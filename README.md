@@ -80,7 +80,15 @@ refuses with a code. Events are never deleted.
 
 ## Where things stand
 
-Build order step 2 (worker core) is in. Reducers exist for devices, location
-refresh, cages, backfill submissions, trucks and pallets; the rest of the
-catalogue is accepted by validation but rejected `not_implemented` until its
-reducer lands, so nothing is ever logged without effect.
+Build order step 2 (worker core) is in, and every type in the catalogue has
+a reducer. Shapes follow the legacy modules, ported faithfully:
+
+| Area | Reducers | Ported from |
+| --- | --- | --- |
+| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list | ShelfSearcher refresh, label-integrity, stocktake, maintenance, em-service modes |
+| Stockroom | cages with ring colours, backfill submissions (pending, corrected, submitted; requested list; claims; rename), negative-SOH adjustments, day list | K2B review, adjust and scan modules |
+| Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits, pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4, history rows on finalise | Decant Visualiser receiving, manifests, planner, history |
+| Store | device heartbeat, map publish, roster rotation marker | |
+
+A catalogued type without a reducer would be rejected `not_implemented`; the
+unit suite asserts there are none.

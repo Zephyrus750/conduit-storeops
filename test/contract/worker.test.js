@@ -113,9 +113,9 @@ test('events: entitlement, role, validation, duplicate, conflict rule, and a sec
 
   // Not entitled to backdock, floor role cannot write stockroom, bad payload.
   const r1 = await api('POST', '/v1/store/1241/events', { events: [
-    event('truck.create', { truck: 'T1' }, {}, 'backdock'),
+    event('truck.create', { truck: '2026-09-07-T1' }, {}, 'backdock'),
     event('cage.create', { cage: 'BSN1240417' }, { ring: 'overstock' }, 'stockroom'),
-    event('refresh.mark', { shelf: 'K12S1' }, {}, 'floor'),
+    event('refresh.mark', { segment: 'K12S1' }, {}, 'floor'),
   ] }, p1.token);
   assert.equal(r1.status, 200);
   assert.deepEqual(r1.body.results.map(x => x.code), ['not_entitled', 'unauthorised', 'invalid_event']);
@@ -136,7 +136,7 @@ test('events: entitlement, role, validation, duplicate, conflict rule, and a sec
   // Snapshot and changes agree with the log; the socket can submit too.
   const snap2 = await api('GET', '/v1/store/1241/snapshot', undefined, p2.token);
   assert.equal(snap2.body.seq, 1); assert.equal(snap2.body.state.cages.BSN1240417.ring, 'overstock');
-  ws.send(JSON.stringify({ t: 'submit', events: [event('refresh.mark', { shelf: 'K12S1', week: '2026-W37' }, {}, 'floor')] }));
+  ws.send(JSON.stringify({ t: 'submit', events: [event('refresh.mark', { segment: 'K12S1', week: '2026-W37' }, {}, 'floor')] }));
   const ack = await next(d => d.t === 'ack');
   assert.equal(ack.results[0].ok, true); assert.equal(ack.results[0].seq, 2);
   await next(d => d.t === 'event' && d.event.type === 'refresh.mark');

@@ -4,7 +4,7 @@ import { validateEvent } from '../../shared/validate.js';
 import { ulid, isUlid, ulidTime } from '../../shared/ulid.js';
 import { Router } from '../../worker/router.js';
 
-const good = () => ({ id: ulid(), store: '1241', area: 'backdock', type: 'pallet.land', entity: { truck: 'T1', bay: 'A6' }, payload: { kind: 'load', cartons: 20 }, at: '2026-09-07T08:41:12+08:00', v: 1 });
+const good = () => ({ id: ulid(), store: '1241', area: 'backdock', type: 'pallet.land', entity: { truck: 'T1', bay: 'A6' }, payload: { ptype: 'loscam', cartons: 20 }, at: '2026-09-07T08:41:12+08:00', v: 1 });
 
 test('a well-formed event validates', () => { assert.equal(validateEvent(good()), null); });
 
@@ -14,8 +14,8 @@ test('envelope faults are named', () => {
   assert.match(validateEvent({ ...good(), area: 'floor' }).message, /area must be backdock/);
   assert.match(validateEvent({ ...good(), at: 'yesterday' }).message, /ISO 8601/);
   assert.match(validateEvent({ ...good(), entity: { truck: 'T1' } }).message, /entity.bay/);
-  assert.match(validateEvent({ ...good(), payload: { kind: 'load' } }).message, /payload.cartons/);
-  assert.match(validateEvent({ ...good(), payload: { kind: 'load', cartons: '20' } }).message, /must be number/);
+  assert.match(validateEvent({ ...good(), payload: {} }).message, /payload.ptype/);
+  assert.match(validateEvent({ ...good(), payload: { ptype: 7 } }).message, /must be string/);
   assert.match(validateEvent({ ...good(), v: 2 }).message, /schema v1/);
 });
 
