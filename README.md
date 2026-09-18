@@ -13,6 +13,7 @@ doc and the "Conduit Shell Swap" showcase.
 ```
 worker/      the Cloudflare worker: routes, auth, registry object, store object
 shared/      code the device runs too: event catalogue, validation, reducers, ULID
+client/      the device library: session, store (outbox, snapshot cache, socket), catalogue
 test/unit    pure-module tests (node --test)
 test/contract the worker running in workerd via Miniflare, real SQLite-backed objects
 scripts/     hash-secret: make the OWNER_KEY_HASH for wrangler secret put
@@ -78,10 +79,33 @@ The worker sets `actor` from the token, never from the device, assigns `seq`
 on apply, acknowledges duplicates by `id`, and rejects anything a reducer
 refuses with a code. Events are never deleted.
 
+## Client library
+
+```js
+import { createClient } from './client/index.js';
+const c = createClient({ baseUrl: 'https://conduit-staging.<account>.workers.dev' });
+await c.session.load();                                   // device id, saved session
+await c.session.signIn({ store: '1241', pin: '2468' });   // or signInOwner({ ownerKey })
+await c.session.unlock('SR-CODE');                        // adds the stockroom role
+const store = await c.open('1241');                       // cache first, then the socket
+store.on('cages', render);                                // re-render on change
+await store.dispatch({ type: 'cage.park', entity: { cage: 'BSN1240417' }, payload: { location: 'Aisle 2' } });
+store.on('reject', r => toast(r.message));                // rejections name the event
+store.on('status', s => footer(s));                       // { state, queued, lastError, seq }
+```
+
+Local state is the last server snapshot with the outbox replayed on top, so
+optimism is automatic and a rejection rolls back by rebuilding without that
+event. One WebSocket per device with backoff and jitter; polling on
+`/changes` when sockets are blocked; heartbeat every three minutes or on
+change. Storage is IndexedDB on a device and memory under tests, behind one
+adapter. `status.state` is `offline`, `connecting`, `live` or `polling`, and
+`queued` is the real outbox depth.
+
 ## Where things stand
 
-Build order step 2 (worker core) is in, and every type in the catalogue has
-a reducer. Shapes follow the legacy modules, ported faithfully:
+Build order steps 2 (worker core) and 3 (client library) are in, and every
+type in the catalogue has a reducer. Shapes follow the legacy modules, ported faithfully:
 
 | Area | Reducers | Ported from |
 | --- | --- | --- |
