@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Conduit</title>
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/shell.css">
+<link rel="stylesheet" href="styles/app.css">
+</head>
+<body>
+<div class="frame">
+  <div class="app ws-floor" id="app">
+    <aside class="rail">
+      <div class="brand">
+        <svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M22 10.2a8 8 0 1 0 0 11.6" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round"/><circle cx="16.5" cy="16" r="2.8" fill="#fff"/></svg>
+        <span class="bname">Conduit</span>
+        <button class="bsearch" title="Search (Ctrl K)"><svg class="i"><use href="icons.svg#i-search"/></svg></button><input class="bsin" placeholder="Search anything…" aria-label="Search">
+      </div>
+      <div class="storechip" role="button" tabindex="0">
+        <svg class="i sc-ic"><use href="icons.svg#i-m-store"/></svg>
+        <span class="sc-t"><b id="chipName">Store</b><span id="chipNo"></span></span>
+        <svg class="i"><use href="icons.svg#i-chev"/></svg>
+      </div>
+      <button class="rrow on" data-view="dashboard"><svg class="i"><use href="icons.svg#i-grid"/></svg>Dashboard</button>
+      <div class="railscroll" id="railscroll"></div>
+      <div class="railfoot">
+        <button class="rrow soon" disabled title="Arrives with the Back dock port"><svg class="i"><use href="icons.svg#i-m-planner"/></svg>Planner<span class="badge soon">Soon</span></button>
+        <button class="rrow" data-view="settings"><svg class="i"><use href="icons.svg#i-m-settings"/></svg>Settings and utilities</button>
+      </div>
+    </aside>
+    <div class="m-appbar">
+      <div class="search msearch" id="msearch"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Search" aria-label="Search" autocomplete="off"><svg class="i mic" title="Voice search"><use href="icons.svg#i-mic"/></svg></div>
+      <button class="mdepts" title="Departments"><svg class="i"><use href="icons.svg#i-grid"/></svg></button>
+    </div>
+    <div class="main">
+      <header class="top">
+        <span id="crumb" hidden></span>
+        <div id="hdrslot"></div>
+        <div class="search" id="hsearch"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Search anything — a shelf, bay, product, manifest or consolidation…" aria-label="Search" readonly><svg class="i mic" title="Voice search"><use href="icons.svg#i-mic"/></svg><span class="kbd">Ctrl K</span></div>
+        <button class="btn accent showmap" id="showMap" data-go="map"><svg class="i"><use href="icons.svg#i-map"/></svg>Show map</button>
+      </header>
+      <main class="content" id="content"></main>
+      <footer class="foot">
+        <button class="fmenu" id="railToggle" title="Collapse the rail to icons"><svg class="i"><use href="icons.svg#i-sidebar"/></svg><span>Menu</span></button><span class="fdiv"></span>
+        <span id="footDate"></span>
+        <span class="fsp"></span>
+        <span id="footSync"><span class="dot off"></span>Offline</span><span class="fdiv"></span><span class="ver" id="footVer"></span>
+      </footer>
+    </div>
+    <nav class="m-tabs" id="mstrip"></nav>
+  </div>
+</div>
+<script type="module" src="js/shell.js"></script>
+</body>
+</html>

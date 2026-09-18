@@ -1,0 +1,9 @@
+/* Design tokens: generated from the showcase by scripts/extract-css.py. */
+:root{color-scheme:light;
+  --ground:#F3F4F6; --panel:#FFFFFF; --line:#E5E7EB; --line-soft:#EEF0F3; --ink:#111827; --ink2:#374151; --dim:#6B7280; --faint:#9CA3AF;
+  --accent:#D24E0E; --accent-ink:#B84309; --accent-soft:#FDEEE5; --accent-line:#F4C9B3;
+  --amber:#F59E0B; --blue:#2563EB; --green:#16A34A; --red:#DC2626; --violet:#7C3AED; --amber-ink:#B45309; --green-ink:#15803D; --blue-ink:#1D4ED8;
+  --chip:#F3F4F6; --chip-ink:#4B5563; --track:#E9EBEF; --hover:#F7F8FA;
+  --shadow:0 1px 2px rgba(17,24,39,.04), 0 8px 24px -16px rgba(17,24,39,.18);
+  --body:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --r-card:14px; --r-ctl:10px;}

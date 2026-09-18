@@ -11,6 +11,10 @@ doc and the "Conduit Shell Swap" showcase.
 ## Layout
 
 ```
+index.html   the shell (one frame; desktop, half-screen and phone by container query)
+js/          shell.js, map.js, ui.js, registry.js, prefs.js, views/*.js (one module per view)
+styles/      tokens.css + shell.css (generated from the showcase), app.css
+maps/        published map documents (1241.svg for the pilot)
 worker/      the Cloudflare worker: routes, auth, registry object, store object
 shared/      code the device runs too: event catalogue, validation, reducers, ULID
 client/      the device library: session, store (outbox, snapshot cache, socket), catalogue
@@ -20,6 +24,16 @@ scripts/     hash-secret: make the OWNER_KEY_HASH for wrangler secret put
 ```
 
 No bundler. Plain ES modules, deployed by wrangler as written.
+
+## Run it locally
+
+```
+npm install
+npm run dev          # worker in workerd on :8787 (store 1241, PIN 2468) + shell on :8080
+```
+
+Open http://127.0.0.1:8080/. The shell finds the worker at `?worker=` (remembered
+per device) or defaults to :8787 on localhost. Sign in as 1241 / 2468.
 
 ## Run the tests
 
@@ -102,10 +116,24 @@ change. Storage is IndexedDB on a device and memory under tests, behind one
 adapter. `status.state` is `offline`, `connecting`, `live` or `polling`, and
 `queued` is the real outbox depth.
 
+## The shell
+
+One frame, one stylesheet set, appearance as tokens. `styles/tokens.css` and
+`styles/shell.css` are generated from the showcase by `npm run css`; only rules
+whose classes the shell and views use survive, so the stylesheet tracks the
+code rather than the other way round. `js/registry.js` is the one view registry:
+a view is `{ id, title, icon, desktop(ctx), mobile?(ctx), mount?(ctx, root) }`
+and renders into the content region; it owns no chrome and no stylesheet.
+
+Floor views live on real data: Store map, Pick list, Location refresh, Label
+integrity, Emergency, Maintenance, Stocktake, plus Dashboard and Settings
+(skin, accent, rail, bars, title bar). Back dock and Stockroom rows are inert
+until their ports land.
+
 ## Where things stand
 
-Build order steps 2 (worker core) and 3 (client library) are in, and every
-type in the catalogue has a reducer. Shapes follow the legacy modules, ported faithfully:
+Build order steps 2 (worker core), 3 (client library) and the shell with the
+Floor views are in, and every type in the catalogue has a reducer. Shapes follow the legacy modules, ported faithfully:
 
 | Area | Reducers | Ported from |
 | --- | --- | --- |

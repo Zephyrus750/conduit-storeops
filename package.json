@@ -8,7 +8,9 @@
     "test": "node --test test/unit/*.test.js test/contract/*.test.js",
     "test:unit": "node --test test/unit/*.test.js",
     "test:contract": "node --test test/contract/*.test.js",
-    "dev": "wrangler dev --env staging",
+    "dev": "node scripts/dev.js",
+    "dev:worker": "wrangler dev --env staging",
+    "css": "python3 scripts/extract-css.py ../vector-suite/docs/showcase/conduit-shell-swap.html",
     "deploy:staging": "wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production",
     "hash-secret": "node scripts/hash-secret.js"

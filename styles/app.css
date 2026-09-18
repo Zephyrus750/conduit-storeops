@@ -1,0 +1,33 @@
+/* App-specific rules that the showcase did not need: the frame fills the
+   window, form fields, toasts, inert rail rows. Everything else is tokens
+   (tokens.css) and the shell (shell.css). */
+html, body { height: 100%; margin: 0; background: var(--ground); }
+body { font-family: var(--body); color: var(--ink); }
+.frame { position: relative; width: 100%; height: 100%; border: none; border-radius: 0; box-shadow: none; overflow: hidden; container-type: inline-size; container-name: shell; background: var(--ground); color: var(--ink); }
+.frame > .app { height: 100%; }
+.frame.dark { color: var(--ink); }
+.rrow.soon { opacity: .55; cursor: default; }
+.rrow .badge.soon { background: var(--chip); color: var(--dim); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.fld { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 12.5px; color: var(--dim); }
+.fld input, .fld select, .mv-field input, .mv-field select { font: inherit; font-size: 14px; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 8px 10px; width: 100%; box-sizing: border-box; }
+.mv-field input, .mv-field select { border: none; background: transparent; padding: 0; font-size: 15px; }
+.mv-field input:focus { outline: none; }
+.si-form select.si-field { appearance: none; font: inherit; }
+.si-form input.si-pin { font: inherit; font-size: 22px; letter-spacing: .3em; width: 100%; box-sizing: border-box; }
+.si-err { min-height: 18px; color: var(--red); font-size: 13px; margin: 6px 0; }
+.si-panel.si-centre { width: min(500px, 92%); }
+.signin .si-panel { z-index: 2; }
+#toasts { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; pointer-events: none; }
+.toast { background: var(--ink); color: var(--panel); padding: 10px 14px; border-radius: 10px; font-size: 13.5px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); transition: .25s; max-width: 90vw; }
+.toast.show { opacity: 1; transform: none; }
+.toast.bad { background: var(--red); color: #fff; }
+.foot .dot.off { background: var(--faint); }
+.m-more .sheet .mv-tiles { margin: 10px 0; }
+.mv-hint a { color: var(--accent-ink); font-weight: 600; cursor: pointer; }
+.mv-sel .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mv-row[data-act] { cursor: pointer; }
+.keywrap.open .keypop { display: block; }
+.map.real .pin text { font-size: 22px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+
+@container shell (max-width:1600px) { .kpi .kh h3 { white-space: normal; line-height: 1.15; overflow: visible; text-overflow: clip; font-size: 16px; } .kpi .kh .open { padding: 6px 9px; } }
+@container shell (max-width:600px) { .mv-sel.mode { max-height: 46cqh; overflow: auto; } }

@@ -27,6 +27,17 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
 8. **Zero-build.** Plain ES modules for worker and client. wrangler deploys
    the tree as written.
 
+## The shell (index.html, js/, styles/)
+
+- Views register in `js/registry.js` and render into `#content`; a view gets
+  `ctx = { store, session, storeNo, storeName, isMobile, go, rerender, signOut }`
+  and returns unsubscribe functions from `mount`. Listeners go on the root the
+  shell hands you; the shell replaces that element on every navigation.
+- `styles/shell.css` and `tokens.css` are generated (`npm run css`) from the
+  showcase in vector-suite; put app-only rules in `styles/app.css`.
+- Rendering is innerHTML; every value from another device goes through `esc()`.
+- The map is `js/map.js`: mount, pan/zoom, select, marks, pins, routes.
+
 ## Working here
 
 - Tests: `npm test`. Contract tests run the worker in workerd via Miniflare
