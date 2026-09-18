@@ -48,14 +48,28 @@ over its WebSocket.
 
 ## Deploy
 
-Staging and production are separate workers (`conduit-staging`, `conduit`).
+**Worker (Cloudflare).** GitHub Actions deploys `conduit-staging` on every push
+to `main` and runs the tests first. Set four repository secrets once
+(Settings › Secrets and variables › Actions):
 
-```
-npx wrangler secret put TOKEN_SECRET --env staging      # random 32+ bytes
-npm run hash-secret -- "<owner key>"                     # then:
-npx wrangler secret put OWNER_KEY_HASH --env staging     # paste the hash
-npm run deploy:staging
-```
+| Secret | Value |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | API token from the "Edit Cloudflare Workers" template |
+| `CLOUDFLARE_ACCOUNT_ID` | Account id from the Workers overview |
+| `TOKEN_SECRET` | Any long random string; signs access tokens |
+| `OWNER_KEY` | The owner key you will type on your devices; only its hash reaches the worker |
+
+Then run the **deploy** workflow by hand once with `set_secrets` ticked, so the
+worker receives `TOKEN_SECRET` and `OWNER_KEY_HASH`. After that, pushes deploy.
+Production is the same workflow run by hand with `env=production`.
+
+From a laptop instead: `npx wrangler login`, then the same two `secret put`
+commands and `npm run deploy:staging`.
+
+**Shell (Netlify).** Import this repository as a new site: publish directory
+`.`, no build command (netlify.toml already says so). The shell talks to the
+staging worker by default (`js/config.js`); open it once with
+`?worker=<url>` to point a device elsewhere.
 
 D1, R2 and KV bindings are added when the features that need them land
 (history, manifests and exports, map cache). See `wrangler.toml`.

@@ -9,8 +9,9 @@ import { loadMap } from './map.js';
 import { VIEWS, RAIL, STRIP, MORE } from './registry.js';
 import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
+import { WORKER_DEFAULT } from './config.js';
 
-const WORKER = new URLSearchParams(location.search).get('worker') || localStorage.getItem('suite_worker') || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8787' : '');
+const WORKER = new URLSearchParams(location.search).get('worker') || localStorage.getItem('suite_worker') || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8787' : WORKER_DEFAULT);
 if (new URLSearchParams(location.search).get('worker')) try { localStorage.setItem('suite_worker', WORKER); } catch {}
 
 const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
