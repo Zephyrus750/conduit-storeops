@@ -1,0 +1,149 @@
+// Conduit worker entry. Routes /v1/*, verifies tokens, and hands store
+// traffic to the store's Durable Object. Everything not yet built returns
+// 501 not_implemented with the route named, never a silent 404.
+
+import { Router } from './router.js';
+import { json, fail, preflight, readJson, HttpError } from './http.js';
+import { signToken, verifyToken, verifySecret, makeClaims, hasRole } from './auth.js';
+export { StoreObject } from './store.js';
+export { RegistryObject } from './registry.js';
+import { VERSION } from './version.js';
+
+const r = new Router();
+
+// ── health ────────────────────────────────────────────────────────────────
+r.get('/v1/health', (_req, env) => json({ ok: true, version: VERSION, env: env.ENVIRONMENT || 'dev' }));
+
+// ── auth ──────────────────────────────────────────────────────────────────
+r.post('/v1/auth/signin', async (req, env) => {
+  const b = await readJson(req);
+  const device = String(b.device || '').slice(0, 64) || null;
+  if (b.ownerKey !== undefined) {
+    if (!env.OWNER_KEY_HASH) throw new HttpError(503, 'not_configured', 'OWNER_KEY_HASH is not set');
+    const key = `owner:${device || 'nodevice'}`;
+    await registry(env, 'POST', '/lockout/check', { key });
+    if (!(await verifySecret(String(b.ownerKey), env.OWNER_KEY_HASH))) {
+      await registry(env, 'POST', '/lockout/fail', { key });
+      throw new HttpError(403, 'unauthorised', 'wrong owner key');
+    }
+    await registry(env, 'POST', '/lockout/clear', { key });
+    const claims = makeClaims({ store: null, roles: ['owner'], caps: [], device, owner: true, ttl: ttl(env) });
+    const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: null, device, roles: ['owner'], owner: true });
+    return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, owner: true });
+  }
+  const res = await registry(env, 'POST', '/signin', { store: String(b.store || ''), pin: b.pin, device });
+  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device, ttl: ttl(env) });
+  const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: res.store, device, roles: res.roles, owner: false });
+  return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, store: res.store, name: res.name, roles: res.roles, caps: res.caps, status: res.status });
+});
+
+r.post('/v1/auth/unlock', async (req, env, ctx) => {
+  const c = await requireClaims(req, env);
+  if (!c.store) throw new HttpError(400, 'invalid_request', 'owner tokens do not unlock areas');
+  const b = await readJson(req);
+  const { role } = await registry(env, 'POST', '/unlock', { store: c.store, code: b.code });
+  const roles = c.roles.includes(role) ? c.roles : [...c.roles, role];
+  const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, ttl: ttl(env) });
+  const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false });
+  return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, roles });
+});
+
+r.post('/v1/auth/refresh', async (req, env) => {
+  const b = await readJson(req);
+  const res = await registry(env, 'POST', '/refresh/use', { refresh: b.refresh });
+  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device: res.device, owner: res.owner, ttl: ttl(env) });
+  return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh: res.refresh, expires: claims.exp, roles: res.roles, caps: res.caps, owner: res.owner });
+});
+
+// ── registry (public) ─────────────────────────────────────────────────────
+r.get('/v1/stores', async (_req, env) => json(await registry(env, 'GET', '/stores')));
+
+// ── store traffic ─────────────────────────────────────────────────────────
+r.get('/v1/store/:no/snapshot', (req, env, _ctx, p) => storeCall(req, env, p.no, '/snapshot', new URL(req.url).search));
+r.get('/v1/store/:no/changes', (req, env, _ctx, p) => storeCall(req, env, p.no, '/changes', new URL(req.url).search));
+r.post('/v1/store/:no/events', (req, env, _ctx, p) => storeCall(req, env, p.no, '/events'));
+r.get('/v1/store/:no/ws', (req, env, _ctx, p) => storeCall(req, env, p.no, '/ws'));
+
+// ── admin (owner) ─────────────────────────────────────────────────────────
+r.post('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'POST', '/stores', await readJson(req)), 201); });
+r.get('/v1/admin/stores/:no', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'GET', `/stores/${p.no}`)); });
+r.patch('/v1/admin/stores/:no', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'PATCH', `/stores/${p.no}`, await readJson(req))); });
+r.get('/v1/admin/actions', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/actions')); });
+r.get('/v1/admin/stores/:no/devices', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/devices'));
+r.get('/v1/admin/stores/:no/tail', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/tail', new URL(req.url).search));
+r.post('/v1/admin/actas/:no', async (req, env, _c, p) => {
+  const c = await requireOwner(req, env);
+  const rec = await registry(env, 'GET', `/stores/${p.no}`);
+  const caps = Object.entries(rec.entitlements).filter(([, on]) => on).map(([a]) => a);
+  const claims = makeClaims({ store: rec.no, roles: ['manager'], caps, device: c.device, owner: true, actor: 'owner', ttl: Math.min(ttl(env), 3600) });
+  return json({ token: await signToken(claims, env.TOKEN_SECRET), expires: claims.exp, store: rec.no, caps });
+});
+
+// ── not built yet: named, never silent ────────────────────────────────────
+for (const [m, path] of [
+  ['GET', '/v1/store/:no/life/:keycode'], ['POST', '/v1/store/:no/manifest'], ['GET', '/v1/store/:no/map/:version'],
+  ['POST', '/v1/store/:no/map'], ['GET', '/v1/catalogue'], ['GET', '/v1/store/:no/history/:kind'],
+  ['GET', '/v1/store/:no/export/:kind'], ['POST', '/v1/admin/stores/:no/import'], ['POST', '/v1/admin/stores/:no/flip'],
+]) r.add(m, path, () => fail(501, 'not_implemented', `${m} ${path} is on the build order but not built yet`));
+
+// ── plumbing ──────────────────────────────────────────────────────────────
+export default {
+  async fetch(request, env, ctx) {
+    if (request.method === 'OPTIONS') return preflight();
+    if (!env.TOKEN_SECRET) return fail(503, 'not_configured', 'TOKEN_SECRET is not set');
+    const url = new URL(request.url);
+    const m = r.match(request.method, url.pathname);
+    if (!m) return fail(404, 'not_found', `no route for ${request.method} ${url.pathname}`);
+    try {
+      return await m.handler(request, env, ctx, m.params);
+    } catch (e) {
+      if (e instanceof HttpError) return e.toResponse();
+      console.error('unhandled', e);
+      return fail(500, 'internal', 'unexpected error');
+    }
+  },
+};
+
+function ttl(env) { return Number(env.TOKEN_TTL_SECONDS || 43200); }
+
+async function requireClaims(req, env) {
+  const h = req.headers.get('Authorization') || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : new URL(req.url).searchParams.get('token');
+  const claims = await verifyToken(token, env.TOKEN_SECRET);
+  if (!claims) throw new HttpError(401, 'unauthorised', 'token missing, invalid or expired');
+  return claims;
+}
+async function requireOwner(req, env) {
+  const c = await requireClaims(req, env);
+  if (!c.owner || c.store) throw new HttpError(403, 'unauthorised', 'owner token required');
+  return c;
+}
+
+// Internal call to the registry object.
+async function registry(env, method, path, body) {
+  const stub = env.REGISTRY.get(env.REGISTRY.idFromName('registry'));
+  const res = await stub.fetch('https://registry' + path, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) throw new HttpError(res.status, data.code || 'registry_error', data.message || 'registry error', data);
+  return data;
+}
+
+// Forward a store request to its object with the verified claims attached.
+async function storeCall(req, env, no, path, search = '') {
+  const c = await requireClaims(req, env);
+  if (c.store !== no) throw new HttpError(403, 'unauthorised', `token is for store ${c.store || '(owner)'}, not ${no}`);
+  return forward(req, env, no, path, search, c);
+}
+async function ownerStoreCall(req, env, no, path, search = '') {
+  const c = await requireOwner(req, env);
+  const rec = await registry(env, 'GET', `/stores/${no}`);
+  const caps = Object.entries(rec.entitlements).filter(([, on]) => on).map(([a]) => a);
+  return forward(req, env, no, path, search, { ...c, store: no, caps, roles: ['manager'] });
+}
+function forward(req, env, no, path, search, claims) {
+  const stub = env.STORE.get(env.STORE.idFromName(String(no)));
+  const headers = new Headers(req.headers);
+  headers.set('X-Conduit-Claims', JSON.stringify(claims));
+  headers.delete('Authorization');
+  return stub.fetch(new Request('https://store' + path + search, { method: req.method, headers, body: req.method === 'GET' ? undefined : req.body }));
+}

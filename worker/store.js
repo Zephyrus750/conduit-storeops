@@ -1,0 +1,217 @@
+// StoreObject: one Durable Object per store. It owns the event log (SQLite),
+// the in-memory projections folded by the shared reducers, snapshots, and
+// the WebSocket fan-out to every device in the store.
+//
+// Internal HTTP (the worker forwards with an X-Conduit-Claims header holding
+// the verified token claims as JSON):
+//   GET  /snapshot?areas=a,b       → { seq, state: {…filtered} }
+//   GET  /changes?since=N          → { seq, events: [...] }
+//   POST /events  { events: [] }   → { results: [{ id, ok, seq } | { id, ok:false, code, message }] }
+//   GET  /ws                       → WebSocket upgrade
+//   GET  /devices                  → devices projection (owner)
+//   GET  /tail?limit=              → raw log, newest first (owner)
+//
+// WebSocket protocol (JSON text frames):
+//   → { t:'hello', since }          ← { t:'snapshot', seq, state } or { t:'delta', seq, events }
+//   → { t:'submit', events }        ← { t:'ack', results }
+//   → { t:'hb', app }               (updates the devices projection, no reply)
+//   ← { t:'event', event }          broadcast on every applied event
+//   → { t:'ping' }                  ← { t:'pong', seq }
+
+import { DurableObject } from 'cloudflare:workers';
+import { initialState, apply, replay } from '../shared/reducers.js';
+import { validateEvent } from '../shared/validate.js';
+import { typeInfo, AREA_PROJECTIONS } from '../shared/catalogue.js';
+import { hasRole } from './auth.js';
+import { HttpError, json, fail } from './http.js';
+
+const SNAPSHOT_EVERY = 1000;
+const DELTA_LIMIT = 5000;     // above this gap a hello gets a snapshot instead of a delta
+
+export class StoreObject extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS events (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL, area TEXT NOT NULL,
+        entity TEXT NOT NULL, payload TEXT NOT NULL, actor TEXT NOT NULL,
+        at TEXT NOT NULL, v INTEGER NOT NULL, received TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS events_type ON events(type, seq);
+      CREATE TABLE IF NOT EXISTS snapshots (seq INTEGER PRIMARY KEY, state TEXT NOT NULL, at TEXT NOT NULL);
+    `);
+    this.state = null;
+    this.storeNo = null;
+    ctx.blockConcurrencyWhile(async () => this.load());
+  }
+
+  // ── state ─────────────────────────────────────────────────────────────
+  load() {
+    const snap = this.sql.exec('SELECT seq, state FROM snapshots ORDER BY seq DESC LIMIT 1').toArray()[0];
+    this.state = snap ? JSON.parse(snap.state) : initialState();
+    const since = snap ? snap.seq : 0;
+    const rows = this.sql.exec('SELECT * FROM events WHERE seq > ? ORDER BY seq', since).toArray();
+    replay(this.state, rows.map(rowToEvent));
+    const last = this.sql.exec('SELECT MAX(seq) AS m FROM events').toArray()[0];
+    this.state.seq = last?.m || 0;
+    this.sinceSnapshot = rows.length;
+  }
+  snapshotIfDue() {
+    if (this.sinceSnapshot < SNAPSHOT_EVERY) return;
+    this.sql.exec('INSERT OR REPLACE INTO snapshots (seq, state, at) VALUES (?, ?, ?)', this.state.seq, JSON.stringify(this.state), new Date().toISOString());
+    this.sql.exec('DELETE FROM snapshots WHERE seq < ?', this.state.seq);
+    this.sinceSnapshot = 0;
+  }
+
+  // ── HTTP ──────────────────────────────────────────────────────────────
+  async fetch(request) {
+    const url = new URL(request.url);
+    const claims = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
+    if (!claims) return fail(401, 'unauthorised', 'no claims');
+    this.storeNo = claims.store;
+    try {
+      switch (url.pathname) {
+        case '/snapshot': return json(this.snapshot(claims, url.searchParams.get('areas')));
+        case '/changes': return json(this.changes(Number(url.searchParams.get('since') || 0), claims));
+        case '/events': { const body = await request.json(); return json({ results: this.submit(body.events, claims) }); }
+        case '/ws': return this.upgrade(request, claims);
+        case '/devices': return json({ devices: this.state.devices });
+        case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
+        default: return fail(404, 'not_found', `store object has no ${url.pathname}`);
+      }
+    } catch (e) {
+      if (e instanceof HttpError) return e.toResponse();
+      throw e;
+    }
+  }
+
+  snapshot(claims, areasParam) {
+    const wanted = areasParam ? areasParam.split(',') : claims.caps;
+    const allowed = new Set(claims.owner ? [...claims.caps, 'store'] : claims.caps);
+    allowed.add('store');
+    const out = { v: this.state.v };
+    for (const area of wanted) {
+      if (!allowed.has(area)) continue;
+      for (const proj of AREA_PROJECTIONS[area] || []) if (proj in this.state) out[proj] = this.state[proj];
+    }
+    if (!hasRole(claims, ['manager']) && !claims.owner) delete out.devices;
+    return { seq: this.state.seq, state: out };
+  }
+
+  changes(since, claims) {
+    const rows = this.sql.exec('SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT ?', since, DELTA_LIMIT).toArray();
+    const events = rows.map(rowToEvent).filter(e => claims.owner || claims.caps.includes(e.area) || e.area === 'store');
+    return { seq: this.state.seq, events, more: rows.length === DELTA_LIMIT };
+  }
+
+  tail(limit) {
+    return this.sql.exec('SELECT * FROM events ORDER BY seq DESC LIMIT ?', Math.min(limit, 1000)).toArray().map(rowToEvent);
+  }
+
+  // ── apply ─────────────────────────────────────────────────────────────
+  submit(events, claims) {
+    if (!Array.isArray(events)) throw new HttpError(400, 'invalid_request', 'events must be an array');
+    if (events.length > 500) throw new HttpError(400, 'invalid_request', 'at most 500 events per batch');
+    const results = [];
+    const applied = [];
+    for (const raw of events) {
+      const r = this.applyOne(raw, claims);
+      results.push(r);
+      if (r.ok && r.event) applied.push(r.event);
+    }
+    this.snapshotIfDue();
+    if (applied.length) this.broadcast(applied);
+    return results.map(({ event, ...rest }) => rest);
+  }
+
+  applyOne(raw, claims) {
+    const id = raw?.id;
+    const bad = validateEvent(raw);
+    if (bad) return { id, ok: false, ...bad };
+    if (raw.store !== claims.store) return { id, ok: false, code: 'unauthorised', message: 'event is for another store' };
+    const info = typeInfo(raw.type);
+    if (info.area !== 'store' && !claims.caps.includes(info.area)) return { id, ok: false, code: 'not_entitled', message: `store is not entitled to ${info.area}` };
+    if (!hasRole(claims, info.roles)) return { id, ok: false, code: 'unauthorised', message: `${raw.type} needs ${info.roles.join(' or ')}` };
+
+    const dup = this.sql.exec('SELECT seq FROM events WHERE id = ?', id).toArray()[0];
+    if (dup) return { id, ok: true, seq: dup.seq, duplicate: true };
+
+    // The actor is what the token says, never what the device claims.
+    const event = {
+      id, store: raw.store, area: info.area, type: raw.type,
+      entity: raw.entity, payload: raw.payload ?? {},
+      actor: { role: primaryRole(claims, info.roles), device: claims.device, owner: !!claims.owner },
+      at: raw.at, v: info.v,
+    };
+    const rej = apply(this.state, event);
+    if (rej) return { id, ok: false, ...rej };
+
+    const received = new Date().toISOString();
+    const cur = this.sql.exec(
+      'INSERT INTO events (id, type, area, entity, payload, actor, at, v, received) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq',
+      id, event.type, event.area, JSON.stringify(event.entity), JSON.stringify(event.payload), JSON.stringify(event.actor), event.at, event.v, received,
+    ).toArray()[0];
+    event.seq = cur.seq;
+    this.state.seq = cur.seq;
+    this.sinceSnapshot += 1;
+    return { id, ok: true, seq: cur.seq, event };
+  }
+
+  // ── WebSocket ─────────────────────────────────────────────────────────
+  upgrade(request, claims) {
+    if (request.headers.get('Upgrade') !== 'websocket') return fail(426, 'upgrade_required', 'expected a WebSocket upgrade');
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    this.ctx.acceptWebSocket(server, [claims.device || 'nodevice']);
+    server.serializeAttachment({ claims });
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(ws, message) {
+    let msg;
+    try { msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)); }
+    catch { return ws.send(JSON.stringify({ t: 'error', code: 'invalid_json', message: 'frames must be JSON' })); }
+    const { claims } = ws.deserializeAttachment() || {};
+    if (!claims) return ws.close(1008, 'no claims');
+    if (claims.exp * 1000 < Date.now()) { ws.send(JSON.stringify({ t: 'error', code: 'unauthorised', message: 'token expired' })); return ws.close(1008, 'expired'); }
+    switch (msg.t) {
+      case 'hello': {
+        const since = Number(msg.since || 0);
+        if (since && this.state.seq - since <= DELTA_LIMIT) ws.send(JSON.stringify({ t: 'delta', ...this.changes(since, claims) }));
+        else ws.send(JSON.stringify({ t: 'snapshot', ...this.snapshot(claims, null) }));
+        return;
+      }
+      case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
+      case 'hb': {
+        this.state.devices[claims.device || 'nodevice'] = { app: msg.app || null, last: new Date().toISOString(), role: claims.roles?.[0] || null };
+        return;
+      }
+      case 'ping': return ws.send(JSON.stringify({ t: 'pong', seq: this.state.seq }));
+      default: return ws.send(JSON.stringify({ t: 'error', code: 'invalid_request', message: `unknown frame ${msg.t}` }));
+    }
+  }
+  webSocketClose(ws) { try { ws.close(); } catch {} }
+  webSocketError(ws) { try { ws.close(); } catch {} }
+
+  broadcast(events) {
+    for (const ws of this.ctx.getWebSockets()) {
+      const { claims } = ws.deserializeAttachment() || {};
+      for (const e of events) {
+        if (!claims || (!claims.owner && e.area !== 'store' && !claims.caps.includes(e.area))) continue;
+        try { ws.send(JSON.stringify({ t: 'event', event: e })); } catch {}
+      }
+    }
+  }
+}
+
+function rowToEvent(r) {
+  return { id: r.id, seq: r.seq, type: r.type, area: r.area, entity: JSON.parse(r.entity), payload: JSON.parse(r.payload), actor: JSON.parse(r.actor), at: r.at, v: r.v };
+}
+function primaryRole(claims, roles) {
+  if (claims.actor) return claims.actor;
+  for (const r of roles) if (claims.roles.includes(r)) return r;
+  return claims.roles.includes('manager') ? 'manager' : claims.roles[0];
+}

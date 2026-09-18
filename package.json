@@ -1,0 +1,21 @@
+{
+  "name": "conduit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Conduit — unified store-ops program. One worker, one shell, one event log per store.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/unit/*.test.js test/contract/*.test.js",
+    "test:unit": "node --test test/unit/*.test.js",
+    "test:contract": "node --test test/contract/*.test.js",
+    "dev": "wrangler dev --env staging",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "hash-secret": "node scripts/hash-secret.js"
+  },
+  "devDependencies": {
+    "miniflare": "^4.20250917.0",
+    "wrangler": "^4.40.0"
+  },
+  "engines": { "node": ">=22" }
+}
