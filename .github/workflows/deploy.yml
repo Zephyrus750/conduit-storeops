@@ -43,10 +43,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      # Deploy first: a secret can only be attached to a worker that exists.
+      - name: Deploy
+        run: npx wrangler deploy --env "$TARGET"
       - name: Worker secrets (first run, or when asked)
         if: github.event.inputs.set_secrets == 'true'
         run: |
           printf '%s' "${{ secrets.TOKEN_SECRET }}" | npx wrangler secret put TOKEN_SECRET --env "$TARGET"
           npm run --silent hash-secret -- "${{ secrets.OWNER_KEY }}" | npx wrangler secret put OWNER_KEY_HASH --env "$TARGET"
-      - name: Deploy
-        run: npx wrangler deploy --env "$TARGET"
+      - name: Health
+        run: |
+          sleep 5
+          NAME=$([ "$TARGET" = production ] && echo conduit || echo conduit-staging); curl -s "https://$NAME.zephyrus-np750.workers.dev/v1/health"; echo
