@@ -49,10 +49,20 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   if (cls) svg.classList.add(...cls.split(' ').filter(Boolean));
   if (showEmergency) svg.classList.add('showem');
   const vb0 = svg.getAttribute('viewBox');
+  // Emergency markers are authored at translate(x,y) only; scale them so a
+  // sign is about 32px on screen whatever the zoom (the legacy viewer did
+  // the same on every viewBox change).
+  const markerEls = $$('.emergency-marker[data-x]', svg);
+  const scaleMarkers = () => {
+    if (!markerEls.length) return;
+    const w = svg.getBoundingClientRect().width || 600, vbw = Number(svg.getAttribute('viewBox').split(' ')[2]) || 1;
+    const k = Math.max(1, Math.min(12, (32 * vbw / w) / 28)).toFixed(3);
+    for (const m of markerEls) m.setAttribute('transform', `translate(${m.getAttribute('data-x')},${m.getAttribute('data-y')}) scale(${k})`);
+  };
   const api = {
     svg, stage,
     vb() { return svg.getAttribute('viewBox').split(' ').map(Number); },
-    setVb(v) { svg.setAttribute('viewBox', v.join(' ')); },
+    setVb(v) { svg.setAttribute('viewBox', v.join(' ')); scaleMarkers(); },
     fit() { svg.setAttribute('viewBox', vb0); svg.classList.remove('zoomed'); },
     zoomBy(f, cx, cy) {
       const v = api.vb(), r = svg.getBoundingClientRect();
@@ -132,6 +142,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   };
   api.setMarks(marks);
   if (select) api.select(select);
+  scaleMarkers();
 
   // pan, zoom, tap
   let drag = null;

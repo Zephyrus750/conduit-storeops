@@ -15,6 +15,6 @@ The full walkthrough lives in the "Conduit Setup Guide" doc. Short form:
    curl -s -X POST $W/v1/admin/stores -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      -d '{"no":"1241","name":"Busselton","region":"WA South","pin":"<pin>","codes":{"stockroom":"<code>","dock":"<code>","manager":"<code>"},"entitlements":{"floor":true,"stockroom":true,"backdock":true}}'
    ```
-8. **Publish the map** (owner): admin console › the store › Map › choose `maps/1241.svg` as the ground floor, version `4.3`, Publish. Or `OWNER_KEY=… npm run publish-map -- --store 1241 --version 4.3 --name Busselton --floor ground=maps/1241.svg`.
+8. **Publish the map** (owner): admin console › the store › Map › choose the Map Editor's export for the store (the `.js` file ShelfSearcher used, e.g. `maps/1241-busselton.js`, or the editor's `.json` save; a rendered ground-floor `.svg` also works), give it a new version, Publish. Every floor in the export is rendered and published; the label under the file says what it found before you publish. Or `OWNER_KEY=… npm run publish-map -- --store 1241 --version 4.4 --file ../vector-suite/maps/1241-busselton.js`.
 9. **Sign in** on the Netlify site with 1241 and the PIN. Production: run the workflow with env `production` (tick `set_secrets` the first time).
 10. **Install on devices**: open the Netlify site in Chrome on the phone and choose *Install app* (Add to Home Screen on iPhone). It works offline from then on; new releases show an *Update now* bar and apply only when tapped.

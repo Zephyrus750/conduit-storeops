@@ -8,6 +8,7 @@
 // or any write clears the relevant cache.
 
 import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast } from '../ui.js';
+import { parseMapFile, renderMap } from '../../shared/maprender.js';
 
 const AREAS = ['floor', 'stockroom', 'backdock'];
 const AREA_NAME = { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock', store: 'Store', owner: 'Owner' };
@@ -104,7 +105,7 @@ const storeView = {
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="filter"]')) { st.filter = e.target.value; const t = $('#adTail', root); if (t) t.innerHTML = tailRows(forStore(st.no)); } });
     root.addEventListener('submit', e => { e.preventDefault(); const f = e.target.getAttribute('data-form'); if (f === 'rotate') saveRotate(ctx, e.target); else if (f === 'edit') saveEdit(ctx, e.target); else if (f === 'publish') publishMap(ctx, e.target); else if (f === 'import') runImport(ctx, e.target, e.submitter?.dataset.dry === '1'); });
-    root.addEventListener('change', e => { if (e.target.matches('input[type="file"][data-floor]')) { const f = e.target.files?.[0]; const lbl = e.target.closest('label')?.querySelector('small'); if (lbl && f) lbl.textContent = `${f.name} · ${(f.size / 1024).toFixed(0)} KB`; } });
+    root.addEventListener('change', e => { if (e.target.matches('input[type="file"][data-floor]')) mapFileChosen(e.target); });
     return [];
   },
 };
@@ -174,26 +175,43 @@ function mapTab(rec, c) {
   const cur = m === undefined ? `<div class="ohint">Loading…</div>` : m === null ? `<p class="lbl">No map has been published for this store. Devices show a placeholder until one is.</p>` : m.error ? `<p class="lbl">Could not read the map: ${esc(m.error)}</p>` :
     `<div class="ad-kv"><span>Version</span><b class="mono">${esc(m.version)}</b><span>Published</span><b>${when(m.at)} · ${m.by?.owner ? 'owner' : esc(m.by?.device || '')}</b><span>Floors</span><b>${(m.floors || []).map(f => `${esc(f.name || f.id)} · ${f.shelves ?? '?'} shelves · ${Math.round((f.bytes || 0) / 1024)} KB`).join('<br>')}</b><span>Departments</span><b>${(m.departments || []).length || 'none in the document'}</b><span>Earlier versions</span><b>${(m.versions || []).filter(v => v.version !== m.version).map(v => `<span class="mono">${esc(v.version)}</span> ${fmtTime(v.at)}`).join(' · ') || '—'}</b></div>`;
   const next = m && m.version ? bump(m.version) : '1';
-  const form = `<form class="card" data-form="publish"><div class="ch"><h3>Publish a map</h3><span class="cs-dim">rendered floor SVGs, as the shell mounts them</span></div><div class="ad-grid2">${field('Version', inp('version', st.pubVersion ?? next, 'e.g. 4.4', 'mono', 'required pattern="[\\w.\\-]{1,32}"'), 'must be new; devices switch to it on their next sync')}${field('Map name', inp('name', rec.name, 'e.g. Busselton'))}</div>` +
-    `<div class="ad-grid2" style="margin-top:12px">${field('Ground floor SVG', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="ground" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'the svg.map.real document the store views mount (maps/1241.svg is one)')}${field('Stockroom floor SVG (optional)', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="stockroom" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'arrives with the Stockroom port')}</div>` +
+  const form = `<form class="card" data-form="publish"><div class="ch"><h3>Publish a map</h3><span class="cs-dim">the Map Editor's export, or rendered floor SVGs</span></div><div class="ad-grid2">${field('Version', inp('version', st.pubVersion ?? next, 'e.g. 4.4', 'mono', 'required pattern="[\\w.\\-]{1,32}"'), 'must be new; devices switch to it on their next sync')}${field('Map name', inp('name', rec.name, 'e.g. Busselton'))}</div>` +
+    `<div class="ad-grid2" style="margin-top:12px">${field('Map file', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".js,.json,.svg,text/javascript,application/json,image/svg+xml" data-floor="ground" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'the editor\'s .js export (what ShelfSearcher read) or its .json save: every floor in it is rendered and published. A rendered ground-floor .svg still works.')}${field('Stockroom floor SVG (optional)', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="stockroom" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'only with an .svg map file; an editor export carries its own floors')}</div>` +
     `<div class="si-err" id="pubErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit">${ic('check')}Publish</button></div><p class="lbl">Publishing writes the document to the store and logs a <span class="mono">map.publish</span> event with your owner id. Every signed-in device downloads the new version once and keeps it offline.</p></form>`;
   return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3><span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}</div>${form}</div>`;
 }
 const bump = v => { const m = String(v).match(/^(.*?)(\d+)$/); return m ? m[1] + (Number(m[2]) + 1) : v + '.1'; };
+// A chosen map file: an editor export is parsed and rendered here in the
+// browser, so the label can say what it holds before anything is published.
+async function mapFileChosen(inp) {
+  const f = inp.files?.[0], lbl = inp.closest('label')?.querySelector('small');
+  st.pubDoc = null; if (!f) { if (lbl) lbl.textContent = ''; return; }
+  try {
+    const parsed = parseMapFile(await f.text(), f.name);
+    if (parsed.kind === 'svg') { if (lbl) lbl.textContent = `${f.name} · ${(f.size / 1024).toFixed(0)} KB · rendered SVG`; return; }
+    const doc = renderMap(parsed.data); doc.floors = doc.floors.filter(fl => fl.shelves || fl.markers || /landmark-group/.test(fl.svg));
+    if (!doc.floors.length) throw new Error('no floor in the file has any shelves');
+    if (inp.dataset.floor === 'ground') st.pubDoc = doc;
+    if (lbl) lbl.textContent = `${f.name} · ${doc.store ? doc.store + ' ' : ''}${doc.name} · editor v${doc.editorVersion} · ${doc.floors.map(fl => `${fl.name} ${fl.shelves} shelves`).join(', ')}`;
+    const nameIn = inp.form?.querySelector('[name="name"]'); if (nameIn && !nameIn.value && doc.name) nameIn.value = doc.name;
+  } catch (e) { if (lbl) lbl.textContent = `Cannot read ${f.name}: ${e.message}`; inp.value = ''; }
+}
 async function publishMap(ctx, form) {
   const err = $('#pubErr', form), btn = form.querySelector('[type="submit"]');
   const version = form.version.value.trim(), name = form.name.value.trim();
-  const floors = [];
-  for (const inp of form.querySelectorAll('input[type="file"][data-floor]')) {
+  let floors = [], departments;
+  if (st.pubDoc) { floors = st.pubDoc.floors.map(f => ({ id: f.id, name: f.name, type: f.type, svg: f.svg })); departments = st.pubDoc.departments; }
+  else for (const inp of form.querySelectorAll('input[type="file"][data-floor]')) {
     const f = inp.files?.[0]; if (!f) continue;
     const svg = await f.text();
     if (!/^\s*<svg[\s>]/i.test(svg)) { err.textContent = `${f.name} is not an SVG document.`; return; }
     floors.push({ id: inp.dataset.floor, name: inp.dataset.floor === 'ground' ? 'Ground' : 'Stockroom', type: inp.dataset.floor === 'ground' ? 'foh' : 'boh', svg });
   }
-  if (!floors.length) { err.textContent = 'Choose at least the ground floor SVG.'; return; }
+  if (!floors.length) { err.textContent = 'Choose the map file: the editor\'s .js or .json export, or the ground floor SVG.'; return; }
   st.pubVersion = version; btn.disabled = true; err.textContent = '';
   try {
-    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: { version, name, floors } });
+    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: { version, name, floors, departments } });
+    st.pubDoc = null;
     toast(`Map ${r.version} published · ${r.floors.map(f => `${f.id} ${f.shelves} shelves`).join(', ')}`);
     st.pubVersion = null; st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); ctx.rerender();
   } catch (e) { btn.disabled = false; err.textContent = e.code === 'exists' ? `Version ${version} is already published. Use a new version.` : e.message; }

@@ -20,7 +20,7 @@ shared/      code the device runs too: event catalogue, validation, reducers, UL
 client/      the device library: session, store (outbox, snapshot cache, socket), catalogue
 test/unit    pure-module tests (node --test)
 test/contract the worker running in workerd via Miniflare, real SQLite-backed objects
-scripts/     hash-secret (OWNER_KEY_HASH), publish-map (a map version from SVG files), build-sw (the precache list), dev, extract-css
+scripts/     hash-secret (OWNER_KEY_HASH), publish-map (a map version from the editor's export or SVG files), build-sw (the precache list), dev, extract-css
 ```
 
 No bundler. Plain ES modules, deployed by wrangler as written.
@@ -178,10 +178,18 @@ stack runs a stand-in legacy worker on :8789 (code `BUS247`, PIN 2468).
 departments, floors: [{ id, name, type, svg }] }`, each floor an SVG in the
 form the store views mount (`svg.map.real`, `shelf-group` elements with
 `data-shelf` and `data-dept`, emergency markers). Versions live in the
-store object, one row per floor. Publishing is owner-only: the admin
-console's Map tab takes the SVG files, or `npm run publish-map -- --store
-1241 --version 4.3 --floor ground=maps/1241.svg` with `OWNER_KEY` in the
-environment. The publish is an ordinary `map.publish` event, so every
+store object, one row per floor. Publishing is owner-only. The admin
+console's Map tab takes the Map Editor's export straight: the `.js` file
+ShelfSearcher read (`window.STORE_MAPS['1241'] = {…}`) or the `.json` the
+editor saves. `shared/maprender.js` reads either without evaluating it and
+renders every floor into the mounted form (a port of the legacy viewer's
+loader plus the editor's floor render, so both files come out the same;
+emergency and price-check markers are regenerated from the structured
+arrays, and the shell scales markers to a readable size at any zoom). A
+rendered ground-floor `.svg` still works. From the terminal:
+`npm run publish-map -- --store 1241 --version 4.4 --file
+../maps/1241-busselton.js` (or `--floor ground=maps/1241.svg`) with
+`OWNER_KEY` in the environment. The publish is an ordinary `map.publish` event, so every
 device sees the new version in its `map` projection and downloads the
 document once (`client/maps.js`, kept under `map:<store>` on the device).
 A store with no map published yet falls back to a bundled `maps/<no>.svg`
