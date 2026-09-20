@@ -13,9 +13,10 @@ export class TransportError extends Error {
 
 export function createTransport({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs = REQUEST_TIMEOUT_MS }) {
   const base = baseUrl.replace(/\/+$/, '');
-  async function request(path, { method = 'GET', body, token } = {}) {
+  // timeoutMs per call for the few slow ones (an import reads a whole legacy store).
+  async function request(path, { method = 'GET', body, token, timeoutMs: perCall } = {}) {
     const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), perCall || timeoutMs) : null;
     let res;
     try {
       res = await fetchImpl(base + path, {

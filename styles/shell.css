@@ -428,12 +428,15 @@ svg.map.real{display:block;width:100%;height:auto;background:var(--panel)}
 .map.real .shelf-group[data-mark="counting"] .shelf{stroke:#CA8A04;stroke-width:9;fill:#EAB308;fill-opacity:.95}
 .map.real .shelf-group[data-mark="due"] .shelf{stroke:#DC2626;stroke-width:9}
 .emlist .li .nm{white-space:normal}
+.mtip{position:absolute;z-index:6;pointer-events:none;display:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px -14px rgba(17,24,39,.35);padding:9px 12px;font-size:12.5px;gap:12px;align-items:center;white-space:nowrap}
 .mtip.on{display:flex}
 .mtip .md{display:flex;flex-direction:column;align-items:center;gap:4px;padding-right:12px;border-right:1px solid var(--line-soft);color:var(--dim);font-size:11.5px}
 .mtip .md .dep{font-size:11px;padding:2px 7px}
 .mtip .md .shid{display:flex;flex-direction:column;align-items:center;line-height:1.1;margin-top:2px}
 .mtip .md .shid b{font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.01em}
 .mtip .md .shid small{font-size:11px;font-weight:700;color:var(--dim);margin-top:2px}
+.mtip .mr b{display:block;font-size:14px;font-weight:700;margin-bottom:2px}
+.mtip .mr span{display:flex;align-items:center;gap:6px;color:var(--ink2);line-height:1.5}
 .mtip .mr span svg.i{width:13px;height:13px;color:var(--faint)}
 .pcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);padding:14px 16px}
 .pcard .pt3{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -533,9 +536,12 @@ svg.map.real{display:block;width:100%;height:auto;background:var(--panel)}
 .vh .vic svg.i{width:24px;height:24px;stroke-width:1.8}
 .vh .vt{display:flex;align-items:center;gap:14px;flex:1 1 380px;min-width:0}
 .vh .vt>div{min-width:0}
+.mtip .mr .mx{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:3px 8px;border-radius:7px;font-size:12px;font-weight:600;background:var(--chip);color:var(--ink2)}
 .mtip .mr .mx.g{background:#DCFCE7;color:#166534}
 .mtip .mr .mx.b{background:#DBEAFE;color:#1E40AF}
 .mtip .mr .mx.r{background:#FEE2E2;color:#991B1B}
+.mtip .mr .mx.y{background:#FEF3C7;color:#92400E}
+.mtip .mr .mx.o{background:var(--accent-soft);color:var(--accent-ink)}
 .prod{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px}
 .prod:last-child{border-bottom:none}
 .prod .kc{font-weight:700;letter-spacing:.02em;min-width:74px}
@@ -796,6 +802,9 @@ svg.map.real{display:block;width:100%;height:auto;background:var(--panel)}
 .mt-li.sel{background:var(--accent-soft);margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:8px}
 .mt-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--ink2);margin-bottom:10px}
 .pr-map svg.map.real{background:#fff}
+.mtip .cg-id{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-weight:700;color:var(--ink)}
+.mtip .mr .dchip{vertical-align:-2px}
+.mtip .mr small{margin-left:5px;font-size:11px}
 .mtip .md .dep svg.i{width:12px;height:12px;color:#fff}
 .map.real .cpin:hover rect{filter:brightness(1.08)}
 .pd-name{font-weight:500;color:var(--dim);margin-left:10px;font-size:22px}
@@ -2033,6 +2042,7 @@ svg.map.real{display:block;width:100%;height:auto;background:var(--panel)}
 @container shell (max-width:600px){.m-launcher.open{display:flex}}
 @container shell (max-width:600px){.main{grid-template-rows:minmax(0,1fr);display:block;overflow:auto;height:100%}}
 @container shell (max-width:600px){.content{padding:14px 14px 20px}}
+@container shell (max-width:600px){.mtip{display:none!important}}
 @container shell (max-width:600px){.omni{padding:10px;align-items:stretch}}
 @container shell (max-width:600px){.omni .pal{max-height:none;border-radius:14px}}
 @container shell (max-width:600px){.search .kbd{display:none}}

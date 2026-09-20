@@ -2,7 +2,7 @@
 // plan paint. Reads store.get('refresh'); writes refresh.* events.
 
 import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine } from '../map.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
 const TARGET = 100;
@@ -62,7 +62,12 @@ export default {
   },
   mount(ctx, root) {
     const m0 = model(ctx);
-    const map = mountMap($('#mapstage', root), { mono: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); } });
+    const map = mountMap($('#mapstage', root), { mono: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
+      const m = model(ctx), mk = m.marks[info.full];
+      if (mk) return tipLine('g', 'check', `Refreshed ${fmtTime(mk.at)}`);
+      if (m.focus.includes(info.dept)) return tipLine('o', 'asterisk', 'Focus department · not yet refreshed');
+      return tipLine('', 'minus', 'Not in a focus department this week');
+    } });
     bindMapChrome(root, map);
     const paint = () => {
       const m = model(ctx);

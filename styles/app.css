@@ -99,3 +99,8 @@ form.li { margin: 0; }
 @container shell (max-width:1100px) { .sr3 { grid-template-columns: 220px minmax(0,1fr) 220px; } }
 @container shell (max-width:600px) { .sr3 { grid-template-columns: 1fr; height: auto; } .srail.right { display: none; } .hgrid, .grid2 { grid-template-columns: 1fr; } }
 @media print { .rail, .top, .foot, .m-tabs, .m-appbar, .vh .acts { display: none !important; } .content { overflow: visible !important; } }
+
+/* Store map view: the showcase caps this view's SVG at 70vh, so on a tall
+   window the drawing stops short of the stage and a blank band shows under
+   it. The other map views let the SVG fill the stage; do the same here. */
+.mapview .mapbox svg.map.real { max-height: none; }

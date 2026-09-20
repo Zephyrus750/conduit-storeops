@@ -163,7 +163,7 @@ async function runImport(ctx, form, dry) {
   const code = form.code.value.trim().toUpperCase(), pin = form.pin.value;
   st.importCode = code; btns.forEach(b => { b.disabled = true; }); err.textContent = ''; toast(dry ? 'Reading the legacy worker…' : 'Importing…');
   try {
-    st.importResult = await ctx.admin.api(`/v1/admin/stores/${st.no}/import`, { method: 'POST', body: { source: 'k2b', code, pin, dry } });
+    st.importResult = await ctx.admin.api(`/v1/admin/stores/${st.no}/import`, { method: 'POST', body: { source: 'k2b', code, pin, dry }, timeoutMs: 300_000 });
     st.importPin = dry ? pin : null;
     if (!dry) { st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); }
     ctx.rerender();

@@ -88,10 +88,13 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
   const today = String(list.today || '').slice(0, 10);
   const dayMs = Date.parse(today + 'T00:00:00+08:00') || now();
   let todayN = 0;
-  for (const it of list.items || []) {
-    const bay = String(it.location || '').toUpperCase(), date = String(it.date || today).slice(0, 10), key = `${bay}:${date}`;
-    const got = await call(`sub=get&location=${encodeURIComponent(bay)}&date=${date}`);
-    const s = got.found ? got.submission : null; if (!s) { warnings.push(`${key}: on the board but its record could not be read`); continue; }
+  // Per-bay detail, eight at a time: a busy board has 30 bays and each is a read.
+  const board = (list.items || []).map(it => ({ bay: String(it.location || '').toUpperCase(), date: String(it.date || today).slice(0, 10) }));
+  const details = new Map();
+  for (let i = 0; i < board.length; i += 8) await Promise.all(board.slice(i, i + 8).map(async b => { const got = await call(`sub=get&location=${encodeURIComponent(b.bay)}&date=${b.date}`); details.set(`${b.bay}:${b.date}`, got.found ? got.submission : null); }));
+  for (const { bay, date } of board) {
+    const key = `${bay}:${date}`;
+    const s = details.get(key); if (!s) { warnings.push(`${key}: on the board but its record could not be read`); continue; }
     const k = { bay, date }, t0 = s.submittedAt || dayMs;
     const codes = {}; for (const c of s.codes || []) { const kc = String(c.code || c); if (/^\d{6,13}$/.test(kc)) codes[kc] = typeof c === 'object' ? !!c.scanned : true; }
     await push(`open:${key}`, t0, 'submission.open', 'stockroom', k);

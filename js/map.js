@@ -25,7 +25,24 @@ const PLACEHOLDER = '<svg class="map real placeholder" viewBox="0 0 1200 700" xm
 // Shelf segment id as the refresh mode keys it: "A11 S1" (data-full), uppercased.
 export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttribute('data-shelf') + ' ' + (g.getAttribute('data-subname') || '')).trim()).toUpperCase(); }
 
-export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false } = {}) {
+// Hover tooltip on a shelf, as in the showcase: department chip, shelf id and
+// segment, name, Side/End, module count, run direction, then a status line
+// from the segment's mark. A view passes `tip(info, g)` to say what its mark
+// means ('Refreshed Tue 09:12'); without it the mark's generic label shows.
+const MARK_LINE = { done: ['g', 'check', 'Done'], checked: ['b', 'check', 'Checked'], wrong: ['r', 'alert', 'Wrong label found'], focus: ['o', 'asterisk', 'Focus department'], stop: ['o', 'route', 'On the route'], counting: ['y', 'clock', 'Counting'], counted: ['g', 'check', 'Counted'], verified: ['b', 'checks', 'Verified'], due: ['r', 'clock', 'Due'], plana: ['o', 'edit', 'Planned'], planb: ['o', 'edit', 'Planned'], planc: ['o', 'edit', 'Planned'] };
+export function tipLine(cls, icon, text) { return `<span class="mx ${cls}">${ic(icon)}${esc(text)}</span>`; }
+function tipHtml(api, g, tip) {
+  const info = api.shelfInfo(g);
+  const r = g.querySelector('.shelf'); const horiz = r && (+r.getAttribute('width') >= +r.getAttribute('height'));
+  const side = /^S/i.test(info.sub) ? 'Side' : /^E/i.test(info.sub) ? 'End' : (info.sub || '—');
+  const mark = g.getAttribute('data-mark') || '';
+  let mx = tip ? tip({ ...info, mark }, g) : undefined;
+  if (mx === undefined) { const m = MARK_LINE[mark]; mx = m ? tipLine(m[0], m[1], m[2]) : ''; }
+  return `<div class="md"><span class="dep" style="background:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
+    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b><span>${ic('side')}${esc(side)}</span><span>${ic('grid')}${info.segments} module${info.segments === 1 ? '' : 's'}</span><span>${ic('orient')}${horiz ? 'Horizontal run' : 'Vertical run'}</span>${mx || ''}</div>`;
+}
+
+export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false, tip = null, tips = true } = {}) {
   stage.innerHTML = mapText;
   const svg = stage.querySelector('svg.map.real');
   if (mono) svg.classList.add('mono');
@@ -131,6 +148,25 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
   });
   svg.addEventListener('pointercancel', () => { drag = null; });
+
+  // hover tooltip (mouse only; a touch shows nothing, the tap selects)
+  if (tips) {
+    let tipEl = null;
+    const hide = () => { if (tipEl) tipEl.classList.remove('on'); };
+    stage.addEventListener('pointermove', e => {
+      if (e.pointerType && e.pointerType !== 'mouse') return hide();
+      const g = e.target.closest?.('.shelf-group[data-shelf]');
+      if (!g || !g.getAttribute('data-shelf') || drag?.moved) return hide();
+      if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'mtip'; stage.appendChild(tipEl); }
+      tipEl.innerHTML = tipHtml(api, g, tip); tipEl.classList.add('on');
+      const r = stage.getBoundingClientRect(); let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+      if (x + tipEl.offsetWidth > r.width - 8) x = e.clientX - r.left - tipEl.offsetWidth - 14;
+      if (y + tipEl.offsetHeight > r.height - 8) y = e.clientY - r.top - tipEl.offsetHeight - 14;
+      tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+    });
+    stage.addEventListener('pointerleave', hide);
+    stage.addEventListener('pointerdown', hide);
+  }
   return api;
 }
 
