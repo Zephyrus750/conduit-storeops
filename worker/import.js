@@ -18,6 +18,7 @@
 // All but info take the PIN in X-K2B-Pin. Timestamps are epoch ms.
 
 import { HttpError } from './http.js';
+import { upstream } from './upstream.js';
 
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const PAGE = 250;
@@ -39,12 +40,18 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
   if (!base) throw new HttpError(503, 'not_configured', 'LEGACY_URL is not set');
   const storeCode = String(code || '').trim().toUpperCase();
   if (!/^[A-Z2-9]{6,10}$/.test(storeCode)) throw new HttpError(400, 'invalid_request', 'code must be the 6 to 10 character K2B store code');
+  const doFetch = upstream(env, 'LEGACY', fetchImpl);
   const call = async (q, withPin = true) => {
-    const r = await fetchImpl(`${base}/?${q}&store=${storeCode}`, { headers: withPin ? { 'X-K2B-Pin': String(pin || '') } : {} });
-    const j = await r.json().catch(() => ({}));
-    if (r.status === 403) throw new HttpError(403, 'legacy_pin', 'the legacy worker refused the store PIN');
-    if (r.status === 404) throw new HttpError(404, 'legacy_store', j.error || `store code ${storeCode} is not known to the legacy worker`);
-    if (!r.ok) throw new HttpError(502, 'legacy_error', `legacy worker answered ${r.status}: ${j.error || ''}`);
+    const url = `${base}/?${q}&store=${storeCode}`;
+    let r;
+    try { r = await doFetch(url, { headers: withPin ? { 'X-K2B-Pin': String(pin || '') } : {} }); }
+    catch (e) { throw new HttpError(502, 'legacy_unreachable', `could not reach the legacy worker at ${base}: ${e.message}`); }
+    const text = await r.text();
+    let j = {}; try { j = JSON.parse(text); } catch { j = {}; }
+    const said = j.error ? String(j.error) : text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    if (r.status === 403 && withPin) throw new HttpError(403, 'legacy_pin', `the legacy worker refused the store PIN: ${said}`);
+    if (r.status === 404 && (j.found === false || /unknown store/i.test(said))) throw new HttpError(404, 'legacy_store', `store code ${storeCode} is not known to the legacy worker: ${said}`);
+    if (!r.ok) throw new HttpError(502, 'legacy_error', `legacy worker answered ${r.status} for ?${q}: ${said || 'no body'}`);
     return j;
   };
 

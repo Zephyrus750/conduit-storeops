@@ -12,6 +12,7 @@
 // briefly so a mistyped code does not hammer the upstreams.
 
 import { HttpError } from './http.js';
+import { upstream } from './upstream.js';
 
 export const MAX_CODES = 50;
 const LINK_TTL_S = 7 * 86400;       // name and URL do not change
@@ -73,11 +74,12 @@ async function cachePut(cache, kc, item, now) {
 
 async function fetchLinks(env, codes, fetchImpl) {
   const base = env.LOOKUP_URL; if (!base) return {};
+  const doFetch = upstream(env, 'LOOKUP', fetchImpl);
   const out = {};
   for (let i = 0; i < codes.length; i += 40) {
     const chunk = codes.slice(i, i + 40);
     try {
-      const r = await timed(fetchImpl(`${base.replace(/\/+$/, '')}/?codes=${chunk.join(',')}`));
+      const r = await timed(doFetch(`${base.replace(/\/+$/, '')}/?codes=${chunk.join(',')}`));
       if (!r.ok) continue;
       const j = await r.json();
       for (const kc of chunk) if (j?.[kc]?.found && j[kc].url) out[kc] = { url: j[kc].url, name: j[kc].name || '' };
@@ -87,11 +89,12 @@ async function fetchLinks(env, codes, fetchImpl) {
 }
 async function fetchDetails(env, items, fetchImpl) {
   const url = env.DETAILS_URL; if (!url || !items.length) return {};
+  const doFetch = upstream(env, 'DETAILS', fetchImpl);
   const out = {};
   for (let i = 0; i < items.length; i += 20) {
     const chunk = items.slice(i, i + 20);
     try {
-      const r = await timed(fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: chunk }) }));
+      const r = await timed(doFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: chunk }) }));
       if (!r.ok) continue;
       const j = await r.json();
       for (const it of chunk) if (j?.[it.kc]?.found) out[it.kc] = j[it.kc];

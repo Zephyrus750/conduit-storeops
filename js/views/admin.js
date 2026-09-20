@@ -167,7 +167,7 @@ async function runImport(ctx, form, dry) {
     st.importPin = dry ? pin : null;
     if (!dry) { st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); }
     ctx.rerender();
-  } catch (e) { btns.forEach(b => { b.disabled = false; }); err.textContent = e.code === 'legacy_pin' ? 'K2B refused that PIN.' : e.code === 'legacy_store' ? 'K2B does not know that store code.' : e.code === 'not_entitled' ? 'Turn the Stockroom on in Access first.' : e.message; }
+  } catch (e) { btns.forEach(b => { b.disabled = false; }); err.textContent = e.code === 'legacy_pin' ? `K2B refused that PIN. (${e.message})` : e.code === 'legacy_store' ? `K2B does not know that store code. (${e.message})` : e.code === 'legacy_unreachable' ? `The legacy worker could not be reached. (${e.message})` : e.code === 'not_entitled' ? 'Turn the Stockroom on in Access first.' : `${e.code}: ${e.message}`; }
 }
 function mapTab(rec, c) {
   const m = c.map;

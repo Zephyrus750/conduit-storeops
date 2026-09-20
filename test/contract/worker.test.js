@@ -55,9 +55,12 @@ before(async () => {
         upstreamCalls.lookup += 1; return Response.json(out);
       }
       if (u.hostname === 'details.test') { upstreamCalls.details += 1; return req.json().then(b => Response.json(Object.fromEntries(b.items.map(i => [i.kc, { found: true, price: 12, was: 15, img: 'https://img.test/42977636.jpg', clr: true }])))); }
-      if (u.hostname === 'legacy.test') return legacy(u, req);
+      if (u.hostname === 'legacy.test') return new Response('legacy must go through the LEGACY binding', { status: 500 });
       return new Response('unexpected upstream ' + req.url, { status: 502 });
     },
+    // The legacy worker is reached through a service binding in production;
+    // the lookup and details workers fall back to fetch (outboundService).
+    serviceBindings: { LEGACY: (req) => legacy(new URL(req.url), req) },
     bindings: {
       LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', LEGACY_URL: 'https://legacy.test',
       TOKEN_SECRET: 'test-token-secret',
@@ -248,7 +251,8 @@ test('maps: owner publishes, devices read by version or latest, the log and regi
 
 test('K2B importer: dry run counts, the import lands as events, a second run is all duplicates, flip sets the area', async () => {
   const bad = await api('POST', '/v1/admin/stores/1241/import', { code: 'NOPE99', pin: '2468', dry: true }, ownerToken);
-  assert.equal(bad.status, 404); assert.equal(bad.body.code, 'legacy_store');
+  assert.equal(bad.status, 404); assert.equal(bad.body.code, 'legacy_store'); assert.match(bad.body.message, /Unknown store code/);
+  assert.equal((await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS0147', pin: '2468', dry: true }, ownerToken)).status, 400, 'K2B codes never hold 0, O, 1 or I');
   const wrongPin = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '0000', dry: true }, ownerToken);
   assert.equal(wrongPin.status, 403); assert.equal(wrongPin.body.code, 'legacy_pin');
 
