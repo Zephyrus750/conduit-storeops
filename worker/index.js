@@ -22,7 +22,7 @@ r.post('/v1/auth/signin', async (req, env) => {
     if (!env.OWNER_KEY_HASH) throw new HttpError(503, 'not_configured', 'OWNER_KEY_HASH is not set');
     const key = `owner:${device || 'nodevice'}`;
     await registry(env, 'POST', '/lockout/check', { key });
-    if (!(await verifySecret(String(b.ownerKey), env.OWNER_KEY_HASH))) {
+    if (!(await verifySecret(String(b.ownerKey).trim(), env.OWNER_KEY_HASH))) {
       await registry(env, 'POST', '/lockout/fail', { key });
       throw new HttpError(403, 'unauthorised', 'wrong owner key');
     }

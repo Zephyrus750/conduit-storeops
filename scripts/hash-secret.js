@@ -4,7 +4,7 @@
 // or pipe it in:  echo -n "<owner key>" | npm run hash-secret
 import { hashSecret } from '../worker/auth.js';
 
-let secret = process.argv.slice(2).join(' ');
+let secret = process.argv.slice(2).join(' ').trim();
 if (!secret) {
   secret = await new Promise(resolve => {
     let s = ''; process.stdin.setEncoding('utf8');

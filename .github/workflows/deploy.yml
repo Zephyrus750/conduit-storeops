@@ -46,11 +46,19 @@ jobs:
       # Deploy first: a secret can only be attached to a worker that exists.
       - name: Deploy
         run: npx wrangler deploy --env "$TARGET"
+      # Secrets reach the shell as environment variables, never inlined, so a
+      # key containing $ ` " or ! survives intact. hash-secret trims stdin.
       - name: Worker secrets (first run, or when asked)
         if: github.event.inputs.set_secrets == 'true'
+        env:
+          TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}
+          OWNER_KEY: ${{ secrets.OWNER_KEY }}
         run: |
-          printf '%s' "${{ secrets.TOKEN_SECRET }}" | npx wrangler secret put TOKEN_SECRET --env "$TARGET"
-          npm run --silent hash-secret -- "${{ secrets.OWNER_KEY }}" | npx wrangler secret put OWNER_KEY_HASH --env "$TARGET"
+          [ -n "$OWNER_KEY" ] || { echo "OWNER_KEY repository secret is empty"; exit 1; }
+          [ -n "$TOKEN_SECRET" ] || { echo "TOKEN_SECRET repository secret is empty"; exit 1; }
+          printf '%s' "$TOKEN_SECRET" | npx wrangler secret put TOKEN_SECRET --env "$TARGET"
+          printf '%s' "$OWNER_KEY" | npm run --silent hash-secret | npx wrangler secret put OWNER_KEY_HASH --env "$TARGET"
+          echo "owner key length: ${#OWNER_KEY} characters (hash stored, key never printed)"
       - name: Health
         run: |
           sleep 5
