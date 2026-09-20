@@ -91,3 +91,14 @@ test('picklist: per device, sanitised items', () => {
   assert.equal(apply(s, ev('picklist.set', { device: 'P1' }, { items: [{ code: 'K12S1' }, { code: 'A1', completed: true }, { nope: 1 }] })), null);
   assert.deepEqual(s.picklists.P1.items, [{ code: 'K12S1', completed: false }, { code: 'A1', completed: true }]);
 });
+
+test('refresh: an unmark holds against a mark that arrives late from another device', () => {
+  const s = initialState(); const k = { segment: 'A8 S2', week: '2026-W38' };
+  assert.equal(apply(s, ev('refresh.mark', k, {}, { at: '2026-09-20T08:00:00+08:00', actor: { role: 'floor', device: 'PHONE' } })), null);
+  assert.equal(apply(s, ev('refresh.unmark', k, {}, { at: '2026-09-20T08:05:00+08:00', actor: { role: 'floor', device: 'DESK' } })), null);
+  assert.equal(s.refresh.weeks['2026-W38']['A8 S2'], undefined);
+  assert.equal(apply(s, ev('refresh.mark', k, {}, { at: '2026-09-20T08:01:00+08:00', actor: { role: 'floor', device: 'PHONE' } })), null, 'accepted quietly');
+  assert.equal(s.refresh.weeks['2026-W38']['A8 S2'], undefined, 'the phone’s earlier tap does not bring the mark back');
+  assert.equal(apply(s, ev('refresh.mark', k, {}, { at: '2026-09-20T08:09:00+08:00', actor: { role: 'floor', device: 'PHONE' } })), null);
+  assert.equal(s.refresh.weeks['2026-W38']['A8 S2'].devices[0], 'PHONE', 'a fresh tap after the unmark marks again');
+});

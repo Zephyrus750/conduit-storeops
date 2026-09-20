@@ -2,7 +2,7 @@
 // plan paint. Reads store.get('refresh'); writes refresh.* events.
 
 import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode } from '../map.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
 const PLAN_NAME = { '#a855f7': 'Purple', '#3b82f6': 'Blue', '#f59e0b': 'Amber', '#ec4899': 'Pink', '#14b8a6': 'Teal', '#ef4444': 'Red' };
@@ -22,13 +22,13 @@ function marksFor(map, m) {
   const out = {};
   for (const g of map.segments()) {
     const id = segmentId(g), d = (g.getAttribute('data-dept') || '').toLowerCase();
-    if (m.marks[id]) out[id] = 'done'; else if (m.focus.includes(d)) out[id] = 'focus';
+    if (markKeysFor(m.marks, { full: id, id: g.getAttribute('data-shelf') }).length) out[id] = 'done'; else if (m.focus.includes(d)) out[id] = 'focus';
   }
   return out;
 }
 function focusCounts(map, m) {
   const by = {}; const tot = {};
-  for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(); tot[d] = (tot[d] || 0) + 1; if (m.marks[segmentId(g)]) by[d] = (by[d] || 0) + 1; }
+  for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(); tot[d] = (tot[d] || 0) + 1; if (markKeysFor(m.marks, { full: segmentId(g), id: g.getAttribute('data-shelf') }).length) by[d] = (by[d] || 0) + 1; }
   return m.focus.map(d => ({ d, done: by[d] || 0, total: tot[d] || 0 }));
 }
 function dayBars(m) {
@@ -47,6 +47,7 @@ function applyPlan(map, plan, marks, planMode) {
     const id = segmentId(g), c = plan[id], done = !!marks[id];
     g.querySelector('.plan-dot')?.remove();
     if (c && (planMode || !done)) r.style.setProperty('fill', c, 'important'); else r.style.removeProperty('fill');
+    if (c) g.setAttribute('data-plan', '1'); else g.removeAttribute('data-plan');
     if (c && done && !planMode) {
       const circle = r.tagName === 'circle'; const cx = circle ? +r.getAttribute('cx') : +r.getAttribute('x') + +r.getAttribute('width') / 2, cy = circle ? +r.getAttribute('cy') : +r.getAttribute('y') + +r.getAttribute('height') / 2;
       const rad = circle ? +r.getAttribute('r') * 0.35 : Math.min(+r.getAttribute('width'), +r.getAttribute('height')) * 0.3;
@@ -54,11 +55,19 @@ function applyPlan(map, plan, marks, planMode) {
     }
   }
 }
+// The mark keys that cover a tapped module: its own ("A8 S2"), the same
+// code written another way ("A8S2"), or the whole shelf ("A8") as a device
+// on an older map without modules would have marked it.
+function markKeysFor(marks, info) {
+  const full = canonCode(info.full), shelf = canonCode(info.id);
+  return Object.keys(marks).filter(k => { const c = canonCode(k); return c === full || c === shelf; });
+}
 async function tap(ctx, info) {
   const m = model(ctx);
   try {
     if (mode === 'plan') { const cur = m.plan[info.full]; await ctx.store.dispatch({ type: 'refresh.plan.paint', entity: { segment: info.full }, payload: { colour: planColour === 'erase' || cur === planColour ? 'erase' : planColour } }); return; }
-    if (m.marks[info.full]) await ctx.store.dispatch({ type: 'refresh.unmark', entity: { segment: info.full, week: m.week } });
+    const covered = markKeysFor(m.marks, info);
+    if (covered.length) for (const seg of covered) await ctx.store.dispatch({ type: 'refresh.unmark', entity: { segment: seg, week: m.week } });
     else await ctx.store.dispatch({ type: 'refresh.mark', entity: { segment: info.full, week: m.week } });
   } catch (e) { toast(e.message, 'bad'); }
 }
@@ -80,7 +89,7 @@ export default {
   mount(ctx, root) {
     const m0 = model(ctx);
     const map = mountMap($('#mapstage', root), { cls: 'rf', badges: false, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
-      const m = model(ctx), mk = m.marks[info.full], c = m.plan[info.full];
+      const m = model(ctx), mk = m.marks[markKeysFor(m.marks, info)[0]], c = m.plan[info.full];
       const plan = c ? `<span class="mx"><i class="pdot" style="background:${esc(c)}"></i>Planned · ${planName(c)}</span>` : '';
       if (mk) return tipLine('g', 'check', `Refreshed ${fmtTime(mk.at)}`) + plan;
       if (m.focus.includes(info.dept)) return tipLine('o', 'asterisk', 'Focus · not yet refreshed') + plan;
@@ -89,7 +98,7 @@ export default {
     bindMapChrome(root, map);
     const paint = () => {
       const m = model(ctx);
-      map.setMarks(marksFor(map, m)); applyPlan(map, m.plan, m.marks, mode === 'plan'); map.svg.classList.toggle('rfplan', mode === 'plan');
+      map.setMarks(marksFor(map, m)); applyPlan(map, m.plan, m.marks, mode === 'plan'); map.svg.classList.toggle('rfplan', mode === 'plan'); map.svg.toggleAttribute('data-focus', m.focus.length > 0);
       const side = $('#rfside', root); if (side) side.innerHTML = sidebar(map, m);
       const mob = $('#rfmob', root); if (mob) mob.innerHTML = mobileBar(map, m);
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.done}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}`;

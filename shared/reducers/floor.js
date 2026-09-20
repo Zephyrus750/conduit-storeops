@@ -23,7 +23,7 @@ const MAX_INT_MONTHS = 120;
 
 export function floorState() {
   return {
-    refresh: { weeks: {}, focus: {}, plan: {} },
+    refresh: { weeks: {}, focus: {}, plan: {}, unmarked: {} },
     labels: { cycleLen: 'monthly', assign: {}, checks: {}, variances: {} },
     stocktake: { sessions: {} },
     issues: {},
@@ -34,9 +34,13 @@ export function floorState() {
 
 export const floorReducers = {
   // ── Location refresh ─────────────────────────────────────────────────
+  // A mark that arrives after the desk already unmarked that segment (a
+  // phone's queued tap landing late) is ignored, so an unmark holds.
   'refresh.mark'(s, e) {
     const week = (s.refresh.weeks[e.entity.week] ||= {});
     const seg = e.entity.segment;
+    const gone = s.refresh.unmarked?.[e.entity.week]?.[seg];
+    if (gone && e.at <= gone) return null;
     const dev = e.actor?.device || 'unknown';
     const cur = week[seg];
     if (!cur) { week[seg] = { at: e.at, devices: [dev] }; return null; }
@@ -47,6 +51,7 @@ export const floorReducers = {
   'refresh.unmark'(s, e) {
     const week = s.refresh.weeks[e.entity.week];
     if (week) delete week[e.entity.segment];
+    ((s.refresh.unmarked ||= {})[e.entity.week] ||= {})[e.entity.segment] = e.at;
     return null;
   },
   'refresh.clearWeek'(s, e) {

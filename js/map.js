@@ -132,10 +132,10 @@ export function parkMap() { if (live?.isConnected) live.remove(); }
 // Everything a view can leave on the map, undone: marks, selection, find
 // rings, dimming, route and pins, plan colours, classes, floor and zoom.
 function resetLive(svg, fl) {
-  svg.setAttribute('class', 'map real'); svg.removeAttribute('data-deptzoom'); svg.removeAttribute('style');
+  svg.setAttribute('class', 'map real'); svg.removeAttribute('data-deptzoom'); svg.removeAttribute('data-focus'); svg.removeAttribute('style');
   for (const el of [...svg.children]) if (!el.classList.contains('mfl')) el.remove();
   for (const g of svg.querySelectorAll('.shelf-group')) {
-    for (const a of ['data-mark', 'data-sel', 'data-hl', 'data-onroute', 'data-dim']) if (g.hasAttribute(a)) g.removeAttribute(a);
+    for (const a of ['data-mark', 'data-sel', 'data-hl', 'data-onroute', 'data-dim', 'data-plan']) if (g.hasAttribute(a)) g.removeAttribute(a);
     if (g.style.length) g.removeAttribute('style');
     const r = g.firstElementChild; if (r && r.style.length) r.removeAttribute('style');
   }
