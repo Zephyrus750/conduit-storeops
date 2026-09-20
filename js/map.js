@@ -3,7 +3,7 @@
 // filter. Ported from the showcase's map chrome; the map document itself
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
-import { $, $$, ic, esc, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS } from './ui.js';
+import { $, $$, ic, esc, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments } from './ui.js';
 
 let mapText = null, mapMeta = null;
 // The shell sets the map from the published document (client.maps.get) or
@@ -11,6 +11,7 @@ let mapText = null, mapMeta = null;
 export function setMap(doc) {
   if (!doc) { mapText = PLACEHOLDER; mapMeta = null; return; }
   mapText = doc.floors?.[0]?.svg || PLACEHOLDER; mapMeta = { version: doc.version, at: doc.at, name: doc.name, floors: (doc.floors || []).map(f => ({ id: f.id, name: f.name, type: f.type })), departments: doc.departments || [] };
+  setDepartments(doc.departments);
 }
 export function mapInfo() { return mapMeta; }
 export function hasMap() { return !!mapText && mapText !== PLACEHOLDER; }
@@ -170,9 +171,17 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       if (!g || !g.getAttribute('data-shelf') || drag?.moved) return hide();
       if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'mtip'; stage.appendChild(tipEl); }
       tipEl.innerHTML = tipHtml(api, g, tip); tipEl.classList.add('on');
-      const r = stage.getBoundingClientRect(); let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
-      if (x + tipEl.offsetWidth > r.width - 8) x = e.clientX - r.left - tipEl.offsetWidth - 14;
-      if (y + tipEl.offsetHeight > r.height - 8) y = e.clientY - r.top - tipEl.offsetHeight - 14;
+      // Above and to the right of the pointer, so the shelf under it stays
+      // visible; flips left or below when it would leave the stage.
+      // Pointer coordinates are screen px; the frame renders under a CSS
+      // zoom, so divide by it to place the tip in layout px.
+      const r = stage.getBoundingClientRect(), k = r.width / (stage.offsetWidth || r.width) || 1;
+      const cx = (e.clientX - r.left) / k, cy = (e.clientY - r.top) / k, w = tipEl.offsetWidth, h = tipEl.offsetHeight, sw = stage.offsetWidth, sh = stage.offsetHeight;
+      let x = cx + 18, y = cy - h - 18;
+      if (x + w > sw - 8) x = cx - w - 18;
+      if (x < 8) x = Math.max(8, Math.min(cx - w / 2, sw - w - 8));
+      if (y < 8) y = cy + 24;
+      if (y + h > sh - 8) y = Math.max(8, sh - h - 8);
       tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
     });
     stage.addEventListener('pointerleave', hide);
@@ -185,7 +194,8 @@ function cssq(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
 // The bar above a desktop map: find, department chips, zoom, key.
 export function mapbar() {
-  const chips = [['All', 'grid', ''], ['Home', 'home', 'home'], ['Clothing', 'shirt', 'clothing'], ['Kids', 'star', 'kids'], ['Checkouts', 'bag', 'checkouts'], ['Flex', 'flame', 'flex'], ['Stockroom', 'box', 'stockroom']];
+  const chips = [['All', 'grid', '']];
+  for (const [label, icon, ids] of DEPT_GROUPS) { if (label === 'Other') for (const id of ids) chips.push([DEPT_NAME[id] || id, { checkouts: 'bag', flex: 'flame', stockroom: 'box' }[id] || 'tag', id]); else chips.push([label, icon, label.toLowerCase()]); }
   return `<div class="mapbar"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Find a shelf, bay or product on the map…" aria-label="Find on map" data-mapfind><svg class="i mic" title="Voice search"><use href="icons.svg#i-mic"/></svg></div>` +
     `<div class="legchips">${chips.map((c, i) => `<span class="chip${i === 0 ? ' on' : ''}" data-mapgroup="${c[2]}">${ic(c[1])}${c[0]}</span>`).join('')}</div>` +
     `<div class="zoom" style="margin-left:auto;display:flex;gap:6px"><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span>` +
@@ -206,7 +216,7 @@ export function bindMapChrome(root, map) {
     if (grp) {
       for (const c of $$('[data-mapgroup]', root)) c.classList.toggle('on', c === grp);
       const g = grp.getAttribute('data-mapgroup');
-      const codes = { home: ['h1', 'h2', 'h3', 'h4'], clothing: ['c1', 'c2', 'c3', 'c4'], kids: ['k1', 'k2', 'k3', 'k4'], checkouts: ['checkouts'], flex: ['flex'], stockroom: ['stockroom'] }[g];
+      const codes = !g ? null : (DEPT_GROUPS.find(x => x[0].toLowerCase() === g)?.[2] || [g]);
       for (const el of $$('.shelf-group[data-dept]', map.svg)) el.style.opacity = !codes || codes.includes((el.getAttribute('data-dept') || '').toLowerCase()) ? '' : '.14';
       if (!codes) map.fit();
     }

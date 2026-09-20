@@ -23,7 +23,7 @@ export function selCard(ctx, map, id) {
   return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>Selected shelf</h3><span class="go" data-act="clear">Clear</span></div>` +
     `<div class="sid">${esc(id)}${dep(info.dept)}</div><div class="meta">${DEPT_NAME[info.dept] || info.dept} · ${info.segments} segment${info.segments === 1 ? '' : 's'} · aisle ${esc(id.charAt(0))}, bay ${esc(id.slice(1))}</div>` +
     `<div class="rows" style="margin-top:12px;border-top:1px solid var(--line-soft)">${row('Refreshed this week', f.refreshed ? fmtTime(f.refreshed.at) : 'not yet')}${row('Label micro-depts', f.micros.length ? `${f.checked.length}/${f.micros.length} checked` : 'none assigned')}${row('Planned', f.plan.length ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${f.plan[0]};vertical-align:-1px"></i> yes` : 'no')}</div>` +
-    `<div class="acts2"><a class="btn primary sm" data-go="picklist">${ic('route')}Pick list</a><a class="btn sm" data-go="refresh">${ic('asterisk')}Refresh</a><a class="btn sm" data-go="labelint">${ic('dollar')}Label check</a></div></div>`;
+    `<div class="acts2"><a class="btn primary sm" data-go="picklist">${ic('m-picklist')}Pick list</a><a class="btn sm" data-go="refresh">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint">${ic('m-labelint')}Label check</a></div></div>`;
 }
 export function mvSel(ctx, map, id) {
   if (!id) return `<div class="what"><span>Tap a shelf to see what is there, or search above.</span></div>`;

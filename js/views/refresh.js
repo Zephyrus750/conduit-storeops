@@ -65,8 +65,8 @@ export default {
     const map = mountMap($('#mapstage', root), { mono: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
       const m = model(ctx), mk = m.marks[info.full];
       if (mk) return tipLine('g', 'check', `Refreshed ${fmtTime(mk.at)}`);
-      if (m.focus.includes(info.dept)) return tipLine('o', 'asterisk', 'Focus department · not yet refreshed');
-      return tipLine('', 'minus', 'Not in a focus department this week');
+      if (m.focus.includes(info.dept)) return tipLine('o', 'asterisk', 'Focus · not yet refreshed');
+      return tipLine('', 'minus', 'Not in focus this week');
     } });
     bindMapChrome(root, map);
     const paint = () => {
@@ -100,7 +100,7 @@ function sidebar(map, m) {
   return `<div class="pcard"><div class="rfcount">${ic('asterisk')}<div class="n">${m.done}<small> / ${TARGET}</small></div><div class="fx">Focus this week<div class="chips">${fc.map(f => `<span class="chip" data-act="zoom-dept" data-dept="${f.d}"><span class="sw" style="background:${DEPT_COLOUR[f.d]}"></span>${f.d.toUpperCase()} ${f.done}/${f.total}</span>`).join('')}<span class="chip" style="color:var(--accent-ink)" data-act="mode" data-mode="focus">Choose…</span></div></div></div>${prog(m.done / TARGET * 100)}` +
     (mode === 'focus' ? `<div class="chips" style="margin-top:10px">${depts.map(d => `<span class="chip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}"><span class="sw" style="background:${DEPT_COLOUR[d]}"></span>${d.toUpperCase()}</span>`).join('')}<span class="chip" data-act="mode" data-mode="refresh">Done</span></div>` : '') + `</div>` +
     `<div class="pcard"><div class="pt3">This week’s scanning</div><div class="rfchart">${dayBars(m)}</div></div>` +
-    `<div class="pcard"><div class="pt3">Refreshed this week<span style="margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none">${m.done} segments</span></div><div class="list rflist">${list.map(([id, x]) => { const d = deptOfSeg(map, id); return `<div class="li"><span class="loc">${esc(id)}</span>${dep(d)}<span class="nm"></span><span class="rt">${fmtTime(x.at)}</span></div>`; }).join('') || '<div class="li" style="color:var(--dim);font-size:12px">Nothing yet this week. Tap a shelf on the map.</div>'}${m.done > 8 ? `<div class="li" style="color:var(--dim);font-size:12px">+ ${m.done - 8} more this week</div>` : ''}</div></div>` +
+    `<div class="pcard"><div class="pt3">Refreshed this week<span style="margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none">${m.done} segments</span></div><div class="list rflist">${list.map(([id, x]) => { const d = deptOfSeg(map, id); return `<div class="li"><span class="loc">${esc(id)}</span>${dep(d)}<span class="nm">${esc(DEPT_NAME[d] || d)}</span><span class="rt">${fmtTime(x.at)}</span></div>`; }).join('') || '<div class="li" style="color:var(--dim);font-size:12px">Nothing yet this week. Tap a shelf on the map.</div>'}${m.done > 8 ? `<div class="li" style="color:var(--dim);font-size:12px">+ ${m.done - 8} more this week</div>` : ''}</div></div>` +
     `<div class="pcard"><div class="plan"><span class="pt3" style="margin:0">Plan</span><span class="sw2${mode === 'plan' ? ' on' : ''}" data-act="mode" data-mode="${mode === 'plan' ? 'refresh' : 'plan'}"></span></div><div class="pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c && mode === 'plan' ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<span class="er${planColour === 'erase' && mode === 'plan' ? ' on' : ''}" data-act="colour" data-colour="erase">${ic('x')}</span></div><div class="lbl">${mode === 'plan' ? 'Plan mode: tap shelves to paint them for the team. Same colour again clears.' : 'Pick a colour, then tap shelves to mark them.'}</div></div>` +
     `<div class="pfoot"><button class="btn" data-act="reset-plan">${ic('refresh')}Reset planning</button></div>`;
 }

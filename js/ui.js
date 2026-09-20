@@ -29,10 +29,34 @@ export function card(title, body, right = '') { return `<div class="card"><div c
 export function prog(pct) { pct = Math.max(0, Math.min(100, Math.round(pct || 0))); return `<div class="prog"><div class="track"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`; }
 export function status(cls, text) { return `<span class="status ${cls}">${text}</span>`; }
 
-// ── departments (from the published map's key) ────────────────────────
+// ── departments ───────────────────────────────────────────────────────
+// Filled from the published map's department list (setDepartments, called
+// when the map document loads). Until a map with departments is published
+// these hold the showcase's stand-in names. The tables are mutated in
+// place so every view reads the current store's names.
 export const DEPT_COLOUR = { h1: '#FF8C00', h2: '#9B59B6', c1: '#FF69B4', h3: '#8B4513', h4: '#228B22', c2: '#4169E1', c4: '#FF1493', c3: '#D4A017', k1: '#2E8B57', checkouts: '#10b981', flex: '#808080', k2: '#FF4500', k3: '#FFB6C1', k4: '#87CEEB', stockroom: '#800020' };
 export const DEPT_NAME = { h1: 'Manchester', h2: 'Home', h3: 'Decor', h4: 'Kitchen', c1: 'Kids apparel', c2: 'Womens', c3: 'Mens', c4: 'Footwear', k1: 'Toys', k2: 'Kids', k3: 'Baby', k4: 'Sport', flex: 'Flex', checkouts: 'Checkouts', stockroom: 'Stockroom' };
 export const DEPT_GROUPS = [['Home', 'home', ['h1', 'h2', 'h3', 'h4']], ['Clothing', 'shirt', ['c1', 'c2', 'c3', 'c4']], ['Kids', 'star', ['k1', 'k2', 'k3', 'k4']], ['Other', 'box', ['checkouts', 'flex', 'stockroom']]];
+const GROUP_ICON = { home: 'home', clothing: 'shirt', kids: 'star' };
+// The map file names departments "H1 Kitchen": the badge is the id, the
+// rest is the common name shown beside it.
+export function deptCommonName(d) { const n = String(d.name || d.id || '').trim(); const m = n.match(/^([A-Za-z]\d+)\s+(.+)$/); return m && m[1].toLowerCase() === String(d.id).toLowerCase() ? m[2] : n; }
+export function setDepartments(list) {
+  if (!Array.isArray(list) || !list.length) return false;
+  for (const k of Object.keys(DEPT_COLOUR)) delete DEPT_COLOUR[k];
+  for (const k of Object.keys(DEPT_NAME)) delete DEPT_NAME[k];
+  DEPT_GROUPS.length = 0;
+  const groups = new Map(), loose = [];
+  for (const d of list) {
+    const id = String(d.id || '').toLowerCase(); if (!id) continue;
+    DEPT_COLOUR[id] = d.color || '#64748B'; DEPT_NAME[id] = deptCommonName(d);
+    const parent = d.parent ? String(d.parent).toLowerCase() : '';
+    if (parent) { if (!groups.has(parent)) groups.set(parent, []); groups.get(parent).push(id); } else loose.push(id);
+  }
+  for (const [gid, ids] of groups) DEPT_GROUPS.push([gid.charAt(0).toUpperCase() + gid.slice(1), GROUP_ICON[gid] || 'layers', ids]);
+  if (loose.length) DEPT_GROUPS.push(['Other', 'box', loose]);
+  return true;
+}
 export function dep(code) { const c = String(code || '').toLowerCase(); return `<span class="dep" style="background:${DEPT_COLOUR[c] || '#64748B'}">${esc(c.toUpperCase())}</span>`; }
 
 // ── time ──────────────────────────────────────────────────────────────

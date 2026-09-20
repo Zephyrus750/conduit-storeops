@@ -31,10 +31,10 @@ const KEY = 'suite_prefs';
 // Display scale: the whole frame renders at this factor (0.9 reads as the
 // showcase did on a 1440-wide screen). Container queries see the scaled
 // width, so a half-screen window still gets the half-screen layout.
-export const SCALES = [['0.75', 'Small'], ['0.9', 'Compact'], ['1', 'Default'], ['1.15', 'Large']];
-const DEFAULTS = { skin: 'light', accent: 0, rail: 'light', bars: 'plain', hdr: 'classic', railmin: false, scale: '0.9' };
+export const SCALES = [['0.8', 'Small'], ['0.95', 'Compact'], ['1', 'Default'], ['1.15', 'Large']];
+const DEFAULTS = { skin: 'light', accent: 0, rail: 'light', bars: 'plain', hdr: 'classic', railmin: false, scale: '0.95' };
 let cur = null;
-export function prefs() { if (!cur) { try { cur = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) || '{}')) }; } catch { cur = { ...DEFAULTS }; } } return cur; }
+export function prefs() { if (!cur) { try { cur = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) || '{}')) }; } catch { cur = { ...DEFAULTS }; } if (['0.75', '0.85', '0.9'].includes(cur.scale)) cur.scale = cur.scale === '0.75' ? '0.8' : '0.95'; } return cur; }
 export function setPref(k, v) { prefs()[k] = v; try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch {} applyPrefs(); }
 export function applyPrefs(frame = document.querySelector('.frame')) {
   if (!frame) return;

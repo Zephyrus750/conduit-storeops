@@ -104,3 +104,33 @@ form.li { margin: 0; }
    window the drawing stops short of the stage and a blank band shows under
    it. The other map views let the SVG fill the stage; do the same here. */
 .mapview .mapbox svg.map.real { max-height: none; }
+
+/* Map look: the rendered floor carries the editor's presentation
+   attributes; these rules give shelves, labels and landmarks one clean
+   style whatever version of the editor exported them. Labels are centred
+   on their module (the editor's stylesheet did that; it is stripped on
+   publish), name and segment both white. */
+.map.real .shelf-group .shelf { stroke: #fff; stroke-opacity: .6; stroke-width: 1.4; rx: 2.5; ry: 2.5; fill-opacity: .92; transition: fill-opacity .12s, filter .12s; }
+.map.real .shelf-group:hover .shelf { fill-opacity: 1; filter: brightness(1.06); }
+.map.real .shelf-label { font-family: Inter, system-ui, sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; }
+.map.real .shelf-label + .shelf-label { font-weight: 600; opacity: .92; }
+.map.real .landmark-rect { fill: #1F2937; fill-opacity: .82; stroke: none; rx: 4; ry: 4; }
+.map.real .landmark-label { font-family: Inter, system-ui, sans-serif; font-weight: 700; letter-spacing: .08em; fill: #fff; }
+.map.real .wall-rect { fill: #111827; stroke: none; }
+.map.real .wall-group.window rect { fill: #DBEAFE; stroke: #93C5FD; }
+.frame.dark .map.real .shelf-group .shelf { stroke: #111827; stroke-opacity: .5; }
+
+/* Shelf tooltip: a bigger badge and id on the left, sized to the text on
+   the right rather than padded above and below it. */
+.mtip { padding: 8px 12px; gap: 12px; align-items: stretch; }
+.mtip .md { justify-content: center; gap: 5px; min-width: 58px; padding-right: 12px; }
+.mtip .md .dep { font-size: 12.5px; padding: 3px 9px; }
+.mtip .md .shid { margin-top: 0; }
+.mtip .md .shid b { font-size: 23px; }
+.mtip .md .shid small { font-size: 12.5px; margin-top: 1px; }
+
+/* Store map detail panel: the same icons as the rail, room to read them,
+   and the grid reflows before a label would wrap. */
+.selshelf .acts2 { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; }
+.selshelf .acts2 .btn { padding: 10px 0; font-size: 12.5px; gap: 5px; letter-spacing: -.01em; }
+.selshelf .acts2 .btn svg.i { width: 18px; height: 18px; }
