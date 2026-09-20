@@ -192,7 +192,14 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       let x = 0, y = 0; for (const r of segs) { const b = r.getBBox(); x += b.x + b.width / 2; y += b.y + b.height / 2; }
       return [x / segs.length, y / segs.length];
     },
+    // Search highlight: the given groups get a ring, the rest dim; null clears.
+    highlight(groups) {
+      for (const g of $$('.shelf-group[data-hl]', svg)) g.removeAttribute('data-hl');
+      if (!groups || !groups.length) { svg.classList.remove('has-hl'); return; }
+      for (const g of groups) g.setAttribute('data-hl', '1'); svg.classList.add('has-hl');
+    },
     zoomTo(id, pad = 700) {
+      const fid = api.groups(id)[0]?.closest('.mfl')?.getAttribute('data-fid'); if (fid && fid !== cur?.id) api.floor(fid);
       const c = api.centreOf(id); if (!c) return;
       const full = vb0.split(' ').map(Number);
       const w = pad * 2, h = pad * 2 * (full[3] / full[2]);
@@ -251,12 +258,32 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   if (select) api.select(select);
   scaleMarkers(); setLabelFade();
 
-  // pan, zoom, tap
-  let drag = null;
+  // pan, zoom, tap. Two fingers pinch and pan the map itself (the stage
+  // has touch-action:none, so the page never zooms with it).
+  let drag = null, pinch = null; const ptrs = new Map();
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) || 1, mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   stage.addEventListener('wheel', e => { e.preventDefault(); api.zoomBy(e.deltaY > 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
-  svg.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, v: api.vb(), w: svg.getBoundingClientRect().width, moved: false, t: Date.now() }; });
-  svg.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; const k = drag.v[2] / drag.w; api.setVb([drag.v[0] - dx * k, drag.v[1] - dy * k, drag.v[2], drag.v[3]]); });
+  svg.addEventListener('pointerdown', e => {
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (e.pointerType !== 'mouse') { try { svg.setPointerCapture(e.pointerId); } catch {} }
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { v: api.vb(), d: dist(a, b), m: mid(a, b), r: svg.getBoundingClientRect() }; drag = null; return; }
+    if (ptrs.size > 2) return;
+    drag = { x: e.clientX, y: e.clientY, v: api.vb(), w: svg.getBoundingClientRect().width, moved: false, t: Date.now() };
+  });
+  svg.addEventListener('pointermove', e => {
+    if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && ptrs.size >= 2) {
+      const [a, b] = [...ptrs.values()], m = mid(a, b), k = pinch.d / dist(a, b);
+      const u = pinch.v[2] / pinch.r.width, px = pinch.v[0] + (pinch.m.x - pinch.r.left) * u, py = pinch.v[1] + (pinch.m.y - pinch.r.top) * u;
+      const W = pinch.v[2] * k, H = pinch.v[3] * k, u2 = W / pinch.r.width;
+      api.setVb([px - (m.x - pinch.r.left) * u2, py - (m.y - pinch.r.top) * u2, W, H]); svg.classList.add('zoomed');
+      return;
+    }
+    if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; const k = drag.v[2] / drag.w; api.setVb([drag.v[0] - dx * k, drag.v[1] - dy * k, drag.v[2], drag.v[3]]);
+  });
+  const lift = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; };
   svg.addEventListener('pointerup', e => {
+    lift(e);
     if (!drag) return; const { moved, t } = drag; drag = null; if (moved) return;
     const hit = document.elementFromPoint(e.clientX, e.clientY) || e.target;
     const g = hit.closest?.('.shelf-group[data-shelf]');
@@ -265,7 +292,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m) });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
   });
-  svg.addEventListener('pointercancel', () => { drag = null; });
+  svg.addEventListener('pointercancel', e => { lift(e); drag = null; });
 
   // hover tooltip (mouse only; a touch shows nothing, the tap selects)
   if (tips) {
@@ -354,5 +381,76 @@ export function bindMapChrome(root, map) {
     for (const b of $$('[data-mapfloor]', root)) b.classList.toggle('on', b.getAttribute('data-mapfloor') === f.id);
   });
   const find = root.querySelector('[data-mapfind]');
-  if (find) find.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const id = find.value.trim().toUpperCase().split(' ')[0]; if (map.groups(id).length) { map.select(id); map.zoomTo(id); } });
+  if (find) mapFind(root, find, map);
+}
+
+// Find on the map, as Vector's search bar worked: suggestions as you type
+// (shelf names first, then modules and locations, then departments), the
+// matches ringed on the map while typing, recent searches on focus, Enter
+// or a click to select and zoom, arrow keys to move through the list.
+function mapFind(root, input, map) {
+  const box = input.parentElement, ac = document.createElement('div'); ac.className = 'mapac'; box.appendChild(ac);
+  const KEY = () => `mapfind_recent:${mapMeta?.name || 'store'}`;
+  let idx = null, items = [], focus = -1, timer = null, blurTimer = null;
+  const index = () => {
+    if (idx) return idx;
+    const by = new Map();
+    for (const g of map.segments()) {
+      const i = map.shelfInfo(g); const e = by.get(i.id) || { name: i.id.toUpperCase(), dept: i.dept, sections: [], locations: new Set() };
+      if (i.sub) e.sections.push(i.sub.toUpperCase());
+      for (const l of (g.getAttribute('data-locations') || '').split(',')) if (l) e.locations.add(l.toUpperCase());
+      by.set(i.id, e);
+    }
+    return (idx = [...by.values()].map(e => ({ kind: 'shelf', ...e, locations: [...e.locations] })));
+  };
+  const depts = () => { const out = []; for (const [label, , ids] of DEPT_GROUPS) { if (label !== 'Other') out.push({ kind: 'group', name: label.toUpperCase(), label, ids }); for (const id of ids) out.push({ kind: 'dept', name: id.toUpperCase(), label: DEPT_NAME[id] || id, ids: [id], dept: id }); } return out; };
+  const norm = q => q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[\s-]+/g, '');
+  const suggest = q => {
+    let Q = norm(q); if (!Q) return [];
+    if (/^[A-Z]+\d+[SE]$/.test(Q)) Q = Q.slice(0, -1);           // "B21S" while typing B21 S1
+    const exact = [], starts = [], contains = [];
+    for (const s of index()) { const n = s.name; if (n === Q) exact.push(s); else if (n.startsWith(Q)) starts.push(s); else if (n.includes(Q) || s.sections.some(x => (n + x).startsWith(Q)) || s.locations.some(l => l.includes(Q))) contains.push(s); }
+    const ql = q.trim().toLowerCase();
+    const ds = ql.length >= 2 ? depts().filter(d => d.name.toLowerCase().startsWith(ql) || d.label.toLowerCase().includes(ql)).slice(0, 3) : [];
+    return [...exact, ...starts, ...contains].slice(0, 6).concat(ds);
+  };
+  const recent = () => { try { return JSON.parse(localStorage.getItem(KEY()) || '[]'); } catch { return []; } };
+  const remember = name => { try { localStorage.setItem(KEY(), JSON.stringify([name, ...recent().filter(x => x !== name)].slice(0, 6))); } catch {} };
+  const row = (it, i) => it.kind === 'shelf'
+    ? `<div class="row" data-i="${i}"><i class="dot" style="background:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length ? ` · ${it.sections.length} module${it.sections.length === 1 ? '' : 's'}` : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
+    : `<div class="row" data-i="${i}"><i class="dot" style="background:${it.dept ? DEPT_COLOUR[it.dept] || '#64748B' : 'var(--ink)'}"></i><b class="code">${esc(it.kind === 'group' ? it.label : it.name)}</b><span class="dn">${it.kind === 'group' ? `${it.ids.length} departments` : esc(it.label)}</span><span class="kind">Department</span></div>`;
+  const show = (list, header) => { items = list; focus = -1; if (!list.length) return hide(); ac.innerHTML = (header ? `<div class="hdr">${header}<span data-clear>Clear</span></div>` : '') + list.map(row).join(''); ac.classList.add('on'); };
+  const hide = () => { ac.classList.remove('on'); ac.innerHTML = ''; items = []; focus = -1; };
+  const matchGroups = q => {                         // groups the typed text points at
+    let Q = norm(q); if (!Q) return [];
+    if (/^[A-Z]+\d+[SE]$/.test(Q)) Q = Q.slice(0, -1);
+    const exactSeg = map.segments().filter(g => segmentId(g).replace(/\s+/g, '') === Q);
+    if (exactSeg.length) return exactSeg;
+    const byName = map.segments().filter(g => (g.getAttribute('data-shelf') || '').toUpperCase() === Q);
+    if (byName.length) return byName;
+    return Q.length >= 2 ? map.segments().filter(g => { const n = (g.getAttribute('data-shelf') || '').toUpperCase(); return n.startsWith(Q) || (g.getAttribute('data-locations') || '').toUpperCase().includes(Q); }) : [];
+  };
+  const state = cls => { input.classList.remove('found', 'not-found'); if (cls) input.classList.add(cls); };
+  const pick = it => {
+    if (it.kind === 'shelf') { const gs = matchGroups(input.value).filter(g => (g.getAttribute('data-shelf') || '').toUpperCase() === it.name); const seg = gs.length === 1 && input.value.replace(/[\s-]+/g, '').toUpperCase() !== it.name ? gs : null; map.select(it.name); map.highlight(seg || map.groups(it.name)); map.zoomTo(it.name); if (!seg) input.value = it.name; remember(input.value.trim().toUpperCase()); state('found'); }
+    else { input.value = it.kind === 'group' ? it.label : `${it.name} ${it.label}`; map.highlight(null); const grp = it.kind === 'group' ? it.label.toLowerCase() : (DEPT_GROUPS.find(x => x[2].includes(it.dept) && x[0] !== 'Other')?.[0].toLowerCase() || it.dept); root.querySelector(`[data-mapgroup="${grp}"]`)?.click(); if (it.kind === 'dept' && grp !== it.dept) root.querySelector(`[data-mapdept="${it.dept}"]`)?.click(); remember(input.value); state('found'); }
+    hide();
+  };
+  const submit = () => {
+    if (focus >= 0 && items[focus]) return pick(items[focus]);
+    const q = input.value.trim(); if (!q) return;
+    const gs = matchGroups(q);
+    if (gs.length) { const id = gs[0].getAttribute('data-shelf'); map.select(id); map.highlight(gs); map.zoomTo(id); remember(q.toUpperCase()); state('found'); return hide(); }
+    const d = suggest(q).find(x => x.kind !== 'shelf'); if (d) return pick(d);
+    state('not-found');
+  };
+  input.addEventListener('input', () => { clearTimeout(timer); const q = input.value; state(''); timer = setTimeout(() => { show(suggest(q)); map.highlight(q.trim() ? matchGroups(q) : null); if (!q.trim()) map.highlight(null); }, 60); });
+  input.addEventListener('focus', () => { clearTimeout(blurTimer); if (!input.value.trim()) { const r = recent(); if (r.length) show(r.map(name => index().find(s => s.name === name) || { kind: 'shelf', name, dept: '', sections: [], locations: [] }), 'Recent'); } });
+  input.addEventListener('blur', () => { blurTimer = setTimeout(hide, 150); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!items.length) return; e.preventDefault(); focus = (focus + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; for (const r of ac.querySelectorAll('.row')) r.classList.toggle('focused', +r.dataset.i === focus); return; }
+    if (e.key === 'Enter') { e.preventDefault(); submit(); return; }
+    if (e.key === 'Escape') { input.value = ''; state(''); map.highlight(null); hide(); input.blur(); }
+  });
+  ac.addEventListener('mousedown', e => { e.preventDefault(); if (e.target.closest('[data-clear]')) { try { localStorage.removeItem(KEY()); } catch {} return hide(); } const r = e.target.closest('.row'); if (r) pick(items[+r.dataset.i]); });
 }

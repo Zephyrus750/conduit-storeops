@@ -39,7 +39,7 @@ export function initSearch({ client, frame, go, tools = () => [] }) {
     if (shelves) return shelves;
     shelves = [];
     const stage = document.createElement('div');
-    try { const m = mountMap(stage, { mono: true }); const seen = new Set(); for (const g of m.segments()) { const info = m.shelfInfo(g); if (!seen.has(info.id)) { seen.add(info.id); shelves.push({ id: info.id, dept: info.dept, segments: info.segments }); } } } catch {}
+    try { const m = mountMap(stage, { mono: true, badges: false, tips: false }); const seen = new Set(); for (const g of m.segments()) { const info = m.shelfInfo(g); if (!seen.has(info.id)) { seen.add(info.id); shelves.push({ id: info.id, dept: info.dept, segments: info.segments }); } } } catch {}
     return shelves;
   }
   function invalidate() { shelves = null; }

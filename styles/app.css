@@ -164,3 +164,36 @@ form.li { margin: 0; }
 .ad-depts .ad-deptr { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
 .ad-depts .ad-deptr .dep { font-size: 11px; padding: 2px 7px; justify-self: start; }
 .ad-depts .ad-deptr b { font-variant-numeric: tabular-nums; }
+
+/* Rail 5% narrower than the showcase's 232px. */
+.app { grid-template-columns: 220px minmax(0, 1fr); }
+
+/* The map stage owns its touches: two fingers pinch and pan the map, and
+   the page does not zoom with them. */
+.mapstage { touch-action: none; }
+
+/* Location refresh: a refreshed shelf that was planned keeps a dot of its
+   plan colour; the list and tooltip name the colour. */
+.map.real .plan-dot { stroke: #fff; stroke-width: 2; pointer-events: none; }
+.rflist .li .rfplan-c { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dim); white-space: nowrap; margin-left: 6px; }
+.rflist .li .rfplan-c i, .mtip .mr .pdot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; border: 1.5px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+
+/* Find on the map: the suggestion list under the box, live highlight on
+   the map, and a green or red ring on the box for found / not found. */
+.mapbar .search { overflow: visible; }
+.mapac { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 9; display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 34px -14px rgba(17, 24, 39, .35); padding: 6px; max-height: 320px; overflow: auto; }
+.mapac.on { display: block; }
+.mapac .hdr { display: flex; justify-content: space-between; padding: 6px 8px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.mapac .hdr span { cursor: pointer; color: var(--accent-ink); letter-spacing: 0; text-transform: none; font-weight: 600; }
+.mapac .row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+.mapac .row.focused, .mapac .row:hover { background: var(--chip); }
+.mapac .row .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.mapac .row .code { font-weight: 700; min-width: 44px; }
+.mapac .row .dn { flex: 1; min-width: 0; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.mapac .row .kind { font-size: 11px; color: var(--faint); }
+.mapac .row .dep { font-size: 10.5px; padding: 1px 6px; }
+.mapbar .search input.found { border-color: #16A34A; box-shadow: 0 0 0 3px rgba(22, 163, 74, .15); }
+.mapbar .search input.not-found { border-color: #DC2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .12); }
+.map.real.has-hl .shelf-group:not([data-hl]) { opacity: .28; }
+.map.real .shelf-group[data-hl] .shelf { stroke: #111827; stroke-width: 7; stroke-opacity: 1; }
+.map.real.has-hl .shelf-badges { opacity: 0; }
