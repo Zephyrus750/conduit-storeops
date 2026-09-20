@@ -10,7 +10,8 @@
 
 import { createClient } from '../client/index.js';
 import { $, $$, ic, esc, greeting, fmtLong, toast } from './ui.js';
-import { loadMap } from './map.js';
+import { loadMap, setMap, mapInfo } from './map.js';
+import { initSearch } from './search.js';
 import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL } from './registry.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
@@ -41,20 +42,43 @@ async function enter() {
   showLoading();
   const s = client.session.current;
   try {
-    await loadMap(`maps/${s.store}.svg`);
     store = await client.open(s.store);
+    await loadStoreMap(s.store);
   } catch (e) {
     if (s.actas) { await client.session.endActAs(); await enterAdmin(); toast(`Cannot open ${s.store}: ${e.message}`, 'bad'); return; }
     hideCover(); showSignin({ error: e.message }); return;
   }
   admin = null; frame.classList.remove('adm');
   store.on('status', paintStatus); store.on('reject', r => toast(`${r.code}: ${r.message}`, 'bad'));
+  store.on('map', onMapProjection);
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = 'Store ' + s.store;
   buildRail(); setWs('floor');
   actasBar(s.actas ? s : null);
   hideCover();
   show(isMobile() ? 'mhome' : 'dashboard');
+}
+// The published map: the store's `map` projection names the current
+// version, the maps client holds one copy per device, and a store with
+// nothing published yet falls back to a bundled file or a placeholder.
+async function loadStoreMap(no) {
+  const version = store?.get('map')?.version || null;
+  let doc = null;
+  try { doc = await client.maps.get(no, { version }); } catch (e) { console.warn('map', e.message); }
+  if (doc) { setMap(doc); search?.invalidate(); return; }
+  try { await loadMap(`maps/${no}.svg`); } catch { setMap(null); }
+  search?.invalidate();
+}
+let mapRefresh = null;
+function onMapProjection(m) {
+  if (!store || !m?.version || m.version === mapInfo()?.version) return;
+  clearTimeout(mapRefresh);
+  mapRefresh = setTimeout(async () => {
+    const no = client.session.current?.store; if (!no || !store) return;
+    await loadStoreMap(no);
+    toast(`Map updated to version ${m.version}`);
+    if (current) show(current, currentArg);
+  }, 500);
 }
 function closeStore() { client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); actasBar(null); resetAdmin(); }
@@ -209,11 +233,14 @@ document.addEventListener('click', e => {
     return;
   }
   const v = e.target.closest('[data-view]'); if (v && !v.disabled) { show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no } : undefined); return; }
-  const g = e.target.closest('[data-go]'); if (g) { show(g.getAttribute('data-go')); return; }
+  const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else show(g.getAttribute('data-go')); return; }
   if (e.target.closest('[data-act="close-more"]') || (e.target.id === 'msheet')) $('#msheet')?.classList.remove('open');
   if (e.target.closest('#railToggle')) { $('#app').classList.toggle('railmin'); }
-  if (e.target.closest('#hsearch,.bsearch')) toast(admin ? 'Find a store from the rail for now' : 'Search arrives with the catalogue route');
+  if (e.target.closest('#hsearch,.bsearch,#msearch')) { if (admin) toast('Find a store from the rail for now'); else search.open($('#msearch input')?.value || ''); }
 });
+// The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
+const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string').map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.settings]) });
+$('#msearch input')?.addEventListener('focus', e => { if (!admin && store) { e.target.blur(); search.open(e.target.value); } });
 let lastMobile = isMobile();
 window.addEventListener('resize', () => { const m = isMobile(); if (m !== lastMobile) { lastMobile = m; if (current) show(current, currentArg); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#msheet')?.classList.remove('open'); });

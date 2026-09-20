@@ -18,7 +18,7 @@ const mf = new Miniflare({
   modules: true, modulesRules: [{ type: 'ESModule', include: ['**/*.js'] }], modulesRoot: root, scriptPath: path.join(root, 'worker/index.js'),
   compatibilityDate: '2026-08-06', compatibilityFlags: ['nodejs_compat'], port: API, host: '127.0.0.1',
   durableObjects: { STORE: { className: 'StoreObject', useSQLite: true }, REGISTRY: { className: 'RegistryObject', useSQLite: true } },
-  bindings: { TOKEN_SECRET: 'dev-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '43200', REFRESH_TTL_SECONDS: '2592000', LOCKOUT_ATTEMPTS: '5', LOCKOUT_SECONDS: '900', ENVIRONMENT: 'dev' },
+  bindings: { LOOKUP_URL: 'https://shrill-voice-f46f.zephyrus-np750.workers.dev', DETAILS_URL: 'https://k2b-details.zephyrus-np750.workers.dev', TOKEN_SECRET: 'dev-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '43200', REFRESH_TTL_SECONDS: '2592000', LOCKOUT_ATTEMPTS: '5', LOCKOUT_SECONDS: '900', ENVIRONMENT: 'dev' },
   persist: process.env.PERSIST ? path.join(root, '.wrangler/dev') : undefined,
 });
 const api = await mf.ready;
@@ -26,6 +26,12 @@ const call = async (m, p, b, t) => { const r = await fetch(new URL(p, api), { me
 const owner = await call('POST', '/v1/auth/signin', { ownerKey: OWNER_KEY, device: 'dev' });
 const reg = await call('POST', '/v1/admin/stores', { no: '1241', name: 'Busselton', region: 'WA South', pin: '2468', codes: { stockroom: 'SR-CODE', dock: 'DK-CODE', manager: 'MGR-CODE' }, entitlements: { floor: true, stockroom: true, backdock: true } }, owner.token);
 console.log('worker  ', String(api), reg.no ? 'seeded store 1241 (PIN 2468)' : reg.code === 'exists' ? 'store 1241 already registered' : JSON.stringify(reg));
+// Publish the bundled Busselton map so the shell exercises the map route.
+const svgFile = path.join(root, 'maps/1241.svg');
+if (fs.existsSync(svgFile)) {
+  const pub = await call('POST', '/v1/store/1241/map', { version: 'dev', name: 'Busselton', floors: [{ id: 'ground', name: 'Ground', type: 'foh', svg: fs.readFileSync(svgFile, 'utf8') }] }, owner.token);
+  console.log('map     ', pub.version ? `published dev map (${pub.floors[0].shelves} shelves)` : pub.code === 'exists' ? 'dev map already published' : JSON.stringify(pub));
+}
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 http.createServer((req, res) => {

@@ -8,6 +8,7 @@ import { signToken, verifyToken, verifySecret, makeClaims, hasRole } from './aut
 export { StoreObject } from './store.js';
 export { RegistryObject } from './registry.js';
 import { VERSION } from './version.js';
+import { parseCodes, lookup } from './catalogue.js';
 
 const r = new Router();
 
@@ -81,10 +82,26 @@ r.post('/v1/admin/actas/:no', async (req, env, _c, p) => {
   return json({ token: await signToken(claims, env.TOKEN_SECRET), expires: claims.exp, store: rec.no, caps });
 });
 
+// ── maps ──────────────────────────────────────────────────────────────────
+r.get('/v1/store/:no/map', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/map'));
+r.get('/v1/store/:no/map/:version', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/map/${p.version}`));
+r.post('/v1/store/:no/map', async (req, env, _c, p) => {
+  const res = await ownerStoreCall(req, env, p.no, '/map');
+  if (res.ok) { const { version } = await res.clone().json(); await registry(env, 'PATCH', `/stores/${p.no}`, { map_version: version }); }
+  return res;
+});
+
+// ── catalogue (public) ────────────────────────────────────────────────────
+r.get('/v1/catalogue', async (req, env, ctx) => {
+  const url = new URL(req.url);
+  const codes = parseCodes(url.searchParams.get('kc'));
+  const items = await lookup(env, ctx, codes, { details: url.searchParams.get('fields') !== 'link' });
+  return json({ items }, 200, { 'Cache-Control': 'public, max-age=300' });
+});
+
 // ── not built yet: named, never silent ────────────────────────────────────
 for (const [m, path] of [
-  ['GET', '/v1/store/:no/life/:keycode'], ['POST', '/v1/store/:no/manifest'], ['GET', '/v1/store/:no/map/:version'],
-  ['POST', '/v1/store/:no/map'], ['GET', '/v1/catalogue'], ['GET', '/v1/store/:no/history/:kind'],
+  ['GET', '/v1/store/:no/life/:keycode'], ['POST', '/v1/store/:no/manifest'], ['GET', '/v1/store/:no/history/:kind'],
   ['GET', '/v1/store/:no/export/:kind'], ['POST', '/v1/admin/stores/:no/import'], ['POST', '/v1/admin/stores/:no/flip'],
 ]) r.add(m, path, () => fail(501, 'not_implemented', `${m} ${path} is on the build order but not built yet`));
 
@@ -135,6 +152,12 @@ async function storeCall(req, env, no, path, search = '') {
   const c = await requireClaims(req, env);
   if (c.store !== no) throw new HttpError(403, 'unauthorised', `token is for store ${c.store || '(owner)'}, not ${no}`);
   return forward(req, env, no, path, search, c);
+}
+// A store token for that store, or the owner: reads any device may make.
+async function anyStoreCall(req, env, no, path, search = '') {
+  const c = await requireClaims(req, env);
+  if (c.owner && !c.store) return ownerStoreCall(req, env, no, path, search);
+  return storeCall(req, env, no, path, search);
 }
 async function ownerStoreCall(req, env, no, path, search = '') {
   const c = await requireOwner(req, env);

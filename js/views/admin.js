@@ -31,6 +31,7 @@ async function load(ctx, no, keys) {
   if (keys.includes('rec') && !c.rec) calls.push(ctx.admin.api(`/v1/admin/stores/${no}`).then(r => { c.rec = r; }));
   if (keys.includes('devices') && !c.devices) calls.push(ctx.admin.api(`/v1/admin/stores/${no}/devices`).then(r => { c.devices = r.devices || {}; }));
   if (keys.includes('tail') && !c.tail) calls.push(ctx.admin.api(`/v1/admin/stores/${no}/tail?limit=300`).then(r => { c.tail = r.events || []; c.seq = r.seq; }));
+  if (keys.includes('map') && c.map === undefined) calls.push(ctx.admin.api(`/v1/store/${no}/map`).then(r => { c.map = r; }).catch(e => { c.map = e.status === 404 ? null : { error: e.message }; }));
   if (keys.includes('snap') && !c.snap) calls.push(ctx.admin.api(`/v1/admin/stores/${no}/snapshot?areas=floor,stockroom,backdock,store`).then(r => { c.snap = r.state; c.seq = r.seq; }).catch(() => { c.snap = {}; }));
   if (!calls.length) return false;
   await Promise.all(calls); return true;
@@ -88,21 +89,22 @@ const storeView = {
     if (!st.no) st.no = ctx.admin.stores?.[0]?.no || null;
     const c = forStore(st.no), rec = c.rec || (ctx.admin.stores || []).find(s => s.no === st.no);
     if (!rec) return vh('Store', '', `<a class="btn" data-view="admin">${ic('arrow')}All stores</a>`) + banner('No store selected. Pick one from the rail or the Stores list.');
-    const tabs = [['over', 'Overview'], ['events', 'Events'], ['devices', 'Devices'], ['access', 'Access']];
+    const tabs = [['over', 'Overview'], ['events', 'Events'], ['devices', 'Devices'], ['access', 'Access'], ['map', 'Map']];
     const head = vh(`${esc(rec.no)} <span class="pd-name">${esc(rec.name)}</span>`, sub(esc(rec.region || ''), tst(rec.status), `registered ${fmtTime(rec.created)}`), `<a class="btn" data-view="admin">${ic('arrow')}All stores</a><button class="btn" data-act="refresh">${ic('refresh')}Refresh</button><button class="btn primary" data-act="actas">${ic('users')}Act as store</button>`);
     const seg = `<div class="ad-tabs">${tabs.map(t => `<button class="${t[0] === st.tab ? 'on' : ''}" data-act="tab" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>`;
-    const ro = st.tab === 'access' ? '' : banner(`Read-only view of <b>${esc(rec.name)}</b>. Nothing you do here changes the store until you <b>Act as store</b>.`, true);
-    const body = st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : overTab(rec, c);
+    const ro = st.tab === 'access' || st.tab === 'map' ? '' : banner(`Read-only view of <b>${esc(rec.name)}</b>. Nothing you do here changes the store until you <b>Act as store</b>.`, true);
+    const body = st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : overTab(rec, c);
     return head + ro + seg + body;
   },
   mount(ctx, root) {
     if (!st.no) return [];
-    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : ['rec', 'devices', 'snap'];
+    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map'] : ['rec', 'devices', 'snap'];
     load(ctx, st.no, keys).then(did => { if (did) ctx.rerender(); }).catch(fail);
     root.addEventListener('click', e => onStoreClick(e, ctx));
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="filter"]')) { st.filter = e.target.value; const t = $('#adTail', root); if (t) t.innerHTML = tailRows(forStore(st.no)); } });
-    root.addEventListener('submit', e => { e.preventDefault(); const f = e.target.getAttribute('data-form'); if (f === 'rotate') saveRotate(ctx, e.target); else if (f === 'edit') saveEdit(ctx, e.target); });
+    root.addEventListener('submit', e => { e.preventDefault(); const f = e.target.getAttribute('data-form'); if (f === 'rotate') saveRotate(ctx, e.target); else if (f === 'edit') saveEdit(ctx, e.target); else if (f === 'publish') publishMap(ctx, e.target); });
+    root.addEventListener('change', e => { if (e.target.matches('input[type="file"][data-floor]')) { const f = e.target.files?.[0]; const lbl = e.target.closest('label')?.querySelector('small'); if (lbl && f) lbl.textContent = `${f.name} · ${(f.size / 1024).toFixed(0)} KB`; } });
     return [];
   },
 };
@@ -143,6 +145,35 @@ function accessTab(rec) {
     ? `<form class="card" data-form="edit"><div class="ch"><h3>Store</h3></div><div class="ad-grid2">${field('Name', inp('name', rec.name, 'Store name', '', 'required'))}${field('Region', inp('region', rec.region, 'e.g. WA South'))}${field('Status', `<select class="ad-in" name="status">${STATUSES.map(v => `<option value="${v}" ${rec.status === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`, 'live once any area is live on Conduit')}</div><div class="acts" style="margin-top:12px"><button class="btn primary sm" type="submit">${ic('check')}Save</button><button class="btn sm" type="button" data-act="edit-cancel">Cancel</button></div></form>`
     : `<div class="card"><div class="ch"><h3>Store</h3><span class="btn sm" data-act="edit">${ic('edit')}Edit</span></div><div class="ad-kv"><span>Number</span><b class="mono">${esc(rec.no)}</b><span>Name</span><b>${esc(rec.name)}</b><span>Region</span><b>${esc(rec.region || '—')}</b><span>Status</span><b>${tst(rec.status)}</b><span>Created</span><b>${fmtTime(rec.created)}</b><span>Updated</span><b>${fmtTime(rec.updated)}</b></div></div>`;
   return areas + `<div class="grid2 ad-two">${creds}${identity}</div>`;
+}
+function mapTab(rec, c) {
+  const m = c.map;
+  const cur = m === undefined ? `<div class="ohint">Loading…</div>` : m === null ? `<p class="lbl">No map has been published for this store. Devices show a placeholder until one is.</p>` : m.error ? `<p class="lbl">Could not read the map: ${esc(m.error)}</p>` :
+    `<div class="ad-kv"><span>Version</span><b class="mono">${esc(m.version)}</b><span>Published</span><b>${when(m.at)} · ${m.by?.owner ? 'owner' : esc(m.by?.device || '')}</b><span>Floors</span><b>${(m.floors || []).map(f => `${esc(f.name || f.id)} · ${f.shelves ?? '?'} shelves · ${Math.round((f.bytes || 0) / 1024)} KB`).join('<br>')}</b><span>Departments</span><b>${(m.departments || []).length || 'none in the document'}</b><span>Earlier versions</span><b>${(m.versions || []).filter(v => v.version !== m.version).map(v => `<span class="mono">${esc(v.version)}</span> ${fmtTime(v.at)}`).join(' · ') || '—'}</b></div>`;
+  const next = m && m.version ? bump(m.version) : '1';
+  const form = `<form class="card" data-form="publish"><div class="ch"><h3>Publish a map</h3><span class="cs-dim">rendered floor SVGs, as the shell mounts them</span></div><div class="ad-grid2">${field('Version', inp('version', st.pubVersion ?? next, 'e.g. 4.4', 'mono', 'required pattern="[\\w.\\-]{1,32}"'), 'must be new; devices switch to it on their next sync')}${field('Map name', inp('name', rec.name, 'e.g. Busselton'))}</div>` +
+    `<div class="ad-grid2" style="margin-top:12px">${field('Ground floor SVG', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="ground" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'the svg.map.real document the store views mount (maps/1241.svg is one)')}${field('Stockroom floor SVG (optional)', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="stockroom" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'arrives with the Stockroom port')}</div>` +
+    `<div class="si-err" id="pubErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit">${ic('check')}Publish</button></div><p class="lbl">Publishing writes the document to the store and logs a <span class="mono">map.publish</span> event with your owner id. Every signed-in device downloads the new version once and keeps it offline.</p></form>`;
+  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3><span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}</div>${form}</div>`;
+}
+const bump = v => { const m = String(v).match(/^(.*?)(\d+)$/); return m ? m[1] + (Number(m[2]) + 1) : v + '.1'; };
+async function publishMap(ctx, form) {
+  const err = $('#pubErr', form), btn = form.querySelector('[type="submit"]');
+  const version = form.version.value.trim(), name = form.name.value.trim();
+  const floors = [];
+  for (const inp of form.querySelectorAll('input[type="file"][data-floor]')) {
+    const f = inp.files?.[0]; if (!f) continue;
+    const svg = await f.text();
+    if (!/^\s*<svg[\s>]/i.test(svg)) { err.textContent = `${f.name} is not an SVG document.`; return; }
+    floors.push({ id: inp.dataset.floor, name: inp.dataset.floor === 'ground' ? 'Ground' : 'Stockroom', type: inp.dataset.floor === 'ground' ? 'foh' : 'boh', svg });
+  }
+  if (!floors.length) { err.textContent = 'Choose at least the ground floor SVG.'; return; }
+  st.pubVersion = version; btn.disabled = true; err.textContent = '';
+  try {
+    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: { version, name, floors } });
+    toast(`Map ${r.version} published · ${r.floors.map(f => `${f.id} ${f.shelves} shelves`).join(', ')}`);
+    st.pubVersion = null; st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); ctx.rerender();
+  } catch (e) { btn.disabled = false; err.textContent = e.code === 'exists' ? `Version ${version} is already published. Use a new version.` : e.message; }
 }
 async function patchStore(ctx, body) {
   const no = st.no;

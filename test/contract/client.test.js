@@ -143,3 +143,28 @@ test('owner acts as a store, writes carry the owner, and returns to the console'
   assert.notEqual(await o.session.token(), before); assert.equal(o.session.current.actas, true);
   o.closeAll();
 });
+
+test('maps: one download per version, served from the cache after, refetched when the projection moves on', async () => {
+  const o = createClient({ baseUrl, storage: memoryStorage({ suite_device: 'dev-laptop' }) });
+  await o.session.load(); await o.session.signInOwner({ ownerKey: OWNER_KEY });
+  const svg = v => `<svg class="map real" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><g class="shelf-group" data-shelf="A${v}" data-dept="h1"><rect class="shelf" x="0" y="0" width="1" height="1"/></g></svg>`;
+  await o.maps.publish('1241', { version: '1', name: 'Busselton', floors: [{ id: 'ground', svg: svg(1) }] });
+
+  let fetches = 0;
+  const counting = { ...o.transport, request: (p, opts) => { if (/\/map\//.test(p)) fetches += 1; return o.transport.request(p, opts); } };
+  const storage = memoryStorage({ suite_device: 'phone-m' });
+  const c = createClient({ baseUrl, storage });
+  await c.session.load(); await c.session.signIn({ store: '1241', pin: '2468' });
+  const maps = (await import('../../client/maps.js')).createMaps({ transport: counting, session: c.session, storage });
+  const a = await maps.get('1241', { version: '1' });
+  assert.equal(a.version, '1'); assert.match(a.floors[0].svg, /A1/); assert.equal(fetches, 1);
+  const b = await maps.get('1241', { version: '1' });
+  assert.equal(b.version, '1'); assert.equal(fetches, 1, 'second get is the cache');
+  assert.equal((await storage.get('map:1241')).version, '1', 'kept on the device');
+  await o.maps.publish('1241', { version: '2', floors: [{ id: 'ground', svg: svg(2) }] });
+  const st = await c.open('1241'); await until(() => st.get('map').version === '2');
+  const d = await maps.get('1241', { version: st.get('map').version });
+  assert.equal(d.version, '2'); assert.match(d.floors[0].svg, /A2/); assert.equal(fetches, 2);
+  assert.equal(await o.maps.get('9999'), null, 'no map published answers null, not a throw');
+  st.close(); o.closeAll();
+});

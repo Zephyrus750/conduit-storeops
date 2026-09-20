@@ -20,7 +20,7 @@ shared/      code the device runs too: event catalogue, validation, reducers, UL
 client/      the device library: session, store (outbox, snapshot cache, socket), catalogue
 test/unit    pure-module tests (node --test)
 test/contract the worker running in workerd via Miniflare, real SQLite-backed objects
-scripts/     hash-secret: make the OWNER_KEY_HASH for wrangler secret put
+scripts/     hash-secret (OWNER_KEY_HASH), publish-map (a map version from SVG files), dev, extract-css
 ```
 
 No bundler. Plain ES modules, deployed by wrangler as written.
@@ -90,7 +90,10 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate |
 | `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
-| life, manifest, map, catalogue, history, export, import, flip | | `501 not_implemented`, named |
+| `GET /v1/store/:no/map`, `GET …/map/:version` (`latest` allowed) | store token or owner | live: published map metadata and document, ETag / 304 |
+| `POST /v1/store/:no/map` | owner | live: publish a version; logs `map.publish`, sets the registry's map version |
+| `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
+| life, manifest, history, export, import, flip | | `501 not_implemented`, named |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `invalid_event`, `duplicate` (a success),
@@ -110,6 +113,29 @@ store** mints a store-scoped token (manager role, `actor: owner`) and opens
 the store views with a bar to return; the owner session is kept underneath
 so refresh keeps working. Everything the console writes is a registry
 action or an ordinary event; nothing is deployed.
+
+## Maps and the catalogue
+
+**Maps.** A published map is one document per version: `{ version, name,
+departments, floors: [{ id, name, type, svg }] }`, each floor an SVG in the
+form the store views mount (`svg.map.real`, `shelf-group` elements with
+`data-shelf` and `data-dept`, emergency markers). Versions live in the
+store object, one row per floor. Publishing is owner-only: the admin
+console's Map tab takes the SVG files, or `npm run publish-map -- --store
+1241 --version 4.3 --floor ground=maps/1241.svg` with `OWNER_KEY` in the
+environment. The publish is an ordinary `map.publish` event, so every
+device sees the new version in its `map` projection and downloads the
+document once (`client/maps.js`, kept under `map:<store>` on the device).
+A store with no map published yet falls back to a bundled `maps/<no>.svg`
+if the shell ships one, else a placeholder.
+
+**Catalogue.** `GET /v1/catalogue?kc=` proxies two existing upstreams (the
+suite lookup worker for keycode → name and product URL; the details worker
+for price, was, image and clearance) and caches per keycode in the edge
+Cache API: links for a week, details for a day, misses for an hour. The
+device library (`client/catalogue.js`) batches lookups and keeps hits for a
+week. The shell's search palette (Ctrl K, the header and phone search)
+understands a keycode, a shelf such as H14-3, a department and a tool.
 
 ## Event envelope
 

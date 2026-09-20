@@ -10,6 +10,7 @@ import { ulid } from '../../shared/ulid.js';
 
 const OWNER_KEY = 'owner-key-for-tests-only';
 let mf, ownerToken;
+const upstreamCalls = { lookup: 0, details: 0 };
 
 before(async () => {
   mf = new Miniflare({
@@ -23,7 +24,19 @@ before(async () => {
       STORE: { className: 'StoreObject', useSQLite: true },
       REGISTRY: { className: 'RegistryObject', useSQLite: true },
     },
+    // Catalogue upstreams are stubbed: the lookup worker answers ?codes=,
+    // the details worker answers the POST, and one code is unknown.
+    outboundService(req) {
+      const u = new URL(req.url);
+      if (u.hostname === 'lookup.test') {
+        const out = {}; for (const kc of (u.searchParams.get('codes') || '').split(',')) if (kc === '42977636') out[kc] = { found: true, url: 'https://www.kmart.com.au/product/12-pk-diecast-vehicles-42977636/', name: '12 pk diecast vehicles' }; else out[kc] = { found: false };
+        upstreamCalls.lookup += 1; return Response.json(out);
+      }
+      if (u.hostname === 'details.test') { upstreamCalls.details += 1; return req.json().then(b => Response.json(Object.fromEntries(b.items.map(i => [i.kc, { found: true, price: 12, was: 15, img: 'https://img.test/42977636.jpg', clr: true }])))); }
+      return new Response('unexpected upstream ' + req.url, { status: 502 });
+    },
     bindings: {
+      LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test',
       TOKEN_SECRET: 'test-token-secret',
       OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000),
       TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_SECONDS: '60', ENVIRONMENT: 'test',
@@ -45,8 +58,21 @@ const event = (type, entity, payload, area) => ({ id: ulid(), store: '1241', are
 
 test('health and unbuilt routes are named', async () => {
   assert.equal((await api('GET', '/v1/health')).body.ok, true);
-  const r = await api('GET', '/v1/catalogue?kc=42977636');
+  const r = await api('GET', '/v1/store/1241/life/42977636');
   assert.equal(r.status, 501); assert.equal(r.body.code, 'not_implemented');
+});
+
+test('catalogue: links and details from the upstreams, cached per keycode, misses answered', async () => {
+  assert.equal((await api('GET', '/v1/catalogue?kc=12')).status, 400);
+  const r = await api('GET', '/v1/catalogue?kc=42977636,99999999');
+  assert.equal(r.status, 200);
+  const it = r.body.items['42977636'];
+  assert.equal(it.name, '12 pk diecast vehicles'); assert.match(it.url, /42977636/); assert.equal(it.price, 12); assert.equal(it.was, 15); assert.equal(it.clr, true); assert.ok(it.at > 0);
+  assert.equal(r.body.items['99999999'], null);
+  const calls = { ...upstreamCalls };
+  const again = await api('GET', '/v1/catalogue?kc=42977636,99999999');
+  assert.equal(again.body.items['42977636'].name, '12 pk diecast vehicles');
+  assert.deepEqual(upstreamCalls, calls, 'second lookup is served from the edge cache');
 });
 
 test('owner signs in with the owner key and registers a store', async () => {
@@ -170,4 +196,29 @@ test('owner diagnostics and act-as', async () => {
   assert.equal((await api('GET', '/v1/admin/stores', undefined, actas.body.token)).status, 403);
   const snap = await api('GET', '/v1/admin/stores/1241/snapshot?areas=stockroom,store', undefined, ownerToken);
   assert.equal(snap.status, 200); assert.equal(snap.body.state.cages.BSN1240417.location, 'AISLE 2, NEAR 7023'); assert.ok('devices' in snap.body.state);
+});
+
+test('maps: owner publishes, devices read by version or latest, the log and registry record it', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-map' })).body.token;
+  assert.equal((await api('GET', '/v1/store/1241/map', undefined, dev)).status, 404);
+  const svg = '<svg class="map real" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g class="shelf-group" data-shelf="A1" data-dept="h1"><rect class="shelf" x="1" y="1" width="10" height="10"/></g></svg>';
+  assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg }] }, dev)).status, 403, 'a store token cannot publish');
+  assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg: '<svg onload="x()"></svg>' }] }, ownerToken)).status, 400);
+  const pub = await api('POST', '/v1/store/1241/map', { version: '4.3', name: 'Busselton', departments: [{ id: 'h1', name: 'H1 Kitchen', color: '#FF8C00' }], floors: [{ id: 'ground', name: 'Ground', type: 'foh', svg }] }, ownerToken);
+  assert.equal(pub.status, 201); assert.equal(pub.body.floors[0].shelves, 1);
+  assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg }] }, ownerToken)).status, 409);
+
+  const info = await api('GET', '/v1/store/1241/map', undefined, dev);
+  assert.equal(info.body.version, '4.3'); assert.equal(info.body.floors[0].id, 'ground'); assert.equal(info.body.by.owner, true);
+  const doc = await api('GET', '/v1/store/1241/map/latest', undefined, dev);
+  assert.equal(doc.body.version, '4.3'); assert.equal(doc.body.floors[0].svg, svg); assert.equal(doc.body.departments[0].id, 'h1');
+  const res = await mf.dispatchFetch('http://conduit.test/v1/store/1241/map/4.3', { headers: { Authorization: `Bearer ${dev}`, 'If-None-Match': '"map-4.3"' } });
+  assert.equal(res.status, 304);
+  assert.equal((await api('GET', '/v1/store/1241/map/9.9', undefined, dev)).status, 404);
+
+  const snap = await api('GET', '/v1/store/1241/snapshot?areas=store', undefined, dev);
+  assert.equal(snap.body.state.map.version, '4.3');
+  const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
+  assert.equal(tail.body.events[0].type, 'map.publish'); assert.equal(tail.body.events[0].actor.owner, true);
+  assert.equal((await api('GET', '/v1/admin/stores/1241', undefined, ownerToken)).body.mapVersion, '4.3');
 });

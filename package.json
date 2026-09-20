@@ -13,7 +13,8 @@
     "css": "python3 scripts/extract-css.py ../vector-suite/docs/showcase/conduit-shell-swap.html",
     "deploy:staging": "wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production",
-    "hash-secret": "node scripts/hash-secret.js"
+    "hash-secret": "node scripts/hash-secret.js",
+    "publish-map": "node scripts/publish-map.js"
   },
   "devDependencies": {
     "miniflare": "^4.20250917.0",

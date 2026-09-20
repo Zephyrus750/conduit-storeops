@@ -11,12 +11,17 @@ main = "worker/index.js"
 compatibility_date = "2026-08-06"
 compatibility_flags = ["nodejs_compat"]
 
+# Catalogue upstreams: the suite lookup worker (keycode → product URL and
+# name, from the public sitemaps) and the details worker (price, was, image,
+# clearance from the public product pages). Cached per keycode at the edge.
 [vars]
 ENVIRONMENT = "dev"
 TOKEN_TTL_SECONDS = "43200"
 REFRESH_TTL_SECONDS = "2592000"
 LOCKOUT_ATTEMPTS = "5"
 LOCKOUT_SECONDS = "900"
+LOOKUP_URL = "https://shrill-voice-f46f.zephyrus-np750.workers.dev"
+DETAILS_URL = "https://k2b-details.zephyrus-np750.workers.dev"
 
 [durable_objects]
 bindings = [
@@ -28,13 +33,14 @@ bindings = [
 tag = "v1"
 new_sqlite_classes = ["StoreObject", "RegistryObject"]
 
-# Archive and files. IDs are placeholders until the resources are created:
+# Archive and files arrive with the D1 nightly and manifests:
 #   npx wrangler d1 create conduit-archive-staging
 #   npx wrangler r2 bucket create conduit-files-staging
-#   npx wrangler kv namespace create CACHE --env staging
+# Published maps live in each store object (SQLite) and the catalogue uses
+# the edge Cache API, so neither needs a KV namespace.
 [env.staging]
 name = "conduit-staging"
-vars = { ENVIRONMENT = "staging", TOKEN_TTL_SECONDS = "43200", REFRESH_TTL_SECONDS = "2592000", LOCKOUT_ATTEMPTS = "5", LOCKOUT_SECONDS = "900" }
+vars = { ENVIRONMENT = "staging", TOKEN_TTL_SECONDS = "43200", REFRESH_TTL_SECONDS = "2592000", LOCKOUT_ATTEMPTS = "5", LOCKOUT_SECONDS = "900", LOOKUP_URL = "https://shrill-voice-f46f.zephyrus-np750.workers.dev", DETAILS_URL = "https://k2b-details.zephyrus-np750.workers.dev" }
 durable_objects.bindings = [
   { name = "STORE", class_name = "StoreObject" },
   { name = "REGISTRY", class_name = "RegistryObject" }
@@ -42,7 +48,7 @@ durable_objects.bindings = [
 
 [env.production]
 name = "conduit"
-vars = { ENVIRONMENT = "production", TOKEN_TTL_SECONDS = "43200", REFRESH_TTL_SECONDS = "2592000", LOCKOUT_ATTEMPTS = "5", LOCKOUT_SECONDS = "900" }
+vars = { ENVIRONMENT = "production", TOKEN_TTL_SECONDS = "43200", REFRESH_TTL_SECONDS = "2592000", LOCKOUT_ATTEMPTS = "5", LOCKOUT_SECONDS = "900", LOOKUP_URL = "https://shrill-voice-f46f.zephyrus-np750.workers.dev", DETAILS_URL = "https://k2b-details.zephyrus-np750.workers.dev" }
 durable_objects.bindings = [
   { name = "STORE", class_name = "StoreObject" },
   { name = "REGISTRY", class_name = "RegistryObject" }

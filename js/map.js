@@ -5,14 +5,22 @@
 
 import { $, $$, ic, esc, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS } from './ui.js';
 
-let mapText = null;
+let mapText = null, mapMeta = null;
+// The shell sets the map from the published document (client.maps.get) or
+// from a bundled file when the store has none published yet.
+export function setMap(doc) {
+  if (!doc) { mapText = PLACEHOLDER; mapMeta = null; return; }
+  mapText = doc.floors?.[0]?.svg || PLACEHOLDER; mapMeta = { version: doc.version, at: doc.at, name: doc.name, floors: (doc.floors || []).map(f => ({ id: f.id, name: f.name, type: f.type })), departments: doc.departments || [] };
+}
+export function mapInfo() { return mapMeta; }
+export function hasMap() { return !!mapText && mapText !== PLACEHOLDER; }
 export async function loadMap(url) {
-  if (mapText) return mapText;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`map ${res.status}`);
-  mapText = await res.text();
+  mapText = await res.text(); mapMeta = { version: 'bundled', floors: [{ id: 'ground' }], departments: [] };
   return mapText;
 }
+const PLACEHOLDER = '<svg class="map real placeholder" viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="1200" height="700" fill="none"/><text x="600" y="330" text-anchor="middle" font-size="36" font-weight="700" fill="#9CA3AF">No map published for this store yet</text><text x="600" y="380" text-anchor="middle" font-size="22" fill="#9CA3AF">The owner publishes one from the admin console, Map tab</text></svg>';
 
 // Shelf segment id as the refresh mode keys it: "A11 S1" (data-full), uppercased.
 export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttribute('data-shelf') + ' ' + (g.getAttribute('data-subname') || '')).trim()).toUpperCase(); }

@@ -15,4 +15,5 @@ The full walkthrough lives in the "Conduit Setup Guide" doc. Short form:
    curl -s -X POST $W/v1/admin/stores -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
      -d '{"no":"1241","name":"Busselton","region":"WA South","pin":"<pin>","codes":{"stockroom":"<code>","dock":"<code>","manager":"<code>"},"entitlements":{"floor":true,"stockroom":true,"backdock":true}}'
    ```
-8. **Sign in** on the Netlify site with 1241 and the PIN. Production: run the workflow with env `production` (tick `set_secrets` the first time).
+8. **Publish the map** (owner): admin console › the store › Map › choose `maps/1241.svg` as the ground floor, version `4.3`, Publish. Or `OWNER_KEY=… npm run publish-map -- --store 1241 --version 4.3 --name Busselton --floor ground=maps/1241.svg`.
+9. **Sign in** on the Netlify site with 1241 and the PIN. Production: run the workflow with env `production` (tick `set_secrets` the first time).
