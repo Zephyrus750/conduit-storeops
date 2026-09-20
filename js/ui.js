@@ -20,6 +20,10 @@ export function mtile(icon, t, s, badge, view, cls) { return `<button class="mv-
 export function mbig(label, cls, icon, attrs) { return `<button class="mv-big ${cls || ''}"${attrs || ''}>${icon ? ic(icon) : ''}${label}</button>`; }
 export function mghost(label, attrs) { return `<button class="mv-ghost"${attrs || ''}>${label}</button>`; }
 export function mfoot(inner) { return `<div class="mv-foot">${inner}</div>`; }
+export function msteps(n, labels) { return `<div class="mv-steps">${labels.map((l, i) => `<span class="${i + 1 < n ? 'done' : i + 1 === n ? 'cur' : ''}"><i>${i + 1 < n ? ic('check') : i + 1}</i>${l}</span>`).join('')}</div>`; }
+export function mlast(code, name, meta) { return `<div class="mv-last"><small>Last scanned</small><b>${code}</b><span>${name}</span>${meta ? `<em>${meta}</em>` : ''}</div>`; }
+// A scan prompt with a typed field: hardware scanners type into it and press Enter; the camera arrives later.
+export function mscan(cap, field, hint, btn) { return `<div class="mv-scan typed"><div class="cap">${cap}</div><div class="mv-field">${field}</div>${hint ? `<div class="hint">${hint}</div>` : ''}${btn ? `<div class="tools">${btn}</div>` : ''}</div>`; }
 export function mrows(rows) { return `<div class="mv-rows">${rows.map(r => `<div class="mv-row${r[3] ? ' ' + r[3] : ''}"><span class="a">${r[0]}</span><span class="b">${r[1]}</span><span class="c">${r[2] || ''}</span></div>`).join('')}</div>`; }
 export function card(title, body, right = '') { return `<div class="card"><div class="ch"><h3>${title}</h3>${right}</div>${body}</div>`; }
 export function prog(pct) { pct = Math.max(0, Math.min(100, Math.round(pct || 0))); return `<div class="prog"><div class="track"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`; }

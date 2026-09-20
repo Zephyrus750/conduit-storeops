@@ -168,3 +168,30 @@ test('maps: one download per version, served from the cache after, refetched whe
   assert.equal(await o.maps.get('9999'), null, 'no map published answers null, not a throw');
   st.close(); o.closeAll();
 });
+
+test('a listener that resubscribes itself while an event is emitted runs once, not forever', async () => {
+  const c = device('phone-resub');
+  await c.session.load(); await c.session.signIn({ store: '1241', pin: '2468' }); await c.session.unlock('SR-CODE');
+  const s = await c.open('1241'); await until(() => s.status.state === 'live');
+  let runs = 0, off = null;
+  const sub = () => { off = s.on('cages', () => { runs += 1; off(); sub(); }); };
+  sub();
+  await s.dispatch({ type: 'cage.create', entity: { cage: 'BSN1240998' }, payload: { ring: 'overstock' } });
+  await until(() => s.pending.length === 0);
+  assert.ok(runs >= 1 && runs <= 3, `listener ran ${runs} times`);
+  await s.dispatch({ type: 'cage.close', entity: { cage: 'BSN1240998' } }); await until(() => s.pending.length === 0);
+  off(); s.close();
+});
+
+test('unlocking an area after the socket is open reconnects, so the next submit is judged on the new role', async () => {
+  const c = device('phone-unlock');
+  await c.session.load(); await c.session.signIn({ store: '1241', pin: '2468' });
+  const s = await c.open('1241'); await until(() => s.status.state === 'live');
+  await c.session.unlock('SR-CODE');
+  await until(() => s.status.state === 'live');
+  await s.dispatch({ type: 'cage.create', entity: { cage: 'BSN1240999' }, payload: { ring: 'overstock' } });
+  await until(() => s.pending.length === 0);
+  assert.equal(s.get('cages').BSN1240999.ring, 'overstock', 'applied on the server, not rolled back');
+  await s.dispatch({ type: 'cage.close', entity: { cage: 'BSN1240999' } }); await until(() => s.pending.length === 0);
+  s.close();
+});

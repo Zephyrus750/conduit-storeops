@@ -28,7 +28,11 @@ export const ACCENTS = [
   ["Cocoa", '#7A5A4A', '#5F463A', '#F2EEED', '#D4CAC5', '', 'soft'],
 ];
 const KEY = 'suite_prefs';
-const DEFAULTS = { skin: 'light', accent: 0, rail: 'light', bars: 'plain', hdr: 'classic', railmin: false };
+// Display scale: the whole frame renders at this factor (0.85 reads as the
+// showcase did on a 1440-wide screen). Container queries see the scaled
+// width, so a half-screen window still gets the half-screen layout.
+export const SCALES = [['0.75', 'Small'], ['0.85', 'Compact'], ['1', 'Default'], ['1.15', 'Large']];
+const DEFAULTS = { skin: 'light', accent: 0, rail: 'light', bars: 'plain', hdr: 'classic', railmin: false, scale: '0.85' };
 let cur = null;
 export function prefs() { if (!cur) { try { cur = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) || '{}')) }; } catch { cur = { ...DEFAULTS }; } } return cur; }
 export function setPref(k, v) { prefs()[k] = v; try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch {} applyPrefs(); }
@@ -44,4 +48,5 @@ export function applyPrefs(frame = document.querySelector('.frame')) {
   s.setProperty('--accent-line', dark ? `color-mix(in srgb,${a[1]} 45%,#111827)` : a[4]);
   document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
   const app = frame.querySelector('#app'); if (app) app.classList.toggle('railmin', !!p.railmin);
+  const z = Number(p.scale) || 1; s.zoom = z === 1 ? '' : String(z);
 }

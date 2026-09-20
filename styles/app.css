@@ -29,7 +29,8 @@ body { font-family: var(--body); color: var(--ink); }
 .keywrap.open .keypop { display: block; }
 .map.real .pin text { font-size: 22px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
 
-@container shell (max-width:1600px) { .kpi .kh h3 { white-space: normal; line-height: 1.15; overflow: visible; text-overflow: clip; font-size: 16px; } .kpi .kh .open { padding: 6px 9px; } }
+.kpi .kh h3 { white-space: normal; line-height: 1.15; overflow: visible; text-overflow: clip; font-size: 16px; }
+.kpi .kh .open { padding: 6px 9px; }
 @container shell (max-width:600px) { .mv-sel.mode { max-height: 46cqh; overflow: auto; } }
 
 /* ── owner console (app-side rules the showcase did not need) ── */
@@ -67,3 +68,34 @@ form.li { margin: 0; }
 .frame.adm .top .search input::placeholder { color: var(--faint); }
 @container shell (max-width:1100px) { .ad-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ad-form { grid-template-columns: 1fr; } .ad-ent, .ad-ent.in { grid-template-columns: 1fr; } .ad-two { grid-template-columns: 1fr !important; } }
 @container shell (max-width:600px) { .ad-grid2 { grid-template-columns: 1fr; } .ad-form .ch, .ad-two .ch { flex-wrap: wrap; } .ad-form .ch h3, .ad-two .ch h3 { flex: none; white-space: normal; } .ad-tabs { overflow: auto; } .ad-banner { font-size: 12.5px; } .ad-banner.actas { bottom: 78px; } .ad-banner.actas span { display: none; } .pd-name { font-size: 16px; margin-left: 6px; } .si-panel.si-owner { width: min(460px, 92%); } .si-own { padding: 28px 22px 24px; } .ad-filters .search { max-width: none; } }
+
+/* ── stockroom (app-side) ── */
+.mv-scan.typed { display: flex; flex-direction: column; gap: 8px; border: 2px dashed var(--accent-line); border-radius: 16px; padding: 12px 14px; background: var(--panel); }
+.mv-scan.typed .cap { font-weight: 700; font-size: 14px; }
+.mv-scan.typed .hint { font-size: 12.5px; color: var(--dim); }
+.mv-scan.typed .mv-field input { width: 100%; box-sizing: border-box; font: inherit; font-size: 18px; letter-spacing: .04em; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--ground); color: var(--ink); }
+.mv-scan.typed .tools { display: flex; gap: 8px; align-items: center; }
+.mv-scan.typed .tools button { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-weight: 600; font-size: 13.5px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink2); cursor: pointer; }
+.mv-scan.typed .cs-step { display: inline-flex; align-items: center; gap: 4px; }
+.mv-scan.typed .cs-step button { padding: 6px 8px; }
+.mv-scan.typed .cs-step b { min-width: 24px; text-align: center; }
+.sr3 { height: calc(100cqh - 150px); min-height: 480px; }
+.sr3 .srail-list { overflow: auto; flex: 1; }
+.srail-t .sortb { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; background: var(--panel); color: var(--ink2); }
+.slc .lock { display: inline-flex; color: var(--amber, #B45309); }
+.scode .acts span, .dc-edit span, .adj-x, .hist-row, .swp-row .btn, .tick[data-act] { cursor: pointer; }
+.ringpick { display: inline-flex; align-items: center; gap: 6px; }
+.ringpick small { color: var(--dim); font-size: 11.5px; margin-right: 2px; }
+.ringpick [data-act] { cursor: pointer; display: inline-flex; }
+.pcard.clist .row.sel { background: var(--accent-soft); border-radius: 8px; }
+.pcard.clist .row[data-act] { cursor: pointer; }
+.adj-form2 { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.adj-form2 input + input { grid-column: auto; }
+.hist-deps .status { font-size: 10.5px; }
+.swp-row { grid-template-columns: 22px auto minmax(0, 1fr); }
+.swp-row .cg { white-space: nowrap; }
+.unlock .si-form input.si-pin { letter-spacing: .12em; font-size: 20px; text-transform: uppercase; }
+.unlock .si-foot a { cursor: pointer; font-weight: 600; color: var(--accent-ink); }
+@container shell (max-width:1100px) { .sr3 { grid-template-columns: 220px minmax(0,1fr) 220px; } }
+@container shell (max-width:600px) { .sr3 { grid-template-columns: 1fr; height: auto; } .srail.right { display: none; } .hgrid, .grid2 { grid-template-columns: 1fr; } }
+@media print { .rail, .top, .foot, .m-tabs, .m-appbar, .vh .acts { display: none !important; } .content { overflow: visible !important; } }

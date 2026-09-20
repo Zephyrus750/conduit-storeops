@@ -42,5 +42,5 @@ export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, W
   }
   function closeAll() { for (const s of stores.values()) s.close(); stores.clear(); }
   session.on('signin-required', closeAll);
-  return { transport, session, catalogue, maps, open, closeAll, stores };
+  return { transport, session, catalogue, maps, storage, open, closeAll, stores };
 }

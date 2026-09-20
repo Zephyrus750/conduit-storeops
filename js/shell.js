@@ -13,7 +13,8 @@ import { $, $$, ic, esc, greeting, fmtLong, toast } from './ui.js';
 import { loadMap, setMap, mapInfo } from './map.js';
 import { initSearch } from './search.js';
 import { updates, initUpdates } from './updates.js';
-import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL } from './registry.js';
+import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
+import { ensureArea, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
@@ -189,12 +190,20 @@ function markRail() {
 function show(id, arg) {
   if (!store && !admin) return;
   const mobile = isMobile();
-  if (id === 'mhome') id = admin ? 'admin' : mobile ? 'map' : 'dashboard';
+  if (id === 'mhome') id = admin ? 'admin' : mobile ? (HOME[ws] || 'map') : 'dashboard';
   if (id === 'more') return openMore();
+  if (id === 'launcher') return openLauncher();
   let view = VIEWS[id] || VIEWS[admin ? 'admin' : 'dashboard'];
   // Admin views need the owner session; store views need a store.
   if (view.id.startsWith('admin') && !admin) view = VIEWS.dashboard;
   if (!view.id.startsWith('admin') && view.id !== 'settings' && !store) view = VIEWS.admin;
+  // A workspace view needs its crew code once per device (a manager code opens all).
+  if (store && view.area && view.area !== 'floor' && !hasArea(client.session, view.area)) {
+    if (!(client.session.current?.caps || []).includes(view.area)) { toast(`This store is not set up for the ${view.area === 'backdock' ? 'Back dock' : view.area}`); return; }
+    ensureArea({ session: client.session, frame, area: view.area }).then(ok => { if (ok) show(id, arg); });
+    return;
+  }
+  if (store && view.area && view.area !== ws && view.area !== 'admin') setWs(view.area);
   id = view.id;
   for (const u of unsubs) u(); unsubs = [];
   currentArg = arg !== undefined ? arg : (id === current ? currentArg : null);
@@ -202,7 +211,7 @@ function show(id, arg) {
   // A fresh content element each time, so a view's listeners die with it.
   const fresh = content.cloneNode(false); content.replaceWith(fresh); content = fresh;
   const cur = client.session.current;
-  const ctx = { store, admin, arg: currentArg, session: client.session, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
+  const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, storage: client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
   const useMobile = mobile && typeof view.mobile === 'function';
   content.classList.toggle('mv', useMobile);
   content.innerHTML = useMobile ? view.mobile(ctx) : view.desktop(ctx);
@@ -218,6 +227,12 @@ async function actAs(no) {
   await client.session.actAs(no);
   closeStore(); admin = null; frame.classList.remove('adm'); resetAdmin();
   await enter();
+}
+function openLauncher() {
+  let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
+  const caps = client.session.current?.caps || [];
+  sh.innerHTML = `<div class="sheet"><h3>Workspace</h3><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]) && w[0] !== 'backdock'; return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  sh.classList.add('open');
 }
 function openMore() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
@@ -236,7 +251,9 @@ document.addEventListener('click', e => {
     return;
   }
   const v = e.target.closest('[data-view]'); if (v && !v.disabled) { show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no } : undefined); return; }
-  const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else show(g.getAttribute('data-go')); return; }
+  const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
+  if (e.target.closest('.mdepts')) { if (store) openLauncher(); return; }
+  const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else show(g.getAttribute('data-go'), g.dataset.bay ? { bay: g.dataset.bay } : undefined); return; }
   if (e.target.closest('[data-act="close-more"]') || (e.target.id === 'msheet')) $('#msheet')?.classList.remove('open');
   if (e.target.closest('#railToggle')) { $('#app').classList.toggle('railmin'); }
   if (e.target.closest('#hsearch,.bsearch,#msearch')) { if (admin) toast('Find a store from the rail for now'); else search.open($('#msearch input')?.value || ''); }

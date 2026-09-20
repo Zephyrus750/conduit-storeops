@@ -12,7 +12,7 @@ doc and the "Conduit Shell Swap" showcase.
 
 ```
 index.html   the shell (one frame; desktop, half-screen and phone by container query)
-js/          shell.js, map.js, ui.js, registry.js, prefs.js, views/*.js (one module per view)
+js/          shell.js, map.js, search.js, updates.js, unlock.js, ui.js, registry.js, prefs.js, views/*.js, views/stockroom/*.js
 styles/      tokens.css + shell.css (generated from the showcase), app.css
 maps/        published map documents (1241.svg for the pilot)
 worker/      the Cloudflare worker: routes, auth, registry object, store object
@@ -131,6 +131,35 @@ maps (`maps/*.svg`) serve network-first from a cache that survives releases.
 After changing any shell file run `npm run sw` and commit `sw-precache.js`;
 the unit suite fails when it is stale. Netlify serves `sw.js` and the
 precache list with `no-cache` so a device always sees the newest release.
+
+## Stockroom
+
+The Stockroom workspace is the first ported module with live users
+(`js/views/stockroom/`). Its views run on the stockroom reducers that were
+already in the log:
+
+- **Backfill review** (`bfreview`): the desk. Phones scan bays; the desk
+  pastes the SIM report (kept on the device under `simreport:<store>:<date>`,
+  never sent to the worker, as K2B did), compares every bay (add / delete /
+  match, `shared/backfill.js`), marks codes incorrect, flags a code to
+  Adjustments, requests bays for the day list, marks Ready (the system-only
+  codes are written as `scanned:false` so the worker's metrics match the
+  desk) and Submits. Claims are a soft lock per bay. On the phone: bay →
+  scan → send, one `submission.update` per scan so wifi drops lose nothing.
+- **Cages**: open cages with ring colour, park location, contents, last
+  seen; the phone scans cartons onto a cage, parks it and runs a sweep.
+- **Adjustments**: the below-zero SOH list per day, typed or flagged from
+  review; copy as CSV for the office.
+- **Day list**: today's requested and pending bays split across 1 to 4
+  walkers; print the sheet; the phone starts a bay from it.
+- **History**: every bay marked ready or submitted, any day, with metrics
+  and codes; copy as CSV.
+
+A Stockroom view asks for the crew code once per device (`js/unlock.js`,
+`session.unlock`), and the client store reconnects its socket when the
+session's roles change so the next submit is judged on the new role. The
+phone switches workspace from the launcher (the grid button beside search).
+Still to come in this step: the K2B importer and the migration flip.
 
 ## Maps and the catalogue
 

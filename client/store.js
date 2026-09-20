@@ -37,7 +37,9 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   let flushing = null;
 
   // ── events out ────────────────────────────────────────────────────────
-  const emit = (k, v) => { for (const f of listeners.get(k) || []) { try { f(v); } catch (e) { console.error(e); } } };
+  // Iterate a snapshot: a listener may unsubscribe and resubscribe (a view
+  // re-rendering), and a live Set would visit the new entry too, forever.
+  const emit = (k, v) => { for (const f of [...(listeners.get(k) || [])]) { try { f(v); } catch (e) { console.error(e); } } };
   function on(k, f) { if (!listeners.has(k)) listeners.set(k, new Set()); listeners.get(k).add(f); return () => listeners.get(k).delete(f); }
   function setStatus(patch) { status = { ...status, ...patch, queued: pending.length, seq: base.seq }; emit('status', status); }
   function changed(keys) { for (const k of keys) emit(k, state[k]); emit('*', { keys, state }); }
@@ -204,8 +206,19 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   let hbSoon = null;
   function heartbeatSoon() { timers.clearTimeout(hbSoon); hbSoon = timers.setTimeout(heartbeat, 1000); }
 
+  // The socket carries the claims it was opened with. When the session
+  // changes (an area unlocked, a refresh), reconnect so the next submit is
+  // judged on the current roles rather than refused as unauthorised.
+  let lastToken = null;
+  const offSession = session.on('change', snap => {
+    const t = snap ? session.current?.expires + ':' + (snap.roles || []).join(',') : null;
+    if (t === lastToken) return;
+    lastToken = t;
+    if (ws && !closed) { const s = ws; ws = null; try { s.close(); } catch {} wsAttempt = 0; connect(); }
+  });
+
   function close() {
-    closed = true; timers.clearTimeout(wsTimer); timers.clearTimeout(hbTimer); timers.clearTimeout(hbSoon); stopPolling();
+    closed = true; offSession(); timers.clearTimeout(wsTimer); timers.clearTimeout(hbTimer); timers.clearTimeout(hbSoon); stopPolling();
     if (ws) { const s = ws; ws = null; try { s.close(); } catch {} }
     setStatus({ state: 'offline' });
   }
