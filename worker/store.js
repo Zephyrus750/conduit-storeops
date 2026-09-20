@@ -14,7 +14,7 @@
 // WebSocket protocol (JSON text frames):
 //   → { t:'hello', since }          ← { t:'snapshot', seq, state } or { t:'delta', seq, events }
 //   → { t:'submit', events }        ← { t:'ack', results }
-//   → { t:'hb', app }               (updates the devices projection, no reply)
+//   → { t:'hb', app, area, online, outbox, lastError }   (updates the devices projection, no reply)
 //   ← { t:'event', event }          broadcast on every applied event
 //   → { t:'ping' }                  ← { t:'pong', seq }
 
@@ -186,7 +186,10 @@ export class StoreObject extends DurableObject {
       }
       case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
       case 'hb': {
-        this.state.devices[claims.device || 'nodevice'] = { app: msg.app || null, last: new Date().toISOString(), role: claims.roles?.[0] || null };
+        this.state.devices[claims.device || 'nodevice'] = {
+          app: msg.app || null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
+          area: msg.area || null, online: msg.online !== false, outbox: Number(msg.outbox) || 0, lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
+        };
         return;
       }
       case 'ping': return ws.send(JSON.stringify({ t: 'pong', seq: this.state.seq }));

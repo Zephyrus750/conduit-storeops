@@ -8,7 +8,7 @@ The full walkthrough lives in the "Conduit Setup Guide" doc. Short form:
 4. **Check**: `https://conduit-staging.<sub>.workers.dev/v1/health` → `{"ok":true,...}`.
 5. **Netlify**: Add new site › Import from GitHub › this repo. Build command empty, publish directory `.`. Give the site a name-neutral name.
 6. **Subdomain**: if it is not `zephyrus-np750`, change the URL in `js/config.js` and push.
-7. **Register the store** (owner):
+7. **Register the store** (owner): open the Netlify site, choose "Owner sign-in", enter the owner key, then Register a store. The console generates the PIN and codes and shows them once. The same thing from a terminal:
    ```bash
    W=https://conduit-staging.<sub>.workers.dev
    TOKEN=$(curl -s -X POST $W/v1/auth/signin -H 'Content-Type: application/json' -d '{"ownerKey":"<owner key>","device":"laptop"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')

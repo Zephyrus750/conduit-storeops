@@ -65,11 +65,13 @@ r.post('/v1/store/:no/events', (req, env, _ctx, p) => storeCall(req, env, p.no, 
 r.get('/v1/store/:no/ws', (req, env, _ctx, p) => storeCall(req, env, p.no, '/ws'));
 
 // ── admin (owner) ─────────────────────────────────────────────────────────
+r.get('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/stores/_all')); });
 r.post('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'POST', '/stores', await readJson(req)), 201); });
 r.get('/v1/admin/stores/:no', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'GET', `/stores/${p.no}`)); });
 r.patch('/v1/admin/stores/:no', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'PATCH', `/stores/${p.no}`, await readJson(req))); });
 r.get('/v1/admin/actions', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/actions')); });
 r.get('/v1/admin/stores/:no/devices', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/devices'));
+r.get('/v1/admin/stores/:no/snapshot', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/snapshot', new URL(req.url).search));
 r.get('/v1/admin/stores/:no/tail', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/tail', new URL(req.url).search));
 r.post('/v1/admin/actas/:no', async (req, env, _c, p) => {
   const c = await requireOwner(req, env);

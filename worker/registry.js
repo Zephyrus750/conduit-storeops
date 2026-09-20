@@ -9,6 +9,7 @@
 //   POST /refresh/issue { store, device, roles, owner }    → { refresh }
 //   POST /refresh/use   { refresh }                        → { store, device, roles, owner, refresh } | error
 //   GET  /stores                                           → public list
+//   GET  /stores/_all                                      → full records (owner)
 //   GET  /stores/:no                                       → full record (owner)
 //   POST /stores        { no, name, region, pin, codes, entitlements } (owner)
 //   PATCH /stores/:no   { entitlements?, status?, pin?, codes?, name?, region? } (owner)
@@ -72,7 +73,7 @@ export class RegistryObject extends DurableObject {
       case 'POST /unlock': return this.unlock(body);
       case 'POST /refresh/*': return p[1] === 'issue' ? this.issueRefresh(body) : this.useRefresh(body);
       case 'GET /stores': return this.publicList();
-      case 'GET /stores/*': return this.record(p[1]);
+      case 'GET /stores/*': return p[1] === '_all' ? this.fullList() : this.record(p[1]);
       case 'POST /stores': return this.register(body);
       case 'PATCH /stores/*': return this.patch(p[1], body);
       case 'POST /lockout/*':
@@ -149,6 +150,9 @@ export class RegistryObject extends DurableObject {
   // ── registry ──────────────────────────────────────────────────────────
   publicList() {
     return { stores: this.sql.exec('SELECT no, name, region, status FROM stores ORDER BY no').toArray() };
+  }
+  fullList() {
+    return { stores: this.sql.exec('SELECT * FROM stores ORDER BY no').toArray().map(r => this.present(r)) };
   }
   record(no) {
     const row = this.get(no);

@@ -22,10 +22,19 @@ used = set()
 files = [os.path.join(root, 'index.html')] + glob.glob(os.path.join(root, 'js', '**', '*.js'), recursive=True) + glob.glob(os.path.join(root, 'maps', '*.svg'))
 for f in files:
     t = open(f, encoding='utf-8').read()
-    for m in re.finditer(r'class=\\?["\']([^"\']*)["\']', t):
-        for c in re.split(r'\s+|\$\{[^}]*\}', m.group(1)):
-            c = c.strip()
-            if re.fullmatch(r'[A-Za-z_][\w-]*', c): used.add(c)
+    # Scan class="…" attributes, then blank the innermost ${…} expressions
+    # and scan again, a few levels deep. The raw pass catches names quoted
+    # inside expressions (`${on ? 'on' : ''}`); each blanked pass exposes
+    # the static part next to an expression holding quotes
+    # (class="ad-tile${cls ? ' ' + cls : ''}" → ad-tile), including inside
+    # nested template literals.
+    text = t
+    for _ in range(5):
+        for m in re.finditer(r'class=\\?["\']([^"\']*)["\']', text):
+            for c in re.split(r'\s+|\$\{[^}]*\}', m.group(1)):
+                c = c.strip()
+                if re.fullmatch(r'[A-Za-z_][\w-]*', c): used.add(c)
+        text = re.sub(r'\$\{[^{}]*\}', ' ', text)
     for m in re.finditer(r"classList\.(?:add|toggle|remove)\(([^)]*)\)", t):
         for c in re.findall(r"'([\w-]+)'", m.group(1)): used.add(c)
     for m in re.finditer(r"class(?:Name)?\s*=\s*['\"]([^'\"]*)['\"]", t):
@@ -33,7 +42,7 @@ for f in files:
 # state / variant classes set from code paths the regexes cannot see
 used |= {'on', 'off', 'sel', 'done', 'hot', 'live', 'open', 'hi', 'full', 'warn', 'info', 'good', 'sec', 'ok', 'bad', 'cur', 'completed', 'error', 'zoomed', 'mono', 'rfplan', 'showem', 'railmin', 'dark', 'fit', 'mv', 'loading', 'frame', 'app', 'browser',
          'rail-light', 'rail-tint', 'rail-solid', 'rail-deep', 'bars-plain', 'bars-tint', 'bars-strong', 'hdr-classic', 'hdr-title', 'ws-floor', 'ws-stockroom', 'ws-backdock',
-         'route-path', 'route-n', 'pin', 'c-green', 'c-red', 'due', 'soon', 'overdue', 'phase', 'er', 'v', 'c', 'dep', 'chip', 'sw', 'sw2', 'pt', 'big', 'of', 'lbl', 'go', 'ib', 'md', 'mc', 'mn', 'sc', 'tk', 'micro', 'micros', 'subrow', 'sh', 'ct', 'code', 'nm', 'rt', 'loc', 'stopn', 'tick', 'li', 'list', 'kh', 'hero', 'n', 'd', 'hl', 'rows', 'row', 'l', 'r', 'where', 'hs', 'prog', 'track', 'kpi', 'dash', 'kpis', 'side2', 'greet', 'vh', 'vt', 'vic', 'sub', 'acts', 'acts2', 'i', 'mic', 'kbd', 'btn', 'primary', 'accent', 'sm', 'ibtn', 'seg', 'seg2', 'seg3', 'pills', 'tabs', 'status', 'card', 'ch', 'pcard', 'pt3', 'cs-dim', 'grid2', 'mapbox', 'mapstage', 'mapleg', 'crumbx', 'sidecol', 'fill', 'mapview', 'selshelf', 'sid', 'meta', 'mapbar', 'search', 'legchips', 'zoom', 'keywrap', 'keypop', 'keygrp', 'keygrid', 'keyrow'}
+         'adm', 'radm', 'radm-top', 'radm-find', 'hdot', 'ad', 'own', 'ro', 'ad-tile', 'ad-tiles', 'ad-tools', 'ad-in', 'ad-done', 'ad-kv', 'ad-steps', 'ad-sum', 'ad-ent', 'ad-entc', 'ad-inrow', 'ad-grid2', 'ad-field', 'ad-form', 'ad-form-main', 'ad-form-side', 'ad-tabs', 'ad-filters', 'ad-ev', 'ad-dev', 'ad-dot', 'ad-areas', 'ad-two', 'ad-tbl', 'ad-row', 'ad-banner', 'ad-tgl', 'tick', 'mono', 'go', 'rt', 'pd-name', 'codes', 'foot-adm', 'si-owner', 'si-own', 'route-path', 'route-n', 'pin', 'c-green', 'c-red', 'due', 'soon', 'overdue', 'phase', 'er', 'v', 'c', 'dep', 'chip', 'sw', 'sw2', 'pt', 'big', 'of', 'lbl', 'go', 'ib', 'md', 'mc', 'mn', 'sc', 'tk', 'micro', 'micros', 'subrow', 'sh', 'ct', 'code', 'nm', 'rt', 'loc', 'stopn', 'tick', 'li', 'list', 'kh', 'hero', 'n', 'd', 'hl', 'rows', 'row', 'l', 'r', 'where', 'hs', 'prog', 'track', 'kpi', 'dash', 'kpis', 'side2', 'greet', 'vh', 'vt', 'vic', 'sub', 'acts', 'acts2', 'i', 'mic', 'kbd', 'btn', 'primary', 'accent', 'sm', 'ibtn', 'seg', 'seg2', 'seg3', 'pills', 'tabs', 'status', 'card', 'ch', 'pcard', 'pt3', 'cs-dim', 'grid2', 'mapbox', 'mapstage', 'mapleg', 'crumbx', 'sidecol', 'fill', 'mapview', 'selshelf', 'sid', 'meta', 'mapbar', 'search', 'legchips', 'zoom', 'keywrap', 'keypop', 'keygrp', 'keygrid', 'keyrow'}
 EXCLUDE = re.compile(r'\.stage\b|\.stagewrap|\.page\b|\.rp\b|\.rp-|\.sheet-sec|\.swap\b|\.si-var|\.intro\b|\.footnote|\.cap\b|\.capline|#stage|#accents|#heads|\.accents\b|\.acc\b|\.acc-|\.heads\b|\.eyebrow|\.lead\b|\.showcase|\.pills\.top|\.sizes|\.seg\.sizes')
 CLASS_RE = re.compile(r'\.(-?[_a-zA-Z][\w-]*)')
 

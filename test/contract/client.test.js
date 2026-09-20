@@ -122,3 +122,24 @@ test('dispatch offline queues and applies locally; connect flushes; a second dev
   assert.equal(se.get('cages').BSN1240417.location, 'AISLE 2');
   se.close(); live.close(); sb.close(); storeA.close(); storeA2.close(); forced.close();
 });
+
+test('owner acts as a store, writes carry the owner, and returns to the console', async () => {
+  const o = createClient({ baseUrl, storage: memoryStorage({ suite_device: 'dev-laptop' }) });
+  await o.session.load();
+  assert.equal((await o.session.signInOwner({ ownerKey: OWNER_KEY })).owner, true);
+  assert.equal(o.session.current.store, null);
+  const s = await o.session.actAs('1241');
+  assert.equal(s.store, '1241'); assert.equal(s.name, 'Busselton'); assert.equal(s.actas, true); assert.deepEqual(s.roles, ['manager']);
+  const st = await o.open('1241');
+  await until(() => st.status.state === 'live');
+  await st.dispatch({ type: 'refresh.focus.set', entity: { week: '2026-W38' }, payload: { departments: ['h1'] } });
+  await until(() => st.pending.length === 0);
+  const tail = await o.transport.request('/v1/admin/stores/1241/tail?limit=1', { token: (await o.session.endActAs(), await o.session.token()) });
+  assert.deepEqual(tail.events[0].actor, { role: 'owner', device: 'dev-laptop', owner: true }); assert.equal(tail.events[0].seq, 3);
+  assert.equal(o.session.current.store, null); assert.equal(o.session.current.owner, true);
+  // Refreshing while acting mints a fresh act-as token off the kept owner refresh.
+  await o.session.actAs('1241');
+  const before = await o.session.token(); await o.session.refresh();
+  assert.notEqual(await o.session.token(), before); assert.equal(o.session.current.actas, true);
+  o.closeAll();
+});

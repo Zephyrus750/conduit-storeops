@@ -14,10 +14,10 @@ export default {
   id: 'settings', title: 'Settings and utilities', icon: 'm-settings',
   desktop(ctx) {
     const NAV = [['general', 'General', 'settings'], ['appearance', 'Appearance', 'star'], ['_', 'SUPPORT'], ['about', 'About', 'file']];
-    const nav = `<div class="stg-nav">${NAV.map(n => n[0] === '_' ? `<div class="stg-grp">${n[1]}</div>` : `<button class="stg-row${n[0] === sec ? ' on' : ''}" data-act="sec" data-sec="${n[0]}">${ic(n[2])}${n[1]}</button>`).join('')}<div class="stg-ver">Conduit ${VERSION} · store ${esc(ctx.storeNo)} · signed in on this device</div></div>`;
-    return vh('Settings and utilities', sub(`Store ${esc(ctx.storeNo)}`, esc(ctx.storeName), VERSION), '', 'm-settings') + `<div class="stg">${nav}<div class="stg-body">${body(ctx)}</div></div>`;
+    const nav = `<div class="stg-nav">${NAV.map(n => n[0] === '_' ? `<div class="stg-grp">${n[1]}</div>` : `<button class="stg-row${n[0] === sec ? ' on' : ''}" data-act="sec" data-sec="${n[0]}">${ic(n[2])}${n[1]}</button>`).join('')}<div class="stg-ver">Conduit ${VERSION} · ${ctx.store ? 'store ' + esc(ctx.storeNo) : 'owner'} · signed in on this device</div></div>`;
+    return vh('Settings and utilities', ctx.store ? sub(`Store ${esc(ctx.storeNo)}`, esc(ctx.storeName), VERSION) : sub('Owner console', VERSION), '', 'm-settings') + `<div class="stg">${nav}<div class="stg-body">${body(ctx)}</div></div>`;
   },
-  mobile(ctx) { return `<div class="mv-head"><div><h2>Settings</h2><span>${esc(ctx.storeNo)} ${esc(ctx.storeName)} · ${VERSION}</span></div></div><div class="stg-body">${body(ctx)}</div>`; },
+  mobile(ctx) { return `<div class="mv-head"><div><h2>Settings</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : 'Owner console'} · ${VERSION}</span></div></div><div class="stg-body">${body(ctx)}</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
@@ -29,9 +29,9 @@ export default {
       else if (act === 'bars') setPref('bars', a.getAttribute('data-v')), ctx.rerender();
       else if (act === 'hdr') setPref('hdr', prefs().hdr === 'title' ? 'classic' : 'title'), ctx.rerender();
       else if (act === 'railmin') setPref('railmin', !prefs().railmin), ctx.rerender();
-      else if (act === 'signout') { if (confirm('Sign out of this store on this device?')) await ctx.signOut(); }
+      else if (act === 'signout') { if (confirm(ctx.store ? 'Sign out of this store on this device?' : 'Sign out of the owner console on this device?')) await ctx.signOut(); }
       else if (act === 'reload') location.reload();
-      else if (act === 'resync') ctx.store.resync();
+      else if (act === 'resync') ctx.store?.resync();
     });
     return [];
   },
@@ -48,8 +48,10 @@ function body(ctx) {
       `<div class="stg-card"><div class="stg-h">Shell</div>${row('Rail colour', 'Light keeps the rail plain. Tinted washes it in the soft accent. Accent paints it fully.', seg('rail', [['light', 'Light'], ['tint', 'Tinted'], ['solid', 'Accent'], ['deep', 'Deep']], p.rail))}${row('Header and footer', 'Plain, tinted or strong accent bars.', seg('bars', [['plain', 'Plain'], ['tint', 'Tinted'], ['strong', 'Strong']], p.bars))}${row('Title bar', 'Move each view’s title into the header and fold search into the logo.', tgl(p.hdr === 'title', 'hdr'))}${row('Rail', 'Start with the rail collapsed to icons', tgl(p.railmin, 'railmin'))}</div>`;
   }
   if (sec === 'about') return `<div class="stg-card"><div class="stg-h">Conduit</div>${row('Version', `${VERSION} · one shell, one worker, one event log per store`, '')}${row('Design of record', 'The Conduit Backend Design doc and the Conduit Shell Swap showcase', '')}</div>`;
-  const s = ctx.store.status;
-  return `<div class="stg-card"><div class="stg-h">This device</div>${row('Store', `${esc(ctx.storeNo)} ${esc(ctx.storeName)} · verified against the worker`, '<span class="chip">Signed in</span>')}${row('Device id', esc(ctx.session.device), '')}${row('Roles', esc((ctx.session.current?.roles || []).join(', ')), '<span class="stg-dim">hard-restricted by role</span>')}${row('Sync', `${esc(s.state)} · ${s.queued} queued · seq ${s.seq}${s.lastError ? ' · ' + esc(s.lastError) : ''}`, `<span class="btn sm" data-act="resync">${ic('refresh')}Resync</span>`)}</div>` +
+  const s = ctx.store?.status, cur = ctx.session.current;
+  const who = ctx.store ? row('Store', `${esc(ctx.storeNo)} ${esc(ctx.storeName)} · verified against the worker${cur?.actas ? ' · acting as the store as owner' : ''}`, '<span class="chip">Signed in</span>') : row('Owner', 'Signed in with the owner key · every action is logged in the registry', '<span class="chip">Owner</span>');
+  const sync = s ? row('Sync', `${esc(s.state)} · ${s.queued} queued · seq ${s.seq}${s.lastError ? ' · ' + esc(s.lastError) : ''}`, `<span class="btn sm" data-act="resync">${ic('refresh')}Resync</span>`) : '';
+  return `<div class="stg-card"><div class="stg-h">This device</div>${who}${row('Device id', esc(ctx.session.device), '')}${row('Roles', esc((cur?.roles || []).join(', ')), '<span class="stg-dim">hard-restricted by role</span>')}${sync}</div>` +
     `<div class="stg-card"><div class="stg-h">Updates</div>${row('Version', `${VERSION} · this device is on the current release`, `<span class="btn sm" data-act="reload">${ic('refresh')}Reload</span>`)}</div>` +
-    `<div class="stg-card"><div class="stg-h">Account</div>${row('Sign out', 'Forgets the store on this device. Queued changes are sent first.', `<span class="btn sm" style="color:var(--red)" data-act="signout">Sign out</span>`)}</div>`;
+    `<div class="stg-card"><div class="stg-h">Account</div>${row('Sign out', ctx.store ? (cur?.actas ? 'Returns to the owner console. Queued changes are sent first.' : 'Forgets the store on this device. Queued changes are sent first.') : 'Forgets the owner session on this device.', `<span class="btn sm" style="color:var(--red)" data-act="signout">${cur?.actas ? 'Back to the console' : 'Sign out'}</span>`)}</div>`;
 }

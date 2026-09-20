@@ -31,3 +31,36 @@ body { font-family: var(--body); color: var(--ink); }
 
 @container shell (max-width:1600px) { .kpi .kh h3 { white-space: normal; line-height: 1.15; overflow: visible; text-overflow: clip; font-size: 16px; } .kpi .kh .open { padding: 6px 9px; } }
 @container shell (max-width:600px) { .mv-sel.mode { max-height: 46cqh; overflow: auto; } }
+
+/* ── owner console (app-side rules the showcase did not need) ── */
+.si-own { width: 100%; box-sizing: border-box; }
+.si-own .si-pin.own input { flex: 1; min-width: 0; background: transparent; border: none; color: #fff; font: inherit; font-size: 18px; letter-spacing: .18em; outline: none; }
+.si-own .si-pin.own input::placeholder { color: rgba(255,255,255,.4); letter-spacing: .1em; }
+.si-own .si-err { color: #FCA5A5; }
+.si-own .si-cta.own { cursor: pointer; }
+.si-foot .si-owner-link { color: var(--accent-ink); font-weight: 600; cursor: pointer; }
+.si-own .si-foot.own a { cursor: pointer; }
+.frame.adm .rail > .radm { display: flex; }
+.radm .rrow.ad { gap: 8px; }
+.radm-top b { white-space: nowrap; }
+.ad-two .li .nm { white-space: normal; }
+.radm .rrow.soon { opacity: .55; font-size: 13px; }
+.ad-banner > div { flex: 1; min-width: 0; }
+.ad-banner.actas { position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%); z-index: 20; margin: 0; max-width: min(720px, calc(100% - 32px)); box-shadow: var(--shadow); background: #111827; color: #fff; }
+.ad-banner.actas span { opacity: .8; }
+.ad-banner.actas a { margin-left: auto; color: #fff; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ad-banner.actas a svg.i { transform: rotate(180deg); }
+.ad-scroll { overflow: auto; }
+.ad-row .btn { pointer-events: none; }
+.ad-in:focus { outline: 2px solid var(--accent-line); outline-offset: 1px; border-color: var(--accent); }
+.ad-tgl { cursor: pointer; }
+.ad-tabs button { cursor: pointer; }
+.ad-tools label { color: var(--ink2); }
+form.li { margin: 0; }
+.ad-kv b .mono { font-family: ui-monospace, monospace; }
+.ad-tile b .mono { font-size: 20px; }
+.rstbl .go { color: var(--accent-ink); font-weight: 700; cursor: pointer; }
+.frame.adm .top .search::after { content: none; }
+.frame.adm .top .search input::placeholder { color: var(--faint); }
+@container shell (max-width:1100px) { .ad-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ad-form { grid-template-columns: 1fr; } .ad-ent, .ad-ent.in { grid-template-columns: 1fr; } .ad-two { grid-template-columns: 1fr !important; } }
+@container shell (max-width:600px) { .ad-grid2 { grid-template-columns: 1fr; } .ad-form .ch, .ad-two .ch { flex-wrap: wrap; } .ad-form .ch h3, .ad-two .ch h3 { flex: none; white-space: normal; } .ad-tabs { overflow: auto; } .ad-banner { font-size: 12.5px; } .ad-banner.actas { bottom: 78px; } .ad-banner.actas span { display: none; } .pd-name { font-size: 16px; margin-left: 6px; } .si-panel.si-owner { width: min(460px, 92%); } .si-own { padding: 28px 22px 24px; } .ad-filters .search { max-width: none; } }

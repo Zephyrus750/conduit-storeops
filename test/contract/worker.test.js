@@ -163,4 +163,11 @@ test('owner diagnostics and act-as', async () => {
 
   const flip = await api('PATCH', '/v1/admin/stores/1241', { entitlements: { backdock: true }, status: 'migrating', areas: { stockroom: 'live' } }, ownerToken);
   assert.equal(flip.body.entitlements.backdock, true); assert.equal(flip.body.areas.stockroom, 'live'); assert.equal(flip.body.status, 'migrating');
+
+  // The console's list: full records, owner only; and a read-only snapshot of any store.
+  const all = await api('GET', '/v1/admin/stores', undefined, ownerToken);
+  assert.equal(all.status, 200); assert.equal(all.body.stores[0].no, '1241'); assert.deepEqual(all.body.stores[0].codes.sort(), ['dock', 'manager', 'stockroom']); assert.equal(all.body.stores[0].status, 'migrating');
+  assert.equal((await api('GET', '/v1/admin/stores', undefined, actas.body.token)).status, 403);
+  const snap = await api('GET', '/v1/admin/stores/1241/snapshot?areas=stockroom,store', undefined, ownerToken);
+  assert.equal(snap.status, 200); assert.equal(snap.body.state.cages.BSN1240417.location, 'AISLE 2, NEAR 7023'); assert.ok('devices' in snap.body.state);
 });

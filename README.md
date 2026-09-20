@@ -33,7 +33,8 @@ npm run dev          # worker in workerd on :8787 (store 1241, PIN 2468) + shell
 ```
 
 Open http://127.0.0.1:8080/. The shell finds the worker at `?worker=` (remembered
-per device) or defaults to :8787 on localhost. Sign in as 1241 / 2468.
+per device) or defaults to :8787 on localhost. Sign in as 1241 / 2468, or
+follow "Owner sign-in" with `dev-owner-key` for the admin console.
 
 ## Run the tests
 
@@ -86,14 +87,29 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/changes?since=` | store token | live: events after a seq |
 | `POST /v1/store/:no/events` | store token | live: batch submit, per-event ack or rejection |
 | `GET /v1/store/:no/ws` | store token | live: hello, submit, hb, ping; event fan-out |
-| `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: register, entitle, status, rotate |
-| `GET /v1/admin/stores/:no/tail`, `/devices`, `GET /v1/admin/actions` | owner | live: diagnostics |
+| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate |
+| `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
 | life, manifest, map, catalogue, history, export, import, flip | | `501 not_implemented`, named |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `invalid_event`, `duplicate` (a success),
 `not_implemented`, plus reducer codes such as `bay_occupied` and `cage_exists`.
+
+## Admin console
+
+The owner's views live in the same shell (`js/views/admin.js`): "Owner
+sign-in" on the store sign-in takes the owner key and opens the console with
+every store in the rail. Overview lists the registry; a store has Overview,
+Events (the raw tail with area and text filters), Devices (heartbeats,
+outbox depth, last error) and Access (entitlements, per-area state, PIN and
+code rotation with a generated value shown once, name, region and status).
+Register a store creates a store on the worker with generated credentials
+and hands them over once. Owner actions is the registry log. **Act as
+store** mints a store-scoped token (manager role, `actor: owner`) and opens
+the store views with a bar to return; the owner session is kept underneath
+so refresh keeps working. Everything the console writes is a registry
+action or an ordinary event; nothing is deployed.
 
 ## Event envelope
 
