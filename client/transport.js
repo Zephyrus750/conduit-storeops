@@ -14,7 +14,8 @@ export class TransportError extends Error {
 export function createTransport({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs = REQUEST_TIMEOUT_MS }) {
   const base = baseUrl.replace(/\/+$/, '');
   // timeoutMs per call for the few slow ones (an import reads a whole legacy store).
-  async function request(path, { method = 'GET', body, token, timeoutMs: perCall } = {}) {
+  // text: true returns the body as text (a CSV export) instead of parsed JSON.
+  async function request(path, { method = 'GET', body, token, timeoutMs: perCall, text = false } = {}) {
     const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), perCall || timeoutMs) : null;
     let res;
@@ -29,6 +30,7 @@ export function createTransport({ baseUrl, fetchImpl = globalThis.fetch, timeout
       throw new TransportError(0, 'network', e?.name === 'AbortError' ? 'request timed out' : (e?.message || 'network error'));
     } finally { if (timer) clearTimeout(timer); }
     let data = null;
+    if (text && res.ok) return res.text();
     try { data = await res.json(); } catch { data = null; }
     if (!res.ok) throw new TransportError(res.status, data?.code || 'http_error', data?.message || `HTTP ${res.status}`, data || {});
     return data;

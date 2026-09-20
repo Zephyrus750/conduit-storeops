@@ -79,7 +79,8 @@ test('halts need a known reason; finalise closes an open halt and writes a histo
   const row = s.dock.history[0];
   assert.equal(row.id, t); assert.equal(row.cartons, 10); assert.equal(row.pallets, 1); assert.equal(row.haltMins, 30); assert.equal(row.haltCount, 1);
   assert.deepEqual(row.carriedIn, { pallets: 1, cartons: 10 });
-  assert.equal(row.perPerson[0].pid, 'D2');
+  assert.equal(row.perPerson[0].pid, 'D2'); assert.deepEqual(row.perPerson[0].bays, ['B1']); assert.equal(row.perPerson[0].mins, 10);
+  assert.deepEqual(row.byDept, [], 'no manifest on this truck, so no department split');
   assert.equal(apply(s, ev('pallet.land', { truck: t, bay: 'B2' }, { ptype: 'bulk' })).code, 'truck_closed');
 });
 

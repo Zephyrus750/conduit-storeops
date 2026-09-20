@@ -10,7 +10,8 @@
 // the bay's status and metrics. Adjustments and cages holding the code
 // ride along.
 
-export const HISTORY_KINDS = ['backfill', 'cages', 'adjustments'];
+export const HISTORY_KINDS = ['backfill', 'cages', 'adjustments', 'receiving'];
+export const HISTORY_AREA = { backfill: 'stockroom', cages: 'stockroom', adjustments: 'stockroom', receiving: 'backdock' };
 const desc = k => (a, b) => String(b[k] || '').localeCompare(String(a[k] || ''));
 
 export function productLife(state, keycode) {
@@ -42,6 +43,8 @@ export function historyRows(state, kind) {
   if (kind === 'cages') return Object.entries(state.cages || {})
     .map(([cage, c]) => ({ cage, ring: c.ring, status: c.status, location: c.location || '', keycodes: Object.keys(c.items || {}).length, units: Object.values(c.items || {}).reduce((a, b) => a + b, 0), sweeps: (c.sweeps || []).length, created: c.created || '', seen: c.seen || '', closed: c.closed || '' }))
     .sort(desc('seen'));
+  if (kind === 'receiving') return (state.dock?.history || []).slice().reverse()
+    .map(r => ({ date: r.date, truck: r.id, manifest: r.manifest?.manNo || '', dcNo: r.manifest?.dcNo || '', despatch: r.manifest?.despatch || '', landedAt: r.landedAt || '', clearedAt: r.clearedAt || '', cartons: r.cartons, pallets: r.pallets, palletsLanded: r.palletsLanded, clearMins: r.clearMins, haltMins: r.haltMins, halts: r.haltCount, teamRate: r.teamRate, matched: r.audit?.matched ?? '', missing: r.audit?.missing ?? '', offManifest: r.audit?.extra ?? '', crew: (r.perPerson || []).length }));
   if (kind === 'adjustments') return Object.entries(state.adjustments || {})
     .flatMap(([date, day]) => Object.entries(day || {}).map(([keycode, a]) => ({ date, keycode, qty: a.qty, name: a.name || '', location: a.location || '', confirmed: !!a.confirmed, addedAt: a.addedAt || '' })))
     .sort((a, b) => b.date.localeCompare(a.date) || a.keycode.localeCompare(b.keycode));

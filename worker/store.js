@@ -28,7 +28,8 @@ import { typeInfo, AREA_PROJECTIONS } from '../shared/catalogue.js';
 import { hasRole } from './auth.js';
 import { HttpError, json, fail, CORS } from './http.js';
 import { ulid } from '../shared/ulid.js';
-import { productLife, historyRows, toCsv, HISTORY_KINDS } from '../shared/records.js';
+import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
+import { buildProfiles } from '../shared/profiles.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
@@ -95,6 +96,7 @@ export class StoreObject extends DurableObject {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
           if (url.pathname === '/manifest' && request.method === 'POST') return this.publishManifest(await request.json(), claims);
+          if (url.pathname === '/profiles') { const no = needArea(claims, 'backdock'); if (no) return no; const docs = this.sql.exec('SELECT doc, at FROM manifests').toArray().map(r => ({ ...JSON.parse(r.doc), at: r.at })); return json(buildProfiles(docs, { store: this.storeNo })); }
           const man = url.pathname.match(/^\/manifest\/([\w-]{1,20})$/);
           if (man) { const no = needArea(claims, 'backdock'); if (no) return no; return request.method === 'DELETE' ? this.removeManifest(man[1], claims) : this.manifestDoc(man[1]); }
           const life = url.pathname.match(/^\/life\/(\d{6,13})$/);
@@ -102,7 +104,7 @@ export class StoreObject extends DurableObject {
           const hist = url.pathname.match(/^\/(history|export)\/([a-z]+)$/);
           if (hist) {
             if (!HISTORY_KINDS.includes(hist[2])) return fail(400, 'invalid_request', `kind must be one of ${HISTORY_KINDS.join(', ')}`);
-            const no = needArea(claims, 'stockroom'); if (no) return no;
+            const no = needArea(claims, HISTORY_AREA[hist[2]]); if (no) return no;
             const rows = historyRows(this.state, hist[2]);
             if (hist[1] === 'export') return new Response(toCsv(rows), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${this.storeNo}-${hist[2]}.csv"`, ...CORS } });
             const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));

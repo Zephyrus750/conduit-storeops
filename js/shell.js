@@ -185,6 +185,8 @@ const RDESC = {
   daylist: 'The posted walk for the day, split by walker, with spot-checks flagged.',
   srhistory: 'The permanent archive of every location marked ready and what it held.',
   planner: 'The week ahead: which trucks land when, their teams and pre-staged manifests.',
+  rhistory: 'Every decanted truck: clear time, where the time went, manifest reconciliation and crew credit.',
+  profiles: 'Units per carton by keycode, built from the manifests the store has published.',
   settings: 'Updates, account, appearance, storage, departments, feedback and help.',
   admin: 'Every registered store: health, areas live or on legacy, devices and the last event.',
   adminstore: 'This store’s console: overview, events, devices, access, map and migration.',

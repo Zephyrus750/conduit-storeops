@@ -21,14 +21,17 @@ import srhome from './views/stockroom/srhome.js';
 import receiving from './views/backdock/receiving.js';
 import bdhome from './views/backdock/bdhome.js';
 import manifests from './views/backdock/manifests.js';
+import planner from './views/backdock/planner.js';
+import rhistory from './views/backdock/rhistory.js';
+import profiles from './views/backdock/profiles.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, stocktake, settings, bfreview, cages, adjust, daylist, srhistory, srhome, receiving, bdhome, manifests, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, stocktake, settings, bfreview, cages, adjust, daylist, srhistory, srhome, receiving, bdhome, manifests, planner, rhistory, profiles, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
 // Rail sections and the phone tab strip per workspace. Rows without a view
 // yet are inert and say so.
 export const RAIL = [
   { sec: 'Store', rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake'] },
-  { sec: 'Back dock', rows: ['receiving', 'manifests', ['rhistory', 'History', 'm-rhistory']] },
+  { sec: 'Back dock', rows: ['receiving', 'rhistory', 'manifests', 'profiles'] },
   { sec: 'Stockroom', rows: ['bfreview', 'cages', 'adjust', 'daylist', 'srhistory'] },
 ];
 export const STRIP = {
@@ -42,4 +45,4 @@ export const HOME = { floor: 'map', stockroom: 'srhome', backdock: 'bdhome', adm
 export const WORKSPACES = [['floor', 'Floor', 'm-map', 'Map, refresh, labels, stocktake, issues'], ['stockroom', 'Stockroom', 'box', 'Backfill scan, cages, adjustments, day list'], ['backdock', 'Back dock', 'truck', 'Land and decant pallets, run the truck']];
 // The owner console's rail: stores are added at runtime, these are the system rows.
 export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
-export const MORE = { floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['maintenance', 'm-maintenance', 'Report an issue'], ['settings', 'm-settings', 'Settings']], stockroom: [['daylist', 'm-daylist', 'Day list'], ['srhistory', 'm-srhistory', 'History'], ['settings', 'm-settings', 'Settings']], backdock: [['settings', 'm-settings', 'Settings']] };
+export const MORE = { floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['maintenance', 'm-maintenance', 'Report an issue'], ['settings', 'm-settings', 'Settings']], stockroom: [['daylist', 'm-daylist', 'Day list'], ['srhistory', 'm-srhistory', 'History'], ['settings', 'm-settings', 'Settings']], backdock: [['rhistory', 'm-rhistory', 'History'], ['settings', 'm-settings', 'Settings']] };

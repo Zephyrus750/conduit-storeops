@@ -1,7 +1,7 @@
 // A keycode's life, the history lists and CSV, from the projection shapes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { productLife, historyRows, toCsv, HISTORY_KINDS } from '../../shared/records.js';
+import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../../shared/records.js';
 
 const state = {
   backfill: { subs: {
@@ -25,6 +25,19 @@ test('productLife: bays newest first with what happened there, adjustments, cage
   assert.equal(productLife({}, '4316-6022').keycode, '43166022', 'non-digits are dropped, empty state is fine');
 });
 
+test('historyRows: receiving flattens the dock history newest first', () => {
+  const dock = { history: [
+    { id: '2026-09-04-T1', date: '2026-09-04', landedAt: '2026-09-04T06:00:00+08:00', clearedAt: '2026-09-04T09:00:00+08:00', cartons: 470, pallets: 14, palletsLanded: 14, clearMins: 180, haltMins: 0, haltCount: 0, teamRate: 157, audit: null, perPerson: [], manifest: null },
+    { id: '2026-09-07-T1', date: '2026-09-07', landedAt: '2026-09-07T06:12:00+08:00', clearedAt: '2026-09-07T09:22:00+08:00', cartons: 912, pallets: 17, palletsLanded: 17, clearMins: 190, haltMins: 17, haltCount: 2, teamRate: 316, audit: { matched: 76, missing: 2, total: 78, extra: 1 }, perPerson: [{ pid: 'D1' }, { pid: 'D2' }], manifest: { manNo: '7031482', dcNo: '4101533', despatch: '06/09/2026' } },
+  ] };
+  const r = historyRows({ dock }, 'receiving');
+  assert.deepEqual(r.map(x => x.truck), ['2026-09-07-T1', '2026-09-04-T1']);
+  assert.deepEqual(r[0], { date: '2026-09-07', truck: '2026-09-07-T1', manifest: '7031482', dcNo: '4101533', despatch: '06/09/2026', landedAt: '2026-09-07T06:12:00+08:00', clearedAt: '2026-09-07T09:22:00+08:00', cartons: 912, pallets: 17, palletsLanded: 17, clearMins: 190, haltMins: 17, halts: 2, teamRate: 316, matched: 76, missing: 2, offManifest: 1, crew: 2 });
+  assert.equal(r[1].manifest, ''); assert.equal(r[1].matched, '');
+  assert.deepEqual(historyRows({}, 'receiving'), []);
+  assert.equal(HISTORY_AREA.receiving, 'backdock');
+});
+
 test('historyRows: backfill keeps the record (not pending), cages and adjustments flatten, unknown kind is null', () => {
   const b = historyRows(state, 'backfill');
   assert.deepEqual(b.map(r => r.bay), ['7016', '7012']); assert.equal(b[1].codes, 2); assert.equal(b[1].auto, false);
@@ -32,7 +45,7 @@ test('historyRows: backfill keeps the record (not pending), cages and adjustment
   assert.deepEqual(c.map(r => [r.cage, r.keycodes, r.units, r.sweeps]), [['BSN1', 1, 4, 0], ['BSN2', 1, 1, 1]]);
   const a = historyRows(state, 'adjustments');
   assert.deepEqual(a.map(r => r.keycode), ['43166022', '43302210']);
-  assert.equal(historyRows(state, 'manifests'), null); assert.deepEqual(HISTORY_KINDS, ['backfill', 'cages', 'adjustments']);
+  assert.equal(historyRows(state, 'manifests'), null); assert.deepEqual(HISTORY_KINDS, ['backfill', 'cages', 'adjustments', 'receiving']);
 });
 
 test('toCsv quotes commas and quotes, writes booleans as yes/no, empty gives a header when asked', () => {

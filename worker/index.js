@@ -139,6 +139,7 @@ r.get('/v1/store/:no/export/:kind', (req, env, _c, p) => anyStoreCall(req, env, 
 r.post('/v1/store/:no/manifest', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/manifest'));
 r.get('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));
 r.delete('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));
+r.get('/v1/store/:no/profiles', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/profiles'));
 
 // ── plumbing ──────────────────────────────────────────────────────────────
 export default {

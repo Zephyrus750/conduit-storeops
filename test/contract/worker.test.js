@@ -345,6 +345,22 @@ test('manifests: publish the report, list it through the projection, read it, at
   assert.equal(s2.dock.trucks[truck].manifest.manNo, '7031482'); assert.equal(s2.dock.trucks[truck].pallets.A1.cartons, 3, 'the scan pulled the consol’s cartons onto the pallet'); assert.deepEqual(s2.dock.trucks[truck].pallets.A1.consolIds, ['601804381']);
   assert.equal(s2.dock.manifests['7031482'].truck, truck); assert.equal(s2.dock.manifests['7031482'].keycodes, 3);
 
+  // Profiles come from the published documents; finalising the truck
+  // writes the receiving record the history and export routes read.
+  const prof = await api('GET', '/v1/store/1241/profiles', undefined, dev);
+  assert.equal(prof.status, 200); assert.equal(prof.body.schema, 'dv-profiles/1'); assert.equal(prof.body.trucks_sampled, 1);
+  assert.equal(prof.body.profiles['43307685']?.ctn, 6, 'twelve units in two cartons on 7031482'); assert.equal(prof.body.profiles['43302210'], undefined, 'no carton count, no profile');
+  const mgr = (await api('POST', '/v1/auth/unlock', { code: 'MGR-CODE' }, dev)).body.token;
+  assert.equal((await api('POST', '/v1/store/1241/events', { events: [ev('truck.finalise', { truck }, {})] }, unlocked)).body.results[0].ok, false, 'finalising a truck takes the manager code');
+  const fin = await api('POST', '/v1/store/1241/events', { events: [ev('pallet.start', { truck, bay: 'A1' }, { pid: 'D1' }), ev('pallet.done', { truck, bay: 'A1' }, {}), ev('truck.finalise', { truck }, {})] }, mgr);
+  assert.deepEqual(fin.body.results.map(x => x.ok), [true, true, true]);
+  const rh = await api('GET', '/v1/store/1241/history/receiving', undefined, dev);
+  assert.equal(rh.status, 200); assert.equal(rh.body.rows.length, 1);
+  assert.equal(rh.body.rows[0].truck, truck); assert.equal(rh.body.rows[0].manifest, '7031482'); assert.equal(rh.body.rows[0].cartons, 3); assert.equal(rh.body.rows[0].matched, 1); assert.equal(rh.body.rows[0].crew, 1);
+  const csv = await mf.dispatchFetch('http://conduit.test/v1/store/1241/export/receiving', { headers: { Authorization: `Bearer ${dev}` } });
+  assert.equal(csv.status, 200); assert.match(csv.headers.get('content-type'), /text\/csv/); assert.match(await csv.text(), /^date,truck,manifest,/);
+  assert.equal((await api('GET', '/v1/store/1241/history/receiving', undefined, ownerToken)).status, 200, 'the owner reads any area');
+
   const del = await api('DELETE', '/v1/store/1241/manifest/7031482', undefined, unlocked);
   assert.equal(del.status, 200);
   assert.equal((await api('GET', '/v1/store/1241/manifest/7031482', undefined, dev)).status, 404);

@@ -264,6 +264,10 @@ export function historyRow(id, t) {
   const cartons = done.reduce((n, p) => n + (p.cartons || 0), 0);
   const clearMins = mins(t.landedAt, t.clearedAt);
   const carried = pallets.filter(p => p.carryover);
+  // Cartons per department: the manifest consols that landed on a done
+  // pallet, by the consol's department.
+  const byDept = {};
+  if (t.manifest) { const consol = new Map(t.manifest.consols.map(c => [c.id, c])); for (const p of done) for (const id of p.consolIds) { const c = consol.get(id); if (!c) continue; const d = (byDept[c.dept || '?'] ||= { dept: c.dept || '', cartons: 0, pallets: new Set() }); d.cartons += Number(c.cartons) || 0; d.pallets.add(p.ref); } }
   return {
     id, date: id.slice(0, 10), landedAt: t.landedAt, clearedAt: t.clearedAt,
     cartons, pallets: done.length, palletsLanded: pallets.length,
@@ -272,7 +276,8 @@ export function historyRow(id, t) {
     teamRate: clearMins > haltMins ? Math.round(cartons / ((clearMins - haltMins) / 60)) : 0,
     audit: t.manifest ? auditOf(t, pallets) : null,
     carriedIn: carried.length ? { pallets: carried.length, cartons: carried.reduce((n, p) => n + (p.cartons || 0), 0) } : null,
-    perPerson: Object.values(perPerson).map(r => ({ pid: r.pid, cartons: Math.round(r.cartons), pallets: r.pallets.size, rate: r.mins ? Math.round(r.cartons / (r.mins / 60)) : 0 })),
+    perPerson: Object.values(perPerson).map(r => ({ pid: r.pid, cartons: Math.round(r.cartons), pallets: r.pallets.size, bays: [...r.pallets], mins: Math.round(r.mins), rate: r.mins ? Math.round(r.cartons / (r.mins / 60)) : 0 })),
+    byDept: Object.values(byDept).map(d => ({ dept: d.dept, cartons: d.cartons, pallets: d.pallets.size })).sort((a, b) => b.cartons - a.cartons),
     manifest: t.manifest ? { manNo: t.manifest.manNo, despatch: t.manifest.despatch, dcNo: t.manifest.dcNo } : null,
   };
 }
@@ -281,5 +286,7 @@ function auditOf(t, pallets) {
   const total = t.manifest.consols.length;
   const matched = t.manifest.consols.filter(c => on.has(c.id)).length;
   const extra = pallets.reduce((n, p) => n + p.scanIds.length, 0);
-  return { matched, missing: total - matched, total, extra };
+  const missingIds = t.manifest.consols.filter(c => !on.has(c.id)).slice(0, 40).map(c => ({ id: c.id, cartons: c.cartons, dept: c.dept || '' }));
+  const extraIds = pallets.flatMap(p => p.scanIds.map(id => ({ id, bay: p.ref }))).slice(0, 40);
+  return { matched, missing: total - matched, total, extra, missingIds, extraIds };
 }
