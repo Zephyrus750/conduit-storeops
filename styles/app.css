@@ -169,9 +169,11 @@ form.li { margin: 0; }
    normally, 300px on screens 1600px and up, 200px at half-screen. Rows
    keep the showcase's size at each width; a label that still does not fit
    trims with an ellipsis rather than pushing its badge out. */
-.app { grid-template-columns: 182px minmax(0, 1fr); }
-.rail { padding-left: 10px; padding-right: 10px; }
-.rrow { gap: 9px; padding: 8px 8px; }
+@container shell (min-width: 1101px) {
+  .app { grid-template-columns: 182px minmax(0, 1fr); }
+  .rail { padding-left: 10px; padding-right: 10px; }
+  .rrow { gap: 9px; padding: 8px 8px; }
+}
 .rrow .rl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rrow .soon { margin-left: 6px; }
 .app.railmin .rrow .rl { display: none; }
@@ -180,7 +182,7 @@ form.li { margin: 0; }
   .rail { padding-left: 14px; padding-right: 14px; }
   .rrow { gap: 12px; padding: 8px 10px; }
 }
-@container shell (max-width: 1100px) {
+@container shell (min-width: 601px) and (max-width: 1100px) {
   .app { grid-template-columns: 150px minmax(0, 1fr); }
 }
 
@@ -224,3 +226,48 @@ form.li { margin: 0; }
 .plife .li .nm b.bad { color: #B91C1C; font-weight: 600; }
 .plife .li .nm b.warn { color: #B45309; font-weight: 600; }
 .plife .li.ohint { padding: 6px 0 0; }
+
+/* Back dock: the pallet panel (phone sheet and desktop card), the team
+   editor, halt controls, and the reasons row. */
+.bdk-pal { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.bdk-pal.desk { margin-top: 12px; border-color: var(--accent-line); }
+.bdk-pal-h { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.bdk-pal-h b { font-size: 16px; }
+.bdk-pal-h .ibtn { margin-left: auto; }
+.bdk-pal-b { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.bdk-ptrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.bdk-fields { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 8px; }
+.bdk-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.bdk-fields .bdr-in { width: 100%; min-width: 0; }
+.bdk-fields .bdr-in.auto { color: var(--dim); }
+.bdk-scanrow { display: flex; gap: 6px; }
+.bdk-scanrow .bdr-in { flex: 1; min-width: 0; }
+.bdk-verified { display: flex; flex-direction: column; gap: 4px; }
+.bdk-vrow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 8px; border-radius: 8px; background: var(--ground); }
+.bdk-vrow.ok { background: #E4F5EC; }
+.bdk-vrow.warn { background: #FEF3C7; }
+.bdk-vrow .bdk-vbtns { margin-left: auto; display: flex; gap: 4px; }
+.bdk-vrow .mono { font-family: ui-monospace, Menlo, monospace; }
+.bdk-decant { border-top: 1px solid var(--line-soft); padding-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bdk-declab { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); width: 100%; }
+.bdk-decant select.bdr-in { min-width: 140px; }
+.bdk-verbs { display: flex; gap: 6px; margin-left: auto; }
+.bdk-palacts { display: flex; gap: 6px; justify-content: flex-end; }
+.bdr-teamadd { display: flex; gap: 6px; margin-top: 10px; }
+.bdr-teamadd .bdr-in { flex: 1; min-width: 0; }
+.bdr-tc { position: relative; }
+.bdr-tc .bdr-x { position: absolute; top: 6px; right: 6px; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 2px; }
+.bdr-tc .bdr-x svg.i { width: 12px; height: 12px; }
+.bdr-haltrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding: 8px 10px; border-radius: 10px; background: #FEE2E2; color: #991B1B; font-size: 13px; }
+.bdr-haltrow.dim { background: var(--ground); color: var(--dim); }
+.bdr-haltrow svg.i { width: 15px; height: 15px; }
+.bdr-haltrow .btn { margin-left: auto; }
+.bdr-reasons { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.bdr-reasons .chip { cursor: pointer; }
+.bdr-land .lbl { margin: 0; }
+.mv .bdk-fields { grid-template-columns: 1fr 1fr; }
+.mv .bdk-fields label:last-child { grid-column: 1 / -1; }
+.mv .bdk-verbs { margin-left: 0; width: 100%; }
+.mv .bdk-verbs .btn { flex: 1; justify-content: center; padding: 10px; font-size: 14px; }
+.mv .bdk-palacts .btn { flex: 1; justify-content: center; padding: 10px; }
+.mv .bdr-reasons { padding: 0 2px 8px; }

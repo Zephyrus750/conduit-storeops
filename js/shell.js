@@ -271,7 +271,7 @@ async function actAs(no) {
 function openLauncher() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const caps = client.session.current?.caps || [];
-  sh.innerHTML = `<div class="sheet"><h3>Workspace</h3><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]) && w[0] !== 'backdock'; return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  sh.innerHTML = `<div class="sheet"><h3>Workspace</h3><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
   sh.classList.add('open');
 }
 function openMore() {
