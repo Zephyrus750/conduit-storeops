@@ -51,6 +51,10 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
 - Adding an event type: catalogue entry (area, roles, entity keys, payload
   shape) + reducer + unit test. Adding a route: handler + contract test +
   README table row.
+- Browser checks (Playwright, `/opt/pw-browsers/chromium`, `--no-sandbox`):
+  1920×1080 first — the store PCs are 1080p panels and the shell's wide
+  layout starts at 1600px — then 1440×900, 960×1040 half-screen and
+  420×860 phone. A shell change passes all four.
 
 ## Service worker
 

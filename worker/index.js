@@ -130,10 +130,14 @@ r.post('/v1/admin/stores/:no/flip', async (req, env, _c, p) => {
   return json({ ok: true, no: rec.no, areas: rec.areas });
 });
 
+// ── records: a keycode's life, per-area history, CSV export ───────────────
+r.get('/v1/store/:no/life/:keycode', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/life/${p.keycode}`));
+r.get('/v1/store/:no/history/:kind', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/history/${p.kind}`, new URL(req.url).search));
+r.get('/v1/store/:no/export/:kind', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/export/${p.kind}`));
+
 // ── not built yet: named, never silent ────────────────────────────────────
 for (const [m, path] of [
-  ['GET', '/v1/store/:no/life/:keycode'], ['POST', '/v1/store/:no/manifest'], ['GET', '/v1/store/:no/history/:kind'],
-  ['GET', '/v1/store/:no/export/:kind'],
+  ['POST', '/v1/store/:no/manifest'],
 ]) r.add(m, path, () => fail(501, 'not_implemented', `${m} ${path} is on the build order but not built yet`));
 
 // ── plumbing ──────────────────────────────────────────────────────────────

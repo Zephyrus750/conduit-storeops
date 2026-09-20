@@ -27,7 +27,7 @@ const orow = (cls, icon, title, sub, act, attrs) => `<div class="orow" ${attrs}>
 const grp = (t, n) => `<div class="ogrp">${t}${n != null ? `<span>${n}</span>` : ''}</div>`;
 const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
-export function initSearch({ client, frame, go, tools = () => [] }) {
+export function initSearch({ client, frame, go, tools = () => [], life = () => null }) {
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
   el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like H14-3, a department or a tool…" autocomplete="off" inputmode="search">${ic('mic', 'mic')}<span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
   frame.appendChild(el);
@@ -64,11 +64,16 @@ export function initSearch({ client, frame, go, tools = () => [] }) {
       body.innerHTML = out; prev.hidden = true; pal.classList.remove('wide');
       const item = await client.catalogue.lookup(Q);
       if (my !== seq) return;
+      const L = life(Q);
       out = grp('Products', item ? 1 : 0);
       if (item) {
         out += orow('p', 'barcode', `${hi(Q, Q)} · ${esc(item.name || 'Product')}`, [item.price != null ? money(item.price) : '', item.was != null && item.was !== item.price ? `was ${money(item.was)}` : '', item.clr ? 'clearance' : ''].filter(Boolean).join(' · ') || 'On kmart.com.au', 'Open', `data-url="${esc(item.url)}"`);
         preview = `<div class="pcardx">${item.img ? `<img src="${esc(item.img)}" alt="" style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:#fff;margin-bottom:8px">` : ''}<div class="kc">${esc(Q)}</div><div class="nm">${esc(item.name || '')}</div><div class="fx">${item.price != null ? `<span class="soh g">${money(item.price)}</span>` : ''}${item.was != null && item.was !== item.price ? `<span>was ${money(item.was)}</span>` : ''}${item.clr ? '<span class="status warn">Clearance</span>' : ''}</div></div><div class="pfacts"><span>${ic('clock')}Price checked ${item.at ? new Date(item.at).toLocaleDateString() : 'never'}</span><span>${ic('m-product')}From the public product page</span></div><a class="btn accent sm" href="${esc(item.url)}" target="_blank" rel="noopener">${ic('arrow')}Open on kmart.com.au</a>`;
-      } else out += `<div class="ohint">No product found for ${esc(Q)}. Check the keycode, or search kmart.com.au.</div>` + orow('p', 'search', `Search kmart.com.au for ${esc(Q)}`, 'Opens the site search in a new tab', 'Open', `data-url="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(Q)}"`);
+      } else out += `<div class="ohint">No product found for ${esc(Q)}${L?.name ? ` (the stockroom knew it as “${esc(L.name)}”)` : ''}. Check the keycode, or search kmart.com.au.</div>` + orow('p', 'search', `Search kmart.com.au for ${esc(Q)}`, 'Opens the site search in a new tab', 'Open', `data-url="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(Q)}"`);
+      if (L && (L.visits.length || L.adjustments.length || L.cages.length)) {
+        out += grp('In the stockroom') + orow('s', 'm-srhistory', `Backfilled at ${L.bays.length} bay${L.bays.length === 1 ? '' : 's'}${L.adjustments.length ? ` · ${L.adjustments.length} SOH adjustment${L.adjustments.length === 1 ? '' : 's'}` : ''}${L.cages.length ? ` · in ${L.cages.length} cage${L.cages.length === 1 ? '' : 's'}` : ''}`, `Last seen ${esc(L.last || '')}`, 'History', `data-view="srhistory" data-q="${esc(Q)}"`);
+        preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || 'Not in the catalogue')}</div></div>`) + lifeHtml(L);
+      } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}Where it’s been</div><div class="ohint">No backfill, adjustment or cage record for this code yet.</div></div>`;
     } else if (k === 'shelf' || k === 'loc') {
       const id = U.replace(/\s+/g, '').split('-')[0].replace(/[SE]\d+$/, '');
       const hits = hasMap() ? shelfIndex().filter(s => s.id.startsWith(id) || s.id === U).slice(0, 8) : [];
@@ -87,13 +92,26 @@ export function initSearch({ client, frame, go, tools = () => [] }) {
     if (preview) { prev.hidden = false; pal.classList.add('wide'); prev.innerHTML = preview; const pm = $('#opmap', prev); if (pm) { try { const m = mountMap(pm, { mono: true }); const first = prev.querySelector('[data-select]')?.getAttribute('data-select'); if (first) { m.select(first); m.zoomTo(first, 900); } } catch {} } }
     else { prev.hidden = true; pal.classList.remove('wide'); }
   }
+  // A keycode's life in the store: bays it was backfilled at, SOH
+  // adjustments, cages holding it (K2B's code lookup, with more detail).
+  function lifeHtml(L) {
+    const day = d => d ? new Date(d.length > 10 ? d : d + 'T00:00:00').toLocaleDateString([], { day: 'numeric', month: 'short' }) : '';
+    const st = v => v.status === 'submitted' ? 'Submitted' : v.status === 'corrected' ? 'Ready' : 'Needs review';
+    const rows = [
+      ...L.visits.slice(0, 8).map(v => `<div class="li"><span class="loc">${esc(v.bay)}</span><span class="nm">${st(v)}${v.expected != null ? ` · ${v.expected} codes` : ''}${v.accuracy != null ? ` · ${v.accuracy}%` : ''}${v.incorrect ? ' · <b class="bad">not on the report</b>' : v.scanned ? '' : ' · <b class="warn">not scanned</b>'}</span><span class="rt">${day(v.date)}</span></div>`),
+      ...L.adjustments.slice(0, 4).map(a => `<div class="li"><span class="loc">SOH</span><span class="nm">${a.qty} · ${a.confirmed ? 'confirmed' : 'unconfirmed'}${a.location ? ` · ${esc(a.location)}` : ''}</span><span class="rt">${day(a.date)}</span></div>`),
+      ...L.cages.slice(0, 4).map(c => `<div class="li"><span class="loc">${esc(c.cage)}</span><span class="nm">${esc(c.ring)} · ${c.qty} unit${c.qty === 1 ? '' : 's'}${c.location ? ` · at ${esc(c.location)}` : ''}${c.status === 'closed' ? ' · closed' : ''}</span><span class="rt">${day(c.seen)}</span></div>`),
+    ];
+    const more = L.visits.length - 8; 
+    return `<div class="plife"><div class="pt3">${ic('m-srhistory')}Where it’s been<span>${L.bays.length} bay${L.bays.length === 1 ? '' : 's'}</span></div><div class="list">${rows.join('')}${more > 0 ? `<div class="li ohint">+ ${more} earlier</div>` : ''}</div></div>`;
+  }
   function markSel() { const rows = $$('.orow', body); rows.forEach((r, i) => r.classList.toggle('sel', i === sel)); rows[sel]?.scrollIntoView?.({ block: 'nearest' }); }
   function act(row) {
     if (!row) return;
     const q = input.value.trim(); if (q) remember(q, classify(q));
-    if (row.dataset.q != null) { open(row.dataset.q); return; }
+    if (row.dataset.view) { close(); go(row.dataset.view, row.dataset.select ? { select: row.dataset.select } : row.dataset.dept ? { dept: row.dataset.dept } : row.dataset.q != null ? { q: row.dataset.q } : undefined); return; }
+    if (row.dataset.q != null) { open(row.dataset.q); return; }        // a recent search: run it again
     if (row.dataset.url) { try { window.open(row.dataset.url, '_blank', 'noopener'); } catch {} close(); return; }
-    if (row.dataset.view) { close(); go(row.dataset.view, row.dataset.select ? { select: row.dataset.select } : row.dataset.dept ? { dept: row.dataset.dept } : undefined); }
   }
 
   input.addEventListener('input', () => render(input.value));

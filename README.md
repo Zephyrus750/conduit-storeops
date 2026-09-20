@@ -94,7 +94,9 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/store/:no/map` | owner | live: publish a version; logs `map.publish`, sets the registry's map version |
 | `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B importer with dry run; area state flip |
 | `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
-| life, manifest, history, export | | `501 not_implemented`, named |
+| `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
+| `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`) | store token or owner, stockroom entitled | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
+| manifest | | `501 not_implemented`, named |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `invalid_event`, `duplicate` (a success),

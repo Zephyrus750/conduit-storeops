@@ -17,6 +17,7 @@ function model(ctx) {
 export default {
   id: 'srhistory', title: 'History', icon: 'm-srhistory', area: 'stockroom',
   desktop(ctx) {
+    if (ctx.arg?.q != null && st.arg !== ctx.arg) { st.q = ctx.arg.q; st.arg = ctx.arg; st.open = null; }
     const m = model(ctx), o = m.open;
     const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); const k = d.toISOString().slice(0, 10); return [k, m.subs.filter(s => s.date === k).length, ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]]; });
     const max = Math.max(1, ...days.map(d => d[1]));
@@ -29,6 +30,7 @@ export default {
       `<div class="card"><div class="ch"><h3>Locations submitted</h3><span class="cs-dim">last 7 days</span></div><div class="bars" style="height:100px">${days.map(d => `<div class="${d[0] === todayKey() ? 'hi' : ''}" style="height:${d[1] ? Math.round(d[1] / max * 100) : 3}%"><span>${d[2]}</span></div>`).join('')}</div></div></div></div>`;
   },
   mobile(ctx) {
+    if (ctx.arg?.q != null && st.arg !== ctx.arg) { st.q = ctx.arg.q; st.arg = ctx.arg; st.open = null; }
     const m = model(ctx), today = m.subs.filter(s => s.date === todayKey());
     return mhead('History', `Today · ${today.length} bays sent`) + (today.length ? mrows(today.map(s => [esc(s.bay), `${s.metrics.expected} codes · ${s.metrics.accuracy}%${s.status === 'submitted' ? ' · submitted' : ''}`, fmtTime(s.readyAt), s.metrics.accuracy < 90 ? 'warn' : 'ok'])) : `<div class="mv-note">${ic('layers')}Nothing sent yet today.</div>`) + `<div class="mv-note">${ic('lock')}Metrics and the full record are on the desktop History.</div>`;
   },

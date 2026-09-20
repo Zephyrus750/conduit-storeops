@@ -8,6 +8,7 @@
 // "Act as store" turns an owner session into a store session whose writes
 // carry actor.owner, and "Back to the console" returns.
 
+import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
 import { $, $$, ic, esc, greeting, fmtLong, toast } from './ui.js';
 import { loadMap, setMap, mapInfo } from './map.js';
@@ -289,7 +290,10 @@ document.addEventListener('click', e => {
     else if (act === 'store-signin') showSignin();
     return;
   }
-  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no } : undefined); return; }
+  // The search palette routes its own rows (they carry select, dept or q);
+  // elsewhere a data-view element opens the view, with a store number for
+  // the console's store rows.
+  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no } : undefined); return; }
   const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
   if (e.target.closest('.mdepts')) { if (store) openLauncher(); return; }
   const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else show(g.getAttribute('data-go'), g.dataset.bay ? { bay: g.dataset.bay } : undefined); return; }
@@ -308,7 +312,7 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>Updating…</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string').map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.settings]) });
+const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string').map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.settings]) });
 $('#msearch input')?.addEventListener('focus', e => { if (!admin && store) { e.target.blur(); search.open(e.target.value); } });
 let lastMobile = isMobile();
 window.addEventListener('resize', () => { const m = isMobile(); if (m !== lastMobile) { lastMobile = m; if (current) show(current, currentArg); } });

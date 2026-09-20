@@ -28,6 +28,7 @@ import { typeInfo, AREA_PROJECTIONS } from '../shared/catalogue.js';
 import { hasRole } from './auth.js';
 import { HttpError, json, fail } from './http.js';
 import { ulid } from '../shared/ulid.js';
+import { productLife, historyRows, toCsv, HISTORY_KINDS } from '../shared/records.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
@@ -91,6 +92,17 @@ export class StoreObject extends DurableObject {
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
+          const life = url.pathname.match(/^\/life\/(\d{6,13})$/);
+          if (life) { const no = needArea(claims, 'stockroom'); if (no) return no; return json(productLife(this.state, life[1])); }
+          const hist = url.pathname.match(/^\/(history|export)\/([a-z]+)$/);
+          if (hist) {
+            if (!HISTORY_KINDS.includes(hist[2])) return fail(400, 'invalid_request', `kind must be one of ${HISTORY_KINDS.join(', ')}`);
+            const no = needArea(claims, 'stockroom'); if (no) return no;
+            const rows = historyRows(this.state, hist[2]);
+            if (hist[1] === 'export') return new Response(toCsv(rows), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${this.storeNo}-${hist[2]}.csv"` } });
+            const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));
+            return json({ kind: hist[2], total: rows.length, offset, limit, rows: rows.slice(offset, offset + limit) });
+          }
           return fail(404, 'not_found', `store object has no ${url.pathname}`);
         }
       }
@@ -284,3 +296,7 @@ function primaryRole(claims, roles) {
   for (const r of roles) if (claims.roles.includes(r)) return r;
   return claims.roles.includes('manager') ? 'manager' : claims.roles[0];
 }
+
+// A read that belongs to one area needs that area on the token (the store's
+// entitlement, carried as a capability).
+function needArea(claims, area) { return (claims.caps || []).includes(area) ? null : fail(403, 'not_entitled', `${area} is not enabled for this store`); }

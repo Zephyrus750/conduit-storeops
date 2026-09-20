@@ -84,8 +84,9 @@ const event = (type, entity, payload, area) => ({ id: ulid(), store: '1241', are
 
 test('health and unbuilt routes are named', async () => {
   assert.equal((await api('GET', '/v1/health')).body.ok, true);
-  const r = await api('GET', '/v1/store/1241/life/42977636');
+  const r = await api('POST', '/v1/store/1241/manifest', {});
   assert.equal(r.status, 501); assert.equal(r.body.code, 'not_implemented');
+  assert.equal((await api('GET', '/v1/store/1241/life/42977636')).status, 401, 'built routes want a token');
 });
 
 test('catalogue: links and details from the upstreams, cached per keycode, misses answered', async () => {
@@ -285,4 +286,31 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
   assert.equal((await api('POST', '/v1/admin/stores/1241/flip', { area: 'stockroom', state: 'gone' }, ownerToken)).status, 400);
   const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
   assert.equal(tail.body.events[0].actor.owner, true, 'imported events carry the owner as actor');
+});
+
+test('a keycode’s life, the history lists and the CSV export read the stockroom record', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-life' })).body.token;
+  const life = await api('GET', '/v1/store/1241/life/43166022', undefined, dev);
+  assert.equal(life.status, 200);
+  assert.deepEqual(life.body.visits.map(v => [v.bay, v.date, v.status, v.scanned]), [['7012', '2026-09-17', 'submitted', true]]);
+  assert.equal(life.body.visits[0].accuracy, 91); assert.deepEqual(life.body.bays, ['7012']);
+  const adj = await api('GET', '/v1/store/1241/life/43302210', undefined, dev);
+  assert.equal(adj.body.adjustments[0].qty, -6); assert.equal(adj.body.name, 'Paper plates 20 pk'); assert.equal(adj.body.last, '2026-09-18');
+  assert.deepEqual((await api('GET', '/v1/store/1241/life/99999999', undefined, dev)).body.visits, []);
+  assert.equal((await api('GET', '/v1/store/1241/life/12', undefined, dev)).status, 404, 'a keycode is 6 to 13 digits');
+  const owner = await api('GET', '/v1/store/1241/life/43166022', undefined, ownerToken);
+  assert.equal(owner.status, 200, 'the owner reads any entitled store');
+
+  const h = await api('GET', '/v1/store/1241/history/backfill?limit=1', undefined, dev);
+  assert.equal(h.status, 200); assert.equal(h.body.kind, 'backfill'); assert.ok(h.body.total >= 2); assert.equal(h.body.rows.length, 1); assert.ok(h.body.rows[0].bay); assert.equal(typeof h.body.rows[0].accuracy, 'number');
+  const page2 = await api('GET', '/v1/store/1241/history/backfill?limit=1&offset=1', undefined, dev);
+  assert.notEqual(page2.body.rows[0].bay + page2.body.rows[0].date, h.body.rows[0].bay + h.body.rows[0].date);
+  assert.equal((await api('GET', '/v1/store/1241/history/adjustments', undefined, dev)).body.rows[0].keycode, '43302210');
+  assert.equal((await api('GET', '/v1/store/1241/history/manifests', undefined, dev)).status, 400);
+
+  const csv = await mf.dispatchFetch('http://conduit.test/v1/store/1241/export/backfill', { headers: { Authorization: `Bearer ${dev}` } });
+  assert.equal(csv.status, 200); assert.match(csv.headers.get('content-type'), /text\/csv/); assert.match(csv.headers.get('content-disposition'), /1241-backfill\.csv/);
+  const text = await csv.text();
+  assert.equal(text.split('\n')[0], 'date,bay,status,readyAt,submittedAt,expected,scanned,match,accuracy,incorrect,codes,auto');
+  assert.match(text, /2026-09-17,7012,submitted,/);
 });
