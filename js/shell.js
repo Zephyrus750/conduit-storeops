@@ -12,6 +12,7 @@ import { createClient } from '../client/index.js';
 import { $, $$, ic, esc, greeting, fmtLong, toast } from './ui.js';
 import { loadMap, setMap, mapInfo } from './map.js';
 import { initSearch } from './search.js';
+import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL } from './registry.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
@@ -228,6 +229,8 @@ document.addEventListener('click', e => {
   if (sa) {
     const act = sa.getAttribute('data-shell-act');
     if (act === 'signout' || act === 'end-actas') signOut();
+    else if (act === 'update-now') updates.apply();
+    else if (act === 'update-later') $('#updBar')?.remove();
     else if (act === 'owner-signin') showSignin({ owner: true });
     else if (act === 'store-signin') showSignin();
     return;
@@ -237,6 +240,16 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-act="close-more"]') || (e.target.id === 'msheet')) $('#msheet')?.classList.remove('open');
   if (e.target.closest('#railToggle')) { $('#app').classList.toggle('railmin'); }
   if (e.target.closest('#hsearch,.bsearch,#msearch')) { if (admin) toast('Find a store from the rail for now'); else search.open($('#msearch input')?.value || ''); }
+});
+// Installing and updating: the bar appears when a new release is waiting and
+// applies only on "Update now" (the worker never takes over on its own).
+initUpdates();
+updates.on(kind => {
+  if (kind === 'ready') {
+    let bar = $('#updBar'); if (!bar) { bar = document.createElement('div'); bar.id = 'updBar'; bar.className = 'ad-banner actas upd'; frame.appendChild(bar); }
+    bar.innerHTML = `${ic('refresh')}<div><b>Conduit ${esc(updates.state.waiting?.version || '')} is ready</b><span> · installed in the background · applies when you say</span></div><a data-shell-act="update-now">${ic('check')}Update now</a><a data-shell-act="update-later">Later</a>`;
+  }
+  if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>Updating…</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
 const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string').map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.settings]) });

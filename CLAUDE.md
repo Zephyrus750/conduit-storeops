@@ -51,3 +51,9 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
 - Adding an event type: catalogue entry (area, roles, entity keys, payload
   shape) + reducer + unit test. Adding a route: handler + contract test +
   README table row.
+
+## Service worker
+
+- `sw.js` installs the whole shell as one release cache and serves it cache-first; updates apply only on the person's "Update now" (never `skipWaiting` on install).
+- After any change under index.html, js/, client/, shared/, styles/, icons/ run `npm run sw` and commit `sw-precache.js`; `npm test` fails when it is stale.
+- Maps, snapshots and the outbox are IndexedDB data, not app files; the worker API is never cached.

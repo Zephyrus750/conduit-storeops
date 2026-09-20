@@ -50,6 +50,9 @@ body { font-family: var(--body); color: var(--ink); }
 .ad-banner.actas span { opacity: .8; }
 .ad-banner.actas a { margin-left: auto; color: #fff; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .ad-banner.actas a svg.i { transform: rotate(180deg); }
+.ad-banner.upd { background: var(--accent); }
+.ad-banner.upd a svg.i { transform: none; }
+.ad-banner.upd a + a { margin-left: 4px; opacity: .8; }
 .ad-scroll { overflow: auto; }
 .ad-row .btn { pointer-events: none; }
 .ad-in:focus { outline: 2px solid var(--accent-line); outline-offset: 1px; border-color: var(--accent); }

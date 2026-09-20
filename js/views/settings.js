@@ -2,9 +2,10 @@
 // Appearance (skin, accent, rail and bars as tokens). Preferences persist
 // per device under suite_prefs.
 
-import { $, ic, esc, vh, sub } from '../ui.js';
+import { $, ic, esc, vh, sub, toast } from '../ui.js';
 import { ACCENTS, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
+import { updates } from '../updates.js';
 
 let sec = 'general';
 const row = (t, d, ctl) => `<div class="stg-item"><div><b>${t}</b><span>${d}</span></div><div class="stg-ctl">${ctl}</div></div>`;
@@ -31,6 +32,8 @@ export default {
       else if (act === 'railmin') setPref('railmin', !prefs().railmin), ctx.rerender();
       else if (act === 'signout') { if (confirm(ctx.store ? 'Sign out of this store on this device?' : 'Sign out of the owner console on this device?')) await ctx.signOut(); }
       else if (act === 'reload') location.reload();
+      else if (act === 'check-update') { a.textContent = 'Checking…'; await updates.check(); ctx.rerender(); if (!updates.state.waiting) toast('You are on the current release'); }
+      else if (act === 'update-now') updates.apply();
       else if (act === 'resync') ctx.store?.resync();
     });
     return [];
@@ -52,6 +55,12 @@ function body(ctx) {
   const who = ctx.store ? row('Store', `${esc(ctx.storeNo)} ${esc(ctx.storeName)} · verified against the worker${cur?.actas ? ' · acting as the store as owner' : ''}`, '<span class="chip">Signed in</span>') : row('Owner', 'Signed in with the owner key · every action is logged in the registry', '<span class="chip">Owner</span>');
   const sync = s ? row('Sync', `${esc(s.state)} · ${s.queued} queued · seq ${s.seq}${s.lastError ? ' · ' + esc(s.lastError) : ''}`, `<span class="btn sm" data-act="resync">${ic('refresh')}Resync</span>`) : '';
   return `<div class="stg-card"><div class="stg-h">This device</div>${who}${row('Device id', esc(ctx.session.device), '')}${row('Roles', esc((cur?.roles || []).join(', ')), '<span class="stg-dim">hard-restricted by role</span>')}${sync}</div>` +
-    `<div class="stg-card"><div class="stg-h">Updates</div>${row('Version', `${VERSION} · this device is on the current release`, `<span class="btn sm" data-act="reload">${ic('refresh')}Reload</span>`)}</div>` +
+    `<div class="stg-card"><div class="stg-h">Updates</div>${updatesRow()}</div>` +
     `<div class="stg-card"><div class="stg-h">Account</div>${row('Sign out', ctx.store ? (cur?.actas ? 'Returns to the owner console. Queued changes are sent first.' : 'Forgets the store on this device. Queued changes are sent first.') : 'Forgets the owner session on this device.', `<span class="btn sm" style="color:var(--red)" data-act="signout">${cur?.actas ? 'Back to the console' : 'Sign out'}</span>`)}</div>`;
+}
+function updatesRow() {
+  const u = updates.state;
+  if (!u.supported) return row('Version', `${VERSION} · this browser cannot install the app; it runs from the network`, `<span class="btn sm" data-act="reload">${ic('refresh')}Reload</span>`);
+  if (u.waiting) return row('Update ready', `Conduit ${esc(u.waiting.version)} is installed and waiting. Applying reloads the app; queued changes are kept.`, `<span class="btn sm primary" data-act="update-now">${ic('check')}Update now</span>`);
+  return row('Version', `${VERSION}${u.build ? ' · build ' + esc(u.build) : ''} · ${u.offlineReady ? 'installed on this device, works offline' : 'installing for offline use…'}`, `<span class="btn sm" data-act="check-update">${ic('refresh')}Check for updates</span>`);
 }

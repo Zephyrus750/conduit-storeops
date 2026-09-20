@@ -14,7 +14,8 @@
     "deploy:staging": "wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production",
     "hash-secret": "node scripts/hash-secret.js",
-    "publish-map": "node scripts/publish-map.js"
+    "publish-map": "node scripts/publish-map.js",
+    "sw": "node scripts/build-sw.js"
   },
   "devDependencies": {
     "miniflare": "^4.20250917.0",

@@ -7,3 +7,18 @@
   [headers.values]
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+# The worker script and its precache list must never be served stale, or a
+# device would keep an old release; everything else revalidates (Netlify's
+# default) and the service worker holds the release cache.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/sw-precache.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"

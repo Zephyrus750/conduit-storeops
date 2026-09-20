@@ -20,7 +20,7 @@ shared/      code the device runs too: event catalogue, validation, reducers, UL
 client/      the device library: session, store (outbox, snapshot cache, socket), catalogue
 test/unit    pure-module tests (node --test)
 test/contract the worker running in workerd via Miniflare, real SQLite-backed objects
-scripts/     hash-secret (OWNER_KEY_HASH), publish-map (a map version from SVG files), dev, extract-css
+scripts/     hash-secret (OWNER_KEY_HASH), publish-map (a map version from SVG files), build-sw (the precache list), dev, extract-css
 ```
 
 No bundler. Plain ES modules, deployed by wrangler as written.
@@ -113,6 +113,24 @@ store** mints a store-scoped token (manager role, `actor: owner`) and opens
 the store views with a bar to return; the owner session is kept underneath
 so refresh keeps working. Everything the console writes is a registry
 action or an ordinary event; nothing is deployed.
+
+## Install and updates
+
+The shell installs as an app (`manifest.webmanifest`, `icons/`) and works
+offline through `sw.js`, ported from the chassis's release patterns: install
+writes the complete shell (the generated `sw-precache.js`, 46 files) into
+one release cache named by a content hash, same-origin requests are served
+cache-first from that release only, and a new release takes over only when
+the person accepts it. The new worker installs in the background and waits;
+the shell shows an update bar (and Settings › Updates) and "Update now"
+posts SKIP_WAITING, then the page reloads once on the new release. The
+precache is the shell alone: maps, snapshots and the outbox live in
+IndexedDB, and every worker call passes through uncached. Bundled fallback
+maps (`maps/*.svg`) serve network-first from a cache that survives releases.
+
+After changing any shell file run `npm run sw` and commit `sw-precache.js`;
+the unit suite fails when it is stale. Netlify serves `sw.js` and the
+precache list with `no-cache` so a device always sees the newest release.
 
 ## Maps and the catalogue
 

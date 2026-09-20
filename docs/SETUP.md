@@ -17,3 +17,4 @@ The full walkthrough lives in the "Conduit Setup Guide" doc. Short form:
    ```
 8. **Publish the map** (owner): admin console › the store › Map › choose `maps/1241.svg` as the ground floor, version `4.3`, Publish. Or `OWNER_KEY=… npm run publish-map -- --store 1241 --version 4.3 --name Busselton --floor ground=maps/1241.svg`.
 9. **Sign in** on the Netlify site with 1241 and the PIN. Production: run the workflow with env `production` (tick `set_secrets` the first time).
+10. **Install on devices**: open the Netlify site in Chrome on the phone and choose *Install app* (Add to Home Screen on iPhone). It works offline from then on; new releases show an *Update now* bar and apply only when tapped.
