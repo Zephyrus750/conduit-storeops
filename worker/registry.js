@@ -23,6 +23,9 @@ import { HttpError, json } from './http.js';
 
 const ALL_AREAS = ['floor', 'stockroom', 'backdock'];
 const CODE_ROLES = { stockroom: 'stockroom', dock: 'dock', manager: 'manager' };
+// Area and manager codes are compared case-insensitively with spaces and
+// hyphens removed, so SR-7304, sr 7304 and SR7304 are the same code.
+const normCode = c => String(c ?? '').toUpperCase().replace(/[\s-]/g, '');
 
 export class RegistryObject extends DurableObject {
   constructor(ctx, env) {
@@ -102,7 +105,7 @@ export class RegistryObject extends DurableObject {
     if (!row) throw new HttpError(404, 'not_registered', `store ${store} is not registered`);
     const codes = JSON.parse(row.codes);
     for (const [name, role] of Object.entries(CODE_ROLES)) {
-      if (codes[name] && await verifySecret(String(code ?? ''), codes[name])) { this.clear(key); return { role }; }
+      if (codes[name] && await verifySecret(normCode(code), codes[name])) { this.clear(key); return { role }; }
     }
     this.fail(key);
     throw new HttpError(403, 'unauthorised', 'wrong code');
@@ -158,7 +161,7 @@ export class RegistryObject extends DurableObject {
     if (!/^\d{4,8}$/.test(String(b.pin || ''))) throw new HttpError(400, 'invalid_request', 'pin must be 4 to 8 digits');
     if (this.get(b.no)) throw new HttpError(409, 'exists', `store ${b.no} is already registered`);
     const codes = {};
-    for (const name of Object.keys(CODE_ROLES)) if (b.codes?.[name]) codes[name] = await hashSecret(String(b.codes[name]));
+    for (const name of Object.keys(CODE_ROLES)) if (b.codes?.[name]) codes[name] = await hashSecret(normCode(b.codes[name]));
     const ent = {}; for (const a of ALL_AREAS) ent[a] = !!b.entitlements?.[a];
     const areas = {}; for (const a of ALL_AREAS) areas[a] = 'legacy';
     const now = new Date().toISOString();
@@ -192,7 +195,7 @@ export class RegistryObject extends DurableObject {
     if (b.pin) { sets.push('pin_hash = ?'); vals.push(await hashSecret(String(b.pin))); this.log('roster.rotate', no, { pin: true }); }
     if (b.codes) {
       const codes = JSON.parse(row.codes);
-      for (const name of Object.keys(CODE_ROLES)) if (b.codes[name]) codes[name] = await hashSecret(String(b.codes[name]));
+      for (const name of Object.keys(CODE_ROLES)) if (b.codes[name]) codes[name] = await hashSecret(normCode(b.codes[name]));
       sets.push('codes = ?'); vals.push(JSON.stringify(codes)); this.log('roster.rotate', no, { codes: Object.keys(b.codes) });
     }
     if (b.map_version) { sets.push('map_version = ?'); vals.push(b.map_version); }

@@ -82,7 +82,7 @@ test('store sign-in: wrong PIN, lockout, then in; unlock adds a role', async () 
 
   const wrong = await api('POST', '/v1/auth/unlock', { code: 'nope' }, ok.body.token);
   assert.equal(wrong.status, 403);
-  const sr = await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, ok.body.token);
+  const sr = await api('POST', '/v1/auth/unlock', { code: 'sr code' }, ok.body.token);   // spelling is forgiven
   assert.equal(sr.status, 200); assert.deepEqual(sr.body.roles, ['floor', 'stockroom']);
 
   const ref = await api('POST', '/v1/auth/refresh', { refresh: sr.body.refresh });
