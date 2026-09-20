@@ -11,6 +11,28 @@ import { ulid } from '../../shared/ulid.js';
 const OWNER_KEY = 'owner-key-for-tests-only';
 let mf, ownerToken;
 const upstreamCalls = { lookup: 0, details: 0 };
+// A stand-in for the legacy K2B worker: one store (BUS247, PIN 2468) with
+// two history records, a live board of two bays, a requested bay and one
+// negative-SOH item. Shapes follow k2b-coolwisp/cloudflare-worker.js.
+const T = Date.parse('2026-09-18T01:00:00Z');
+function legacy(u, req) {
+  const store = u.searchParams.get('store'), pin = req.headers.get('X-K2B-Pin');
+  if (store !== 'BUS247') return Response.json({ found: false, error: 'Unknown store code' }, { status: 404 });
+  if (u.searchParams.get('storeop') === 'info') return Response.json({ found: true, code: 'BUS247', name: 'Busselton', storeNumber: '1241' });
+  if (pin !== '2468') return Response.json({ error: 'Wrong PIN' }, { status: 403 });
+  const sub = u.searchParams.get('sub');
+  if (sub === 'history') return Response.json({ items: [
+    { location: '7012', date: '2026-09-17', submittedAt: T - 86400000, readyAt: T - 86400000 + 3600000, submittedDoneAt: T - 86400000 + 7200000, metrics: { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 }, codes: ['43166022', '43199310', 'bad'] },
+    { location: '7020', date: '2026-09-17', requestedOnly: true, codes: [] },
+  ], total: 2, offset: 0, hasMore: false });
+  if (sub === 'list') return Response.json({ today: '2026-09-18', requested: ['7037'], items: [{ location: '7014', date: '2026-09-18', status: 'pending' }, { location: '7016', date: '2026-09-18', status: 'submitted' }] });
+  if (sub === 'get') { const loc = u.searchParams.get('location');
+    if (loc === '7014') return Response.json({ found: true, submission: { location: '7014', date: '2026-09-18', submittedAt: T, updatedAt: T + 60000, status: 'pending', codes: [{ code: '42345501', scanned: true }, { code: '43006311', scanned: false }], incorrectCodes: ['43006311'] } });
+    if (loc === '7016') return Response.json({ found: true, submission: { location: '7016', date: '2026-09-18', submittedAt: T, updatedAt: T + 120000, status: 'submitted', submittedDoneAt: T + 180000, metrics: { expected: 2, scanned: 2, match: 2, accuracy: 100, incorrect: 0 }, codes: [{ code: '42977636', scanned: true }, { code: '43307685', scanned: true }] } });
+    return Response.json({ found: false }); }
+  if (sub === 'negsohlist') return Response.json({ date: '2026-09-18', items: [{ keycode: '43302210', qty: -6, name: 'Paper plates 20 pk', location: '7014', confirmed: true, addedAt: T + 240000 }] });
+  return Response.json({ error: 'unknown sub' }, { status: 400 });
+}
 
 before(async () => {
   mf = new Miniflare({
@@ -33,10 +55,11 @@ before(async () => {
         upstreamCalls.lookup += 1; return Response.json(out);
       }
       if (u.hostname === 'details.test') { upstreamCalls.details += 1; return req.json().then(b => Response.json(Object.fromEntries(b.items.map(i => [i.kc, { found: true, price: 12, was: 15, img: 'https://img.test/42977636.jpg', clr: true }])))); }
+      if (u.hostname === 'legacy.test') return legacy(u, req);
       return new Response('unexpected upstream ' + req.url, { status: 502 });
     },
     bindings: {
-      LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test',
+      LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', LEGACY_URL: 'https://legacy.test',
       TOKEN_SECRET: 'test-token-secret',
       OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000),
       TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_SECONDS: '60', ENVIRONMENT: 'test',
@@ -221,4 +244,41 @@ test('maps: owner publishes, devices read by version or latest, the log and regi
   const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
   assert.equal(tail.body.events[0].type, 'map.publish'); assert.equal(tail.body.events[0].actor.owner, true);
   assert.equal((await api('GET', '/v1/admin/stores/1241', undefined, ownerToken)).body.mapVersion, '4.3');
+});
+
+test('K2B importer: dry run counts, the import lands as events, a second run is all duplicates, flip sets the area', async () => {
+  const bad = await api('POST', '/v1/admin/stores/1241/import', { code: 'NOPE99', pin: '2468', dry: true }, ownerToken);
+  assert.equal(bad.status, 404); assert.equal(bad.body.code, 'legacy_store');
+  const wrongPin = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '0000', dry: true }, ownerToken);
+  assert.equal(wrongPin.status, 403); assert.equal(wrongPin.body.code, 'legacy_pin');
+
+  const dry = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468', dry: true }, ownerToken);
+  assert.equal(dry.status, 200); assert.equal(dry.body.dry, true); assert.equal(dry.body.legacy.name, 'Busselton');
+  assert.deepEqual(dry.body.counts, { history: 2, today: 2, requested: 1, negsoh: 1, events: 13 });
+  assert.ok(dry.body.warnings.some(w => /7012:2026-09-17: 1 codes were not keycodes/.test(w)), dry.body.warnings.join('|'));
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-imp' })).body.token;
+  const before = (await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, dev)).body;
+  assert.equal(before.state.backfill.subs['7012:2026-09-17'], undefined, 'a dry run writes nothing');
+
+  const run = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468' }, ownerToken);
+  assert.equal(run.status, 200); assert.equal(run.body.applied, 13); assert.equal(run.body.duplicates, 0); assert.deepEqual(run.body.rejected, []);
+  const s = (await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, dev)).body.state;
+  const h = s.backfill.subs['7012:2026-09-17'];
+  assert.equal(h.status, 'submitted'); assert.deepEqual(h.metrics, { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 }); assert.deepEqual(Object.keys(h.codes).sort(), ['43166022', '43199310']);
+  assert.deepEqual(s.backfill.requested['2026-09-17'], ['7020']); assert.deepEqual(s.backfill.requested['2026-09-18'], ['7037']);
+  const t = s.backfill.subs['7014:2026-09-18'];
+  assert.equal(t.status, 'pending'); assert.equal(t.codes['42345501'].scanned, true); assert.equal(t.codes['43006311'].scanned, false); assert.deepEqual(t.incorrect, ['43006311']);
+  assert.equal(s.backfill.subs['7016:2026-09-18'].status, 'submitted'); assert.equal(s.backfill.subs['7016:2026-09-18'].metrics.accuracy, 100);
+  assert.deepEqual(s.adjustments['2026-09-18']['43302210'], { qty: -6, name: 'Paper plates 20 pk', location: '7014', confirmed: true, addedAt: new Date(T + 240000).toISOString().replace(/\.\d{3}Z$/, '+00:00') });
+
+  const again = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468' }, ownerToken);
+  assert.equal(again.body.applied, 0); assert.equal(again.body.duplicates, 13, 'the import is idempotent');
+  const acts = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions;
+  assert.equal(acts[0].type, 'store.import'); assert.equal(acts[0].detail.applied, 0); assert.equal(acts[1].detail.applied, 13);
+
+  const flip = await api('POST', '/v1/admin/stores/1241/flip', { area: 'stockroom', state: 'live' }, ownerToken);
+  assert.equal(flip.status, 200); assert.equal(flip.body.areas.stockroom, 'live');
+  assert.equal((await api('POST', '/v1/admin/stores/1241/flip', { area: 'stockroom', state: 'gone' }, ownerToken)).status, 400);
+  const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
+  assert.equal(tail.body.events[0].actor.owner, true, 'imported events carry the owner as actor');
 });

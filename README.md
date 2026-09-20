@@ -92,8 +92,9 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
 | `GET /v1/store/:no/map`, `GET …/map/:version` (`latest` allowed) | store token or owner | live: published map metadata and document, ETag / 304 |
 | `POST /v1/store/:no/map` | owner | live: publish a version; logs `map.publish`, sets the registry's map version |
+| `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B importer with dry run; area state flip |
 | `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
-| life, manifest, history, export, import, flip | | `501 not_implemented`, named |
+| life, manifest, history, export | | `501 not_implemented`, named |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `invalid_event`, `duplicate` (a success),
@@ -159,7 +160,17 @@ A Stockroom view asks for the crew code once per device (`js/unlock.js`,
 `session.unlock`), and the client store reconnects its socket when the
 session's roles change so the next submit is judged on the new role. The
 phone switches workspace from the launcher (the grid button beside search).
-Still to come in this step: the K2B importer and the migration flip.
+**Migration.** The console's Migration tab (per store) imports from K2B
+(`worker/import.js`): a dry run reads the legacy worker with the store's
+K2B code and PIN and counts what would be written; the import turns each
+history record, today's bay, requested bay and negative-SOH item into the
+events Conduit would have logged, with ids derived from the record so a
+second run only adds what is new. Legacy metrics ride on `submission.ready`
+so History matches K2B's numbers. Flip to live sets the area's state in the
+registry; K2B stays deployed and goes bugfix-only for that store by hand.
+Routes: `POST /v1/admin/stores/:no/import` (`{ code, pin, dry }`) and
+`POST /v1/admin/stores/:no/flip` (`{ area, state }`), owner only; the dev
+stack runs a stand-in legacy worker on :8789 (code `BUS247`, PIN 2468).
 
 ## Maps and the catalogue
 

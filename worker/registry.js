@@ -15,6 +15,7 @@
 //   PATCH /stores/:no   { entitlements?, status?, pin?, codes?, name?, region? } (owner)
 //   POST /lockout/fail  { key }   POST /lockout/clear { key }   (used by owner sign-in)
 //   GET  /actions                                          → owner action tail
+//   POST /log          { type, store, detail }             → append an owner action
 //
 // Store status: 'registered' (no areas live), 'migrating', 'live', 'legacy'.
 
@@ -81,6 +82,7 @@ export class RegistryObject extends DurableObject {
         if (p[1] === 'check') { this.checkLocked(body.key); return { ok: true }; }
         return this.clear(body.key);
       case 'GET /actions': return this.actions();
+      case 'POST /log': this.log(String(body.type || 'note'), body.store || null, body.detail || {}); return { ok: true };
       default: throw new HttpError(404, 'not_found', `registry has no ${key}`);
     }
   }

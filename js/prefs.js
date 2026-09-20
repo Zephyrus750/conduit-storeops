@@ -28,11 +28,11 @@ export const ACCENTS = [
   ["Cocoa", '#7A5A4A', '#5F463A', '#F2EEED', '#D4CAC5', '', 'soft'],
 ];
 const KEY = 'suite_prefs';
-// Display scale: the whole frame renders at this factor (0.85 reads as the
+// Display scale: the whole frame renders at this factor (0.9 reads as the
 // showcase did on a 1440-wide screen). Container queries see the scaled
 // width, so a half-screen window still gets the half-screen layout.
-export const SCALES = [['0.75', 'Small'], ['0.85', 'Compact'], ['1', 'Default'], ['1.15', 'Large']];
-const DEFAULTS = { skin: 'light', accent: 0, rail: 'light', bars: 'plain', hdr: 'classic', railmin: false, scale: '0.85' };
+export const SCALES = [['0.75', 'Small'], ['0.9', 'Compact'], ['1', 'Default'], ['1.15', 'Large']];
+const DEFAULTS = { skin: 'light', accent: 0, rail: 'light', bars: 'plain', hdr: 'classic', railmin: false, scale: '0.9' };
 let cur = null;
 export function prefs() { if (!cur) { try { cur = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) || '{}')) }; } catch { cur = { ...DEFAULTS }; } } return cur; }
 export function setPref(k, v) { prefs()[k] = v; try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch {} applyPrefs(); }

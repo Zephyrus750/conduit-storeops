@@ -21,6 +21,8 @@ REFRESH_TTL_SECONDS = "2592000"
 LOCKOUT_ATTEMPTS = "5"
 LOCKOUT_SECONDS = "900"
 LOOKUP_URL = "https://shrill-voice-f46f.zephyrus-np750.workers.dev"
+# The K2B importer reads the legacy worker (the same suite worker) unless
+# LEGACY_URL points elsewhere.
 DETAILS_URL = "https://k2b-details.zephyrus-np750.workers.dev"
 
 [durable_objects]

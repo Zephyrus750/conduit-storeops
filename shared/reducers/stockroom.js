@@ -76,11 +76,14 @@ export const stockroomReducers = {
     sub.updatedAt = e.at;
     return null;
   },
+  // payload.metrics is honoured when present (the K2B importer carries the
+  // metrics the legacy desk computed); otherwise they come from the codes.
   'submission.ready'(s, e) {
     const sub = sub_(s, e); if (sub.code) return sub;
     if (e.at < sub.statusAt) return null;
     sub.status = 'corrected'; sub.statusAt = e.at; sub.readyAt = sub.readyAt || e.at;
-    sub.metrics = metrics(sub);
+    const m = e.payload?.metrics;
+    sub.metrics = m && typeof m === 'object' ? { expected: Number(m.expected) || 0, scanned: Number(m.scanned) || 0, match: Number(m.match) || 0, accuracy: Number(m.accuracy) || 0, incorrect: Number(m.incorrect) || 0 } : metrics(sub);
     return null;
   },
   'submission.submit'(s, e) {
@@ -88,7 +91,7 @@ export const stockroomReducers = {
     if (sub.reopenedAt && e.at < sub.reopenedAt) return null;    // stale submit after a reopen: ignored
     if (sub.status === 'submitted') return null;
     sub.status = 'submitted'; sub.statusAt = e.at; sub.submittedDoneAt = e.at;
-    sub.autoSubmitted = !!e.payload.auto; sub.metrics = metrics(sub);
+    sub.autoSubmitted = !!e.payload.auto; sub.metrics = sub.metrics || metrics(sub);   // submit never rewrites what ready recorded
     delete s.backfill.claims[sub.bay];
     return null;
   },

@@ -9,6 +9,7 @@ export { StoreObject } from './store.js';
 export { RegistryObject } from './registry.js';
 import { VERSION } from './version.js';
 import { parseCodes, lookup } from './catalogue.js';
+import { importK2B } from './import.js';
 
 const r = new Router();
 
@@ -99,10 +100,40 @@ r.get('/v1/catalogue', async (req, env, ctx) => {
   return json({ items }, 200, { 'Cache-Control': 'public, max-age=300' });
 });
 
+// ── migration (owner) ─────────────────────────────────────────────────────
+// Import: pull the store's K2B data into its log; dry:true only counts.
+// Flip: set an area's state (legacy | migrating | live) and log it.
+r.post('/v1/admin/stores/:no/import', async (req, env, _c, p) => {
+  const c = await requireOwner(req, env);
+  const rec = await registry(env, 'GET', `/stores/${p.no}`);
+  const b = await readJson(req);
+  if ((b.source || 'k2b') !== 'k2b') throw new HttpError(400, 'invalid_request', 'source must be k2b');
+  const caps = Object.entries(rec.entitlements).filter(([, on]) => on).map(([a]) => a);
+  if (!caps.includes('stockroom')) throw new HttpError(409, 'not_entitled', 'turn the Stockroom on for this store before importing');
+  const claims = { ...c, store: rec.no, caps, roles: ['manager'], actor: 'owner' };
+  const apply = async (events) => {
+    const res = await forward(new Request(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events }) }), env, rec.no, '/events', '', claims);
+    const j = await res.json();
+    if (!res.ok) throw new HttpError(res.status, j.code || 'store_error', j.message || 'store object refused the batch');
+    return j.results;
+  };
+  const summary = await importK2B(env, { no: rec.no, code: b.code, pin: b.pin, dry: !!b.dry, apply });
+  if (!b.dry) await registry(env, 'POST', '/log', { type: 'store.import', store: rec.no, detail: { source: 'k2b', code: summary.code, applied: summary.applied, duplicates: summary.duplicates, rejected: summary.rejected.length, warnings: summary.warnings.length, counts: summary.counts } });
+  return json(summary);
+});
+r.post('/v1/admin/stores/:no/flip', async (req, env, _c, p) => {
+  await requireOwner(req, env);
+  const b = await readJson(req);
+  if (!['floor', 'stockroom', 'backdock'].includes(b.area)) throw new HttpError(400, 'invalid_request', 'area must be floor, stockroom or backdock');
+  if (!['legacy', 'migrating', 'live'].includes(b.state)) throw new HttpError(400, 'invalid_request', 'state must be legacy, migrating or live');
+  const rec = await registry(env, 'PATCH', `/stores/${p.no}`, { areas: { [b.area]: b.state } });
+  return json({ ok: true, no: rec.no, areas: rec.areas });
+});
+
 // ── not built yet: named, never silent ────────────────────────────────────
 for (const [m, path] of [
   ['GET', '/v1/store/:no/life/:keycode'], ['POST', '/v1/store/:no/manifest'], ['GET', '/v1/store/:no/history/:kind'],
-  ['GET', '/v1/store/:no/export/:kind'], ['POST', '/v1/admin/stores/:no/import'], ['POST', '/v1/admin/stores/:no/flip'],
+  ['GET', '/v1/store/:no/export/:kind'],
 ]) r.add(m, path, () => fail(501, 'not_implemented', `${m} ${path} is on the build order but not built yet`));
 
 // ── plumbing ──────────────────────────────────────────────────────────────

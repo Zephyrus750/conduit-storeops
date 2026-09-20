@@ -89,11 +89,11 @@ const storeView = {
     if (!st.no) st.no = ctx.admin.stores?.[0]?.no || null;
     const c = forStore(st.no), rec = c.rec || (ctx.admin.stores || []).find(s => s.no === st.no);
     if (!rec) return vh('Store', '', `<a class="btn" data-view="admin">${ic('arrow')}All stores</a>`) + banner('No store selected. Pick one from the rail or the Stores list.');
-    const tabs = [['over', 'Overview'], ['events', 'Events'], ['devices', 'Devices'], ['access', 'Access'], ['map', 'Map']];
+    const tabs = [['over', 'Overview'], ['events', 'Events'], ['devices', 'Devices'], ['access', 'Access'], ['map', 'Map'], ['migr', 'Migration']];
     const head = vh(`${esc(rec.no)} <span class="pd-name">${esc(rec.name)}</span>`, sub(esc(rec.region || ''), tst(rec.status), `registered ${fmtTime(rec.created)}`), `<a class="btn" data-view="admin">${ic('arrow')}All stores</a><button class="btn" data-act="refresh">${ic('refresh')}Refresh</button><button class="btn primary" data-act="actas">${ic('users')}Act as store</button>`);
     const seg = `<div class="ad-tabs">${tabs.map(t => `<button class="${t[0] === st.tab ? 'on' : ''}" data-act="tab" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>`;
-    const ro = st.tab === 'access' || st.tab === 'map' ? '' : banner(`Read-only view of <b>${esc(rec.name)}</b>. Nothing you do here changes the store until you <b>Act as store</b>.`, true);
-    const body = st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : overTab(rec, c);
+    const ro = ['access', 'map', 'migr'].includes(st.tab) ? '' : banner(`Read-only view of <b>${esc(rec.name)}</b>. Nothing you do here changes the store until you <b>Act as store</b>.`, true);
+    const body = st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : st.tab === 'migr' ? migrTab(rec, c) : overTab(rec, c);
     return head + ro + seg + body;
   },
   mount(ctx, root) {
@@ -103,7 +103,7 @@ const storeView = {
     root.addEventListener('click', e => onStoreClick(e, ctx));
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="filter"]')) { st.filter = e.target.value; const t = $('#adTail', root); if (t) t.innerHTML = tailRows(forStore(st.no)); } });
-    root.addEventListener('submit', e => { e.preventDefault(); const f = e.target.getAttribute('data-form'); if (f === 'rotate') saveRotate(ctx, e.target); else if (f === 'edit') saveEdit(ctx, e.target); else if (f === 'publish') publishMap(ctx, e.target); });
+    root.addEventListener('submit', e => { e.preventDefault(); const f = e.target.getAttribute('data-form'); if (f === 'rotate') saveRotate(ctx, e.target); else if (f === 'edit') saveEdit(ctx, e.target); else if (f === 'publish') publishMap(ctx, e.target); else if (f === 'import') runImport(ctx, e.target, e.submitter?.dataset.dry === '1'); });
     root.addEventListener('change', e => { if (e.target.matches('input[type="file"][data-floor]')) { const f = e.target.files?.[0]; const lbl = e.target.closest('label')?.querySelector('small'); if (lbl && f) lbl.textContent = `${f.name} · ${(f.size / 1024).toFixed(0)} KB`; } });
     return [];
   },
@@ -145,6 +145,29 @@ function accessTab(rec) {
     ? `<form class="card" data-form="edit"><div class="ch"><h3>Store</h3></div><div class="ad-grid2">${field('Name', inp('name', rec.name, 'Store name', '', 'required'))}${field('Region', inp('region', rec.region, 'e.g. WA South'))}${field('Status', `<select class="ad-in" name="status">${STATUSES.map(v => `<option value="${v}" ${rec.status === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`, 'live once any area is live on Conduit')}</div><div class="acts" style="margin-top:12px"><button class="btn primary sm" type="submit">${ic('check')}Save</button><button class="btn sm" type="button" data-act="edit-cancel">Cancel</button></div></form>`
     : `<div class="card"><div class="ch"><h3>Store</h3><span class="btn sm" data-act="edit">${ic('edit')}Edit</span></div><div class="ad-kv"><span>Number</span><b class="mono">${esc(rec.no)}</b><span>Name</span><b>${esc(rec.name)}</b><span>Region</span><b>${esc(rec.region || '—')}</b><span>Status</span><b>${tst(rec.status)}</b><span>Created</span><b>${fmtTime(rec.created)}</b><span>Updated</span><b>${fmtTime(rec.updated)}</b></div></div>`;
   return areas + `<div class="grid2 ad-two">${creds}${identity}</div>`;
+}
+// ── migration: import from the legacy app, review, flip the area ───────
+const AREA_STATE = { legacy: ['On the legacy app', ''], migrating: ['Migrating', 'staged'], live: ['Live on Conduit', 'live'] };
+function migrTab(rec, c) {
+  const rows = AREAS.map(a => { const on = rec.entitlements?.[a], v = rec.areas?.[a] || 'legacy'; return `<tr><td><b>${AREA_NAME[a]}</b></td><td>${on ? `<span class="tst ${AREA_STATE[v][1]}">${AREA_STATE[v][0]}</span>` : '<span class="tst">not entitled</span>'}</td><td>${a === 'floor' ? 'ShelfSearcher · no live users' : a === 'stockroom' ? 'K2B' : 'Decant Visualiser'}</td><td>${!on ? '' : v === 'live' ? '<span class="cs-dim">done</span>' : `<span class="btn sm primary" data-act="flip" data-area="${a}" data-state="live">${ic('check')}Flip to live</span> ${v === 'legacy' ? `<span class="btn sm" data-act="flip" data-area="${a}" data-state="migrating">Mark migrating</span>` : ''}`}${on && v === 'live' ? ` <span class="btn sm" data-act="flip" data-area="${a}" data-state="legacy">Back to legacy</span>` : ''}</td></tr>`; }).join('');
+  const r = st.importResult;
+  const result = !r ? '' : `<div class="card"><div class="ch"><h3>${r.dry ? 'Dry run' : 'Import'} · ${esc(r.legacy?.name || r.code)}</h3><span class="cs-dim">${r.dry ? 'nothing was written' : `${r.applied} events written · ${r.duplicates} already there`}</span></div><div class="ad-kv"><span>Legacy store</span><b>${esc(r.legacy?.name || '—')} · code ${esc(r.code)}${r.legacy?.storeNumber ? ' · number ' + esc(r.legacy.storeNumber) : ''}</b><span>History</span><b>${r.counts.history} bays on record</b><span>Today's board</span><b>${r.counts.today} bays · ${r.counts.requested} requested</b><span>Negative SOH</span><b>${r.counts.negsoh} items today</b><span>Events</span><b>${r.counts.events}${r.dry ? ' would be written' : ` · ${r.applied} written · ${r.duplicates} duplicates · ${r.rejected.length} rejected`}</b></div>` +
+    (r.warnings.length ? `<div class="scol-t del" style="margin-top:10px">Warnings<span class="ct">${r.warnings.length}</span></div><ul class="ad-sum" style="padding-left:18px;font-size:12.5px;color:var(--ink2)">${r.warnings.slice(0, 20).map(w => `<li>${esc(w)}</li>`).join('')}${r.warnings.length > 20 ? `<li>… ${r.warnings.length - 20} more</li>` : ''}</ul>` : '') +
+    (r.rejected.length ? `<div class="scol-t del" style="margin-top:10px">Rejected<span class="ct">${r.rejected.length}</span></div><ul style="padding-left:18px;font-size:12.5px">${r.rejected.slice(0, 10).map(x => `<li><span class="mono">${esc(x.id)}</span> ${esc(x.code)}: ${esc(x.message)}</li>`).join('')}</ul>` : '') +
+    (r.dry ? `<div class="acts" style="margin-top:12px"><button class="btn primary" data-act="import-accept">${ic('check')}Looks right · import now</button></div>` : `<div class="ad-done" style="margin:12px 0 0"><span class="ck">${ic('check')}</span><div><b>Imported.</b><span>Open the store's Backfill review to check the board, then flip the Stockroom to live below. K2B stays deployed; freezing it for this store is a manual step in that app.</span></div></div>`) + `</div>`;
+  const form = `<form class="card" data-form="import"><div class="ch"><h3>Import from K2B</h3><span class="cs-dim">history, today's board, requested bays, negative SOH</span></div><div class="ad-grid2">${field('K2B store code', inp('code', st.importCode || '', 'e.g. BUS247', 'mono', 'required autocapitalize="characters"'), 'the join code the store’s phones use')}${field('Store PIN in K2B', `<input class="ad-in mono" name="pin" type="password" autocomplete="off" required placeholder="••••">`, 'the review PIN; only its hash is stored, and only in K2B')}</div><div class="si-err" id="impErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit" data-dry="1">${ic('search')}Dry run</button><button class="btn" type="submit" data-dry="0">${ic('arrow')}Import</button></div><p class="lbl">A dry run reads everything and counts what would be written. Importing writes events with your owner id; running it again only adds what is new. ${rec.entitlements?.stockroom ? '' : '<b>Turn the Stockroom on in Access first.</b>'}</p></form>`;
+  return `<div class="card"><div class="ch"><h3>Cutover by area</h3><span class="cs-dim">a switch, not a mirror · one area at a time</span></div><div class="ad-scroll"><table class="rstbl"><tr><th>Area</th><th>Now</th><th>Legacy twin</th><th></th></tr>${rows}</table></div></div><div class="grid2 ad-two">${form}${result || `<div class="card"><div class="ch"><h3>How it works</h3></div><div class="ad-steps"><div class="on"><i>1</i><b>Dry run</b><span>Reads the legacy worker with the store's code and PIN; nothing is written.</span></div><div><i>2</i><b>Import</b><span>Each legacy record becomes the events Conduit would have logged. Re-running only adds what is new.</span></div><div><i>3</i><b>Check the board</b><span>Open Backfill review and History as the store; the day's bays and the archive should match K2B.</span></div><div><i>4</i><b>Flip to live</b><span>Devices see the area as live; K2B goes bugfix-only for this store.</span></div></div></div>`}</div>`;
+}
+async function runImport(ctx, form, dry) {
+  const err = $('#impErr', form), btns = form.querySelectorAll('button');
+  const code = form.code.value.trim().toUpperCase(), pin = form.pin.value;
+  st.importCode = code; btns.forEach(b => { b.disabled = true; }); err.textContent = ''; toast(dry ? 'Reading the legacy worker…' : 'Importing…');
+  try {
+    st.importResult = await ctx.admin.api(`/v1/admin/stores/${st.no}/import`, { method: 'POST', body: { source: 'k2b', code, pin, dry } });
+    st.importPin = dry ? pin : null;
+    if (!dry) { st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); }
+    ctx.rerender();
+  } catch (e) { btns.forEach(b => { b.disabled = false; }); err.textContent = e.code === 'legacy_pin' ? 'K2B refused that PIN.' : e.code === 'legacy_store' ? 'K2B does not know that store code.' : e.code === 'not_entitled' ? 'Turn the Stockroom on in Access first.' : e.message; }
 }
 function mapTab(rec, c) {
   const m = c.map;
@@ -193,6 +216,8 @@ async function onStoreClick(e, ctx) {
   else if (act === 'gen') { const kind = a.dataset.kind || a.dataset.name; const el = a.closest('.ad-inrow')?.querySelector('input'); if (el && gen[kind]) el.value = gen[kind](); }
   else if (act === 'edit') { st.edit = true; ctx.rerender(); }
   else if (act === 'edit-cancel') { st.edit = false; ctx.rerender(); }
+  else if (act === 'flip') { const { area, state } = a.dataset; if (state === 'live' && !confirm(`Flip ${AREA_NAME[area]} for ${no} to live? Devices treat Conduit as the system of record for it from now.`)) return; try { await ctx.admin.api(`/v1/admin/stores/${no}/flip`, { method: 'POST', body: { area, state } }); st.actions = null; invalidate(no); await ctx.admin.refreshStores(); toast(`${AREA_NAME[area]} is ${state}`); ctx.rerender(); } catch (err) { fail(err); } }
+  else if (act === 'import-accept') { const r = st.importResult; if (!r || !st.importPin) return toast('Run the dry run again first', 'bad'); const form = document.querySelector('form[data-form="import"]'); if (form) { form.code.value = r.code; form.pin.value = st.importPin; runImport(ctx, form, false); } }
 }
 async function saveRotate(ctx, form) {
   const name = st.rot, value = form.value.value.trim();
@@ -277,6 +302,7 @@ function actionText(a) {
     case 'store.entitle': return `${s}entitlements: ${AREAS.filter(x => d[x]).map(x => AREA_NAME[x]).join(', ') || 'none'}`;
     case 'area.flip': return `${s}areas: ${AREAS.map(x => `${AREA_NAME[x]} ${esc(d[x] || '')}`).join(' · ')}`;
     case 'roster.rotate': return `${s}rotated ${d.pin ? 'the store PIN' : (d.codes || []).join(', ') + ' code'}`;
+    case 'store.import': return `${s}imported from K2B ${esc(d.code || '')}: ${d.applied} events written, ${d.duplicates} already there${d.rejected ? `, ${d.rejected} rejected` : ''}`;
     default: return `${s}${esc(a.type)} ${esc(short(d))}`;
   }
 }

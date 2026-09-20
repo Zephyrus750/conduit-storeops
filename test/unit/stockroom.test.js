@@ -79,3 +79,10 @@ test('day list walkers 1..4 with a known source', () => {
   assert.equal(apply(s, ev('daylist.set', { date: '2026-09-07' }, { walkers: 2, source: 'snapshot', excluded: ['7001'] })), null);
   assert.deepEqual(s.daylist['2026-09-07'].excluded, ['7001']);
 });
+
+test('ready honours metrics carried by the importer', () => {
+  const s = initialState();
+  apply(s, ev('submission.update', k, { codes: { 42977636: true } }));
+  apply(s, ev('submission.ready', k, { metrics: { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 } }));
+  assert.deepEqual(s.backfill.subs['7023:2026-09-07'].metrics, { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 });
+});
