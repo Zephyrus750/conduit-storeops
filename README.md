@@ -95,9 +95,10 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B importer with dry run; area state flip |
 | `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
-| `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`) | store token or owner, stockroom entitled | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
+| `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
+| `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `invalid_event`, `duplicate` (a success),
