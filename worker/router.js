@@ -11,6 +11,7 @@ export class Router {
   get(p, h) { return this.add('GET', p, h); }
   post(p, h) { return this.add('POST', p, h); }
   patch(p, h) { return this.add('PATCH', p, h); }
+  delete(p, h) { return this.add('DELETE', p, h); }
 
   match(method, pathname) {
     for (const r of this.routes) {

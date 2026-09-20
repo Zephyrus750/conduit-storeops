@@ -82,11 +82,13 @@ const api = async (method, path, body, token) => {
 const at = () => new Date().toISOString().replace('Z', '+00:00');
 const event = (type, entity, payload, area) => ({ id: ulid(), store: '1241', area, type, entity, payload, at: at(), v: 1 });
 
-test('health and unbuilt routes are named', async () => {
+test('health answers, every build-order route is built and wants a token, an unknown route is named', async () => {
   assert.equal((await api('GET', '/v1/health')).body.ok, true);
-  const r = await api('POST', '/v1/store/1241/manifest', {});
-  assert.equal(r.status, 501); assert.equal(r.body.code, 'not_implemented');
-  assert.equal((await api('GET', '/v1/store/1241/life/42977636')).status, 401, 'built routes want a token');
+  for (const [m, p] of [['POST', '/v1/store/1241/manifest'], ['GET', '/v1/store/1241/manifest/7031482'], ['GET', '/v1/store/1241/life/42977636'], ['GET', '/v1/store/1241/history/backfill'], ['GET', '/v1/store/1241/export/cages']]) {
+    const r = await api(m, p, m === 'POST' ? {} : undefined); assert.equal(r.status, 401, `${m} ${p}`); assert.equal(r.body.code, 'unauthorised');
+  }
+  const r = await api('GET', '/v1/store/1241/nothing-here');
+  assert.equal(r.status, 404); assert.equal(r.body.code, 'not_found');
 });
 
 test('catalogue: links and details from the upstreams, cached per keycode, misses answered', async () => {
@@ -313,4 +315,39 @@ test('a keycode’s life, the history lists and the CSV export read the stockroo
   const text = await csv.text();
   assert.equal(text.split('\n')[0], 'date,bay,status,readyAt,submittedAt,expected,scanned,match,accuracy,incorrect,codes,auto');
   assert.match(text, /2026-09-17,7012,submitted,/);
+});
+
+test('manifests: publish the report, list it through the projection, read it, attach it to a truck, scan against it, remove it', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'dock-1' })).body.token;
+  const unlocked = (await api('POST', '/v1/auth/unlock', { code: 'DK-CODE' }, dev)).body.token || dev;
+  const doc = { v: 1, kind: 'report', manNo: '7031482', storeNo: '1241', despatch: '05/09/2026', dcNo: '4101533', filename: 'Manifest Report 06-09.xls', consols: [
+    { id: '601804381', cons: '093008012601804381', cartons: 3, dept: '024', mix: [['024', 2, 12]], items: [{ k: '43307685', q: 12, dept: '024', c: 2, cc: ['000000000000000001'] }, { k: '42977636', q: 2, dept: '070', c: 1 }] },
+    { id: '601804382', cons: '093008012601804382', cartons: 3, dept: '084', mix: [], items: [{ k: '43302210', q: 3, dept: '084' }] },
+  ] };
+  assert.equal((await api('POST', '/v1/store/1241/manifest', doc, dev)).status, 403, 'the dock code is needed to publish');
+  const pub = await api('POST', '/v1/store/1241/manifest', doc, unlocked);
+  assert.equal(pub.status, 201, JSON.stringify(pub.body)); assert.equal(pub.body.consols, 2); assert.equal(pub.body.totalCartons, 6); assert.equal(pub.body.keycodes, 3);
+  assert.equal((await api('POST', '/v1/store/1241/manifest', { ...doc, storeNo: '1187' }, unlocked)).status, 409, 'another store’s report is refused');
+  assert.equal((await api('POST', '/v1/store/1241/manifest', { ...doc, manNo: 'bad manifest number!' }, unlocked)).status, 400);
+  const snap = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
+  assert.equal(snap.dock.manifests['7031482'].totalCartons, 6); assert.equal(snap.dock.manifests['7031482'].truck, null); assert.equal(snap.dock.manifests['7031482'].filename, 'Manifest Report 06-09.xls');
+  const got = await api('GET', '/v1/store/1241/manifest/7031482', undefined, dev);
+  assert.equal(got.status, 200); assert.deepEqual(got.body.consols[0].items[0].cc, ['000000000000000001'], 'the stored document keeps carton ids');
+  assert.equal((await api('GET', '/v1/store/1241/manifest/9999999', undefined, dev)).status, 404);
+
+  const truck = '2026-09-21-T1';
+  const ev = (type, entity, payload) => ({ id: ulid(), store: '1241', area: 'backdock', type, entity, payload, at: at(), v: 1 });
+  const consols = got.body.consols.map(c => ({ id: c.id, cons: c.cons, cartons: c.cartons, dept: c.dept, mix: c.mix, items: c.items.map(({ k, q, dept, c: cc }) => ({ k, q, dept, c: cc })) }));
+  const r = await api('POST', '/v1/store/1241/events', { events: [ev('truck.create', { truck }, { landedAt: at() }), ev('truck.setLive', { truck }, {}), ev('manifest.attach', { truck }, { manNo: '7031482', dcNo: '4101533', despatch: '05/09/2026', consols }), ev('pallet.land', { truck, bay: 'A1' }, { ptype: 'chep', cartons: null }), ev('pallet.scan', { truck, bay: 'A1' }, { code: '093008012601804381' }), ev('pallet.scan', { truck, bay: 'A1' }, { code: '601804399' })] }, unlocked);
+  assert.deepEqual(r.body.results.map(x => x.ok), [true, true, true, true, true, false]);
+  assert.equal(r.body.results[5].code, 'not_on_manifest');
+  const s2 = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
+  assert.equal(s2.dock.trucks[truck].manifest.manNo, '7031482'); assert.equal(s2.dock.trucks[truck].pallets.A1.cartons, 3, 'the scan pulled the consol’s cartons onto the pallet'); assert.deepEqual(s2.dock.trucks[truck].pallets.A1.consolIds, ['601804381']);
+  assert.equal(s2.dock.manifests['7031482'].truck, truck); assert.equal(s2.dock.manifests['7031482'].keycodes, 3);
+
+  const del = await api('DELETE', '/v1/store/1241/manifest/7031482', undefined, unlocked);
+  assert.equal(del.status, 200);
+  assert.equal((await api('GET', '/v1/store/1241/manifest/7031482', undefined, dev)).status, 404);
+  const s3 = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
+  assert.equal(s3.dock.manifests['7031482'], undefined); assert.equal(s3.dock.trucks[truck].manifest.manNo, '7031482', 'the truck keeps its copy');
 });

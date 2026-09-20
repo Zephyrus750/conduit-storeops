@@ -5,9 +5,9 @@
 // backdock-receiving and backdock-decant over the backdock reducers.
 
 import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
-import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, who, grid, startable } from './common.js';
+import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, who, grid, startable, manifestIndex, publishManifestFile, attachManifest } from './common.js';
 
-const st = { truck: null, land: { ref: '', ptype: 'chep', cartons: '' }, view: 'receive', arm: null, sel: null, halting: false, pending: [] };
+const st = { truck: null, land: { ref: '', ptype: 'chep', cartons: '' }, view: 'receive', arm: null, sel: null, halting: false, pending: [], manPick: false };
 const dispatch = (ctx, type, entity, payload) => ctx.store.dispatch({ type, entity, payload });
 
 function model(ctx) {
@@ -42,7 +42,7 @@ function landForm() {
 function desktop(ctx) {
   const m = model(ctx), t = m.t, pr = m.pr, live = t?.status === 'live';
   const head = vh('Receiving', sub(fmtDate(todayKey()), `${m.open.length} truck${m.open.length === 1 ? '' : 's'} on the board`, t ? (live ? `T${truckNo(t.id)} live` : `T${truckNo(t.id)} staged`) : 'dock clear'),
-    (t ? `<button class="btn" data-act="goal">${ic('clock')}${t.goalAt ? 'Goal ' + fmtHM(t.goalAt) : 'Set goal'}</button>` + (live ? `<button class="btn" data-act="finalise">${ic('check')}Finalise</button>` : `<button class="btn primary" data-act="golive">${ic('truck')}Start receiving T${truckNo(t.id)}</button>`) : '') + `<button class="btn primary" data-act="newtruck">${ic('plus')}New truck</button>`, 'm-receiving');
+    (t ? `<button class="btn" data-act="manpick">${ic('file')}${t.manifest ? 'Manifest ' + esc(t.manifest.manNo) : 'Manifest'}</button><button class="btn" data-act="goal">${ic('clock')}${t.goalAt ? 'Goal ' + fmtHM(t.goalAt) : 'Set goal'}</button>` + (live ? `<button class="btn" data-act="finalise">${ic('check')}Finalise</button>` : `<button class="btn primary" data-act="golive">${ic('truck')}Start receiving T${truckNo(t.id)}</button>`) : '') + `<button class="btn primary" data-act="newtruck">${ic('plus')}New truck</button>`, 'm-receiving');
   if (!t) return head + `<div class="card bdr-empty" style="padding:28px;text-align:center"><div style="font-size:34px;color:var(--faint)">${ic('truck')}</div><b style="display:block;font-size:18px;margin:8px 0 4px">No truck on the dock</b><p class="lbl">Start receiving the next truck here, or let a dock phone land it. The board wakes either way.</p><button class="btn primary" data-act="newtruck">${ic('plus')}Start receiving a truck</button></div>`;
   const strip = `<div class="trk-strip">${m.open.map(x => truckCard(x, x.id === t.id)).join('')}</div>`;
   const man = t.manifest;
@@ -56,7 +56,14 @@ function desktop(ctx) {
     `<div class="bdr-teamadd"><input class="bdr-in" data-field="team" placeholder="Add a device or name, e.g. D4" maxlength="24"><button class="btn sm" data-act="team-add">${ic('plus')}Add</button></div><p class="lbl">Devices, not people: whoever signs in on D1 is D1 for the day.</p></div>`;
   const landed = pallets(t).slice().sort((a, b) => (a.landedAt || '').localeCompare(b.landedAt || ''));
   const landedcard = `<div class="card"><div class="ch"><h3>Landed today</h3><span class="cs-dim">${landed.length ? `${landed.length} pallets · newest last` : `Truck ${truckNo(t.id)}`}</span></div>${landed.length ? `<div class="list rcv-list bdr-landed">${landed.map(p => `<div class="li${st.sel === p.ref ? ' sel' : ''}" data-act="cell" data-ref="${esc(p.ref)}"><span class="loc">${esc(p.ref)}</span><span class="nm">${esc(PT_NAME[p.ptype] || p.ptype)}${p.carryover ? ' · carryover' : ''} · ${p.cartons ?? '–'} cartons${p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}</span><span class="rcv-st ${p.status}">${p.status === 'done' ? 'Done' : p.status === 'active' ? 'Decanting' : p.status === 'paused' ? 'Paused' : 'Waiting'}</span><span class="rt">${p.carryover ? 'Yesterday' : fmtHM(p.landedAt)}</span></div>`).join('')}</div>` : `<div class="pempty">Nothing landed yet</div>`}${st.sel && t.pallets[st.sel] ? palletPanel(t, t.pallets[st.sel], true) : ''}</div>`;
-  return head + strip + `<div class="bdr-stack">${headcard}${dock}${teamcard}${landedcard}</div>`;
+  const picker = !st.manPick ? '' : (() => {
+    const idx = manifestIndex(m.dock).sort((a, b) => (a.truck ? 1 : 0) - (b.truck ? 1 : 0));
+    return `<div class="card bdr-manpick"><div class="ch"><h3>${t.manifest ? `Manifest ${esc(t.manifest.manNo)} on Truck ${esc(truckNo(t.id))}` : `Attach a manifest to Truck ${esc(truckNo(t.id))}`}</h3><span class="go" data-act="manpick">Close</span></div>` +
+      (t.manifest ? `<p class="lbl">${t.manifest.consols.length} consols · ${t.manifest.consols.reduce((n, c) => n + c.cartons, 0)} cartons · attached ${fmtHM(t.manifest.attachedAt)}. Attaching another replaces it.</p>` : '') +
+      `<div class="list">${idx.map(x => `<div class="li"><span class="loc">${esc(x.manNo)}</span><span class="nm">${x.consols} consols · ${x.totalCartons} cartons${x.despatch ? ' · despatch ' + esc(x.despatch) : ''}${x.truck ? ` · on Truck ${esc(truckNo(x.truck))}` : ''}</span><button class="btn sm${x.truck === t.id ? '' : ' primary'}" data-act="manattach" data-man="${esc(x.manNo)}"${x.truck === t.id ? ' disabled' : ''}>${x.truck === t.id ? 'Attached' : 'Attach'}</button></div>`).join('') || '<div class="ohint">Nothing in the library yet.</div>'}</div>` +
+      `<div class="bdr-manup"><label class="btn" style="cursor:pointer"><input type="file" accept=".xls,.xlsx,.csv" data-field="manfile" style="display:none">${ic('file')}Upload today's report and attach it</label><span class="cs-dim">The DC's Manifest Report .xls from the email. It is published to the library and attached to this truck.</span></div></div>`;
+  })();
+  return head + strip + picker + `<div class="bdr-stack">${headcard}${dock}${teamcard}${landedcard}</div>`;
 }
 
 // One pallet's controls: type, cartons, note, decant verbs, scanned
@@ -109,7 +116,9 @@ async function onAct(ctx, a, root) {
   const field = n => root.querySelector(`[data-field="${n}"]`)?.value ?? '';
   const num = v => { const n = parseInt(String(v).replace(/\D/g, ''), 10); return Number.isFinite(n) ? n : null; };
   try {
-    if (act === 'pick') { st.truck = a.dataset.id; st.sel = null; st.arm = null; return ctx.rerender(); }
+    if (act === 'pick') { st.truck = a.dataset.id; st.sel = null; st.arm = null; st.manPick = false; return ctx.rerender(); }
+    if (act === 'manpick') { st.manPick = !st.manPick; return ctx.rerender(); }
+    if (act === 'manattach') { a.disabled = true; await attachManifest(ctx, id, a.dataset.man); st.manPick = false; toast(`${a.dataset.man} attached to Truck ${truckNo(id)}`); return; }
     if (act === 'view') { st.view = a.dataset.mode; st.arm = null; st.sel = null; return ctx.rerender(); }
     if (act === 'newtruck') { const nid = nextTruckId(m.dock); await dispatch(ctx, 'truck.create', { truck: nid }, { landedAt: new Date().toISOString() }); await dispatch(ctx, 'truck.setLive', { truck: nid }, {}); st.truck = nid; st.sel = null; toast(`Truck ${truckNo(nid)} is receiving`); return; }
     if (act === 'golive') { await dispatch(ctx, 'truck.setLive', { truck: id }, {}); return; }
@@ -165,6 +174,14 @@ export default {
   mobile(ctx) { return mobile(ctx); },
   mount(ctx, root) {
     root.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (a) onAct(ctx, a, root); });
+    root.addEventListener('change', async e => {
+      if (!e.target.matches('[data-field="manfile"]')) return;
+      const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
+      const t = model(ctx).t; if (!t) return;
+      toast(`Reading ${f.name}…`);
+      try { const r = await publishManifestFile(ctx, f); await attachManifest(ctx, t.id, r.manNo); st.manPick = false; toast(`Manifest ${r.manNo} attached · ${r.consols} consols, ${r.totalCartons} cartons`); }
+      catch (err) { toast(`Could not use ${f.name}: ${err.message}`, 'bad'); }
+    });
     root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const f = e.target.dataset?.field; if (f === 'cartons' || f === 'ref') { e.preventDefault(); root.querySelector('[data-act="land"]')?.click(); } else if (f === 'pscan') { e.preventDefault(); root.querySelector('[data-act="pscan"]')?.click(); } else if (f === 'team') { e.preventDefault(); root.querySelector('[data-act="team-add"]')?.click(); } });
     return [ctx.store.on('dock', () => ctx.rerender())];
   },

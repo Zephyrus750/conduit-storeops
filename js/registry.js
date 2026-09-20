@@ -20,14 +20,15 @@ import srhistory from './views/stockroom/srhistory.js';
 import srhome from './views/stockroom/srhome.js';
 import receiving from './views/backdock/receiving.js';
 import bdhome from './views/backdock/bdhome.js';
+import manifests from './views/backdock/manifests.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, stocktake, settings, bfreview, cages, adjust, daylist, srhistory, srhome, receiving, bdhome, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, stocktake, settings, bfreview, cages, adjust, daylist, srhistory, srhome, receiving, bdhome, manifests, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
 // Rail sections and the phone tab strip per workspace. Rows without a view
 // yet are inert and say so.
 export const RAIL = [
   { sec: 'Store', rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake'] },
-  { sec: 'Back dock', rows: ['receiving', ['manifests', 'Manifests', 'm-manifests'], ['rhistory', 'History', 'm-rhistory']] },
+  { sec: 'Back dock', rows: ['receiving', 'manifests', ['rhistory', 'History', 'm-rhistory']] },
   { sec: 'Stockroom', rows: ['bfreview', 'cages', 'adjust', 'daylist', 'srhistory'] },
 ];
 export const STRIP = {

@@ -271,3 +271,12 @@ form.li { margin: 0; }
 .mv .bdk-verbs .btn { flex: 1; justify-content: center; padding: 10px; font-size: 14px; }
 .mv .bdk-palacts .btn { flex: 1; justify-content: center; padding: 10px; }
 .mv .bdr-reasons { padding: 0 2px 8px; }
+
+/* Manifests: the library's actions row, the attach picker at Receiving. */
+.mfd-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 12px; }
+.mfd-acts select.ad-in { width: auto; min-width: 180px; }
+.bdr-manpick .list .li { gap: 10px; }
+.bdr-manpick .list .li .btn { margin-left: auto; flex: none; }
+.bdr-manup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.bdr-manup .cs-dim { flex: 1; min-width: 200px; font-size: 12.5px; }
+.mfc .mfc-items .mfc-it .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

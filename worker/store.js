@@ -26,11 +26,12 @@ import { initialState, apply, replay } from '../shared/reducers.js';
 import { validateEvent } from '../shared/validate.js';
 import { typeInfo, AREA_PROJECTIONS } from '../shared/catalogue.js';
 import { hasRole } from './auth.js';
-import { HttpError, json, fail } from './http.js';
+import { HttpError, json, fail, CORS } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS } from '../shared/records.js';
 
 const SNAPSHOT_EVERY = 1000;
+const MANIFEST_MAX = 8_000_000;
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
 const DELTA_LIMIT = 5000;     // above this gap a hello gets a snapshot instead of a delta
 
@@ -50,6 +51,7 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS snapshots (seq INTEGER PRIMARY KEY, state TEXT NOT NULL, at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS maps (version TEXT PRIMARY KEY, meta TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
+      CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
     `);
     this.state = null;
     this.storeNo = null;
@@ -92,6 +94,9 @@ export class StoreObject extends DurableObject {
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
+          if (url.pathname === '/manifest' && request.method === 'POST') return this.publishManifest(await request.json(), claims);
+          const man = url.pathname.match(/^\/manifest\/([\w-]{1,20})$/);
+          if (man) { const no = needArea(claims, 'backdock'); if (no) return no; return request.method === 'DELETE' ? this.removeManifest(man[1], claims) : this.manifestDoc(man[1]); }
           const life = url.pathname.match(/^\/life\/(\d{6,13})$/);
           if (life) { const no = needArea(claims, 'stockroom'); if (no) return no; return json(productLife(this.state, life[1])); }
           const hist = url.pathname.match(/^\/(history|export)\/([a-z]+)$/);
@@ -99,7 +104,7 @@ export class StoreObject extends DurableObject {
             if (!HISTORY_KINDS.includes(hist[2])) return fail(400, 'invalid_request', `kind must be one of ${HISTORY_KINDS.join(', ')}`);
             const no = needArea(claims, 'stockroom'); if (no) return no;
             const rows = historyRows(this.state, hist[2]);
-            if (hist[1] === 'export') return new Response(toCsv(rows), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${this.storeNo}-${hist[2]}.csv"` } });
+            if (hist[1] === 'export') return new Response(toCsv(rows), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${this.storeNo}-${hist[2]}.csv"`, ...CORS } });
             const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));
             return json({ kind: hist[2], total: rows.length, offset, limit, rows: rows.slice(offset, offset + limit) });
           }
@@ -183,6 +188,42 @@ export class StoreObject extends DurableObject {
     this.state.seq = cur.seq;
     this.sinceSnapshot += 1;
     return { id, ok: true, seq: cur.seq, event };
+  }
+
+  // ── manifests ─────────────────────────────────────────────────────────
+  // The DC report, parsed on the device, published whole (up to 8 MB) and
+  // indexed by a manifest.publish event so every device lists it; the
+  // document itself is read on demand. Needs the dock role.
+  publishManifest(doc, claims) {
+    if (!(claims.caps || []).includes('backdock')) throw new HttpError(403, 'not_entitled', 'backdock is not enabled for this store');
+    if (!hasRole(claims, ['dock', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'publishing a manifest needs the dock code');
+    if (!doc || doc.v !== 1 || doc.kind !== 'report') throw new HttpError(400, 'invalid_request', 'manifest must be v 1, kind report');
+    const manNo = String(doc.manNo || '').trim();
+    if (!/^[\w-]{1,20}$/.test(manNo)) throw new HttpError(400, 'invalid_request', 'manifest number missing or invalid');
+    const docStore = String(doc.storeNo || '').replace(/\D/g, '');
+    if (docStore && docStore !== String(this.storeNo)) throw new HttpError(409, 'wrong_store', `manifest is for store ${doc.storeNo}, not ${this.storeNo}`);
+    if (!Array.isArray(doc.consols) || !doc.consols.length || doc.consols.length > 500) throw new HttpError(400, 'invalid_request', 'manifest needs 1 to 500 consolidations');
+    const text = JSON.stringify(doc);
+    if (text.length > MANIFEST_MAX) throw new HttpError(413, 'payload_too_large', `manifest is over ${MANIFEST_MAX / 1_000_000} MB`);
+    const at = new Date().toISOString(), by = claims.device || (claims.owner ? 'owner' : '');
+    this.sql.exec('INSERT OR REPLACE INTO manifests (manNo, doc, at, by) VALUES (?, ?, ?, ?)', manNo, text, at, by);
+    const totalCartons = doc.consols.reduce((n, c) => n + (Number(c.cartons) || 0), 0), keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size;
+    const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.publish', entity: { manNo }, payload: { dcNo: doc.dcNo || '', despatch: doc.despatch || '', filename: String(doc.filename || '').slice(0, 80), consols: doc.consols.length, totalCartons, keycodes }, at, v: 1 };
+    const [r] = this.submit([ev], claims);
+    if (!r.ok) throw new HttpError(400, r.code, r.message);
+    return json({ ok: true, manNo, at, consols: doc.consols.length, totalCartons, keycodes, seq: r.seq }, 201);
+  }
+  manifestDoc(manNo) {
+    const row = this.sql.exec('SELECT doc FROM manifests WHERE manNo = ?', manNo).toArray()[0];
+    if (!row) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published (expired or removed)`);
+    return new Response(row.doc, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', ...CORS } });
+  }
+  removeManifest(manNo, claims) {
+    this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
+    const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.remove', entity: { manNo }, payload: {}, at: new Date().toISOString(), v: 1 };
+    const [r] = this.submit([ev], claims);
+    if (!r.ok) throw new HttpError(400, r.code, r.message);
+    return json({ ok: true, manNo });
   }
 
   // ── published maps ────────────────────────────────────────────────────

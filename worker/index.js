@@ -135,10 +135,10 @@ r.get('/v1/store/:no/life/:keycode', (req, env, _c, p) => anyStoreCall(req, env,
 r.get('/v1/store/:no/history/:kind', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/history/${p.kind}`, new URL(req.url).search));
 r.get('/v1/store/:no/export/:kind', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/export/${p.kind}`));
 
-// ── not built yet: named, never silent ────────────────────────────────────
-for (const [m, path] of [
-  ['POST', '/v1/store/:no/manifest'],
-]) r.add(m, path, () => fail(501, 'not_implemented', `${m} ${path} is on the build order but not built yet`));
+// ── manifests: the DC report published whole, read on demand ──────────────
+r.post('/v1/store/:no/manifest', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/manifest'));
+r.get('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));
+r.delete('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));
 
 // ── plumbing ──────────────────────────────────────────────────────────────
 export default {

@@ -29,3 +29,45 @@ export function running(t) { const out = {}; for (const p of pallets(t)) { const
 export const who = m => m.dnum || m.name || m.pid;
 export function grid(t) { const g = t?.grid || { rows: 4, cols: 7, rowLabels: 'ABCD' }; const labels = g.rowLabels || 'ABCDEFGH'; const refs = []; for (let r = 0; r < (g.rows || 4); r++) for (let c = 1; c <= (g.cols || 7); c++) refs.push(labels[r] + c); return { cols: g.cols || 7, refs }; }
 export const startable = p => p && (p.status === 'landed' || p.status === 'assigned' || p.status === 'paused');
+
+// ── manifests ──────────────────────────────────────────────────────────
+import { parseManifestSheets, manifestDoc, attachConsols } from '../../../shared/manifest.js';
+import { MICRO } from '../../data/micros.js';
+export function microDept(code) { const c = String(code || '').padStart(3, '0'); for (const [d, list] of Object.entries(MICRO)) if (list.some(x => x.startsWith(c + ' '))) return d; return ''; }
+export const manifestIndex = dock => Object.values(dock.manifests || {}).sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
+
+// SheetJS reads the .xls (Crystal export) and .xlsx; it loads on first use
+// from the CDN, since publishing a report is a desktop job with a network.
+let xlsxLoading = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (xlsxLoading) return xlsxLoading;
+  xlsxLoading = new Promise((resolve, reject) => {
+    const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload = () => resolve(window.XLSX); sc.onerror = () => { xlsxLoading = null; reject(new Error('the spreadsheet reader did not load. Check the connection and try again')); };
+    document.head.appendChild(sc);
+  });
+  return xlsxLoading;
+}
+export async function readManifestFile(file) {
+  const XLSX = await loadXLSX();
+  const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array', cellDates: false, raw: true });
+  const sheets = wb.SheetNames.map(name => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null }) }));
+  const parsed = parseManifestSheets(sheets);
+  if (!parsed.consols.length) throw new Error(parsed.diag || 'no consolidations found in that file');
+  return parsed;
+}
+// Read, ask for a manifest number when the report carries none, publish.
+export async function publishManifestFile(ctx, file) {
+  const parsed = await readManifestFile(file);
+  let manNo = parsed.manNo;
+  if (!/^[\w-]{1,20}$/.test(manNo)) { manNo = (prompt(`${file.name}: the report has no manifest number. Enter one:`, '') || '').trim(); if (!manNo) throw new Error('a manifest needs a number'); }
+  const doc = manifestDoc(parsed, { filename: file.name, by: ctx.session.current?.device || '', manNo });
+  const r = await ctx.api(`/v1/store/${ctx.storeNo}/manifest`, { method: 'POST', body: doc, timeoutMs: 60000 });
+  return { ...r, doc };
+}
+export async function attachManifest(ctx, truck, manNo) {
+  const doc = await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(manNo)}`);
+  await ctx.store.dispatch({ type: 'manifest.attach', entity: { truck }, payload: { manNo: doc.manNo, dcNo: doc.dcNo || '', despatch: doc.despatch || '', consols: attachConsols(doc) } });
+  return doc;
+}

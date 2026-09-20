@@ -78,6 +78,16 @@ export const backdockReducers = {
   },
 
   // ── Manifest ─────────────────────────────────────────────────────────
+  // The library index: a published report (its document lives on the
+  // worker, GET /manifest/:manNo) or one attached to a truck.
+  'manifest.publish'(s, e) {
+    const no = String(e.entity.manNo); if (!/^[\w-]{1,20}$/.test(no)) return reject('invalid_event', 'manifest number must be 1 to 20 letters, digits or dashes');
+    const p = e.payload || {}, cur = s.dock.manifests[no];
+    s.dock.manifests[no] = { manNo: no, dcNo: p.dcNo || '', despatch: p.despatch || '', truck: cur?.truck || null, totalCartons: Number(p.totalCartons) || 0, consols: Number(p.consols) || 0, keycodes: Number(p.keycodes) || 0, filename: String(p.filename || '').slice(0, 80), by: e.actor?.device || null, publishedAt: e.at };
+    capManifests(s);
+    return null;
+  },
+  'manifest.remove'(s, e) { delete s.dock.manifests[String(e.entity.manNo)]; return null; },
   // consols: [{ id (last 9 digits), cons (18–22 digits), cartons, dept, mix, desc, items }]
   'manifest.attach'(s, e) {
     const t = truck(s, e); if (t.code) return t;
@@ -90,9 +100,9 @@ export const backdockReducers = {
       consols.push({ id: cons.slice(-9), cons, cartons: Number(c.cartons) || 0, dept: c.dept || '', mix: Array.isArray(c.mix) ? c.mix : [], desc: c.desc || '', items: Array.isArray(c.items) ? c.items.slice(0, 250) : [] });
     }
     t.manifest = { manNo: String(p.manNo), dcNo: p.dcNo || '', despatch: p.despatch || '', consols, attachedAt: e.at, by: e.actor?.device || null };
-    s.dock.manifests[String(p.manNo)] = { manNo: String(p.manNo), dcNo: p.dcNo || '', despatch: p.despatch || '', truck: e.entity.truck, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), consols: consols.length, publishedAt: e.at };
-    const keys = Object.keys(s.dock.manifests);
-    if (keys.length > MANIFEST_INDEX_CAP) for (const k of keys.sort((a, b) => s.dock.manifests[a].publishedAt < s.dock.manifests[b].publishedAt ? -1 : 1).slice(0, keys.length - MANIFEST_INDEX_CAP)) delete s.dock.manifests[k];
+    const cur = s.dock.manifests[String(p.manNo)] || {};
+    s.dock.manifests[String(p.manNo)] = { ...cur, manNo: String(p.manNo), dcNo: p.dcNo || cur.dcNo || '', despatch: p.despatch || cur.despatch || '', truck: e.entity.truck, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), consols: consols.length, keycodes: cur.keycodes || new Set(consols.flatMap(c => c.items.map(i => i.k))).size, publishedAt: cur.publishedAt || e.at, attachedAt: e.at };
+    capManifests(s);
     return null;
   },
 
@@ -219,6 +229,7 @@ export const backdockReducers = {
 };
 
 // ── helpers ────────────────────────────────────────────────────────────
+function capManifests(s) { const keys = Object.keys(s.dock.manifests); if (keys.length > MANIFEST_INDEX_CAP) for (const k of keys.sort((a, b) => s.dock.manifests[a].publishedAt < s.dock.manifests[b].publishedAt ? -1 : 1).slice(0, keys.length - MANIFEST_INDEX_CAP)) delete s.dock.manifests[k]; }
 function bay(e) { return String(e.entity.bay).toUpperCase(); }
 function uniq(a) { return Array.isArray(a) ? [...new Set(a.map(String))] : []; }
 function autoMins(cartons) { return cartons ? Math.max(1, Math.round(cartons * STD_MINS_PER_CARTON)) : null; }

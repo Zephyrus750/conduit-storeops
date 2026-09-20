@@ -96,7 +96,8 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`) | store token or owner, stockroom entitled | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
-| manifest | | `501 not_implemented`, named |
+| `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
+| `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `invalid_event`, `duplicate` (a success),

@@ -251,7 +251,7 @@ function show(id, arg) {
   // A fresh content element each time, so a view's listeners die with it.
   const fresh = content.cloneNode(false); content.replaceWith(fresh); content = fresh;
   const cur = client.session.current;
-  const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, storage: client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
+  const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, api: (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token })), storage: client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
   const useMobile = mobile && typeof view.mobile === 'function';
   content.classList.toggle('mv', useMobile);
   content.innerHTML = useMobile ? view.mobile(ctx) : view.desktop(ctx);
