@@ -12,7 +12,7 @@ const row = (t, d, ctl) => `<div class="stg-item"><div><b>${t}</b><span>${d}</sp
 const tgl = (on, act) => `<span class="tgl${on ? ' on' : ''}" data-act="${act}"></span>`;
 
 export default {
-  id: 'settings', title: 'Settings and utilities', icon: 'm-settings',
+  id: 'settings', title: 'Settings and utilities', rail: 'Settings', icon: 'm-settings',
   desktop(ctx) {
     const NAV = [['general', 'General', 'settings'], ['appearance', 'Appearance', 'star'], ['_', 'SUPPORT'], ['about', 'About', 'file']];
     const nav = `<div class="stg-nav">${NAV.map(n => n[0] === '_' ? `<div class="stg-grp">${n[1]}</div>` : `<button class="stg-row${n[0] === sec ? ' on' : ''}" data-act="sec" data-sec="${n[0]}">${ic(n[2])}${n[1]}</button>`).join('')}<div class="stg-ver">Conduit ${VERSION} · ${ctx.store ? 'store ' + esc(ctx.storeNo) : 'owner'} · signed in on this device</div></div>`;

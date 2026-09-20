@@ -112,10 +112,10 @@ async function enterAdmin() {
 function buildAdminRail() {
   const h = s => !['floor', 'stockroom', 'backdock'].some(a => s.entitlements?.[a]) ? 'leg' : s.status === 'live' ? 'ok' : s.status === 'migrating' ? 'mig' : 'leg';
   $('#radm').innerHTML = `<div class="radm-top"><span class="own">Owner</span><b>Admin console</b></div>` +
-    `<div class="rsec">Stores</div>` + (admin.stores.map(s => `<button class="rrow ad" data-view="adminstore" data-no="${esc(s.no)}"><i class="hdot ${h(s)}"></i><span class="mono">${esc(s.no)}</span>${esc(s.name)}</button>`).join('') || '<div class="rrow soon">No stores yet</div>') +
-    `<div class="rsec">System</div>` + ADMIN_RAIL.map(r => `<button class="rrow" data-view="${r[0]}">${ic(r[1])}${r[2]}</button>`).join('') +
-    `<button class="rrow" data-view="settings">${ic('m-settings')}Settings</button>` +
-    `<div class="railfoot"><button class="rrow" data-shell-act="signout">${ic('lock')}Sign out of owner</button></div>`;
+    `<div class="rsec">Stores</div>` + (admin.stores.map(s => `<button class="rrow ad" data-view="adminstore" data-no="${esc(s.no)}"><i class="hdot ${h(s)}"></i><span class="mono">${esc(s.no)}</span><span class="rl">${esc(s.name)}</span></button>`).join('') || '<div class="rrow soon">No stores yet</div>') +
+    `<div class="rsec">System</div>` + ADMIN_RAIL.map(r => `<button class="rrow" data-view="${r[0]}">${ic(r[1])}<span class="rl">${r[2]}</span></button>`).join('') +
+    `<button class="rrow" data-view="settings">${ic('m-settings')}<span class="rl">Settings</span></button>` +
+    `<div class="railfoot"><button class="rrow" data-shell-act="signout">${ic('lock')}<span class="rl">Sign out of owner</span></button></div>`;
   markRail();
 }
 
@@ -205,8 +205,8 @@ document.addEventListener('mouseover', e => { const b = e.target.closest?.('.rro
 document.addEventListener('mouseout', e => { const b = e.target.closest?.('.rrow[data-view]'); if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) railTip(b, false); });
 document.addEventListener('click', () => railTip(null, false));
 function buildRail() {
-  const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}${v.title}</button>`;
-  $('#railscroll').innerHTML = RAIL.map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? rows(VIEWS[r]) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}${r[1]}<span class="badge soon">Soon</span></button>`).join('')).join('');
+  const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}<span class="rl">${v.rail || v.title}</span></button>`;
+  $('#railscroll').innerHTML = RAIL.map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? rows(VIEWS[r]) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">Soon</span></button>`).join('')).join('');
 }
 function setWs(w) {
   ws = w; $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');

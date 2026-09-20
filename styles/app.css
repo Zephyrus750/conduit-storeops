@@ -165,8 +165,13 @@ form.li { margin: 0; }
 .ad-depts .ad-deptr .dep { font-size: 11px; padding: 2px 7px; justify-self: start; }
 .ad-depts .ad-deptr b { font-variant-numeric: tabular-nums; }
 
-/* Rail 5% narrower than the showcase's 232px. */
-.app { grid-template-columns: 220px minmax(0, 1fr); }
+/* Rail 50px narrower than the showcase's 232px. */
+.app { grid-template-columns: 182px minmax(0, 1fr); }
+.rail { padding-left: 10px; padding-right: 10px; }
+.rrow { gap: 9px; padding: 8px 8px; font-size: 13.5px; }
+.rrow .rl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rrow .soon { margin-left: 6px; }
+.app.railmin .rrow .rl { display: none; }
 
 /* The map stage owns its touches: two fingers pinch and pan the map, and
    the page does not zoom with them. */
