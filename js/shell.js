@@ -165,6 +165,45 @@ const friendly = (err, wrong = 'Wrong PIN.') => err.code === 'locked_out' ? `Too
 const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M22 10.2a8 8 0 1 0 0 11.6" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round"/><circle cx="16.5" cy="16" r="2.8" fill="#fff"/></svg>`;
 
 // ── rail, strip, status ───────────────────────────────────────────────
+// What each rail row does, shown beside it on hover (the showcase's rail
+// tips; Vector's rail had the same).
+const RDESC = {
+  dashboard: 'Today’s numbers across the three areas, the operations register and the dock at a glance.',
+  map: 'The live store map: shelves, bays, departments and what sits on each shelf.',
+  picklist: 'Items to fetch for the floor, routed as the shortest walk from the front doors.',
+  refresh: 'Scan shelves against this week’s focus departments and track the weekly target.',
+  labelint: 'Check every numbered micro-department once a cycle for wrong labels and tickets.',
+  emergency: 'Exits, extinguishers, first aid, assembly point and service dates on the map.',
+  maintenance: 'Log store issues on the map, track severity, contractors and completion.',
+  stocktake: 'Run a count session: shelves counted, verified and the department tallies.',
+  receiving: 'The dock board: pallets landed, decanting live, progress to the clear-by goal.',
+  manifests: 'Published DC manifests and which pallet carries any keycode.',
+  bfreview: 'Today’s backfill board: compare scans to the report, mark locations ready.',
+  cages: 'Every cage on the stockroom and dock levels, what it holds and when it was last seen.',
+  adjust: 'Below-zero stock evidence for the office to adjust in the official system.',
+  daylist: 'The posted walk for the day, split by walker, with spot-checks flagged.',
+  srhistory: 'The permanent archive of every location marked ready and what it held.',
+  planner: 'The week ahead: which trucks land when, their teams and pre-staged manifests.',
+  settings: 'Updates, account, appearance, storage, departments, feedback and help.',
+  admin: 'Every registered store: health, areas live or on legacy, devices and the last event.',
+  adminstore: 'This store’s console: overview, events, devices, access, map and migration.',
+  adminreg: 'Register a store: number, name, region, PIN, crew codes and which areas it may use.',
+  adminactions: 'Everything done from the owner console, newest first.',
+};
+let rtip = null;
+function railTip(b, show) {
+  if (!show) { if (rtip) rtip.classList.remove('on'); return; }
+  const v = b.getAttribute('data-view'), fr = $('.frame'); if (!fr) return;
+  const name = b.dataset.no ? `${b.dataset.no} ${b.textContent.replace(b.dataset.no, '').trim()}` : (VIEWS[v]?.title || b.textContent.trim());
+  const d = RDESC[v] || ''; if (!d) return railTip(b, false);
+  if (!rtip || rtip.parentNode !== fr) { if (rtip) rtip.remove(); rtip = document.createElement('div'); rtip.className = 'rtip'; fr.appendChild(rtip); }
+  rtip.innerHTML = `<b>${esc(name)}</b><span>${esc(d)}</span>`;
+  const r = b.getBoundingClientRect(), fb = fr.getBoundingClientRect(), sc = fb.width / fr.offsetWidth || 1;
+  rtip.style.left = ((r.right - fb.left) / sc + 10) + 'px'; rtip.style.top = ((r.top - fb.top) / sc + r.height / (2 * sc)) + 'px'; rtip.classList.add('on');
+}
+document.addEventListener('mouseover', e => { const b = e.target.closest?.('.rrow[data-view]'); if (b && !b.disabled) railTip(b, true); });
+document.addEventListener('mouseout', e => { const b = e.target.closest?.('.rrow[data-view]'); if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) railTip(b, false); });
+document.addEventListener('click', () => railTip(null, false));
 function buildRail() {
   const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}${v.title}</button>`;
   $('#railscroll').innerHTML = RAIL.map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? rows(VIEWS[r]) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}${r[1]}<span class="badge soon">Soon</span></button>`).join('')).join('');

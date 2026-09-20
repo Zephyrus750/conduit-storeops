@@ -135,3 +135,32 @@ form.li { margin: 0; }
 .selshelf .acts2 .btn { padding: 10px 8px; font-size: 13px; gap: 7px; }
 .selshelf .acts2 .btn.primary { grid-column: 1 / -1; }
 .selshelf .acts2 .btn svg.i { width: 18px; height: 18px; }
+
+/* Shelf badges: one per shelf name over the whole run, shown zoomed out
+   and handing over to the per-module labels as the map zooms in. */
+.map.real .shelf-badges { opacity: var(--badge-opacity, 1); pointer-events: none; transition: opacity .15s; }
+.map.real .shelf-badges .sb-bg { rx: 8; ry: 8; fill-opacity: .96; stroke: #fff; stroke-opacity: .9; stroke-width: 1.5; }
+.map.real .shelf-badges .sb { font-family: Inter, system-ui, sans-serif; font-size: 24px; font-weight: 800; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; }
+.map.real.mono .shelf-badges .sb-bg { fill: #4B5563 !important; }
+.map.real .shelf-label { opacity: var(--label-opacity, 1); transition: opacity .15s; }
+
+/* Map bar: floor switch, and the sub-department row under a chosen group. */
+.mapbar .floorseg button, .admap .floorseg button { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 700; }
+.mapbar .subchips { flex-basis: 100%; padding-top: 2px; }
+.mapbar .subchips .chip b { font-weight: 800; margin-right: 1px; }
+.mapleg .crumbx [data-crumbdept] .dep { font-size: 10.5px; padding: 1px 6px; margin: 0 2px; }
+
+/* Admin console: the published map drawn in the card, and shelving counts. */
+.admap { margin-top: 14px; }
+.admap .admap-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); }
+.admap .admap-bar .zoom { margin-left: auto; display: flex; gap: 6px; }
+.admap .mapstage { height: 400px; min-height: 0; }
+.ad-depts { margin-top: 14px; font-size: 13px; }
+.ad-depts .ad-deptsh { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0 8px; border-bottom: 1px solid var(--line); }
+.ad-depts .ad-deptsh b { font-size: 14px; }
+.ad-depts .ad-deptsh span, .ad-depts .ad-deptg span { color: var(--dim); }
+.ad-depts .ad-deptg { display: flex; justify-content: space-between; padding: 10px 0 4px; font-size: 11px; letter-spacing: .06em; }
+.ad-depts .ad-deptg b { color: var(--ink2); }
+.ad-depts .ad-deptr { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
+.ad-depts .ad-deptr .dep { font-size: 11px; padding: 2px 7px; justify-self: start; }
+.ad-depts .ad-deptr b { font-variant-numeric: tabular-nums; }

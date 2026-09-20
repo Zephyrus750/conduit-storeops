@@ -1,7 +1,7 @@
 // Store map and the selected shelf card. Also the phone's Home: the map with
 // the selected shelf beneath it.
 
-import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, weekId, fmtTime, cycleId } from '../ui.js';
+import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtTime, cycleId } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
 
 let selected = null;
@@ -46,7 +46,7 @@ export default {
     const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { selected = info.id; paint(); } } });
     bindMapChrome(root, map);
     if (ctx.arg?.select) { map.select(selected); map.zoomTo(selected); }
-    if (ctx.arg?.dept) { const group = { h1: 'home', h2: 'home', h3: 'home', h4: 'home', c1: 'clothing', c2: 'clothing', c3: 'clothing', c4: 'clothing', k1: 'kids', k2: 'kids', k3: 'kids', k4: 'kids' }[ctx.arg.dept]; root.querySelector(`[data-mapgroup="${group || ctx.arg.dept}"]`)?.click(); }
+    if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
     const paint = () => {
       const host = $('#selhost', root); if (host) host.innerHTML = selCard(ctx, map, selected);
       const mv = $('#mvsel', root); if (mv) mv.innerHTML = mvSel(ctx, map, selected);

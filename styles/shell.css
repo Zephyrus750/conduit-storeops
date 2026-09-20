@@ -667,6 +667,7 @@ svg.map.real{display:block;width:100%;height:auto;background:var(--panel)}
 .swp-row.lost .swp-ic,.swp-row.lost .st{color:var(--red)}
 .mfl .pt3,.mfd .pt3,.hist-det .pt3,.cs-list .pt3,.pdl .pt3{display:flex;align-items:center;gap:10px}
 .mfl .pt3>.cs-dim,.mfd .pt3>.cs-dim,.hist-det .pt3>.cs-dim,.pdl .pt3>.cs-dim{margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0;font-size:12px}
+.mfl{padding:12px 14px}
 .mfl-row.on{background:var(--accent-soft)}
 .mfl-row>svg.i{width:16px;height:16px;color:var(--faint);transform:rotate(-90deg)}
 .mfl-top .cs-dim{display:inline-flex;align-items:center;gap:4px}
@@ -1160,7 +1161,11 @@ svg.map.real{display:block;width:100%;height:auto;background:var(--panel)}
 .frame.rail-deep .brand .vmark rect{fill:var(--accent)}
 .frame.rail-deep .brand .vmark path{stroke:#fff}
 .frame.rail-deep .brand .vmark circle{fill:#fff}
+.rtip{position:absolute;z-index:30;display:none;transform:translateY(-50%);max-width:260px;background:var(--ink);color:#fff;border-radius:10px;padding:8px 11px;font-size:12px;line-height:1.4;box-shadow:0 10px 30px -12px rgba(17,24,39,.5);pointer-events:none}
 .rtip.on{display:block}
+.rtip b{display:block;font-size:13px;font-weight:700;margin-bottom:2px}
+.rtip span{color:rgba(255,255,255,.78)}
+.rtip::before{content:"";position:absolute;left:-5px;top:50%;transform:translateY(-50%);border:5px solid transparent;border-right-color:var(--ink);border-left:0}
 .markc.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .mk-row .vmark{width:30px;height:30px}
 .mk-row .bname{font-size:20px;font-weight:800;letter-spacing:-.02em}

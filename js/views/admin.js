@@ -7,8 +7,9 @@
 // Reads are cached per store while the console is open; a Refresh button
 // or any write clears the relevant cache.
 
-import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName } from '../ui.js';
 import { parseMapFile, renderMap } from '../../shared/maprender.js';
+import { mountMap, bindMapChrome } from '../map.js';
 
 const AREAS = ['floor', 'stockroom', 'backdock'];
 const AREA_NAME = { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock', store: 'Store', owner: 'Owner' };
@@ -33,6 +34,7 @@ async function load(ctx, no, keys) {
   if (keys.includes('devices') && !c.devices) calls.push(ctx.admin.api(`/v1/admin/stores/${no}/devices`).then(r => { c.devices = r.devices || {}; }));
   if (keys.includes('tail') && !c.tail) calls.push(ctx.admin.api(`/v1/admin/stores/${no}/tail?limit=300`).then(r => { c.tail = r.events || []; c.seq = r.seq; }));
   if (keys.includes('map') && c.map === undefined) calls.push(ctx.admin.api(`/v1/store/${no}/map`).then(r => { c.map = r; }).catch(e => { c.map = e.status === 404 ? null : { error: e.message }; }));
+  if (keys.includes('mapdoc') && c.mapdoc === undefined) calls.push(ctx.admin.api(`/v1/store/${no}/map/latest`).then(r => { c.mapdoc = r; }).catch(() => { c.mapdoc = null; }));
   if (keys.includes('snap') && !c.snap) calls.push(ctx.admin.api(`/v1/admin/stores/${no}/snapshot?areas=floor,stockroom,backdock,store`).then(r => { c.snap = r.state; c.seq = r.seq; }).catch(() => { c.snap = {}; }));
   if (!calls.length) return false;
   await Promise.all(calls); return true;
@@ -99,16 +101,44 @@ const storeView = {
   },
   mount(ctx, root) {
     if (!st.no) return [];
-    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map'] : ['rec', 'devices', 'snap'];
+    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map', 'mapdoc'] : ['rec', 'devices', 'snap'];
     load(ctx, st.no, keys).then(did => { if (did) ctx.rerender(); }).catch(fail);
     root.addEventListener('click', e => onStoreClick(e, ctx));
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="filter"]')) { st.filter = e.target.value; const t = $('#adTail', root); if (t) t.innerHTML = tailRows(forStore(st.no)); } });
     root.addEventListener('submit', e => { e.preventDefault(); const f = e.target.getAttribute('data-form'); if (f === 'rotate') saveRotate(ctx, e.target); else if (f === 'edit') saveEdit(ctx, e.target); else if (f === 'publish') publishMap(ctx, e.target); else if (f === 'import') runImport(ctx, e.target, e.submitter?.dataset.dry === '1'); });
     root.addEventListener('change', e => { if (e.target.matches('input[type="file"][data-floor]')) mapFileChosen(e.target); });
+    const stage = $('#adMapStage', root), doc = forStore(st.no).mapdoc;
+    if (stage && doc) { try { const m = mountMap(stage, { doc, badges: true }); bindMapChrome(stage.closest('.card'), m); } catch (e) { stage.innerHTML = `<p class="lbl" style="padding:14px">Could not draw the map: ${esc(e.message)}</p>`; } }
     return [];
   },
 };
+
+// Shelves per department in a published map, grouped as the store's
+// department list groups them. Counts are shelf groups (modules), the same
+// number the floor rows show.
+function deptShelving(doc, info) {
+  const depts = (info?.departments?.length ? info.departments : doc.departments) || [];
+  const counts = {}; let total = 0;
+  for (const f of doc.floors || []) for (const m of String(f.svg || '').matchAll(/<g class="shelf-group"[^>]*data-dept="([^"]*)"/g)) { const d = m[1].toLowerCase(); if (!d) continue; counts[d] = (counts[d] || 0) + 1; total++; }
+  const groups = new Map();
+  const add = (parent, row) => { if (!groups.has(parent)) groups.set(parent, []); groups.get(parent).push(row); };
+  for (const d of depts) { const id = String(d.id || '').toLowerCase(); if (!id) continue; add(d.parent ? String(d.parent).toLowerCase() : 'other', { id, name: deptCommonName(d), color: d.color || '#64748B' }); }
+  for (const id of Object.keys(counts)) if (!depts.some(d => String(d.id || '').toLowerCase() === id)) add('other', { id, name: id, color: '#64748B' });
+  return { total, counts, groups };
+}
+function shelvingHtml(doc, info) {
+  const { total, counts, groups } = deptShelving(doc, info);
+  if (!total) return '';
+  const badge = (id, color) => `<span class="dep" style="background:${esc(color)}">${esc(id.toUpperCase())}</span>`;
+  let out = `<div class="ad-depts"><div class="ad-deptsh"><b>Shelving by department</b><span>${total} shelves</span></div>`;
+  for (const [gid, rows] of groups) {
+    const n = rows.reduce((a, r) => a + (counts[r.id] || 0), 0); if (!n) continue;
+    out += `<div class="ad-deptg"><b>${esc(gid.toUpperCase())}</b><span>${n} shelves</span></div>`;
+    for (const r of rows) if (counts[r.id]) out += `<div class="ad-deptr">${badge(r.id, r.color)}<span>${esc(r.name)}</span><b>${counts[r.id]}</b></div>`;
+  }
+  return out + '</div>';
+}
 
 function overTab(rec, c) {
   const devs = Object.entries(c.devices || {}), online = devs.filter(([, d]) => d.online !== false && Date.now() - new Date(d.last) < 10 * 60000).length;
@@ -174,11 +204,14 @@ function mapTab(rec, c) {
   const m = c.map;
   const cur = m === undefined ? `<div class="ohint">Loading…</div>` : m === null ? `<p class="lbl">No map has been published for this store. Devices show a placeholder until one is.</p>` : m.error ? `<p class="lbl">Could not read the map: ${esc(m.error)}</p>` :
     `<div class="ad-kv"><span>Version</span><b class="mono">${esc(m.version)}</b><span>Published</span><b>${when(m.at)} · ${m.by?.owner ? 'owner' : esc(m.by?.device || '')}</b><span>Floors</span><b>${(m.floors || []).map(f => `${esc(f.name || f.id)} · ${f.shelves ?? '?'} shelves · ${Math.round((f.bytes || 0) / 1024)} KB`).join('<br>')}</b><span>Departments</span><b>${(m.departments || []).length || 'none in the document'}</b><span>Earlier versions</span><b>${(m.versions || []).filter(v => v.version !== m.version).map(v => `<span class="mono">${esc(v.version)}</span> ${fmtTime(v.at)}`).join(' · ') || '—'}</b></div>`;
+  const doc = c.mapdoc, floors = doc?.floors || [];
+  const preview = !m || !m.version ? '' : doc === undefined ? `<div class="ohint" style="margin-top:12px">Loading the map…</div>` : !doc ? '' :
+    `<div class="mapbox admap"><div class="admap-bar">${floors.length > 1 ? `<div class="seg2 floorseg">${floors.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}">${esc(f.name || f.id)}</button>`).join('')}</div>` : `<span class="cs-dim">${esc(floors[0]?.name || 'Ground')}</span>`}<div class="zoom"><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span></div></div><div class="mapstage" id="adMapStage"></div></div>` + shelvingHtml(doc, m);
   const next = m && m.version ? bump(m.version) : '1';
   const form = `<form class="card" data-form="publish"><div class="ch"><h3>Publish a map</h3><span class="cs-dim">the Map Editor's export, or rendered floor SVGs</span></div><div class="ad-grid2">${field('Version', inp('version', st.pubVersion ?? next, 'e.g. 4.4', 'mono', 'required pattern="[\\w.\\-]{1,32}"'), 'must be new; devices switch to it on their next sync')}${field('Map name', inp('name', rec.name, 'e.g. Busselton'))}</div>` +
     `<div class="ad-grid2" style="margin-top:12px">${field('Map file', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".js,.json,.svg,text/javascript,application/json,image/svg+xml" data-floor="ground" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'the editor\'s .js export (what ShelfSearcher read) or its .json save: every floor in it is rendered and published. A rendered ground-floor .svg still works.')}${field('Stockroom floor SVG (optional)', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="stockroom" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'only with an .svg map file; an editor export carries its own floors')}</div>` +
     `<div class="si-err" id="pubErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit">${ic('check')}Publish</button></div><p class="lbl">Publishing writes the document to the store and logs a <span class="mono">map.publish</span> event with your owner id. Every signed-in device downloads the new version once and keeps it offline.</p></form>`;
-  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3><span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}</div>${form}</div>`;
+  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3><span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}${preview}</div>${form}</div>`;
 }
 const bump = v => { const m = String(v).match(/^(.*?)(\d+)$/); return m ? m[1] + (Number(m[2]) + 1) : v + '.1'; };
 // A chosen map file: an editor export is parsed and rendered here in the
