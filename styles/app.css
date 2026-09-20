@@ -165,12 +165,12 @@ form.li { margin: 0; }
 .ad-depts .ad-deptr .dep { font-size: 11px; padding: 2px 7px; justify-self: start; }
 .ad-depts .ad-deptr b { font-variant-numeric: tabular-nums; }
 
-/* Rail 50px narrower than the showcase at each of its widths: 232px
+/* Rail 10px narrower than the showcase at each of its widths: 232px
    normally, 300px on screens 1600px and up, 200px at half-screen. Rows
    keep the showcase's size at each width; a label that still does not fit
    trims with an ellipsis rather than pushing its badge out. */
 @container shell (min-width: 1101px) {
-  .app { grid-template-columns: 182px minmax(0, 1fr); }
+  .app { grid-template-columns: 222px minmax(0, 1fr); }
   .rail { padding-left: 10px; padding-right: 10px; }
   .rrow { gap: 9px; padding: 8px 8px; }
 }
@@ -178,12 +178,12 @@ form.li { margin: 0; }
 .rrow .soon { margin-left: 6px; }
 .app.railmin .rrow .rl { display: none; }
 @container shell (min-width: 1600px) {
-  .app { grid-template-columns: 250px minmax(0, 1fr); }
+  .app { grid-template-columns: 290px minmax(0, 1fr); }
   .rail { padding-left: 14px; padding-right: 14px; }
   .rrow { gap: 12px; padding: 8px 10px; }
 }
 @container shell (min-width: 601px) and (max-width: 1100px) {
-  .app { grid-template-columns: 150px minmax(0, 1fr); }
+  .app { grid-template-columns: 190px minmax(0, 1fr); }
 }
 
 /* The map stage owns its touches: two fingers pinch and pan the map, and
@@ -280,3 +280,31 @@ form.li { margin: 0; }
 .bdr-manup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 .bdr-manup .cs-dim { flex: 1; min-width: 200px; font-size: 12.5px; }
 .mfc .mfc-items .mfc-it .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Map bar on one line: the find box gives way, the department buttons
+   scroll sideways if they must, and every control shares the 32px
+   height and border of the zoom buttons. Sub-department buttons sit in
+   their own row beneath. */
+.mapbar { flex-wrap: nowrap; gap: 8px; }
+.mapbar .search { flex: 0 1 260px; min-width: 150px; }
+.mapbar .legchips { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
+.mapbar .legchips::-webkit-scrollbar { display: none; }
+.mapbar .legchips .chip { flex: none; height: 32px; box-sizing: border-box; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink2); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.mapbar .legchips .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mapbar .floorseg { flex: none; height: 32px; box-sizing: border-box; padding: 2px; border-radius: 9px; background: var(--panel); }
+.mapbar .floorseg button { height: 26px; padding: 0 10px; border-radius: 7px; }
+.mapbar .zoom { flex: none; margin-left: auto; }
+.mapbar.mapsub { padding-top: 0; margin-top: -4px; }
+.mapbar.mapsub .legchips .chip b { font-weight: 800; margin-right: 2px; }
+
+/* Anything that acts on a click shows the hand. */
+button:not(:disabled), a[data-view], a[data-go], [data-act], [data-go], [data-view]:not(input), [data-zoom], [data-key], [data-mapgroup], [data-mapdept], [data-mapfloor], [data-mapfloor-next], .ibtn, .rrow:not(:disabled), .go, .open, .chip[data-act], .mfl-row, .trk, .bdk-sq, .hist-row, .mv-tile, .orow, .li[data-act], .row[data-act], .ad-row[data-act], .tst[data-act], label.btn, .sw2, .pal i, .er { cursor: pointer; }
+button:disabled, .rrow.soon { cursor: default; }
+
+/* Title-bar header (the header at the top): the view name only, left,
+   with a plain larger icon and no subtext. */
+.frame.hdr-title .top .vh .sub, .frame.hdr-title .top .vh .greet { display: none; }
+.frame.hdr-title .top .vh .vic { width: auto; height: auto; background: none !important; border-radius: 0; color: var(--accent); }
+.frame.hdr-title .top .vh .vic svg.i { width: 30px; height: 30px; stroke-width: 1.7; }
+.frame.hdr-title .top .vh h2 { font-size: 24px; }
+.frame.bars-strong.hdr-title .top .vh .vic { color: #fff; }

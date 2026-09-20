@@ -21,9 +21,9 @@ export function parseFloors(doc) {
     const m = /^\s*<svg\b([^>]*)>([\s\S]*)<\/svg>\s*$/i.exec(f.svg || ''); if (!m) continue;
     const vb = (/viewBox="([^"]+)"/.exec(m[1]) || [])[1] || '0 0 100 100';
     let name = String(f.name || f.id || `Floor ${i + 1}`); if (seen[name]) name += ' ' + (++seen[name]); else seen[name] = 1;
-    out.push({ id: String(f.id || 'f' + i), name, type: f.type === 'boh' ? 'boh' : 'foh', vb, inner: m[2] });
+    out.push({ id: String(f.id || 'f' + i), name, type: f.type === 'boh' ? 'boh' : 'foh', level: Number(f.level) || 0, vb, inner: m[2] });
   }
-  return out;
+  return out.sort((a, b) => (a.type === b.type ? 0 : a.type === 'foh' ? -1 : 1) || a.level - b.level);
 }
 export function mapInfo() { return mapMeta; }
 export function hasMap() { return floors.length > 0; }
@@ -104,7 +104,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   const fl = doc ? parseFloors(doc) : floors;
   let cur = fl.find(f => f.type === 'foh') || fl[0];
   stage.innerHTML = cur
-    ? `<svg class="map real" viewBox="${cur.vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${fl.map(f => `<g class="mfl" data-fid="${esc(f.id)}" data-ftype="${f.type}" style="${f === cur ? '' : 'visibility:hidden;pointer-events:none'}">${f.inner}</g>`).join('')}</svg>`
+    ? `<svg class="map real" viewBox="${cur.vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${fl.map(f => `<g class="mfl" data-fid="${esc(f.id)}" data-ftype="${f.type}" style="${f === cur ? '' : 'display:none'}">${f.inner}</g>`).join('')}</svg>`
     : PLACEHOLDER;
   const svg = stage.querySelector('svg.map.real');
   if (mono) svg.classList.add('mono');
@@ -138,20 +138,21 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     floorId() { return cur?.id; },
     floor(id) {
       const f = fl.find(x => x.id === id); if (!f || f === cur) return false;
-      for (const el of svg.querySelectorAll('.mfl')) { const on = el.getAttribute('data-fid') === f.id; el.style.visibility = on ? '' : 'hidden'; el.style.pointerEvents = on ? '' : 'none'; }
+      for (const el of svg.querySelectorAll('.mfl')) el.style.display = el.getAttribute('data-fid') === f.id ? '' : 'none';
       cur = f; vb0 = f.vb; api.fit();
       stage.dispatchEvent(new CustomEvent('mapfloor', { detail: { id: f.id, name: f.name, type: f.type } }));
       return true;
     },
     // Zoom to the shelves of one or more departments: switches to the floor
     // holding most of them, dims the rest, and says what it found.
-    zoomDept(codes) {
+    zoomDept(codes) { return api.zoomDeptOn(codes, null); },
+    zoomDeptOn(codes, floorId) {
       const want = (codes || []).map(c => String(c).toLowerCase());
       if (!want.length) { for (const g of $$('.shelf-group[data-dept]', svg)) g.style.opacity = ''; api.fit(); return null; }
       const perFloor = new Map();
       for (const g of $$('.shelf-group[data-dept]', svg)) { if (!want.includes((g.getAttribute('data-dept') || '').toLowerCase())) continue; const fid = g.closest('.mfl')?.getAttribute('data-fid'); perFloor.set(fid, (perFloor.get(fid) || 0) + 1); }
-      const best = [...perFloor.entries()].sort((a, b) => b[1] - a[1])[0];
-      if (!best) return { shelves: 0, floor: cur?.name, depts: want };
+      const best = floorId && perFloor.has(floorId) ? [floorId, perFloor.get(floorId)] : [...perFloor.entries()].sort((a, b) => b[1] - a[1])[0];
+      if (!best) return { shelves: 0, floor: cur?.name, depts: want, floors: [] };
       api.floor(best[0]);
       let bb = null; const depts = new Set();
       for (const g of $$('.shelf-group[data-dept]', svg)) {
@@ -169,7 +170,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
         if (W / H < ar) { const nw = H * ar; x0 -= (nw - W) / 2; W = nw; } else { const nh = W / ar; y0 -= (nh - H) / 2; H = nh; }
         api.setVb([x0, y0, W, H]); svg.classList.add('zoomed');
       }
-      return { shelves: best[1], floor: cur?.name, floorType: cur?.type, depts: [...depts], total: [...perFloor.values()].reduce((a, b) => a + b, 0) };
+      return { shelves: best[1], floor: cur?.name, floorType: cur?.type, depts: [...depts], total: [...perFloor.values()].reduce((a, b) => a + b, 0), floors: [...perFloor.entries()].map(([id, n]) => ({ id, name: fl.find(x => x.id === id)?.name || id, shelves: n })) };
     },
     zoomBy(f, cx, cy) {
       const v = api.vb(), r = svg.getBoundingClientRect();
@@ -335,13 +336,14 @@ export function mapbar() {
   for (const [label, icon, ids] of DEPT_GROUPS) { if (label === 'Other') for (const id of ids) chips.push([DEPT_NAME[id] || id, { checkouts: 'bag', flex: 'flame', stockroom: 'box' }[id] || 'tag', id]); else chips.push([label, icon, label.toLowerCase()]); }
   const fls = mapFloors(), floorSeg = fls.length > 1 ? `<div class="seg2 floorseg" data-floorseg>${fls.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}" title="${f.type === 'boh' ? 'Back of house' : 'Sales floor'}">${esc(f.name)}</button>`).join('')}</div>` : '';
   return `<div class="mapbar"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Find a shelf, bay or product on the map…" aria-label="Find on map" data-mapfind><svg class="i mic" title="Voice search"><use href="icons.svg#i-mic"/></svg></div>` +
-    `<div class="legchips">${chips.map((c, i) => `<span class="chip${i === 0 ? ' on' : ''}" data-mapgroup="${c[2]}">${ic(c[1])}${c[0]}</span>`).join('')}</div>${floorSeg}<div class="legchips subchips" data-subchips hidden></div>` +
+    `<div class="legchips">${chips.map((c, i) => `<span class="chip${i === 0 ? ' on' : ''}" data-mapgroup="${c[2]}">${ic(c[1])}${c[0]}</span>`).join('')}</div>${floorSeg}` +
     `<div class="zoom" style="margin-left:auto;display:flex;gap:6px"><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span>` +
-    `<span class="keywrap"><span class="ibtn" data-key="1" title="Department key">${ic('layers')}</span><div class="keypop"><h4>Department key</h4>${DEPT_GROUPS.map(gp => `<div class="keygrp">${ic(gp[1])}${gp[0]}</div><div class="keygrid">${gp[2].map(d => `<div class="keyrow"><i style="background:${DEPT_COLOUR[d]}"></i><b>${d.toUpperCase()}</b><span>${DEPT_NAME[d]}</span></div>`).join('')}</div>`).join('')}</div></span></div></div>`;
+    `<span class="keywrap"><span class="ibtn" data-key="1" title="Department key">${ic('layers')}</span><div class="keypop"><h4>Department key</h4>${DEPT_GROUPS.map(gp => `<div class="keygrp">${ic(gp[1])}${gp[0]}</div><div class="keygrid">${gp[2].map(d => `<div class="keyrow"><i style="background:${DEPT_COLOUR[d]}"></i><b>${d.toUpperCase()}</b><span>${DEPT_NAME[d]}</span></div>`).join('')}</div>`).join('')}</div></span></div></div><div class="mapbar mapsub" data-subchips hidden></div>`;
 }
 export function crumbx(ctx, storeNo, storeName) { const f = mapFloors()[0]; return `<span class="crumbx">${ic('map')}<span data-crumbfloor>${f ? `${f.type.toUpperCase()} · ${esc(f.name)}` : 'FOH · Ground'}</span> <b>${esc(storeNo)}</b>${ctx ? ' › ' + ctx : ''}<span data-crumbdept></span></span>`; }
 export function mvMap(o = {}) {
-  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="Scan">${ic('barcode')}</span><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+  const fls = mapFloors();
+  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="Scan">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="Next level">${ic('layers')}</span>` : ''}<span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
 }
 
 // Wire zoom buttons and group chips on a mounted view.
@@ -351,7 +353,12 @@ export function bindMapChrome(root, map) {
     if (z) { const k = z.getAttribute('data-zoom'); if (k === 'in') map.zoomBy(1 / 1.3); else if (k === 'out') map.zoomBy(1.3); else map.fit(); return; }
     const key = e.target.closest('[data-key]'); if (key) { key.parentNode.classList.toggle('open'); return; }
     const fb = e.target.closest('[data-mapfloor]');
-    if (fb) { map.zoomDept([]); map.floor(fb.getAttribute('data-mapfloor')); for (const c of $$('[data-mapgroup]', root)) c.classList.toggle('on', !c.getAttribute('data-mapgroup')); subchips(null); readout(''); return; }
+    if (fb) {
+      if (fb.classList.contains('crumb-jump')) { map.floor(fb.getAttribute('data-mapfloor')); const on = root.querySelector('[data-mapdept].on') || root.querySelector('[data-mapgroup].on'); if (on) { const d = on.getAttribute('data-mapdept'), g = on.getAttribute('data-mapgroup'); const codes = d ? [d] : g ? (DEPT_GROUPS.find(x => x[0].toLowerCase() === g)?.[2] || [g]) : []; const info = map.zoomDeptOn(codes, fb.getAttribute('data-mapfloor')); readout(`› ${d ? (DEPT_GROUPS.find(x => x[2].includes(d)) ? esc(DEPT_GROUPS.find(x => x[2].includes(d))[0]) + ' › ' : '') + dep(d) + ' ' + esc(DEPT_NAME[d] || d) : esc(on.textContent.trim())} · ${info?.shelves || 0} shelves${elsewhere(info)}`); } return; }
+      map.zoomDept([]); map.floor(fb.getAttribute('data-mapfloor')); for (const c of $$('[data-mapgroup]', root)) c.classList.toggle('on', !c.getAttribute('data-mapgroup')); subchips(null); readout(''); return;
+    }
+    const fn = e.target.closest('[data-mapfloor-next]');
+    if (fn) { const fls = map.floors(), i = fls.findIndex(f => f.id === map.floorId()); map.floor(fls[(i + 1) % fls.length].id); return; }
     const grp = e.target.closest('[data-mapgroup]');
     if (grp) {
       for (const c of $$('[data-mapgroup]', root)) c.classList.toggle('on', c === grp);
@@ -360,7 +367,7 @@ export function bindMapChrome(root, map) {
       const codes = !g ? null : (group?.[2] || [g]);
       const info = map.zoomDept(codes || []);
       subchips(group && group[2].length > 1 ? group : null);
-      readout(!codes ? '' : `› ${group ? esc(group[0]) : dep(codes[0]) + ' ' + esc(DEPT_NAME[codes[0]] || codes[0])} · ${info?.shelves || 0} shelves${info && info.total > info.shelves ? ` here, ${info.total} in all` : ''}`);
+      readout(!codes ? '' : `› ${group ? esc(group[0]) : dep(codes[0]) + ' ' + esc(DEPT_NAME[codes[0]] || codes[0])} · ${info?.shelves || 0} shelves${elsewhere(info)}`);
       return;
     }
     const sub = e.target.closest('[data-mapdept]');
@@ -369,12 +376,15 @@ export function bindMapChrome(root, map) {
       for (const c of $$('[data-mapdept]', root)) c.classList.toggle('on', c === sub);
       const info = map.zoomDept([d]);
       const grp = DEPT_GROUPS.find(x => x[2].includes(d));
-      readout(`› ${grp ? esc(grp[0]) + ' › ' : ''}${dep(d)} ${esc(DEPT_NAME[d] || d)} · ${info?.shelves || 0} shelves`);
+      readout(`› ${grp ? esc(grp[0]) + ' › ' : ''}${dep(d)} ${esc(DEPT_NAME[d] || d)} · ${info?.shelves || 0} shelves${elsewhere(info)}`);
     }
   });
+  // A department that also lives on another level says so, and the level
+  // name jumps there (ShelfSearcher's floor-jump badge).
+  const elsewhere = info => { const others = (info?.floors || []).filter(f => f.id !== map.floorId()); return others.length ? ` · also on ${others.map(f => `<span class="crumb-jump" data-mapfloor="${esc(f.id)}">${esc(f.name)}</span> (${f.shelves})`).join(', ')}` : ''; };
   // Sub-department chips under the bar once a group is chosen, the floor
   // switch following the map, and the crumb saying where the map is.
-  const subchips = group => { const host = root.querySelector('[data-subchips]'); if (!host) return; host.hidden = !group; host.innerHTML = group ? group[2].map(d => `<span class="chip" data-mapdept="${esc(d)}"><i style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b>${esc(DEPT_NAME[d] || d)}</span>`).join('') : ''; };
+  const subchips = group => { const host = root.querySelector('[data-subchips]'); if (!host) return; host.hidden = !group; host.innerHTML = group ? `<div class="legchips">${group[2].map(d => `<span class="chip" data-mapdept="${esc(d)}"><i style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b>${esc(DEPT_NAME[d] || d)}</span>`).join('')}</div>` : ''; };
   const readout = html => { const el = root.querySelector('[data-crumbdept]'); if (el) el.innerHTML = html ? ' ' + html : ''; };
   map.stage.addEventListener('mapfloor', e => {
     const f = e.detail; const el = root.querySelector('[data-crumbfloor]'); if (el) el.textContent = `${f.type.toUpperCase()} · ${f.name}`;
