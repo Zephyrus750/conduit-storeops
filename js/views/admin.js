@@ -242,7 +242,7 @@ async function publishMap(ctx, form) {
   const err = $('#pubErr', form), btn = form.querySelector('[type="submit"]');
   const version = form.version.value.trim(), name = form.name.value.trim();
   let floors = [], departments;
-  if (st.pubDoc) { floors = st.pubDoc.floors.map(f => ({ id: f.id, name: f.name, type: f.type, svg: f.svg })); departments = st.pubDoc.departments; }
+  if (st.pubDoc) { floors = st.pubDoc.floors.map(f => ({ id: f.id, name: f.name, type: f.type, svg: f.svg, ...(f.paths ? { paths: f.paths } : {}) })); departments = st.pubDoc.departments; }
   else for (const inp of form.querySelectorAll('input[type="file"][data-floor]')) {
     const f = inp.files?.[0]; if (!f) continue;
     const svg = await f.text();

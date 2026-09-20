@@ -110,8 +110,7 @@ form.li { margin: 0; }
    style whatever version of the editor exported them. Labels are centred
    on their module (the editor's stylesheet did that; it is stripped on
    publish), name and segment both white. */
-.map.real .shelf-group .shelf { stroke: #fff; stroke-opacity: .6; stroke-width: 1.4; rx: 2.5; ry: 2.5; fill-opacity: .92; transition: fill-opacity .12s, filter .12s; }
-.map.real .shelf-group:hover .shelf { fill-opacity: 1; filter: brightness(1.06); }
+
 .map.real .shelf-label { font-family: Inter, system-ui, sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; }
 .map.real .shelf-label + .shelf-label { font-weight: 600; opacity: .92; }
 .map.real .landmark-rect { fill: #1F2937; fill-opacity: .82; stroke: none; rx: 4; ry: 4; }
@@ -139,10 +138,10 @@ form.li { margin: 0; }
 /* Shelf badges: one per shelf name over the whole run, shown zoomed out
    and handing over to the per-module labels as the map zooms in. */
 .map.real .shelf-badges { opacity: var(--badge-opacity, 1); pointer-events: none; transition: opacity .15s; }
-.map.real .shelf-badges .sb-bg { rx: 8; ry: 8; fill-opacity: .96; stroke: #fff; stroke-opacity: .9; stroke-width: 1.5; }
+.map.real .shelf-badges .sb-bg { rx: 8; ry: 8; fill-opacity: .92; }
 .map.real .shelf-badges .sb { font-family: Inter, system-ui, sans-serif; font-size: 24px; font-weight: 800; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; }
 .map.real.mono .shelf-badges .sb-bg { fill: #4B5563 !important; }
-.map.real .shelf-label { opacity: var(--label-opacity, 1); transition: opacity .15s; }
+.map.real .shelf-label { opacity: var(--label-opacity, 1); display: var(--label-display, inline); transition: none; }
 
 /* Map bar: floor switch, and the sub-department row under a chosen group. */
 .mapbar .floorseg button, .admap .floorseg button { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 700; }
@@ -319,3 +318,129 @@ button:disabled, .rrow.soon { cursor: default; }
 .dk-tc .dk-x svg.i { width: 12px; height: 12px; }
 .cpf-strip .chip { display: inline-flex; align-items: center; gap: 6px; }
 @container shell (max-width: 1100px) { .rh { grid-template-columns: 1fr; } .rh2 { grid-template-columns: 1fr; } .facts6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+
+/* ── The map as ShelfSearcher drew it ─────────────────────────────────
+   White floor, the editor's shelf colours with their colour-matched
+   outline and rounded corners, department-coloured name badges when
+   zoomed out, white module labels when zoomed in. The chrome floats over
+   the map: tools down the left, department chips top centre, find top
+   right, the crumb along the bottom. */
+.mapbox { position: relative; background: #fff; }
+.mapbox .mapstage { background: #fff; }
+svg.map.real { background: #fff; }
+/* No transitions or filters on the shelves themselves: a state that lands
+   on hundreds of shelves at once (refresh marks, a route) would otherwise
+   re-raster the whole map for every frame of the transition. */
+.map.real .shelf-group .shelf { stroke-width: 1.5; rx: 3; ry: 3; transition: none; }
+.map.real .shelf-group:hover .shelf { stroke-width: 2.5; }
+.map.real .shelf-badges .sb { font-size: 24px; font-weight: 800; }
+.map.real .shelf-badges .sb[data-dept="k3"], .map.real .shelf-badges .sb[data-dept="k4"], .map.real .shelf-badges .sb[data-dept="c3"] { fill: #1a1a2e; }
+.map.real .shelf-group[data-sel] .shelf { stroke: #fff !important; stroke-width: 4 !important; fill-opacity: 1 !important; }
+.map.real .shelf-group[data-sel] .shelf-label { fill: #fff !important; font-weight: 800; }
+/* find on the map: cyan and magenta pulse on the hits, the rest step back */
+.map.real.has-hl .shelf-group:not([data-hl]) { opacity: .3; }
+.map.real.has-hl .shelf-badges [data-shelf] { opacity: .15; }
+.map.real .shelf-group[data-hl] { opacity: 1 !important; }
+.map.real .shelf-group[data-hl] .shelf { stroke-width: 5 !important; fill-opacity: 1 !important; animation: shelf-pulse-border 1.4s ease-in-out infinite; }
+@keyframes shelf-pulse-border { 0%, 100% { stroke: #00e5ff; stroke-width: 5; } 50% { stroke: #ff40ff; stroke-width: 7; } }
+@media (prefers-reduced-motion: reduce) { .map.real .shelf-group[data-hl] .shelf { animation: none; stroke: #00e5ff; } }
+
+/* floating chrome */
+.mapbox .mapbar { display: contents; }
+.mapbox .mapbar.mapsub { display: block; position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 6; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; box-shadow: 0 10px 28px -14px rgba(17, 24, 39, .35); max-width: calc(100% - 200px); }
+.mapbox .mapbar.mapsub[hidden] { display: none; }
+.mapbox .mapbar .legchips { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6; flex-wrap: nowrap; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 6px; box-shadow: 0 10px 28px -14px rgba(17, 24, 39, .35); max-width: calc(100% - 380px); overflow-x: auto; scrollbar-width: none; }
+.mapbox .mapbar .legchips::-webkit-scrollbar { display: none; }
+.mapbox .mapbar .legchips .chip { flex: none; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
+.mapbox .mapbar .legchips .chip.on { background: var(--accent); color: #fff; }
+.mapbox .mapbar .search { position: absolute; top: 12px; right: 12px; z-index: 6; width: 250px; max-width: calc(50% - 20px); margin: 0; background: var(--panel); border-radius: 999px; box-shadow: 0 10px 28px -14px rgba(17, 24, 39, .35); }
+.mapbox .mapbar .search input { border-radius: 999px; padding: 9px 34px 9px 34px; font-size: 13px; }
+.mapbox .mapbar .zoom { position: absolute; top: 12px; left: 12px; z-index: 6; display: flex; flex-direction: column; gap: 0; margin: 0 !important; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 28px -14px rgba(17, 24, 39, .35); overflow: visible; }
+.mapbox .mapbar .zoom > .ibtn, .mapbox .mapbar .zoom .keywrap > .ibtn { width: 38px; height: 38px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.mapbox .mapbar .zoom > .ibtn + .ibtn, .mapbox .mapbar .zoom > .keywrap { border-top: 1px solid var(--line-soft); }
+.mapbox .mapbar .zoom > .ibtn:first-child { border-radius: 12px 12px 0 0; }
+.mapbox .mapbar .zoom .keywrap > .ibtn { border-radius: 0 0 12px 12px; }
+.mapbox .mapbar .zoom .ibtn:hover { background: var(--chip); }
+.mapbox .mapbar .zoom .keypop { left: 46px; right: auto; top: 0; }
+.mapbox .mapbar .floorseg { position: absolute; top: 196px; left: 12px; z-index: 6; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px; box-shadow: 0 10px 28px -14px rgba(17, 24, 39, .35); }
+.mapbox .mapbar .floorseg button { border-radius: 8px; padding: 6px 8px; text-align: left; }
+.mapbox .mapleg { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 6; border: 1px solid var(--line); border-top: 1px solid var(--line); border-radius: 999px; background: var(--panel); padding: 7px 16px; box-shadow: 0 10px 28px -14px rgba(17, 24, 39, .35); max-width: calc(100% - 24px); min-height: 0; font-size: 12.5px; }
+.mapbox .mapleg .crumbx { margin-right: 4px; }
+.mapbox .mapleg .crumbx b { color: var(--accent-ink); }
+.mapbox .mapleg .crumbx svg.i { color: var(--accent-ink); }
+.mapview .mapbox, .grid2 .mapbox { border: 1px solid var(--line); }
+.mapview .mapstage { min-height: 560px; }
+@container shell (max-width: 1100px) {
+  .mapbox .mapbar .legchips { left: 62px; transform: none; max-width: calc(100% - 270px); }
+  .mapbox .mapbar .mapsub { left: 62px; transform: none; max-width: calc(100% - 80px); }
+  .mapbox .mapbar .search { width: 190px; }
+}
+
+/* Location refresh: shelves drop their colours. To do is grey, done is
+   green with a white outline, this week's focus keeps an orange outline,
+   a planned shelf shows its plan colour, and the name badges stay off so
+   the fills alone tell the story. */
+.map.real.rf .shelf-group .shelf { fill: #6b7280 !important; stroke: #6b7280 !important; }
+.map.real.rf .shelf-group[data-mark="focus"] .shelf { stroke: #D24E0E !important; stroke-width: 2.5 !important; }
+.map.real.rf .shelf-group[data-mark="done"] .shelf { fill: #16a34a !important; fill-opacity: 1 !important; stroke: #fff !important; stroke-width: 2.5 !important; animation: rf-done-pulse 2s ease-in-out infinite; }
+@keyframes rf-done-pulse { 0%, 100% { stroke: #4ade80; stroke-width: 2.2; } 50% { stroke: #fff; stroke-width: 4; } }
+@media (prefers-reduced-motion: reduce) { .map.real.rf .shelf-group[data-mark="done"] .shelf { animation: none; } }
+.map.real.rf .shelf-group .shelf-label { fill: #fff !important; }
+.map.real.rf .shelf-badges, .map.real.nobadges .shelf-badges { display: none; }
+.map.real.rf .shelf-group[data-sel] .shelf { stroke: #111827 !important; stroke-width: 3 !important; }
+
+/* Label integrity: the map greys out except the department being worked,
+   which keeps its colours with a violet outline; a checked micro's
+   shelves go pale green, a wrong label red, the selected micro violet. */
+.map.real.li .shelf-group .shelf { fill: #CBD0D8 !important; stroke: #B9BFC9 !important; fill-opacity: 1 !important; }
+.map.real.li .shelf-group .shelf-label { fill: #fff !important; }
+.map.real.li .shelf-badges .sb-bg { fill: #9CA3AF !important; }
+.map.real.li[data-deptzoom] .shelf-group:not([data-dim]) .shelf { fill: revert-layer !important; stroke: #7C3AED !important; stroke-width: 2 !important; fill-opacity: revert-layer !important; }
+.map.real.li[data-deptzoom] .shelf-group:not([data-dim]) .shelf-badges .sb-bg, .map.real.li[data-deptzoom] .shelf-badges .sb-bg:not([data-dim]) { fill: revert-layer !important; }
+.map.real.li .shelf-group[data-mark="checked"] .shelf { fill: #DCFCE7 !important; stroke: #16A34A !important; stroke-width: 1.6 !important; fill-opacity: 1 !important; }
+.map.real.li .shelf-group[data-mark="checked"] .shelf-label { fill: #166534 !important; }
+.map.real.li .shelf-group[data-mark="wrong"] .shelf { fill: #FEE2E2 !important; stroke: #DC2626 !important; stroke-width: 2.2 !important; fill-opacity: 1 !important; }
+.map.real.li .shelf-group[data-mark="wrong"] .shelf-label { fill: #991B1B !important; }
+.map.real.li .shelf-group[data-mark="focus"] .shelf { fill: #F3EEFC !important; stroke: #5B21B6 !important; stroke-width: 2.6 !important; fill-opacity: 1 !important; }
+.map.real.li .shelf-group[data-mark="focus"] .shelf-label { fill: #5B21B6 !important; }
+.map.real.li .shelf-group[data-sel] .shelf { stroke: #111827 !important; stroke-width: 3 !important; }
+
+/* Pick route: a teal ribbon along the walk paths with white pulses
+   running the way of travel and chevrons at each bend, a numbered stop
+   on each shelf, and every shelf not on the list greyed. */
+.map.real.has-route .shelf-group:not([data-onroute]) .shelf { fill: #d0d2d5 !important; stroke: #c0c2c5 !important; transition: none; }
+.map.real.has-route .shelf-group:not([data-onroute]) { pointer-events: none; }
+.map.real.has-route .shelf-badges .sb-bg:not([data-onroute]) { fill: rgba(120, 120, 130, .18) !important; }
+.map.real.has-route .shelf-badges .sb:not([data-onroute]) { fill: rgba(180, 180, 190, .35) !important; }
+.map.real.has-route .shelf-group[data-onroute] .shelf { stroke: #1e293b !important; stroke-width: 4.5 !important; fill-opacity: 1 !important; paint-order: stroke; }
+.map.real.has-route .shelf-group[data-onroute="done"] .shelf { stroke: #16A34A !important; }
+.map.real .pick-route-line { fill: none; stroke: #0E7490; stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
+.map.real .pick-route-line.active { stroke: #0891B2; stroke-width: 16; opacity: .95; }
+.map.real .pick-route-flow { fill: none; stroke: #fff; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 7 22; opacity: .9; animation: pick-route-flow 1.05s linear infinite; }
+@keyframes pick-route-flow { to { stroke-dashoffset: -29; } }
+.map.real .pick-route-arrow { fill: none; stroke: #fff; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: .9; }
+.map.real .path-badge-bg { fill: #2563EB; stroke: #fff; stroke-width: 3; }
+.map.real .path-badge.start .path-badge-bg { fill: #22c55e; }
+.map.real .path-badge.completed .path-badge-bg { fill: #6b7280; opacity: .7; }
+.map.real .path-badge.current .path-badge-bg { fill: #f59e0b; stroke-width: 4; }
+.map.real .path-badge-text { fill: #fff; font-family: ui-monospace, Menlo, monospace; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+.map.real .path-badge.current .path-badge-text { fill: #1a1a2e; }
+@media (prefers-reduced-motion: reduce) { .map.real .pick-route-flow { animation: none; opacity: .55; } }
+.mv .map.real .pick-route-line { stroke-width: 9; } .mv .map.real .pick-route-flow { display: none; }
+.selshelf .sid small.sub { font-size: 14px; color: var(--dim); font-weight: 700; margin-left: 6px; }
+
+/* Backfill review on a 1080p desk: the same type size as the rest of the
+   program, wider rails, and the board's columns not stretched thin. */
+@container shell (min-width: 1600px) {
+  .sr3 { grid-template-columns: 340px minmax(0, 1fr) 340px; }
+  .srail-t { font-size: 15px; padding: 13px 14px; }
+  .slc { padding: 11px 14px; }
+  .slc .loc { font-size: 16px; }
+  .slc .meta, .slc .sr .dc { font-size: 12.5px; }
+  .slc .sr .pc { font-size: 14px; }
+  .smid { font-size: 15px; }
+  .smid .scode, .smid .scols { font-size: 14px; }
+  .scode .kc { font-size: 15px; }
+  .smid-h .bigloc { font-size: 30px; }
+}

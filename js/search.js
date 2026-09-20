@@ -39,7 +39,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (shelves) return shelves;
     shelves = [];
     const stage = document.createElement('div');
-    try { const m = mountMap(stage, { mono: true, badges: false, tips: false }); const seen = new Set(); for (const g of m.segments()) { const info = m.shelfInfo(g); if (!seen.has(info.id)) { seen.add(info.id); shelves.push({ id: info.id, dept: info.dept, segments: info.segments }); } } } catch {}
+    try { const m = mountMap(stage, { mono: true, badges: false, tips: false, clone: true }); const by = new Map(); for (const g of m.segments()) { const info = m.shelfInfo(g); const e = by.get(info.id) || { id: info.id, dept: info.dept, segments: info.segments, subs: [] }; if (info.sub) e.subs.push(info.sub.toUpperCase()); by.set(info.id, e); } shelves.push(...by.values()); } catch {}
     return shelves;
   }
   function invalidate() { shelves = null; }
@@ -75,10 +75,14 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
         preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || 'Not in the catalogue')}</div></div>`) + lifeHtml(L);
       } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}Where it’s been</div><div class="ohint">No backfill, adjustment or cage record for this code yet.</div></div>`;
     } else if (k === 'shelf' || k === 'loc') {
-      const id = U.replace(/\s+/g, '').split('-')[0].replace(/[SE]\d+$/, '');
-      const hits = hasMap() ? shelfIndex().filter(s => s.id.startsWith(id) || s.id === U).slice(0, 8) : [];
-      out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `Shelf ${hi(s.id, id)} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${s.segments} segment${s.segments === 1 ? '' : 's'}`, 'Show on map', `data-view="map" data-select="${esc(s.id)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf starts with ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
-      if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>Shelf ${esc(hits[0].id)}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${esc(hits[0].id)}">${ic('map')}Show on the store map</a>`;
+      // "A16S1", "A16 S1" and "A16-S1" name one module of A16: the row and
+      // the map keep that module rather than widening to the whole shelf.
+      const C = U.replace(/[\s-]+/g, ''), mm = /^([A-Z]+\d+)([SE]\d+)$/.exec(C), id = mm ? mm[1] : C, suffix = mm ? mm[2] : '';
+      const hits = hasMap() ? shelfIndex().filter(s => s.id === id || (!suffix && s.id.startsWith(id))).slice(0, 8) : [];
+      const modOf = s => suffix && s.subs.includes(suffix) ? suffix : '';
+      const sel = s => esc(s.id + modOf(s));
+      out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `Shelf ${hi(s.id, id)}${modOf(s) ? ` <small>module ${esc(modOf(s))}</small>` : suffix ? ` <small class="warn">no module ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${s.segments} module${s.segments === 1 ? '' : 's'}${s.subs.length ? ' · ' + esc(s.subs.join(' ')) : ''}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
+      if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>Shelf ${esc(hits[0].id)}${modOf(hits[0]) ? ' · ' + esc(modOf(hits[0])) : ''}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}Show on the store map</a>`;
     } else {
       const ql = Q.toLowerCase();
       const depts = Object.entries(DEPT_NAME).filter(([, n]) => n.toLowerCase().includes(ql));
@@ -89,7 +93,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     }
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();
-    if (preview) { prev.hidden = false; pal.classList.add('wide'); prev.innerHTML = preview; const pm = $('#opmap', prev); if (pm) { try { const m = mountMap(pm, { mono: true }); const first = prev.querySelector('[data-select]')?.getAttribute('data-select'); if (first) { m.select(first); m.zoomTo(first, 900); } } catch {} } }
+    if (preview) { prev.hidden = false; pal.classList.add('wide'); prev.innerHTML = preview; const pm = $('#opmap', prev); if (pm) { try { const m = mountMap(pm, { mono: true, clone: 'preview' }); const first = prev.querySelector('[data-select]')?.getAttribute('data-select'); if (first) { m.select(first); m.zoomTo(first, 900); } } catch {} } }
     else { prev.hidden = true; pal.classList.remove('wide'); }
   }
   // A keycode's life in the store: bays it was backfilled at, SOH

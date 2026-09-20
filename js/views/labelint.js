@@ -37,7 +37,7 @@ export default {
     return mvMap({ badge: `<b>${m.done}</b> of ${m.total} · ${cycleLabel(m.cycle)}` }) + `<div class="mv-sel mode" id="limob"></div>`;
   },
   mount(ctx, root) {
-    const map = mountMap($('#mapstage', root), { mono: true, onSelect: info => {
+    const map = mountMap($('#mapstage', root), { cls: 'li', onSelect: info => {
       if (info.kind !== 'shelf' || !selected) return;
       const m = model(ctx); const cur = m.L.assign[selected] || [];
       const next = cur.includes(info.id) ? cur.filter(x => x !== info.id) : [...cur, info.id];

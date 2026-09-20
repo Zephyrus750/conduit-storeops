@@ -61,3 +61,19 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
 - `sw.js` installs the whole shell as one release cache and serves it cache-first; updates apply only on the person's "Update now" (never `skipWaiting` on install).
 - After any change under index.html, js/, client/, shared/, styles/, icons/ run `npm run sw` and commit `sw-precache.js`; `npm test` fails when it is stale.
 - Maps, snapshots and the outbox are IndexedDB data, not app files; the worker API is never cached.
+
+## Map performance rules (learned on the 1,157-shelf Busselton map)
+
+- One live map element. `js/map.js` builds the SVG once per published
+  document and views share the same element (`parkMap()` runs before the
+  shell replaces a view's content); the search palette's preview reuses
+  a second one. Never `innerHTML` the map per view: parsing 800 KB and the
+  first layout and paint of fresh nodes cost 700 ms or more.
+- No `transition` or `filter` on `.shelf`. A state that lands on hundreds
+  of shelves at once (refresh marks, a route) re-rasters the whole map
+  for every frame of a transition. Stroke and fill changes alone are cheap.
+- Module labels are `display:none` while the badges show; two thousand
+  invisible `<text>` elements still cost layout and paint.
+- Sub-shelf codes: `groupsFor()` in `js/map.js` is the one resolver for a
+  typed or scanned location. "A16S1", "A16 S1" and "A16-S1" name one
+  module; never widen a module to its shelf.

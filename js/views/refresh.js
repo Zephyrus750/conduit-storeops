@@ -79,7 +79,7 @@ export default {
   },
   mount(ctx, root) {
     const m0 = model(ctx);
-    const map = mountMap($('#mapstage', root), { mono: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
+    const map = mountMap($('#mapstage', root), { cls: 'rf', badges: false, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
       const m = model(ctx), mk = m.marks[info.full], c = m.plan[info.full];
       const plan = c ? `<span class="mx"><i class="pdot" style="background:${esc(c)}"></i>Planned · ${planName(c)}</span>` : '';
       if (mk) return tipLine('g', 'check', `Refreshed ${fmtTime(mk.at)}`) + plan;

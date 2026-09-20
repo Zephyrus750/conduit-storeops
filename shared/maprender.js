@@ -15,6 +15,8 @@
 // .json export renders the same as a .js one. Pure functions; runs in the
 // browser (admin console), in node (scripts/publish-map.js) and in tests.
 
+import { pathsOf } from './route.js';
+
 const NS = 'http://www.w3.org/2000/svg';
 export const esc = s => s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -111,7 +113,8 @@ export function renderFloor(floor, data) {
   const vb = floorViewBox(floor, data);
   const svg = `<svg class="map real" viewBox="${vb}" xmlns="${NS}" preserveAspectRatio="xMidYMid meet" style="--badge-opacity:1;--label-opacity:0;--label-bg-opacity:0">` +
     `<g id="floor-${esc(id)}" class="map-floor zoom-out" data-floor="${esc(id)}" data-floor-type="${esc(floor.type || 'foh')}" style="opacity:1;pointer-events:auto;visibility:visible">${inner}</g></svg>`;
-  return { id, name: String(floor.name || id), type: String(floor.type || 'foh'), level: floor.level || 0, svg, shelves: (svg.match(/class="shelf-group"/g) || []).length, markers: (floor.emergencyMarkers || []).length };
+  const paths = pathsOf(floor);
+  return { id, name: String(floor.name || id), type: String(floor.type || 'foh'), level: floor.level || 0, svg, shelves: (svg.match(/class="shelf-group"/g) || []).length, markers: (floor.emergencyMarkers || []).length, ...(paths ? { paths } : {}) };
 }
 
 // A floor's pre-rendered svg minus its outer <svg>, <style> and any marker

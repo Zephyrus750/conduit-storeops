@@ -236,14 +236,17 @@ test('maps: owner publishes, devices read by version or latest, the log and regi
   const svg = '<svg class="map real" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g class="shelf-group" data-shelf="A1" data-dept="h1"><rect class="shelf" x="1" y="1" width="10" height="10"/></g></svg>';
   assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg }] }, dev)).status, 403, 'a store token cannot publish');
   assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg: '<svg onload="x()"></svg>' }] }, ownerToken)).status, 400);
-  const pub = await api('POST', '/v1/store/1241/map', { version: '4.3', name: 'Busselton', departments: [{ id: 'h1', name: 'H1 Kitchen', color: '#FF8C00' }], floors: [{ id: 'ground', name: 'Ground', type: 'foh', svg }] }, ownerToken);
-  assert.equal(pub.status, 201); assert.equal(pub.body.floors[0].shelves, 1);
+  assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg, paths: { nodes: [{ id: 'a', x: 'no', y: 0 }, { id: 'b', x: 1, y: 1 }], edges: [{ a: 'a', b: 'b' }] } }] }, ownerToken)).status, 400, 'path nodes need numeric coordinates');
+  const paths = { nodes: [{ id: 'pn1', x: 0, y: 0 }, { id: 'pn2', x: 100, y: 0, type: 'stairs' }], edges: [{ a: 'pn1', b: 'pn2' }, { a: 'pn2' }] };
+  const pub = await api('POST', '/v1/store/1241/map', { version: '4.3', name: 'Busselton', departments: [{ id: 'h1', name: 'H1 Kitchen', color: '#FF8C00' }], floors: [{ id: 'ground', name: 'Ground', type: 'foh', svg, paths }] }, ownerToken);
+  assert.equal(pub.status, 201); assert.equal(pub.body.floors[0].shelves, 1); assert.deepEqual(pub.body.floors[0].paths, { nodes: 2, edges: 1 });
   assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg }] }, ownerToken)).status, 409);
 
   const info = await api('GET', '/v1/store/1241/map', undefined, dev);
   assert.equal(info.body.version, '4.3'); assert.equal(info.body.floors[0].id, 'ground'); assert.equal(info.body.by.owner, true);
   const doc = await api('GET', '/v1/store/1241/map/latest', undefined, dev);
   assert.equal(doc.body.version, '4.3'); assert.equal(doc.body.floors[0].svg, svg); assert.equal(doc.body.departments[0].id, 'h1');
+  assert.deepEqual(doc.body.floors[0].paths, { nodes: [{ id: 'pn1', x: 0, y: 0 }, { id: 'pn2', x: 100, y: 0, type: 'stairs' }], edges: [{ a: 'pn1', b: 'pn2' }] }, 'the document carries the walk-path network'); assert.deepEqual(info.body.floors[0].paths, { nodes: 2, edges: 1 });
   const res = await mf.dispatchFetch('http://conduit.test/v1/store/1241/map/4.3', { headers: { Authorization: `Bearer ${dev}`, 'If-None-Match': '"map-4.3"' } });
   assert.equal(res.status, 304);
   assert.equal((await api('GET', '/v1/store/1241/map/9.9', undefined, dev)).status, 404);

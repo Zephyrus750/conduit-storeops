@@ -20,7 +20,7 @@ const floorData = {
     { type: 'first_aid', label: 'Kit', location: 'B2', detail: '', method: '', operation: '', x: 500, y: 300 },
   ],
   priceChecks: [{ label: 'PC', location: 'A11', detail: '', x: 50, y: 50 }, { label: 'Order', location: '', detail: '', x: 80, y: 50, variant: 'order' }],
-  deptZoomBoxes: [], pathNodes: [], pathEdges: [],
+  deptZoomBoxes: [], pathNodes: [{ id: 'pn1', x: 0, y: 0 }, { id: 'pn2', x: 100, y: 0, type: 'stairs' }], pathEdges: [{ a: 'pn1', b: 'pn2' }],
 };
 const base = {
   storeNumber: '1241', storeName: "Bus'selton", version: '4.3', storeInfo: { zone: '' }, metresPerUnit: null,
@@ -70,6 +70,7 @@ test('a .js floor renders from its pre-rendered svg: wrapper, viewBox, markers r
 
 test('a .json export renders the same floor from its data', () => {
   const j = renderMap(parseMapFile(jsonExport, 'x.json').data).floors[0];
+  assert.deepEqual(j.paths, { nodes: [{ id: 'pn1', x: 0, y: 0 }, { id: 'pn2', x: 100, y: 0, type: 'stairs' }], edges: [{ a: 'pn1', b: 'pn2' }] }, 'the walk-path network travels with the floor');
   assert.equal(j.shelves, 4, 'inactive shelves stay, dimmed');
   assert.match(j.svg, /<g class="shelf-group" data-shelf="A11" data-subname="S1" data-dept="h1" data-full="A11 S1"><rect class="shelf" x="-230" y="225" width="20" height="120" fill="#FF8C00" fill-opacity="0.75" stroke="#FF8C00"\/><\/g>/);
   assert.match(j.svg, /<text class="shelf-label" font-size="8" x="-220" y="[\d.-]+">A11<\/text><text class="shelf-label" font-size="6" x="-220" y="[\d.-]+" fill="rgba\(255,255,255,0.7\)">S1<\/text>/);

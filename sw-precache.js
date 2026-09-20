@@ -2,7 +2,7 @@
 // The complete app shell for one release; the build id names its cache.
 self.PRECACHE = {
   "version": "v0.2.0",
-  "build": "e20e835762",
+  "build": "4946747c4d",
   "files": [
     "./index.html",
     "./icons.svg",
@@ -61,6 +61,7 @@ self.PRECACHE = {
     "./shared/reducers/store.js",
     "./shared/reducers/util.js",
     "./shared/reducers.js",
+    "./shared/route.js",
     "./shared/ulid.js",
     "./shared/validate.js",
     "./styles/app.css",

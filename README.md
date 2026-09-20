@@ -190,6 +190,14 @@ stand-in DV site on :8790.
 
 ## Maps and the catalogue
 
+**Routing.** The Map Editor's walk-path network (`pathNodes`, `pathEdges`)
+travels with each published floor as `paths`; `shared/route.js` (ported
+from ShelfSearcher's route engine) builds the graph, joins any map point
+to its nearest edge, routes between points with Dijkstra and orders stops
+by the shortest walk from the anchored first stop (nearest neighbour then
+2-opt). The pick list draws its legs along the network and "Plan route"
+reorders the stops; a floor without a network gets straight lines.
+
 **Maps.** A published map is one document per version: `{ version, name,
 departments, floors: [{ id, name, type, svg }] }`, each floor an SVG in the
 form the store views mount (`svg.map.real`, `shelf-group` elements with

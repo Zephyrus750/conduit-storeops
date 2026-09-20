@@ -238,7 +238,7 @@ export class StoreObject extends DurableObject {
     if (!rows.length) throw new HttpError(404, 'not_found', 'no map has been published for this store');
     const cur = rows.find(r => r.version === this.state.map.version) || rows[0];
     const meta = JSON.parse(cur.meta);
-    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors, departments: meta.departments, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at })) };
+    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at })) };
   }
   mapDoc(version, ifNoneMatch) {
     if (version === 'latest') version = this.state.map.version || this.sql.exec('SELECT version FROM maps ORDER BY at DESC LIMIT 1').toArray()[0]?.version;
@@ -265,7 +265,18 @@ export class StoreObject extends DurableObject {
       if (!/^\s*<svg[\s>]/i.test(svg) || !/<\/svg>\s*$/i.test(svg)) throw new HttpError(400, 'invalid_request', `floor ${id}: svg must be a complete <svg> document`);
       if (svg.length > MAP_FLOOR_MAX) throw new HttpError(413, 'payload_too_large', `floor ${id}: svg is over ${MAP_FLOOR_MAX / 1_000_000} MB`);
       if (/<script[\s>]/i.test(svg) || /\son[a-z]+\s*=/i.test(svg)) throw new HttpError(400, 'invalid_request', `floor ${id}: svg must not contain scripts or event handlers`);
-      metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), shelves: (svg.match(/class="shelf-group"/g) || []).length, bytes: svg.length });
+      // The walk-path network the editor authored for this floor rides in
+      // the metadata: a few hundred nodes, so it stays with the floor row.
+      let paths = null;
+      if (f.paths && typeof f.paths === 'object') {
+        const nodes = Array.isArray(f.paths.nodes) ? f.paths.nodes : [], edges = Array.isArray(f.paths.edges) ? f.paths.edges : [];
+        if (nodes.length > 5000 || edges.length > 10000) throw new HttpError(400, 'invalid_request', `floor ${id}: too many path nodes or edges`);
+        const ns = nodes.map(n => ({ id: String(n?.id ?? '').slice(0, 24), x: Number(n?.x), y: Number(n?.y), ...(n?.type ? { type: String(n.type).slice(0, 16) } : {}) }));
+        if (ns.some(n => !n.id || !Number.isFinite(n.x) || !Number.isFinite(n.y))) throw new HttpError(400, 'invalid_request', `floor ${id}: every path node needs an id and numeric x, y`);
+        const es = edges.map(e => ({ a: String(e?.a ?? '').slice(0, 24), b: String(e?.b ?? '').slice(0, 24) })).filter(e => e.a && e.b);
+        if (ns.length >= 2 && es.length) paths = { nodes: ns, edges: es };
+      }
+      metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), shelves: (svg.match(/class="shelf-group"/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}) });
     }
     const departments = Array.isArray(body.departments) ? body.departments.slice(0, 64).map(d => ({ id: String(d.id || '').slice(0, 16), name: String(d.name || '').slice(0, 64), color: String(d.color || '').slice(0, 16), parent: String(d.parent || '').slice(0, 16) })) : [];
     const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments };
@@ -278,7 +289,7 @@ export class StoreObject extends DurableObject {
     const r = this.applyOne(ev, { ...claims, roles: ['manager'], caps: claims.caps || [] });
     if (!r.ok) throw new HttpError(500, 'internal', `map stored but map.publish was refused: ${r.message}`);
     this.snapshotIfDue(); this.broadcast([r.event]);
-    return json({ ok: true, version, at, seq: r.seq, floors: metaFloors }, 201);
+    return json({ ok: true, version, at, seq: r.seq, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────────

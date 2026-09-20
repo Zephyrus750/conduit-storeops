@@ -11,7 +11,7 @@
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
 import { $, $$, ic, esc, greeting, fmtLong, toast } from './ui.js';
-import { loadMap, setMap, mapInfo } from './map.js';
+import { loadMap, setMap, mapInfo, parkMap } from './map.js';
 import { initSearch } from './search.js';
 import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
@@ -251,6 +251,7 @@ function show(id, arg) {
   currentArg = arg !== undefined ? arg : (id === current ? currentArg : null);
   current = id;
   // A fresh content element each time, so a view's listeners die with it.
+  parkMap();
   const fresh = content.cloneNode(false); content.replaceWith(fresh); content = fresh;
   const cur = client.session.current;
   const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, api: (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token })), storage: client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };

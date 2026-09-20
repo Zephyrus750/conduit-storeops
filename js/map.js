@@ -4,6 +4,7 @@
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
 import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments } from './ui.js';
+import { build as buildGraph, routeBetween, orderStops, pathsOf } from '../shared/route.js';
 
 let floors = [], mapMeta = null;
 // The shell sets the map from the published document (client.maps.get) or
@@ -11,6 +12,7 @@ let floors = [], mapMeta = null;
 // svg is kept as its viewBox plus inner markup; mountMap puts every floor
 // into one <svg> and shows one at a time, as the legacy viewer did.
 export function setMap(doc) {
+  tpl = null;
   if (!doc) { floors = []; mapMeta = null; return; }
   floors = parseFloors(doc); mapMeta = { version: doc.version, at: doc.at, name: doc.name, floors: floors.map(f => ({ id: f.id, name: f.name, type: f.type })), departments: doc.departments || [] };
   setDepartments(doc.departments);
@@ -21,7 +23,7 @@ export function parseFloors(doc) {
     const m = /^\s*<svg\b([^>]*)>([\s\S]*)<\/svg>\s*$/i.exec(f.svg || ''); if (!m) continue;
     const vb = (/viewBox="([^"]+)"/.exec(m[1]) || [])[1] || '0 0 100 100';
     let name = String(f.name || f.id || `Floor ${i + 1}`); if (seen[name]) name += ' ' + (++seen[name]); else seen[name] = 1;
-    out.push({ id: String(f.id || 'f' + i), name, type: f.type === 'boh' ? 'boh' : 'foh', level: Number(f.level) || 0, vb, inner: m[2] });
+    out.push({ id: String(f.id || 'f' + i), name, type: f.type === 'boh' ? 'boh' : 'foh', level: Number(f.level) || 0, vb, inner: m[2], paths: pathsOf(f), graph: undefined });
   }
   return out.sort((a, b) => (a.type === b.type ? 0 : a.type === 'foh' ? -1 : 1) || a.level - b.level);
 }
@@ -39,6 +41,23 @@ const PLACEHOLDER = '<svg class="map real placeholder" viewBox="0 0 1200 700" xm
 
 // Shelf segment id as the refresh mode keys it: "A11 S1" (data-full), uppercased.
 export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttribute('data-shelf') + ' ' + (g.getAttribute('data-subname') || '')).trim()).toUpperCase(); }
+// A code as the store writes it: "A16S1", "a16 s1" and "A16-S1" are the
+// same module; "A16" is the whole shelf. Upper case, no spaces or dashes.
+export function canonCode(code) { return String(code || '').toUpperCase().replace(/[\s-]+/g, ''); }
+// The groups a code points at: a shelf name first (a shelf can itself be
+// called "S1"), then a shelf plus a module suffix (S1, S2, E1, E2). Any
+// place that takes a typed or scanned location goes through here, so a
+// module is never quietly widened to its whole shelf.
+export function groupsFor(root, code) {
+  const C = canonCode(code); if (!C) return [];
+  const all = $$('.shelf-group[data-shelf]', root).filter(g => g.getAttribute('data-shelf'));
+  const byName = all.filter(g => canonCode(g.getAttribute('data-shelf')) === C);
+  if (byName.length) return byName;
+  const m = /^(.+?)([SE]\d+)$/.exec(C); if (!m) return [];
+  return all.filter(g => canonCode(g.getAttribute('data-shelf')) === m[1] && canonCode(g.getAttribute('data-subname')) === m[2]);
+}
+// Split a code into { shelf, sub } once it is known on the map.
+export function splitCode(root, code) { const gs = groupsFor(root, code); if (!gs.length) return null; const C = canonCode(code), shelf = gs[0].getAttribute('data-shelf'); return { shelf, sub: canonCode(shelf) === C ? '' : canonCode(gs[0].getAttribute('data-subname')), groups: gs }; }
 
 // Hover tooltip on a shelf, as in the showcase: department chip, shelf id and
 // segment, name, Side/End, module count, run direction, then a status line
@@ -93,30 +112,78 @@ function buildBadges(floorEl) {
   const layer = document.createElementNS(NS, 'g'); layer.setAttribute('class', 'shelf-badges');
   for (const b of badges) {
     const x = b.cx + b.dx, y = b.cy + b.dy;
-    const bg = document.createElementNS(NS, 'rect'); bg.setAttribute('class', 'sb-bg'); bg.setAttribute('x', x - b.w / 2); bg.setAttribute('y', y - b.h / 2); bg.setAttribute('width', b.w); bg.setAttribute('height', b.h); bg.setAttribute('rx', 8); bg.setAttribute('fill', DEPT_COLOUR[b.dept] || '#374151'); bg.setAttribute('data-shelf', b.name);
-    const t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'sb'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('data-shelf', b.name); t.textContent = b.label;
+    const bg = document.createElementNS(NS, 'rect'); bg.setAttribute('class', 'sb-bg'); bg.setAttribute('x', x - b.w / 2); bg.setAttribute('y', y - b.h / 2); bg.setAttribute('width', b.w); bg.setAttribute('height', b.h); bg.setAttribute('rx', 8); bg.setAttribute('fill', DEPT_COLOUR[b.dept] || '#374151'); bg.setAttribute('data-shelf', b.name); bg.setAttribute('data-dept', b.dept);
+    const t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'sb'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('data-shelf', b.name); t.setAttribute('data-dept', b.dept); t.textContent = b.label;
     layer.appendChild(bg); layer.appendChild(t);
   }
   floorEl.appendChild(layer);
 }
 
-export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false, tip = null, tips = true, doc = null, badges = true } = {}) {
+// The map's DOM is built once per published document (parsing 800 KB of
+// markup and laying out every badge is the slow part) and each view gets
+// a clone: a clone of 1,200 groups costs a few milliseconds, a parse
+// costs hundreds, and a fresh clone means no marks, overlays or classes
+// leak from the last view.
+let tpl = null, live = null, pv = null;
+// The shell calls this before it replaces a view's content: the live map
+// steps out first, so the next view re-inserts the same element instead of
+// the browser destroying five thousand nodes and building them again.
+export function parkMap() { if (live?.isConnected) live.remove(); }
+// Everything a view can leave on the map, undone: marks, selection, find
+// rings, dimming, route and pins, plan colours, classes, floor and zoom.
+function resetLive(svg, fl) {
+  svg.setAttribute('class', 'map real'); svg.removeAttribute('data-deptzoom'); svg.removeAttribute('style');
+  for (const el of [...svg.children]) if (!el.classList.contains('mfl')) el.remove();
+  for (const g of svg.querySelectorAll('.shelf-group')) {
+    for (const a of ['data-mark', 'data-sel', 'data-hl', 'data-onroute', 'data-dim']) if (g.hasAttribute(a)) g.removeAttribute(a);
+    if (g.style.length) g.removeAttribute('style');
+    const r = g.firstElementChild; if (r && r.style.length) r.removeAttribute('style');
+  }
+  for (const d of svg.querySelectorAll('.plan-dot')) d.remove();
+  for (const b of svg.querySelectorAll('.shelf-badges [data-onroute]')) b.removeAttribute('data-onroute');
+  const cur = fl.find(f => f.type === 'foh') || fl[0];
+  for (const el of svg.querySelectorAll('.mfl')) el.style.display = el.getAttribute('data-fid') === cur.id ? '' : 'none';
+  svg.setAttribute('viewBox', cur.vb);
+}
+function template(fl) {
+  const main = fl === floors;
+  if (main && tpl) return tpl;
+  const cur = fl.find(f => f.type === 'foh') || fl[0];
+  const host = document.createElement('div');
+  host.innerHTML = `<svg class="map real" viewBox="${cur.vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${fl.map(f => `<g class="mfl" data-fid="${esc(f.id)}" data-ftype="${f.type}" style="${f === cur ? '' : 'display:none'}">${f.inner}</g>`).join('')}</svg>`;
+  const svg = host.firstElementChild;
+  for (const f of svg.querySelectorAll('.mfl[data-ftype="foh"]')) buildBadges(f);
+  if (main) tpl = svg;
+  return svg;
+}
+// clone: true builds a throwaway copy; 'preview' reuses one kept for the
+// search palette's small map, so opening the palette never pays for a
+// fresh five-thousand-node tree.
+export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false, tip = null, tips = true, doc = null, badges = true, clone = false } = {}) {
   const fl = doc ? parseFloors(doc) : floors;
   let cur = fl.find(f => f.type === 'foh') || fl[0];
-  stage.innerHTML = cur
-    ? `<svg class="map real" viewBox="${cur.vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${fl.map(f => `<g class="mfl" data-fid="${esc(f.id)}" data-ftype="${f.type}" style="${f === cur ? '' : 'display:none'}">${f.inner}</g>`).join('')}</svg>`
-    : PLACEHOLDER;
+  // A view gets the one live map element (reset, moved into its stage); a
+  // preview that must not disturb the view behind it asks for a clone.
+  const shared = cur && fl === floors && !clone;
+  if (shared) { if (!live) live = template(fl).cloneNode(true); resetLive(live, fl); stage.replaceChildren(live); }
+  else if (cur && fl === floors && clone === 'preview') { if (!pv) pv = template(fl).cloneNode(true); resetLive(pv, fl); stage.replaceChildren(pv); }
+  else if (cur) stage.replaceChildren(template(fl).cloneNode(true)); else stage.innerHTML = PLACEHOLDER;
   const svg = stage.querySelector('svg.map.real');
   if (mono) svg.classList.add('mono');
   if (cls) svg.classList.add(...cls.split(' ').filter(Boolean));
   if (showEmergency) svg.classList.add('showem');
-  if (badges && cur) for (const f of svg.querySelectorAll('.mfl[data-ftype="foh"]')) buildBadges(f);
+  if (!badges) svg.classList.add('nobadges');
+  const graphFor = f => { if (!f) return null; if (f.graph === undefined) f.graph = f.paths ? buildGraph(f.paths) : null; return f.graph; };
   let vb0 = svg.getAttribute('viewBox');
   const floorEl = id => svg.querySelector(`.mfl[data-fid="${cssq(id)}"]`);
   const setLabelFade = () => {
     const z = (Number(vb0.split(' ')[2]) || 1) / (Number(svg.getAttribute('viewBox').split(' ')[2]) || 1);
     const badge = z <= BADGE_START ? 1 : z >= BADGE_END ? 0 : 1 - (z - BADGE_START) / (BADGE_END - BADGE_START);
     svg.style.setProperty('--badge-opacity', badge.toFixed(2)); svg.style.setProperty('--label-opacity', (1 - badge).toFixed(2));
+    // Two thousand module labels that are invisible when zoomed out still
+    // cost a layout and a paint each; take them out of the tree until the
+    // badges start handing over (views without badges keep them).
+    svg.style.setProperty('--label-display', badge >= 1 && !svg.classList.contains('nobadges') ? 'none' : 'inline');
   };
   // Emergency markers are authored at translate(x,y) only; scale them so a
   // sign is about 32px on screen whatever the zoom (the legacy viewer did
@@ -148,16 +215,17 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     zoomDept(codes) { return api.zoomDeptOn(codes, null); },
     zoomDeptOn(codes, floorId) {
       const want = (codes || []).map(c => String(c).toLowerCase());
-      if (!want.length) { for (const g of $$('.shelf-group[data-dept]', svg)) g.style.opacity = ''; api.fit(); return null; }
+      if (!want.length) { for (const g of $$('.shelf-group[data-dept]', svg)) { g.style.opacity = ''; g.removeAttribute('data-dim'); } svg.removeAttribute('data-deptzoom'); api.fit(); return null; }
       const perFloor = new Map();
       for (const g of $$('.shelf-group[data-dept]', svg)) { if (!want.includes((g.getAttribute('data-dept') || '').toLowerCase())) continue; const fid = g.closest('.mfl')?.getAttribute('data-fid'); perFloor.set(fid, (perFloor.get(fid) || 0) + 1); }
       const best = floorId && perFloor.has(floorId) ? [floorId, perFloor.get(floorId)] : [...perFloor.entries()].sort((a, b) => b[1] - a[1])[0];
       if (!best) return { shelves: 0, floor: cur?.name, depts: want, floors: [] };
       api.floor(best[0]);
+      svg.setAttribute('data-deptzoom', want.join(' '));
       let bb = null; const depts = new Set();
       for (const g of $$('.shelf-group[data-dept]', svg)) {
         const d = (g.getAttribute('data-dept') || '').toLowerCase(), hit = want.includes(d), here = g.closest('.mfl')?.getAttribute('data-fid') === best[0];
-        g.style.opacity = hit ? '' : '.14';
+        g.style.opacity = hit ? '' : '.14'; if (hit) g.removeAttribute('data-dim'); else g.setAttribute('data-dim', '1');
         if (!hit || !here) continue; depts.add(d);
         const r = g.querySelector('.shelf'); if (!r) continue;
         const x = r.tagName === 'circle' ? +r.getAttribute('cx') - +r.getAttribute('r') : +r.getAttribute('x'), y = r.tagName === 'circle' ? +r.getAttribute('cy') - +r.getAttribute('r') : +r.getAttribute('y');
@@ -178,7 +246,9 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       const nw = v[2] * f, nh = v[3] * f;
       api.setVb([v[0] + (v[2] - nw) * px, v[1] + (v[3] - nh) * py, nw, nh]);
     },
-    groups(id) { return $$(`.shelf-group[data-shelf="${cssq(id)}"]`, svg); },
+    groups(id) { return groupsFor(svg, id); },
+    code(id) { return splitCode(svg, id); },
+    graph() { return graphFor(cur); },
     segments() { return $$('.shelf-group[data-shelf]', svg).filter(g => g.getAttribute('data-shelf')); },
     mark(id, value) { for (const g of api.groups(id)) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
     markSegment(segId, value) { for (const g of api.segments()) if (segmentId(g) === segId) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
@@ -206,21 +276,64 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       const w = pad * 2, h = pad * 2 * (full[3] / full[2]);
       api.setVb([c[0] - w / 2, c[1] - h / 2, w, h]); svg.classList.add('zoomed');
     },
-    clearOverlays() { for (const el of $$('.route-path,.route-n,.pin', svg)) el.remove(); },
+    clearOverlays() { for (const el of $$('.route-layer,.route-path,.route-n,.pin', svg)) el.remove(); for (const g of $$('[data-onroute]', svg)) g.removeAttribute('data-onroute'); svg.classList.remove('has-route'); },
+    // The pick route as ShelfSearcher drew it: legs along the walk-path
+    // network (a straight line where a floor has none), a teal ribbon with
+    // white pulses running the way of travel and chevrons at each bend, a
+    // numbered stop on each shelf (green start, amber next, grey picked),
+    // and every other shelf greyed so the route reads at a glance. Only
+    // the stops on the shown floor draw; the rest keep their numbers.
     drawRoute(ids, done = []) {
       api.clearOverlays();
-      const NS = 'http://www.w3.org/2000/svg', vb = vb0.split(' ').map(Number);
-      const pts = [[vb[0] + vb[2] * 0.5, vb[1] + vb[3] - 40]]; const stops = [];
-      for (const id of ids) { const c = api.centreOf(id); if (c) { pts.push(c); stops.push({ id, c }); } }
-      let d = `M${pts[0][0]} ${pts[0][1]}`;
-      for (let i = 1; i < pts.length; i++) d += ` L${pts[i][0]} ${pts[i - 1][1]} L${pts[i][0]} ${pts[i][1]}`;
-      const path = document.createElementNS(NS, 'path'); path.setAttribute('class', 'route-path'); path.setAttribute('d', d); svg.appendChild(path);
-      stops.forEach((st, i) => {
-        const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'route-n' + (done.includes(st.id) ? ' done' : '')); g.setAttribute('transform', `translate(${st.c[0]},${st.c[1]})`);
-        const c = document.createElementNS(NS, 'circle'); c.setAttribute('r', '30'); g.appendChild(c);
-        const t = document.createElementNS(NS, 'text'); t.textContent = String(i + 1); g.appendChild(t);
-        svg.appendChild(g);
-      });
+      const NS = 'http://www.w3.org/2000/svg';
+      const stops = ids.map((id, i) => ({ id, n: i + 1, c: api.centreOf(id), here: api.groups(id)[0]?.closest('.mfl')?.getAttribute('data-fid') === cur?.id, done: done.includes(id) })).filter(st => st.c);
+      if (!stops.length) return { dist: 0, stops: 0 };
+      const layer = document.createElementNS(NS, 'g'); layer.setAttribute('class', 'route-layer'); layer.setAttribute('pointer-events', 'none');
+      const graph = graphFor(cur), full = vb0.split(' ').map(Number), dim = Math.min(full[2], full[3]) || 1000;
+      const onFloor = stops.filter(st => st.here), firstUndone = onFloor.findIndex(st => !st.done);
+      let total = 0;
+      for (let i = 0; i < onFloor.length - 1; i++) {
+        const A = { x: onFloor[i].c[0], y: onFloor[i].c[1] }, B = { x: onFloor[i + 1].c[0], y: onFloor[i + 1].c[1] };
+        const leg = graph ? routeBetween(graph, A, B) : null, pts = leg ? leg.points : [A, B];
+        total += leg ? leg.dist : Math.hypot(A.x - B.x, A.y - B.y);
+        const d = pts.map((p, k) => (k ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' '), active = i === firstUndone - 1;
+        const line = document.createElementNS(NS, 'path'); line.setAttribute('d', d); line.setAttribute('class', 'pick-route-line' + (active ? ' active' : '')); layer.appendChild(line);
+        const flow = document.createElementNS(NS, 'path'); flow.setAttribute('d', d); flow.setAttribute('class', 'pick-route-flow'); layer.appendChild(flow);
+        const size = Math.max(8, dim * 0.011);
+        for (let k = 0; k < pts.length - 1; k++) {
+          const a = pts[k], b = pts[k + 1], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy); if (len < size * 2.5) continue;
+          const arrow = document.createElementNS(NS, 'path'); arrow.setAttribute('d', `M${-size * 0.5} ${-size * 0.6} L${size * 0.5} 0 L${-size * 0.5} ${size * 0.6}`);
+          arrow.setAttribute('transform', `translate(${((a.x + b.x) / 2).toFixed(1)},${((a.y + b.y) / 2).toFixed(1)}) rotate(${(Math.atan2(dy, dx) * 180 / Math.PI).toFixed(1)})`); arrow.setAttribute('class', 'pick-route-arrow' + (active ? ' active' : '')); layer.appendChild(arrow);
+        }
+      }
+      const r = Math.max(22, dim * 0.026), fs = Math.max(13, dim * 0.016);
+      for (const st of onFloor) {
+        const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'path-badge' + (st.n === 1 ? ' start' : '') + (st.done ? ' completed' : '') + (onFloor[firstUndone] === st ? ' current' : '')); g.setAttribute('transform', `translate(${st.c[0]},${st.c[1]})`);
+        const c = document.createElementNS(NS, 'circle'); c.setAttribute('class', 'path-badge-bg'); c.setAttribute('r', r); g.appendChild(c);
+        const t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'path-badge-text'); t.setAttribute('font-size', fs); t.textContent = String(st.n); g.appendChild(t);
+        layer.appendChild(g);
+      }
+      for (const st of stops) for (const g of api.groups(st.id)) { g.setAttribute('data-onroute', st.done ? 'done' : '1'); for (const b of $$(`.shelf-badges [data-shelf="${cssq(g.getAttribute('data-shelf'))}"]`, svg)) b.setAttribute('data-onroute', '1'); }
+      svg.classList.add('has-route');
+      svg.appendChild(layer);
+      return { dist: total, stops: onFloor.length, network: !!graph };
+    },
+    // The walk order for a list of codes: the first stays the start, the
+    // rest follow the shortest walk over the network (per floor, floors
+    // in map order). Codes not on the map keep their place at the end.
+    planOrder(ids) {
+      const byFloor = new Map(), missing = [];
+      for (const id of ids) { const g = api.groups(id)[0]; if (!g) { missing.push(id); continue; } const fid = g.closest('.mfl')?.getAttribute('data-fid'); if (!byFloor.has(fid)) byFloor.set(fid, []); byFloor.get(fid).push(id); }
+      const first = byFloor.keys().next().value;
+      const seq = [...byFloor.keys()].sort((a, b) => (a === first ? -1 : b === first ? 1 : 0) || fl.findIndex(f => f.id === a) - fl.findIndex(f => f.id === b));
+      const out = [];
+      for (const fid of seq) {
+        const codes = byFloor.get(fid), f = fl.find(x => x.id === fid), graph = graphFor(f);
+        const pts = codes.map(id => { const c = api.centreOf(id); return { x: c[0], y: c[1] }; });
+        if (!graph || codes.length <= 2) { out.push(...nearestNeighbour(codes, pts)); continue; }
+        out.push(...orderStops(graph, pts).order.map(i => codes[i]));
+      }
+      return [...out, ...missing];
     },
     drawPins(pins) {   // [{ x, y, colour, label }] in map coordinates
       const NS = 'http://www.w3.org/2000/svg';
@@ -253,7 +366,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
         x: +m.getAttribute('data-x'), y: +m.getAttribute('data-y'), el: m,
       }));
     },
-    shelfInfo(g) { return { id: g.getAttribute('data-shelf'), sub: g.getAttribute('data-subname') || '', dept: (g.getAttribute('data-dept') || '').toLowerCase(), full: segmentId(g), segments: api.groups(g.getAttribute('data-shelf')).length }; },
+    shelfInfo(g) { const id = g.getAttribute('data-shelf'), sub = g.getAttribute('data-subname') || ''; return { id, sub, code: canonCode(id + sub), dept: (g.getAttribute('data-dept') || '').toLowerCase(), full: segmentId(g), segments: api.groups(id).length }; },
   };
   api.setMarks(marks);
   if (select) api.select(select);
@@ -264,14 +377,14 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   let drag = null, pinch = null; const ptrs = new Map();
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) || 1, mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   stage.addEventListener('wheel', e => { e.preventDefault(); api.zoomBy(e.deltaY > 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
-  svg.addEventListener('pointerdown', e => {
+  stage.addEventListener('pointerdown', e => {
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.pointerType !== 'mouse') { try { svg.setPointerCapture(e.pointerId); } catch {} }
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { v: api.vb(), d: dist(a, b), m: mid(a, b), r: svg.getBoundingClientRect() }; drag = null; return; }
     if (ptrs.size > 2) return;
     drag = { x: e.clientX, y: e.clientY, v: api.vb(), w: svg.getBoundingClientRect().width, moved: false, t: Date.now() };
   });
-  svg.addEventListener('pointermove', e => {
+  stage.addEventListener('pointermove', e => {
     if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pinch && ptrs.size >= 2) {
       const [a, b] = [...ptrs.values()], m = mid(a, b), k = pinch.d / dist(a, b);
@@ -283,7 +396,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; const k = drag.v[2] / drag.w; api.setVb([drag.v[0] - dx * k, drag.v[1] - dy * k, drag.v[2], drag.v[3]]);
   });
   const lift = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; };
-  svg.addEventListener('pointerup', e => {
+  stage.addEventListener('pointerup', e => {
     lift(e);
     if (!drag) return; const { moved, t } = drag; drag = null; if (moved) return;
     const hit = document.elementFromPoint(e.clientX, e.clientY) || e.target;
@@ -293,7 +406,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m) });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
   });
-  svg.addEventListener('pointercancel', e => { lift(e); drag = null; });
+  stage.addEventListener('pointercancel', e => { lift(e); drag = null; });
 
   // hover tooltip (mouse only; a touch shows nothing, the tap selects)
   if (tips) {
@@ -329,6 +442,12 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
 }
 
 function cssq(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+function nearestNeighbour(codes, pts) {
+  if (codes.length <= 2) return codes.slice();
+  const order = [0], left = codes.map((_, i) => i).slice(1);
+  while (left.length) { const last = pts[order[order.length - 1]]; let bi = 0, bd = Infinity; left.forEach((i, k) => { const d = Math.hypot(pts[i].x - last.x, pts[i].y - last.y); if (d < bd) { bd = d; bi = k; } }); order.push(left.splice(bi, 1)[0]); }
+  return order.map(i => codes[i]);
+}
 
 // The bar above a desktop map: find, department chips, zoom, key.
 export function mapbar() {
@@ -434,15 +553,15 @@ function mapFind(root, input, map) {
   const matchGroups = q => {                         // groups the typed text points at
     let Q = norm(q); if (!Q) return [];
     if (/^[A-Z]+\d+[SE]$/.test(Q)) Q = Q.slice(0, -1);
-    const exactSeg = map.segments().filter(g => segmentId(g).replace(/\s+/g, '') === Q);
-    if (exactSeg.length) return exactSeg;
-    const byName = map.segments().filter(g => (g.getAttribute('data-shelf') || '').toUpperCase() === Q);
-    if (byName.length) return byName;
+    const exact = map.groups(Q); if (exact.length) return exact;
     return Q.length >= 2 ? map.segments().filter(g => { const n = (g.getAttribute('data-shelf') || '').toUpperCase(); return n.startsWith(Q) || (g.getAttribute('data-locations') || '').toUpperCase().includes(Q); }) : [];
   };
   const state = cls => { input.classList.remove('found', 'not-found'); if (cls) input.classList.add(cls); };
+  // The view that owns the map hears what find selected (the store map
+  // opens its card; a pick list can add it).
+  const announce = code => map.stage.dispatchEvent(new CustomEvent('mapselect', { detail: { code, ...(map.code(code) || {}) } }));
   const pick = it => {
-    if (it.kind === 'shelf') { const gs = matchGroups(input.value).filter(g => (g.getAttribute('data-shelf') || '').toUpperCase() === it.name); const seg = gs.length === 1 && input.value.replace(/[\s-]+/g, '').toUpperCase() !== it.name ? gs : null; map.select(it.name); map.highlight(seg || map.groups(it.name)); map.zoomTo(it.name); if (!seg) input.value = it.name; remember(input.value.trim().toUpperCase()); state('found'); }
+    if (it.kind === 'shelf') { const gs = matchGroups(input.value).filter(g => (g.getAttribute('data-shelf') || '').toUpperCase() === it.name); const seg = gs.length === 1 && input.value.replace(/[\s-]+/g, '').toUpperCase() !== it.name ? gs : null; const id = seg ? canonCode(input.value) : it.name; map.select(id); map.highlight(seg || map.groups(it.name)); map.zoomTo(id); if (!seg) input.value = it.name; remember(input.value.trim().toUpperCase()); state('found'); announce(id); }
     else { input.value = it.kind === 'group' ? it.label : `${it.name} ${it.label}`; map.highlight(null); const grp = it.kind === 'group' ? it.label.toLowerCase() : (DEPT_GROUPS.find(x => x[2].includes(it.dept) && x[0] !== 'Other')?.[0].toLowerCase() || it.dept); root.querySelector(`[data-mapgroup="${grp}"]`)?.click(); if (it.kind === 'dept' && grp !== it.dept) root.querySelector(`[data-mapdept="${it.dept}"]`)?.click(); remember(input.value); state('found'); }
     hide();
   };
@@ -450,7 +569,7 @@ function mapFind(root, input, map) {
     if (focus >= 0 && items[focus]) return pick(items[focus]);
     const q = input.value.trim(); if (!q) return;
     const gs = matchGroups(q);
-    if (gs.length) { const id = gs[0].getAttribute('data-shelf'); map.select(id); map.highlight(gs); map.zoomTo(id); remember(q.toUpperCase()); state('found'); return hide(); }
+    if (gs.length) { const id = gs.length === map.groups(gs[0].getAttribute('data-shelf')).length ? gs[0].getAttribute('data-shelf') : canonCode(q); map.select(id); map.highlight(gs); map.zoomTo(id); remember(q.toUpperCase()); state('found'); announce(id); return hide(); }
     const d = suggest(q).find(x => x.kind !== 'shelf'); if (d) return pick(d);
     state('not-found');
   };
