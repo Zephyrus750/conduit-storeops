@@ -77,6 +77,34 @@ export const backdockReducers = {
     return null;
   },
 
+  // A record imported from Decant Visualiser (or any legacy archive): the
+  // history row as the legacy app computed it, whitelisted field by field.
+  // Replaces an earlier import of the same truck, so re-running is safe.
+  'truck.import'(s, e) {
+    const id = e.entity.truck;
+    if (!TRUCK_RE.test(id)) return reject('invalid_event', 'truck id must be YYYY-MM-DD-Tn');
+    const p = e.payload || {}, n = v => Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0, arr = v => Array.isArray(v) ? v : [];
+    const str = (v, max = 40) => v == null ? '' : String(v).slice(0, max);
+    const row = {
+      id, date: id.slice(0, 10), landedAt: p.landedAt ? str(p.landedAt) : null, clearedAt: p.clearedAt ? str(p.clearedAt) : null,
+      cartons: n(p.cartons), pallets: n(p.pallets), palletsLanded: n(p.palletsLanded ?? p.pallets),
+      clearMins: n(p.clearMins), haltMins: n(p.haltMins), haltCount: n(p.haltCount),
+      downtime: arr(p.downtime).filter(d => d && typeof d === 'object').map(d => ({ reason: str(d.reason) || 'other', mins: n(d.mins), count: n(d.count) })),
+      teamRate: n(p.teamRate),
+      audit: p.audit && typeof p.audit === 'object' ? { matched: n(p.audit.matched), missing: n(p.audit.missing), total: n(p.audit.total), extra: n(p.audit.extra), missingIds: [], extraIds: [] } : null,
+      carriedIn: p.carriedIn && typeof p.carriedIn === 'object' ? { pallets: n(p.carriedIn.pallets), cartons: n(p.carriedIn.cartons) } : null,
+      perPerson: arr(p.perPerson).filter(x => x && x.pid).map(x => ({ pid: str(x.pid), cartons: n(x.cartons), pallets: n(x.pallets), bays: arr(x.bays).map(b => str(b, 4)).slice(0, 40), mins: n(x.mins), rate: n(x.rate) })),
+      byDept: arr(p.byDept).filter(x => x && typeof x === 'object').map(x => ({ dept: str(x.dept), cartons: n(x.cartons), pallets: n(x.pallets) })),
+      manifest: p.manifest && p.manifest.manNo ? { manNo: str(p.manifest.manNo, 20), despatch: str(p.manifest.despatch, 20), dcNo: str(p.manifest.dcNo, 20) } : null,
+      imported: { source: str(p.source) || 'legacy', at: e.at, ...(p.pauses && typeof p.pauses === 'object' ? { pauses: { huddle: n(p.pauses.huddle), transition: n(p.pauses.transition), break: n(p.pauses.break) } } : {}) },
+    };
+    s.dock.history = s.dock.history.filter(r => r.id !== id);
+    s.dock.history.push(row);
+    s.dock.history.sort((a, b) => String(a.clearedAt || a.date).localeCompare(String(b.clearedAt || b.date)));
+    if (s.dock.history.length > HISTORY_CAP) s.dock.history.splice(0, s.dock.history.length - HISTORY_CAP);
+    return null;
+  },
+
   // ── Manifest ─────────────────────────────────────────────────────────
   // The library index: a published report (its document lives on the
   // worker, GET /manifest/:manNo) or one attached to a truck.

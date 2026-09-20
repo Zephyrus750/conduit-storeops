@@ -10,6 +10,7 @@ export { RegistryObject } from './registry.js';
 import { VERSION } from './version.js';
 import { parseCodes, lookup } from './catalogue.js';
 import { importK2B } from './import.js';
+import { importDV } from './import-dv.js';
 
 const r = new Router();
 
@@ -107,9 +108,11 @@ r.post('/v1/admin/stores/:no/import', async (req, env, _c, p) => {
   const c = await requireOwner(req, env);
   const rec = await registry(env, 'GET', `/stores/${p.no}`);
   const b = await readJson(req);
-  if ((b.source || 'k2b') !== 'k2b') throw new HttpError(400, 'invalid_request', 'source must be k2b');
+  const source = b.source || 'k2b';
+  if (!['k2b', 'dv'].includes(source)) throw new HttpError(400, 'invalid_request', 'source must be k2b or dv');
   const caps = Object.entries(rec.entitlements).filter(([, on]) => on).map(([a]) => a);
-  if (!caps.includes('stockroom')) throw new HttpError(409, 'not_entitled', 'turn the Stockroom on for this store before importing');
+  if (source === 'k2b' && !caps.includes('stockroom')) throw new HttpError(409, 'not_entitled', 'turn the Stockroom on for this store before importing');
+  if (source === 'dv' && !caps.includes('backdock')) throw new HttpError(409, 'not_entitled', 'turn the Back dock on for this store before importing');
   const claims = { ...c, store: rec.no, caps, roles: ['manager'], actor: 'owner' };
   const apply = async (events) => {
     const res = await forward(new Request(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events }) }), env, rec.no, '/events', '', claims);
@@ -117,8 +120,8 @@ r.post('/v1/admin/stores/:no/import', async (req, env, _c, p) => {
     if (!res.ok) throw new HttpError(res.status, j.code || 'store_error', j.message || 'store object refused the batch');
     return j.results;
   };
-  const summary = await importK2B(env, { no: rec.no, code: b.code, pin: b.pin, dry: !!b.dry, apply });
-  if (!b.dry) await registry(env, 'POST', '/log', { type: 'store.import', store: rec.no, detail: { source: 'k2b', code: summary.code, applied: summary.applied, duplicates: summary.duplicates, rejected: summary.rejected.length, warnings: summary.warnings.length, counts: summary.counts } });
+  const summary = source === 'dv' ? await importDV(env, { no: rec.no, url: b.url, dry: !!b.dry, apply }) : await importK2B(env, { no: rec.no, code: b.code, pin: b.pin, dry: !!b.dry, apply });
+  if (!b.dry) await registry(env, 'POST', '/log', { type: 'store.import', store: rec.no, detail: { source, code: summary.code || summary.url, applied: summary.applied, duplicates: summary.duplicates, rejected: summary.rejected.length, warnings: summary.warnings.length, counts: summary.counts } });
   return json(summary);
 });
 r.post('/v1/admin/stores/:no/flip', async (req, env, _c, p) => {

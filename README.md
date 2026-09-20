@@ -92,7 +92,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
 | `GET /v1/store/:no/map`, `GET …/map/:version` (`latest` allowed) | store token or owner | live: published map metadata and document, ETag / 304 |
 | `POST /v1/store/:no/map` | owner | live: publish a version; logs `map.publish`, sets the registry's map version |
-| `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B importer with dry run; area state flip |
+| `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B (`source: k2b`) and Decant Visualiser (`source: dv`) importers with dry run; area state flip |
 | `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
@@ -172,9 +172,21 @@ events Conduit would have logged, with ids derived from the record so a
 second run only adds what is new. Legacy metrics ride on `submission.ready`
 so History matches K2B's numbers. Flip to live sets the area's state in the
 registry; K2B stays deployed and goes bugfix-only for that store by hand.
-Routes: `POST /v1/admin/stores/:no/import` (`{ code, pin, dry }`) and
+Routes: `POST /v1/admin/stores/:no/import` (`{ source: 'k2b', code, pin, dry }`) and
 `POST /v1/admin/stores/:no/flip` (`{ area, state }`), owner only; the dev
 stack runs a stand-in legacy worker on :8789 (code `BUS247`, PIN 2468).
+
+The same tab imports the Back dock from a store's Decant Visualiser site
+(`worker/import-dv.js`, `{ source: 'dv', url, dry }`): DV's `/api/state`
+is read without a code (team members import by D-number), the archive
+lands as `truck.import` rows kept exactly as DV computed them, the trucks
+on the dock replay as the events that built them (create, manifest, team,
+goal, every pallet's landings, starts, pauses and dones, the halts), and
+the planner's slots become `plan.set`. DV's huddles, transitions and team
+breaks import as "Other" halts and a rollover holding record is reported,
+not imported. Manifests already published to the suite worker are not
+copied: the Manifests view publishes fresh reports. The dev stack runs a
+stand-in DV site on :8790.
 
 ## Maps and the catalogue
 

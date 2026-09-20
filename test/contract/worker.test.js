@@ -6,6 +6,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Miniflare } from 'miniflare';
 import { hashSecret } from '../../worker/auth.js';
+import { dvAnswer, DV_TRUCK } from '../fixtures/dv.js';
 import { ulid } from '../../shared/ulid.js';
 
 const OWNER_KEY = 'owner-key-for-tests-only';
@@ -56,6 +57,8 @@ before(async () => {
       }
       if (u.hostname === 'details.test') { upstreamCalls.details += 1; return req.json().then(b => Response.json(Object.fromEntries(b.items.map(i => [i.kc, { found: true, price: 12, was: 15, img: 'https://img.test/42977636.jpg', clr: true }])))); }
       if (u.hostname === 'legacy.test') return new Response('legacy must go through the LEGACY binding', { status: 500 });
+      if (u.hostname === 'dv.test') { if (u.pathname !== '/api/state') return new Response('<html>Not found</html>', { status: 404 }); const a = dvAnswer(u); return a.httpStatus ? Response.json(a.body, { status: a.httpStatus }) : Response.json(a); }
+      if (u.hostname === 'notdv.test') return Response.json({ hello: 'world' });
       return new Response('unexpected upstream ' + req.url, { status: 502 });
     },
     // The legacy worker is reached through a service binding in production;
@@ -366,4 +369,35 @@ test('manifests: publish the report, list it through the projection, read it, at
   assert.equal((await api('GET', '/v1/store/1241/manifest/7031482', undefined, dev)).status, 404);
   const s3 = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
   assert.equal(s3.dock.manifests['7031482'], undefined); assert.equal(s3.dock.trucks[truck].manifest.manNo, '7031482', 'the truck keeps its copy');
+});
+
+test('Decant Visualiser importer: dry run reads the site, the import lands the archive, the live truck and the plan, a second run is duplicates', async () => {
+  assert.equal((await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'not a url', dry: true }, ownerToken)).status, 400);
+  assert.equal((await api('POST', '/v1/admin/stores/1241/import', { source: 'nope' }, ownerToken)).status, 400);
+  const notdv = await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'https://notdv.test/', dry: true }, ownerToken);
+  assert.equal(notdv.status, 404); assert.equal(notdv.body.code, 'dv_site');
+  const dry = await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'https://dv.test', dry: true }, ownerToken);
+  assert.equal(dry.status, 200, JSON.stringify(dry.body)); assert.equal(dry.body.dry, true); assert.equal(dry.body.source, 'dv'); assert.equal(dry.body.legacy.name, 'Busselton back dock');
+  assert.deepEqual(dry.body.counts, { history: 1, trucks: 1, pallets: 3, planner: 2, events: 19 });
+  assert.ok(dry.body.warnings.some(w => /held over/.test(w)), dry.body.warnings.join('|'));
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'dock-imp' })).body.token;
+  assert.equal((await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state.dock.trucks[DV_TRUCK], undefined, 'a dry run writes nothing');
+
+  const run = await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'https://dv.test/' }, ownerToken);
+  assert.equal(run.status, 200); assert.equal(run.body.applied, dry.body.counts.events); assert.deepEqual(run.body.rejected, []);
+  const s = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
+  const t = s.dock.trucks[DV_TRUCK];
+  assert.equal(t.status, 'live'); assert.equal(t.manifest.manNo, '7031490'); assert.deepEqual(t.team.map(m => m.pid), ['D1', 'D2']);
+  assert.equal(t.pallets.A1.status, 'done'); assert.equal(t.pallets.A2.status, 'active'); assert.equal(t.pallets.A2.assignedTo, 'D2'); assert.equal(t.halts[1].reason, 'nostock');
+  assert.ok(s.dock.history.some(r => r.id === '2026-09-16-T1' && r.imported?.source === 'dv' && r.cartons === 470));
+  assert.equal(s.plan.days['2026-09-22'].slots[1].manifest.manNo, '7031495');
+  const rh = await api('GET', '/v1/store/1241/history/receiving', undefined, dev);
+  assert.ok(rh.body.rows.some(r => r.truck === '2026-09-16-T1' && r.manifest === '7031486' && r.crew === 2));
+
+  const again = await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'https://dv.test' }, ownerToken);
+  assert.equal(again.body.applied, 0); assert.equal(again.body.duplicates, dry.body.counts.events, 'the import is idempotent');
+  const acts = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions;
+  assert.equal(acts[0].type, 'store.import'); assert.equal(acts[0].detail.source, 'dv'); assert.equal(acts[0].detail.code, 'https://dv.test');
+  const flip = await api('POST', '/v1/admin/stores/1241/flip', { area: 'backdock', state: 'live' }, ownerToken);
+  assert.equal(flip.body.areas.backdock, 'live');
 });

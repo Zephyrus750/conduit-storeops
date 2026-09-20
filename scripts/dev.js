@@ -3,12 +3,14 @@
 // store, and the shell served statically from the repo root on :8080.
 //   node scripts/dev.js            → open http://127.0.0.1:8080/
 // Sign in with store 1241, PIN 2468. Owner key: dev-owner-key.
+// Stand-ins: legacy K2B worker on :8789 (BUS247 / 2468), a DV site on :8790.
 
 import { Miniflare } from 'miniflare';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { hashSecret } from '../worker/auth.js';
+import { dvAnswer } from '../test/fixtures/dv.js';
 
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const API = Number(process.env.API_PORT || 8787), WEB = Number(process.env.WEB_PORT || 8080);
@@ -31,6 +33,14 @@ http.createServer((req, res) => {
   if (sub === 'negsohlist') return send({ date: legacyDay, items: [{ keycode: '43302210', qty: -6, name: 'Paper plates 20 pk', location: '7014', confirmed: true, addedAt: T + 240000 }] });
   send({ error: 'unknown' }, 400);
 }).listen(8789, '127.0.0.1');
+
+// A stand-in Decant Visualiser site on :8790 (the test fixture: one live
+// truck, one archived, a planned slot) for the console's DV import.
+http.createServer((req, res) => {
+  const u = new URL(req.url, 'http://x');
+  if (u.pathname !== '/api/state') { res.writeHead(404); return res.end('not found'); }
+  const a = dvAnswer(u); res.writeHead(a.httpStatus || 200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(a.httpStatus ? a.body : a));
+}).listen(8790, '127.0.0.1');
 
 const mf = new Miniflare({
   modules: true, modulesRules: [{ type: 'ESModule', include: ['**/*.js'] }], modulesRoot: root, scriptPath: path.join(root, 'worker/index.js'),

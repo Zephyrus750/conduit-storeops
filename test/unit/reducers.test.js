@@ -84,6 +84,22 @@ test('halts need a known reason; finalise closes an open halt and writes a histo
   assert.equal(apply(s, ev('pallet.land', { truck: t, bay: 'B2' }, { ptype: 'bulk' })).code, 'truck_closed');
 });
 
+test('truck.import keeps a legacy record as-is, replaces itself on a re-run and sorts into the archive', () => {
+  const s = initialState(); const t = live(s);
+  apply(s, ev('pallet.land', { truck: t, bay: 'A1' }, { ptype: 'chep', cartons: 4 })); apply(s, ev('pallet.done', { truck: t, bay: 'A1' }, {}, { at: '2026-09-07T09:00:00+08:00' }));
+  apply(s, ev('truck.finalise', { truck: t }, {}, { at: '2026-09-07T09:30:00+08:00', actor: { role: 'manager', device: 'DESK' } }));
+  assert.equal(apply(s, ev('truck.import', { truck: 'nope' }, {})).code, 'invalid_event');
+  const row = { source: 'dv', landedAt: '2026-09-01T22:00:00Z', clearedAt: '2026-09-02T01:00:00Z', cartons: '470', pallets: 14, clearMins: 180, haltMins: 9, haltCount: 1, downtime: [{ reason: 'hcage', mins: 9, count: 1 }, 'junk'], teamRate: 173.4, audit: { matched: 14, missing: 0, total: 14, extra: 0 }, perPerson: [{ pid: 'D1', cartons: 251, pallets: 7.5, mins: 96, rate: 157 }, { nope: 1 }], byDept: [{ dept: '024', cartons: 200, pallets: 6 }], manifest: { manNo: '7031486' }, pauses: { huddle: 5 } };
+  assert.equal(apply(s, ev('truck.import', { truck: '2026-09-02-T1' }, row, { at: '2026-09-20T00:00:00Z' })), null);
+  assert.deepEqual(s.dock.history.map(r => r.id), ['2026-09-02-T1', t], 'sorted by when it cleared');
+  const r = s.dock.history[0];
+  assert.equal(r.cartons, 470); assert.equal(r.palletsLanded, 14); assert.equal(r.teamRate, 173); assert.deepEqual(r.downtime, [{ reason: 'hcage', mins: 9, count: 1 }]);
+  assert.deepEqual(r.perPerson, [{ pid: 'D1', cartons: 251, pallets: 8, bays: [], mins: 96, rate: 157 }]); assert.deepEqual(r.audit.missingIds, []);
+  assert.deepEqual(r.manifest, { manNo: '7031486', despatch: '', dcNo: '' }); assert.deepEqual(r.imported, { source: 'dv', at: '2026-09-20T00:00:00Z', pauses: { huddle: 5, transition: 0, break: 0 } });
+  assert.equal(apply(s, ev('truck.import', { truck: '2026-09-02-T1' }, { ...row, cartons: 480 })), null);
+  assert.equal(s.dock.history.length, 2); assert.equal(s.dock.history[0].cartons, 480, 'a re-run replaces the row');
+});
+
 test('planner slots feed truck.create', () => {
   const s = initialState();
   assert.equal(apply(s, ev('plan.set', { date: '2026-09-08', slot: '5' }, { eta: '09:30' })).code, 'invalid_event');

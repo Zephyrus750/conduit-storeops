@@ -24,10 +24,12 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const PAGE = 250;
 const enc = new TextEncoder();
 
-export async function importId(seed, ms) {
+// The id's time part is the record's timestamp; the rest hashes the seed
+// under the importer's namespace, so K2B and DV imports never collide.
+export async function importId(seed, ms, ns = 'k2b') {
   let time = Math.max(0, Math.floor(Number(ms) || 0)), out = '';
   for (let i = 9; i >= 0; i--) { out = ALPHABET[time % 32] + out; time = Math.floor(time / 32); }
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode('import:k2b:' + seed)));
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(`import:${ns}:` + seed)));
   let bits = 0, acc = 0, rand = '';
   for (const b of digest) { acc = ((acc << 8) | b) >>> 0; bits += 8; while (bits >= 5 && rand.length < 16) { bits -= 5; rand += ALPHABET[(acc >>> bits) & 31]; } if (rand.length >= 16) break; }
   return out + rand;
