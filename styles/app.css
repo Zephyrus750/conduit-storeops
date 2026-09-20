@@ -131,6 +131,7 @@ form.li { margin: 0; }
 
 /* Store map detail panel: the same icons as the rail, room to read them,
    and the grid reflows before a label would wrap. */
-.selshelf .acts2 { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; }
-.selshelf .acts2 .btn { padding: 10px 0; font-size: 12.5px; gap: 5px; letter-spacing: -.01em; }
+.selshelf .acts2 { grid-template-columns: 1fr 1fr; gap: 8px; }
+.selshelf .acts2 .btn { padding: 10px 8px; font-size: 13px; gap: 7px; }
+.selshelf .acts2 .btn.primary { grid-column: 1 / -1; }
 .selshelf .acts2 .btn svg.i { width: 18px; height: 18px; }
