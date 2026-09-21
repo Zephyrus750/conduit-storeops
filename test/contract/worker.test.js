@@ -230,6 +230,19 @@ test('owner diagnostics and act-as', async () => {
   assert.equal(snap.status, 200); assert.equal(snap.body.state.cages.BSN1240417.location, 'AISLE 2, NEAR 7023'); assert.ok('devices' in snap.body.state);
 });
 
+test('device presence: POST /hb records the device (the polling fallback for the socket hb frame)', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'poll-phone' })).body.token;
+  const hb = await api('POST', '/v1/store/1241/hb', { app: 'floor', online: true, outbox: 3, area: 'floor' }, dev);
+  assert.equal(hb.status, 200); assert.equal(hb.body.ok, true);
+  const devs = await api('GET', '/v1/admin/stores/1241/devices', undefined, ownerToken);
+  assert.equal(devs.status, 200);
+  const rec = devs.body.devices['poll-phone'];
+  assert.ok(rec, 'the heartbeat registered the device');
+  assert.equal(rec.app, 'floor'); assert.equal(rec.online, true); assert.equal(rec.outbox, 3); assert.ok(rec.last);
+  // The token is scoped to its store: it cannot heartbeat another store.
+  assert.equal((await api('POST', '/v1/store/1187/hb', {}, dev)).status, 403);
+});
+
 test('maps: owner publishes, devices read by version or latest, the log and registry record it', async () => {
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-map' })).body.token;
   assert.equal((await api('GET', '/v1/store/1241/map', undefined, dev)).status, 404);

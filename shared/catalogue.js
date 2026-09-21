@@ -88,7 +88,6 @@ export const CATALOGUE = {
   // ── Store-wide ───────────────────────────────────────────────────────
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
-  'device.heartbeat':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['device'], { app: 'string' }),
 };
 
 export function typeInfo(type) {

@@ -9,7 +9,8 @@
 // top, so optimism is automatic and a rejection rolls back by rebuilding
 // without that event. One WebSocket per device with backoff and jitter;
 // long-polling /changes when sockets are unavailable. Heartbeat every three
-// minutes or on change. Everything persists through the storage adapter:
+// minutes or on change — over the socket, or POST /hb while polling.
+// Everything persists through the storage adapter:
 //   snap:<store>          { seq, state }
 //   outbox:<store>:<id>   the queued event
 
@@ -183,6 +184,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   function startPolling() {
     if (pollTimer) return;
     setStatus({ state: 'polling' });
+    heartbeat();                       // sockets are down: keep reporting presence over HTTP
     const tick = async () => {
       if (closed) return;
       try {
@@ -200,8 +202,16 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // ── heartbeat ─────────────────────────────────────────────────────────
   function heartbeat() {
     timers.clearTimeout(hbTimer);
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'hb', app: session.app, online: online(), outbox: pending.length, lastError: status.lastError, area: session.current?.roles?.join(',') || null }));
+    const hb = { app: session.app, online: online(), outbox: pending.length, lastError: status.lastError, area: session.current?.roles?.join(',') || null };
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'hb', ...hb }));
+    else if (online() && !closed) sendHbHttp(hb);          // polling fallback still reports presence
     hbTimer = timers.setTimeout(heartbeat, HEARTBEAT_MS);
+  }
+  // Best-effort presence when the socket is down (long-polling). A failed
+  // heartbeat must never surface an error or trip the auth path, so this
+  // swallows everything and never calls unauthorised().
+  async function sendHbHttp(hb) {
+    try { const token = await session.token(); if (token) await transport.request(`/v1/store/${no}/hb`, { method: 'POST', body: hb, token }); } catch {}
   }
   let hbSoon = null;
   function heartbeatSoon() { timers.clearTimeout(hbSoon); hbSoon = timers.setTimeout(heartbeat, 1000); }

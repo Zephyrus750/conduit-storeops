@@ -66,6 +66,9 @@ r.get('/v1/store/:no/snapshot', (req, env, _ctx, p) => storeCall(req, env, p.no,
 r.get('/v1/store/:no/changes', (req, env, _ctx, p) => storeCall(req, env, p.no, '/changes', new URL(req.url).search));
 r.post('/v1/store/:no/events', (req, env, _ctx, p) => storeCall(req, env, p.no, '/events'));
 r.get('/v1/store/:no/ws', (req, env, _ctx, p) => storeCall(req, env, p.no, '/ws'));
+// Presence for a device that has fallen back to long-polling (the socket
+// carries the 'hb' frame; this is its HTTP twin). Any of the store's devices.
+r.post('/v1/store/:no/hb', (req, env, _ctx, p) => storeCall(req, env, p.no, '/hb'));
 
 // ── admin (owner) ─────────────────────────────────────────────────────────
 r.get('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/stores/_all')); });

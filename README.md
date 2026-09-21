@@ -87,6 +87,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/changes?since=` | store token | live: events after a seq |
 | `POST /v1/store/:no/events` | store token | live: batch submit, per-event ack or rejection |
 | `GET /v1/store/:no/ws` | store token | live: hello, submit, hb, ping; event fan-out |
+| `POST /v1/store/:no/hb` | store token | live: record this device's presence — the HTTP twin of the socket `hb` frame, for devices on the polling fallback |
 | `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate |
 | `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
@@ -286,7 +287,7 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 | Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list | ShelfSearcher refresh, label-integrity, stocktake, maintenance, em-service modes |
 | Stockroom | cages with ring colours, backfill submissions (pending, corrected, submitted; requested list; claims; rename), negative-SOH adjustments, day list | K2B review, adjust and scan modules |
 | Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits, pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4, history rows on finalise | Decant Visualiser receiving, manifests, planner, history |
-| Store | device heartbeat, map publish, roster rotation marker | |
+| Store | map publish, roster rotation marker (device presence is a projection written directly from the socket `hb` frame / `POST /hb`, not an event) | |
 
 A catalogued type without a reducer would be rejected `not_implemented`; the
 unit suite asserts there are none.

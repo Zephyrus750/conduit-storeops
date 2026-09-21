@@ -9,6 +9,7 @@
 //   POST /events  { events: [] }   → { results: [{ id, ok, seq } | { id, ok:false, code, message }] }
 //   GET  /ws                       → WebSocket upgrade
 //   GET  /devices                  → devices projection (owner)
+//   POST /hb                       → record this device's presence (HTTP twin of the WS 'hb' frame)
 //   GET  /tail?limit=              → raw log, newest first (owner)
 //   GET  /map                      → { version, at, by, floors:[{id,name,type,bytes}], versions:[…] } (404 until published)
 //   GET  /map/:version             → the published document; `latest` allowed; floors carry their svg
@@ -90,6 +91,7 @@ export class StoreObject extends DurableObject {
         case '/events': { const body = await request.json(); return json({ results: this.submit(body.events, claims) }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
+        case '/hb': { const b = await request.json().catch(() => ({})); this.recordHb(claims, b); return json({ ok: true }); }
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await request.json(), claims) : json(this.mapInfo());
         default: {
@@ -302,6 +304,20 @@ export class StoreObject extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  // Device presence is a deliberate projection side channel, not an event: a
+  // heartbeat every few minutes per device would bloat the append-only log
+  // with "who is on right now", which the events table never prunes. The WS
+  // 'hb' frame and POST /hb both land here and nothing is logged. (If presence
+  // ever needs an audit trail, reintroduce a device.heartbeat event WITH a
+  // pruning / TTL story for the log — not a straight append.)
+  recordHb(claims, msg) {
+    this.state.devices[claims.device || 'nodevice'] = {
+      app: msg.app || null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
+      area: msg.area || null, online: msg.online !== false, outbox: Number(msg.outbox) || 0,
+      lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
+    };
+  }
+
   async webSocketMessage(ws, message) {
     let msg;
     try { msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)); }
@@ -317,13 +333,7 @@ export class StoreObject extends DurableObject {
         return;
       }
       case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
-      case 'hb': {
-        this.state.devices[claims.device || 'nodevice'] = {
-          app: msg.app || null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
-          area: msg.area || null, online: msg.online !== false, outbox: Number(msg.outbox) || 0, lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
-        };
-        return;
-      }
+      case 'hb': this.recordHb(claims, msg); return;
       case 'ping': return ws.send(JSON.stringify({ t: 'pong', seq: this.state.seq }));
       default: return ws.send(JSON.stringify({ t: 'error', code: 'invalid_request', message: `unknown frame ${msg.t}` }));
     }

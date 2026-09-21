@@ -120,6 +120,18 @@ test('dispatch offline queues and applies locally; connect flushes; a second dev
   const se = await e.open('1241');
   await until(() => se.status.state === 'polling' && se.seq === 2);
   assert.equal(se.get('cages').BSN1240417.location, 'AISLE 2');
+
+  // A polling client (no socket) still reports presence: startPolling kicks
+  // the heartbeat, which POSTs /hb because there is no socket to carry it.
+  let hbPosts = 0;
+  const hbClient = createClient({ baseUrl, storage: memoryStorage({ suite_device: 'phone-hb' }), WebSocketImpl: null });
+  await hbClient.session.load(); await hbClient.session.signIn({ store: '1241', pin: '2468' });
+  const countingT = { ...hbClient.transport, request: (p, opts) => { if (/\/hb$/.test(p)) hbPosts += 1; return hbClient.transport.request(p, opts); } };
+  const hbStore = (await import('../../client/store.js')).createStore({ storeNo: '1241', session: hbClient.session, transport: countingT, storage: memoryStorage(), WebSocketImpl: null });
+  await hbStore.load(); await hbStore.connect();
+  await until(() => hbPosts >= 1);
+  hbStore.close();
+
   se.close(); live.close(); sb.close(); storeA.close(); storeA2.close(); forced.close();
 });
 
