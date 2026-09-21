@@ -12,7 +12,13 @@ let floors = [], mapMeta = null;
 // svg is kept as its viewBox plus inner markup; mountMap puts every floor
 // into one <svg> and shows one at a time, as the legacy viewer did.
 export function setMap(doc) {
+  // A new document (or a different store) makes the built template and the
+  // mounted copies stale, so drop them here: the next mountMap rebuilds from
+  // the new floors instead of re-showing the previous map's shelves. (parkMap
+  // only detaches the live element between views; here the map itself changed.)
   tpl = null;
+  if (live?.isConnected) live.remove();
+  live = pv = null;
   if (!doc) { floors = []; mapMeta = null; return; }
   floors = parseFloors(doc); mapMeta = { version: doc.version, at: doc.at, name: doc.name, floors: floors.map(f => ({ id: f.id, name: f.name, type: f.type })), departments: doc.departments || [] };
   setDepartments(doc.departments);
@@ -48,13 +54,17 @@ export function canonCode(code) { return String(code || '').toUpperCase().replac
 // called "S1"), then a shelf plus a module suffix (S1, S2, E1, E2). Any
 // place that takes a typed or scanned location goes through here, so a
 // module is never quietly widened to its whole shelf.
+// Split a canonical code into its shelf name and module suffix (S1, S2, E1,
+// E2), or an empty suffix for a whole shelf. The one place that decides where
+// a module ends and a shelf begins, so search and find never diverge from it.
+export function splitCanon(code) { const C = canonCode(code); const m = /^(.+?)([SE]\d+)$/.exec(C); return m ? { shelf: m[1], sub: m[2] } : { shelf: C, sub: '' }; }
 export function groupsFor(root, code) {
   const C = canonCode(code); if (!C) return [];
   const all = $$('.shelf-group[data-shelf]', root).filter(g => g.getAttribute('data-shelf'));
   const byName = all.filter(g => canonCode(g.getAttribute('data-shelf')) === C);
   if (byName.length) return byName;
-  const m = /^(.+?)([SE]\d+)$/.exec(C); if (!m) return [];
-  return all.filter(g => canonCode(g.getAttribute('data-shelf')) === m[1] && canonCode(g.getAttribute('data-subname')) === m[2]);
+  const { shelf, sub } = splitCanon(C); if (!sub) return [];
+  return all.filter(g => canonCode(g.getAttribute('data-shelf')) === shelf && canonCode(g.getAttribute('data-subname')) === sub);
 }
 // Split a code into { shelf, sub } once it is known on the map.
 export function splitCode(root, code) { const gs = groupsFor(root, code); if (!gs.length) return null; const C = canonCode(code), shelf = gs[0].getAttribute('data-shelf'); return { shelf, sub: canonCode(shelf) === C ? '' : canonCode(gs[0].getAttribute('data-subname')), groups: gs }; }
@@ -533,7 +543,7 @@ function mapFind(root, input, map) {
     return (idx = [...by.values()].map(e => ({ kind: 'shelf', ...e, locations: [...e.locations] })));
   };
   const depts = () => { const out = []; for (const [label, , ids] of DEPT_GROUPS) { if (label !== 'Other') out.push({ kind: 'group', name: label.toUpperCase(), label, ids }); for (const id of ids) out.push({ kind: 'dept', name: id.toUpperCase(), label: DEPT_NAME[id] || id, ids: [id], dept: id }); } return out; };
-  const norm = q => q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[\s-]+/g, '');
+  const norm = q => canonCode(q.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
   const suggest = q => {
     let Q = norm(q); if (!Q) return [];
     if (/^[A-Z]+\d+[SE]$/.test(Q)) Q = Q.slice(0, -1);           // "B21S" while typing B21 S1

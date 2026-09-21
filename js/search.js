@@ -5,7 +5,7 @@
 // search, Ctrl K, and the phone's search bar.
 
 import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast } from './ui.js';
-import { mountMap, hasMap } from './map.js';
+import { mountMap, hasMap, canonCode, splitCanon } from './map.js';
 import { VIEWS, RAIL } from './registry.js';
 
 const KIND = { prod: 'Product code', shelf: 'Shelf', loc: 'Shelf or bay', name: 'Name', none: 'Type to search' };
@@ -77,8 +77,8 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     } else if (k === 'shelf' || k === 'loc') {
       // "A16S1", "A16 S1" and "A16-S1" name one module of A16: the row and
       // the map keep that module rather than widening to the whole shelf.
-      const C = U.replace(/[\s-]+/g, ''), mm = /^([A-Z]+\d+)([SE]\d+)$/.exec(C), id = mm ? mm[1] : C, suffix = mm ? mm[2] : '';
-      const hits = hasMap() ? shelfIndex().filter(s => s.id === id || (!suffix && s.id.startsWith(id))).slice(0, 8) : [];
+      const C = canonCode(U), { shelf: id, sub: suffix } = splitCanon(C);
+      const hits = hasMap() ? shelfIndex().filter(s => s.id === C || s.id === id || (!suffix && s.id.startsWith(id))).slice(0, 8) : [];
       const modOf = s => suffix && s.subs.includes(suffix) ? suffix : '';
       const sel = s => esc(s.id + modOf(s));
       out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `Shelf ${hi(s.id, id)}${modOf(s) ? ` <small>module ${esc(modOf(s))}</small>` : suffix ? ` <small class="warn">no module ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${s.segments} module${s.segments === 1 ? '' : 's'}${s.subs.length ? ' · ' + esc(s.subs.join(' ')) : ''}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
