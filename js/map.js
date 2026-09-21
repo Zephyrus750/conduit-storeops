@@ -353,6 +353,41 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
         svg.appendChild(g);
       }
     },
+    // Evacuation route from a point on the current floor to the nearest exit
+    // (by walk distance where the floor carries a path network, a straight
+    // line otherwise), then on to the nearest assembly point. target:'assembly'
+    // routes straight to the assembly. Draws a cased green line with a "you are
+    // here" dot and rings the chosen markers, frames the route, and returns
+    // { dist, via, to, network } or null when there is nothing to route to.
+    evacFrom(from, target = 'exit') {
+      api.clearOverlays();
+      const NS = 'http://www.w3.org/2000/svg', graph = graphFor(cur);
+      const here = api.markers().filter(m => m.el.closest('.mfl')?.getAttribute('data-fid') === cur?.id);
+      const exits = here.filter(m => m.type === 'exit' || m.type === 'fire-exit');
+      const assemblies = here.filter(m => m.type === 'assembly');
+      const leg = (A, B) => (graph && routeBetween(graph, A, B)) || { points: [A, B], dist: Math.hypot(A.x - B.x, A.y - B.y) };
+      const nearest = (A, list) => list.reduce((best, m) => { const l = leg(A, { x: m.x, y: m.y }); return !best || l.dist < best.dist ? { m, leg: l } : best; }, null);
+      const legs = []; let dist = 0, via = null, to = null;
+      if (target === 'assembly') { const a = nearest(from, assemblies); if (!a) return null; legs.push(a.leg); dist = a.leg.dist; to = a.m; }
+      else {
+        const ex = nearest(from, exits); if (!ex) return null; legs.push(ex.leg); dist = ex.leg.dist; via = ex.m;
+        const a = nearest({ x: ex.m.x, y: ex.m.y }, assemblies); if (a) { legs.push(a.leg); dist += a.leg.dist; to = a.m; }
+      }
+      const full = vb0.split(' ').map(Number), dim = Math.min(full[2], full[3]) || 1000, w = Math.max(5, dim * 0.007), rr = Math.max(16, dim * 0.02);
+      const layer = document.createElementNS(NS, 'g'); layer.setAttribute('class', 'route-layer evac'); layer.setAttribute('pointer-events', 'none');
+      const path = (d, stroke, sw, dash) => { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', stroke); p.setAttribute('stroke-width', sw); p.setAttribute('stroke-linecap', 'round'); p.setAttribute('stroke-linejoin', 'round'); if (dash) p.setAttribute('stroke-dasharray', dash); layer.appendChild(p); };
+      for (const l of legs) { const d = l.points.map((p, k) => (k ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' '); path(d, 'rgba(255,255,255,.92)', w * 2.2); path(d, '#0B8A43', w, `${(w * 2.2).toFixed(1)} ${(w * 1.6).toFixed(1)}`); }
+      const ring = m => { const c = document.createElementNS(NS, 'circle'); c.setAttribute('cx', m.x); c.setAttribute('cy', m.y); c.setAttribute('r', rr); c.setAttribute('fill', 'none'); c.setAttribute('stroke', '#0B8A43'); c.setAttribute('stroke-width', w); layer.appendChild(c); };
+      if (via) ring(via); if (to) ring(to);
+      const dot = document.createElementNS(NS, 'circle'); dot.setAttribute('cx', from.x); dot.setAttribute('cy', from.y); dot.setAttribute('r', rr * 0.55); dot.setAttribute('fill', '#DC2626'); dot.setAttribute('stroke', '#fff'); dot.setAttribute('stroke-width', w * 0.8); layer.appendChild(dot);
+      svg.classList.add('has-route'); svg.appendChild(layer);
+      const xs = [from.x, ...(via ? [via.x] : []), ...(to ? [to.x] : [])], ys = [from.y, ...(via ? [via.y] : []), ...(to ? [to.y] : [])];
+      const pad = rr * 3; let x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad, W = Math.max(...xs) - Math.min(...xs) + pad * 2, H = Math.max(...ys) - Math.min(...ys) + pad * 2;
+      const r0 = svg.getBoundingClientRect(), ar = r0.width / r0.height || 1;
+      if (W / H < ar) { const nw = H * ar; x0 -= (nw - W) / 2; W = nw; } else { const nh = W / ar; y0 -= (nh - H) / 2; H = nh; }
+      api.setVb([x0, y0, W, H]); svg.classList.add('zoomed');
+      return { dist, via: via?.type || null, to: to?.type || null, network: !!graph };
+    },
     filterDept(dept) {
       let bb = null;
       for (const g of $$('.shelf-group[data-dept]', svg)) {
