@@ -1,7 +1,7 @@
 // Label integrity: one check per numbered micro-department per cycle, with
 // shelf assignment and variance capture. Reads store.get('labels').
 
-import { $, $$, ic, esc, vh, sub, prog, dep, DEPT_COLOUR, cycleId, daysLeftInCycle, fmtDate, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, prog, dep, DEPT_COLOUR, DEPT_GROUPS, cycleId, daysLeftInCycle, fmtDate, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome } from '../map.js';
 import { SUBS, MICRO, microId, microCode, microName, microCount } from '../data/micros.js';
 
@@ -105,38 +105,54 @@ function mobileBar(m) {
   return `<div class="mv-mh">${ic('m-labelint')}<b>${esc(code)} ${esc(microName(entry))}</b><span>${m.done} / ${m.total}</span></div><div class="mv-hint">${cycleLabel(m.cycle)} · <b>${m.daysLeft}d left</b> · ${subId.toUpperCase()} · ${c ? 'checked ' + fmtDate(c.at) : 'not checked yet'}</div><div class="mv-two">${mbig(c ? 'Uncheck' : 'Checked', c ? 'sec' : '', 'check', ` data-act="check" data-micro="${selected}"`)}${mbig('Price is wrong', 'warn', 'alert', ` data-act="variance" data-micro="${selected}"`)}</div><div class="mv-hint"><a data-act="toggle-sub" data-sub="${subId}">Choose another</a></div>`;
 }
 
-// Printable marking sheets: one A4 page per micro-department — a header with
-// fields to sign, a 100-box tally to count labels as they are checked, and a
-// table for the wrong ones. The floor's paper twin of the digital check.
-// Scope is 'all', a sub id ('h1'), or a micro id ('h1-021').
+// Printable marking sheets — ShelfSearcher's Correction & Marking Sheet, ported
+// faithfully: title, the department / sub (accent badge) / micro up top-left
+// with the sub's accent colour, a 100-box tally grid, and a table for incorrect
+// labels and their true cost. Pure print HTML in a throwaway window so it never
+// touches the app's layout. Scope is 'all', a sub id ('h1'), or a micro id.
 function printSheets(ctx, scope) {
   const m = model(ctx);
+  const storeLabel = (ctx.storeName || '') + (ctx.storeNo ? ' · ' + ctx.storeNo : '');
+  const cyc = cycleLabel(m.cycle);
   const all = [];
-  for (const sd of SUBS) for (const entry of (MICRO[sd[0]] || [])) all.push({ subId: sd[0], subCode: sd[1], subName: sd[2], code: microCode(entry), name: microName(entry), id: microId(sd[0], entry), shelves: m.L.assign[microId(sd[0], entry)] || [] });
-  let items = all;
-  if (scope && scope !== 'all') items = scope.includes('-') ? all.filter(x => x.id === scope) : all.filter(x => x.subId === scope);
-  if (!items.length) return toast('Nothing to print for that scope', 'bad');
-  const grid = Array.from({ length: 100 }).map(() => '<i></i>').join('');
-  const rows = Array.from({ length: 14 }).map(() => '<tr><td></td><td></td><td></td><td></td></tr>').join('');
-  const page = it => `<section class="sheet"><div class="hd"><div><div class="store">Store ${esc(ctx.storeNo)}${ctx.storeName ? ' · ' + esc(ctx.storeName) : ''}</div><h1>Label integrity check</h1><div class="cyc">${esc(cycleLabel(m.cycle))} · ${esc(m.L.cycleLen)} cycle</div></div><div class="micro">${esc(it.code)}<small> ${esc(it.subCode)}</small><div class="mn">${esc(it.name)}</div><div class="sn">${esc(it.subName)}</div></div></div>` +
-    `<div class="fields"><span>Checked by <span class="ln"></span></span><span>Date <span class="ln" style="min-width:90px"></span></span><span>Time <span class="ln" style="min-width:70px"></span></span></div>` +
-    `<div class="shelves"><b>Shelves:</b> ${it.shelves.length ? esc(it.shelves.join(', ')) : '—— assign shelves to this micro-department in the app ——'}</div>` +
-    `<div class="sec">Tally — one mark per label checked (100)</div><div class="grid">${grid}</div>` +
-    `<div class="sec">Incorrect labels found</div><table><thead><tr><th style="width:20%">Location</th><th>Description</th><th style="width:17%">Ticket price</th><th style="width:17%">Correct price</th></tr></thead><tbody>${rows}</tbody></table></section>`;
-  const title = scope === 'all' || !scope ? 'all micro-departments' : items.length > 1 ? esc(items[0].subCode) + ' sheets' : esc(items[0].code + ' ' + items[0].name);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Label check — ${title}</title><style>` +
-    `@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}html,body{margin:0}body{font:12px/1.45 -apple-system,"Segoe UI",Roboto,sans-serif;color:#111}` +
-    `.sheet{page-break-after:always}.sheet:last-child{page-break-after:auto}` +
-    `.hd{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2.5px solid #111;padding-bottom:8px}` +
-    `.hd .store{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.05em}.hd h1{font-size:19px;margin:3px 0 2px}.hd .cyc{font-size:12px;color:#555}` +
-    `.micro{text-align:right;font-size:30px;font-weight:800;line-height:1}.micro small{font-size:14px;font-weight:600;color:#666}.micro .mn{font-size:14px;font-weight:600;margin-top:4px}.micro .sn{font-size:11px;font-weight:500;color:#666}` +
-    `.fields{display:flex;gap:28px;margin:12px 0 8px;font-size:13px}.fields .ln{display:inline-block;border-bottom:1px solid #111;min-width:150px;height:15px}` +
-    `.shelves{font-size:11.5px;color:#333;margin-bottom:4px}.sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#333;margin:12px 0 6px}` +
-    `.grid{display:grid;grid-template-columns:repeat(10,1fr);border-left:1.5px solid #111;border-top:1.5px solid #111}.grid i{border-right:1.5px solid #bbb;border-bottom:1.5px solid #bbb;height:8mm}` +
-    `table{width:100%;border-collapse:collapse;margin-top:2px}th,td{border:1px solid #999;padding:5px 8px;text-align:left;font-size:12px}th{background:#f1f1f1;font-size:11px;text-transform:uppercase;letter-spacing:.04em}td{height:24px}` +
-    `@media screen{body{background:#e9e9e9;padding:16px}.sheet{background:#fff;padding:16mm;margin:0 auto 16px;max-width:210mm;box-shadow:0 1px 6px rgba(0,0,0,.25)}}` +
-    `</style></head><body>${items.map(page).join('')}<script>window.onload=function(){setTimeout(function(){window.print();},80);};<\/script></body></html>`;
+  for (const sd of SUBS) {
+    const group = (DEPT_GROUPS.find(g => g[0] !== 'Other' && g[2].includes(sd[0])) || [])[0] || sd[2];
+    for (const entry of (MICRO[sd[0]] || [])) all.push({ subId: sd[0], group, sub: sd[1], subName: sd[2], color: DEPT_COLOUR[sd[0]] || '#5B21B6', micro: entry, id: microId(sd[0], entry) });
+  }
+  let list = all;
+  if (scope && scope !== 'all') list = scope.includes('-') ? all.filter(x => x.id === scope) : all.filter(x => x.subId === scope);
+  if (!list.length) return toast('Nothing to print for that scope', 'bad');
+  const sheet = sh => {
+    let boxes = ''; for (let i = 0; i < 100; i++) boxes += '<i></i>';
+    let rows = ''; for (let r = 0; r < 16; r++) rows += '<tr><td></td><td></td><td class="c"></td></tr>';
+    return `<section class="sheet" style="--ac:${esc(sh.color)}">` +
+      `<header class="sh-top"><div class="sh-ttl"><b>Label Integrity</b><span>Correction &amp; Marking Sheet</span></div><div class="sh-store"><b>${esc(storeLabel)}</b><span>${esc(cyc)}</span></div></header>` +
+      `<div class="sh-meta"><div class="sh-info"><div class="sh-ln"><label>Department</label><b>${esc(sh.group)}</b></div><div class="sh-ln"><label>Sub-department</label><b><i class="bdg">${esc(sh.sub)}</i>${esc(sh.subName)}</b></div><div class="sh-ln"><label>Micro-department</label><b class="mic">${esc(sh.micro)}</b></div></div>` +
+        `<div class="sh-who"><div class="sh-ln"><label>Checked by</label><u></u></div><div class="sh-ln"><label>Date</label><u></u></div><div class="sh-ln"><label>Time</label><u></u></div></div></div>` +
+      `<div class="sh-sec">Labels checked <span>— tick each as you go (100)</span></div><div class="sh-grid">${boxes}</div>` +
+      `<div class="sh-sec">Incorrect labels found</div><table class="sh-tbl"><thead><tr><th class="loc">Location / keycode</th><th>Incorrect label description</th><th class="c">True cost</th></tr></thead><tbody>${rows}</tbody></table>` +
+      `<footer class="sh-foot">${esc(sh.sub)} · ${esc(sh.micro)}</footer></section>`;
+  };
+  const css = `*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff}` +
+    `.sheet{width:190mm;min-height:277mm;padding:12mm 10mm;margin:0 auto;page-break-after:always;position:relative}.sheet:last-child{page-break-after:auto}` +
+    `.sh-top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--ac);padding-bottom:7px;margin-bottom:12px}` +
+    `.sh-ttl b{display:block;font-size:23px;font-weight:800;letter-spacing:-.01em}.sh-ttl span{font-size:12px;color:#555;letter-spacing:.03em;text-transform:uppercase}` +
+    `.sh-store{text-align:right}.sh-store b{display:block;font-size:14px}.sh-store span{font-size:11px;color:#555}` +
+    `.sh-meta{display:flex;justify-content:space-between;gap:20px;margin-bottom:16px}.sh-ln{margin-bottom:7px}` +
+    `.sh-ln label{display:block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#777}` +
+    `.sh-ln b{font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px}.sh-ln b.mic{font-size:16px}` +
+    `.bdg{font-style:normal;background:var(--ac);color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:800}` +
+    `.sh-who{min-width:150px}.sh-who u{display:block;border-bottom:1px solid #999;height:16px;text-decoration:none}` +
+    `.sh-sec{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ac);border-bottom:1px solid #ddd;padding-bottom:3px;margin:14px 0 8px}.sh-sec span{color:#999;font-weight:600;letter-spacing:0}` +
+    `.sh-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-bottom:6px}.sh-grid i{display:block;aspect-ratio:1/1;border:1.2px solid #888;border-radius:3px}` +
+    `.sh-tbl{width:100%;border-collapse:collapse;table-layout:fixed}.sh-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#555;text-align:left;border-bottom:2px solid var(--ac);padding:5px 6px}` +
+    `.sh-tbl td{border:1px solid #bbb;height:26px;padding:2px 6px}.sh-tbl .loc{width:30%}.sh-tbl .c{width:20%}` +
+    `.sh-foot{position:absolute;bottom:8mm;left:10mm;right:10mm;font-size:8.5px;color:#aaa;border-top:1px solid #eee;padding-top:4px}` +
+    `@media screen{body{background:#e9edf0;padding:16px}.sheet{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin-bottom:16px}}@page{size:A4;margin:0}`;
+  const title = scope === 'all' || !scope ? 'all' : esc(list[0].sub + (scope.includes('-') ? ' ' + list[0].micro : ''));
   const w = window.open('', '_blank');
-  if (!w) return toast('Allow pop-ups to print the sheets', 'bad');
-  w.document.open(); w.document.write(html); w.document.close();
+  if (!w) return toast('Allow pop-ups to print the marking sheets', 'bad');
+  w.document.open();
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Marking sheets — ${title}</title><style>${css}</style></head><body>${list.map(sheet).join('')}<scr` + `ipt>window.focus();setTimeout(function(){try{window.print();}catch(e){}},350);</scr` + `ipt></body></html>`);
+  w.document.close();
 }
