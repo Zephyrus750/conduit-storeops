@@ -2,7 +2,8 @@
 // plan paint. Reads store.get('refresh'); writes refresh.* events.
 
 import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, splitCanon } from '../map.js';
+import { openScanner, scanSupported } from '../scan.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
 const PLAN_NAME = { '#a855f7': 'Purple', '#3b82f6': 'Blue', '#f59e0b': 'Amber', '#ec4899': 'Pink', '#14b8a6': 'Teal', '#ef4444': 'Red' };
@@ -71,12 +72,26 @@ async function tap(ctx, info) {
     else await ctx.store.dispatch({ type: 'refresh.mark', entity: { segment: info.full, week: m.week } });
   } catch (e) { toast(e.message, 'bad'); }
 }
+// A camera scan of a shelf label marks it refreshed (never toggles — scanning
+// the same label twice is a no-op, not an unmark). A bare bay code ("A16")
+// marks the whole shelf; a module code ("A16 S1") marks that one module.
+async function scanMark(ctx, map, raw) {
+  const code = canonCode(raw);
+  const gs = code ? map.groups(code) : [];
+  if (!gs.length) return { ok: false, message: `No shelf matches “${raw}”` };
+  const first = map.shelfInfo(gs[0]);
+  const seg = splitCanon(code).sub ? first.full : first.id;
+  const m = model(ctx);
+  if (markKeysFor(m.marks, { full: seg, id: first.id }).length) return { ok: true, message: `${code} already refreshed` };
+  await ctx.store.dispatch({ type: 'refresh.mark', entity: { segment: seg, week: m.week } });
+  return { ok: true, message: `${code} refreshed` };
+}
 
 export default {
   id: 'refresh', title: 'Location refresh', icon: 'm-refresh',
   desktop(ctx) {
     const m = model(ctx);
-    return vh('Location refresh', sub('This week', m.week, `${m.done} / ${TARGET}`), `<button class="btn" data-act="reset-week">${ic('refresh')}Reset week</button>`, 'm-refresh') +
+    return vh('Location refresh', sub('This week', m.week, `${m.done} / ${TARGET}`), `${scanSupported() ? `<button class="btn" data-act="scan">${ic('barcode')}Scan</button>` : ''}<button class="btn" data-act="reset-week">${ic('refresh')}Reset week</button>`, 'm-refresh') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx('Location refresh', ctx.storeNo)}<span><i style="background:#16A34A"></i>Refreshed this week (${m.done})</span><span><i style="background:transparent;border:2px solid #D24E0E"></i>Focus department, not yet</span><span><i style="background:#CBD0D8"></i>Not in focus</span></div></div>` +
       `<div class="sidecol fill" id="rfside"></div></div>`;
@@ -117,6 +132,7 @@ export default {
         else if (act === 'reset-plan') { for (const seg of Object.keys(m.plan)) await ctx.store.dispatch({ type: 'refresh.plan.paint', entity: { segment: seg }, payload: { colour: 'erase' } }); }
         else if (act === 'focus') { const d = a.getAttribute('data-dept'); const next = m.focus.includes(d) ? m.focus.filter(x => x !== d) : [...m.focus, d]; await ctx.store.dispatch({ type: 'refresh.focus.set', entity: { week: m.week }, payload: { departments: next } }); }
         else if (act === 'zoom-dept') { map.filterDept(a.getAttribute('data-dept')); }
+        else if (act === 'scan') { openScanner({ title: 'Refresh scan', hint: 'Scan a shelf label to mark it refreshed', onCode: raw => scanMark(ctx, map, raw) }); }
       } catch (err) { toast(err.message, 'bad'); }
     });
     return [ctx.store.on('refresh', paint)];
@@ -137,6 +153,7 @@ function sidebar(map, m) {
 function mobileBar(map, m) {
   const fc = focusCounts(map, m);
   return `<div class="mv-mh">${ic('m-refresh')}<b>Location refresh</b><span>${m.done} / ${TARGET}</span></div>` +
+    (mode !== 'plan' && scanSupported() ? `<div style="padding:0 12px 2px">${mbig('Scan a shelf', '', 'barcode', ' data-act="scan"')}</div>` : '') +
     `<div class="rf-row"><div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div>` +
     (mode === 'plan' ? `<div class="rf-pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<span class="rf-sync live" title="Team sync"><i></i>live</span>`) + `</div>` +
     (mode === 'plan' ? `<div class="mv-hint">Plan mode: tap a shelf to paint it for the team. Tap the same colour again to clear.</div>`

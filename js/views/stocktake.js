@@ -2,7 +2,8 @@
 // counted → verified, phase counting | final. Reads store.get('stocktake').
 
 import { $, ic, esc, vh, sub, prog, status, dep, DEPT_COLOUR, DEPT_NAME, today, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, canonCode } from '../map.js';
+import { openScanner, scanSupported } from '../scan.js';
 
 let reportOpen = false;
 
@@ -37,7 +38,7 @@ export default {
   id: 'stocktake', title: 'Stocktake', icon: 'm-stocktake',
   desktop(ctx) {
     const m = model(ctx);
-    return vh('Stocktake', m.sess ? sub('Session open', esc(m.id), `${m.sess.phase === 'final' ? 'Final check' : 'Counting'} · started ${fmtTime(m.sess.startedAt)}`) : sub('No session open'), m.sess ? `<button class="btn" data-act="report">${ic('listcheck')}Report</button>` : `<button class="btn primary" data-act="start">${ic('plus')}Start a session</button>`, 'm-stocktake') +
+    return vh('Stocktake', m.sess ? sub('Session open', esc(m.id), `${m.sess.phase === 'final' ? 'Final check' : 'Counting'} · started ${fmtTime(m.sess.startedAt)}`) : sub('No session open'), m.sess ? `${scanSupported() ? `<button class="btn" data-act="scan">${ic('barcode')}Scan</button>` : ''}<button class="btn" data-act="report">${ic('listcheck')}Report</button>` : `<button class="btn primary" data-act="start">${ic('plus')}Start a session</button>`, 'm-stocktake') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx('Stocktake', ctx.storeNo)}<span><i style="background:#EAB308"></i>Counting</span><span><i style="background:#16A34A"></i>Counted</span><span><i style="background:#2563EB"></i>Verified</span><span><i style="background:#CBD0D8"></i>To start</span></div></div>` +
       `<div class="sidecol" id="stside"></div></div><div id="strep"></div>`;
@@ -71,6 +72,7 @@ export default {
         else if (act === 'report-close') { reportOpen = false; paint(); }
         else if (act === 'locate') { reportOpen = false; const id = a.getAttribute('data-id'); paint(); map.zoomTo(id); map.select(id); toast('Located ' + id); }
         else if (act === 'csv') exportCsv(ctx, map, m);
+        else if (act === 'scan') { if (!m.sess) return toast('No session open'); if (m.sess.phase === 'final') return toast('Counting is closed — Final Check is on'); openScanner({ title: 'Stocktake scan', hint: 'Scan a shelf label to count it', onCode: raw => scanCount(ctx, map, raw) }); }
       } catch (err) { toast(err.message, 'bad'); }
     });
     return [ctx.store.on('stocktake', paint)];
@@ -85,9 +87,23 @@ function sidebar(map, m) {
 }
 function mobileBar(m) {
   if (!m.sess) return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b></div><div class="mv-hint">No session is open. Sessions start on the desktop.</div>`;
-  return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b><span class="phase">${m.sess.phase === 'final' ? 'Final' : 'Counting'}</span></div><div class="st-prog"><i><u class="v" style="width:${Math.min(100, m.counts.verified)}%"></u><u class="c" style="width:${Math.min(100, m.done)}%"></u></i><span><b>${m.done}</b> counted · ${m.counts.verified} ✓✓</span></div><div style="padding:0 12px 2px"><button class="btn sm" data-act="report">${ic('listcheck')}Report &amp; missing list</button></div><div class="mv-hint">Tap a shelf to count it, hold to step back. Session <b>${esc(m.id)}</b> is controlled from the desktop.</div>`;
+  return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b><span class="phase">${m.sess.phase === 'final' ? 'Final' : 'Counting'}</span></div><div class="st-prog"><i><u class="v" style="width:${Math.min(100, m.counts.verified)}%"></u><u class="c" style="width:${Math.min(100, m.done)}%"></u></i><span><b>${m.done}</b> counted · ${m.counts.verified} ✓✓</span></div>${m.sess.phase !== 'final' && scanSupported() ? `<div style="padding:0 12px 2px">${mbig('Scan a shelf', '', 'barcode', ' data-act="scan"')}</div>` : ''}<div style="padding:0 12px 2px"><button class="btn sm" data-act="report">${ic('listcheck')}Report &amp; missing list</button></div><div class="mv-hint">Tap a shelf to count it, hold to step back. Session <b>${esc(m.id)}</b> is controlled from the desktop.</div>`;
 }
 
+// A camera scan of a shelf label counts it (idempotent — a shelf already
+// counted or verified is left as is). Stocktake keys shelves by their id.
+async function scanCount(ctx, map, raw) {
+  const m = model(ctx); if (!m.id) return { ok: false, message: 'No session open' };
+  if (m.sess.phase === 'final') return { ok: false, message: 'Counting is closed' };
+  const code = canonCode(raw);
+  const gs = code ? map.groups(code) : [];
+  if (!gs.length) return { ok: false, message: `No shelf matches “${raw}”` };
+  const id = map.shelfInfo(gs[0]).id;
+  const cur = m.shelves[id];
+  if (cur && (cur.state === 'counted' || cur.state === 'verified')) return { ok: true, message: `${id} already counted` };
+  await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: id }, payload: { state: 'counted' } });
+  return { ok: true, message: `${id} counted` };
+}
 // The session report — per-department tallies over unique shelf ids, the
 // still-to-count list (tap one to find it on the map), and a CSV export.
 // Ported from ShelfSearcher's stocktake report; missing = a shelf with no
