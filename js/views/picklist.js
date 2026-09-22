@@ -32,6 +32,8 @@ export default {
       const b = $('#pkbadge', root); if (b) { const next = m.items.find(i => !i.completed); b.innerHTML = `<b>${m.items.filter(i => i.completed).length} / ${m.items.length}</b> picked${next ? ' · next ' + esc(next.code) : ''}`; }
     };
     paint();
+    // Carried from a shelf selected on the map: add it as a stop once.
+    if (ctx.arg?.select) { const code = canonCode(ctx.arg.select), m = model(ctx); if (map.groups(code).length && !m.items.some(i => i.code === code)) { save(ctx, [...m.items, { code, completed: false }]); toast(`${code} added to the pick list`); } }
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act'), m = model(ctx), code = a.getAttribute('data-code');

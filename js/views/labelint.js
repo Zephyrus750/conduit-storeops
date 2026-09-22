@@ -52,6 +52,14 @@ export default {
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.done}</b> of ${m.total} · ${cycleLabel(m.cycle)}`;
     };
     paint();
+    // Carried from a shelf selected on the map: zoom to it and, when it is
+    // assigned to a micro-department, open that one so its checks show.
+    if (ctx.arg?.select && map.groups(ctx.arg.select).length) {
+      const sel = ctx.arg.select, m0 = model(ctx);
+      const micro = Object.entries(m0.L.assign).find(([, sh]) => sh.includes(sel))?.[0];
+      if (micro) { selected = micro; openSub = micro.split('-')[0]; paint(); }
+      map.select(sel); map.zoomTo(sel);
+    }
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act'), m = model(ctx);

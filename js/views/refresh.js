@@ -104,6 +104,9 @@ export default {
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.done}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}`;
     };
     paint();
+    // Carried from a shelf selected on the map: zoom to it and ring it (no
+    // mark — a tap here toggles the refresh, so we only bring it into view).
+    if (ctx.arg?.select) { const code = canonCode(ctx.arg.select); if (map.groups(code).length) { map.select(code); map.zoomTo(code); } }
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act'), m = model(ctx);
