@@ -494,10 +494,17 @@ function nearestNeighbour(codes, pts) {
   return order.map(i => codes[i]);
 }
 
-// The bar above a desktop map: find, department chips, zoom, key.
-export function mapbar() {
+// The department chips shared by the desktop bar and the phone map: All, the
+// four groups, then Checkouts / Flex / Stockroom. Each entry is [label, icon,
+// group] where group is the data-mapgroup value ('' means All).
+function deptChips() {
   const chips = [['All', 'grid', '']];
   for (const [label, icon, ids] of DEPT_GROUPS) { if (label === 'Other') for (const id of ids) chips.push([DEPT_NAME[id] || id, { checkouts: 'bag', flex: 'flame', stockroom: 'box' }[id] || 'tag', id]); else chips.push([label, icon, label.toLowerCase()]); }
+  return chips;
+}
+// The bar above a desktop map: find, department chips, zoom, key.
+export function mapbar() {
+  const chips = deptChips();
   const fls = mapFloors(), floorSeg = fls.length > 1 ? `<div class="seg2 floorseg" data-floorseg>${fls.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}" title="${f.type === 'boh' ? 'Back of house' : 'Sales floor'}">${esc(f.name)}</button>`).join('')}</div>` : '';
   return `<div class="mapbar"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Find a shelf, bay or product on the map…" aria-label="Find on map" data-mapfind><svg class="i mic" title="Voice search"><use href="icons.svg#i-mic"/></svg></div>` +
     `<div class="legchips">${chips.map((c, i) => `<span class="chip${i === 0 ? ' on' : ''}" data-mapgroup="${c[2]}">${ic(c[1])}${c[0]}</span>`).join('')}</div>${floorSeg}` +
@@ -507,7 +514,14 @@ export function mapbar() {
 export function crumbx(ctx, storeNo, storeName) { const f = mapFloors()[0]; return `<span class="crumbx">${ic('map')}<span data-crumbfloor>${f ? `${f.type.toUpperCase()} · ${esc(f.name)}` : 'FOH · Ground'}</span> <b>${esc(storeNo)}</b>${ctx ? ' › ' + ctx : ''}<span data-crumbdept></span></span>`; }
 export function mvMap(o = {}) {
   const fls = mapFloors();
-  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="Scan">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="Next level">${ic('layers')}</span>` : ''}<span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="Scan">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="Next level">${ic('layers')}</span>` : ''}<span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>` + (o.depts ? mvDeptbar() : '');
+}
+// The phone map's department filter and legend: the same group chips as the
+// desktop bar, scrolling in one row, with a sub-department row that fills in
+// underneath. bindMapChrome wires them (data-mapgroup / data-mapdept →
+// zoomDept), so the phone gets the desktop's filter with no extra plumbing.
+export function mvDeptbar() {
+  return `<div class="mv-deptbar"><div class="legchips mv-legchips">${deptChips().map((c, i) => `<span class="chip${i === 0 ? ' on' : ''}" data-mapgroup="${c[2]}">${ic(c[1])}${c[0]}</span>`).join('')}</div><div class="mv-subchips" data-subchips hidden></div></div>`;
 }
 
 // Wire zoom buttons and group chips on a mounted view.

@@ -40,7 +40,7 @@ export default {
       `<div class="mapleg">${crumbx('Store map', ctx.storeNo)}<span><i style="background:transparent;border:2px solid #D24E0E"></i>Selected <b id="mapcrumb" style="color:var(--ink)">${selected ? esc(selected) : '—'}</b></span><span><i style="background:#CBD0D8"></i>Department colours from the key</span><span style="color:var(--faint)">Scroll to zoom · drag to pan · click a shelf</span></div></div>` +
       `<div id="selhost">${''}</div></div>`;
   },
-  mobile(ctx) { return mvMap({ badge: `<span id="mvcrumb">Floor</span>` }) + `<div class="mv-sel home" id="mvsel"></div>`; },
+  mobile(ctx) { return mvMap({ badge: `<span id="mvcrumb">Floor</span>`, depts: true }) + `<div class="mv-sel home" id="mvsel"></div>`; },
   mount(ctx, root) {
     if (ctx.arg?.select) selected = ctx.arg.select;
     const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { selected = info.id; paint(); } } });
