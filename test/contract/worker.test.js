@@ -152,6 +152,7 @@ test('events: entitlement, role, validation, duplicate, conflict rule, and a sec
   const p1 = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-1' })).body;
   const p2 = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-2' })).body;
   const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, p1.token)).body;
+  const p2floor = p2.token; p2.token = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, p2.token)).body.token;
 
   // phone-2 opens its socket first and says hello.
   const wsRes = await mf.dispatchFetch('http://conduit.test/v1/store/1241/ws', { headers: { Upgrade: 'websocket', 'Sec-WebSocket-Protocol': `conduit, ${p2.token}` } });
@@ -200,6 +201,9 @@ test('events: entitlement, role, validation, duplicate, conflict rule, and a sec
   const ack = await next(d => d.t === 'ack');
   assert.equal(ack.results[0].ok, true); assert.equal(ack.results[0].seq, 2);
   await next(d => d.t === 'event' && d.event.type === 'refresh.mark');
+  const floorSnap = await api('GET', '/v1/store/1241/snapshot', undefined, p2floor);
+  assert.equal(floorSnap.body.state.cages, undefined, 'the store PIN alone does not read the Stockroom');
+  assert.deepEqual((await api('GET', '/v1/store/1241/changes?since=0', undefined, p2floor)).body.events.map(e => e.type), ['refresh.mark'], 'nor its events');
   const ch = await api('GET', '/v1/store/1241/changes?since=1', undefined, p1.token);
   assert.equal(ch.body.events.length, 1); assert.equal(ch.body.events[0].type, 'refresh.mark');
 
@@ -278,12 +282,13 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
   assert.deepEqual(dry.body.counts, { history: 2, today: 2, requested: 1, negsoh: 1, events: 13 });
   assert.ok(dry.body.warnings.some(w => /7012:2026-09-17: 1 codes were not keycodes/.test(w)), dry.body.warnings.join('|'));
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-imp' })).body.token;
-  const before = (await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, dev)).body;
+  const reader = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, dev)).body.token;
+  const before = (await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, reader)).body;
   assert.equal(before.state.backfill.subs['7012:2026-09-17'], undefined, 'a dry run writes nothing');
 
   const run = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468' }, ownerToken);
   assert.equal(run.status, 200); assert.equal(run.body.applied, 13); assert.equal(run.body.duplicates, 0); assert.deepEqual(run.body.rejected, []);
-  const s = (await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, dev)).body.state;
+  const s = (await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, reader)).body.state;
   const h = s.backfill.subs['7012:2026-09-17'];
   assert.equal(h.status, 'submitted'); assert.deepEqual(h.metrics, { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 }); assert.deepEqual(Object.keys(h.codes).sort(), ['43166022', '43199310']);
   assert.deepEqual(s.backfill.requested['2026-09-17'], ['7020']); assert.deepEqual(s.backfill.requested['2026-09-18'], ['7037']);
@@ -306,25 +311,28 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
 
 test('a keycode’s life, the history lists and the CSV export read the stockroom record', async () => {
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-life' })).body.token;
-  const life = await api('GET', '/v1/store/1241/life/43166022', undefined, dev);
+  assert.equal((await api('GET', '/v1/store/1241/history/backfill', undefined, dev)).status, 403, 'the store PIN alone does not read the Stockroom');
+  assert.equal((await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, dev)).body.state.cages, undefined);
+  const reader = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, dev)).body.token;
+  const life = await api('GET', '/v1/store/1241/life/43166022', undefined, reader);
   assert.equal(life.status, 200);
   assert.deepEqual(life.body.visits.map(v => [v.bay, v.date, v.status, v.scanned]), [['7012', '2026-09-17', 'submitted', true]]);
   assert.equal(life.body.visits[0].accuracy, 91); assert.deepEqual(life.body.bays, ['7012']);
-  const adj = await api('GET', '/v1/store/1241/life/43302210', undefined, dev);
+  const adj = await api('GET', '/v1/store/1241/life/43302210', undefined, reader);
   assert.equal(adj.body.adjustments[0].qty, -6); assert.equal(adj.body.name, 'Paper plates 20 pk'); assert.equal(adj.body.last, '2026-09-18');
-  assert.deepEqual((await api('GET', '/v1/store/1241/life/99999999', undefined, dev)).body.visits, []);
-  assert.equal((await api('GET', '/v1/store/1241/life/12', undefined, dev)).status, 404, 'a keycode is 6 to 13 digits');
+  assert.deepEqual((await api('GET', '/v1/store/1241/life/99999999', undefined, reader)).body.visits, []);
+  assert.equal((await api('GET', '/v1/store/1241/life/12', undefined, reader)).status, 404, 'a keycode is 6 to 13 digits');
   const owner = await api('GET', '/v1/store/1241/life/43166022', undefined, ownerToken);
   assert.equal(owner.status, 200, 'the owner reads any entitled store');
 
-  const h = await api('GET', '/v1/store/1241/history/backfill?limit=1', undefined, dev);
+  const h = await api('GET', '/v1/store/1241/history/backfill?limit=1', undefined, reader);
   assert.equal(h.status, 200); assert.equal(h.body.kind, 'backfill'); assert.ok(h.body.total >= 2); assert.equal(h.body.rows.length, 1); assert.ok(h.body.rows[0].bay); assert.equal(typeof h.body.rows[0].accuracy, 'number');
-  const page2 = await api('GET', '/v1/store/1241/history/backfill?limit=1&offset=1', undefined, dev);
+  const page2 = await api('GET', '/v1/store/1241/history/backfill?limit=1&offset=1', undefined, reader);
   assert.notEqual(page2.body.rows[0].bay + page2.body.rows[0].date, h.body.rows[0].bay + h.body.rows[0].date);
-  assert.equal((await api('GET', '/v1/store/1241/history/adjustments', undefined, dev)).body.rows[0].keycode, '43302210');
-  assert.equal((await api('GET', '/v1/store/1241/history/manifests', undefined, dev)).status, 400);
+  assert.equal((await api('GET', '/v1/store/1241/history/adjustments', undefined, reader)).body.rows[0].keycode, '43302210');
+  assert.equal((await api('GET', '/v1/store/1241/history/manifests', undefined, reader)).status, 400);
 
-  const csv = await mf.dispatchFetch('http://conduit.test/v1/store/1241/export/backfill', { headers: { Authorization: `Bearer ${dev}` } });
+  const csv = await mf.dispatchFetch('http://conduit.test/v1/store/1241/export/backfill', { headers: { Authorization: `Bearer ${reader}` } });
   assert.equal(csv.status, 200); assert.match(csv.headers.get('content-type'), /text\/csv/); assert.match(csv.headers.get('content-disposition'), /1241-backfill\.csv/);
   const text = await csv.text();
   assert.equal(text.split('\n')[0], 'date,bay,status,readyAt,submittedAt,expected,scanned,match,accuracy,incorrect,codes,auto');
@@ -334,6 +342,7 @@ test('a keycode’s life, the history lists and the CSV export read the stockroo
 test('manifests: publish the report, list it through the projection, read it, attach it to a truck, scan against it, remove it', async () => {
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'dock-1' })).body.token;
   const unlocked = (await api('POST', '/v1/auth/unlock', { code: 'DK-CODE' }, dev)).body.token || dev;
+  assert.equal((await api('GET', '/v1/store/1241/profiles', undefined, dev)).status, 403, 'the store PIN alone does not read the Back dock');
   const doc = { v: 1, kind: 'report', manNo: '7031482', storeNo: '1241', despatch: '05/09/2026', dcNo: '4101533', filename: 'Manifest Report 06-09.xls', consols: [
     { id: '601804381', cons: '093008012601804381', cartons: 3, dept: '024', mix: [['024', 2, 12]], items: [{ k: '43307685', q: 12, dept: '024', c: 2, cc: ['000000000000000001'] }, { k: '42977636', q: 2, dept: '070', c: 1 }] },
     { id: '601804382', cons: '093008012601804382', cartons: 3, dept: '084', mix: [], items: [{ k: '43302210', q: 3, dept: '084' }] },
@@ -343,11 +352,11 @@ test('manifests: publish the report, list it through the projection, read it, at
   assert.equal(pub.status, 201, JSON.stringify(pub.body)); assert.equal(pub.body.consols, 2); assert.equal(pub.body.totalCartons, 6); assert.equal(pub.body.keycodes, 3);
   assert.equal((await api('POST', '/v1/store/1241/manifest', { ...doc, storeNo: '1187' }, unlocked)).status, 409, 'another store’s report is refused');
   assert.equal((await api('POST', '/v1/store/1241/manifest', { ...doc, manNo: 'bad manifest number!' }, unlocked)).status, 400);
-  const snap = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
+  const snap = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, unlocked)).body.state;
   assert.equal(snap.dock.manifests['7031482'].totalCartons, 6); assert.equal(snap.dock.manifests['7031482'].truck, null); assert.equal(snap.dock.manifests['7031482'].filename, 'Manifest Report 06-09.xls');
-  const got = await api('GET', '/v1/store/1241/manifest/7031482', undefined, dev);
+  const got = await api('GET', '/v1/store/1241/manifest/7031482', undefined, unlocked);
   assert.equal(got.status, 200); assert.deepEqual(got.body.consols[0].items[0].cc, ['000000000000000001'], 'the stored document keeps carton ids');
-  assert.equal((await api('GET', '/v1/store/1241/manifest/9999999', undefined, dev)).status, 404);
+  assert.equal((await api('GET', '/v1/store/1241/manifest/9999999', undefined, unlocked)).status, 404);
 
   const truck = '2026-09-21-T1';
   const ev = (type, entity, payload) => ({ id: ulid(), store: '1241', area: 'backdock', type, entity, payload, at: at(), v: 1 });
@@ -355,13 +364,13 @@ test('manifests: publish the report, list it through the projection, read it, at
   const r = await api('POST', '/v1/store/1241/events', { events: [ev('truck.create', { truck }, { landedAt: at() }), ev('truck.setLive', { truck }, {}), ev('manifest.attach', { truck }, { manNo: '7031482', dcNo: '4101533', despatch: '05/09/2026', consols }), ev('pallet.land', { truck, bay: 'A1' }, { ptype: 'chep', cartons: null }), ev('pallet.scan', { truck, bay: 'A1' }, { code: '093008012601804381' }), ev('pallet.scan', { truck, bay: 'A1' }, { code: '601804399' })] }, unlocked);
   assert.deepEqual(r.body.results.map(x => x.ok), [true, true, true, true, true, false]);
   assert.equal(r.body.results[5].code, 'not_on_manifest');
-  const s2 = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
+  const s2 = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, unlocked)).body.state;
   assert.equal(s2.dock.trucks[truck].manifest.manNo, '7031482'); assert.equal(s2.dock.trucks[truck].pallets.A1.cartons, 3, 'the scan pulled the consol’s cartons onto the pallet'); assert.deepEqual(s2.dock.trucks[truck].pallets.A1.consolIds, ['601804381']);
   assert.equal(s2.dock.manifests['7031482'].truck, truck); assert.equal(s2.dock.manifests['7031482'].keycodes, 3);
 
   // Profiles come from the published documents; finalising the truck
   // writes the receiving record the history and export routes read.
-  const prof = await api('GET', '/v1/store/1241/profiles', undefined, dev);
+  const prof = await api('GET', '/v1/store/1241/profiles', undefined, unlocked);
   assert.equal(prof.status, 200); assert.equal(prof.body.schema, 'dv-profiles/1'); assert.equal(prof.body.trucks_sampled, 1);
   assert.equal(prof.body.profiles['43307685']?.ctn, 6, 'twelve units in two cartons on 7031482'); assert.equal(prof.body.profiles['43302210'], undefined, 'no carton count, no profile');
   assert.equal((await api('POST', '/v1/store/1241/events', { events: [ev('truck.finalise', { truck }, {})] }, dev)).body.results[0].code, 'unauthorised', 'finalising a truck takes the dock code');
@@ -369,17 +378,17 @@ test('manifests: publish the report, list it through the projection, read it, at
   assert.equal(running.body.results[1].code, 'pallets_running', 'a running pallet holds the truck open');
   const fin = await api('POST', '/v1/store/1241/events', { events: [ev('pallet.done', { truck, bay: 'A1' }, {}), ev('truck.finalise', { truck }, {})] }, unlocked);
   assert.deepEqual(fin.body.results.map(x => x.ok), [true, true]);
-  const rh = await api('GET', '/v1/store/1241/history/receiving', undefined, dev);
+  const rh = await api('GET', '/v1/store/1241/history/receiving', undefined, unlocked);
   assert.equal(rh.status, 200); assert.equal(rh.body.rows.length, 1);
   assert.equal(rh.body.rows[0].truck, truck); assert.equal(rh.body.rows[0].manifest, '7031482'); assert.equal(rh.body.rows[0].cartons, 3); assert.equal(rh.body.rows[0].matched, 1); assert.equal(rh.body.rows[0].crew, 1);
-  const csv = await mf.dispatchFetch('http://conduit.test/v1/store/1241/export/receiving', { headers: { Authorization: `Bearer ${dev}` } });
+  const csv = await mf.dispatchFetch('http://conduit.test/v1/store/1241/export/receiving', { headers: { Authorization: `Bearer ${unlocked}` } });
   assert.equal(csv.status, 200); assert.match(csv.headers.get('content-type'), /text\/csv/); assert.match(await csv.text(), /^date,truck,manifest,/);
   assert.equal((await api('GET', '/v1/store/1241/history/receiving', undefined, ownerToken)).status, 200, 'the owner reads any area');
 
   const del = await api('DELETE', '/v1/store/1241/manifest/7031482', undefined, unlocked);
   assert.equal(del.status, 200);
-  assert.equal((await api('GET', '/v1/store/1241/manifest/7031482', undefined, dev)).status, 404);
-  const s3 = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
+  assert.equal((await api('GET', '/v1/store/1241/manifest/7031482', undefined, unlocked)).status, 404);
+  const s3 = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, unlocked)).body.state;
   assert.equal(s3.dock.manifests['7031482'], undefined); assert.equal(s3.dock.trucks[truck].manifest.manNo, '7031482', 'the truck keeps its copy');
 });
 
@@ -393,17 +402,18 @@ test('Decant Visualiser importer: dry run reads the site, the import lands the a
   assert.deepEqual(dry.body.counts, { history: 1, trucks: 1, pallets: 3, planner: 2, events: 19 });
   assert.ok(dry.body.warnings.some(w => /held over/.test(w)), dry.body.warnings.join('|'));
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'dock-imp' })).body.token;
-  assert.equal((await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state.dock.trucks[DV_TRUCK], undefined, 'a dry run writes nothing');
+  const reader = (await api('POST', '/v1/auth/unlock', { code: 'DK-CODE' }, dev)).body.token;
+  assert.equal((await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, reader)).body.state.dock.trucks[DV_TRUCK], undefined, 'a dry run writes nothing');
 
   const run = await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'https://dv.test/' }, ownerToken);
   assert.equal(run.status, 200); assert.equal(run.body.applied, dry.body.counts.events); assert.deepEqual(run.body.rejected, []);
-  const s = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, dev)).body.state;
+  const s = (await api('GET', '/v1/store/1241/snapshot?areas=backdock', undefined, reader)).body.state;
   const t = s.dock.trucks[DV_TRUCK];
   assert.equal(t.status, 'live'); assert.equal(t.manifest.manNo, '7031490'); assert.deepEqual(t.team.map(m => m.pid), ['D1', 'D2']);
   assert.equal(t.pallets.A1.status, 'done'); assert.equal(t.pallets.A2.status, 'active'); assert.equal(t.pallets.A2.assignedTo, 'D2'); assert.equal(t.halts[1].reason, 'nostock');
   assert.ok(s.dock.history.some(r => r.id === '2026-09-16-T1' && r.imported?.source === 'dv' && r.cartons === 470));
   assert.equal(s.plan.days['2026-09-22'].slots[1].manifest.manNo, '7031495');
-  const rh = await api('GET', '/v1/store/1241/history/receiving', undefined, dev);
+  const rh = await api('GET', '/v1/store/1241/history/receiving', undefined, reader);
   assert.ok(rh.body.rows.some(r => r.truck === '2026-09-16-T1' && r.manifest === '7031486' && r.crew === 2));
 
   const again = await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'https://dv.test' }, ownerToken);
@@ -455,9 +465,10 @@ test('manifest delete needs the dock code, and a refused delete leaves the docum
   assert.equal((await api('POST', '/v1/store/2006/manifest', doc, dock)).status, 201);
   const no = await api('DELETE', '/v1/store/2006/manifest/7777001', undefined, floor);
   assert.equal(no.status, 403); assert.equal(no.body.code, 'unauthorised');
-  assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, floor)).status, 200, 'still there');
+  assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, dock)).status, 200, 'still there');
+  assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, floor)).status, 403, 'and the PIN alone cannot read it');
   assert.equal((await api('DELETE', '/v1/store/2006/manifest/7777001', undefined, dock)).status, 200);
-  assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, floor)).status, 404);
+  assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, dock)).status, 404);
 });
 
 test('sessions: revoke, rotation and suspension sign devices out; sign-out ends the refresh token', async () => {

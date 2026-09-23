@@ -135,9 +135,10 @@ export class StoreObject extends DurableObject {
 
   snapshot(claims, areasParam) {
     // Store-wide projections (map version, roster marker, devices) ride along
-    // with every snapshot; area projections follow the token's capabilities.
-    const wanted = areasParam ? areasParam.split(',') : [...claims.caps, 'store'];
-    const allowed = new Set([...claims.caps, 'store']);
+    // with every snapshot; area projections follow what the token may read
+    // (entitlement and role, see readable()).
+    const wanted = areasParam ? areasParam.split(',') : [...readable(claims), 'store'];
+    const allowed = new Set([...readable(claims), 'store']);
     const out = { v: this.state.v };
     for (const area of wanted) {
       if (!allowed.has(area)) continue;
@@ -149,7 +150,8 @@ export class StoreObject extends DurableObject {
 
   changes(since, claims) {
     const rows = this.sql.exec('SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT ?', since, DELTA_LIMIT).toArray();
-    const events = rows.map(rowToEvent).filter(e => claims.owner || claims.caps.includes(e.area) || e.area === 'store');
+    const can = new Set(readable(claims));
+    const events = rows.map(rowToEvent).filter(e => claims.owner || can.has(e.area) || e.area === 'store');
     return { seq: this.state.seq, events, more: rows.length === DELTA_LIMIT };
   }
 
@@ -392,7 +394,7 @@ export class StoreObject extends DurableObject {
     for (const ws of this.ctx.getWebSockets()) {
       const { claims } = ws.deserializeAttachment() || {};
       for (const e of events) {
-        if (!claims || (!claims.owner && e.area !== 'store' && !claims.caps.includes(e.area))) continue;
+        if (!claims || (!claims.owner && e.area !== 'store' && !readable(claims).includes(e.area))) continue;
         try { ws.send(JSON.stringify({ t: 'event', event: e })); } catch {}
       }
     }
@@ -408,6 +410,19 @@ function primaryRole(claims, roles) {
   return claims.roles.includes('manager') ? 'manager' : claims.roles[0];
 }
 
-// A read that belongs to one area needs that area on the token (the store's
-// entitlement, carried as a capability).
-function needArea(claims, area) { return (claims.caps || []).includes(area) ? null : fail(403, 'not_entitled', `${area} is not enabled for this store`); }
+// What a token may read. The store PIN opens the Floor; Stockroom and Back
+// dock data need that area's code (or the manager code) on the token as
+// well as the store's entitlement. The owner reads every entitled area.
+const ROLE_AREAS = { stockroom: ['stockroom'], dock: ['backdock'], manager: ['floor', 'stockroom', 'backdock'] };
+export function readable(claims) {
+  const caps = claims?.caps || [];
+  if (claims?.owner) return caps;
+  const roles = claims?.roles || [];
+  return caps.filter(a => a === 'floor' || roles.some(r => ROLE_AREAS[r]?.includes(a)));
+}
+// A read that belongs to one area: the store must be entitled to it and the
+// token must hold a role that opens it.
+function needArea(claims, area) {
+  if (!(claims.caps || []).includes(area)) return fail(403, 'not_entitled', `${area} is not enabled for this store`);
+  return readable(claims).includes(area) ? null : fail(403, 'unauthorised', `reading ${area === 'backdock' ? 'the Back dock' : 'the Stockroom'} needs its code`);
+}

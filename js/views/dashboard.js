@@ -5,6 +5,7 @@ import { storeDay } from '../../shared/time.js';
 import { focusDone } from '../../shared/reducers/floor.js';
 import { ic, esc, vh, greeting, today, weekId, cycleId, daysLeftInCycle, fmtTime, ago, status } from '../ui.js';
 import { microCount } from '../data/micros.js';
+import { hasArea } from '../unlock.js';
 import { openTrucks, progress, truckNo, fmtHM, openHalt, HALT_NAME } from './backdock/common.js';
 
 const TARGET = 100;
@@ -30,14 +31,19 @@ export default {
     const maint = `<div class="card kpi mt"><div class="kh">${ic('tool')}<h3>Maintenance</h3><a class="open" data-go="maintenance">Open ${ic('arrow')}</a></div><div class="hero"><span class="n">${m.open.length}</span><span class="hs">open · ${m.recurring} recurring</span></div><div class="rows">${m.open.slice(0, 4).map(i => `<div class="row"><span class="l"><span class="pt" style="background:${i.status === 'open' ? '#DC2626' : '#2563EB'}"></span><span><b>${esc(i.title)}</b><span class="where">${esc(i.loc || '')} · ${ago(i.created)}</span></span></span>${status(i.status === 'open' ? 'warn' : 'info', i.status === 'open' ? 'Open' : 'To check')}</div>`).join('') || '<div class="row">Nothing open<b class="c-green">✓</b></div>'}</div></div>`;
     const st = `<div class="card kpi"><div class="kh">${ic('m-stocktake')}<h3>Stocktake</h3><a class="open" data-go="stocktake">Open ${ic('arrow')}</a></div><div class="hero"><span class="n">${m.sess ? Object.values(m.sess[1].shelves).filter(x => x.state !== 'pending').length : '—'}</span><span class="d">${m.sess ? 'counted' : ''}</span></div><div class="hl">${m.sess ? `Session ${esc(m.sess[0])} · ${m.sess[1].phase === 'final' ? 'final check' : 'counting'} · started ${fmtTime(m.sess[1].startedAt)}` : 'No session open'}</div></div>`;
     const em = `<div class="card kpi"><div class="kh">${ic('m-emergency')}<h3>Emergency</h3><a class="open" data-go="emergency">Open ${ic('arrow')}</a></div><div class="hero"><span class="n">${m.due}</span><span class="d">services due</span></div><div class="hl">Within 30 days · ${m.devices} device${m.devices === 1 ? '' : 's'} seen today</div></div>`;
+    // The Stockroom and Back dock cards need that area's code on this device:
+    // without it the data never reaches the device, so the card offers the code.
     const caps = ctx.session.current?.caps || [];
-    const sr = caps.includes('stockroom') ? stockroomCard(ctx) : '';
-    const bd = caps.includes('backdock') ? backdockCard(ctx) : '';
+    const sr = caps.includes('stockroom') ? (hasArea(ctx.session, 'stockroom') ? stockroomCard(ctx) : lockedCard('Stockroom', 'box', 'bfreview')) : '';
+    const bd = caps.includes('backdock') ? (hasArea(ctx.session, 'backdock') ? backdockCard(ctx) : lockedCard('Back dock', 'm-receiving', 'receiving')) : '';
     return vh(`<span class="greet">${greeting()}</span><span id="dashTitle">How we’re tracking</span>`, '', '', 'm-dashboard') +
       `<div class="dash"><div class="kpis">${refresh}${labels}${st}${sr}${bd}</div><div class="side2">${maint}${em}</div></div>`;
   },
   mount(ctx, root) { const re = () => { root.innerHTML = this.desktop(ctx); }; return ['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock'].map(k => ctx.store.on(k, re)); },
 };
+function lockedCard(name, icon, view) {
+  return `<div class="card kpi locked"><div class="kh">${ic(icon)}<h3>${name}</h3></div><div class="hero"><span class="n">${ic('lock')}</span><span class="d">Needs the ${name} code</span></div><div class="hl">${name} figures stay on the worker until this device has the ${name} or manager code.</div><button type="button" class="btn" data-go="${view}">${ic('lock')}Enter the code</button></div>`;
+}
 function stockroomCard(ctx) {
   const date = today(), bf = ctx.store.get('backfill');
   const subs = Object.values(bf.subs).filter(s => s.date === date);

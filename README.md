@@ -112,6 +112,10 @@ Sign-in and unlock lock out per device (5 wrong), per store (30 in an hour)
 and per network address (200 in an hour; stores may share one), each for
 15 minutes. `LOCKOUT_ATTEMPTS`, `LOCKOUT_STORE_ATTEMPTS`,
 `LOCKOUT_IP_ATTEMPTS`, `LOCKOUT_WINDOW_SECONDS` and `LOCKOUT_SECONDS` tune them.
+Reading follows the same codes as writing: the store PIN opens the Floor, and
+Stockroom or Back dock data (snapshot, changes, the socket, history, export,
+keycode life, manifests, profiles) reach a device only when it holds that
+area's code or the manager code. The owner reads every entitled area.
 An area or manager code lasts a shift (`ROLE_TTL_SECONDS`, 12 h); after that
 the device keeps the Floor and asks for the code again. The WebSocket carries
 its token as the second subprotocol (`conduit, <token>`), never in the URL.

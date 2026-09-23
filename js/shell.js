@@ -100,6 +100,10 @@ function closeStore() { client.closeAll(); store = null; for (const u of unsubs)
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); actasBar(null); resetAdmin(); }
 async function signOut() {
   try { await store?.flush(); } catch {}
+  // A shared device keeps no store data past sign-out (the outbox was just
+  // flushed; anything still queued stays so it is not lost).
+  const no = client.session.current?.store;
+  if (no && !client.session.current?.actas && !(store?.pending?.length)) try { await client.storage.del(`snap:${no}`); } catch {}
   if (client.session.current?.actas) { closeStore(); await client.session.endActAs(); await enterAdmin(); return; }
   leave(); await client.session.signOut(); showSignin();
 }
@@ -259,6 +263,8 @@ function show(id, arg) {
     return;
   }
   if (store && view.area && view.area !== ws && view.area !== 'admin') setWs(view.area);
+  // A phone-only view (a workspace home) opens its desktop counterpart on a wide screen.
+  if (!mobile && view.desktopView && VIEWS[view.desktopView]) return show(view.desktopView, arg);
   id = view.id;
   for (const u of unsubs) u(); unsubs = [];
   currentArg = arg !== undefined ? arg : (id === current ? currentArg : null);
@@ -292,7 +298,7 @@ function openLauncher() {
 }
 function openMore() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
-  sh.innerHTML = `<div class="sheet"><h3>More</h3><div class="mv-tiles">${MORE[ws].map(m => `<button class="mv-tile" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><span class="tx"><b>${m[2]}</b></span><span></span>${ic('chev')}</button>`).join('')}<button class="mv-tile" data-shell-act="signout"><span class="ti">${ic('lock')}</span><span class="tx"><b>${client.session.current?.actas ? 'Back to the console' : 'Sign out'}</b></span><span></span>${ic('chev')}</button></div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  sh.innerHTML = `<div class="sheet"><h3>More</h3><div class="mv-tiles">${MORE[ws].map(m => `<button class="mv-tile" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><span class="tx"><b>${m[2]}</b></span><span></span>${ic('chev')}</button>`).join('')}<button class="mv-tile" data-shell-act="switch-area"><span class="ti">${ic('grid')}</span><span class="tx"><b>Switch area</b></span><span></span>${ic('chev')}</button><button class="mv-tile" data-shell-act="signout"><span class="ti">${ic('lock')}</span><span class="tx"><b>${client.session.current?.actas ? 'Back to the console' : 'Sign out'}</b></span><span></span>${ic('chev')}</button></div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
   sh.classList.add('open');
 }
 document.addEventListener('click', e => {
@@ -303,6 +309,7 @@ document.addEventListener('click', e => {
     else if (act === 'update-now') updates.apply();
     else if (act === 'update-later') $('#updBar')?.remove();
     else if (act === 'owner-signin') showSignin({ owner: true });
+    else if (act === 'switch-area') { $('#msheet')?.classList.remove('open'); if (store) openLauncher(); }
     else if (act === 'store-signin') showSignin();
     return;
   }
