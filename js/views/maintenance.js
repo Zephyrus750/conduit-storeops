@@ -34,13 +34,17 @@ export default {
     const stage = $('#mapstage', root);
     if (stage) {
       map = mountMap(stage, { onSelect: info => {
-        if (draft && (info.kind === 'floor' || info.kind === 'shelf')) { const p = info.point || map.centreOf(info.id); draft.x = p[0]; draft.y = p[1]; if (info.kind === 'shelf') { draft.loc = 'near ' + info.id; draft.dept = info.dept; } paint(); }
+        if (draft && (info.kind === 'floor' || info.kind === 'shelf')) { const p = info.point || map.centreOf(info.id); draft.x = p[0]; draft.y = p[1]; draft.floor = map.floorId() || null; if (info.kind === 'shelf') { draft.loc = 'near ' + info.id; draft.dept = info.dept; } paint(); }
       } });
       bindMapChrome(root, map);
+      stage.addEventListener('mapfloor', () => paint());
     }
+    // Pins show on their own floor. An issue whose floor the map does not
+    // know (logged before issues recorded their floor) shows on every floor.
+    const here = i => { if (!map) return true; const ids = map.floors().map(f => f.id); return !i.floor || !ids.includes(i.floor) || i.floor === map.floorId(); };
     const paint = () => {
       const m = model(ctx);
-      if (map) { map.clearOverlays(); map.drawPins(m.list.filter(i => i.x != null).map((i, n) => ({ x: i.x, y: i.y, colour: colour(i), label: String(n + 1) }))); if (draft?.x != null) map.drawPins([{ x: draft.x, y: draft.y, colour: 'var(--accent)', label: '+' }]); }
+      if (map) { map.clearOverlays(); map.drawPins(m.list.map((i, n) => ({ i, n })).filter(({ i }) => i.x != null && here(i)).map(({ i, n }) => ({ x: i.x, y: i.y, colour: colour(i), label: String(n + 1) }))); if (draft?.x != null && here(draft)) map.drawPins([{ x: draft.x, y: draft.y, colour: 'var(--accent)', label: '+' }]); }
       const side = $('#mtside', root); if (side) side.innerHTML = sidebar(m);
       const mob = $('#mtmob', root); if (mob) mob.innerHTML = mobile(m);
     };
@@ -52,24 +56,28 @@ export default {
         if (act === 'filter') { filter = a.getAttribute('data-filter'); paint(); }
         else if (act === 'select') { selected = a.getAttribute('data-id'); paint(); }
         else if (act === 'new') { draft = { cat: 'other', sev: 1, title: '', note: '', loc: '', x: null, y: null }; paint(); }
-        else if (act === 'edit') { const i = ctx.store.get('issues')[selected]; if (i) { draft = { editId: selected, cat: i.cat, sev: i.sev, title: i.title, note: i.note || '', loc: i.loc || '', dept: i.dept || null, x: i.x, y: i.y }; paint(); } }
+        else if (act === 'edit') { const i = ctx.store.get('issues')[selected]; if (i) { draft = { editId: selected, cat: i.cat, sev: i.sev, title: i.title, note: i.note || '', loc: i.loc || '', dept: i.dept || null, x: i.x, y: i.y, floor: i.floor || null }; paint(); } }
         else if (act === 'draft-sev') { draft.sev = Number(a.getAttribute('data-sev')); readDraft(root); paint(); }
         else if (act === 'draft-cancel') { draft = null; paint(); }
         else if (act === 'draft-save') {
           readDraft(root);
           if (!draft.title) return toast('Give the issue a title', 'bad');
           if (draft.editId) {
-            await ctx.store.dispatch({ type: 'issue.update', entity: { issue: draft.editId }, payload: { cat: draft.cat, title: draft.title, note: draft.note, sev: draft.sev, loc: draft.loc, dept: draft.dept || null, x: draft.x, y: draft.y } });
+            await ctx.store.dispatch({ type: 'issue.update', entity: { issue: draft.editId }, payload: { cat: draft.cat, title: draft.title, note: draft.note, sev: draft.sev, loc: draft.loc, dept: draft.dept || null, x: draft.x, y: draft.y, ...(draft.floor ? { floor: draft.floor } : {}) } });
             selected = draft.editId; draft = null; toast('Issue updated'); paint();
           } else {
             const id = newId();
-            await ctx.store.dispatch({ type: 'issue.log', entity: { issue: id }, payload: { cat: draft.cat, title: draft.title, note: draft.note, sev: draft.sev, loc: draft.loc, dept: draft.dept || null, x: draft.x, y: draft.y, floor: 'ground' } });
+            await ctx.store.dispatch({ type: 'issue.log', entity: { issue: id }, payload: { cat: draft.cat, title: draft.title, note: draft.note, sev: draft.sev, loc: draft.loc, dept: draft.dept || null, x: draft.x, y: draft.y, floor: draft.floor || map?.floorId() || null } });
             selected = id; draft = null; toast('Sent to Maintenance'); paint();
           }
         }
-        else if (act === 'progress') await ctx.store.dispatch({ type: 'issue.progress', entity: { issue: selected }, payload: {} });
-        else if (act === 'close') await ctx.store.dispatch({ type: 'issue.close', entity: { issue: selected }, payload: {} });
-        else if (act === 'reopen') await ctx.store.dispatch({ type: 'issue.reopen', entity: { issue: a.getAttribute('data-id') || selected }, payload: {} });
+        // Each status change asks for a note for the log, as ShelfSearcher did; Cancel keeps the status.
+        else if (act === 'progress' || act === 'close' || act === 'reopen') {
+          const note = prompt(act === 'progress' ? 'Maintenance done. Note (optional):' : act === 'close' ? 'Completed. Note (optional):' : 'Reopen as recurring. What is wrong again?', '');
+          if (note === null) return;
+          const type = act === 'progress' ? 'issue.progress' : act === 'close' ? 'issue.close' : 'issue.reopen';
+          await ctx.store.dispatch({ type, entity: { issue: act === 'reopen' ? a.getAttribute('data-id') || selected : selected }, payload: note.trim() ? { note: note.trim().slice(0, 500) } : {} });
+        }
         else if (act === 'show') { const i = ctx.store.get('issues')[selected]; if (map && i?.x != null) map.setVb([i.x - 700, i.y - 450, 1400, 900]); }
       } catch (err) { toast(err.message, 'bad'); }
     });

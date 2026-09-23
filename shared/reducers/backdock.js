@@ -27,6 +27,7 @@ export const STD_MINS_PER_CARTON = 0.5;
 const HISTORY_CAP = 500;
 const MANIFEST_INDEX_CAP = 20;
 const BAY_RE = /^[A-Z]\d{1,2}$/;
+const MAX_CARTONS = 500;
 const TRUCK_RE = /^\d{4}-\d{2}-\d{2}-T\d+$/;
 
 export function backdockState() {
@@ -67,8 +68,12 @@ export const backdockReducers = {
     t.team = e.payload.team.filter(m => m && m.pid).map(m => ({ pid: String(m.pid), name: m.name || '', dnum: m.dnum || null }));
     return null;
   },
+  // Refused while a pallet is running: its open segment would close with no
+  // end and its time would be lost from credit (legacy action.mjs:548-555).
   'truck.finalise'(s, e) {
     const t = truck(s, e); if (t.code) return t;
+    const running = Object.values(t.pallets).filter(p => p.status === 'active').map(p => p.ref);
+    if (running.length) return reject('pallets_running', `pause or finish ${running.join(', ')} before finalising`);
     const open = t.halts[t.halts.length - 1];
     if (open && !open.end) open.end = e.at;
     t.status = 'closed'; t.clearedAt = e.at;
@@ -128,6 +133,7 @@ export const backdockReducers = {
       consols.push({ id: cons.slice(-9), cons, cartons: Number(c.cartons) || 0, dept: c.dept || '', mix: Array.isArray(c.mix) ? c.mix : [], desc: c.desc || '', items: Array.isArray(c.items) ? c.items.slice(0, 250) : [] });
     }
     t.manifest = { manNo: String(p.manNo), dcNo: p.dcNo || '', despatch: p.despatch || '', consols, attachedAt: e.at, by: e.actor?.device || null };
+    rematchScans(t);
     const cur = s.dock.manifests[String(p.manNo)] || {};
     s.dock.manifests[String(p.manNo)] = { ...cur, manNo: String(p.manNo), dcNo: p.dcNo || cur.dcNo || '', despatch: p.despatch || cur.despatch || '', truck: e.entity.truck, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), consols: consols.length, keycodes: cur.keycodes || new Set(consols.flatMap(c => c.items.map(i => i.k))).size, publishedAt: cur.publishedAt || e.at, attachedAt: e.at };
     capManifests(s);
@@ -139,9 +145,11 @@ export const backdockReducers = {
     const t = liveTruck(s, e); if (t.code) return t;
     const ref = bay(e);
     if (!BAY_RE.test(ref)) return reject('invalid_event', 'bay must be a row letter and number, e.g. A6');
+    if (!onGrid(t.grid, ref)) return reject('invalid_event', `bay ${ref} is not on the ${t.grid.rows} × ${t.grid.cols} dock grid`);
     if (t.pallets[ref]) return reject('bay_occupied', `bay ${ref} already holds a pallet`);
     const p = e.payload;
     if (!PTYPES.includes(p.ptype)) return reject('invalid_event', `ptype must be one of ${PTYPES.join(', ')}`);
+    if (badCartons(p.cartons)) return reject('invalid_event', `cartons must be 1 to ${MAX_CARTONS}`);
     const cartons = Number.isFinite(p.cartons) ? Math.max(0, Math.round(p.cartons)) : null;
     const pal = {
       ref, ptype: p.ptype, cartons, expectedMins: null, expectedBasis: 'auto', note: String(p.note || '').slice(0, 120),
@@ -157,6 +165,7 @@ export const backdockReducers = {
     const p = pallet(s, e); if (p.code) return p;
     const u = e.payload;
     if (u.ptype !== undefined) { if (!PTYPES.includes(u.ptype)) return reject('invalid_event', 'bad ptype'); p.ptype = u.ptype; }
+    if (u.cartons !== undefined && badCartons(u.cartons)) return reject('invalid_event', `cartons must be 1 to ${MAX_CARTONS}`);
     if (u.cartons !== undefined) { p.cartons = Number.isFinite(u.cartons) ? Math.max(0, Math.round(u.cartons)) : null; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons); }
     if (u.expectedMins !== undefined) { if (u.expectedMins === null) { p.expectedBasis = 'auto'; p.expectedMins = autoMins(p.cartons); } else { p.expectedMins = Math.max(1, Math.round(u.expectedMins)); p.expectedBasis = 'manual'; } }
     if (u.note !== undefined) p.note = String(u.note || '').slice(0, 120);
@@ -169,6 +178,7 @@ export const backdockReducers = {
   'pallet.start'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     if (p.status === 'done' || p.status === 'active') return null;
+    const who = canWork(s.dock.trucks[e.entity.truck], p, e.payload.pid); if (who) return who;
     p.status = 'active'; p.assignedTo = String(e.payload.pid); p.segments.push({ pid: p.assignedTo, start: e.at, end: null });
     return null;
   },
@@ -181,6 +191,7 @@ export const backdockReducers = {
   'pallet.resume'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     if (p.status !== 'paused') return null;
+    const who = canWork(s.dock.trucks[e.entity.truck], p, e.payload.pid); if (who) return who;
     p.status = 'active'; p.assignedTo = String(e.payload.pid); p.segments.push({ pid: p.assignedTo, start: e.at, end: null });
     return null;
   },
@@ -196,8 +207,12 @@ export const backdockReducers = {
     p.status = p.segments.length ? 'paused' : 'landed'; p.doneAt = null;
     return null;
   },
+  // A pallet with recorded work stays: removing it would drop the time and
+  // credit already earned (legacy action.mjs:818-826). Reopen or fix instead.
   'pallet.remove'(s, e) {
     const t = truck(s, e); if (t.code) return t;
+    const p = t.pallets[bay(e)];
+    if (p && (p.segments.length || p.status === 'done')) return reject('pallet_worked', `bay ${p.ref} has decant time recorded and cannot be removed`);
     delete t.pallets[bay(e)];
     return null;
   },
@@ -261,6 +276,39 @@ function capManifests(s) { const keys = Object.keys(s.dock.manifests); if (keys.
 function bay(e) { return String(e.entity.bay).toUpperCase(); }
 function uniq(a) { return Array.isArray(a) ? [...new Set(a.map(String))] : []; }
 function autoMins(cartons) { return cartons ? Math.max(1, Math.round(cartons * STD_MINS_PER_CARTON)) : null; }
+function badCartons(v) { return v != null && (!Number.isFinite(v) || v < 1 || v > MAX_CARTONS); }
+function onGrid(g, ref) {
+  const labels = (g?.rowLabels || 'ABCDEFGH').slice(0, g?.rows || 4), n = Number(ref.slice(1));
+  return labels.includes(ref[0]) && n >= 1 && n <= (g?.cols || 7);
+}
+// One person, one pallet: a decanter already running another pallet on this
+// truck must pause or finish it first; and on a staffed truck the person must
+// be on the team (legacy action.mjs:207-213, 838-840).
+function canWork(t, p, pid) {
+  pid = String(pid);
+  if (t.team.length && !t.team.some(m => m.pid === pid)) return reject('not_on_team', `${pid} is not on this truck's team`);
+  const busy = Object.values(t.pallets).find(o => o !== p && o.status === 'active' && o.assignedTo === pid);
+  if (busy) return reject('person_busy', `${pid} is already decanting ${busy.ref}`);
+  return null;
+}
+// A manifest attached after pallets landed: scans saved against the pallets
+// (scanIds) that are on it move to the pallet's consols, so the audit stops
+// counting them as off-manifest extras. A pallet's typed carton count stands;
+// an unknown count takes the manifest's.
+function rematchScans(t) {
+  const byId = new Map(t.manifest.consols.map(c => [c.id, c]));
+  const taken = new Set(Object.values(t.pallets).flatMap(p => p.consolIds));
+  for (const p of Object.values(t.pallets)) {
+    const keep = []; let added = 0;
+    for (const id of p.scanIds) {
+      const c = byId.get(id);
+      if (!c || taken.has(id)) { keep.push(id); continue; }
+      taken.add(id); p.consolIds.push(id); added += c.cartons;
+    }
+    p.scanIds = keep;
+    if (p.cartons == null && added) { p.cartons = added; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons); }
+  }
+}
 function closeSegment(p, at) { const seg = p.segments[p.segments.length - 1]; if (seg && !seg.end) seg.end = at; }
 function truck(s, e) {
   const t = s.dock.trucks[e.entity.truck];

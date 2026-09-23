@@ -9,7 +9,7 @@ export const PT_COLOUR = Object.fromEntries(PTYPES.map(p => [p[0], p[2]]));
 export const HALT_NAME = { hcage: 'Home cage', nostock: 'No stock', equip: 'Equipment', safety: 'Safety', waiting: 'Waiting', other: 'Other' };
 export const STD_MINS_PER_CARTON = 0.5;
 
-export const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+export const todayKey = () => today();
 export const truckNo = id => String(id || '').replace(/^\d{4}-\d{2}-\d{2}-T/, '');
 export const truckDay = id => String(id || '').slice(0, 10);
 export function fmtHM(iso) { if (!iso) return '—'; const d = new Date(iso); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -31,6 +31,7 @@ export function grid(t) { const g = t?.grid || { rows: 4, cols: 7, rowLabels: 'A
 export const startable = p => p && (p.status === 'landed' || p.status === 'assigned' || p.status === 'paused');
 
 // ── manifests ──────────────────────────────────────────────────────────
+import { today } from '../../ui.js';
 import { parseManifestSheets, manifestDoc, attachConsols } from '../../../shared/manifest.js';
 import { MICRO } from '../../data/micros.js';
 export function microDept(code) { const c = String(code || '').padStart(3, '0'); for (const [d, list] of Object.entries(MICRO)) if (list.some(x => x.startsWith(c + ' '))) return d; return ''; }

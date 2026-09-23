@@ -21,6 +21,8 @@ body { font-family: var(--body); color: var(--ink); }
 .toast { background: var(--ink); color: var(--panel); padding: 10px 14px; border-radius: 10px; font-size: 13.5px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); transition: .25s; max-width: 90vw; }
 .toast.show { opacity: 1; transform: none; }
 .toast.bad { background: var(--red); color: #fff; }
+.toast.has-act { pointer-events: auto; display: flex; align-items: center; gap: 12px; }
+.toast-act { background: none; border: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; padding: 6px 2px; min-height: 36px; cursor: pointer; }
 .foot .dot.off { background: var(--faint); }
 .m-more .sheet .mv-tiles { margin: 10px 0; }
 .mv-hint a { color: var(--accent-ink); font-weight: 600; cursor: pointer; }

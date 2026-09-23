@@ -30,6 +30,8 @@ import { HttpError, json, fail, CORS } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
+import { rolloverDue } from '../shared/backfill.js';
+import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/time.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
@@ -53,10 +55,16 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS maps (version TEXT PRIMARY KEY, meta TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
     this.state = null;
-    this.storeNo = null;
-    ctx.blockConcurrencyWhile(async () => this.load());
+    this.storeNo = this.sql.exec("SELECT value FROM meta WHERE key = 'store'").toArray()[0]?.value || null;
+    ctx.blockConcurrencyWhile(async () => {
+      this.load();
+      // The end-of-day rollover runs on an alarm at store midnight. A store
+      // object with no alarm (new, or woken after a deploy) catches up now.
+      if (await ctx.storage.getAlarm() == null) await ctx.storage.setAlarm(Date.now() + 1000);
+    });
   }
 
   // ── state ─────────────────────────────────────────────────────────────
@@ -82,7 +90,7 @@ export class StoreObject extends DurableObject {
     const url = new URL(request.url);
     const claims = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
     if (!claims) return fail(401, 'unauthorised', 'no claims');
-    this.storeNo = claims.store;
+    if (claims.store && claims.store !== this.storeNo) { this.storeNo = claims.store; this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('store', ?)", String(claims.store)); }
     try {
       switch (url.pathname) {
         case '/snapshot': return json(this.snapshot(claims, url.searchParams.get('areas')));
@@ -190,6 +198,23 @@ export class StoreObject extends DurableObject {
     this.state.seq = cur.seq;
     this.sinceSnapshot += 1;
     return { id, ok: true, seq: cur.seq, event };
+  }
+
+  // ── end-of-day rollover ───────────────────────────────────────────────
+  // Earlier-day bays still pending or ready are submitted as auto, through
+  // the ordinary write path with a system actor, then the next alarm is set
+  // for the coming store midnight (plus a minute of slack).
+  async alarm() {
+    try { this.rollover(); }
+    finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
+  }
+  tz() { return this.env.STORE_TZ || DEFAULT_TZ; }
+  rollover(now = new Date()) {
+    if (!this.storeNo) return [];
+    const at = storeIso(now, this.tz()), today = storeDay(now, this.tz());
+    const events = rolloverDue(this.state.backfill, today).map(entity => ({ id: ulid(), store: this.storeNo, area: 'stockroom', type: 'submission.submit', entity, payload: { auto: true }, at, v: 1 }));
+    if (!events.length) return [];
+    return this.submit(events, { store: this.storeNo, roles: ['manager'], caps: ['stockroom'], device: 'system', owner: false, actor: 'system' });
   }
 
   // ── manifests ─────────────────────────────────────────────────────────

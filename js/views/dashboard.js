@@ -1,7 +1,9 @@
 // Dashboard: the Floor at a glance from live projections. Stockroom and
 // The Back dock card reads the dock projection.
 
-import { ic, esc, vh, greeting, weekId, cycleId, daysLeftInCycle, fmtTime, ago, status } from '../ui.js';
+import { storeDay } from '../../shared/time.js';
+import { focusDone } from '../../shared/reducers/floor.js';
+import { ic, esc, vh, greeting, today, weekId, cycleId, daysLeftInCycle, fmtTime, ago, status } from '../ui.js';
 import { microCount } from '../data/micros.js';
 import { openTrucks, progress, truckNo, fmtHM, openHalt, HALT_NAME } from './backdock/common.js';
 
@@ -16,8 +18,8 @@ export function model(ctx) {
   const issues = Object.values(s.issues), open = issues.filter(i => i.status !== 'completed');
   const sess = Object.entries(s.stocktake.sessions).filter(([, x]) => !x.ended)[0];
   const due = Object.values(s.assets).filter(a => a.due && (new Date(a.due) - Date.now()) / 86400000 <= 30).length;
-  const todayMarks = Object.values(marks).filter(m => m.at.slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
-  return { week, marks, focus, done: Object.keys(marks).length, todayMarks, cyc, checked: Object.keys(checks).length, total: microCount(), variances: variances.length, daysLeft: daysLeftInCycle(s.labels.cycleLen), issues, open, recurring: open.filter(i => i.recur).length, sess, due, devices: Object.keys(s.devices).length };
+  const todayMarks = Object.values(marks).filter(m => storeDay(m.at) === today()).length;
+  return { week, marks, focus, done: focusDone(marks, focus), todayMarks, cyc, checked: Object.keys(checks).length, total: microCount(), variances: variances.length, daysLeft: daysLeftInCycle(s.labels.cycleLen), issues, open, recurring: open.filter(i => i.recur).length, sess, due, devices: Object.keys(s.devices).length };
 }
 export default {
   id: 'dashboard', title: 'Dashboard', icon: 'm-dashboard',
@@ -37,7 +39,7 @@ export default {
   mount(ctx, root) { const re = () => { root.innerHTML = this.desktop(ctx); }; return ['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock'].map(k => ctx.store.on(k, re)); },
 };
 function stockroomCard(ctx) {
-  const date = new Date().toISOString().slice(0, 10), bf = ctx.store.get('backfill');
+  const date = today(), bf = ctx.store.get('backfill');
   const subs = Object.values(bf.subs).filter(s => s.date === date);
   const pending = subs.filter(s => s.status === 'pending').length, ready = subs.filter(s => s.status === 'corrected').length, done = subs.filter(s => s.status === 'submitted').length;
   const req = (bf.requested[date] || []).filter(b => !subs.some(s => s.bay === b)).length;

@@ -117,3 +117,38 @@ test('replay rebuilds the same state from the log', () => {
   assert.deepEqual(a, b);
   assert.equal(a.dock.trucks['2026-09-07-T1'].pallets.A1.status, 'done');
 });
+
+test('dock guards: grid, carton bounds, one person one pallet, team, worked pallets stay, finalise waits for running pallets', () => {
+  const s = initialState(), truck = live(s);
+  assert.equal(apply(s, ev('pallet.land', { truck, bay: 'E1' }, { ptype: 'chep' })).code, 'invalid_event', 'row E is off a 4-row grid');
+  assert.equal(apply(s, ev('pallet.land', { truck, bay: 'A8' }, { ptype: 'chep' })).code, 'invalid_event', 'column 8 is off a 7-column grid');
+  assert.equal(apply(s, ev('pallet.land', { truck, bay: 'A1' }, { ptype: 'chep', cartons: 501 })).code, 'invalid_event');
+  assert.equal(apply(s, ev('pallet.land', { truck, bay: 'A1' }, { ptype: 'chep', cartons: 20 })), null);
+  assert.equal(apply(s, ev('pallet.land', { truck, bay: 'A2' }, { ptype: 'chep', cartons: 10 })), null);
+  assert.equal(apply(s, ev('pallet.update', { truck, bay: 'A2' }, { cartons: 0 })).code, 'invalid_event');
+  apply(s, ev('truck.team.set', { truck }, { team: [{ pid: 'D1' }, { pid: 'D2' }] }));
+  assert.equal(apply(s, ev('pallet.start', { truck, bay: 'A1' }, { pid: 'D9' })).code, 'not_on_team');
+  assert.equal(apply(s, ev('pallet.start', { truck, bay: 'A1' }, { pid: 'D1' })), null);
+  assert.equal(apply(s, ev('pallet.start', { truck, bay: 'A2' }, { pid: 'D1' })).code, 'person_busy');
+  assert.equal(apply(s, ev('truck.finalise', { truck })).code, 'pallets_running');
+  assert.equal(apply(s, ev('pallet.remove', { truck, bay: 'A1' })).code, 'pallet_worked');
+  assert.equal(apply(s, ev('pallet.pause', { truck, bay: 'A1' })), null);
+  assert.equal(apply(s, ev('pallet.start', { truck, bay: 'A2' }, { pid: 'D1' })), null, 'free again once paused');
+  assert.equal(apply(s, ev('pallet.done', { truck, bay: 'A2' })), null);
+  assert.equal(apply(s, ev('truck.finalise', { truck })), null);
+});
+
+test('a late manifest re-matches saved scans, so the audit stops counting them as extras', () => {
+  const s = initialState(), truck = live(s);
+  apply(s, ev('pallet.land', { truck, bay: 'A1' }, { ptype: 'chep' }));
+  assert.equal(apply(s, ev('pallet.scan', { truck, bay: 'A1' }, { code: '00093000601804381' })), null);
+  assert.equal(apply(s, ev('pallet.scan', { truck, bay: 'A1' }, { code: '00093000699999999' })), null);
+  assert.deepEqual(s.dock.trucks[truck].pallets.A1.scanIds, ['601804381', '699999999']);
+  assert.equal(apply(s, ev('manifest.attach', { truck }, { manNo: '7031482', consols: [{ cons: '00093000601804381', cartons: 7 }] })), null);
+  const p = s.dock.trucks[truck].pallets.A1;
+  assert.deepEqual(p.consolIds, ['601804381']); assert.deepEqual(p.scanIds, ['699999999'], 'the off-manifest scan stays an extra');
+  assert.equal(p.cartons, 7, 'an unknown count takes the manifest’s');
+  apply(s, ev('pallet.start', { truck, bay: 'A1' }, { pid: 'D1' })); apply(s, ev('pallet.done', { truck, bay: 'A1' })); apply(s, ev('truck.finalise', { truck }));
+  const a = s.dock.history.at(-1).audit;
+  assert.equal(a.matched, 1); assert.equal(a.extra, 1);
+});

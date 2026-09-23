@@ -1,10 +1,11 @@
 // Backfill review: K2B's review-and-submission desk, on the store's own
 // event log. The phones scan bays (submission.update, codes scanned:true);
 // the desk pastes the SIM report, compares each bay, marks it Ready
-// (writes the system-only codes as scanned:false so the worker's metrics
-// match) and Submits it; the lifecycle is pending → corrected → submitted.
-// The pasted report is desk-side state under `simreport:<store>:<date>`,
-// as it was in K2B (the report never goes to the worker).
+// (writes the system-only codes as scanned:false and sends the bay's report
+// list with submission.ready so the worker's metrics match the desk's) and
+// Submits it; the lifecycle is pending → corrected → submitted. The pasted
+// report is desk-side state under `simreport:<store>:<date>`, as it was in
+// K2B; only a readied bay's own list goes to the worker.
 //
 // Phone: bay → scan → send. Each scan is its own submission.update, so a
 // phone that loses wifi mid-bay keeps its scans in the outbox.
@@ -119,7 +120,7 @@ async function onClick(e, ctx, root, repaint) {
   }
   else if (act === 'request') { const inp = root.querySelector('[data-field="addloc"]'); await addLocation(ctx, inp.value, true); inp.value = ''; }
   else if (act === 'cancel-req') { await send(ctx, 'submission.request', { bay: a.dataset.bay, date }, { remove: true }); st.sel = null; }
-  else if (act === 'ready') { const s = cur(); if (!s) return; const sys = m.sys?.[s.bay] || null; const p = readyPayload(s, sys); if (Object.keys(p.codes).length || p.incorrect.length) await send(ctx, 'submission.update', { bay: s.bay, date }, p); await send(ctx, 'submission.ready', { bay: s.bay, date }); await send(ctx, 'submission.claim', { bay: s.bay, date }, { release: true }); st.sel = null; }
+  else if (act === 'ready') { const s = cur(); if (!s) return; const sys = m.sys?.[s.bay] || null; const p = readyPayload(s, sys); if (Object.keys(p.codes).length || p.incorrect.length) await send(ctx, 'submission.update', { bay: s.bay, date }, p); await send(ctx, 'submission.ready', { bay: s.bay, date }, sys ? { system: sys } : {}); await send(ctx, 'submission.claim', { bay: s.bay, date }, { release: true }); st.sel = null; }
   else if (act === 'submit') { const s = cur(); if (s) await send(ctx, 'submission.submit', { bay: s.bay, date }); }
   else if (act === 'reopen') { const s = cur(); if (s) await send(ctx, 'submission.reopen', { bay: s.bay, date }); }
   else if (act === 'finalise') { for (const s of m.ready) await send(ctx, 'submission.submit', { bay: s.bay, date }); toast(`${m.ready.length} bays submitted`); }

@@ -48,19 +48,48 @@ export function reviewRows(sub, system) {
   rows.sort((a, b) => (order[a.status] - order[b.status]) || (a.code < b.code ? -1 : 1));
   return rows;
 }
+// Accuracy, ported from K2B's review (app.js ~8095): a code the reviewer
+// marked incorrect drops out of whichever side it is extra on, then
+// accuracy = matches / the larger of (real scanned, real system), so both
+// over- and under-scanning pull it down. The desk, the reducer and imported
+// K2B history all use this one formula.
+export function backfillMetrics(scanned, system, incorrect) {
+  const sc = new Set(scanned), sy = new Set(system), bad = new Set(incorrect || []);
+  let match = 0, badScanned = 0, badSystem = 0;
+  for (const c of sc) { if (sy.has(c)) match += 1; else if (bad.has(c)) badScanned += 1; }
+  for (const c of sy) if (!sc.has(c) && bad.has(c)) badSystem += 1;
+  const realScanned = Math.max(0, sc.size - badScanned), realSystem = Math.max(0, sy.size - badSystem);
+  const denom = Math.max(realScanned, realSystem);
+  return { expected: realSystem, scanned: realScanned, match, accuracy: denom ? Math.round(match / denom * 100) : 0, incorrect: badScanned + badSystem };
+}
+export const scannedCodes = sub => Object.entries(sub?.codes || {}).filter(([, c]) => c.scanned).map(([code]) => code);
+
 export function compareCounts(sub, system) {
   const c = { match: 0, add: 0, delete: 0, scanned: 0, incorrect: 0 };
   for (const r of reviewRows(sub, system)) { c[r.status] += 1; if (r.incorrect) c.incorrect += 1; }
-  const expected = system ? system.length : c.scanned;
-  const scannedN = c.match + c.add + c.scanned;
-  c.pct = !system ? null : expected ? Math.round(Math.max(0, c.match - c.incorrect) / expected * 100) : 100;
-  c.expected = expected; c.scannedCount = scannedN;
+  if (!system) { c.pct = null; c.expected = c.scanned; c.scannedCount = c.scanned; return c; }
+  const m = backfillMetrics(scannedCodes(sub), system, sub?.incorrect);
+  c.pct = m.accuracy; c.expected = m.expected; c.scannedCount = m.scanned; c.incorrect = m.incorrect;
   return c;
 }
-// What "Ready" writes so the worker's metrics match the desk's compare:
-// every system code the phone did not scan is merged as scanned:false.
+// What "Ready" writes: every system code the phone did not scan is merged as
+// scanned:false (History shows it as "system only"), and the ready event
+// carries the report's list so the reducer computes the desk's metrics.
 export function readyPayload(sub, system) {
   const codes = {};
   for (const code of system || []) if (!sub.codes[code]) codes[code] = false;
   return { codes, incorrect: sub.incorrect || [] };
+}
+
+// End-of-day rollover, ported from K2B's runRollover (worker:1586-1690): a
+// bay still pending or ready on an earlier store day is submitted as
+// "auto" so it reaches History instead of dropping off the board. Requested
+// bays that were never scanned stay on their day's requested list, which is
+// the "requested, not verified" record (the K2B importer lands them the same
+// way). Returns the entities to submit, oldest first.
+export function rolloverDue(backfill, today) {
+  return Object.values(backfill?.subs || {})
+    .filter(s => s.date < today && (s.status === 'pending' || s.status === 'corrected'))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.bay.localeCompare(b.bay))
+    .map(s => ({ bay: s.bay, date: s.date }));
 }

@@ -3,7 +3,8 @@
 // scans cartons onto a cage (cage.scan), parks it (cage.park) and sweeps
 // the room (cage.sweep). Ring colour is the physical ring on the cage.
 
-import { $, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mrows, mbig, mghost, mfoot, mscan } from '../../ui.js';
+import { storeDay } from '../../../shared/time.js';
+import { $, ic, esc, vh, sub, today as storeToday, status, fmtTime, ago, toast, mhead, mrows, mbig, mghost, mfoot, mscan } from '../../ui.js';
 import { parseKeycodes } from '../../../shared/backfill.js';
 import { RINGS } from '../../../shared/reducers/stockroom.js';
 import { RING, ring, ageOf, ensureNames, nameHtml, nameOf, send } from './common.js';
@@ -106,13 +107,13 @@ async function sweepTag(ctx, raw, repaint) {
 function mobile(ctx) {
   const m = model(ctx);
   if (st.mode === 'sweep') {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = storeToday();
     const zones = {}; for (const c of m.open) (zones[c.location || 'Not parked'] ||= []).push(c);
-    const seen = m.open.filter(c => c.sweeps.some(s => s.at.slice(0, 10) === today)).length;
+    const seen = m.open.filter(c => c.sweeps.some(s => storeDay(s.at) === today)).length;
     return mhead('Cage sweep', `${seen} of ${m.open.length} seen today`) + `<div class="cs">${cagetabs('sweep')}` +
       `<div class="card swp-prog"><div class="swp-big"><b>${seen}</b><span>of ${m.open.length} seen</span></div><div class="track"><i style="width:${m.open.length ? Math.round(seen / m.open.length * 100) : 0}%"></i></div></div>` +
       mscan('Scan a cage tag', `<input data-field="msweep" autocomplete="off" autocapitalize="characters" placeholder="Cage tag" enterkeyhint="done">`, 'Or tap Seen on the cage in front of you') +
-      `<div class="card swp-list">${Object.entries(zones).map(([z, cs]) => `<div class="swp-zone"><div class="swp-zh">${esc(z)}<span>${cs.filter(c => c.sweeps.some(s => s.at.slice(0, 10) === today)).length} of ${cs.length}</span></div>${cs.map(c => { const ok = c.sweeps.some(s => s.at.slice(0, 10) === today); return `<div class="swp-row ${ok ? 'ok' : c.stale ? 'lost' : 'todo'}"><span class="swp-ic">${ic(ok ? 'check' : c.stale ? 'alert' : 'clock')}</span><span class="cg">${esc(c.id)}</span><span class="st">${ok ? 'Seen' : c.stale ? `Not seen ${ageOf(c.seen)}` : 'To find'}${ok ? '' : ` <span class="btn sm" data-act="m-seen" data-id="${esc(c.id)}">Seen</span>`}</span></div>`; }).join('')}</div>`).join('') || '<div class="cs-dim" style="padding:12px">No open cages</div>'}</div></div>`;
+      `<div class="card swp-list">${Object.entries(zones).map(([z, cs]) => `<div class="swp-zone"><div class="swp-zh">${esc(z)}<span>${cs.filter(c => c.sweeps.some(s => storeDay(s.at) === today)).length} of ${cs.length}</span></div>${cs.map(c => { const ok = c.sweeps.some(s => storeDay(s.at) === today); return `<div class="swp-row ${ok ? 'ok' : c.stale ? 'lost' : 'todo'}"><span class="swp-ic">${ic(ok ? 'check' : c.stale ? 'alert' : 'clock')}</span><span class="cg">${esc(c.id)}</span><span class="st">${ok ? 'Seen' : c.stale ? `Not seen ${ageOf(c.seen)}` : 'To find'}${ok ? '' : ` <span class="btn sm" data-act="m-seen" data-id="${esc(c.id)}">Seen</span>`}</span></div>`; }).join('')}</div>`).join('') || '<div class="cs-dim" style="padding:12px">No open cages</div>'}</div></div>`;
   }
   const t = m.open.find(c => c.id === st.target);
   if (!t) {

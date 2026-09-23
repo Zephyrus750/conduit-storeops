@@ -66,7 +66,7 @@ export const CATALOGUE = {
   'truck.setLive':       T('backdock', D, ['truck']),
   'truck.setGoal':       T('backdock', D, ['truck']),                           // payload.goal ISO | null
   'truck.team.set':      T('backdock', D, ['truck'], { team: 'array' }),
-  'truck.finalise':      T('backdock', M, ['truck']),
+  'truck.finalise':      T('backdock', D, ['truck']),                           // the facilitator closes (legacy: facilitator code)
   'truck.import':        T('backdock', M, ['truck']),                           // a finalised truck's record from the legacy app, as-is
   'manifest.publish':    T('backdock', D, ['manNo']),                            // payload: dcNo, despatch, filename, consols, totalCartons, keycodes
   'manifest.remove':     T('backdock', D, ['manNo']),

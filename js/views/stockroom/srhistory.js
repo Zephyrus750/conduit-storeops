@@ -2,6 +2,7 @@
 // or submitted, any day, with its metrics and codes; search, open a record,
 // copy the metrics as CSV. Reads the same projection the review does.
 
+import { addDays } from '../../../shared/time.js';
 import { $, ic, esc, vh, sub, fmtTime, toast, mhead, mrows } from '../../ui.js';
 import { ensureNames, nameHtml, todayKey } from './common.js';
 
@@ -19,7 +20,7 @@ export default {
   desktop(ctx) {
     if (ctx.arg?.q != null && st.arg !== ctx.arg) { st.q = ctx.arg.q; st.arg = ctx.arg; st.open = null; }
     const m = model(ctx), o = m.open;
-    const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); const k = d.toISOString().slice(0, 10); return [k, m.subs.filter(s => s.date === k).length, ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]]; });
+    const days = Array.from({ length: 7 }, (_, i) => { const k = addDays(todayKey(), i - 6); return [k, m.subs.filter(s => s.date === k).length, ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(`${k}T00:00:00Z`).getUTCDay()]]; });
     const max = Math.max(1, ...days.map(d => d[1]));
     return vh('History', sub('Backfill archive', `${m.subs.length} locations on record`, `last 7 days: ${m.week.length}`), `<button class="btn" data-act="export">${ic('file')}Copy CSV</button>`, 'm-srhistory') +
       `<div class="hgrid"><div class="card hist"><div class="pt3">Archive<span class="hist-tools"><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="Search location, keycode or date…"></div><span class="pills"><button class="${st.sort === 'time' ? 'on' : ''}" data-act="sort" data-v="time">Newest first</button><button class="${st.sort === 'loc' ? 'on' : ''}" data-act="sort" data-v="loc">By location</button></span></span></div>` +

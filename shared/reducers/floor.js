@@ -43,7 +43,9 @@ export const floorReducers = {
     if (gone && e.at <= gone) return null;
     const dev = e.actor?.device || 'unknown';
     const cur = week[seg];
-    if (!cur) { week[seg] = { at: e.at, devices: [dev] }; return null; }
+    const dept = typeof e.payload?.dept === 'string' && e.payload.dept ? e.payload.dept.toLowerCase().slice(0, 16) : null;
+    if (!cur) { week[seg] = { at: e.at, devices: [dev], ...(dept ? { dept } : {}) }; return null; }
+    if (dept && !cur.dept) cur.dept = dept;
     if (!cur.devices.includes(dev)) cur.devices.push(dev);
     if (e.at < cur.at) cur.at = e.at;                       // first mark wins the time
     return null;
@@ -242,4 +244,14 @@ export function addMonths(iso, months) {
   const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
   d.setUTCDate(Math.min(day, last));
   return d.toISOString().slice(0, 10);
+}
+
+// What the weekly X/100 counts, as ShelfSearcher did (refresh-mode.js:573):
+// with focus departments set, only marks in them; with none, every mark.
+// deptOf(segment, mark) names a mark's department; an unknown one counts.
+export function focusDone(marks, focus, deptOf = (_, m) => m.dept) {
+  if (!focus?.length) return Object.keys(marks || {}).length;
+  let n = 0;
+  for (const [seg, m] of Object.entries(marks || {})) { const d = deptOf(seg, m); if (!d || focus.includes(d)) n += 1; }
+  return n;
 }

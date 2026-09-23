@@ -2,6 +2,8 @@
 // esc() is the one rule: anything that came from another device goes
 // through it.
 
+import { storeDay, storeParts } from '../shared/time.js';
+
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
@@ -65,23 +67,27 @@ export function nowIso(d = new Date()) {
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
   return local + sign + p(Math.floor(Math.abs(off) / 60)) + ':' + p(Math.abs(off) % 60);
 }
-export function today() { return nowIso().slice(0, 10); }
+// The store's day, week and cycle come from the store clock (shared/time.js),
+// never UTC and never the device's zone.
+export function today() { return storeDay(); }
 // ISO-ish week id, Monday start: 2026-W37
 export function weekId(d = new Date()) {
-  const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const { y, m, d: dd } = storeParts(d);
+  const x = new Date(Date.UTC(y, m - 1, dd));
   const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day);
   const y0 = new Date(Date.UTC(x.getUTCFullYear(), 0, 1));
   return `${x.getUTCFullYear()}-W${String(Math.ceil(((x - y0) / 86400000 + 1) / 7)).padStart(2, '0')}`;
 }
 export function cycleId(len = 'monthly', d = new Date()) {
-  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0');
+  const { y, m: mo } = storeParts(d), m = String(mo).padStart(2, '0');
   if (len === 'monthly') return `${y}-${m}M`;
   const w = Number(weekId(d).slice(-2));
   return len === 'weekly' ? weekId(d) : `${y}-F${String(Math.ceil(w / 2)).padStart(2, '0')}`;
 }
 export function daysLeftInCycle(len = 'monthly', d = new Date()) {
-  if (len === 'monthly') return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate();
-  const dow = (d.getDay() + 6) % 7;
+  const { y, m, d: dd } = storeParts(d);
+  if (len === 'monthly') return new Date(Date.UTC(y, m, 0)).getUTCDate() - dd;
+  const dow = (new Date(Date.UTC(y, m - 1, dd)).getUTCDay() + 6) % 7;
   return (len === 'weekly' ? 6 : 13 - (Number(weekId(d).slice(-2)) % 2 ? 0 : 7)) - dow;
 }
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -93,8 +99,11 @@ export function ago(iso) { if (!iso) return ''; const m = Math.round((Date.now()
 export function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning!' : h < 17 ? 'Good afternoon!' : 'Good evening!'; }
 
 // Tiny toast for rejections and confirmations.
-export function toast(msg, kind = '') {
+// action: { label, run } adds a button (Undo), and the toast stays a little longer.
+export function toast(msg, kind = '', action = null) {
   let host = $('#toasts'); if (!host) { host = document.createElement('div'); host.id = 'toasts'; document.body.appendChild(host); }
   const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = msg; host.appendChild(t);
-  setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500);
+  const close = () => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); };
+  if (action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-act'; b.textContent = action.label; b.addEventListener('click', () => { close(); action.run(); }); t.appendChild(b); t.classList.add('has-act'); }
+  setTimeout(() => t.classList.add('show'), 10); setTimeout(close, action ? 6000 : 3500);
 }
