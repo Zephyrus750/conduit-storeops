@@ -68,7 +68,7 @@ before(async () => {
       LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', LEGACY_URL: 'https://legacy.test',
       TOKEN_SECRET: 'test-token-secret',
       OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000),
-      TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_SECONDS: '60', ENVIRONMENT: 'test',
+      TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_STORE_ATTEMPTS: '8', LOCKOUT_IP_ATTEMPTS: '40', LOCKOUT_SECONDS: '60', ENVIRONMENT: 'test',
     },
   });
   await mf.ready;
@@ -404,4 +404,80 @@ test('Decant Visualiser importer: dry run reads the site, the import lands the a
   assert.equal(acts[0].type, 'store.import'); assert.equal(acts[0].detail.source, 'dv'); assert.equal(acts[0].detail.code, 'https://dv.test');
   const flip = await api('POST', '/v1/admin/stores/1241/flip', { area: 'backdock', state: 'live' }, ownerToken);
   assert.equal(flip.body.areas.backdock, 'live');
+});
+
+// ── security fixes (audit §3 High 1–4) ─────────────────────────────────────
+const raw = (path, body, headers = {}) => mf.dispatchFetch('http://conduit.test' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body }).then(async r => ({ status: r.status, body: await r.json() }));
+const reg2 = (no, extra = {}) => api('POST', '/v1/admin/stores', { no, name: `Store ${no}`, pin: '135790', codes: { dock: `DK-${no}`, manager: `MG-${no}` }, entitlements: { floor: true, stockroom: true, backdock: true }, ...extra }, ownerToken);
+
+test('lockout: a new device id per guess still meets the store-wide and network lockouts', async () => {
+  assert.equal((await reg2('2003')).status, 201);
+  let r;
+  for (let i = 0; i < 8; i++) { r = await api('POST', '/v1/auth/signin', { store: '2003', pin: String(200000 + i), device: `guess${i}` }); assert.equal(r.status, 403, `guess ${i}`); }
+  r = await api('POST', '/v1/auth/signin', { store: '2003', pin: '135790', device: 'fresh-device' });
+  assert.equal(r.status, 429, 'the right PIN from a fresh device is still locked out'); assert.equal(r.body.code, 'locked_out');
+
+  assert.equal((await reg2('2004')).status, 201);
+  const ip = { 'CF-Connecting-IP': '203.0.113.9' };
+  // Spraying across stores (here, store numbers that do not exist) from one network.
+  for (let i = 0; i < 40; i++) assert.equal((await raw('/v1/auth/signin', JSON.stringify({ store: String(3000 + i), pin: '000000', device: `ipguess${i}` }), ip)).status, 404);
+  assert.equal((await raw('/v1/auth/signin', JSON.stringify({ store: '2004', pin: '135790', device: 'ipfresh' }), ip)).status, 429, 'that network is locked out');
+  assert.equal((await raw('/v1/auth/signin', JSON.stringify({ store: '2004', pin: '135790', device: 'elsewhere' }), { 'CF-Connecting-IP': '198.51.100.7' })).status, 200, 'another network is not');
+  assert.equal((await api('POST', '/v1/auth/signin', { store: '2004', pin: '135790', device: '__proto__' })).status, 400, 'device ids are plain');
+});
+
+test('validation: prototype names are refused as entity values and payload keys', async () => {
+  assert.equal((await reg2('2005')).status, 201);
+  const tok = (await api('POST', '/v1/auth/signin', { store: '2005', pin: '135790', device: 'pp1' })).body.token;
+  const ev = (type, entity, payload, area) => ({ id: ulid(), store: '2005', area, type, entity, payload, at: at(), v: 1 });
+  const send = body => raw('/v1/store/2005/events', body, { Authorization: `Bearer ${tok}` });
+  const r1 = await send(JSON.stringify({ events: [ev('refresh.mark', { week: '__proto__', segment: 'A1 S1' }, {}, 'floor')] }));
+  assert.equal(r1.body.results[0].code, 'invalid_event');
+  const bad = JSON.stringify({ events: [ev('refresh.mark', { week: '2026-W39', segment: 'A1 S1' }, { dept: 'h1' }, 'floor')] }).replace('"dept":"h1"', '"dept":"h1","__proto__":{"polluted":true}');
+  assert.equal((await send(bad)).body.results[0].code, 'invalid_event');
+  const ok = await send(JSON.stringify({ events: [ev('refresh.mark', { week: '2026-W39', segment: 'A1 S1' }, { dept: 'h1' }, 'floor')] }));
+  assert.equal(ok.body.results[0].ok, true, 'an ordinary mark still lands');
+});
+
+test('manifest delete needs the dock code, and a refused delete leaves the document', async () => {
+  assert.equal((await reg2('2006')).status, 201);
+  const floor = (await api('POST', '/v1/auth/signin', { store: '2006', pin: '135790', device: 'md1' })).body.token;
+  const dock = (await api('POST', '/v1/auth/unlock', { code: 'DK-2006' }, floor)).body.token;
+  const doc = { v: 1, kind: 'report', manNo: '7777001', storeNo: '2006', consols: [{ id: '601804381', cons: '00093000601804381', cartons: 3, items: [] }] };
+  assert.equal((await api('POST', '/v1/store/2006/manifest', doc, dock)).status, 201);
+  const no = await api('DELETE', '/v1/store/2006/manifest/7777001', undefined, floor);
+  assert.equal(no.status, 403); assert.equal(no.body.code, 'unauthorised');
+  assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, floor)).status, 200, 'still there');
+  assert.equal((await api('DELETE', '/v1/store/2006/manifest/7777001', undefined, dock)).status, 200);
+  assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, floor)).status, 404);
+});
+
+test('sessions: revoke, rotation and suspension sign devices out; sign-out ends the refresh token', async () => {
+  assert.equal((await reg2('2007')).status, 201);
+  const signin = device => api('POST', '/v1/auth/signin', { store: '2007', pin: '135790', device });
+  const a = (await signin('ra1')).body;
+  assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, a.token)).status, 200);
+  const rev = await api('PATCH', '/v1/admin/stores/2007', { revoke: true }, ownerToken);
+  assert.equal(rev.status, 200); assert.equal(rev.body.epoch, 1);
+  const refused = await api('GET', '/v1/store/2007/snapshot', undefined, a.token);
+  assert.equal(refused.status, 401); assert.equal(refused.body.code, 'revoked');
+  assert.equal((await api('POST', '/v1/auth/refresh', { refresh: a.refresh })).status, 401, 'the refresh token went too');
+  assert.equal((await api('POST', '/v1/auth/unlock', { code: 'DK-2007' }, a.token)).status, 401, 'an old token cannot unlock');
+
+  const b = (await signin('rb1')).body;
+  assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, b.token)).status, 200, 'signing in again works');
+  assert.equal((await api('POST', '/v1/auth/signout', { refresh: b.refresh })).status, 200);
+  assert.equal((await api('POST', '/v1/auth/refresh', { refresh: b.refresh })).status, 401, 'signed out on the worker');
+
+  const c = (await signin('rc1')).body;
+  assert.equal((await api('PATCH', '/v1/admin/stores/2007', { codes: { manager: 'MG-NEW' } }, ownerToken)).body.epoch, 2, 'a code rotation revokes');
+  assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, c.token)).status, 401);
+
+  assert.equal((await api('PATCH', '/v1/admin/stores/2007', { status: 'suspended' }, ownerToken)).status, 200);
+  const sus = await signin('rd1');
+  assert.equal(sus.status, 403); assert.equal(sus.body.code, 'suspended');
+  assert.equal((await api('PATCH', '/v1/admin/stores/2007', { status: 'live' }, ownerToken)).status, 200);
+  assert.equal((await signin('rd1')).status, 200);
+  const log = await api('GET', '/v1/admin/actions', undefined, ownerToken);
+  assert.ok(log.body.actions.some(x => x.type === 'sessions.revoke' && x.store === '2007'));
 });

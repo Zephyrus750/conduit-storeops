@@ -59,6 +59,7 @@ export class StoreObject extends DurableObject {
     `);
     this.state = null;
     this.storeNo = this.sql.exec("SELECT value FROM meta WHERE key = 'store'").toArray()[0]?.value || null;
+    this.epoch = Number(this.sql.exec("SELECT value FROM meta WHERE key = 'epoch'").toArray()[0]?.value || 0);
     ctx.blockConcurrencyWhile(async () => {
       this.load();
       // The end-of-day rollover runs on an alarm at store midnight. A store
@@ -90,6 +91,10 @@ export class StoreObject extends DurableObject {
     const url = new URL(request.url);
     const claims = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
     if (!claims) return fail(401, 'unauthorised', 'no claims');
+    // A device token from before the store's last rotation, suspension or
+    // revoke is refused; the device refreshes (which fails) and signs in.
+    if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) return fail(401, 'revoked', 'this device was signed out; sign in again');
+    if (url.pathname === '/epoch') return this.setEpoch(await request.json(), claims);
     if (claims.store && claims.store !== this.storeNo) { this.storeNo = claims.store; this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('store', ?)", String(claims.store)); }
     try {
       switch (url.pathname) {
@@ -200,6 +205,21 @@ export class StoreObject extends DurableObject {
     return { id, ok: true, seq: cur.seq, event };
   }
 
+  // ── session revocation ──────────────────────────────────────────────
+  setEpoch(body, claims) {
+    if (!claims.owner) return fail(403, 'unauthorised', 'owner only');
+    const epoch = Math.max(this.epoch, Number(body?.epoch) || 0);
+    if (epoch !== this.epoch) {
+      this.epoch = epoch;
+      this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('epoch', ?)", String(epoch));
+      for (const ws of this.ctx.getWebSockets()) {
+        const { claims: c } = ws.deserializeAttachment() || {};
+        if (c && !c.owner && (Number(c.epoch) || 0) < epoch) { try { ws.send(JSON.stringify({ t: 'error', code: 'revoked', message: 'signed out' })); ws.close(1008, 'revoked'); } catch {} }
+      }
+    }
+    return json({ ok: true, epoch: this.epoch });
+  }
+
   // ── end-of-day rollover ───────────────────────────────────────────────
   // Earlier-day bays still pending or ready are submitted as auto, through
   // the ordinary write path with a system actor, then the next alarm is set
@@ -245,11 +265,16 @@ export class StoreObject extends DurableObject {
     if (!row) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published (expired or removed)`);
     return new Response(row.doc, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', ...CORS } });
   }
+  // The role is checked and the manifest.remove event accepted before the
+  // document goes: a refused remove changes nothing, and every removal that
+  // happens is in the log.
   removeManifest(manNo, claims) {
-    this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
+    if (!hasRole(claims, ['dock', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a manifest needs the dock code');
+    if (!this.sql.exec('SELECT 1 FROM manifests WHERE manNo = ?', manNo).toArray().length) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published`);
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.remove', entity: { manNo }, payload: {}, at: new Date().toISOString(), v: 1 };
     const [r] = this.submit([ev], claims);
-    if (!r.ok) throw new HttpError(400, r.code, r.message);
+    if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
+    this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
     return json({ ok: true, manNo });
   }
 
@@ -334,6 +359,7 @@ export class StoreObject extends DurableObject {
     const { claims } = ws.deserializeAttachment() || {};
     if (!claims) return ws.close(1008, 'no claims');
     if (claims.exp * 1000 < Date.now()) { ws.send(JSON.stringify({ t: 'error', code: 'unauthorised', message: 'token expired' })); return ws.close(1008, 'expired'); }
+    if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) { ws.send(JSON.stringify({ t: 'error', code: 'revoked', message: 'signed out' })); return ws.close(1008, 'revoked'); }
     switch (msg.t) {
       case 'hello': {
         const since = Number(msg.since || 0);

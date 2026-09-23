@@ -82,12 +82,13 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` |
 | `POST /v1/auth/unlock` | signed-in device | live: area or manager code adds a role |
 | `POST /v1/auth/refresh` | signed-in device | live: rotates the refresh token |
+| `POST /v1/auth/signout` | holder of the refresh token | live: deletes the refresh token on the worker |
 | `GET /v1/stores` | anyone | live: number, name, region, status |
 | `GET /v1/store/:no/snapshot` | store token | live: projections for entitled areas |
 | `GET /v1/store/:no/changes?since=` | store token | live: events after a seq |
 | `POST /v1/store/:no/events` | store token | live: batch submit, per-event ack or rejection |
 | `GET /v1/store/:no/ws` | store token | live: hello, submit, hb, ping; event fan-out |
-| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate |
+| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate; a new PIN or code, `status: suspended` or `revoke: true` signs every device out (the store's credential epoch moves on) |
 | `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
 | `GET /v1/store/:no/map`, `GET …/map/:version` (`latest` allowed) | store token or owner | live: published map metadata and document, ETag / 304 |
@@ -101,8 +102,14 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
-`not_registered`, `locked_out`, `invalid_event`, `duplicate` (a success),
+`not_registered`, `locked_out`, `revoked` (signed out by a rotation, suspension
+or revoke), `suspended`, `invalid_event`, `duplicate` (a success),
 `not_implemented`, plus reducer codes such as `bay_occupied` and `cage_exists`.
+
+Sign-in and unlock lock out per device (5 wrong), per store (30 in an hour)
+and per network address (200 in an hour; stores may share one), each for
+15 minutes. `LOCKOUT_ATTEMPTS`, `LOCKOUT_STORE_ATTEMPTS`,
+`LOCKOUT_IP_ATTEMPTS`, `LOCKOUT_WINDOW_SECONDS` and `LOCKOUT_SECONDS` tune them.
 
 ## Admin console
 

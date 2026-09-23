@@ -14,7 +14,7 @@ import { mountMap, bindMapChrome } from '../map.js';
 const AREAS = ['floor', 'stockroom', 'backdock'];
 const AREA_NAME = { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock', store: 'Store', owner: 'Owner' };
 const CODES = [['stockroom', 'Stockroom code', 'unlocks the Stockroom area on a device'], ['dock', 'Dock code', 'unlocks the Back dock on a device'], ['manager', 'Manager code', 'opens every entitled area on a device']];
-const STATUSES = ['registered', 'migrating', 'live', 'legacy'];
+const STATUSES = ['registered', 'migrating', 'live', 'legacy', 'suspended'];
 const TOOLS = { floor: ['Store map', 'Pick list', 'Location refresh', 'Label integrity', 'Emergency', 'Maintenance', 'Stocktake'], stockroom: ['Backfill review', 'Cages', 'Adjustments', 'Day list', 'History'], backdock: ['Receiving', 'Decant', 'Manifests', 'Carton profiles', 'Planner', 'Receiving history'] };
 
 // Credential formats: PIN six digits; SR-/BD- four digits; MG- six digits.
@@ -43,7 +43,7 @@ const fail = e => toast(e.code === 'unauthorised' ? 'Owner session expired. Sign
 
 // ── shared bits ───────────────────────────────────────────────────────
 const tile = (n, label, small, cls = '') => `<div class="ad-tile${cls ? ' ' + cls : ''}"><b>${n}</b><span>${label}</span>${small ? `<small>${small}</small>` : ''}</div>`;
-const tst = (s) => `<span class="tst ${s === 'live' ? 'live' : s === 'migrating' ? 'staged' : ''}">${esc(s || 'off')}</span>`;
+const tst = (s) => `<span class="tst ${s === 'live' ? 'live' : s === 'migrating' ? 'staged' : s === 'suspended' ? 'bad' : ''}">${esc(s || 'off')}</span>`;
 const areaChips = rec => `<span class="ad-areas">${AREAS.map(a => { const on = rec.entitlements?.[a], v = rec.areas?.[a]; return `<i class="${!on ? '' : v === 'live' ? 'on' : v === 'migrating' ? 'mig' : 'leg'}" title="${a} · ${on ? esc(v) : 'off'}">${AREA_NAME[a]}</i>`; }).join('')}</span>`;
 const health = rec => !AREAS.some(a => rec.entitlements?.[a]) ? 'leg' : rec.status === 'live' ? 'ok' : rec.status === 'migrating' ? 'mig' : 'leg';
 const when = iso => iso ? `${fmtTime(iso)} · ${ago(iso)}` : '—';
@@ -171,7 +171,7 @@ function accessTab(rec) {
     if (st.rot === name) return `<form class="li" data-form="rotate"><span class="loc" style="min-width:120px">${label}</span><span class="ad-inrow" style="flex:1">${inp('value', st.rotValue, name === 'pin' ? '6 digits' : '', 'mono', 'required')}<button class="btn sm" type="button" data-act="gen" data-name="value" data-kind="${name}">${ic('refresh')}Generate</button><button class="btn sm primary" type="submit">Save</button><button class="btn sm" type="button" data-act="rot-cancel">Cancel</button></span></form>`;
     return `<div class="li"><span class="loc" style="min-width:120px">${label}</span><span class="nm">${desc}</span>${on ? `<span class="btn sm" data-act="rot" data-name="${name}">${ic('refresh')}${rec.codes?.includes(name) || name === 'pin' ? 'Rotate' : 'Set'}</span>` : '<span class="cs-dim">not entitled</span>'}</div>`;
   };
-  const creds = `<div class="card"><div class="ch"><h3>Credentials</h3><span class="cs-dim">shared per store, no individual logins</span></div><div class="list">${rotRow('pin', 'Store PIN', 'opens the Floor on any device', true)}${CODES.map(([k, l, d]) => rotRow(k, l, d, k !== 'dock' || rec.entitlements?.backdock)).join('')}</div>${st.rotDone ? `<div class="ad-done" style="margin:12px 0 0"><span class="ck">${ic('check')}</span><div><b>${esc(st.rotDone.label)} is now <span class="mono">${esc(st.rotDone.value)}</span></b><span>Shown once. Hand it to the store; devices need it the next time they unlock.</span></div></div>` : ''}<p class="lbl">Rotating a code signs that area out on every device the next time its token refreshes. The registry keeps only a hash.</p></div>`;
+  const creds = `<div class="card"><div class="ch"><h3>Credentials</h3><span class="cs-dim">shared per store, no individual logins</span></div><div class="list">${rotRow('pin', 'Store PIN', 'opens the Floor on any device', true)}${CODES.map(([k, l, d]) => rotRow(k, l, d, k !== 'dock' || rec.entitlements?.backdock)).join('')}<div class="li"><span class="loc" style="min-width:120px">Sessions</span><span class="nm">For a lost or shared device when the codes can stay.</span><button type="button" class="btn sm" data-act="revoke">${ic('lock')}Sign out every device</button></div></div>${st.rotDone ? `<div class="ad-done" style="margin:12px 0 0"><span class="ck">${ic('check')}</span><div><b>${esc(st.rotDone.label)} is now <span class="mono">${esc(st.rotDone.value)}</span></b><span>Shown once. Hand it to the store; devices need it the next time they unlock.</span></div></div>` : ''}<p class="lbl">A new PIN or code signs every device at the store out straight away; each needs the store PIN again. The registry keeps only a hash.</p></div>`;
   const identity = st.edit
     ? `<form class="card" data-form="edit"><div class="ch"><h3>Store</h3></div><div class="ad-grid2">${field('Name', inp('name', rec.name, 'Store name', '', 'required'))}${field('Region', inp('region', rec.region, 'e.g. WA South'))}${field('Status', `<select class="ad-in" name="status">${STATUSES.map(v => `<option value="${v}" ${rec.status === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`, 'live once any area is live on Conduit')}</div><div class="acts" style="margin-top:12px"><button class="btn primary sm" type="submit">${ic('check')}Save</button><button class="btn sm" type="button" data-act="edit-cancel">Cancel</button></div></form>`
     : `<div class="card"><div class="ch"><h3>Store</h3><span class="btn sm" data-act="edit">${ic('edit')}Edit</span></div><div class="ad-kv"><span>Number</span><b class="mono">${esc(rec.no)}</b><span>Name</span><b>${esc(rec.name)}</b><span>Region</span><b>${esc(rec.region || '—')}</b><span>Status</span><b>${tst(rec.status)}</b><span>Created</span><b>${fmtTime(rec.created)}</b><span>Updated</span><b>${fmtTime(rec.updated)}</b></div></div>`;
@@ -271,6 +271,7 @@ async function onStoreClick(e, ctx) {
   else if (act === 'area') { st.area = a.dataset.area; ctx.rerender(); }
   else if (act === 'actas') { a.disabled = true; try { await ctx.actAs(no); } catch (err) { a.disabled = false; fail(err); } }
   else if (act === 'entitle') { const area = a.dataset.area, on = !c.rec?.entitlements?.[area]; if (!on && !confirm(`Turn ${AREA_NAME[area]} off for ${no}? Devices lose the area the next time their token refreshes.`)) return; await patchStore(ctx, { entitlements: { [area]: on } }); }
+  else if (act === 'revoke') { if (confirm(`Sign out every device at store ${st.no}? Each one needs the store PIN again.`) && await patchStore(ctx, { revoke: true })) toast('Every device is signed out'); }
   else if (act === 'rot') { st.rot = a.dataset.name; st.rotValue = gen[a.dataset.name](); st.rotDone = null; ctx.rerender(); }
   else if (act === 'rot-cancel') { st.rot = null; ctx.rerender(); }
   else if (act === 'gen') { const kind = a.dataset.kind || a.dataset.name; const el = a.closest('.ad-inrow')?.querySelector('input'); if (el && gen[kind]) el.value = gen[kind](); }
@@ -362,6 +363,7 @@ function actionText(a) {
     case 'store.status': return `${s}status set to ${esc(d.status)}`;
     case 'store.entitle': return `${s}entitlements: ${AREAS.filter(x => d[x]).map(x => AREA_NAME[x]).join(', ') || 'none'}`;
     case 'area.flip': return `${s}areas: ${AREAS.map(x => `${AREA_NAME[x]} ${esc(d[x] || '')}`).join(' · ')}`;
+    case 'sessions.revoke': return `${s}signed every device out (${esc(d.why || 'owner')})`;
     case 'roster.rotate': return `${s}rotated ${d.pin ? 'the store PIN' : (d.codes || []).join(', ') + ' code'}`;
     case 'store.import': return `${s}imported from ${d.source === 'dv' ? 'Decant Visualiser' : 'K2B'} ${esc(d.code || '')}: ${d.applied} events written, ${d.duplicates} already there${d.rejected ? `, ${d.rejected} rejected` : ''}`;
     default: return `${s}${esc(a.type)} ${esc(short(d))}`;

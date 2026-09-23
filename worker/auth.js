@@ -6,7 +6,9 @@
 // credentials live in the registry object.
 //
 // Access tokens are compact HMAC-SHA256 signed JSON: base64url(payload).sig.
-// Payload: { store, roles, caps, device, owner, actor, iat, exp, jti }.
+// Payload: { store, roles, caps, device, owner, actor, epoch, iat, exp, jti }.
+// epoch is the store's credential epoch at issue; the store object refuses a
+// token from an older epoch (a rotation, suspension or revoke signed it out).
 // Nothing in the token is secret; the signature is what matters, so the
 // worker never needs to look a token up.
 
@@ -68,9 +70,9 @@ export async function sha256(text) {
 }
 
 // ── claims ─────────────────────────────────────────────────────────────
-export function makeClaims({ store, roles, caps, device, owner = false, actor = null, ttl }) {
+export function makeClaims({ store, roles, caps, device, owner = false, actor = null, epoch = 0, ttl }) {
   const iat = Math.floor(Date.now() / 1000);
-  return { store, roles, caps, device, owner, actor, iat, exp: iat + ttl, jti: randomToken(8) };
+  return { store, roles, caps, device, owner, actor, epoch, iat, exp: iat + ttl, jti: randomToken(8) };
 }
 
 export function hasRole(claims, roles) {

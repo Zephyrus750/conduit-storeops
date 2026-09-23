@@ -84,7 +84,13 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     if (cur.expires * 1000 - now() < REFRESH_AHEAD_S * 1000) { try { await refresh(); } catch (e) { if (!(e instanceof TransportError && e.network)) return null; } }
     return cur?.token || null;
   }
-  async function signOut() { cur = null; await save(); }
+  // Sign-out ends the session on the worker too (best effort: offline, the
+  // local session still goes and the refresh token expires on its own).
+  async function signOut() {
+    const refreshes = [cur?.refresh, cur?.via?.refresh].filter(Boolean);
+    cur = null; await save();
+    for (const refresh of refreshes) { try { await transport.request('/v1/auth/signout', { method: 'POST', body: { refresh } }); } catch {} }
+  }
   function unauthorised() { cur = null; save(); emit('signin-required', { reason: 'unauthorised' }); }
   function on(k, f) { listeners[k].add(f); return () => listeners[k].delete(f); }
 

@@ -424,3 +424,4 @@ svg.map.real { background: #fff; }
   .scode .kc { font-size: 15px; }
   .smid-h .bigloc { font-size: 30px; }
 }
+.tst.bad { background: var(--red); color: #fff; }
