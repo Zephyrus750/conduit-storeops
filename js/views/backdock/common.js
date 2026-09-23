@@ -44,7 +44,7 @@ function loadXLSX() {
   if (window.XLSX) return Promise.resolve(window.XLSX);
   if (xlsxLoading) return xlsxLoading;
   xlsxLoading = new Promise((resolve, reject) => {
-    const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    const sc = document.createElement('script'); sc.src = 'vendor/xlsx/xlsx.full.min.js';   // self-hosted: works offline, no third-party script
     sc.onload = () => resolve(window.XLSX); sc.onerror = () => { xlsxLoading = null; reject(new Error('the spreadsheet reader did not load. Check the connection and try again')); };
     document.head.appendChild(sc);
   });

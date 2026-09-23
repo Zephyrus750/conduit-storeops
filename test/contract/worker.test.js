@@ -68,7 +68,7 @@ before(async () => {
       LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', LEGACY_URL: 'https://legacy.test',
       TOKEN_SECRET: 'test-token-secret',
       OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000),
-      TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_STORE_ATTEMPTS: '8', LOCKOUT_IP_ATTEMPTS: '40', LOCKOUT_SECONDS: '60', ENVIRONMENT: 'test',
+      TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_STORE_ATTEMPTS: '8', LOCKOUT_IP_ATTEMPTS: '40', LOCKOUT_SECONDS: '60', ROLE_TTL_SECONDS: '2', ENVIRONMENT: 'test',
     },
   });
   await mf.ready;
@@ -154,7 +154,9 @@ test('events: entitlement, role, validation, duplicate, conflict rule, and a sec
   const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, p1.token)).body;
 
   // phone-2 opens its socket first and says hello.
-  const wsRes = await mf.dispatchFetch('http://conduit.test/v1/store/1241/ws?token=' + p2.token, { headers: { Upgrade: 'websocket' } });
+  const wsRes = await mf.dispatchFetch('http://conduit.test/v1/store/1241/ws', { headers: { Upgrade: 'websocket', 'Sec-WebSocket-Protocol': `conduit, ${p2.token}` } });
+  assert.equal(wsRes.headers.get('Sec-WebSocket-Protocol'), 'conduit');
+  assert.equal((await mf.dispatchFetch('http://conduit.test/v1/store/1241/snapshot?token=' + p2.token)).status, 401, '?token= is for the socket only');
   assert.equal(wsRes.status, 101);
   const ws = wsRes.webSocket; ws.accept();
   const inbox = []; const waiters = [];
@@ -235,7 +237,6 @@ test('maps: owner publishes, devices read by version or latest, the log and regi
   assert.equal((await api('GET', '/v1/store/1241/map', undefined, dev)).status, 404);
   const svg = '<svg class="map real" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g class="shelf-group" data-shelf="A1" data-dept="h1"><rect class="shelf" x="1" y="1" width="10" height="10"/></g></svg>';
   assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg }] }, dev)).status, 403, 'a store token cannot publish');
-  assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg: '<svg onload="x()"></svg>' }] }, ownerToken)).status, 400);
   assert.equal((await api('POST', '/v1/store/1241/map', { version: '4.3', floors: [{ id: 'ground', svg, paths: { nodes: [{ id: 'a', x: 'no', y: 0 }, { id: 'b', x: 1, y: 1 }], edges: [{ a: 'a', b: 'b' }] } }] }, ownerToken)).status, 400, 'path nodes need numeric coordinates');
   const paths = { nodes: [{ id: 'pn1', x: 0, y: 0 }, { id: 'pn2', x: 100, y: 0, type: 'stairs' }], edges: [{ a: 'pn1', b: 'pn2' }, { a: 'pn2' }] };
   const pub = await api('POST', '/v1/store/1241/map', { version: '4.3', name: 'Busselton', departments: [{ id: 'h1', name: 'H1 Kitchen', color: '#FF8C00' }], floors: [{ id: 'ground', name: 'Ground', type: 'foh', svg, paths }] }, ownerToken);
@@ -256,6 +257,13 @@ test('maps: owner publishes, devices read by version or latest, the log and regi
   const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
   assert.equal(tail.body.events[0].type, 'map.publish'); assert.equal(tail.body.events[0].actor.owner, true);
   assert.equal((await api('GET', '/v1/admin/stores/1241', undefined, ownerToken)).body.mapVersion, '4.3');
+
+  // Markup outside the map allow-list is stripped at publish, never stored.
+  const hostile = svg.replace('</g>', '</g><foreignObject><div onmouseover="x()">hi</div></foreignObject><a href="javascript:x()"><rect width="1" height="1"/></a><use href="https://evil.test/x.svg#a"/>').replace('<rect class="shelf"', '<rect onclick="x()" class="shelf"');
+  const pub2 = await api('POST', '/v1/store/1241/map', { version: '4.3-clean', floors: [{ id: 'ground', svg: hostile }] }, ownerToken);
+  assert.equal(pub2.status, 201); assert.ok(pub2.body.stripped >= 4, `stripped ${pub2.body.stripped}`);
+  const stored = (await api('GET', '/v1/store/1241/map/4.3-clean', undefined, dev)).body.floors[0].svg;
+  assert.doesNotMatch(stored, /foreignObject|onclick|onmouseover|javascript:|evil\.test/); assert.match(stored, /data-shelf="A1"/);
 });
 
 test('K2B importer: dry run counts, the import lands as events, a second run is all duplicates, flip sets the area', async () => {
@@ -480,4 +488,17 @@ test('sessions: revoke, rotation and suspension sign devices out; sign-out ends 
   assert.equal((await signin('rd1')).status, 200);
   const log = await api('GET', '/v1/admin/actions', undefined, ownerToken);
   assert.ok(log.body.actions.some(x => x.type === 'sessions.revoke' && x.store === '2007'));
+});
+
+test('an unlocked code lasts a shift: after ROLE_TTL_SECONDS the next refresh drops back to the Floor', async () => {
+  assert.equal((await reg2('2008')).status, 201);
+  const a = (await api('POST', '/v1/auth/signin', { store: '2008', pin: '135790', device: 'rt1' })).body;
+  const u = (await api('POST', '/v1/auth/unlock', { code: 'MG-2008' }, a.token)).body;
+  assert.deepEqual(u.roles, ['floor', 'manager']);
+  assert.ok(u.expires - Math.floor(Date.now() / 1000) <= 60, 'the access token ends with the role (60 s floor)');
+  const r1 = (await api('POST', '/v1/auth/refresh', { refresh: u.refresh })).body;
+  assert.deepEqual(r1.roles, ['floor', 'manager'], 'still inside the shift');
+  await new Promise(r => setTimeout(r, 2100));
+  const r2 = (await api('POST', '/v1/auth/refresh', { refresh: r1.refresh })).body;
+  assert.deepEqual(r2.roles, ['floor'], 'the code has to be entered again');
 });

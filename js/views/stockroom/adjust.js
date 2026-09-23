@@ -4,6 +4,7 @@
 
 import { $, ic, esc, vh, sub, fmtTime, toast, mhead, mscan, mbig, mghost, mfoot } from '../../ui.js';
 import { parseKeycodes } from '../../../shared/backfill.js';
+import { csvLines } from '../../../shared/records.js';
 import { todayKey, ensureNames, nameHtml, nameOf, send } from './common.js';
 
 const st = { filter: 'all', mSoh: 0, mQty: 1, mKc: '' };
@@ -42,7 +43,7 @@ async function onClick(e, ctx, root, repaint) {
   if (act === 'filter') { st.filter = a.dataset.v; ctx.rerender(); }
   else if (act === 'remove') await send(ctx, 'adjustment.remove', { keycode: a.dataset.kc, date: m.date });
   else if (act === 'add') { const kc = parseKeycodes(root.querySelector('[data-field="kc"]')?.value)[0]; const qty = Number(root.querySelector('[data-field="qty"]')?.value) || 0; const loc = root.querySelector('[data-field="loc"]')?.value.trim() || ''; if (!kc) return toast('Keycode needed', 'bad'); const r = await send(ctx, 'adjustment.set', { keycode: kc, date: m.date }, { qty, location: loc, confirmed: false, name: nameOf(kc) || '' }); if (r) { for (const f of ['kc', 'qty', 'loc']) { const i = root.querySelector(`[data-field="${f}"]`); if (i) i.value = ''; } root.querySelector('[data-field="kc"]')?.focus(); } }
-  else if (act === 'export') { const text = ['keycode,name,soh,location,confirmed,added', ...m.items.map(i => [i.kc, JSON.stringify(i.name || nameOf(i.kc) || ''), i.qty, i.location, i.confirmed ? 'yes' : '', i.addedAt].join(','))].join('\n'); try { await navigator.clipboard.writeText(text); toast(`${m.items.length} rows copied as CSV`); } catch { toast('Copy failed', 'bad'); } }
+  else if (act === 'export') { const text = csvLines(['keycode', 'name', 'soh', 'location', 'confirmed', 'added'], m.items.map(i => [i.kc, i.name || nameOf(i.kc) || '', i.qty, i.location, i.confirmed ? 'yes' : '', i.addedAt])); try { await navigator.clipboard.writeText(text); toast(`${m.items.length} rows copied as CSV`); } catch { toast('Copy failed', 'bad'); } }
   else if (act === 'm-qty') { st.mQty = Math.max(0, st.mQty + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-soh') { st.mSoh = Math.min(0, st.mSoh + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-flag') { if (!st.mKc) return; const r = await send(ctx, 'adjustment.set', { keycode: st.mKc, date: m.date }, { qty: st.mSoh, counted: st.mQty, location: '', confirmed: false, name: nameOf(st.mKc) || '' }); if (r) { toast(`${st.mKc} flagged`); st.mKc = ''; st.mSoh = 0; st.mQty = 1; repaint(); } }

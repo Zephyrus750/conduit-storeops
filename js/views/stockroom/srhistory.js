@@ -3,6 +3,7 @@
 // copy the metrics as CSV. Reads the same projection the review does.
 
 import { addDays } from '../../../shared/time.js';
+import { csvLines } from '../../../shared/records.js';
 import { $, ic, esc, vh, sub, fmtTime, toast, mhead, mrows } from '../../ui.js';
 import { ensureNames, nameHtml, todayKey } from './common.js';
 
@@ -42,7 +43,7 @@ export default {
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'open') { st.open = a.dataset.k; ctx.rerender(); }
       else if (a.dataset.act === 'sort') { st.sort = a.dataset.v; ctx.rerender(); }
-      else if (a.dataset.act === 'export') { const m = model(ctx); const text = ['date,location,status,readyAt,submittedAt,expected,scanned,match,accuracy,incorrect,auto', ...m.recs.map(s => [s.date, s.bay, s.status, s.readyAt || '', s.submittedDoneAt || '', s.metrics.expected, s.metrics.scanned, s.metrics.match, s.metrics.accuracy, s.metrics.incorrect, s.autoSubmitted ? 'yes' : ''].join(','))].join('\n'); try { await navigator.clipboard.writeText(text); toast(`${m.recs.length} rows copied`); } catch { toast('Copy failed', 'bad'); } }
+      else if (a.dataset.act === 'export') { const m = model(ctx); const text = csvLines(['date', 'location', 'status', 'readyAt', 'submittedAt', 'expected', 'scanned', 'match', 'accuracy', 'incorrect', 'auto'], m.recs.map(s => [s.date, s.bay, s.status, s.readyAt || '', s.submittedDoneAt || '', s.metrics.expected, s.metrics.scanned, s.metrics.match, s.metrics.accuracy, s.metrics.incorrect, s.autoSubmitted ? 'yes' : ''])); try { await navigator.clipboard.writeText(text); toast(`${m.recs.length} rows copied`); } catch { toast('Copy failed', 'bad'); } }
     });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="q"]')) { st.q = e.target.value; const v = e.target.value; ctx.rerender(); setTimeout(() => { const i = root.querySelector('[data-field="q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 0); } });
     return [ctx.store.on('backfill', repaint)];

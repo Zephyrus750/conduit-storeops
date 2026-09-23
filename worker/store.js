@@ -31,6 +31,7 @@ import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
 import { rolloverDue } from '../shared/backfill.js';
+import { sanitizeSvg } from '../shared/svgsafe.js';
 import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/time.js';
 
 const SNAPSHOT_EVERY = 1000;
@@ -308,13 +309,16 @@ export class StoreObject extends DurableObject {
     if (this.sql.exec('SELECT 1 FROM maps WHERE version = ?', version).toArray().length) throw new HttpError(409, 'exists', `map version ${version} is already published; publish a new version`);
     const floors = Array.isArray(body.floors) ? body.floors : [];
     if (!floors.length) throw new HttpError(400, 'invalid_request', 'floors must list at least one floor with its svg');
-    const metaFloors = [];
+    const metaFloors = [], clean = [];
+    let stripped = 0;
     for (const f of floors) {
-      const id = String(f?.id ?? '').trim(), svg = String(f?.svg ?? '');
+      const id = String(f?.id ?? '').trim();
+      // Allow-list the markup: every device inserts it into the page.
+      const safe = sanitizeSvg(String(f?.svg ?? '')), svg = safe.svg;
+      stripped += safe.stripped; clean.push({ id, svg });
       if (!/^[\w-]{1,32}$/.test(id)) throw new HttpError(400, 'invalid_request', 'each floor needs an id of letters, digits or dashes');
       if (!/^\s*<svg[\s>]/i.test(svg) || !/<\/svg>\s*$/i.test(svg)) throw new HttpError(400, 'invalid_request', `floor ${id}: svg must be a complete <svg> document`);
       if (svg.length > MAP_FLOOR_MAX) throw new HttpError(413, 'payload_too_large', `floor ${id}: svg is over ${MAP_FLOOR_MAX / 1_000_000} MB`);
-      if (/<script[\s>]/i.test(svg) || /\son[a-z]+\s*=/i.test(svg)) throw new HttpError(400, 'invalid_request', `floor ${id}: svg must not contain scripts or event handlers`);
       // The walk-path network the editor authored for this floor rides in
       // the metadata: a few hundred nodes, so it stays with the floor row.
       let paths = null;
@@ -332,14 +336,14 @@ export class StoreObject extends DurableObject {
     const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments };
     const at = new Date().toISOString(), by = { device: claims.device || null, owner: true };
     this.sql.exec('INSERT INTO maps (version, meta, at, by) VALUES (?, ?, ?, ?)', version, JSON.stringify(meta), at, JSON.stringify(by));
-    for (const f of floors) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, String(f.id).trim(), String(f.svg));
+    for (const f of clean) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, f.id, f.svg);
     // The publish is an ordinary store event, so every device learns the
     // new version through its projection and the log shows who published.
     const ev = { id: ulid(), store: this.storeNo, area: 'store', type: 'map.publish', entity: { version }, payload: { floors: metaFloors.map(f => f.id), name: meta.name }, at, v: 1 };
     const r = this.applyOne(ev, { ...claims, roles: ['manager'], caps: claims.caps || [] });
     if (!r.ok) throw new HttpError(500, 'internal', `map stored but map.publish was refused: ${r.message}`);
     this.snapshotIfDue(); this.broadcast([r.event]);
-    return json({ ok: true, version, at, seq: r.seq, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
+    return json({ ok: true, version, at, seq: r.seq, stripped, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────────
@@ -349,7 +353,9 @@ export class StoreObject extends DurableObject {
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server, [claims.device || 'nodevice']);
     server.serializeAttachment({ claims });
-    return new Response(null, { status: 101, webSocket: client });
+    // A socket that offered the conduit subprotocol (token as the second) gets it back.
+    const offered = (request.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(x => x.trim());
+    return new Response(null, { status: 101, webSocket: client, headers: offered[0] === 'conduit' ? { 'Sec-WebSocket-Protocol': 'conduit' } : {} });
   }
 
   async webSocketMessage(ws, message) {

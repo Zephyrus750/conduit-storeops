@@ -155,7 +155,8 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     const token = await session.token();
     if (!token) { session.unauthorised(); return; }
     let sock;
-    try { sock = new WebSocketImpl(`${transport.wsBase}/v1/store/${no}/ws?token=${encodeURIComponent(token)}`); }
+    // The token travels as the second subprotocol, not in the URL.
+    try { sock = new WebSocketImpl(`${transport.wsBase}/v1/store/${no}/ws`, ['conduit', token]); }
     catch { return scheduleReconnect(); }
     ws = sock;
     sock.onopen = () => { wsAttempt = 0; stopPolling(); sock.send(JSON.stringify({ t: 'hello', since: base.seq })); heartbeat(); };

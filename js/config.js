@@ -1,3 +1,9 @@
-// Where the shell finds the worker when nothing else says. Overridden by
-// ?worker=<url> once per device (remembered) and by localhost during dev.
+// Where the shell finds the worker when nothing else says. ?worker=<url>
+// switches a device (remembered) only to a worker on this list, or to a
+// local worker when the shell itself runs on localhost during dev. A link
+// cannot point a store device at anyone else's server.
 export const WORKER_DEFAULT = 'https://conduit-staging.zephyrus-np750.workers.dev';
+export const WORKER_ALLOWED = [
+  'https://conduit-staging.zephyrus-np750.workers.dev',
+  'https://conduit.zephyrus-np750.workers.dev',
+];

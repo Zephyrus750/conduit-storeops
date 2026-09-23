@@ -51,15 +51,15 @@ r.post('/v1/auth/unlock', async (req, env, ctx) => {
   const b = await readJson(req);
   const { role, epoch } = await registry(env, 'POST', '/unlock', { store: c.store, code: b.code, device: c.device, ip: clientIp(req), epoch: c.epoch || 0 });
   const roles = c.roles.includes(role) ? c.roles : [...c.roles, role];
-  const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, epoch, ttl: ttl(env) });
-  const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false });
+  const { refresh, roleExpires } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false, elevated: Date.now() });
+  const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, epoch, ttl: roleTtl(env, roleExpires) });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, roles });
 });
 
 r.post('/v1/auth/refresh', async (req, env) => {
   const b = await readJson(req);
   const res = await registry(env, 'POST', '/refresh/use', { refresh: b.refresh });
-  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device: res.device, owner: res.owner, epoch: res.epoch, ttl: ttl(env) });
+  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device: res.device, owner: res.owner, epoch: res.epoch, ttl: roleTtl(env, res.roleExpires) });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh: res.refresh, expires: claims.exp, roles: res.roles, caps: res.caps, owner: res.owner });
 });
 
@@ -186,10 +186,18 @@ export default {
 // The caller's address as Cloudflare saw it; absent in local tests.
 function clientIp(req) { return (req.headers.get('CF-Connecting-IP') || '').slice(0, 64) || null; }
 function ttl(env) { return Number(env.TOKEN_TTL_SECONDS || 43200); }
+// An access token carrying an unlocked role ends when the role does, so the
+// next refresh (which drops the role) comes due on time.
+function roleTtl(env, roleExpires) { return roleExpires ? Math.max(60, Math.min(ttl(env), Math.floor((roleExpires - Date.now()) / 1000))) : ttl(env); }
 
 async function requireClaims(req, env) {
+  // The token rides in the Authorization header. A browser WebSocket cannot
+  // set headers, so the socket offers it as its second subprotocol
+  // ("conduit, <token>"); ?token= is honoured on /ws only, for shells from
+  // before that, and never elsewhere, so tokens stay out of URLs and logs.
   const h = req.headers.get('Authorization') || '';
-  const token = h.startsWith('Bearer ') ? h.slice(7) : new URL(req.url).searchParams.get('token');
+  const url = new URL(req.url), proto = (req.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(x => x.trim());
+  const token = h.startsWith('Bearer ') ? h.slice(7) : proto[0] === 'conduit' && proto[1] ? proto[1] : url.pathname.endsWith('/ws') ? url.searchParams.get('token') : null;
   const claims = await verifyToken(token, env.TOKEN_SECRET);
   if (!claims) throw new HttpError(401, 'unauthorised', 'token missing, invalid or expired');
   return claims;

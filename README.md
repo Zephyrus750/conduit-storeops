@@ -70,7 +70,9 @@ commands and `npm run deploy:staging`.
 **Shell (Netlify).** Import this repository as a new site: publish directory
 `.`, no build command (netlify.toml already says so). The shell talks to the
 staging worker by default (`js/config.js`); open it once with
-`?worker=<url>` to point a device elsewhere.
+`?worker=<url>` to point a device at another worker on `WORKER_ALLOWED` in
+the same file (any other origin is ignored, so a link cannot send a store's
+PIN elsewhere). The sign-in names the worker when it is not the default.
 
 D1, R2 and KV bindings are added when the features that need them land
 (history, manifests and exports, map cache). See `wrangler.toml`.
@@ -110,6 +112,9 @@ Sign-in and unlock lock out per device (5 wrong), per store (30 in an hour)
 and per network address (200 in an hour; stores may share one), each for
 15 minutes. `LOCKOUT_ATTEMPTS`, `LOCKOUT_STORE_ATTEMPTS`,
 `LOCKOUT_IP_ATTEMPTS`, `LOCKOUT_WINDOW_SECONDS` and `LOCKOUT_SECONDS` tune them.
+An area or manager code lasts a shift (`ROLE_TTL_SECONDS`, 12 h); after that
+the device keeps the Floor and asks for the code again. The WebSocket carries
+its token as the second subprotocol (`conduit, <token>`), never in the URL.
 
 ## Admin console
 

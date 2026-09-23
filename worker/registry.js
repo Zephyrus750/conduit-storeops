@@ -60,7 +60,7 @@ export class RegistryObject extends DurableObject {
     `);
     // Columns added after first deploy: a lockout window start, and the
     // store's credential epoch (bumped to revoke every session).
-    for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT']) {
+    for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT', 'ALTER TABLE refresh ADD COLUMN elevated INTEGER']) {
       try { this.sql.exec(ddl); } catch { /* already there */ }
     }
   }
@@ -164,12 +164,16 @@ export class RegistryObject extends DurableObject {
   // rotating OWNER_KEY_HASH ends every owner session at its next refresh.
   // Store refresh tokens are deleted when the store's epoch is bumped.
   async ownerFp() { return sha256(String(this.env.OWNER_KEY_HASH || '')); }
-  async issueRefresh({ store, device, roles, owner }) {
+  // elevated: when an area or manager code was entered on this session. The
+  // roles it added last ROLE_TTL_SECONDS (a shift, 12 h) and then drop back
+  // to the Floor, so a code typed once on a shared device does not stay.
+  roleTtlMs() { return Number(this.env.ROLE_TTL_SECONDS || 43200) * 1000; }
+  async issueRefresh({ store, device, roles, owner, elevated = null }) {
     const refresh = randomToken(32);
     const ttl = Number(this.env.REFRESH_TTL_SECONDS || 2592000);
-    this.sql.exec('INSERT INTO refresh (hash, store, device, roles, owner, issued, expires, fp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      await sha256(refresh), store || null, device || null, JSON.stringify(roles || []), owner ? 1 : 0, new Date().toISOString(), Date.now() + ttl * 1000, owner ? await this.ownerFp() : null);
-    return { refresh };
+    this.sql.exec('INSERT INTO refresh (hash, store, device, roles, owner, issued, expires, fp, elevated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      await sha256(refresh), store || null, device || null, JSON.stringify(roles || []), owner ? 1 : 0, new Date().toISOString(), Date.now() + ttl * 1000, owner ? await this.ownerFp() : null, elevated);
+    return { refresh, roleExpires: elevated ? elevated + this.roleTtlMs() : null };
   }
   async useRefresh({ refresh }) {
     const hash = await sha256(String(refresh || ''));
@@ -180,8 +184,13 @@ export class RegistryObject extends DurableObject {
     const store = row.store ? this.get(row.store) : null;
     if (row.store && !store) throw new HttpError(404, 'not_registered', `store ${row.store} is not registered`);
     if (store?.status === 'suspended') throw new HttpError(403, 'suspended', `store ${row.store} is suspended`);
-    const next = await this.issueRefresh({ store: row.store, device: row.device, roles: JSON.parse(row.roles), owner: !!row.owner });
-    return { store: row.store, device: row.device, roles: JSON.parse(row.roles), owner: !!row.owner, caps: store ? this.caps(store) : [], epoch: store?.epoch || 0, refresh: next.refresh };
+    let roles = JSON.parse(row.roles), elevated = row.elevated || null;
+    if (!row.owner && roles.some(r => r !== 'floor')) {
+      if (!elevated) elevated = Date.now();                  // a session from before roles expired: its shift starts now
+      else if (Date.now() - elevated >= this.roleTtlMs()) { roles = ['floor']; elevated = null; }
+    }
+    const next = await this.issueRefresh({ store: row.store, device: row.device, roles, owner: !!row.owner, elevated });
+    return { store: row.store, device: row.device, roles, owner: !!row.owner, caps: store ? this.caps(store) : [], epoch: store?.epoch || 0, refresh: next.refresh, roleExpires: next.roleExpires };
   }
   // Sign-out: the refresh token stops working now, not in 30 days.
   async revokeRefresh({ refresh }) {

@@ -425,3 +425,5 @@ svg.map.real { background: #fff; }
   .smid-h .bigloc { font-size: 30px; }
 }
 .tst.bad { background: var(--red); color: #fff; }
+.si-worker { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--dim); margin: 4px 0 10px; }
+.si-worker .i { width: 14px; height: 14px; }

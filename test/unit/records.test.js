@@ -1,7 +1,7 @@
 // A keycode's life, the history lists and CSV, from the projection shapes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../../shared/records.js';
+import { productLife, historyRows, toCsv, csvCell, HISTORY_KINDS, HISTORY_AREA } from '../../shared/records.js';
 
 const state = {
   backfill: { subs: {
@@ -54,4 +54,11 @@ test('toCsv quotes commas and quotes, writes booleans as yes/no, empty gives a h
   assert.match(csv, /2026-09-18,43166022,-1,"Mug, ""blue""",,no,/);
   assert.match(csv, /,yes,/);
   assert.equal(toCsv([], ['a', 'b']), 'a,b\n'); assert.equal(toCsv([]), '');
+});
+
+test('CSV: formula-looking text is neutralised, numbers (negative SOH too) stay numbers', () => {
+  assert.equal(csvCell('=HYPERLINK("x")'), `"'=HYPERLINK(""x"")"`);
+  assert.equal(csvCell('+1-2'), "'+1-2"); assert.equal(csvCell('@SUM(A1)'), "'@SUM(A1)"); assert.equal(csvCell('-cmd'), "'-cmd");
+  assert.equal(csvCell(-6), '-6'); assert.equal(csvCell('-6'), '-6'); assert.equal(csvCell('Bath towel, 5pk'), '"Bath towel, 5pk"');
+  assert.equal(toCsv([{ name: '=1+1', qty: -3 }]), "name,qty\n'=1+1,-3\n");
 });
