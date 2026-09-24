@@ -37,7 +37,10 @@ import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/tim
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
-const DELTA_LIMIT = 5000;     // above this gap a hello gets a snapshot instead of a delta
+const DELTA_LIMIT = 5000;
+const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
+const EVENT_MAX = 2_000_000;          // one event's payload (a manifest.attach carries its consols)
+const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
 export class StoreObject extends DurableObject {
   constructor(ctx, env) {
@@ -101,7 +104,7 @@ export class StoreObject extends DurableObject {
       switch (url.pathname) {
         case '/snapshot': return json(this.snapshot(claims, url.searchParams.get('areas')));
         case '/changes': return json(this.changes(Number(url.searchParams.get('since') || 0), claims));
-        case '/events': { const body = await request.json(); return json({ results: this.submit(body.events, claims) }); }
+        case '/events': { const body = await readBounded(request, BATCH_MAX); return json({ results: this.submit(body.events, claims) }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
@@ -179,6 +182,11 @@ export class StoreObject extends DurableObject {
     const id = raw?.id;
     const bad = validateEvent(raw);
     if (bad) return { id, ok: false, ...bad };
+    if (JSON.stringify(raw.payload ?? {}).length > EVENT_MAX) return { id, ok: false, code: 'invalid_event', message: `payload is over ${EVENT_MAX / 1_000_000} MB` };
+    // A device's clock decides "first at wins", so its `at` must be near the
+    // worker's: at most 10 minutes ahead, at most 30 days behind (an outbox
+    // that sat offline). The owner's imports carry legacy times and are exempt.
+    if (!claims.owner) { const t = Date.parse(raw.at), now = Date.now(); if (!(t <= now + FUTURE_MS && t >= now - PAST_MS)) return { id, ok: false, code: 'clock_skew', message: `at ${raw.at} is too far from the worker's clock; check this device's date and time` }; }
     if (raw.store !== claims.store) return { id, ok: false, code: 'unauthorised', message: 'event is for another store' };
     const info = typeInfo(raw.type);
     if (info.area !== 'store' && !claims.caps.includes(info.area)) return { id, ok: false, code: 'not_entitled', message: `store is not entitled to ${info.area}` };
@@ -362,6 +370,8 @@ export class StoreObject extends DurableObject {
 
   async webSocketMessage(ws, message) {
     let msg;
+    const size = typeof message === 'string' ? message.length : message.byteLength;
+    if (size > BATCH_MAX) return ws.send(JSON.stringify({ t: 'error', code: 'payload_too_large', message: 'frame is too large' }));
     try { msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)); }
     catch { return ws.send(JSON.stringify({ t: 'error', code: 'invalid_json', message: 'frames must be JSON' })); }
     const { claims } = ws.deserializeAttachment() || {};
@@ -376,10 +386,14 @@ export class StoreObject extends DurableObject {
         return;
       }
       case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
+      // The one write outside the event log, on purpose: heartbeats are
+      // device telemetry every minute from every device, not store history,
+      // so they live in the devices projection only (owner and manager read
+      // it) and never become events. Every field is capped.
       case 'hb': {
         this.state.devices[claims.device || 'nodevice'] = {
-          app: msg.app || null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
-          area: msg.area || null, online: msg.online !== false, outbox: Number(msg.outbox) || 0, lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
+          app: msg.app ? String(msg.app).slice(0, 64) : null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
+          area: msg.area ? String(msg.area).slice(0, 64) : null, online: msg.online !== false, outbox: Math.max(0, Math.min(1e6, Number(msg.outbox) || 0)), lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
         };
         return;
       }
@@ -401,6 +415,12 @@ export class StoreObject extends DurableObject {
   }
 }
 
+// A JSON body no bigger than max (Content-Length may be absent or wrong).
+async function readBounded(request, max) {
+  const text = await request.text();
+  if (text.length > max) throw new HttpError(413, 'payload_too_large', `body is over ${max / 1_000_000} MB`);
+  try { return JSON.parse(text); } catch { throw new HttpError(400, 'invalid_json', 'body must be JSON'); }
+}
 function rowToEvent(r) {
   return { id: r.id, seq: r.seq, type: r.type, area: r.area, entity: JSON.parse(r.entity), payload: JSON.parse(r.payload), actor: JSON.parse(r.actor), at: r.at, v: r.v };
 }

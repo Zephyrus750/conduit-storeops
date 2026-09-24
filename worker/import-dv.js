@@ -145,6 +145,10 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
 export async function importDV(env, { no, url, dry = false, apply, fetchImpl = fetch }) {
   const base = String(url || '').trim().replace(/\/+$/, '').replace(/\/api\/state$/, '');
   if (!/^https?:\/\/[\w.-]+(:\d+)?$/.test(base)) throw new HttpError(400, 'invalid_request', 'url must be the Decant Visualiser site, like https://busselton-dock.netlify.app');
+  // The worker fetches this address, so outside dev it must be a public https
+  // site: no plain http, no bare IP address, no localhost.
+  const host = new URL(base).hostname, local = ['dev', 'test'].includes(env.ENVIRONMENT);
+  if (!local && (!base.startsWith('https://') || /^[\d.]+$/.test(host) || host === 'localhost' || !host.includes('.'))) throw new HttpError(400, 'invalid_request', 'url must be a public https site, like https://busselton-dock.netlify.app');
   if (base.startsWith('http://') && env.ENVIRONMENT !== 'dev' && env.ENVIRONMENT !== 'test') throw new HttpError(400, 'invalid_request', 'the DV site must be https');
   const get = async (q, optional = false) => {
     let r;

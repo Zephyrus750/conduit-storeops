@@ -46,7 +46,7 @@ const mf = new Miniflare({
   modules: true, modulesRules: [{ type: 'ESModule', include: ['**/*.js'] }], modulesRoot: root, scriptPath: path.join(root, 'worker/index.js'),
   compatibilityDate: '2026-08-06', compatibilityFlags: ['nodejs_compat'], port: API, host: '127.0.0.1',
   durableObjects: { STORE: { className: 'StoreObject', useSQLite: true }, REGISTRY: { className: 'RegistryObject', useSQLite: true } },
-  bindings: { LEGACY_URL: 'http://127.0.0.1:8789', LOOKUP_URL: 'https://shrill-voice-f46f.zephyrus-np750.workers.dev', DETAILS_URL: 'https://k2b-details.zephyrus-np750.workers.dev', TOKEN_SECRET: 'dev-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '43200', REFRESH_TTL_SECONDS: '2592000', LOCKOUT_ATTEMPTS: '5', LOCKOUT_SECONDS: '900', ENVIRONMENT: 'dev' },
+  bindings: { LEGACY_URL: 'http://127.0.0.1:8789', LOOKUP_URL: 'https://shrill-voice-f46f.zephyrus-np750.workers.dev', DETAILS_URL: 'https://k2b-details.zephyrus-np750.workers.dev', TOKEN_SECRET: 'dev-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '43200', REFRESH_TTL_SECONDS: '2592000', LOCKOUT_ATTEMPTS: '5', LOCKOUT_SECONDS: '900', PIN_MIN_DIGITS: '4', ENVIRONMENT: 'dev' },
   persist: process.env.PERSIST ? path.join(root, '.wrangler/dev') : undefined,
 });
 const api = await mf.ready;

@@ -2,7 +2,7 @@
 // the reducer accepting them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mapDV } from '../../worker/import-dv.js';
+import { mapDV, importDV } from '../../worker/import-dv.js';
 import { DV, DV_TRUCK } from '../fixtures/dv.js';
 import { initialState, apply } from '../../shared/reducers.js';
 
@@ -65,4 +65,11 @@ test('mapDV: planner slots, the rollover warning, and everything applies through
   assert.equal(s.dock.history.length, 1); assert.equal(s.dock.history[0].id, '2026-09-16-T1'); assert.equal(s.dock.history[0].imported.source, 'dv'); assert.deepEqual(s.dock.history[0].audit, { matched: 14, missing: 0, total: 14, extra: 0, missingIds: [], extraIds: [] });
   assert.equal(s.plan.days['2026-09-22'].slots[1].manifest.manNo, '7031495');
   assert.equal(s.dock.manifests['7031490'].truck, DV_TRUCK, 'the attached manifest is in the library index');
+});
+
+test('the DV address must be a public https site outside dev', async () => {
+  const prod = { ENVIRONMENT: 'production' }, never = () => { throw new Error('must not fetch'); };
+  for (const url of ['http://busselton-dock.netlify.app', 'https://10.0.0.5', 'https://localhost:8790', 'https://intranet']) {
+    await assert.rejects(importDV(prod, { no: '1241', url, dry: true, fetchImpl: never }), e => e.code === 'invalid_request', url);
+  }
 });

@@ -17,7 +17,7 @@ before(async () => {
     modulesRoot: new URL('../../', import.meta.url).pathname, scriptPath: new URL('../../worker/index.js', import.meta.url).pathname,
     compatibilityDate: '2026-08-06', compatibilityFlags: ['nodejs_compat'],
     durableObjects: { STORE: { className: 'StoreObject', useSQLite: true }, REGISTRY: { className: 'RegistryObject', useSQLite: true } },
-    bindings: { TOKEN_SECRET: 'test-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_SECONDS: '60', ENVIRONMENT: 'test' },
+    bindings: { TOKEN_SECRET: 'test-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_SECONDS: '60', PIN_MIN_DIGITS: '4', ENVIRONMENT: 'test' },
   });
   baseUrl = String(await mf.ready).replace(/\/$/, '');
   const owner = createClient({ baseUrl, storage: memoryStorage() });

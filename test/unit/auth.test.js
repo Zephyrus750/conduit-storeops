@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hashSecret, verifySecret, signToken, verifyToken, makeClaims, hasRole } from '../../worker/auth.js';
+import { hashSecret, verifySecret, signToken, verifyToken, makeClaims, hasRole, pinOk, cleanText } from '../../worker/auth.js';
 
 test('hashSecret round-trips and rejects the wrong secret', async () => {
   const stored = await hashSecret('2468', 1000);
@@ -25,4 +25,10 @@ test('hasRole: manager implies every store role', () => {
   assert.equal(hasRole({ roles: ['floor'] }, ['dock']), false);
   assert.equal(hasRole({ roles: ['floor', 'dock'] }, ['dock']), true);
   assert.equal(hasRole({ roles: ['manager'] }, ['dock']), true);
+});
+
+test('store PINs: 6 to 8 digits by default, the floor configurable down to 4; names lose control characters', () => {
+  assert.equal(pinOk('2468'), false); assert.equal(pinOk('246810'), true); assert.equal(pinOk('12345678'), true); assert.equal(pinOk('123456789'), false);
+  assert.equal(pinOk('24681a'), false); assert.equal(pinOk('2468', '4'), true); assert.equal(pinOk('246', '4'), false);
+  assert.equal(cleanText('  Busselton\u0000\n Store  ', 80), 'Busselton Store'); assert.equal(cleanText('x'.repeat(100), 80).length, 80);
 });

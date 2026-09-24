@@ -21,7 +21,7 @@
 // Store status: 'registered' (no areas live), 'migrating', 'live', 'legacy', 'suspended'.
 
 import { DurableObject } from 'cloudflare:workers';
-import { hashSecret, verifySecret, randomToken, sha256 } from './auth.js';
+import { hashSecret, verifySecret, randomToken, sha256, pinOk, cleanText } from './auth.js';
 import { HttpError, json } from './http.js';
 
 const ALL_AREAS = ['floor', 'stockroom', 'backdock'];
@@ -212,8 +212,9 @@ export class RegistryObject extends DurableObject {
   }
   async register(b) {
     if (!/^\d{3,5}$/.test(String(b.no || ''))) throw new HttpError(400, 'invalid_request', 'no must be the store number');
+    b = { ...b, name: cleanText(b.name, 80), region: b.region ? cleanText(b.region, 80) : null, format: b.format ? cleanText(b.format, 40) : null };
     if (!b.name) throw new HttpError(400, 'invalid_request', 'name is required');
-    if (!/^\d{4,8}$/.test(String(b.pin || ''))) throw new HttpError(400, 'invalid_request', 'pin must be 4 to 8 digits');
+    if (!pinOk(b.pin, this.env.PIN_MIN_DIGITS)) throw new HttpError(400, 'invalid_request', `pin must be ${this.env.PIN_MIN_DIGITS || 6} to 8 digits`);
     if (this.get(b.no)) throw new HttpError(409, 'exists', `store ${b.no} is already registered`);
     const codes = {};
     for (const name of Object.keys(CODE_ROLES)) if (b.codes?.[name]) codes[name] = await hashSecret(normCode(b.codes[name]));
@@ -229,8 +230,9 @@ export class RegistryObject extends DurableObject {
     const row = this.get(no);
     if (!row) throw new HttpError(404, 'not_registered', `store ${no} is not registered`);
     const sets = [], vals = [];
-    if (b.name) { sets.push('name = ?'); vals.push(b.name); }
-    if (b.region !== undefined) { sets.push('region = ?'); vals.push(b.region); }
+    if (b.name) { const name = cleanText(b.name, 80); if (!name) throw new HttpError(400, 'invalid_request', 'name is required'); sets.push('name = ?'); vals.push(name); }
+    if (b.region !== undefined) { sets.push('region = ?'); vals.push(b.region ? cleanText(b.region, 80) : null); }
+    if (b.pin && !pinOk(b.pin, this.env.PIN_MIN_DIGITS)) throw new HttpError(400, 'invalid_request', `pin must be ${this.env.PIN_MIN_DIGITS || 6} to 8 digits`);
     if (b.status) {
       if (!STATUSES.includes(b.status)) throw new HttpError(400, 'invalid_request', 'bad status');
       sets.push('status = ?'); vals.push(b.status); this.log('store.status', no, { status: b.status });

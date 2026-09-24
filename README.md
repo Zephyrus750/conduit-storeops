@@ -116,6 +116,10 @@ Reading follows the same codes as writing: the store PIN opens the Floor, and
 Stockroom or Back dock data (snapshot, changes, the socket, history, export,
 keycode life, manifests, profiles) reach a device only when it holds that
 area's code or the manager code. The owner reads every entitled area.
+New and rotated store PINs are 6 to 8 digits (`PIN_MIN_DIGITS`; the dev
+store keeps 2468 with it set to 4). An events body is at most 8 MB and one
+event's payload 2 MB; a device's `at` must be within 10 minutes ahead and 30
+days behind the worker's clock or the event is refused as `clock_skew`.
 An area or manager code lasts a shift (`ROLE_TTL_SECONDS`, 12 h); after that
 the device keeps the Floor and asks for the code again. The WebSocket carries
 its token as the second subprotocol (`conduit, <token>`), never in the URL.

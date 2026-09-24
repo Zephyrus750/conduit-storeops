@@ -68,7 +68,7 @@ before(async () => {
       LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', LEGACY_URL: 'https://legacy.test',
       TOKEN_SECRET: 'test-token-secret',
       OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000),
-      TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_STORE_ATTEMPTS: '8', LOCKOUT_IP_ATTEMPTS: '40', LOCKOUT_SECONDS: '60', ROLE_TTL_SECONDS: '2', ENVIRONMENT: 'test',
+      TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_STORE_ATTEMPTS: '8', LOCKOUT_IP_ATTEMPTS: '40', LOCKOUT_SECONDS: '60', ROLE_TTL_SECONDS: '2', PIN_MIN_DIGITS: '4', ENVIRONMENT: 'test',
     },
   });
   await mf.ready;
@@ -512,4 +512,14 @@ test('an unlocked code lasts a shift: after ROLE_TTL_SECONDS the next refresh dr
   await new Promise(r => setTimeout(r, 2100));
   const r2 = (await api('POST', '/v1/auth/refresh', { refresh: r1.refresh })).body;
   assert.deepEqual(r2.roles, ['floor'], 'the code has to be entered again');
+});
+
+test('events: a device clock far from the worker is refused; an oversized payload is refused', async () => {
+  const floor = (await api('POST', '/v1/auth/signin', { store: '2005', pin: '135790', device: 'clk1' })).body.token;
+  const mk = (at, payload = { dept: 'h1' }) => ({ id: ulid(), store: '2005', area: 'floor', type: 'refresh.mark', entity: { week: '2026-W39', segment: 'B1 S1' }, payload, at, v: 1 });
+  const future = new Date(Date.now() + 3600_000).toISOString(), past = new Date(Date.now() - 40 * 86_400_000).toISOString();
+  const r = await api('POST', '/v1/store/2005/events', { events: [mk(future), mk(past), mk(new Date().toISOString())] }, floor);
+  assert.deepEqual(r.body.results.map(x => x.code || 'ok'), ['clock_skew', 'clock_skew', 'ok']);
+  const big = await api('POST', '/v1/store/2005/events', { events: [mk(new Date().toISOString(), { dept: 'h1', note: 'x'.repeat(2_100_000) })] }, floor);
+  assert.equal(big.body.results[0].code, 'invalid_event');
 });
