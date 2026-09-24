@@ -34,10 +34,19 @@ export function status(cls, text) { return `<span class="status ${cls}">${text}<
 // ── departments ───────────────────────────────────────────────────────
 // Filled from the published map's department list (setDepartments, called
 // when the map document loads). Until a map with departments is published
-// these hold the showcase's stand-in names. The tables are mutated in
+// these hold the registry's names (DEPTS_DEFAULT). The tables are mutated in
 // place so every view reads the current store's names.
-export const DEPT_COLOUR = { h1: '#FF8C00', h2: '#9B59B6', c1: '#FF69B4', h3: '#8B4513', h4: '#228B22', c2: '#4169E1', c4: '#FF1493', c3: '#D4A017', k1: '#2E8B57', checkouts: '#10b981', flex: '#808080', k2: '#FF4500', k3: '#FFB6C1', k4: '#87CEEB', stockroom: '#800020' };
-export const DEPT_NAME = { h1: 'Manchester', h2: 'Home', h3: 'Decor', h4: 'Kitchen', c1: 'Kids apparel', c2: 'Womens', c3: 'Mens', c4: 'Footwear', k1: 'Toys', k2: 'Kids', k3: 'Baby', k4: 'Sport', flex: 'Flex', checkouts: 'Checkouts', stockroom: 'Stockroom' };
+// The fallback is the suite's department registry (K2B's registry=depts,
+// the one the legacy apps shared), so a store without published departments
+// shows the same names in the map, Label integrity and the console.
+export const DEPTS_DEFAULT = [
+  ['h1', 'Kitchen', 'home', '#FF8C00'], ['h2', 'Bed, Bath, Laundry', 'home', '#9B59B6'], ['h3', 'Decor & Pets', 'home', '#8B4513'], ['h4', 'Stationery', 'home', '#166534'],
+  ['c1', 'Women’s Clothing', 'clothing', '#FF69B4'], ['c2', 'Men’s Clothing', 'clothing', '#4169E1'], ['c3', 'Footwear', 'clothing', '#D4A017'], ['c4', 'Cosmetics & Accessories', 'clothing', '#FF1493'],
+  ['k1', 'Active', 'kids', '#4ADE80'], ['k2', 'Toys', 'kids', '#FF4500'], ['k3', 'Nursery / Party', 'kids', '#FFB6C1'], ['k4', 'Kids’ Clothing', 'kids', '#87CEEB'],
+  ['flex', 'Flex', 'other', '#808080'], ['bulk', 'Large / heavy items', 'other', '#6B7280'], ['checkouts', 'Checkouts', 'other', '#10b981'], ['stockroom', 'Stockroom', 'other', '#800020'],
+].map(([id, name, group, color]) => ({ id, name, group, color }));
+export const DEPT_COLOUR = Object.fromEntries(DEPTS_DEFAULT.map(d => [d.id, d.color]));
+export const DEPT_NAME = Object.fromEntries(DEPTS_DEFAULT.map(d => [d.id, d.name]));
 export const DEPT_GROUPS = [['Home', 'home', ['h1', 'h2', 'h3', 'h4']], ['Clothing', 'shirt', ['c1', 'c2', 'c3', 'c4']], ['Kids', 'star', ['k1', 'k2', 'k3', 'k4']], ['Other', 'box', ['checkouts', 'flex', 'stockroom']]];
 const GROUP_ICON = { home: 'home', clothing: 'shirt', kids: 'star' };
 // The map file names departments "H1 Kitchen": the badge is the id, the
@@ -106,4 +115,36 @@ export function toast(msg, kind = '', action = null) {
   const close = () => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); };
   if (action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-act'; b.textContent = action.label; b.addEventListener('click', () => { close(); action.run(); }); t.appendChild(b); t.classList.add('has-act'); }
   setTimeout(() => t.classList.add('show'), 10); setTimeout(close, action ? 6000 : 3500);
+}
+
+// ── keyboard access ───────────────────────────────────────────────────
+// Views draw many controls as <span>/<div>/<a> with a data-act (or data-go,
+// data-view…) that the click delegation handles. Give each one a role and a
+// tab stop, and let Enter and Space press it, so the whole shell works from
+// the keyboard and reads as buttons to a screen reader. Controls inside the
+// map SVG are left alone: a thousand shelves are not a thousand tab stops.
+const ACTIONABLE = '[data-act],[data-go],[data-view],[data-shell-act],[data-zoom],[data-key],[data-mapgroup],[data-mapdept],[data-mapfloor],[data-mapfloor-next],[data-tab],.storechip';
+const NATIVE = new Set(['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'OPTION', 'FORM', 'LABEL']);
+const needsHelp = el => !(NATIVE.has(el.tagName) || (el.tagName === 'A' && el.hasAttribute('href'))) && !el.closest('svg');
+export function enhanceControls(root = document) {
+  const els = root.matches?.(ACTIONABLE) ? [root, ...root.querySelectorAll(ACTIONABLE)] : root.querySelectorAll(ACTIONABLE);
+  for (const el of els) {
+    if (!needsHelp(el)) continue;
+    const sw = el.classList.contains('tgl') || el.classList.contains('ad-tgl') || el.classList.contains('sw2');
+    if (!el.hasAttribute('role')) el.setAttribute('role', sw ? 'switch' : 'button');
+    if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+    if (el.getAttribute('role') === 'switch') el.setAttribute('aria-checked', String(el.classList.contains('on')));
+    if (!el.hasAttribute('aria-label') && !el.textContent.trim() && el.getAttribute('title')) el.setAttribute('aria-label', el.getAttribute('title'));
+  }
+}
+export function installKeyboard() {
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target;
+    if (!(el instanceof HTMLElement) || !el.matches('[role="button"],[role="switch"],[role="tab"]') || !needsHelp(el)) return;
+    e.preventDefault(); el.click();
+  });
+  new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.namespaceURI !== 'http://www.w3.org/2000/svg') enhanceControls(n); })
+    .observe(document.body, { childList: true, subtree: true });
+  enhanceControls();
 }

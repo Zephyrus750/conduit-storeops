@@ -5,6 +5,7 @@
 
 import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments } from './ui.js';
 import { build as buildGraph, routeBetween, orderStops, pathsOf } from '../shared/route.js';
+import { markerGlyph } from '../shared/maprender.js';
 
 let floors = [], mapMeta = null;
 // The shell sets the map from the published document (client.maps.get) or
@@ -163,6 +164,12 @@ function template(fl) {
   host.innerHTML = `<svg class="map real" viewBox="${cur.vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${fl.map(f => `<g class="mfl" data-fid="${esc(f.id)}" data-ftype="${f.type}" style="${f === cur ? '' : 'display:none'}">${f.inner}</g>`).join('')}</svg>`;
   const svg = host.firstElementChild;
   for (const f of svg.querySelectorAll('.mfl[data-ftype="foh"]')) buildBadges(f);
+  // Legacy raw-SVG maps draw some marker icons with an icon font the shell
+  // does not load (the AED showed as a blank disc): draw them as paths.
+  for (const t of svg.querySelectorAll('.emergency-marker text[font-family="tabler-icons"]')) {
+    const glyph = markerGlyph(t.closest('.emergency-marker').getAttribute('data-equip-type'), t.getAttribute('fill') || '#ffffff');
+    if (glyph) t.outerHTML = glyph; else t.remove();
+  }
   if (main) tpl = svg;
   return svg;
 }
@@ -184,8 +191,30 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   if (showEmergency) svg.classList.add('showem');
   if (!badges) svg.classList.add('nobadges');
   const graphFor = f => { if (!f) return null; if (f.graph === undefined) f.graph = f.paths ? buildGraph(f.paths) : null; return f.graph; };
-  let vb0 = svg.getAttribute('viewBox');
   const floorEl = id => svg.querySelector(`.mfl[data-fid="${cssq(id)}"]`);
+  // A floor's authored viewBox can be tighter than what is drawn on it (the
+  // Busselton stockroom rows sit above it). Measure the drawing once per
+  // floor, the first time it shows, and widen the fit to take it all in.
+  const fitFloor = f => {
+    if (!f || f.fitted) return;
+    try {
+      const b = floorEl(f.id)?.getBBox(); if (!b || !b.width || !b.height) return;   // hidden: try again next time
+      f.fitted = true;
+      const [x, y, w, h] = f.vb.split(/[\s,]+/).map(Number), pad = Math.max(b.width, b.height) * 0.015;
+      const x0 = Math.min(x, b.x - pad), y0 = Math.min(y, b.y - pad), x1 = Math.max(x + w, b.x + b.width + pad), y1 = Math.max(y + h, b.y + b.height + pad);
+      if (x0 < x || y0 < y || x1 > x + w || y1 > y + h) f.vb = [x0, y0, x1 - x0, y1 - y0].map(n => Math.round(n)).join(' ');
+    } catch { /* not laid out yet: keep the authored box */ }
+  };
+  fitFloor(cur);
+  if (cur) svg.setAttribute('viewBox', cur.vb);
+  let vb0 = svg.getAttribute('viewBox');
+  // Zoom stays between a fortieth of the floor and a little wider than it,
+  // and the centre stays on the floor, so the map cannot be lost off-screen.
+  const clampVb = v => {
+    const b = vb0.split(' ').map(Number); let [x, y, w, h] = v; if (!(w > 0 && h > 0)) return b;
+    const k = Math.min(Math.max(w, b[2] / 40), b[2] * 1.6) / w, cx = Math.min(Math.max(x + w / 2, b[0]), b[0] + b[2]), cy = Math.min(Math.max(y + h / 2, b[1]), b[1] + b[3]);
+    w *= k; h *= k; return [cx - w / 2, cy - h / 2, w, h];
+  };
   const setLabelFade = () => {
     const z = (Number(vb0.split(' ')[2]) || 1) / (Number(svg.getAttribute('viewBox').split(' ')[2]) || 1);
     const badge = z <= BADGE_START ? 1 : z >= BADGE_END ? 0 : 1 - (z - BADGE_START) / (BADGE_END - BADGE_START);
@@ -208,7 +237,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   const api = {
     svg, stage,
     vb() { return svg.getAttribute('viewBox').split(' ').map(Number); },
-    setVb(v) { svg.setAttribute('viewBox', v.join(' ')); scaleMarkers(); setLabelFade(); },
+    setVb(v) { svg.setAttribute('viewBox', clampVb(v).join(' ')); scaleMarkers(); setLabelFade(); },
     fit() { svg.setAttribute('viewBox', vb0); svg.classList.remove('zoomed'); scaleMarkers(); setLabelFade(); },
     // floors
     floors() { return fl.map(f => ({ id: f.id, name: f.name, type: f.type })); },
@@ -216,7 +245,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     floor(id) {
       const f = fl.find(x => x.id === id); if (!f || f === cur) return false;
       for (const el of svg.querySelectorAll('.mfl')) el.style.display = el.getAttribute('data-fid') === f.id ? '' : 'none';
-      cur = f; vb0 = f.vb; api.fit();
+      cur = f; fitFloor(f); vb0 = f.vb; api.fit();
       stage.dispatchEvent(new CustomEvent('mapfloor', { detail: { id: f.id, name: f.name, type: f.type } }));
       return true;
     },
@@ -464,7 +493,7 @@ export function mapbar() {
   const chips = [['All', 'grid', '']];
   for (const [label, icon, ids] of DEPT_GROUPS) { if (label === 'Other') for (const id of ids) chips.push([DEPT_NAME[id] || id, { checkouts: 'bag', flex: 'flame', stockroom: 'box' }[id] || 'tag', id]); else chips.push([label, icon, label.toLowerCase()]); }
   const fls = mapFloors(), floorSeg = fls.length > 1 ? `<div class="seg2 floorseg" data-floorseg>${fls.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}" title="${f.type === 'boh' ? 'Back of house' : 'Sales floor'}">${esc(f.name)}</button>`).join('')}</div>` : '';
-  return `<div class="mapbar"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Find a shelf, bay or product on the map…" aria-label="Find on map" data-mapfind><svg class="i mic" title="Voice search"><use href="icons.svg#i-mic"/></svg></div>` +
+  return `<div class="mapbar"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Find a shelf or bay…" aria-label="Find a shelf, bay or product on the map" data-mapfind></div>` +
     `<div class="legchips">${chips.map((c, i) => `<span class="chip${i === 0 ? ' on' : ''}" data-mapgroup="${c[2]}">${ic(c[1])}${c[0]}</span>`).join('')}</div>${floorSeg}` +
     `<div class="zoom" style="margin-left:auto;display:flex;gap:6px"><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span>` +
     `<span class="keywrap"><span class="ibtn" data-key="1" title="Department key">${ic('layers')}</span><div class="keypop"><h4>Department key</h4>${DEPT_GROUPS.map(gp => `<div class="keygrp">${ic(gp[1])}${gp[0]}</div><div class="keygrid">${gp[2].map(d => `<div class="keyrow"><i style="background:${DEPT_COLOUR[d]}"></i><b>${d.toUpperCase()}</b><span>${DEPT_NAME[d]}</span></div>`).join('')}</div>`).join('')}</div></span></div></div><div class="mapbar mapsub" data-subchips hidden></div>`;

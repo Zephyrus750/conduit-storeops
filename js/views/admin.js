@@ -7,7 +7,7 @@
 // Reads are cached per store while the console is open; a Refresh button
 // or any write clears the relevant cache.
 
-import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName, DEPTS_DEFAULT } from '../ui.js';
 import { parseMapFile, renderMap } from '../../shared/maprender.js';
 import { mountMap, bindMapChrome } from '../map.js';
 
@@ -124,7 +124,8 @@ function deptShelving(doc, info) {
   const groups = new Map();
   const add = (parent, row) => { if (!groups.has(parent)) groups.set(parent, []); groups.get(parent).push(row); };
   for (const d of depts) { const id = String(d.id || '').toLowerCase(); if (!id) continue; add(d.parent ? String(d.parent).toLowerCase() : 'other', { id, name: deptCommonName(d), color: d.color || '#64748B' }); }
-  for (const id of Object.keys(counts)) if (!depts.some(d => String(d.id || '').toLowerCase() === id)) add('other', { id, name: id, color: '#64748B' });
+  // Ids the map uses but the published list does not name fall back to the registry's names and groups.
+  for (const id of Object.keys(counts)) if (!depts.some(d => String(d.id || '').toLowerCase() === id)) { const r = DEPTS_DEFAULT.find(d => d.id === id); add(r ? r.group : 'other', { id, name: r ? r.name : id.toUpperCase(), color: r ? r.color : '#64748B' }); }
   return { total, counts, groups };
 }
 function shelvingHtml(doc, info) {

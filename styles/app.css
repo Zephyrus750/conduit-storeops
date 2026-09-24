@@ -330,6 +330,12 @@ button:disabled, .rrow.soon { cursor: default; }
    right, the crumb along the bottom. */
 .mapbox .mapstage { background: #fff; }
 svg.map.real { background: #fff; }
+/* Dark appearance: a slate floor instead of a white panel in a dark frame.
+   Shelves keep their department colours; the store outline and walls are
+   lifted so they still read on the darker ground. */
+.frame.dark .mapbox .mapstage, .frame.dark svg.map.real { background: #1c2533; }
+.frame.dark svg.map.real .landmark-rect { fill: #475569; stroke: #94a3b8; }
+.frame.dark svg.map.real .wall-rect { fill: #94a3b8; stroke: #94a3b8; }
 /* No transitions or filters on the shelves themselves: a state that lands
    on hundreds of shelves at once (refresh marks, a route) would otherwise
    re-raster the whole map for every frame of the transition. */
@@ -435,3 +441,40 @@ svg.map.real { background: #fff; }
    Floor: Stockroom and Back dock need a way back without signing out. */
 .app.ws-stockroom .m-appbar .mdepts, .app.ws-backdock .m-appbar .mdepts { display: inline-flex; }
 @container shell (max-width: 600px) { .app.ws-stockroom .m-appbar .mdepts, .app.ws-backdock .m-appbar .mdepts { display: grid; } }
+/* Search palette: the preview column shows only with something in it (the
+   pane's display:flex used to override [hidden], so an old keycode preview
+   stayed up under later name searches). */
+.omni .prev[hidden] { display: none; }
+.omni .pal:not(.wide) .cols { grid-template-columns: minmax(0, 1fr); }
+/* Dashboard: the right-hand column belongs to the operations register; with
+   no register on the page the cards take the full width, flowing into as
+   many columns as fit instead of three fixed ones. */
+.dash:not(:has(.register)) { grid-template-columns: minmax(0, 1fr); }
+.dash .kpis { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+@container shell (max-width: 600px) { .dash .kpis { grid-template-columns: 1fr; } }
+
+/* ── Layout and reach fixes (audit §6 Medium) ─────────────────────────── */
+/* Department chips scroll sideways with a fade instead of cutting a word. */
+.mapbar .legchips { overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.mapbar .legchips::-webkit-scrollbar { display: none; }
+.mapbar .legchips .chip { flex: none; }
+/* Half-screen: long rail labels wrap to two lines rather than ellipsis. */
+@container shell (max-width: 1100px) { .rrow .rl { white-space: normal; line-height: 1.15; } }
+/* Keyboard focus is always visible on the controls the helper made focusable. */
+[role="button"]:focus-visible, [role="switch"]:focus-visible, .storechip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+@container shell (max-width: 600px) {
+  /* Tap targets: 40px or more for anything a thumb presses. */
+  .btn, .pills button, .seg2 button, .ibtn, .kpi .open, .em-filt button, .mv-sel .chips > *, .mscan, .si-foot a, [data-unlock-cancel] { min-height: 40px; }
+  .em-filt button, .mv-sel .chips > * { padding-top: 8px; padding-bottom: 8px; }
+  .ringpick [data-act] { min-width: 40px; min-height: 40px; align-items: center; justify-content: center; }
+  /* Filter chips wrap on the phone instead of running off the edge. */
+  .em-filt { flex-wrap: wrap; overflow: visible; }
+  .mv-sel .chips { flex-wrap: wrap; max-height: none; overflow: visible; }
+  /* Owner console cards: the heading row wraps and its pills scroll inside the card. */
+  .card .ch { flex-wrap: wrap; }
+  .card .ch .pills { margin-left: 0 !important; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  /* Acting as a store on the phone: the bar sits above the tab strip, so the
+     view's own bottom bar keeps clear of it. */
+  .ad-banner.actas { bottom: calc(64px + env(safe-area-inset-bottom)); font-size: 12px; }
+  .frame:has(#actasBar) #content { padding-bottom: 64px; }
+}

@@ -29,7 +29,7 @@ const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
 export function initSearch({ client, frame, go, tools = () => [], life = () => null }) {
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
-  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like H14-3, a department or a tool…" autocomplete="off" inputmode="search">${ic('mic', 'mic')}<span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
+  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like H14-3, a department or a tool…" autocomplete="off" inputmode="search"><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
   frame.appendChild(el);
   const input = $('#oq', el), body = $('#obody', el), prev = $('#oprev', el), pal = $('.pal', el);
   let shelves = null, seq = 0, sel = 0;
@@ -44,8 +44,10 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   }
   function invalidate() { shelves = null; }
 
-  function open(q = '') { el.classList.add('open'); input.value = q; render(q); try { input.focus(); } catch {} }
-  function close() { el.classList.remove('open'); prev.hidden = true; pal.classList.remove('wide'); }
+  // Focus goes back to whatever opened the palette when it closes.
+  let opener = null;
+  function open(q = '') { if (!el.classList.contains('open')) opener = document.activeElement; el.classList.add('open'); input.value = q; render(q); try { input.focus(); } catch {} }
+  function close() { el.classList.remove('open'); prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide'); if (opener?.isConnected && opener !== document.body) { try { opener.focus(); } catch {} } opener = null; }
   const isOpen = () => el.classList.contains('open');
 
   async function render(q) {
@@ -94,7 +96,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();
     if (preview) { prev.hidden = false; pal.classList.add('wide'); prev.innerHTML = preview; const pm = $('#opmap', prev); if (pm) { try { const m = mountMap(pm, { mono: true, clone: 'preview' }); const first = prev.querySelector('[data-select]')?.getAttribute('data-select'); if (first) { m.select(first); m.zoomTo(first, 900); } } catch {} } }
-    else { prev.hidden = true; pal.classList.remove('wide'); }
+    else { prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide'); }
   }
   // A keycode's life in the store: bays it was backfilled at, SOH
   // adjustments, cages holding it (K2B's code lookup, with more detail).

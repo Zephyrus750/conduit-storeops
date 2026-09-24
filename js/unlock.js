@@ -18,7 +18,7 @@ export function ensureArea({ session, frame, area }) {
     $('#unlock')?.remove();
     const el = document.createElement('div'); el.id = 'unlock'; el.className = 'signin unlock';
     el.innerHTML = `<div class="si-panel si-centre"><form class="si-form" id="unlockForm"><h2>${NAME[area]} code</h2><div class="si-sub">The ${NAME[area]} crew code opens this workspace on this device until it is signed out. A manager code opens everything.</div>` +
-      `<label>Code</label><input class="si-pin" name="code" autocomplete="off" autocapitalize="characters" placeholder="SR-0000" required>` +
+      `<label>Code</label><input class="si-pin" name="code" autocomplete="off" autocapitalize="characters" placeholder="${area === 'backdock' ? 'DK-0000' : 'SR-0000'}" required>` +
       `<div class="si-err" id="unlockErr"></div><button class="si-cta" type="submit">Open ${NAME[area]}${ic('arrow')}</button>` +
       `<div class="si-foot"><a data-unlock-cancel>Not now</a><span>${esc(session.current?.store || '')}</span></div></form></div>`;
     frame.appendChild(el);

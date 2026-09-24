@@ -10,7 +10,7 @@
 
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
-import { $, $$, ic, esc, greeting, fmtLong, toast } from './ui.js';
+import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard } from './ui.js';
 import { loadMap, setMap, mapInfo, parkMap } from './map.js';
 import { initSearch } from './search.js';
 import { updates, initUpdates } from './updates.js';
@@ -40,6 +40,7 @@ const workerLine = () => WORKER === WORKER_DEFAULT ? '' : `<div class="si-worker
 const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
 let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor';
 const frame = $('.frame');
+installKeyboard();
 let content = $('#content');
 const isMobile = () => frame.clientWidth <= 600;
 
@@ -319,6 +320,8 @@ document.addEventListener('click', e => {
   const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no } : undefined); return; }
   const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
   if (e.target.closest('.mdepts')) { if (store) openLauncher(); return; }
+  // The store chip opens the device and store page (Settings); store details are still to come.
+  if (e.target.closest('.storechip')) { if (store) show('settings'); return; }
   const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else show(g.getAttribute('data-go'), g.dataset.bay ? { bay: g.dataset.bay } : undefined); return; }
   if (e.target.closest('[data-act="close-more"]') || (e.target.id === 'msheet')) $('#msheet')?.classList.remove('open');
   if (e.target.closest('#railToggle')) { $('#app').classList.toggle('railmin'); }
