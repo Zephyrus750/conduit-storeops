@@ -18,8 +18,8 @@
 //                         clearMins, haltMins, haltCount, downtime, teamRate, perPerson, perDept, audit, carriedIn } ] }
 //   /api/state?planner    { days: { YYYY-MM-DD: { slots: { n: { eta, note, team, manifest } } } } }
 //   /api/state?rollover   leftover pallets held for the next truck, or null
-// Names are withheld without the names code; Conduit keeps devices, not
-// people, so team members import by D-number.
+// Conduit keeps D-numbers, never names: team members, workers and crew
+// credit import as 'D4'.
 //
 // Closed trucks arrive as truck.import rows (the record DV computed, kept
 // as-is). Open trucks replay as the events that built them. Event ids are
@@ -27,7 +27,7 @@
 
 import { HttpError } from './http.js';
 import { importId } from './import.js';
-import { PTYPES, HALT_REASONS } from '../shared/reducers/backdock.js';
+import { PTYPES, HALT_REASONS, dnumId } from '../shared/reducers/backdock.js';
 
 const TRUCK_RE = /^\d{4}-\d{2}-\d{2}-T\d+$/;
 const iso = ms => new Date(Number(ms) || Date.now()).toISOString().replace(/\.\d{3}Z$/, '+00:00');
@@ -50,8 +50,9 @@ function manifestOf(m, warnings, where) {
 export function mapDV({ active, config, history, trucks = {}, planner, rollover }, { no } = {}) {
   const warnings = [], events = [], counts = { history: 0, trucks: 0, pallets: 0, planner: 0, events: 0 };
   const people = new Map((config?.people || []).map(p => [String(p.pid), p]));
-  const who = pid => { const p = people.get(String(pid)); return p?.dnum || String(pid); };
-  const member = pid => { const p = people.get(String(pid)) || {}; return { pid: who(pid), name: p.name || '', dnum: p.dnum || null }; };
+  // A person is their D-number; a name is never carried over.
+  const who = pid => dnumId(people.get(String(pid))?.dnum) || dnumId(pid) || String(pid);
+  const member = pid => ({ pid: who(pid) });
   const push = (seed, at, type, entity, payload = {}) => { events.push({ seed, ms: at, type, area: 'backdock', entity, payload }); };
 
   // 1. the archive

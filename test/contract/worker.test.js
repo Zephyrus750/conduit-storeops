@@ -586,3 +586,35 @@ test('store settings: a manager sets them, the floor cannot, trucks take the gri
   assert.equal(after.body.results[0].code, 'unauthorised');
   assert.equal((await api('POST', '/v1/auth/lock', {}, ownerToken)).status, 400, 'the owner session does not lock');
 });
+
+test('suggested map edits: a floor device suggests, the owner resolves from the console; the dock takes one truck and D-numbers', async () => {
+  assert.equal((await reg2('2032')).status, 201);
+  const dev = (await api('POST', '/v1/auth/signin', { store: '2032', pin: '135790', device: 'ph-32' })).body;
+  const ev32 = (type, entity, payload, area) => ({ ...event(type, entity, payload, area), store: '2032' });
+  const sent = await api('POST', '/v1/store/2032/events', { events: [ev32('map.edit.suggest', { edit: 'e-32-1' }, { shelf: 'A16 S1', kind: 'rename', to: 'Kitchen gadgets' }, 'store')] }, dev.token);
+  assert.equal(sent.body.results[0].ok, true, 'the store PIN alone can suggest');
+  assert.equal((await api('POST', '/v1/store/2032/events', { events: [ev32('map.edit.resolve', { edit: 'e-32-1' }, { status: 'accepted' }, 'store')] }, dev.token)).body.results[0].code, 'unauthorised');
+
+  assert.equal((await api('POST', '/v1/admin/stores/2032/mapedits/e-32-1', { status: 'accepted' })).status, 401, 'owner only');
+  const ok = await api('POST', '/v1/admin/stores/2032/mapedits/e-32-1', { status: 'accepted', note: 'in 4.5' }, ownerToken);
+  assert.equal(ok.status, 200); assert.equal(ok.body.status, 'accepted');
+  assert.equal((await api('POST', '/v1/admin/stores/2032/mapedits/e-32-1', { status: 'declined' }, ownerToken)).status, 400, 'once only');
+  assert.equal((await api('POST', '/v1/admin/stores/2032/mapedits/nope', { status: 'declined' }, ownerToken)).status, 404);
+  const snap = await api('GET', '/v1/store/2032/snapshot', undefined, dev.token);
+  assert.deepEqual([snap.body.state.mapedits['e-32-1'].status, snap.body.state.mapedits['e-32-1'].resolvedBy], ['accepted', 'owner']);
+  assert.ok((await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions.some(a => a.type === 'map.edit.resolve'));
+
+  const dk = (await api('POST', '/v1/auth/unlock', { code: 'DK-2032' }, dev.token)).body;
+  const r = await api('POST', '/v1/store/2032/events', { events: [
+    ev32('truck.create', { truck: '2026-09-07-T1' }, {}, 'backdock'),
+    ev32('truck.team.set', { truck: '2026-09-07-T1' }, { team: ['d4', 'Alex'] }, 'backdock'),
+    ev32('truck.team.set', { truck: '2026-09-07-T1' }, { team: ['d4', '7'] }, 'backdock'),
+    ev32('truck.create', { truck: '2026-09-07-T2' }, {}, 'backdock'),
+    ev32('truck.create', { truck: '2026-09-07-T2' }, { carryFrom: '2026-09-07-T1' }, 'backdock'),
+  ] }, dk.token);
+  assert.deepEqual(r.body.results.map(x => x.ok || x.code), [true, 'invalid_event', true, 'truck_open', true]);
+  const dock = (await api('GET', '/v1/store/2032/snapshot', undefined, dk.token)).body.state.dock;
+  assert.deepEqual(dock.trucks['2026-09-07-T1'].team, [{ pid: 'D4', dnum: 4 }, { pid: 'D7', dnum: 7 }]);
+  assert.equal(dock.trucks['2026-09-07-T1'].status, 'closed');
+  assert.equal(dock.history.at(-1).carriedOut.to, '2026-09-07-T2');
+});

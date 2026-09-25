@@ -42,20 +42,21 @@ test('a set that changes nothing is refused; null and the default value both mea
   assert.equal(s.settings.minsPerCarton, null, 'setting the default value stores "default"');
 });
 
-test('a new truck takes the store grid and carton rate; trucks already on the dock keep theirs', () => {
+test('a new truck takes the store grid and carton rate; a finalised truck keeps its own', () => {
   const s = initialState();
-  apply(s, ev('truck.create', { truck: '2026-09-07-T1' }));
+  apply(s, ev('truck.create', { truck: '2026-09-07-T1' })); apply(s, ev('truck.setLive', { truck: '2026-09-07-T1' }));
+  assert.equal(apply(s, ev('pallet.land', { truck: '2026-09-07-T1', bay: 'D7' }, { ptype: 'chep', cartons: 10 })), null);
+  const t1 = s.dock.trucks['2026-09-07-T1'];
+  assert.equal(t1.pallets.D7.expectedMins, 5, '10 cartons at the standard 0.5');
+  apply(s, ev('truck.finalise', { truck: '2026-09-07-T1' }));
   apply(s, set({ dockGrid: { rows: 2, cols: 3 }, minsPerCarton: 1 }));
-  apply(s, ev('truck.create', { truck: '2026-09-07-T2' }));
-  const [t1, t2] = [s.dock.trucks['2026-09-07-T1'], s.dock.trucks['2026-09-07-T2']];
+  apply(s, ev('truck.create', { truck: '2026-09-07-T2' })); apply(s, ev('truck.setLive', { truck: '2026-09-07-T2' }));
+  const t2 = s.dock.trucks['2026-09-07-T2'];
   assert.deepEqual([t1.grid.rows, t1.grid.cols, t1.minsPerCarton], [4, 7, 0.5]);
   assert.deepEqual(t2.grid, { rows: 2, cols: 3, rowLabels: 'AB' });
-  for (const id of ['2026-09-07-T1', '2026-09-07-T2']) apply(s, ev('truck.setLive', { truck: id }));
   assert.equal(apply(s, ev('pallet.land', { truck: '2026-09-07-T2', bay: 'C1' }, { ptype: 'chep', cartons: 10 }))?.code, 'invalid_event', 'C is off a two-row grid');
   assert.equal(apply(s, ev('pallet.land', { truck: '2026-09-07-T2', bay: 'B3' }, { ptype: 'chep', cartons: 10 })), null);
-  assert.equal(apply(s, ev('pallet.land', { truck: '2026-09-07-T1', bay: 'D7' }, { ptype: 'chep', cartons: 10 })), null);
   assert.equal(t2.pallets.B3.expectedMins, 10, '10 cartons at 1 min');
-  assert.equal(t1.pallets.D7.expectedMins, 5, '10 cartons at the rate T1 was created with');
   apply(s, ev('pallet.update', { truck: '2026-09-07-T2', bay: 'B3' }, { cartons: 24 }));
   assert.equal(t2.pallets.B3.expectedMins, 24);
 });

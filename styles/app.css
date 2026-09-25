@@ -551,3 +551,22 @@ svg.barcode { background: #fff; max-width: 100%; height: auto; }
 .stg-chips .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 @container (max-width: 640px) { .stg-focus { grid-template-columns: 1fr; gap: 6px; } }
 @media (max-width: 640px) { .stg-focus { grid-template-columns: 1fr; gap: 6px; } .stg-store .stg-item { flex-wrap: wrap; } .stg-store .stg-ctl { flex: 1 1 100%; justify-content: flex-start; } }
+
+/* Suggest map edits (store) and the owner's queue (console Map tab) */
+.me-card { display: flex; flex-direction: column; gap: 8px; }
+.me-kinds button { display: inline-flex; align-items: center; gap: 6px; }
+.me-kinds svg.i { width: 15px; height: 15px; }
+.me-shelf { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--ground); }
+.me-shelf b { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.me-li { align-items: flex-start; gap: 10px; }
+.me-li .me-k { flex: none; color: var(--dim); padding-top: 2px; }
+.me-li .me-k svg.i { width: 16px; height: 16px; }
+.me-li .me-line { display: block; font-size: 13px; margin: 2px 0; }
+.me-li small { display: block; }
+.mv-chips.me-kinds { margin-top: 12px; }
+.ad-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.me-form { padding: 0 16px; display: flex; flex-direction: column; gap: 10px; }
+.me-plist { padding: 0 16px; }
+.ad-subh { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 18px 0 6px; }
+.ad-edacts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.bdr-held .li .nm { white-space: normal; }

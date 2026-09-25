@@ -35,6 +35,7 @@ test('pallets cannot land on a staged truck; ptype and bay are validated', () =>
   const s = initialState();
   apply(s, ev('truck.create', { truck: '2026-09-07-T2' }));
   assert.equal(apply(s, ev('pallet.land', { truck: '2026-09-07-T2', bay: 'A1' }, { ptype: 'chep' })).code, 'truck_not_live');
+  apply(s, ev('truck.finalise', { truck: '2026-09-07-T2' }));
   const t = live(s);
   assert.equal(apply(s, ev('pallet.land', { truck: t, bay: 'A1' }, { ptype: 'load' })).code, 'invalid_event');
   assert.equal(apply(s, ev('pallet.land', { truck: t, bay: '7023' }, { ptype: 'chep' })).code, 'invalid_event');
@@ -78,7 +79,7 @@ test('halts need a known reason; finalise closes an open halt and writes a histo
   assert.equal(apply(s, ev('truck.finalise', { truck: t }, {}, { at: '2026-09-07T09:30:00+08:00', actor: { role: 'manager', device: 'DESK' } })), null);
   const row = s.dock.history[0];
   assert.equal(row.id, t); assert.equal(row.cartons, 10); assert.equal(row.pallets, 1); assert.equal(row.haltMins, 30); assert.equal(row.haltCount, 1);
-  assert.deepEqual(row.carriedIn, { pallets: 1, cartons: 10 });
+  assert.deepEqual(row.carriedIn, { pallets: 1, cartons: 10, from: null });
   assert.equal(row.perPerson[0].pid, 'D2'); assert.deepEqual(row.perPerson[0].bays, ['B1']); assert.equal(row.perPerson[0].mins, 10);
   assert.deepEqual(row.byDept, [], 'no manifest on this truck, so no department split');
   assert.equal(apply(s, ev('pallet.land', { truck: t, bay: 'B2' }, { ptype: 'bulk' })).code, 'truck_closed');

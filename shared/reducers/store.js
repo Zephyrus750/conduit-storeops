@@ -1,5 +1,5 @@
-// Store-wide reducers: devices, published map version, roster rotation marker
-// and the store's settings. Credentials themselves live in the registry
+// Store-wide reducers: devices, published map version, roster rotation marker,
+// the store's settings and suggested map edits. Credentials themselves live in the registry
 // object; the events here are the audit trail the store's projections can show.
 
 import { reject } from './util.js';
@@ -44,8 +44,17 @@ export function storeState() {
     map: { version: null, at: null, by: null },
     roster: { rotatedAt: null, rotatedBy: null },
     settings: settingsState(),
+    mapedits: {},                      // id → suggestion (see map.edit.suggest)
   };
 }
+
+// Suggested map edits: anyone in the store can suggest renaming a shelf or
+// flag something wrong with it. A suggestion never changes the map: the
+// owner makes the change in the map editor, publishes a new version and
+// marks the suggestion accepted (or declined). Resolved ones are capped.
+export const MAP_EDIT_KINDS = ['rename', 'flag'];
+const EDITS_KEPT = 300;
+const text = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 export const storeReducers = {
   'device.heartbeat'(s, e) {
@@ -58,6 +67,29 @@ export const storeReducers = {
   },
   'roster.rotate'(s, e) {
     s.roster = { rotatedAt: e.at, rotatedBy: e.actor?.device || null };
+    return null;
+  },
+  'map.edit.suggest'(s, e) {
+    const id = String(e.entity.edit), p = e.payload;
+    if (!/^[\w-]{4,40}$/.test(id)) return reject('invalid_event', 'edit id must be 4 to 40 letters, digits or dashes');
+    const edits = (s.mapedits ||= {});
+    if (edits[id]) return reject('exists', `suggestion ${id} already exists`);
+    if (!MAP_EDIT_KINDS.includes(p.kind)) return reject('invalid_event', `kind must be ${MAP_EDIT_KINDS.join(' or ')}`);
+    const shelf = text(p.shelf, 40).toUpperCase(), to = text(p.to, 40), note = text(p.note, 300);
+    if (!shelf) return reject('invalid_event', 'which shelf?');
+    if (p.kind === 'rename' && !to) return reject('invalid_event', 'a rename needs the new name');
+    if (p.kind === 'flag' && !note) return reject('invalid_event', 'a flag needs a note saying what is wrong');
+    edits[id] = { shelf, kind: p.kind, to: p.kind === 'rename' ? to : null, note, floor: p.floor ? text(p.floor, 40) : null, at: e.at, by: e.actor?.device || null, status: 'open', resolvedAt: null, resolvedBy: null, reply: '' };
+    const done = Object.entries(edits).filter(([, x]) => x.status !== 'open').sort((a, b) => (a[1].resolvedAt < b[1].resolvedAt ? -1 : 1));
+    for (const [k] of done.slice(0, Math.max(0, done.length - EDITS_KEPT))) delete edits[k];
+    return null;
+  },
+  'map.edit.resolve'(s, e) {
+    const x = s.mapedits?.[String(e.entity.edit)];
+    if (!x) return reject('not_found', `no suggestion ${e.entity.edit}`);
+    if (!['accepted', 'declined'].includes(e.payload.status)) return reject('invalid_event', 'status must be accepted or declined');
+    if (x.status !== 'open') return reject('invalid_event', `that suggestion was already ${x.status}`);
+    Object.assign(x, { status: e.payload.status, resolvedAt: e.at, resolvedBy: e.actor?.owner ? 'owner' : e.actor?.device || null, reply: text(e.payload.note, 300) });
     return null;
   },
   // Validated whole before anything changes; a set that changes nothing is

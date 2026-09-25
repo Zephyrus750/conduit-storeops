@@ -9,6 +9,7 @@ export { StoreObject } from './store.js';
 export { RegistryObject } from './registry.js';
 export { CatalogueObject } from './catalogue-object.js';
 import { VERSION } from './version.js';
+import { ulid } from '../shared/ulid.js';
 import { parseCodes, lookup, catalogueStub } from './catalogue.js';
 import { importK2B } from './import.js';
 import { importDV } from './import-dv.js';
@@ -183,6 +184,21 @@ r.post('/v1/admin/stores/:no/import', async (req, env, _c, p) => {
   if (!b.dry) await registry(env, 'POST', '/log', { type: 'store.import', store: rec.no, detail: { source, code: summary.code || summary.url, applied: summary.applied, duplicates: summary.duplicates, rejected: summary.rejected.length, warnings: summary.warnings.length, counts: summary.counts } });
   return json(summary);
 });
+// The owner accepts or declines a suggested map edit from the console's Map
+// tab (after making the change in the map editor). An ordinary event, sent
+// with the owner's claims so it carries actor.owner.
+r.post('/v1/admin/stores/:no/mapedits/:id', async (req, env, _c, p) => {
+  const b = await readJson(req);
+  const ev = { id: ulid(), store: String(p.no), area: 'store', type: 'map.edit.resolve', entity: { edit: String(p.id) }, payload: { status: String(b.status || ''), ...(b.note ? { note: String(b.note).slice(0, 300) } : {}) }, at: new Date().toISOString(), v: 1 };
+  const res = await ownerStoreCall(new Request(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization') || '' }, body: JSON.stringify({ events: [ev] }) }), env, p.no, '/events');
+  const out = await res.json();
+  const r0 = out.results?.[0];
+  if (!res.ok || !r0) return json(out, res.status);
+  if (!r0.ok) throw new HttpError(r0.code === 'not_found' ? 404 : 400, r0.code, r0.message);
+  await registry(env, 'POST', '/log', { type: 'map.edit.resolve', store: String(p.no), detail: { edit: String(p.id), status: ev.payload.status } });
+  return json({ ok: true, edit: String(p.id), status: ev.payload.status, seq: r0.seq });
+});
+
 r.post('/v1/admin/stores/:no/flip', async (req, env, _c, p) => {
   await requireOwner(req, env);
   const b = await readJson(req);

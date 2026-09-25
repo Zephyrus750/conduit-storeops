@@ -10,6 +10,7 @@
 import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName, DEPTS_DEFAULT } from '../ui.js';
 import { parseMapFile, renderMap } from '../../shared/maprender.js';
 import { mountMap, bindMapChrome } from '../map.js';
+import { MAP_EDITOR_URL } from '../config.js';
 
 const AREAS = ['floor', 'stockroom', 'backdock'];
 const AREA_NAME = { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock', store: 'Store', owner: 'Owner' };
@@ -83,7 +84,7 @@ const overview = {
     const rows = stores.map(s => `<tr class="ad-row" data-view="adminstore" data-no="${esc(s.no)}"><td><b class="mono">${esc(s.no)}</b></td><td><b>${esc(s.name)}</b><small>${esc(s.region || '')}</small></td><td>${tst(s.status)}</td><td>${areaChips(s)}</td><td class="mono">${esc(s.mapVersion || '—')}</td><td class="mono">${fmtTime(s.updated)}</td><td><span class="btn sm">Open</span></td></tr>`);
     const acts = (st.actions || []).slice(0, 8).map(a => `<div class="li"><span class="rt" style="min-width:92px">${fmtTime(a.at)}</span><span class="nm">${actionText(a)}</span></div>`).join('') || '<div class="li cs-dim">No owner actions logged yet</div>';
     const h = st.health;
-    return vh('Stores', sub('Owner mode', 'read-only until you act as a store', 'every owner action is logged'), `<a class="btn primary" data-view="adminreg">${ic('plus')}Register a store</a><button class="btn" data-act="refresh">${ic('refresh')}Refresh</button>`) +
+    return vh('Stores', sub('Owner mode', 'read-only until you act as a store', 'every owner action is logged'), `<a class="btn primary" data-view="adminreg">${ic('plus')}Register a store</a>${editorBtn()}<button class="btn" data-act="refresh">${ic('refresh')}Refresh</button>`) +
       banner(`<b>Owner</b> · you are viewing every store the system knows about. Opening a store shows its log and devices read-only; <b>Act as store</b> switches to writes that carry your owner id.`) +
       `<div class="ad-tiles">${tile(stores.length, `store${stores.length === 1 ? '' : 's'} registered`, `${live} live · ${mig} migrating · ${stores.length - live - mig} registered or legacy`)}${tile(stores.filter(s => s.entitlements?.floor).length, 'with the Floor', `${stores.filter(s => s.entitlements?.stockroom).length} Stockroom · ${stores.filter(s => s.entitlements?.backdock).length} Back dock`)}${tile((st.actions || []).length, 'owner actions', 'last 200 kept in the registry')}${tile(h ? esc(h.version) : '…', 'worker', h ? `${esc(h.env)} · ${esc(ctx.admin.base)}` : 'checking health')}</div>` +
       `<div class="card"><div class="ch"><h3>Registered stores</h3><span class="cs-dim">tap a row to open it</span></div>${table(['Store', 'Name', 'Status', 'Areas', 'Map', 'Updated', ''], rows, 'ad-tbl')}</div>` +
@@ -102,6 +103,7 @@ const overview = {
     follow();
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'open-editor') return openEditor();
       if (a.dataset.act === 'refresh') { invalidate(); st.health = null; st.cat = null; try { await ctx.admin.refreshStores(); } catch (err) { return fail(err); } ctx.rerender(); }
       if (a.dataset.act === 'cat-rebuild') {
         try { const r = await ctx.admin.api('/v1/admin/catalogue/rebuild', { method: 'POST', body: {} }); toast(r.started ? 'Catalogue rebuild started' : r.reason || 'Not started'); await loadCatalogue(ctx); ctx.rerender(); }
@@ -128,7 +130,7 @@ const storeView = {
   },
   mount(ctx, root) {
     if (!st.no) return [];
-    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map', 'mapdoc'] : ['rec', 'devices', 'snap'];
+    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map', 'mapdoc', 'snap'] : ['rec', 'devices', 'snap'];
     load(ctx, st.no, keys).then(did => { if (did) ctx.rerender(); }).catch(fail);
     root.addEventListener('click', e => onStoreClick(e, ctx));
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
@@ -248,7 +250,26 @@ function mapTab(rec, c) {
   const form = `<form class="card" data-form="publish"><div class="ch"><h3>Publish a map</h3><span class="cs-dim">the Map Editor's export, or rendered floor SVGs</span></div><div class="ad-grid2">${field('Version', inp('version', st.pubVersion ?? next, 'e.g. 4.4', 'mono', 'required pattern="[\\w.\\-]{1,32}"'), 'must be new; devices switch to it on their next sync')}${field('Map name', inp('name', rec.name, 'e.g. Busselton'))}</div>` +
     `<div class="ad-grid2" style="margin-top:12px">${field('Map file', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".js,.json,.svg,text/javascript,application/json,image/svg+xml" data-floor="ground" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'the editor\'s .js export (what ShelfSearcher read) or its .json save: every floor in it is rendered and published. A rendered ground-floor .svg still works.')}${field('Stockroom floor SVG (optional)', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="stockroom" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'only with an .svg map file; an editor export carries its own floors')}</div>` +
     `<div class="si-err" id="pubErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit">${ic('check')}Publish</button></div><p class="lbl">Publishing writes the document to the store and logs a <span class="mono">map.publish</span> event with your owner id. Every signed-in device downloads the new version once and keeps it offline.</p></form>`;
-  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3><span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}${preview}</div>${form}</div>`;
+  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3>${editorBtn('sm')}<span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}${preview}</div><div class="ad-col">${form}${editsCard(c.snap?.mapedits)}</div></div>`;
+}
+// The store's suggested edits: the owner makes each change in the map
+// editor, publishes, then accepts it (or declines it) here.
+function editsCard(edits) {
+  if (edits === undefined) return `<div class="card"><div class="ch"><h3>Suggested edits</h3></div><div class="ohint">Loading…</div></div>`;
+  const all = Object.entries(edits || {}).map(([id, x]) => ({ id, ...x }));
+  const open = all.filter(x => x.status === 'open').sort((a, b) => (a.at < b.at ? -1 : 1));
+  const done = all.filter(x => x.status !== 'open').sort((a, b) => (a.resolvedAt < b.resolvedAt ? 1 : -1)).slice(0, 8);
+  const what = x => x.kind === 'rename' ? `Rename to <b>${esc(x.to)}</b>${x.note ? ` · ${esc(x.note)}` : ''}` : `Flag · ${esc(x.note)}`;
+  const row = x => `<tr><td class="mono"><b>${esc(x.shelf)}</b>${x.floor ? `<small>${esc(x.floor)}</small>` : ''}</td><td style="white-space:normal">${what(x)}</td><td class="mono">${fmtTime(x.at)}<small>${esc(x.by || '')}</small></td><td>${x.status === 'open' ? `<span class="ad-edacts"><button class="btn sm primary" data-act="edit-accept" data-id="${esc(x.id)}">${ic('check')}Accept</button><button class="btn sm" data-act="edit-decline" data-id="${esc(x.id)}">Decline</button></span>` : `${status(x.status === 'accepted' ? 'good' : '', x.status === 'accepted' ? 'Accepted' : 'Declined')}<small>${fmtTime(x.resolvedAt)}${x.reply ? ' · ' + esc(x.reply) : ''}</small>`}</td></tr>`;
+  return `<div class="card"><div class="ch"><h3>Suggested edits</h3><span class="cs-dim">${open.length} waiting · from the store's Suggest map edits</span></div>` +
+    table(['Shelf', 'Suggestion', 'Sent', ''], open.map(row), 'ad-tbl') +
+    (done.length ? `<div class="ad-subh">Recently resolved</div>` + table(['Shelf', 'Suggestion', 'Sent', ''], done.map(row), 'ad-tbl') : '') +
+    `<p class="lbl">A suggestion never changes the map. Make the change in the map editor, publish the new version here, then accept it; the store sees it resolved.</p></div>`;
+}
+const editorBtn = (cls = '') => `<button class="btn${cls ? ' ' + cls : ''}" data-act="open-editor" title="Open the full map editor in a new tab">${ic('edit')}Map editor</button>`;
+function openEditor() {
+  if (!MAP_EDITOR_URL) return toast('Set MAP_EDITOR_URL in js/config.js to where the map editor is hosted', 'bad');
+  window.open(MAP_EDITOR_URL, '_blank', 'noopener');
 }
 const bump = v => { const m = String(v).match(/^(.*?)(\d+)$/); return m ? m[1] + (Number(m[2]) + 1) : v + '.1'; };
 // A chosen map file: an editor export is parsed and rendered here in the
@@ -296,6 +317,15 @@ async function onStoreClick(e, ctx) {
   const act = a.dataset.act, no = st.no, c = forStore(no);
   if (act === 'tab') { st.tab = a.dataset.tab; st.rot = null; st.rotDone = null; st.edit = false; ctx.rerender(); }
   else if (act === 'refresh') { invalidate(no); ctx.rerender(); }
+  else if (act === 'open-editor') openEditor();
+  else if (act === 'edit-accept' || act === 'edit-decline') {
+    const status = act === 'edit-accept' ? 'accepted' : 'declined';
+    const note = prompt(status === 'accepted' ? 'Accepted: the change is in a published map version. Note for the store (optional):' : 'Decline this suggestion. Why? (optional)', '');
+    if (note === null) return;
+    a.disabled = true;
+    try { await ctx.admin.api(`/v1/admin/stores/${no}/mapedits/${encodeURIComponent(a.dataset.id)}`, { method: 'POST', body: { status, ...(note.trim() ? { note: note.trim() } : {}) } }); delete c.snap; st.actions = null; toast(`Suggestion ${status}`); ctx.rerender(); }
+    catch (err) { a.disabled = false; fail(err); }
+  }
   else if (act === 'area') { st.area = a.dataset.area; ctx.rerender(); }
   else if (act === 'actas') { a.disabled = true; try { await ctx.actAs(no); } catch (err) { a.disabled = false; fail(err); } }
   else if (act === 'entitle') { const area = a.dataset.area, on = !c.rec?.entitlements?.[area]; if (!on && !confirm(`Turn ${AREA_NAME[area]} off for ${no}? Devices lose the area the next time their token refreshes.`)) return; await patchStore(ctx, { entitlements: { [area]: on } }); }

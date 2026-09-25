@@ -28,7 +28,7 @@ test('mapDV: the live truck replays as the events that built it, in time order',
   assert.deepEqual(ev.slice(0, 5).map(e => e.type), ['truck.create', 'truck.setLive', 'manifest.attach', 'truck.team.set', 'truck.setGoal']);
   const man = ev.find(e => e.type === 'manifest.attach').payload;
   assert.equal(man.manNo, '7031490'); assert.deepEqual(man.consols.map(c => [c.id, c.cartons, c.dept]), [['601804401', 12, '024'], ['601804402', 18, '070']], 'the bad consol is dropped, the mixed dept keeps its first');
-  assert.deepEqual(ev.find(e => e.type === 'truck.team.set').payload.team, [{ pid: 'D1', name: 'Sam', dnum: 'D1' }, { pid: 'D2', name: 'Jo', dnum: 'D2' }]);
+  assert.deepEqual(ev.find(e => e.type === 'truck.team.set').payload.team, [{ pid: 'D1' }, { pid: 'D2' }], 'D-numbers only, no names');
   const lands = ev.filter(e => e.type === 'pallet.land');
   assert.deepEqual(lands.map(e => [e.entity.bay, e.payload.ptype, e.payload.cartons, e.payload.expectedMins, e.payload.consolIds, e.payload.scanIds]), [['A1', 'chep', 12, undefined, ['601804401'], []], ['A2', 'chep', 18, 14, ['601804402'], []], ['B1', 'bulk', null, undefined, [], ['601804499']]]);
   assert.ok(m.warnings.some(w => /P4 on ZZ skipped/.test(w))); assert.ok(m.warnings.some(w => /1 pallet had no type/.test(w)));
@@ -49,7 +49,7 @@ test('mapDV: planner slots, the rollover warning, and everything applies through
   const plan = m.events.filter(e => e.type === 'plan.set');
   assert.equal(plan.length, 2); assert.equal(m.counts.planner, 2);
   assert.equal(plan[0].payload.eta, '06:30'); assert.equal(plan[0].payload.note, 'Two loscam');
-  assert.deepEqual(plan[0].payload.team, [{ pid: 'D1', name: 'Sam', dnum: 'D1', start: '06:00' }, { pid: 'D2', name: 'Jo', dnum: 'D2' }]);
+  assert.deepEqual(plan[0].payload.team, [{ pid: 'D1', start: '06:00' }, { pid: 'D2' }]);
   assert.equal(plan[0].payload.manifest.manNo, '7031495'); assert.equal(plan[0].payload.manifest.consols[0].cons, '601804510');
   assert.equal(plan[1].payload.eta, null); assert.equal(plan[1].payload.manifest, null);
   assert.ok(m.warnings.some(w => /1 pallet held over from 2026-09-16-T1/.test(w)));

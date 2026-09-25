@@ -88,7 +88,9 @@ export const CATALOGUE = {
   // ── Store-wide ───────────────────────────────────────────────────────
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
-  'store.settings.set':  T('store', M, []),                                     // any of tz, dockGrid, minsPerCarton, autoLockMins (null = default)
+  'store.settings.set':  T('store', M, []),
+  'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
+  'map.edit.resolve':    T('store', M, ['edit'], { status: 'string' }),       // accepted | declined; payload.note                                     // any of tz, dockGrid, minsPerCarton, autoLockMins (null = default)
   'device.heartbeat':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['device'], { app: 'string' }),
 };
 
@@ -101,5 +103,5 @@ export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist'],
   backdock: ['dock', 'plan'],
-  store: ['devices', 'map', 'roster', 'settings'],
+  store: ['devices', 'map', 'roster', 'settings', 'mapedits'],
 };

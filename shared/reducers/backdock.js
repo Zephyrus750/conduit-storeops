@@ -3,12 +3,23 @@
 // -planner, -history), ported faithfully.
 //
 //   dock.trucks   id ('YYYY-MM-DD-Tn') → { status: staged|live|closed, createdAt, landedAt, goalAt,
-//                 grid, minsPerCarton (both from the store settings at creation), team: [{ pid, name, dnum }], halts: [{ reason, start, end }],
+//                 grid, minsPerCarton (both from the store settings at creation), team: [{ pid: 'D4', dnum: 4 }], halts: [{ reason, start, end }],
+//                 carriedConsols: consols that came with carried pallets
 //                 manifest: { manNo, dcNo, despatch, consols: [...] } | null,
 //                 pallets: ref → pallet }
 //   pallet        { ref, ptype: chep|loscam|bulk, cartons, expectedMins, expectedBasis, note,
 //                 status: landed|assigned|active|paused|done, assignedTo, segments: [{ pid, start, end }],
-//                 consolIds: [], scanIds: [], excluded, carryover, landedAt, doneAt }
+//                 consolIds: [], scanIds: [], excluded, carryover, carriedFrom, landedAt, doneAt }
+//   dock.rollover  pallets held at a finalise for the next truck: { from, at, pallets: ref → pallet, consols } | null
+//
+// One truck at a time (as Decant Visualiser): a new truck is refused while
+// another is open, unless it names the open one as carryFrom. That finalises
+// the open truck and moves its unfinished pallets, still on their bays, onto
+// the new one. A finalise can instead hold its unfinished pallets
+// (payload.rollover); the next truck takes them unless it says takeRollover: false.
+//
+// People are D-numbers (D1, D2…), never names: a team member, a pallet's
+// worker and the credit in history are all 'D4'.
 //   dock.history  closed trucks, newest last, capped (the D1 archive takes the rest)
 //   dock.manifests manNo → index entry (20 most recent)
 //   plan.days     date → slots: 1..4 → { eta, note, team, manifest }
@@ -33,7 +44,7 @@ const TRUCK_RE = /^\d{4}-\d{2}-\d{2}-T\d+$/;
 
 export function backdockState() {
   return {
-    dock: { trucks: {}, history: [], manifests: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' } },
+    dock: { trucks: {}, history: [], manifests: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' }, rollover: null },
     plan: { days: {} },
   };
 }
@@ -44,11 +55,36 @@ export const backdockReducers = {
     const id = e.entity.truck;
     if (!TRUCK_RE.test(id)) return reject('invalid_event', 'truck id must be YYYY-MM-DD-Tn');
     if (s.dock.trucks[id]) return reject('truck_exists', `${id} already exists`);
-    const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, goalAt: null, ...truckSetup(s), team: [], halts: [], manifest: null, pallets: {} };
+    const open = Object.keys(s.dock.trucks).filter(k => s.dock.trucks[k].status !== 'closed');
+    const from = e.payload.carryFrom ? String(e.payload.carryFrom) : null;
+    let carry = null;
+    if (open.length) {
+      if (!from) return reject('truck_open', `truck ${open.join(', ')} is still open: finalise it or carry it over to the new truck`);
+      if (!open.includes(from)) return reject('not_found', `${from} is not an open truck`);
+      const others = open.filter(k => k !== from);
+      if (others.length) return reject('truck_open', `truck ${others.join(', ')} must be finalised first`);
+      carry = s.dock.trucks[from];
+      const bad = closable(carry); if (bad) return bad;
+    }
+    const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, goalAt: null, ...truckSetup(s), team: [], halts: [], manifest: null, pallets: {}, carriedConsols: [] };
+    if (carry) t.grid = widerGrid(t.grid, carry.grid);
     // Creating from a planner slot consumes the slot's team and manifest.
     const date = id.slice(0, 10), slot = e.payload.slot ?? Number(id.slice(id.lastIndexOf('T') + 1));
     const day = s.plan.days[date];
-    if (day && day.slots[slot]) { const sl = day.slots[slot]; t.team = sl.team || []; t.manifest = sl.manifest || null; delete day.slots[slot]; }
+    if (day && day.slots[slot]) { const sl = day.slots[slot]; t.team = teamOf(sl.team) || []; t.manifest = sl.manifest || null; delete day.slots[slot]; }
+    // Pallets held at the last finalise join this truck (unless declined).
+    const held = s.dock.rollover;
+    if (held) {
+      if (e.payload.takeRollover !== false) { for (const [ref, p] of Object.entries(held.pallets)) t.pallets[ref] = p; t.carriedConsols.push(...held.consols); if (held.grid) t.grid = widerGrid(t.grid, held.grid); }
+      s.dock.rollover = null;
+    }
+    if (carry) {
+      const moved = takeLeftovers(carry, from);
+      for (const [ref, p] of Object.entries(moved.pallets)) if (!t.pallets[ref]) t.pallets[ref] = p;
+      t.carriedConsols.push(...moved.consols);
+      if (!t.team.length) t.team = carry.team.map(m => ({ ...m }));     // the crew stays on the dock
+      closeTruck(s, from, carry, e.at, { pallets: Object.keys(moved.pallets).length, cartons: moved.cartons, to: id });
+    }
     s.dock.trucks[id] = t;
     return null;
   },
@@ -66,20 +102,26 @@ export const backdockReducers = {
   },
   'truck.team.set'(s, e) {
     const t = truck(s, e); if (t.code) return t;
-    t.team = e.payload.team.filter(m => m && m.pid).map(m => ({ pid: String(m.pid), name: m.name || '', dnum: m.dnum || null }));
+    const team = teamOf(e.payload.team);
+    if (!team) return reject('invalid_event', 'team members are D-numbers (D1, D2…); names are not kept');
+    t.team = team;
     return null;
   },
   // Refused while a pallet is running: its open segment would close with no
   // end and its time would be lost from credit (legacy action.mjs:548-555).
+  // payload.rollover holds the unfinished pallets for the next truck.
   'truck.finalise'(s, e) {
     const t = truck(s, e); if (t.code) return t;
-    const running = Object.values(t.pallets).filter(p => p.status === 'active').map(p => p.ref);
-    if (running.length) return reject('pallets_running', `pause or finish ${running.join(', ')} before finalising`);
-    const open = t.halts[t.halts.length - 1];
-    if (open && !open.end) open.end = e.at;
-    t.status = 'closed'; t.clearedAt = e.at;
-    s.dock.history.push(historyRow(e.entity.truck, t));
-    if (s.dock.history.length > HISTORY_CAP) s.dock.history.splice(0, s.dock.history.length - HISTORY_CAP);
+    const bad = closable(t); if (bad) return bad;
+    const id = e.entity.truck;
+    let out = null;
+    if (e.payload.rollover && leftovers(t).length) {
+      if (s.dock.rollover) return reject('rollover_held', `pallets from ${s.dock.rollover.from} are already held for the next truck`);
+      const moved = takeLeftovers(t, id);
+      s.dock.rollover = { from: id, at: e.at, grid: { ...t.grid }, pallets: moved.pallets, consols: moved.consols };
+      out = { pallets: Object.keys(moved.pallets).length, cartons: moved.cartons, to: null };
+    }
+    closeTruck(s, id, t, e.at, out);
     return null;
   },
 
@@ -179,8 +221,9 @@ export const backdockReducers = {
   'pallet.start'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     if (p.status === 'done' || p.status === 'active') return null;
-    const who = canWork(s.dock.trucks[e.entity.truck], p, e.payload.pid); if (who) return who;
-    p.status = 'active'; p.assignedTo = String(e.payload.pid); p.segments.push({ pid: p.assignedTo, start: e.at, end: null });
+    const pid = dnumId(e.payload.pid); if (!pid) return reject('invalid_event', 'the worker is a D-number (D1, D2…)');
+    const who = canWork(s.dock.trucks[e.entity.truck], p, pid); if (who) return who;
+    p.status = 'active'; p.assignedTo = pid; p.segments.push({ pid, start: e.at, end: null });
     return null;
   },
   'pallet.pause'(s, e) {
@@ -192,8 +235,9 @@ export const backdockReducers = {
   'pallet.resume'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     if (p.status !== 'paused') return null;
-    const who = canWork(s.dock.trucks[e.entity.truck], p, e.payload.pid); if (who) return who;
-    p.status = 'active'; p.assignedTo = String(e.payload.pid); p.segments.push({ pid: p.assignedTo, start: e.at, end: null });
+    const pid = dnumId(e.payload.pid); if (!pid) return reject('invalid_event', 'the worker is a D-number (D1, D2…)');
+    const who = canWork(s.dock.trucks[e.entity.truck], p, pid); if (who) return who;
+    p.status = 'active'; p.assignedTo = pid; p.segments.push({ pid, start: e.at, end: null });
     return null;
   },
   'pallet.done'(s, e) {
@@ -256,11 +300,13 @@ export const backdockReducers = {
     if (!(Number.isInteger(slot) && slot >= 1 && slot <= 4)) return reject('invalid_event', 'slot must be 1..4');
     const p = e.payload;
     if (p.eta != null && !/^\d{2}:\d{2}$/.test(p.eta)) return reject('invalid_event', 'eta must be HH:MM');
+    const team = p.team === undefined ? undefined : teamOf(Array.isArray(p.team) ? p.team : []);
+    if (team === null) return reject('invalid_event', 'team members are D-numbers (D1, D2…); names are not kept');
     const day = (s.plan.days[e.entity.date] ||= { slots: {} });
     const cur = day.slots[slot] || { eta: null, note: '', team: [], manifest: null };
     if (p.eta !== undefined) cur.eta = p.eta;
     if (p.note !== undefined) cur.note = String(p.note || '').slice(0, 200);
-    if (p.team !== undefined) cur.team = Array.isArray(p.team) ? p.team : [];
+    if (team !== undefined) cur.team = team;
     if (p.manifest !== undefined) cur.manifest = p.manifest;
     day.slots[slot] = cur;
     return null;
@@ -277,6 +323,64 @@ function capManifests(s) { const keys = Object.keys(s.dock.manifests); if (keys.
 function bay(e) { return String(e.entity.bay).toUpperCase(); }
 function uniq(a) { return Array.isArray(a) ? [...new Set(a.map(String))] : []; }
 function autoMins(cartons, rate) { return cartons ? Math.max(1, Math.round(cartons * (rate ?? STD_MINS_PER_CARTON))) : null; }
+// A D-number: 'D4', 'd4', '4', 4 or { dnum: 4 } → 'D4'; anything else
+// (a name) → null.
+export function dnumId(x) {
+  const v = x && typeof x === 'object' ? (x.dnum ?? x.pid) : x;
+  const m = /^\s*D?\s*0*(\d{1,4})\s*$/i.exec(String(v ?? ''));
+  return m && Number(m[1]) > 0 ? `D${Number(m[1])}` : null;
+}
+// A team as D-numbers, de-duplicated; null when any member is not one.
+// Planner entries keep their start and finish times.
+function teamOf(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [], seen = new Set();
+  for (const m of list) {
+    const pid = dnumId(m); if (!pid) return null;
+    if (seen.has(pid)) continue; seen.add(pid);
+    const x = { pid, dnum: Number(pid.slice(1)) };
+    if (m && typeof m === 'object') for (const k of ['start', 'finish']) if (typeof m[k] === 'string') x[k] = m[k].slice(0, 40);
+    out.push(x);
+  }
+  return out;
+}
+// Why a truck cannot close yet, or null.
+function closable(t) {
+  const running = Object.values(t.pallets).filter(p => p.status === 'active').map(p => p.ref);
+  return running.length ? reject('pallets_running', `pause or finish ${running.join(', ')} before finalising`) : null;
+}
+const leftovers = t => Object.values(t.pallets).filter(p => p.status !== 'done' && !p.excluded);
+// Unfinished pallets leave the truck (it keeps what it cleared, so its
+// record counts only its own work), tagged with the truck they first landed
+// on, with the consols that were on them.
+function takeLeftovers(t, id) {
+  const pallets = {}, want = new Set(); let cartons = 0;
+  for (const p of leftovers(t)) {
+    pallets[p.ref] = { ...p, carryover: true, carriedFrom: p.carriedFrom || id };
+    for (const c of p.consolIds) want.add(c);
+    cartons += p.cartons || 0;
+    delete t.pallets[p.ref];
+  }
+  const consols = consolsOf(t).filter(c => want.has(c.id)).map(c => ({ ...c, carried: true }));
+  t.carriedConsols = (t.carriedConsols || []).filter(c => !want.has(c.id));
+  t.carriedOutIds = [...new Set([...(t.carriedOutIds || []), ...want])];    // audited on the truck that clears them
+  return { pallets, consols, cartons };
+}
+function closeTruck(s, id, t, at, carriedOut) {
+  const open = t.halts[t.halts.length - 1];
+  if (open && !open.end) open.end = at;
+  t.status = 'closed'; t.clearedAt = at;
+  const row = historyRow(id, t);
+  if (carriedOut) row.carriedOut = carriedOut;
+  s.dock.history.push(row);
+  if (s.dock.history.length > HISTORY_CAP) s.dock.history.splice(0, s.dock.history.length - HISTORY_CAP);
+}
+function widerGrid(a, b) {
+  const rows = Math.max(a?.rows || 0, b?.rows || 0), cols = Math.max(a?.cols || 0, b?.cols || 0);
+  return { rows, cols, rowLabels: 'ABCDEFGH'.slice(0, rows) };
+}
+// The truck's manifest consols plus any carried in with its pallets.
+export function consolsOf(t) { return [...(t.manifest?.consols || []), ...(t.carriedConsols || [])]; }
 // A truck keeps the grid and carton rate the store had when it was created,
 // so changing a setting mid-shift never moves a landed bay or an estimate.
 function truckSetup(s) {
@@ -346,30 +450,30 @@ export function historyRow(id, t) {
   for (const p of done) { const pids = [...new Set(p.segments.map(x => x.pid))]; for (const pid of pids) perPerson[pid].cartons += (p.cartons || 0) / pids.length; }
   const cartons = done.reduce((n, p) => n + (p.cartons || 0), 0);
   const clearMins = mins(t.landedAt, t.clearedAt);
-  const carried = pallets.filter(p => p.carryover);
+  const carried = pallets.filter(p => p.carryover), gone = new Set(t.carriedOutIds || []), all = consolsOf(t).filter(c => !gone.has(c.id));
   // Cartons per department: the manifest consols that landed on a done
   // pallet, by the consol's department.
   const byDept = {};
-  if (t.manifest) { const consol = new Map(t.manifest.consols.map(c => [c.id, c])); for (const p of done) for (const id of p.consolIds) { const c = consol.get(id); if (!c) continue; const d = (byDept[c.dept || '?'] ||= { dept: c.dept || '', cartons: 0, pallets: new Set() }); d.cartons += Number(c.cartons) || 0; d.pallets.add(p.ref); } }
+  if (all.length) { const consol = new Map(all.map(c => [c.id, c])); for (const p of done) for (const id of p.consolIds) { const c = consol.get(id); if (!c) continue; const d = (byDept[c.dept || '?'] ||= { dept: c.dept || '', cartons: 0, pallets: new Set() }); d.cartons += Number(c.cartons) || 0; d.pallets.add(p.ref); } }
   return {
     id, date: id.slice(0, 10), landedAt: t.landedAt, clearedAt: t.clearedAt,
     cartons, pallets: done.length, palletsLanded: pallets.length,
     clearMins: Math.round(clearMins), haltMins: Math.round(haltMins), haltCount: t.halts.length,
     downtime: Object.values(downtime).map(d => ({ ...d, mins: Math.round(d.mins) })),
     teamRate: clearMins > haltMins ? Math.round(cartons / ((clearMins - haltMins) / 60)) : 0,
-    audit: t.manifest ? auditOf(t, pallets) : null,
-    carriedIn: carried.length ? { pallets: carried.length, cartons: carried.reduce((n, p) => n + (p.cartons || 0), 0) } : null,
+    audit: all.length ? auditOf(all, pallets) : null,
+    carriedIn: carried.length ? { pallets: carried.length, cartons: carried.reduce((n, p) => n + (p.cartons || 0), 0), from: carried[0].carriedFrom || null } : null,
     perPerson: Object.values(perPerson).map(r => ({ pid: r.pid, cartons: Math.round(r.cartons), pallets: r.pallets.size, bays: [...r.pallets], mins: Math.round(r.mins), rate: r.mins ? Math.round(r.cartons / (r.mins / 60)) : 0 })),
     byDept: Object.values(byDept).map(d => ({ dept: d.dept, cartons: d.cartons, pallets: d.pallets.size })).sort((a, b) => b.cartons - a.cartons),
     manifest: t.manifest ? { manNo: t.manifest.manNo, despatch: t.manifest.despatch, dcNo: t.manifest.dcNo } : null,
   };
 }
-function auditOf(t, pallets) {
+function auditOf(consols, pallets) {
   const on = new Set(pallets.flatMap(p => p.consolIds));
-  const total = t.manifest.consols.length;
-  const matched = t.manifest.consols.filter(c => on.has(c.id)).length;
+  const total = consols.length;
+  const matched = consols.filter(c => on.has(c.id)).length;
   const extra = pallets.reduce((n, p) => n + p.scanIds.length, 0);
-  const missingIds = t.manifest.consols.filter(c => !on.has(c.id)).slice(0, 40).map(c => ({ id: c.id, cartons: c.cartons, dept: c.dept || '' }));
+  const missingIds = consols.filter(c => !on.has(c.id)).slice(0, 40).map(c => ({ id: c.id, cartons: c.cartons, dept: c.dept || '' }));
   const extraIds = pallets.flatMap(p => p.scanIds.map(id => ({ id, bay: p.ref }))).slice(0, 40);
   return { matched, missing: total - matched, total, extra, missingIds, extraIds };
 }

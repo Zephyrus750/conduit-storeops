@@ -94,6 +94,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate; a new PIN or code, `status: suspended` or `revoke: true` signs every device out (the store's credential epoch moves on) |
 | `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
+| `POST /v1/admin/stores/:no/mapedits/:id` | owner | live: accept or decline a suggested map edit (`{ status, note }`), logged as an owner action |
 | `GET /v1/store/:no/map`, `GET …/map/:version` (`latest` allowed) | store token or owner | live: published map metadata and document, ETag / 304 |
 | `POST /v1/store/:no/map` | owner | live: publish a version; logs `map.publish`, sets the registry's map version |
 | `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B (`source: k2b`) and Decant Visualiser (`source: dv`) importers with dry run; area state flip |
@@ -258,6 +259,15 @@ device sees the new version in its `map` projection and downloads the
 document once (`client/maps.js`, kept under `map:<store>` on the device).
 A store with no map published yet falls back to a bundled `maps/<no>.svg`
 if the shell ships one, else a placeholder.
+
+**Map editing.** The full map editor stays its own owner tool, outside the
+store app: the console's **Map editor** buttons open it in a new tab
+(`MAP_EDITOR_URL` in `js/config.js`). Inside the store app there is only
+**Suggest map edits** (Store section): anyone signed in taps a shelf and
+suggests a new name or flags what is wrong (`map.edit.suggest`). A
+suggestion never changes the map. The owner sees the queue on the store's
+Map tab, makes the change in the editor, publishes, then accepts or
+declines it (`map.edit.resolve`, also open to a manager in the store).
 
 **Catalogue.** `GET /v1/catalogue?kc=` proxies two existing upstreams (the
 suite lookup worker for keycode → name and product URL; the details worker

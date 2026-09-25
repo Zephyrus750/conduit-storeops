@@ -26,7 +26,11 @@ export function progress(t) {
 export function openHalt(t) { const h = t?.halts || []; for (let i = h.length - 1; i >= 0; i--) if (!h[i].end) return h[i]; return null; }
 // Who is on which pallet right now.
 export function running(t) { const out = {}; for (const p of pallets(t)) { const seg = (p.segments || []).find(s => !s.end); if (seg) out[seg.pid] = p.ref; } return out; }
-export const who = m => m.dnum || m.name || m.pid;
+// People are D-numbers on the dock, never names.
+export const who = m => m.pid;
+export { dnumId } from '../../../shared/reducers/backdock.js';
+// A pallet not finished and not left out: what carries over to the next truck.
+export const unfinished = t => pallets(t).filter(p => p.status !== 'done' && !p.excluded);
 export function grid(t) { const g = t?.grid || { rows: 4, cols: 7, rowLabels: 'ABCD' }; const labels = g.rowLabels || 'ABCDEFGH'; const refs = []; for (let r = 0; r < (g.rows || 4); r++) for (let c = 1; c <= (g.cols || 7); c++) refs.push(labels[r] + c); return { cols: g.cols || 7, refs }; }
 export const startable = p => p && (p.status === 'landed' || p.status === 'assigned' || p.status === 'paused');
 
