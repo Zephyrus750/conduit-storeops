@@ -11,6 +11,7 @@
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
 import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard } from './ui.js';
+import { installCameraButtons } from './scan.js';
 import { loadMap, setMap, mapInfo, parkMap } from './map.js';
 import { initSearch } from './search.js';
 import { updates, initUpdates } from './updates.js';
@@ -41,6 +42,7 @@ const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
 let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor';
 const frame = $('.frame');
 installKeyboard();
+installCameraButtons(document);
 let content = $('#content');
 const isMobile = () => frame.clientWidth <= 600;
 

@@ -24,6 +24,8 @@ export default {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act');
       if (act === 'sec') { sec = a.getAttribute('data-sec'); ctx.rerender(); }
+      else if (act === 'scan-sound') setPref('scanSound', prefs().scanSound === false), ctx.rerender();
+      else if (act === 'scan-vibrate') setPref('scanVibrate', prefs().scanVibrate === false), ctx.rerender();
       else if (act === 'skin') setPref('skin', a.getAttribute('data-skin')), ctx.rerender();
       else if (act === 'accent') setPref('accent', Number(a.getAttribute('data-acc'))), ctx.rerender();
       else if (act === 'rail') setPref('rail', a.getAttribute('data-v')), ctx.rerender();
@@ -56,6 +58,7 @@ function body(ctx) {
   const who = ctx.store ? row('Store', `${esc(ctx.storeNo)} ${esc(ctx.storeName)} · verified against the worker${cur?.actas ? ' · acting as the store as owner' : ''}`, '<span class="chip">Signed in</span>') : row('Owner', 'Signed in with the owner key · every action is logged in the registry', '<span class="chip">Owner</span>');
   const sync = s ? row('Sync', `${esc(s.state)} · ${s.queued} queued · seq ${s.seq}${s.lastError ? ' · ' + esc(s.lastError) : ''}`, `<span class="btn sm" data-act="resync">${ic('refresh')}Resync</span>`) : '';
   return `<div class="stg-card"><div class="stg-h">This device</div>${who}${row('Device id', esc(ctx.session.device), '')}${row('Roles', esc((cur?.roles || []).join(', ')), '<span class="stg-dim">hard-restricted by role</span>')}${sync}</div>` +
+    `<div class="stg-card"><div class="stg-h">Scanner</div>${row('Beep on a read', 'The camera scanner beeps when it reads a code.', tgl(prefs().scanSound !== false, 'scan-sound'))}${row('Vibrate on a read', 'The phone buzzes when a code is read.', tgl(prefs().scanVibrate !== false, 'scan-vibrate'))}</div>` +
     `<div class="stg-card"><div class="stg-h">Updates</div>${updatesRow()}</div>` +
     `<div class="stg-card"><div class="stg-h">Account</div>${row('Sign out', ctx.store ? (cur?.actas ? 'Returns to the owner console. Queued changes are sent first.' : 'Forgets the store on this device. Queued changes are sent first.') : 'Forgets the owner session on this device.', `<span class="btn sm" style="color:var(--red)" data-act="signout">${cur?.actas ? 'Back to the console' : 'Sign out'}</span>`)}</div>`;
 }

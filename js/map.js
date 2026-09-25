@@ -50,7 +50,9 @@ const PLACEHOLDER = '<svg class="map real placeholder" viewBox="0 0 1200 700" xm
 export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttribute('data-shelf') + ' ' + (g.getAttribute('data-subname') || '')).trim()).toUpperCase(); }
 // A code as the store writes it: "A16S1", "a16 s1" and "A16-S1" are the
 // same module; "A16" is the whole shelf. Upper case, no spaces or dashes.
-export function canonCode(code) { return String(code || '').toUpperCase().replace(/[\s-]+/g, ''); }
+// Printed shelf labels pad numbers ("A013S02" is A13 S2), so a leading zero
+// after a letter is dropped: the label and the map meet in one form.
+export function canonCode(code) { return String(code || '').toUpperCase().replace(/[\s-]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1'); }
 // The groups a code points at: a shelf name first (a shelf can itself be
 // called "S1"), then a shelf plus a module suffix (S1, S2, E1, E2). Any
 // place that takes a typed or scanned location goes through here, so a
@@ -64,8 +66,11 @@ export function groupsFor(root, code) {
   const all = $$('.shelf-group[data-shelf]', root).filter(g => g.getAttribute('data-shelf'));
   const byName = all.filter(g => canonCode(g.getAttribute('data-shelf')) === C);
   if (byName.length) return byName;
-  const { shelf, sub } = splitCanon(C); if (!sub) return [];
-  return all.filter(g => canonCode(g.getAttribute('data-shelf')) === shelf && canonCode(g.getAttribute('data-subname')) === sub);
+  const { shelf, sub } = splitCanon(C);
+  if (sub) { const mods = all.filter(g => canonCode(g.getAttribute('data-shelf')) === shelf && canonCode(g.getAttribute('data-subname')) === sub); if (mods.length) return mods; }
+  // A stockroom bay number (7001) names the shelf that lists it in data-locations.
+  if (/^\d{3,6}$/.test(C)) return all.filter(g => (g.getAttribute('data-locations') || '').split(/[\s,]+/).includes(C));
+  return [];
 }
 // Split a code into { shelf, sub } once it is known on the map.
 export function splitCode(root, code) { const gs = groupsFor(root, code); if (!gs.length) return null; const C = canonCode(code), shelf = gs[0].getAttribute('data-shelf'); return { shelf, sub: canonCode(shelf) === C ? '' : canonCode(gs[0].getAttribute('data-subname')), groups: gs }; }

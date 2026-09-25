@@ -4,7 +4,7 @@
 // the decant: start, pause, done, halts). Ported from Vector's
 // backdock-receiving and backdock-decant over the backdock reducers.
 
-import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
+import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate, camButton } from '../../ui.js';
 import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, who, grid, startable, manifestIndex, publishManifestFile, attachManifest } from './common.js';
 
 const st = { truck: null, land: { ref: '', ptype: 'chep', cartons: '' }, view: 'receive', arm: null, sel: null, halting: false, pending: [], manPick: false };
@@ -82,7 +82,7 @@ function palletPanel(t, p, desk) {
   return `<div class="bdk-pal${desk ? ' desk' : ''}"><div class="bdk-pal-h"><b>Pallet ${esc(p.ref)}</b><span class="tst ${s === 'done' ? 'done' : s === 'active' ? 'live' : 'staged'}">${s}</span>${p.carryover ? '<span class="status warn">carryover</span>' : ''}<button class="ibtn" data-act="closepal" title="Close">${ic('x')}</button></div>` +
     `<div class="bdk-pal-b"><div class="bdk-ptrow">${PTYPES.map(x => `<button class="bdr-pt${p.ptype === x[0] ? ' on' : ''}" data-act="pal-pt" data-pt="${x[0]}"><i style="background:${x[2]}"></i>${x[1]}</button>`).join('')}</div>` +
     `<div class="bdk-fields"><label>Cartons<input class="bdr-in mono" data-field="pcartons" inputmode="numeric" maxlength="3" value="${p.cartons ?? ''}"></label><label>Est. mins<input class="bdr-in mono${p.expectedBasis === 'manual' ? '' : ' auto'}" data-field="pexp" inputmode="numeric" maxlength="4" value="${p.expectedMins ?? ''}" title="${p.expectedBasis === 'manual' ? 'set by hand' : `auto · ${STD_MINS_PER_CARTON} min per carton`}"></label><label>Note<input class="bdr-in" data-field="pnote" maxlength="120" placeholder="optional" value="${esc(p.note || '')}"></label></div>` +
-    `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="pscan" inputmode="numeric" enterkeyhint="done" placeholder="Scan or type a pallet label" autocomplete="off"><button class="btn sm" data-act="pscan">${ic('barcode')}Add</button></div>${scans ? `<div class="bdk-verified">${scans}</div>` : ''}` +
+    `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="pscan" inputmode="numeric" enterkeyhint="done" placeholder="Scan or type a pallet label" autocomplete="off">${camButton('pscan')}<button class="btn sm" data-act="pscan">${ic('barcode')}Add</button></div>${scans ? `<div class="bdk-verified">${scans}</div>` : ''}` +
     `<div class="bdk-decant"><div class="bdk-declab">Decant${p.assignedTo ? ` · ${esc(who(team.find(m => m.pid === p.assignedTo) || { pid: p.assignedTo }))}` : ''}</div>${s !== 'done' ? picker : ''}<div class="bdk-verbs">${verbs}</div></div>` +
     `<div class="bdk-palacts"><button class="btn sm" data-act="pal-save">${ic('check')}Update</button><button class="btn sm" data-act="pal-remove">${ic('trash')}Remove</button></div></div></div>`;
 }

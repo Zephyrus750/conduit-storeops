@@ -4,6 +4,7 @@
 
 import { $, ic, esc, vh, sub, toast, mhead, mrows } from '../../ui.js';
 import { todayKey, send } from './common.js';
+import { printSheet, code, tick, table, section } from '../../print.js';
 
 function model(ctx) {
   const date = todayKey(), bf = ctx.store.get('backfill'), dl = ctx.store.get('daylist')[date] || { walkers: 2, excluded: [], source: '' };
@@ -32,7 +33,7 @@ export default {
       if (act === 'walkers') await set({ walkers: Number(a.dataset.n) });
       else if (act === 'exclude') await set({ excluded: [...new Set([...m.dl.excluded, a.dataset.bay])] });
       else if (act === 'include') await set({ excluded: m.dl.excluded.filter(b => b !== a.dataset.bay) });
-      else if (act === 'print') window.print();
+      else if (act === 'print') printWalkSheets(model(ctx));
     });
     const repaint = () => { if (ctx.isMobile) { const h = $('#dlmob', root); if (h) h.innerHTML = mobile(ctx); } else ctx.rerender(); };
     return [ctx.store.on('daylist', repaint), ctx.store.on('backfill', repaint)];
@@ -43,4 +44,12 @@ function mobile(ctx) {
   return mhead('Day list', `What to backfill next · ${m.active.length} bays`) +
     (m.active.length ? mrows(m.active.map(x => [esc(x.bay), `${x.kind} · ${x.sub}`, `<span class="btn sm" data-go="bfreview" data-bay="${esc(x.bay)}">Start</span>`, x.hot ? 'hot' : ''])) : `<div class="mv-note">${ic('layers')}Nothing posted yet. Scanning a bay that is not here still works.</div>`) +
     `<div class="mv-note">${ic('layers')}Ordered by the desk’s day list. ${m.dl.walkers} walker${m.dl.walkers === 1 ? '' : 's'}.</div>`;
+}
+
+// The walk sheets: one page per walker, bays in walking order, each with its
+// barcode for the PDT, a tick and room for a note (K2B's triage sheet).
+function printWalkSheets(m) {
+  const page = (bays, i) => `<div class="${i ? 'ps-page' : ''}">` + section(`Walker ${i + 1} · ${bays.length} bay${bays.length === 1 ? '' : 's'}`,
+    table(['#', 'Bay', 'Why', 'Done', 'Note'], bays.map((b, n) => [String(n + 1), code(b.bay), `${b.kind}<br><small>${b.sub}</small>`, tick, '']), ['n', 'bc', '', 't', 'w'])) + '</div>';
+  printSheet({ title: `Day list · ${m.date}`, subtitle: `${m.active.length} bays across ${m.walkers.length} walker${m.walkers.length === 1 ? '' : 's'}${m.dl.excluded.length ? ` · ${m.dl.excluded.length} left out` : ''}`, body: m.walkers.map(page).join('') });
 }

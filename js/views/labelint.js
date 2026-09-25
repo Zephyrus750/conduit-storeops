@@ -4,6 +4,7 @@
 import { $, $$, ic, esc, vh, sub, prog, dep, DEPT_COLOUR, cycleId, daysLeftInCycle, fmtDate, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome } from '../map.js';
 import { SUBS, MICRO, microId, microCode, microName, microCount } from '../data/micros.js';
+import { printSheet, table, signoff } from '../print.js';
 
 let selected = null, openSub = null, varianceFor = null;
 
@@ -27,7 +28,7 @@ export default {
   id: 'labelint', title: 'Label integrity', icon: 'm-labelint',
   desktop(ctx) {
     const m = model(ctx);
-    return vh('Label integrity', sub(cycleLabel(m.cycle), `${m.L.cycleLen[0].toUpperCase() + m.L.cycleLen.slice(1)} cycle · ${m.daysLeft} days left`, `${m.total} numbered micro-departments`), `<button class="btn primary" data-act="check-selected">${ic('barcode')}Check a micro-dept</button>`, 'm-labelint') +
+    return vh('Label integrity', sub(cycleLabel(m.cycle), `${m.L.cycleLen[0].toUpperCase() + m.L.cycleLen.slice(1)} cycle · ${m.daysLeft} days left`, `${m.total} numbered micro-departments`), `<button class="btn" data-act="print-sheets" title="Marking sheets for the open sub-department, or all of them">${ic('print')}Marking sheets</button><button class="btn primary" data-act="check-selected">${ic('barcode')}Check a micro-dept</button>`, 'm-labelint') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx('Label integrity', ctx.storeNo)}<span><i style="background:#2563EB"></i>Checked this cycle</span><span><i style="background:#DC2626"></i>Wrong label found</span><span><i style="background:transparent;border:2px solid #D24E0E"></i>Selected micro-dept</span><span><i style="background:#CBD0D8"></i>Not yet checked</span></div></div>` +
       `<div class="sidecol" id="liside"></div></div>`;
@@ -59,6 +60,7 @@ export default {
         if (act === 'select') { selected = a.getAttribute('data-micro'); openSub = selected.split('-')[0]; paint(); }
         else if (act === 'toggle-sub') { const s = a.getAttribute('data-sub'); openSub = openSub === s ? null : s; paint(); }
         else if (act === 'check' || act === 'check-selected') { const micro = a.getAttribute('data-micro') || selected; if (!micro) return toast('Pick a micro-department first'); await ctx.store.dispatch({ type: m.checks[micro] ? 'label.uncheck' : 'label.check', entity: { micro, cycle: m.cycle } }); }
+        else if (act === 'print-sheets') printMarkingSheets(m, typeof openSub === 'string' && openSub ? openSub : null);
         else if (act === 'cycle') await ctx.store.dispatch({ type: 'label.cycle.set', entity: {}, payload: { cycleLen: a.getAttribute('data-len') } });
         else if (act === 'variance') { varianceFor = a.getAttribute('data-micro') || selected; paint(); }
         else if (act === 'variance-cancel') { varianceFor = null; paint(); }
@@ -102,4 +104,20 @@ function mobileBar(m) {
     (openSub ? `<div class="mv-rows">${(MICRO[openSub] || []).map(x => { const id = microId(openSub, x); return `<div class="mv-row" data-act="select" data-micro="${id}"><span class="a">${microCode(x)}</span><span class="b">${esc(microName(x))}</span><span class="c">${m.checks[id] ? '✓' : ''}</span></div>`; }).join('')}</div>` : '');
   const [subId, code] = selected.split('-'); const entry = (MICRO[subId] || []).find(x => microCode(x) === code) || code; const c = m.checks[selected];
   return `<div class="mv-mh">${ic('m-labelint')}<b>${esc(code)} ${esc(microName(entry))}</b><span>${m.done} / ${m.total}</span></div><div class="mv-hint">${cycleLabel(m.cycle)} · <b>${m.daysLeft}d left</b> · ${subId.toUpperCase()} · ${c ? 'checked ' + fmtDate(c.at) : 'not checked yet'}</div><div class="mv-two">${mbig(c ? 'Uncheck' : 'Checked', c ? 'sec' : '', 'check', ` data-act="check" data-micro="${selected}"`)}${mbig('Price is wrong', 'warn', 'alert', ` data-act="variance" data-micro="${selected}"`)}</div><div class="mv-hint"><a data-act="toggle-sub" data-sub="${subId}">Choose another</a></div>`;
+}
+
+// ShelfSearcher's marking sheets: one page per micro-department with 100
+// numbered boxes to tick as labels are checked, a table for the wrong ones
+// and a sign-off. For the open sub-department, or every one.
+function printMarkingSheets(m, subId) {
+  const subs = SUBS.filter(sd => !subId || sd[0] === subId);
+  const pages = [];
+  for (const [sid, sc, sname] of subs) for (const entry of MICRO[sid] || []) {
+    const done = m.checks[microId(sid, entry)];
+    pages.push(`<div class="${pages.length ? 'ps-page' : ''}"><h2>${esc(sc)} ${esc(sname)} · ${esc(microCode(entry))} ${esc(microName(entry))}${done ? ' · already checked this cycle' : ''}</h2>`
+      + `<div class="ps-grid">${Array.from({ length: 100 }, (_, i) => `<span>${i + 1}</span>`).join('')}</div>`
+      + `<h2>Incorrect labels</h2>` + table(['Keycode', 'Shelf', 'Label says', 'Should say'], Array.from({ length: 8 }, () => ['', '', '', '']))
+      + signoff() + '</div>');
+  }
+  printSheet({ title: 'Label integrity marking sheets', subtitle: `${esc(cycleLabel(m.cycle))} · ${subId ? esc(subs[0]?.[1] + ' ' + subs[0]?.[2]) : 'all sub-departments'} · ${pages.length} sheet${pages.length === 1 ? '' : 's'}`, body: pages.join('') });
 }

@@ -25,7 +25,16 @@ export function mfoot(inner) { return `<div class="mv-foot">${inner}</div>`; }
 export function msteps(n, labels) { return `<div class="mv-steps">${labels.map((l, i) => `<span class="${i + 1 < n ? 'done' : i + 1 === n ? 'cur' : ''}"><i>${i + 1 < n ? ic('check') : i + 1}</i>${l}</span>`).join('')}</div>`; }
 export function mlast(code, name, meta) { return `<div class="mv-last"><small>Last scanned</small><b>${code}</b><span>${name}</span>${meta ? `<em>${meta}</em>` : ''}</div>`; }
 // A scan prompt with a typed field: hardware scanners type into it and press Enter; the camera arrives later.
-export function mscan(cap, field, hint, btn) { return `<div class="mv-scan typed"><div class="cap">${cap}</div><div class="mv-field">${field}</div>${hint ? `<div class="hint">${hint}</div>` : ''}${btn ? `<div class="tools">${btn}</div>` : ''}</div>`; }
+// A phone scan block. The input's data-field also names the camera button
+// beside it (js/scan.js opens the camera for it; each read presses Enter).
+const CONTINUOUS_FIELDS = new Set(['mscan', 'msweep', 'pscan']);
+export function camButton(field, continuous = CONTINUOUS_FIELDS.has(field)) {
+  return `<button type="button" class="mv-cam" data-camera="${esc(field)}"${continuous ? ' data-camera-continuous' : ''} aria-label="Scan with the camera" title="Scan with the camera">${ic('camera')}</button>`;
+}
+export function mscan(cap, field, hint, btn) {
+  const f = (/data-field="([^"]+)"/.exec(field) || [])[1];
+  return `<div class="mv-scan typed"><div class="cap">${cap}</div><div class="mv-field">${field}${f ? camButton(f) : ''}</div>${hint ? `<div class="hint">${hint}</div>` : ''}${btn ? `<div class="tools">${btn}</div>` : ''}</div>`;
+}
 export function mrows(rows) { return `<div class="mv-rows">${rows.map(r => `<div class="mv-row${r[3] ? ' ' + r[3] : ''}"><span class="a">${r[0]}</span><span class="b">${r[1]}</span><span class="c">${r[2] || ''}</span></div>`).join('')}</div>`; }
 export function card(title, body, right = '') { return `<div class="card"><div class="ch"><h3>${title}</h3>${right}</div>${body}</div>`; }
 export function prog(pct) { pct = Math.max(0, Math.min(100, Math.round(pct || 0))); return `<div class="prog"><div class="track"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`; }
