@@ -10,6 +10,7 @@ import { dvAnswer, DV_TRUCK } from '../fixtures/dv.js';
 import { ulid } from '../../shared/ulid.js';
 
 const OWNER_KEY = 'owner-key-for-tests-only';
+let sitemapReads = 0;
 let mf, ownerToken;
 const upstreamCalls = { lookup: 0, details: 0 };
 // A stand-in for the legacy K2B worker: one store (BUS247, PIN 2468) with
@@ -46,11 +47,20 @@ before(async () => {
     durableObjects: {
       STORE: { className: 'StoreObject', useSQLite: true },
       REGISTRY: { className: 'RegistryObject', useSQLite: true },
+      CATALOGUE: { className: 'CatalogueObject', useSQLite: true },
     },
     // Catalogue upstreams are stubbed: the lookup worker answers ?codes=,
     // the details worker answers the POST, and one code is unknown.
     outboundService(req) {
       const u = new URL(req.url);
+      // Stand-in Kmart sitemaps: an index naming two product files.
+      if (u.hostname === 'sitemap.test') {
+        const files = { '/sitemap/au/product-sitemap.xml': '<sitemapindex><sitemap><loc>https://sitemap.test/sitemap/au/product-sitemap-a.xml</loc></sitemap><sitemap><loc>https://sitemap.test/sitemap/au/product-sitemap-b.xml</loc></sitemap></sitemapindex>',
+          '/sitemap/au/product-sitemap-a.xml': '<urlset><url><loc>https://www.kmart.com.au/product/12-pk-diecast-vehicles-42977636/</loc></url><url><loc>https://www.kmart.com.au/product/paper-plates-20-pk-43302210/</loc></url></urlset>',
+          '/sitemap/au/product-sitemap-b.xml': '<urlset><url><loc>https://www.kmart.com.au/product/memory-foam-bath-mat-110012345/</loc></url></urlset>' };
+        sitemapReads += 1;
+        return files[u.pathname] ? new Response(files[u.pathname], { headers: { 'Content-Type': 'application/xml' } }) : new Response('not found', { status: 404 });
+      }
       if (u.hostname === 'lookup.test') {
         const out = {}; for (const kc of (u.searchParams.get('codes') || '').split(',')) if (kc === '42977636') out[kc] = { found: true, url: 'https://www.kmart.com.au/product/12-pk-diecast-vehicles-42977636/', name: '12 pk diecast vehicles' }; else out[kc] = { found: false };
         upstreamCalls.lookup += 1; return Response.json(out);
@@ -65,7 +75,7 @@ before(async () => {
     // the lookup and details workers fall back to fetch (outboundService).
     serviceBindings: { LEGACY: (req) => legacy(new URL(req.url), req) },
     bindings: {
-      LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', LEGACY_URL: 'https://legacy.test',
+      LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', LEGACY_URL: 'https://legacy.test', SITEMAP_BASE: 'https://sitemap.test/sitemap/au/product-sitemap',
       TOKEN_SECRET: 'test-token-secret',
       OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000),
       TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_STORE_ATTEMPTS: '8', LOCKOUT_IP_ATTEMPTS: '40', LOCKOUT_SECONDS: '60', ROLE_TTL_SECONDS: '2', PIN_MIN_DIGITS: '4', ENVIRONMENT: 'test',
@@ -522,4 +532,24 @@ test('events: a device clock far from the worker is refused; an oversized payloa
   assert.deepEqual(r.body.results.map(x => x.code || 'ok'), ['clock_skew', 'clock_skew', 'ok']);
   const big = await api('POST', '/v1/store/2005/events', { events: [mk(new Date().toISOString(), { dept: 'h1', note: 'x'.repeat(2_100_000) })] }, floor);
   assert.equal(big.body.results[0].code, 'invalid_event');
+});
+
+test('catalogue: the owner builds it from the sitemaps; lookups and near-misses then come from Conduit, not the legacy worker', async () => {
+  const before = await api('GET', '/v1/admin/catalogue', undefined, ownerToken);
+  assert.equal(before.status, 200); assert.equal(before.body.total, 0); assert.equal(before.body.lastbuild, null);
+  assert.equal((await api('GET', '/v1/admin/catalogue')).status, 401, 'owner only');
+  const start = await api('POST', '/v1/admin/catalogue/rebuild', {}, ownerToken);
+  assert.equal(start.status, 202); assert.equal(start.body.started, true);
+  let st; for (let i = 0; i < 100; i++) { st = (await api('GET', '/v1/admin/catalogue', undefined, ownerToken)).body; if (st.lastbuild) break; await new Promise(r => setTimeout(r, 100)); }
+  assert.equal(st.lastbuild?.status, 'ok', JSON.stringify(st.lastbuild)); assert.equal(st.total, 3); assert.equal(st.files, 2); assert.equal(st.lastbuild.discovery, 'index:2 files'); assert.equal(st.build, null);
+  assert.ok(sitemapReads >= 3); assert.ok(st.next > Date.now(), 'the weekly read is scheduled');
+
+  // 110012345 is unknown to the legacy lookup worker: the name proves it came from Conduit.
+  const got = await api('GET', '/v1/catalogue?kc=110012345&fields=link');
+  assert.equal(got.body.items['110012345'].name, 'Memory Foam Bath Mat'); assert.match(got.body.items['110012345'].url, /memory-foam-bath-mat-110012345/);
+  const near = await api('GET', '/v1/catalogue/nearmiss?kc=110012346');
+  assert.equal(near.status, 200); assert.deepEqual(near.body.matches.map(m => [m.keycode, m.position]), [['110012345', 8]]);
+  assert.equal((await api('GET', '/v1/catalogue/nearmiss?kc=12')).status, 400);
+  const log = await api('GET', '/v1/admin/actions', undefined, ownerToken);
+  assert.ok(log.body.actions.some(a => a.type === 'catalogue.rebuild'));
 });

@@ -7,8 +7,9 @@ import { json, fail, preflight, readJson, HttpError } from './http.js';
 import { signToken, verifyToken, verifySecret, makeClaims, hasRole } from './auth.js';
 export { StoreObject } from './store.js';
 export { RegistryObject } from './registry.js';
+export { CatalogueObject } from './catalogue-object.js';
 import { VERSION } from './version.js';
-import { parseCodes, lookup } from './catalogue.js';
+import { parseCodes, lookup, catalogueStub } from './catalogue.js';
 import { importK2B } from './import.js';
 import { importDV } from './import-dv.js';
 
@@ -120,6 +121,29 @@ r.get('/v1/catalogue', async (req, env, ctx) => {
   const codes = parseCodes(url.searchParams.get('kc'));
   const items = await lookup(env, ctx, codes, { details: url.searchParams.get('fields') !== 'link' });
   return json({ items }, 200, { 'Cache-Control': 'public, max-age=300' });
+});
+
+// One-digit near-misses of a keycode (a mistyped or misread code): public,
+// like the catalogue, and cached briefly at the edge.
+r.get('/v1/catalogue/nearmiss', async (req, env) => {
+  const stub = catalogueStub(env); if (!stub) throw new HttpError(503, 'not_configured', 'the catalogue object is not bound');
+  const res = await stub.fetch('https://catalogue/nearmiss' + new URL(req.url).search);
+  return json(await res.json(), res.status, res.ok ? { 'Cache-Control': 'public, max-age=3600' } : {});
+});
+// The owner's view of the catalogue build, and "rebuild now".
+r.get('/v1/admin/catalogue', async (req, env) => {
+  await requireOwner(req, env);
+  const stub = catalogueStub(env); if (!stub) throw new HttpError(503, 'not_configured', 'the catalogue object is not bound');
+  const status = await (await stub.fetch('https://catalogue/status')).json();
+  return json({ ...status, details: { browserRendering: !!(env.CF_ACCOUNT_ID && env.BROWSER_TOKEN), legacy: !!env.DETAILS_URL }, legacyLookup: !!env.LOOKUP_URL });
+});
+r.post('/v1/admin/catalogue/rebuild', async (req, env) => {
+  await requireOwner(req, env);
+  const stub = catalogueStub(env); if (!stub) throw new HttpError(503, 'not_configured', 'the catalogue object is not bound');
+  const b = await readJson(req).catch(() => ({}));
+  const out = await (await stub.fetch('https://catalogue/rebuild', { method: 'POST', body: JSON.stringify({ trigger: 'owner', force: b.force !== false }) })).json();
+  if (out.started) await registry(env, 'POST', '/log', { type: 'catalogue.rebuild', store: null, detail: {} });
+  return json(out, out.started ? 202 : 200);
 });
 
 // ── migration (owner) ─────────────────────────────────────────────────────

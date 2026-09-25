@@ -97,6 +97,8 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/store/:no/map` | owner | live: publish a version; logs `map.publish`, sets the registry's map version |
 | `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B (`source: k2b`) and Decant Visualiser (`source: dv`) importers with dry run; area state flip |
 | `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
+| `GET /v1/catalogue/nearmiss?kc=` | anyone | live: catalogue keycodes one digit away (a mistyped or misread code) |
+| `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
@@ -123,6 +125,23 @@ days behind the worker's clock or the event is refused as `clock_skew`.
 An area or manager code lasts a shift (`ROLE_TTL_SECONDS`, 12 h); after that
 the device keeps the Floor and asks for the code again. The WebSocket carries
 its token as the second subprotocol (`conduit, <token>`), never in the URL.
+
+## Catalogue
+
+Product names and links come from Conduit's own catalogue object
+(`worker/catalogue-object.js`), which reads Kmart's public product sitemaps:
+the sitemap index first, lettered files when the index names none, one file
+per alarm step, rows replaced per file, and a two-strike sweep before a
+file's products are dropped (K2B's rules, ported). It reads weekly, Mondays
+01:00 store time, and the owner console's Stores page shows the last build
+with a **Rebuild now** button. Run it once after the first deploy.
+
+Price, was, image and clearance come from the product page through
+Cloudflare Browser Rendering (`worker/details.js`) once `CF_ACCOUNT_ID`
+(variable) and `BROWSER_TOKEN` (secret) are set. Until the first build lands
+and those are set, the legacy suite and details workers (`LOOKUP_URL`,
+`DETAILS_URL`) answer instead; after that they can be removed from
+`wrangler.toml`. `npm run dev` serves stand-in sitemaps on :8791.
 
 ## Admin console
 

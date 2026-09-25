@@ -56,6 +56,24 @@ const actor = a => a?.owner ? 'owner' : esc(a?.device || '—');
 const short = v => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s.length > 90 ? s.slice(0, 87) + '…' : s; };
 const ent = e => Object.entries(e || {}).map(([k, v]) => `${k} ${v}`).join(' · ');
 
+// ── catalogue ─────────────────────────────────────────────────────────
+// Conduit's own product catalogue (the Kmart sitemaps, read weekly): size,
+// last build, what is still on a legacy worker, and "Rebuild now".
+async function loadCatalogue(ctx) { try { st.cat = await ctx.admin.api('/v1/admin/catalogue'); } catch (e) { st.cat = { error: e.message }; } }
+function catalogueCard(c) {
+  if (!c) return `<div class="card"><div class="ch"><h3>Product catalogue</h3></div><div class="cs-dim">Loading…</div></div>`;
+  if (c.error) return `<div class="card"><div class="ch"><h3>Product catalogue</h3></div><div class="cs-dim">${esc(c.error)}</div></div>`;
+  const lb = c.lastbuild, b = c.build;
+  const state = b ? `<span class="tst staged">building · ${b.done} of ${b.of || '?'} files</span>` : lb ? `<span class="tst ${lb.status === 'ok' ? 'live' : lb.status === 'partial' ? 'staged' : 'bad'}">${esc(lb.status)}</span>` : '<span class="tst">never built</span>';
+  const legacy = [c.total ? '' : 'names and links still come from the legacy suite worker until the first build', c.details?.browserRendering ? '' : c.details?.legacy ? 'prices and images still come from the legacy details worker (set CF_ACCOUNT_ID and BROWSER_TOKEN to move them)' : 'prices and images are off until CF_ACCOUNT_ID and BROWSER_TOKEN are set'].filter(Boolean);
+  return `<div class="card"><div class="ch"><h3>Product catalogue</h3>${state}<button class="btn sm" data-act="cat-rebuild" style="margin-left:auto"${b ? ' disabled' : ''}>${ic('refresh')}Rebuild now</button></div>` +
+    `<div class="ad-kv"><span>Products</span><b>${Number(c.total || 0).toLocaleString()}</b><span>Sitemap files</span><b>${c.files || 0}</b>` +
+    `<span>Last build</span><b>${lb ? `${fmtTime(new Date(lb.at).toISOString())} · ${esc(lb.trigger || '')} · ${esc(lb.discovery || '')}${lb.errors ? ` · ${lb.errors} error${lb.errors === 1 ? '' : 's'}` : ''}` : '—'}</b>` +
+    `${lb?.reason ? `<span>Reason</span><b>${esc(lb.reason)}</b>` : ''}${lb?.sweepHeld ? `<span>Held</span><b>${lb.sweepHeld} files looked gone at once; kept as a suspected outage</b>` : ''}` +
+    `<span>Next weekly read</span><b>${c.next ? fmtTime(new Date(c.next).toISOString()) : '—'}</b></div>` +
+    (legacy.length ? `<div class="cs-dim" style="margin-top:10px">${legacy.map(esc).join('<br>')}</div>` : '') + `</div>`;
+}
+
 // ── views ─────────────────────────────────────────────────────────────
 const overview = {
   id: 'admin', title: 'Stores', icon: 'grid',
@@ -70,18 +88,27 @@ const overview = {
       `<div class="ad-tiles">${tile(stores.length, `store${stores.length === 1 ? '' : 's'} registered`, `${live} live · ${mig} migrating · ${stores.length - live - mig} registered or legacy`)}${tile(stores.filter(s => s.entitlements?.floor).length, 'with the Floor', `${stores.filter(s => s.entitlements?.stockroom).length} Stockroom · ${stores.filter(s => s.entitlements?.backdock).length} Back dock`)}${tile((st.actions || []).length, 'owner actions', 'last 200 kept in the registry')}${tile(h ? esc(h.version) : '…', 'worker', h ? `${esc(h.env)} · ${esc(ctx.admin.base)}` : 'checking health')}</div>` +
       `<div class="card"><div class="ch"><h3>Registered stores</h3><span class="cs-dim">tap a row to open it</span></div>${table(['Store', 'Name', 'Status', 'Areas', 'Map', 'Updated', ''], rows, 'ad-tbl')}</div>` +
       `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Recent owner actions</h3><a class="go" data-view="adminactions">All</a></div><div class="list">${acts}</div></div>` +
-      `<div class="card"><div class="ch"><h3>Service</h3></div><div class="ad-kv"><span>Worker</span><b class="mono">${h ? esc(h.version) + ' · ' + esc(h.env) : '…'}</b><span>Endpoint</span><b class="mono">${esc(ctx.admin.base)}</b><span>Owner device</span><b class="mono">${esc(ctx.session.device)}</b><span>Session</span><b>expires ${fmtTime(new Date(ctx.session.current.expires * 1000).toISOString())}</b></div></div></div>`;
+      `<div class="card"><div class="ch"><h3>Service</h3></div><div class="ad-kv"><span>Worker</span><b class="mono">${h ? esc(h.version) + ' · ' + esc(h.env) : '…'}</b><span>Endpoint</span><b class="mono">${esc(ctx.admin.base)}</b><span>Owner device</span><b class="mono">${esc(ctx.session.device)}</b><span>Session</span><b>expires ${fmtTime(new Date(ctx.session.current.expires * 1000).toISOString())}</b></div></div></div>` + catalogueCard(st.cat);
   },
   mount(ctx, root) {
     const need = [];
     if (!st.health) need.push(ctx.admin.api('/v1/health').then(h => { st.health = h; }));
     if (!st.actions) need.push(ctx.admin.api('/v1/admin/actions').then(r => { st.actions = r.actions || []; }));
+    if (!st.cat) need.push(loadCatalogue(ctx));
     if (need.length) Promise.all(need).then(() => ctx.rerender()).catch(fail);
+    // While a build runs, the card follows it every two seconds.
+    let poll = null;
+    const follow = () => { clearTimeout(poll); if (st.cat?.build) poll = setTimeout(async () => { await loadCatalogue(ctx); ctx.rerender(); }, 2000); };
+    follow();
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
-      if (a.dataset.act === 'refresh') { invalidate(); st.health = null; try { await ctx.admin.refreshStores(); } catch (err) { return fail(err); } ctx.rerender(); }
+      if (a.dataset.act === 'refresh') { invalidate(); st.health = null; st.cat = null; try { await ctx.admin.refreshStores(); } catch (err) { return fail(err); } ctx.rerender(); }
+      if (a.dataset.act === 'cat-rebuild') {
+        try { const r = await ctx.admin.api('/v1/admin/catalogue/rebuild', { method: 'POST', body: {} }); toast(r.started ? 'Catalogue rebuild started' : r.reason || 'Not started'); await loadCatalogue(ctx); ctx.rerender(); }
+        catch (err) { fail(err); }
+      }
     });
-    return [];
+    return [() => clearTimeout(poll)];
   },
 };
 
