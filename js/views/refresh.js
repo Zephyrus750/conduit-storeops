@@ -2,7 +2,9 @@
 // plan paint. Reads store.get('refresh'); writes refresh.* events.
 
 import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode } from '../map.js';
+import { focusDone } from '../../shared/reducers/floor.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor } from '../map.js';
+import { openScanner } from '../scan.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
 const PLAN_NAME = { '#a855f7': 'Purple', '#3b82f6': 'Blue', '#f59e0b': 'Amber', '#ec4899': 'Pink', '#14b8a6': 'Teal', '#ef4444': 'Red' };
@@ -10,13 +12,17 @@ const planName = c => PLAN_NAME[String(c).toLowerCase()] || 'Planned';
 const planChip = c => `<span class="rfplan-c"><i style="background:${esc(c)}"></i>${planName(c)}</span>`;
 const TARGET = 100;
 let mode = 'refresh', planColour = PLAN_COLOURS[0];
+// segment → department from the mounted map, for marks made before marks
+// carried their department.
+let segDept = {};
 
 function model(ctx) {
   const r = ctx.store.get('refresh');
   const week = weekId();
   const marks = r.weeks[week] || {};
   const focus = r.focus[week] || [];
-  return { week, marks, focus, plan: r.plan, done: Object.keys(marks).length };
+  // done: every mark this week; counted: what the X/100 counts (focus only).
+  return { week, marks, focus, plan: r.plan, sync: ctx.store.status || { state: 'offline', queued: 0 }, done: Object.keys(marks).length, counted: focusDone(marks, focus, (seg, mk) => mk.dept || segDept[seg]) };
 }
 function marksFor(map, m) {
   const out = {};
@@ -67,8 +73,14 @@ async function tap(ctx, info) {
   try {
     if (mode === 'plan') { const cur = m.plan[info.full]; await ctx.store.dispatch({ type: 'refresh.plan.paint', entity: { segment: info.full }, payload: { colour: planColour === 'erase' || cur === planColour ? 'erase' : planColour } }); return; }
     const covered = markKeysFor(m.marks, info);
-    if (covered.length) for (const seg of covered) await ctx.store.dispatch({ type: 'refresh.unmark', entity: { segment: seg, week: m.week } });
-    else await ctx.store.dispatch({ type: 'refresh.mark', entity: { segment: info.full, week: m.week } });
+    if (covered.length) {
+      for (const seg of covered) await ctx.store.dispatch({ type: 'refresh.unmark', entity: { segment: seg, week: m.week } });
+      toast(`${info.full} unmarked`, '', { label: 'Undo', run: () => ctx.store.dispatch({ type: 'refresh.mark', entity: { segment: info.full, week: m.week }, payload: { dept: info.dept } }).catch(e => toast(e.message, 'bad')) });
+    } else {
+      await ctx.store.dispatch({ type: 'refresh.mark', entity: { segment: info.full, week: m.week }, payload: { dept: info.dept } });
+      const outside = m.focus.length && !m.focus.includes(info.dept);
+      toast(outside ? `${info.full} marked · outside this week’s focus, not counted` : `${info.full} refreshed`, '', { label: 'Undo', run: () => ctx.store.dispatch({ type: 'refresh.unmark', entity: { segment: info.full, week: m.week } }).catch(e => toast(e.message, 'bad')) });
+    }
   } catch (e) { toast(e.message, 'bad'); }
 }
 
@@ -76,18 +88,17 @@ export default {
   id: 'refresh', title: 'Location refresh', icon: 'm-refresh',
   desktop(ctx) {
     const m = model(ctx);
-    return vh('Location refresh', sub('This week', m.week, `${m.done} / ${TARGET}`), `<button class="btn" data-act="reset-week">${ic('refresh')}Reset week</button>`, 'm-refresh') +
+    return vh('Location refresh', sub('This week', m.week, `${m.counted} / ${TARGET}`), `<button class="btn" data-act="scan-shelf">${ic('camera')}Scan shelves</button><button class="btn" data-act="reset-week">${ic('refresh')}Reset week</button>`, 'm-refresh') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx('Location refresh', ctx.storeNo)}<span><i style="background:#16A34A"></i>Refreshed this week (${m.done})</span><span><i style="background:transparent;border:2px solid #D24E0E"></i>Focus department, not yet</span><span><i style="background:#CBD0D8"></i>Not in focus</span></div></div>` +
       `<div class="sidecol fill" id="rfside"></div></div>`;
   },
   mobile(ctx) {
     const m = model(ctx);
-    return mvMap({ badge: `<b>${m.done}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}` }) +
+    return mvMap({ badge: `<b>${m.counted}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}` }) +
       `<div class="mv-sel mode rf" id="rfmob"></div>`;
   },
   mount(ctx, root) {
-    const m0 = model(ctx);
     const map = mountMap($('#mapstage', root), { cls: 'rf', badges: false, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
       const m = model(ctx), mk = m.marks[markKeysFor(m.marks, info)[0]], c = m.plan[info.full];
       const plan = c ? `<span class="mx"><i class="pdot" style="background:${esc(c)}"></i>Planned · ${planName(c)}</span>` : '';
@@ -96,12 +107,13 @@ export default {
       return tipLine('', 'minus', 'Not in focus this week') + plan;
     } });
     bindMapChrome(root, map);
+    segDept = {}; for (const g of map.segments()) segDept[segmentId(g)] = (g.getAttribute('data-dept') || '').toLowerCase();
     const paint = () => {
       const m = model(ctx);
       map.setMarks(marksFor(map, m)); applyPlan(map, m.plan, m.marks, mode === 'plan'); map.svg.classList.toggle('rfplan', mode === 'plan'); map.svg.toggleAttribute('data-focus', m.focus.length > 0);
       const side = $('#rfside', root); if (side) side.innerHTML = sidebar(map, m);
       const mob = $('#rfmob', root); if (mob) mob.innerHTML = mobileBar(map, m);
-      const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.done}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}`;
+      const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.counted}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}`;
     };
     paint();
     root.addEventListener('click', async e => {
@@ -109,6 +121,14 @@ export default {
       const act = a.getAttribute('data-act'), m = model(ctx);
       try {
         if (act === 'mode') { mode = a.getAttribute('data-mode'); paint(); }
+        // Walk the aisle scanning shelf labels: each read marks that shelf
+        // module refreshed (or unmarks it, as a tap would). "A013S02" and
+        // "A13 S2" name one module (groupsFor).
+        else if (act === 'scan-shelf') openScanner({ title: 'Scan shelf labels', hint: 'Each label marks its shelf refreshed', continuous: true, onCode: code => {
+          const g = groupsFor(map.svg, code)[0];
+          if (!g) return toast(`${code} is not a shelf on this map`, 'bad');
+          tap(ctx, map.shelfInfo(g));
+        } });
         else if (act === 'colour') { planColour = a.getAttribute('data-colour'); mode = 'plan'; paint(); }
         else if (act === 'reset-week') { if (confirm(`Clear every refresh mark for ${m.week}?`)) await ctx.store.dispatch({ type: 'refresh.clearWeek', entity: { week: m.week } }); }
         else if (act === 'reset-plan') { for (const seg of Object.keys(m.plan)) await ctx.store.dispatch({ type: 'refresh.plan.paint', entity: { segment: seg }, payload: { colour: 'erase' } }); }
@@ -116,7 +136,7 @@ export default {
         else if (act === 'zoom-dept') { map.filterDept(a.getAttribute('data-dept')); }
       } catch (err) { toast(err.message, 'bad'); }
     });
-    return [ctx.store.on('refresh', paint)];
+    return [ctx.store.on('refresh', paint), ctx.store.on('status', paint)];
   },
 };
 
@@ -124,18 +144,24 @@ function sidebar(map, m) {
   const fc = focusCounts(map, m);
   const list = Object.entries(m.marks).sort((a, b) => (a[1].at < b[1].at ? 1 : -1)).slice(0, 8);
   const depts = Object.keys(DEPT_NAME).filter(d => !['checkouts', 'stockroom', 'flex'].includes(d));
-  return `<div class="pcard"><div class="rfcount">${ic('asterisk')}<div class="n">${m.done}<small> / ${TARGET}</small></div><div class="fx">Focus this week<div class="chips">${fc.map(f => `<span class="chip" data-act="zoom-dept" data-dept="${f.d}"><span class="sw" style="background:${DEPT_COLOUR[f.d]}"></span>${f.d.toUpperCase()} ${f.done}/${f.total}</span>`).join('')}<span class="chip" style="color:var(--accent-ink)" data-act="mode" data-mode="focus">Choose…</span></div></div></div>${prog(m.done / TARGET * 100)}` +
+  return `<div class="pcard"><div class="rfcount">${ic('asterisk')}<div class="n">${m.counted}<small> / ${TARGET}</small></div><div class="fx">Focus this week<div class="chips">${fc.map(f => `<span class="chip" data-act="zoom-dept" data-dept="${f.d}"><span class="sw" style="background:${DEPT_COLOUR[f.d]}"></span>${f.d.toUpperCase()} ${f.done}/${f.total}</span>`).join('')}<span class="chip" style="color:var(--accent-ink)" data-act="mode" data-mode="focus">Choose…</span></div></div></div>${prog(m.done / TARGET * 100)}` +
     (mode === 'focus' ? `<div class="chips" style="margin-top:10px">${depts.map(d => `<span class="chip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}"><span class="sw" style="background:${DEPT_COLOUR[d]}"></span>${d.toUpperCase()}</span>`).join('')}<span class="chip" data-act="mode" data-mode="refresh">Done</span></div>` : '') + `</div>` +
     `<div class="pcard"><div class="pt3">This week’s scanning</div><div class="rfchart">${dayBars(m)}</div></div>` +
     `<div class="pcard"><div class="pt3">Refreshed this week<span style="margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none">${m.done} segments</span></div><div class="list rflist">${list.map(([id, x]) => { const d = deptOfSeg(map, id); return `<div class="li"><span class="loc">${esc(id)}</span>${dep(d)}<span class="nm">${esc(DEPT_NAME[d] || d)}</span>${m.plan[id] ? planChip(m.plan[id]) : ''}<span class="rt">${fmtTime(x.at)}</span></div>`; }).join('') || '<div class="li" style="color:var(--dim);font-size:12px">Nothing yet this week. Tap a shelf on the map.</div>'}${m.done > 8 ? `<div class="li" style="color:var(--dim);font-size:12px">+ ${m.done - 8} more this week</div>` : ''}</div></div>` +
     `<div class="pcard"><div class="plan"><span class="pt3" style="margin:0">Plan</span><span class="sw2${mode === 'plan' ? ' on' : ''}" data-act="mode" data-mode="${mode === 'plan' ? 'refresh' : 'plan'}"></span></div><div class="pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c && mode === 'plan' ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<span class="er${planColour === 'erase' && mode === 'plan' ? ' on' : ''}" data-act="colour" data-colour="erase">${ic('x')}</span></div><div class="lbl">${mode === 'plan' ? 'Plan mode: tap shelves to paint them for the team. Same colour again clears.' : 'Pick a colour, then tap shelves to mark them.'}</div></div>` +
     `<div class="pfoot"><button class="btn" data-act="reset-plan">${ic('refresh')}Reset planning</button></div>`;
 }
+// The team-sync chip reads the store's real connection state.
+function syncChip(s) {
+  const on = s.state === 'live' || s.state === 'polling';
+  const txt = s.state === 'live' ? 'live' : s.state === 'polling' ? 'polling' : s.state === 'connecting' ? 'connecting' : `offline${s.queued ? ` · ${s.queued} queued` : ''}`;
+  return `<span class="rf-sync${on ? ' live' : ''}" title="${esc(s.lastError || 'Team sync')}"><i></i>${txt}</span>`;
+}
 function mobileBar(map, m) {
   const fc = focusCounts(map, m);
-  return `<div class="mv-mh">${ic('m-refresh')}<b>Location refresh</b><span>${m.done} / ${TARGET}</span></div>` +
-    `<div class="rf-row"><div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div>` +
-    (mode === 'plan' ? `<div class="rf-pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<span class="rf-sync live" title="Team sync"><i></i>live</span>`) + `</div>` +
+  return `<div class="mv-mh">${ic('m-refresh')}<b>Location refresh</b><span>${m.counted} / ${TARGET}</span></div>` +
+    `<div class="rf-row"><button class="mv-cam" data-act="scan-shelf" aria-label="Scan shelf labels" title="Scan shelf labels">${ic('camera')}</button><div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div>` +
+    (mode === 'plan' ? `<div class="rf-pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : syncChip(m.sync)) + `</div>` +
     (mode === 'plan' ? `<div class="mv-hint">Plan mode: tap a shelf to paint it for the team. Tap the same colour again to clear.</div>`
       : `<div class="rf-focus"><span class="lbl">Focus</span>${fc.map(f => `<button class="rf-chip" data-act="zoom-dept" data-dept="${f.d}"><i class="dep" style="background:${DEPT_COLOUR[f.d]}">${f.d.toUpperCase()}</i>${f.done}/${f.total}</button>`).join('') || '<span class="mv-hint" style="margin:0">Tap a shelf to mark it refreshed. Tap again to undo.</span>'}</div>`);
 }

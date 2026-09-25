@@ -26,7 +26,7 @@
         <button class="bsearch" title="Search (Ctrl K)"><svg class="i"><use href="icons.svg#i-search"/></svg></button><input class="bsin" placeholder="Search anything…" aria-label="Search">
       </div>
       <div class="radm" id="radm"></div>
-      <div class="storechip" role="button" tabindex="0">
+      <div class="storechip" role="button" tabindex="0" title="This store and device" aria-label="This store and device">
         <svg class="i sc-ic"><use href="icons.svg#i-m-store"/></svg>
         <span class="sc-t"><b id="chipName">Store</b><span id="chipNo"></span></span>
         <svg class="i"><use href="icons.svg#i-chev"/></svg>
@@ -39,14 +39,14 @@
       </div>
     </aside>
     <div class="m-appbar">
-      <div class="search msearch" id="msearch"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Search" aria-label="Search" autocomplete="off"><svg class="i mic" title="Voice search"><use href="icons.svg#i-mic"/></svg></div>
-      <button class="mdepts" title="Departments"><svg class="i"><use href="icons.svg#i-grid"/></svg></button>
+      <div class="search msearch" id="msearch"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Search" aria-label="Search" autocomplete="off"></div>
+      <button class="mdepts" title="Switch area" aria-label="Switch area"><svg class="i"><use href="icons.svg#i-grid"/></svg></button>
     </div>
     <div class="main">
       <header class="top">
         <span id="crumb" hidden></span>
         <div id="hdrslot"></div>
-        <div class="search" id="hsearch"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Search anything — a shelf, bay, product, manifest or consolidation…" aria-label="Search" readonly><svg class="i mic" title="Voice search"><use href="icons.svg#i-mic"/></svg><span class="kbd">Ctrl K</span></div>
+        <div class="search" id="hsearch"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Search anything — a shelf, bay, product, manifest or consolidation…" aria-label="Search" readonly><span class="kbd">Ctrl K</span></div>
         <button class="btn accent showmap" id="showMap" data-go="map"><svg class="i"><use href="icons.svg#i-map"/></svg>Show map</button>
       </header>
       <main class="content" id="content"></main>

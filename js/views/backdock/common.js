@@ -9,7 +9,7 @@ export const PT_COLOUR = Object.fromEntries(PTYPES.map(p => [p[0], p[2]]));
 export const HALT_NAME = { hcage: 'Home cage', nostock: 'No stock', equip: 'Equipment', safety: 'Safety', waiting: 'Waiting', other: 'Other' };
 export const STD_MINS_PER_CARTON = 0.5;
 
-export const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+export const todayKey = () => today();
 export const truckNo = id => String(id || '').replace(/^\d{4}-\d{2}-\d{2}-T/, '');
 export const truckDay = id => String(id || '').slice(0, 10);
 export function fmtHM(iso) { if (!iso) return '—'; const d = new Date(iso); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -26,11 +26,16 @@ export function progress(t) {
 export function openHalt(t) { const h = t?.halts || []; for (let i = h.length - 1; i >= 0; i--) if (!h[i].end) return h[i]; return null; }
 // Who is on which pallet right now.
 export function running(t) { const out = {}; for (const p of pallets(t)) { const seg = (p.segments || []).find(s => !s.end); if (seg) out[seg.pid] = p.ref; } return out; }
-export const who = m => m.dnum || m.name || m.pid;
+// People are D-numbers on the dock, never names.
+export const who = m => m.pid;
+export { dnumId } from '../../../shared/reducers/backdock.js';
+// A pallet not finished and not left out: what carries over to the next truck.
+export const unfinished = t => pallets(t).filter(p => p.status !== 'done' && !p.excluded);
 export function grid(t) { const g = t?.grid || { rows: 4, cols: 7, rowLabels: 'ABCD' }; const labels = g.rowLabels || 'ABCDEFGH'; const refs = []; for (let r = 0; r < (g.rows || 4); r++) for (let c = 1; c <= (g.cols || 7); c++) refs.push(labels[r] + c); return { cols: g.cols || 7, refs }; }
 export const startable = p => p && (p.status === 'landed' || p.status === 'assigned' || p.status === 'paused');
 
 // ── manifests ──────────────────────────────────────────────────────────
+import { today } from '../../ui.js';
 import { parseManifestSheets, manifestDoc, attachConsols } from '../../../shared/manifest.js';
 import { MICRO } from '../../data/micros.js';
 export function microDept(code) { const c = String(code || '').padStart(3, '0'); for (const [d, list] of Object.entries(MICRO)) if (list.some(x => x.startsWith(c + ' '))) return d; return ''; }
@@ -43,7 +48,7 @@ function loadXLSX() {
   if (window.XLSX) return Promise.resolve(window.XLSX);
   if (xlsxLoading) return xlsxLoading;
   xlsxLoading = new Promise((resolve, reject) => {
-    const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    const sc = document.createElement('script'); sc.src = 'vendor/xlsx/xlsx.full.min.js';   // self-hosted: works offline, no third-party script
     sc.onload = () => resolve(window.XLSX); sc.onerror = () => { xlsxLoading = null; reject(new Error('the spreadsheet reader did not load. Check the connection and try again')); };
     document.head.appendChild(sc);
   });

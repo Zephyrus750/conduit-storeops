@@ -29,7 +29,7 @@ const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
 export function initSearch({ client, frame, go, tools = () => [], life = () => null }) {
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
-  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like H14-3, a department or a tool…" autocomplete="off" inputmode="search">${ic('mic', 'mic')}<span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
+  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like H14-3, a department or a tool…" autocomplete="off" inputmode="search"><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
   frame.appendChild(el);
   const input = $('#oq', el), body = $('#obody', el), prev = $('#oprev', el), pal = $('.pal', el);
   let shelves = null, seq = 0, sel = 0;
@@ -44,8 +44,10 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   }
   function invalidate() { shelves = null; }
 
-  function open(q = '') { el.classList.add('open'); input.value = q; render(q); try { input.focus(); } catch {} }
-  function close() { el.classList.remove('open'); prev.hidden = true; pal.classList.remove('wide'); }
+  // Focus goes back to whatever opened the palette when it closes.
+  let opener = null;
+  function open(q = '') { if (!el.classList.contains('open')) opener = document.activeElement; el.classList.add('open'); input.value = q; render(q); try { input.focus(); } catch {} }
+  function close() { el.classList.remove('open'); prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide'); if (opener?.isConnected && opener !== document.body) { try { opener.focus(); } catch {} } opener = null; }
   const isOpen = () => el.classList.contains('open');
 
   async function render(q) {
@@ -69,7 +71,13 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       if (item) {
         out += orow('p', 'barcode', `${hi(Q, Q)} · ${esc(item.name || 'Product')}`, [item.price != null ? money(item.price) : '', item.was != null && item.was !== item.price ? `was ${money(item.was)}` : '', item.clr ? 'clearance' : ''].filter(Boolean).join(' · ') || 'On kmart.com.au', 'Open', `data-url="${esc(item.url)}"`);
         preview = `<div class="pcardx">${item.img ? `<img src="${esc(item.img)}" alt="" style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:#fff;margin-bottom:8px">` : ''}<div class="kc">${esc(Q)}</div><div class="nm">${esc(item.name || '')}</div><div class="fx">${item.price != null ? `<span class="soh g">${money(item.price)}</span>` : ''}${item.was != null && item.was !== item.price ? `<span>was ${money(item.was)}</span>` : ''}${item.clr ? '<span class="status warn">Clearance</span>' : ''}</div></div><div class="pfacts"><span>${ic('clock')}Price checked ${item.at ? new Date(item.at).toLocaleDateString() : 'never'}</span><span>${ic('m-product')}From the public product page</span></div><a class="btn accent sm" href="${esc(item.url)}" target="_blank" rel="noopener">${ic('arrow')}Open on kmart.com.au</a>`;
-      } else out += `<div class="ohint">No product found for ${esc(Q)}${L?.name ? ` (the stockroom knew it as “${esc(L.name)}”)` : ''}. Check the keycode, or search kmart.com.au.</div>` + orow('p', 'search', `Search kmart.com.au for ${esc(Q)}`, 'Opens the site search in a new tab', 'Open', `data-url="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(Q)}"`);
+      } else {
+        // A code nobody knows is often one digit off: offer the catalogue's near-misses.
+        const near = await client.catalogue.nearMiss?.(Q) || [];
+        if (my !== seq) return;
+        if (near.length) out += grp('Did you mean', near.length) + near.slice(0, 5).map(n => orow('p', 'barcode', `${esc(n.keycode)} · ${esc(n.name)}`, `digit ${n.position + 1} differs`, 'Search', `data-q="${esc(n.keycode)}"`)).join('');
+      }
+      if (!item) out += `<div class="ohint">No product found for ${esc(Q)}${L?.name ? ` (the stockroom knew it as “${esc(L.name)}”)` : ''}. Check the keycode, or search kmart.com.au.</div>` + orow('p', 'search', `Search kmart.com.au for ${esc(Q)}`, 'Opens the site search in a new tab', 'Open', `data-url="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(Q)}"`);
       if (L && (L.visits.length || L.adjustments.length || L.cages.length)) {
         out += grp('In the stockroom') + orow('s', 'm-srhistory', `Backfilled at ${L.bays.length} bay${L.bays.length === 1 ? '' : 's'}${L.adjustments.length ? ` · ${L.adjustments.length} SOH adjustment${L.adjustments.length === 1 ? '' : 's'}` : ''}${L.cages.length ? ` · in ${L.cages.length} cage${L.cages.length === 1 ? '' : 's'}` : ''}`, `Last seen ${esc(L.last || '')}`, 'History', `data-view="srhistory" data-q="${esc(Q)}"`);
         preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || 'Not in the catalogue')}</div></div>`) + lifeHtml(L);
@@ -94,7 +102,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();
     if (preview) { prev.hidden = false; pal.classList.add('wide'); prev.innerHTML = preview; const pm = $('#opmap', prev); if (pm) { try { const m = mountMap(pm, { mono: true, clone: 'preview' }); const first = prev.querySelector('[data-select]')?.getAttribute('data-select'); if (first) { m.select(first); m.zoomTo(first, 900); } } catch {} } }
-    else { prev.hidden = true; pal.classList.remove('wide'); }
+    else { prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide'); }
   }
   // A keycode's life in the store: bays it was backfilled at, SOH
   // adjustments, cages holding it (K2B's code lookup, with more detail).

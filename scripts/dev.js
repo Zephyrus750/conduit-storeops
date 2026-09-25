@@ -3,7 +3,8 @@
 // store, and the shell served statically from the repo root on :8080.
 //   node scripts/dev.js            → open http://127.0.0.1:8080/
 // Sign in with store 1241, PIN 2468. Owner key: dev-owner-key.
-// Stand-ins: legacy K2B worker on :8789 (BUS247 / 2468), a DV site on :8790.
+// Stand-ins: legacy K2B worker on :8789 (BUS247 / 2468), a DV site on :8790,
+// Kmart product sitemaps on :8791 (the console's catalogue "Rebuild now").
 
 import { Miniflare } from 'miniflare';
 import http from 'node:http';
@@ -42,11 +43,23 @@ http.createServer((req, res) => {
   const a = dvAnswer(u); res.writeHead(a.httpStatus || 200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(a.httpStatus ? a.body : a));
 }).listen(8790, '127.0.0.1');
 
+// Stand-in Kmart product sitemaps on :8791: an index naming two files with a
+// few real-looking products, so the catalogue build can be tried locally.
+const SITEMAPS = {
+  '/sitemap/au/product-sitemap.xml': '<sitemapindex><sitemap><loc>http://127.0.0.1:8791/sitemap/au/product-sitemap-a.xml</loc></sitemap><sitemap><loc>http://127.0.0.1:8791/sitemap/au/product-sitemap-b.xml</loc></sitemap></sitemapindex>',
+  '/sitemap/au/product-sitemap-a.xml': '<urlset>' + [['12-pk-diecast-vehicles', '42977636'], ['paper-plates-20-pk', '43302210'], ['bath-towel-5-pk', '43166022']].map(([s, k]) => `<url><loc>https://www.kmart.com.au/product/${s}-${k}/</loc></url>`).join('') + '</urlset>',
+  '/sitemap/au/product-sitemap-b.xml': '<urlset>' + [['gift-wrap-roll', '43199310'], ['memory-foam-bath-mat', '110012345']].map(([s, k]) => `<url><loc>https://www.kmart.com.au/product/${s}-${k}/</loc></url>`).join('') + '</urlset>',
+};
+http.createServer((req, res) => {
+  const body = SITEMAPS[new URL(req.url, 'http://x').pathname];
+  res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/xml' }); res.end(body || 'not found');
+}).listen(8791, '127.0.0.1');
+
 const mf = new Miniflare({
   modules: true, modulesRules: [{ type: 'ESModule', include: ['**/*.js'] }], modulesRoot: root, scriptPath: path.join(root, 'worker/index.js'),
   compatibilityDate: '2026-08-06', compatibilityFlags: ['nodejs_compat'], port: API, host: '127.0.0.1',
-  durableObjects: { STORE: { className: 'StoreObject', useSQLite: true }, REGISTRY: { className: 'RegistryObject', useSQLite: true } },
-  bindings: { LEGACY_URL: 'http://127.0.0.1:8789', LOOKUP_URL: 'https://shrill-voice-f46f.zephyrus-np750.workers.dev', DETAILS_URL: 'https://k2b-details.zephyrus-np750.workers.dev', TOKEN_SECRET: 'dev-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '43200', REFRESH_TTL_SECONDS: '2592000', LOCKOUT_ATTEMPTS: '5', LOCKOUT_SECONDS: '900', ENVIRONMENT: 'dev' },
+  durableObjects: { STORE: { className: 'StoreObject', useSQLite: true }, REGISTRY: { className: 'RegistryObject', useSQLite: true }, CATALOGUE: { className: 'CatalogueObject', useSQLite: true } },
+  bindings: { SITEMAP_BASE: 'http://127.0.0.1:8791/sitemap/au/product-sitemap', LEGACY_URL: 'http://127.0.0.1:8789', LOOKUP_URL: 'https://shrill-voice-f46f.zephyrus-np750.workers.dev', DETAILS_URL: 'https://k2b-details.zephyrus-np750.workers.dev', TOKEN_SECRET: 'dev-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '43200', REFRESH_TTL_SECONDS: '2592000', LOCKOUT_ATTEMPTS: '5', LOCKOUT_SECONDS: '900', PIN_MIN_DIGITS: '4', ENVIRONMENT: 'dev' },
   persist: process.env.PERSIST ? path.join(root, '.wrangler/dev') : undefined,
 });
 const api = await mf.ready;

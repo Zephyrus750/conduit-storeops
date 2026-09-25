@@ -51,9 +51,20 @@ export function historyRows(state, kind) {
   return null;
 }
 
+// One CSV cell. Text that a spreadsheet would run as a formula (a leading
+// = + - @, tab or CR) gets a leading apostrophe; plain numbers, negative SOH
+// included, stay numbers.
+export function csvCell(v) {
+  let s = v == null ? '' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v);
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = "'" + s;
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+// A header row and rows of values, as CSV text.
+export function csvLines(header, rows) {
+  return [header.map(csvCell).join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\n') + '\n';
+}
 export function toCsv(rows, columns) {
   if (!rows?.length) return columns ? columns.join(',') + '\n' : '';
   const cols = columns || Object.keys(rows[0]);
-  const cell = v => { const s = v == null ? '' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  return [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n') + '\n';
+  return csvLines(cols, rows.map(r => cols.map(c => r[c])));
 }

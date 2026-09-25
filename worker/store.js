@@ -30,11 +30,17 @@ import { HttpError, json, fail, CORS } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
+import { rolloverDue } from '../shared/backfill.js';
+import { sanitizeSvg } from '../shared/svgsafe.js';
+import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/time.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
-const DELTA_LIMIT = 5000;     // above this gap a hello gets a snapshot instead of a delta
+const DELTA_LIMIT = 5000;
+const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
+const EVENT_MAX = 2_000_000;          // one event's payload (a manifest.attach carries its consols)
+const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
 export class StoreObject extends DurableObject {
   constructor(ctx, env) {
@@ -53,10 +59,17 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS maps (version TEXT PRIMARY KEY, meta TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
     this.state = null;
-    this.storeNo = null;
-    ctx.blockConcurrencyWhile(async () => this.load());
+    this.storeNo = this.sql.exec("SELECT value FROM meta WHERE key = 'store'").toArray()[0]?.value || null;
+    this.epoch = Number(this.sql.exec("SELECT value FROM meta WHERE key = 'epoch'").toArray()[0]?.value || 0);
+    ctx.blockConcurrencyWhile(async () => {
+      this.load();
+      // The end-of-day rollover runs on an alarm at store midnight. A store
+      // object with no alarm (new, or woken after a deploy) catches up now.
+      if (await ctx.storage.getAlarm() == null) await ctx.storage.setAlarm(Date.now() + 1000);
+    });
   }
 
   // ── state ─────────────────────────────────────────────────────────────
@@ -82,12 +95,16 @@ export class StoreObject extends DurableObject {
     const url = new URL(request.url);
     const claims = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
     if (!claims) return fail(401, 'unauthorised', 'no claims');
-    this.storeNo = claims.store;
+    // A device token from before the store's last rotation, suspension or
+    // revoke is refused; the device refreshes (which fails) and signs in.
+    if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) return fail(401, 'revoked', 'this device was signed out; sign in again');
+    if (url.pathname === '/epoch') return this.setEpoch(await request.json(), claims);
+    if (claims.store && claims.store !== this.storeNo) { this.storeNo = claims.store; this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('store', ?)", String(claims.store)); }
     try {
       switch (url.pathname) {
         case '/snapshot': return json(this.snapshot(claims, url.searchParams.get('areas')));
         case '/changes': return json(this.changes(Number(url.searchParams.get('since') || 0), claims));
-        case '/events': { const body = await request.json(); return json({ results: this.submit(body.events, claims) }); }
+        case '/events': { const body = await readBounded(request, BATCH_MAX); return json({ results: this.submit(body.events, claims) }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
@@ -121,9 +138,10 @@ export class StoreObject extends DurableObject {
 
   snapshot(claims, areasParam) {
     // Store-wide projections (map version, roster marker, devices) ride along
-    // with every snapshot; area projections follow the token's capabilities.
-    const wanted = areasParam ? areasParam.split(',') : [...claims.caps, 'store'];
-    const allowed = new Set([...claims.caps, 'store']);
+    // with every snapshot; area projections follow what the token may read
+    // (entitlement and role, see readable()).
+    const wanted = areasParam ? areasParam.split(',') : [...readable(claims), 'store'];
+    const allowed = new Set([...readable(claims), 'store']);
     const out = { v: this.state.v };
     for (const area of wanted) {
       if (!allowed.has(area)) continue;
@@ -135,7 +153,8 @@ export class StoreObject extends DurableObject {
 
   changes(since, claims) {
     const rows = this.sql.exec('SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT ?', since, DELTA_LIMIT).toArray();
-    const events = rows.map(rowToEvent).filter(e => claims.owner || claims.caps.includes(e.area) || e.area === 'store');
+    const can = new Set(readable(claims));
+    const events = rows.map(rowToEvent).filter(e => claims.owner || can.has(e.area) || e.area === 'store');
     return { seq: this.state.seq, events, more: rows.length === DELTA_LIMIT };
   }
 
@@ -156,6 +175,8 @@ export class StoreObject extends DurableObject {
     }
     this.snapshotIfDue();
     if (applied.length) this.broadcast(applied);
+    // A new time zone moves store midnight: the rollover alarm follows it.
+    if (applied.some(e => e.type === 'store.settings.set' && 'tz' in (e.payload || {}))) this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000);
     return results.map(({ event, ...rest }) => rest);
   }
 
@@ -163,6 +184,11 @@ export class StoreObject extends DurableObject {
     const id = raw?.id;
     const bad = validateEvent(raw);
     if (bad) return { id, ok: false, ...bad };
+    if (JSON.stringify(raw.payload ?? {}).length > EVENT_MAX) return { id, ok: false, code: 'invalid_event', message: `payload is over ${EVENT_MAX / 1_000_000} MB` };
+    // A device's clock decides "first at wins", so its `at` must be near the
+    // worker's: at most 10 minutes ahead, at most 30 days behind (an outbox
+    // that sat offline). The owner's imports carry legacy times and are exempt.
+    if (!claims.owner) { const t = Date.parse(raw.at), now = Date.now(); if (!(t <= now + FUTURE_MS && t >= now - PAST_MS)) return { id, ok: false, code: 'clock_skew', message: `at ${raw.at} is too far from the worker's clock; check this device's date and time` }; }
     if (raw.store !== claims.store) return { id, ok: false, code: 'unauthorised', message: 'event is for another store' };
     const info = typeInfo(raw.type);
     if (info.area !== 'store' && !claims.caps.includes(info.area)) return { id, ok: false, code: 'not_entitled', message: `store is not entitled to ${info.area}` };
@@ -190,6 +216,39 @@ export class StoreObject extends DurableObject {
     this.state.seq = cur.seq;
     this.sinceSnapshot += 1;
     return { id, ok: true, seq: cur.seq, event };
+  }
+
+  // ── session revocation ──────────────────────────────────────────────
+  setEpoch(body, claims) {
+    if (!claims.owner) return fail(403, 'unauthorised', 'owner only');
+    const epoch = Math.max(this.epoch, Number(body?.epoch) || 0);
+    if (epoch !== this.epoch) {
+      this.epoch = epoch;
+      this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('epoch', ?)", String(epoch));
+      for (const ws of this.ctx.getWebSockets()) {
+        const { claims: c } = ws.deserializeAttachment() || {};
+        if (c && !c.owner && (Number(c.epoch) || 0) < epoch) { try { ws.send(JSON.stringify({ t: 'error', code: 'revoked', message: 'signed out' })); ws.close(1008, 'revoked'); } catch {} }
+      }
+    }
+    return json({ ok: true, epoch: this.epoch });
+  }
+
+  // ── end-of-day rollover ───────────────────────────────────────────────
+  // Earlier-day bays still pending or ready are submitted as auto, through
+  // the ordinary write path with a system actor, then the next alarm is set
+  // for the coming store midnight (plus a minute of slack).
+  async alarm() {
+    try { this.rollover(); }
+    finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
+  }
+  // The store's own setting wins; STORE_TZ is the worker-wide fallback.
+  tz() { return this.state?.settings?.tz || this.env.STORE_TZ || DEFAULT_TZ; }
+  rollover(now = new Date()) {
+    if (!this.storeNo) return [];
+    const at = storeIso(now, this.tz()), today = storeDay(now, this.tz());
+    const events = rolloverDue(this.state.backfill, today).map(entity => ({ id: ulid(), store: this.storeNo, area: 'stockroom', type: 'submission.submit', entity, payload: { auto: true }, at, v: 1 }));
+    if (!events.length) return [];
+    return this.submit(events, { store: this.storeNo, roles: ['manager'], caps: ['stockroom'], device: 'system', owner: false, actor: 'system' });
   }
 
   // ── manifests ─────────────────────────────────────────────────────────
@@ -220,11 +279,16 @@ export class StoreObject extends DurableObject {
     if (!row) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published (expired or removed)`);
     return new Response(row.doc, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', ...CORS } });
   }
+  // The role is checked and the manifest.remove event accepted before the
+  // document goes: a refused remove changes nothing, and every removal that
+  // happens is in the log.
   removeManifest(manNo, claims) {
-    this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
+    if (!hasRole(claims, ['dock', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a manifest needs the dock code');
+    if (!this.sql.exec('SELECT 1 FROM manifests WHERE manNo = ?', manNo).toArray().length) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published`);
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.remove', entity: { manNo }, payload: {}, at: new Date().toISOString(), v: 1 };
     const [r] = this.submit([ev], claims);
-    if (!r.ok) throw new HttpError(400, r.code, r.message);
+    if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
+    this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
     return json({ ok: true, manNo });
   }
 
@@ -258,13 +322,16 @@ export class StoreObject extends DurableObject {
     if (this.sql.exec('SELECT 1 FROM maps WHERE version = ?', version).toArray().length) throw new HttpError(409, 'exists', `map version ${version} is already published; publish a new version`);
     const floors = Array.isArray(body.floors) ? body.floors : [];
     if (!floors.length) throw new HttpError(400, 'invalid_request', 'floors must list at least one floor with its svg');
-    const metaFloors = [];
+    const metaFloors = [], clean = [];
+    let stripped = 0;
     for (const f of floors) {
-      const id = String(f?.id ?? '').trim(), svg = String(f?.svg ?? '');
+      const id = String(f?.id ?? '').trim();
+      // Allow-list the markup: every device inserts it into the page.
+      const safe = sanitizeSvg(String(f?.svg ?? '')), svg = safe.svg;
+      stripped += safe.stripped; clean.push({ id, svg });
       if (!/^[\w-]{1,32}$/.test(id)) throw new HttpError(400, 'invalid_request', 'each floor needs an id of letters, digits or dashes');
       if (!/^\s*<svg[\s>]/i.test(svg) || !/<\/svg>\s*$/i.test(svg)) throw new HttpError(400, 'invalid_request', `floor ${id}: svg must be a complete <svg> document`);
       if (svg.length > MAP_FLOOR_MAX) throw new HttpError(413, 'payload_too_large', `floor ${id}: svg is over ${MAP_FLOOR_MAX / 1_000_000} MB`);
-      if (/<script[\s>]/i.test(svg) || /\son[a-z]+\s*=/i.test(svg)) throw new HttpError(400, 'invalid_request', `floor ${id}: svg must not contain scripts or event handlers`);
       // The walk-path network the editor authored for this floor rides in
       // the metadata: a few hundred nodes, so it stays with the floor row.
       let paths = null;
@@ -282,14 +349,14 @@ export class StoreObject extends DurableObject {
     const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments };
     const at = new Date().toISOString(), by = { device: claims.device || null, owner: true };
     this.sql.exec('INSERT INTO maps (version, meta, at, by) VALUES (?, ?, ?, ?)', version, JSON.stringify(meta), at, JSON.stringify(by));
-    for (const f of floors) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, String(f.id).trim(), String(f.svg));
+    for (const f of clean) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, f.id, f.svg);
     // The publish is an ordinary store event, so every device learns the
     // new version through its projection and the log shows who published.
     const ev = { id: ulid(), store: this.storeNo, area: 'store', type: 'map.publish', entity: { version }, payload: { floors: metaFloors.map(f => f.id), name: meta.name }, at, v: 1 };
     const r = this.applyOne(ev, { ...claims, roles: ['manager'], caps: claims.caps || [] });
     if (!r.ok) throw new HttpError(500, 'internal', `map stored but map.publish was refused: ${r.message}`);
     this.snapshotIfDue(); this.broadcast([r.event]);
-    return json({ ok: true, version, at, seq: r.seq, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
+    return json({ ok: true, version, at, seq: r.seq, stripped, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────────
@@ -299,16 +366,21 @@ export class StoreObject extends DurableObject {
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server, [claims.device || 'nodevice']);
     server.serializeAttachment({ claims });
-    return new Response(null, { status: 101, webSocket: client });
+    // A socket that offered the conduit subprotocol (token as the second) gets it back.
+    const offered = (request.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(x => x.trim());
+    return new Response(null, { status: 101, webSocket: client, headers: offered[0] === 'conduit' ? { 'Sec-WebSocket-Protocol': 'conduit' } : {} });
   }
 
   async webSocketMessage(ws, message) {
     let msg;
+    const size = typeof message === 'string' ? message.length : message.byteLength;
+    if (size > BATCH_MAX) return ws.send(JSON.stringify({ t: 'error', code: 'payload_too_large', message: 'frame is too large' }));
     try { msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)); }
     catch { return ws.send(JSON.stringify({ t: 'error', code: 'invalid_json', message: 'frames must be JSON' })); }
     const { claims } = ws.deserializeAttachment() || {};
     if (!claims) return ws.close(1008, 'no claims');
     if (claims.exp * 1000 < Date.now()) { ws.send(JSON.stringify({ t: 'error', code: 'unauthorised', message: 'token expired' })); return ws.close(1008, 'expired'); }
+    if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) { ws.send(JSON.stringify({ t: 'error', code: 'revoked', message: 'signed out' })); return ws.close(1008, 'revoked'); }
     switch (msg.t) {
       case 'hello': {
         const since = Number(msg.since || 0);
@@ -317,10 +389,14 @@ export class StoreObject extends DurableObject {
         return;
       }
       case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
+      // The one write outside the event log, on purpose: heartbeats are
+      // device telemetry every minute from every device, not store history,
+      // so they live in the devices projection only (owner and manager read
+      // it) and never become events. Every field is capped.
       case 'hb': {
         this.state.devices[claims.device || 'nodevice'] = {
-          app: msg.app || null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
-          area: msg.area || null, online: msg.online !== false, outbox: Number(msg.outbox) || 0, lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
+          app: msg.app ? String(msg.app).slice(0, 64) : null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
+          area: msg.area ? String(msg.area).slice(0, 64) : null, online: msg.online !== false, outbox: Math.max(0, Math.min(1e6, Number(msg.outbox) || 0)), lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
         };
         return;
       }
@@ -335,13 +411,19 @@ export class StoreObject extends DurableObject {
     for (const ws of this.ctx.getWebSockets()) {
       const { claims } = ws.deserializeAttachment() || {};
       for (const e of events) {
-        if (!claims || (!claims.owner && e.area !== 'store' && !claims.caps.includes(e.area))) continue;
+        if (!claims || (!claims.owner && e.area !== 'store' && !readable(claims).includes(e.area))) continue;
         try { ws.send(JSON.stringify({ t: 'event', event: e })); } catch {}
       }
     }
   }
 }
 
+// A JSON body no bigger than max (Content-Length may be absent or wrong).
+async function readBounded(request, max) {
+  const text = await request.text();
+  if (text.length > max) throw new HttpError(413, 'payload_too_large', `body is over ${max / 1_000_000} MB`);
+  try { return JSON.parse(text); } catch { throw new HttpError(400, 'invalid_json', 'body must be JSON'); }
+}
 function rowToEvent(r) {
   return { id: r.id, seq: r.seq, type: r.type, area: r.area, entity: JSON.parse(r.entity), payload: JSON.parse(r.payload), actor: JSON.parse(r.actor), at: r.at, v: r.v };
 }
@@ -351,6 +433,19 @@ function primaryRole(claims, roles) {
   return claims.roles.includes('manager') ? 'manager' : claims.roles[0];
 }
 
-// A read that belongs to one area needs that area on the token (the store's
-// entitlement, carried as a capability).
-function needArea(claims, area) { return (claims.caps || []).includes(area) ? null : fail(403, 'not_entitled', `${area} is not enabled for this store`); }
+// What a token may read. The store PIN opens the Floor; Stockroom and Back
+// dock data need that area's code (or the manager code) on the token as
+// well as the store's entitlement. The owner reads every entitled area.
+const ROLE_AREAS = { stockroom: ['stockroom'], dock: ['backdock'], manager: ['floor', 'stockroom', 'backdock'] };
+export function readable(claims) {
+  const caps = claims?.caps || [];
+  if (claims?.owner) return caps;
+  const roles = claims?.roles || [];
+  return caps.filter(a => a === 'floor' || roles.some(r => ROLE_AREAS[r]?.includes(a)));
+}
+// A read that belongs to one area: the store must be entitled to it and the
+// token must hold a role that opens it.
+function needArea(claims, area) {
+  if (!(claims.caps || []).includes(area)) return fail(403, 'not_entitled', `${area} is not enabled for this store`);
+  return readable(claims).includes(area) ? null : fail(403, 'unauthorised', `reading ${area === 'backdock' ? 'the Back dock' : 'the Stockroom'} needs its code`);
+}

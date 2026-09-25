@@ -290,6 +290,9 @@ const GLYPH = {
   'spill-kit': '<path d="M-7 -6h14l-2 12h-10z" fill="none" stroke="C" stroke-width="1.8" stroke-linejoin="round"/><path d="M-7 -6a7 3 0 0 1 14 0" fill="none" stroke="C" stroke-width="1.8"/>',
   hazard: '<path d="M0 -8l8 14h-16z" fill="none" stroke="C" stroke-width="1.8" stroke-linejoin="round"/><path d="M0 -2v4" stroke="C" stroke-width="2" stroke-linecap="round"/><circle cx="0" cy="4.5" r="1" fill="C"/>',
 };
+// The glyph for a marker type in a colour, or '' (maps published as raw SVG
+// by the legacy viewer carry icon-font text the shell swaps for these).
+export function markerGlyph(type, colour) { const g = GLYPH[markerType(type)]; return g ? g.replace(/"C"/g, `"${colour}"`) : ''; }
 function signInner(type, extClass) {
   const RED = '#e4002b', GREEN = '#009639', base = bg => `<rect class="em-icon-bg" x="-13" y="-13" width="26" height="26" rx="3" fill="${bg}" stroke="#ffffff" stroke-width="2"/>`;
   const BANDS = { foam: '#0057b8', powder: '#ffffff', co2: '#111111', wet_chem: '#e8b98a', liquid: '#ffd500' };

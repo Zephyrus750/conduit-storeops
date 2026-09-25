@@ -1,6 +1,6 @@
 // Numbered micro-departments per sub-department, as printed on the label
 // integrity sheet. Static for the pilot; later this comes with the map.
-export const SUBS = [['h1', 'H1', 'Kitchen'], ['h2', 'H2', 'BBL'], ['h3', 'H3', 'Decor & Pets'], ['h4', 'H4', 'Stationary'], ['c1', 'C1', 'Women’s Clothing'], ['c2', 'C2', 'Men’s Clothing'], ['c3', 'C3', 'Footwear'], ['c4', 'C4', 'Cosmetics & Accessories'], ['k1', 'K1', 'Activewear & Sporting'], ['k2', 'K2', 'Toys'], ['k3', 'K3', 'Nursery, Party & Confect.'], ['k4', 'K4', 'Kids Clothing'], ['flex', 'FLEX', 'Flex']];
+export const SUBS = [['h1', 'H1', 'Kitchen'], ['h2', 'H2', 'Bed, Bath, Laundry'], ['h3', 'H3', 'Decor & Pets'], ['h4', 'H4', 'Stationery'], ['c1', 'C1', 'Women’s Clothing'], ['c2', 'C2', 'Men’s Clothing'], ['c3', 'C3', 'Footwear'], ['c4', 'C4', 'Cosmetics & Accessories'], ['k1', 'K1', 'Active'], ['k2', 'K2', 'Toys'], ['k3', 'K3', 'Nursery / Party'], ['k4', 'K4', 'Kids’ Clothing'], ['flex', 'FLEX', 'Flex']];
 export const MICRO = {
   h1: ['021 Seasonal Food', '023 Books', '038 Kitchen', '040 Dining', '056 Appliances'],
   h2: ['015 Laundry & Storage', '054 Furniture', '056 Appliances', '072 Bathroom', '073 Bedroom Accessories', '074 Bed Linen'],

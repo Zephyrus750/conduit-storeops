@@ -66,7 +66,7 @@ export const CATALOGUE = {
   'truck.setLive':       T('backdock', D, ['truck']),
   'truck.setGoal':       T('backdock', D, ['truck']),                           // payload.goal ISO | null
   'truck.team.set':      T('backdock', D, ['truck'], { team: 'array' }),
-  'truck.finalise':      T('backdock', M, ['truck']),
+  'truck.finalise':      T('backdock', D, ['truck']),                           // the facilitator closes (legacy: facilitator code)
   'truck.import':        T('backdock', M, ['truck']),                           // a finalised truck's record from the legacy app, as-is
   'manifest.publish':    T('backdock', D, ['manNo']),                            // payload: dcNo, despatch, filename, consols, totalCartons, keycodes
   'manifest.remove':     T('backdock', D, ['manNo']),
@@ -88,6 +88,9 @@ export const CATALOGUE = {
   // ── Store-wide ───────────────────────────────────────────────────────
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
+  'store.settings.set':  T('store', M, []),
+  'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
+  'map.edit.resolve':    T('store', M, ['edit'], { status: 'string' }),       // accepted | declined; payload.note                                     // any of tz, dockGrid, minsPerCarton, autoLockMins (null = default)
   'device.heartbeat':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['device'], { app: 'string' }),
 };
 
@@ -100,5 +103,5 @@ export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist'],
   backdock: ['dock', 'plan'],
-  store: ['devices', 'map', 'roster'],
+  store: ['devices', 'map', 'roster', 'settings', 'mapedits'],
 };

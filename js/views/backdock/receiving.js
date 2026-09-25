@@ -4,8 +4,8 @@
 // the decant: start, pause, done, halts). Ported from Vector's
 // backdock-receiving and backdock-decant over the backdock reducers.
 
-import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
-import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, who, grid, startable, manifestIndex, publishManifestFile, attachManifest } from './common.js';
+import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate, camButton } from '../../ui.js';
+import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, who, dnumId, unfinished, grid, startable, manifestIndex, publishManifestFile, attachManifest } from './common.js';
 
 const st = { truck: null, land: { ref: '', ptype: 'chep', cartons: '' }, view: 'receive', arm: null, sel: null, halting: false, pending: [], manPick: false };
 const dispatch = (ctx, type, entity, payload) => ctx.store.dispatch({ type, entity, payload });
@@ -43,7 +43,7 @@ function desktop(ctx) {
   const m = model(ctx), t = m.t, pr = m.pr, live = t?.status === 'live';
   const head = vh('Receiving', sub(fmtDate(todayKey()), `${m.open.length} truck${m.open.length === 1 ? '' : 's'} on the board`, t ? (live ? `T${truckNo(t.id)} live` : `T${truckNo(t.id)} staged`) : 'dock clear'),
     (t ? `<button class="btn" data-act="manpick">${ic('file')}${t.manifest ? 'Manifest ' + esc(t.manifest.manNo) : 'Manifest'}</button><button class="btn" data-act="goal">${ic('clock')}${t.goalAt ? 'Goal ' + fmtHM(t.goalAt) : 'Set goal'}</button>` + (live ? `<button class="btn" data-act="finalise">${ic('check')}Finalise</button>` : `<button class="btn primary" data-act="golive">${ic('truck')}Start receiving T${truckNo(t.id)}</button>`) : '') + `<button class="btn primary" data-act="newtruck">${ic('plus')}New truck</button>`, 'm-receiving');
-  if (!t) return head + `<div class="card bdr-empty" style="padding:28px;text-align:center"><div style="font-size:34px;color:var(--faint)">${ic('truck')}</div><b style="display:block;font-size:18px;margin:8px 0 4px">No truck on the dock</b><p class="lbl">Start receiving the next truck here, or let a dock phone land it. The board wakes either way.</p><button class="btn primary" data-act="newtruck">${ic('plus')}Start receiving a truck</button></div>`;
+  if (!t) return head + `<div class="card bdr-empty" style="padding:28px;text-align:center"><div style="font-size:34px;color:var(--faint)">${ic('truck')}</div><b style="display:block;font-size:18px;margin:8px 0 4px">No truck on the dock</b><p class="lbl">Start receiving the next truck here, or let a dock phone land it. The board wakes either way.</p><button class="btn primary" data-act="newtruck">${ic('plus')}Start receiving a truck</button></div>` + heldCard(m.dock);
   const strip = `<div class="trk-strip">${m.open.map(x => truckCard(x, x.id === t.id)).join('')}</div>`;
   const man = t.manifest;
   const headcard = `<div class="card bdr-headcard"><div class="bdr-head"><span class="bdr-tile">${ic('truck')}</span><div class="bdr-tt"><b>Truck ${esc(truckNo(t.id))}</b><span class="tst ${esc(t.status)}">${live ? 'Live' : 'Staged'}</span><small>${live ? `landed ${fmtHM(t.landedAt)} · ${pr.count} pallet${pr.count === 1 ? '' : 's'}${pallets(t).some(p => p.carryover) ? ` (${pallets(t).filter(p => p.carryover).length} carryover)` : ''} · ${pr.active} decanting` : 'staged · the first pallet landed makes it live'}${m.halt ? ` · <b style="color:#B91C1C">halted · ${esc(HALT_NAME[m.halt.reason] || m.halt.reason)}</b>` : ''}</small></div>` +
@@ -53,7 +53,7 @@ function desktop(ctx) {
   const team = t.team || [];
   const teamcard = `<div class="card"><div class="ch"><h3>${live ? 'Decanting now' : 'Team staged'}</h3><span class="cs-dim">${team.length ? `${team.length} on the dock` : 'no team yet'}</span></div>` +
     (team.length ? `<div class="bdr-team">${team.map(mm => `<div class="bdr-tc${m.run[mm.pid] ? ' on' : ''}"><b class="bdr-who">${esc(who(mm))}</b><span class="bdr-state">${m.run[mm.pid] ? `decanting <b>${esc(m.run[mm.pid])}</b>` : 'between pallets'}</span><button class="bdr-x" data-act="team-drop" data-pid="${esc(mm.pid)}" title="Remove from this truck">${ic('x')}</button></div>`).join('')}</div>` : '') +
-    `<div class="bdr-teamadd"><input class="bdr-in" data-field="team" placeholder="Add a device or name, e.g. D4" maxlength="24"><button class="btn sm" data-act="team-add">${ic('plus')}Add</button></div><p class="lbl">Devices, not people: whoever signs in on D1 is D1 for the day.</p></div>`;
+    `<div class="bdr-teamadd"><input class="bdr-in mono" data-field="team" placeholder="Add a D-number, e.g. D4" maxlength="6" autocapitalize="characters"><button class="btn sm" data-act="team-add">${ic('plus')}Add</button></div><p class="lbl">D-numbers only: no names are kept on the dock.</p></div>`;
   const landed = pallets(t).slice().sort((a, b) => (a.landedAt || '').localeCompare(b.landedAt || ''));
   const landedcard = `<div class="card"><div class="ch"><h3>Landed today</h3><span class="cs-dim">${landed.length ? `${landed.length} pallets · newest last` : `Truck ${truckNo(t.id)}`}</span></div>${landed.length ? `<div class="list rcv-list bdr-landed">${landed.map(p => `<div class="li${st.sel === p.ref ? ' sel' : ''}" data-act="cell" data-ref="${esc(p.ref)}"><span class="loc">${esc(p.ref)}</span><span class="nm">${esc(PT_NAME[p.ptype] || p.ptype)}${p.carryover ? ' · carryover' : ''} · ${p.cartons ?? '–'} cartons${p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}</span><span class="rcv-st ${p.status}">${p.status === 'done' ? 'Done' : p.status === 'active' ? 'Decanting' : p.status === 'paused' ? 'Paused' : 'Waiting'}</span><span class="rt">${p.carryover ? 'Yesterday' : fmtHM(p.landedAt)}</span></div>`).join('')}</div>` : `<div class="pempty">Nothing landed yet</div>`}${st.sel && t.pallets[st.sel] ? palletPanel(t, t.pallets[st.sel], true) : ''}</div>`;
   const picker = !st.manPick ? '' : (() => {
@@ -81,17 +81,26 @@ function palletPanel(t, p, desk) {
     st.pending.filter(x => x.ref === p.ref).map((x, i) => `<div class="bdk-vrow warn"><span>⚠</span><b class="mono">${esc(x.id)}</b><span>not on this manifest</span><span class="bdk-vbtns"><button class="btn sm" data-act="pend-add" data-i="${i}">Add &amp; flag</button><button class="btn sm" data-act="pend-drop" data-i="${i}">Ignore</button></span></div>`).join('');
   return `<div class="bdk-pal${desk ? ' desk' : ''}"><div class="bdk-pal-h"><b>Pallet ${esc(p.ref)}</b><span class="tst ${s === 'done' ? 'done' : s === 'active' ? 'live' : 'staged'}">${s}</span>${p.carryover ? '<span class="status warn">carryover</span>' : ''}<button class="ibtn" data-act="closepal" title="Close">${ic('x')}</button></div>` +
     `<div class="bdk-pal-b"><div class="bdk-ptrow">${PTYPES.map(x => `<button class="bdr-pt${p.ptype === x[0] ? ' on' : ''}" data-act="pal-pt" data-pt="${x[0]}"><i style="background:${x[2]}"></i>${x[1]}</button>`).join('')}</div>` +
-    `<div class="bdk-fields"><label>Cartons<input class="bdr-in mono" data-field="pcartons" inputmode="numeric" maxlength="3" value="${p.cartons ?? ''}"></label><label>Est. mins<input class="bdr-in mono${p.expectedBasis === 'manual' ? '' : ' auto'}" data-field="pexp" inputmode="numeric" maxlength="4" value="${p.expectedMins ?? ''}" title="${p.expectedBasis === 'manual' ? 'set by hand' : `auto · ${STD_MINS_PER_CARTON} min per carton`}"></label><label>Note<input class="bdr-in" data-field="pnote" maxlength="120" placeholder="optional" value="${esc(p.note || '')}"></label></div>` +
-    `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="pscan" inputmode="numeric" enterkeyhint="done" placeholder="Scan or type a pallet label" autocomplete="off"><button class="btn sm" data-act="pscan">${ic('barcode')}Add</button></div>${scans ? `<div class="bdk-verified">${scans}</div>` : ''}` +
+    `<div class="bdk-fields"><label>Cartons<input class="bdr-in mono" data-field="pcartons" inputmode="numeric" maxlength="3" value="${p.cartons ?? ''}"></label><label>Est. mins<input class="bdr-in mono${p.expectedBasis === 'manual' ? '' : ' auto'}" data-field="pexp" inputmode="numeric" maxlength="4" value="${p.expectedMins ?? ''}" title="${p.expectedBasis === 'manual' ? 'set by hand' : `auto · ${t.minsPerCarton ?? STD_MINS_PER_CARTON} min per carton`}"></label><label>Note<input class="bdr-in" data-field="pnote" maxlength="120" placeholder="optional" value="${esc(p.note || '')}"></label></div>` +
+    `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="pscan" inputmode="numeric" enterkeyhint="done" placeholder="Scan or type a pallet label" autocomplete="off">${camButton('pscan')}<button class="btn sm" data-act="pscan">${ic('barcode')}Add</button></div>${scans ? `<div class="bdk-verified">${scans}</div>` : ''}` +
     `<div class="bdk-decant"><div class="bdk-declab">Decant${p.assignedTo ? ` · ${esc(who(team.find(m => m.pid === p.assignedTo) || { pid: p.assignedTo }))}` : ''}</div>${s !== 'done' ? picker : ''}<div class="bdk-verbs">${verbs}</div></div>` +
     `<div class="bdk-palacts"><button class="btn sm" data-act="pal-save">${ic('check')}Update</button><button class="btn sm" data-act="pal-remove">${ic('trash')}Remove</button></div></div></div>`;
+}
+
+// Pallets held at the last finalise, between trucks: on the board until
+// the next truck takes them.
+function heldCard(dock) {
+  const h = dock.rollover; if (!h) return '';
+  const list = Object.values(h.pallets).sort((a, b) => a.ref.localeCompare(b.ref, 'en', { numeric: true }));
+  return `<div class="card bdr-held"><div class="ch"><h3>Held for the next truck</h3><span class="cs-dim">from Truck ${esc(truckNo(h.from))} · ${list.length} pallet${list.length === 1 ? '' : 's'} · ${list.reduce((n, p) => n + (p.cartons || 0), 0)} ctn</span></div>` +
+    `<div class="list">${list.map(p => `<div class="li"><span class="loc">${esc(p.ref)}</span><span class="nm">${esc(PT_NAME[p.ptype] || p.ptype)} · ${p.cartons ?? '–'} cartons${p.carriedFrom && p.carriedFrom !== h.from ? ` · first landed on Truck ${esc(truckNo(p.carriedFrom))}` : ''}</span><span class="rcv-st ${esc(p.status)}">${p.status === 'paused' ? 'Paused' : 'Waiting'}</span></div>`).join('')}</div><p class="lbl">They stay on their bays and join the next truck when it starts.</p></div>`;
 }
 
 // ── phone ──────────────────────────────────────────────────────────────
 function mobile(ctx) {
   const m = model(ctx), t = m.t, pr = m.pr;
   const chips = `<div class="bdk-tchips">${m.open.map(x => `<button class="bdk-tchip${x.id === st.truck ? ' on' : ''}" data-act="pick" data-id="${esc(x.id)}">Truck ${esc(truckNo(x.id))}<i>${esc(x.status)}</i></button>`).join('')}<button class="bdk-tchip add" data-act="newtruck">+ New truck</button></div>`;
-  if (!t) return mhead('Receiving', 'No truck on the dock') + chips + `<div class="mv-note">${ic('truck')}Tap <b>New truck</b> when the first pallet comes off. The desktop board follows.</div>`;
+  if (!t) return mhead('Receiving', 'No truck on the dock') + chips + `<div class="mv-note">${ic('truck')}Tap <b>New truck</b> when the first pallet comes off. The desktop board follows.</div>` + heldCard(m.dock);
   const run = st.view === 'run';
   const head = mhead(`Truck ${esc(truckNo(t.id))}`, t.status === 'live' ? `landed ${fmtHM(t.landedAt)}${t.goalAt ? ' · goal ' + fmtHM(t.goalAt) : ''}` : 'staged · land a pallet to go live');
   const toggle = `<div class="bdk-vt"><button class="${run ? '' : 'on'}" data-act="view" data-mode="receive">Receive</button><button class="${run ? 'on' : ''}" data-act="view" data-mode="run">Run</button></div>`;
@@ -120,15 +129,38 @@ async function onAct(ctx, a, root) {
     if (act === 'manpick') { st.manPick = !st.manPick; return ctx.rerender(); }
     if (act === 'manattach') { a.disabled = true; await attachManifest(ctx, id, a.dataset.man); st.manPick = false; toast(`${a.dataset.man} attached to Truck ${truckNo(id)}`); return; }
     if (act === 'view') { st.view = a.dataset.mode; st.arm = null; st.sel = null; return ctx.rerender(); }
-    if (act === 'newtruck') { const nid = nextTruckId(m.dock); await dispatch(ctx, 'truck.create', { truck: nid }, { landedAt: new Date().toISOString() }); await dispatch(ctx, 'truck.setLive', { truck: nid }, {}); st.truck = nid; st.sel = null; toast(`Truck ${truckNo(nid)} is receiving`); return; }
+    // One truck at a time: an open truck is finalised by the new one, and its
+    // unfinished pallets come with it on their bays. Pallets held at the last
+    // finalise join the new truck unless the receiver starts it empty.
+    if (act === 'newtruck') {
+      const nid = nextTruckId(m.dock), cur = t || m.open[0], payload = { landedAt: new Date().toISOString() };
+      if (cur) {
+        const left = unfinished(cur);
+        if (left.some(p => p.status === 'active')) return toast(`Pause or finish what is being decanted on Truck ${truckNo(cur.id)} first`, 'bad');
+        const ctn = left.reduce((n, p) => n + (p.cartons || 0), 0);
+        if (!confirm(left.length ? `Truck ${truckNo(cur.id)} is still open with ${left.length} unfinished pallet${left.length === 1 ? '' : 's'} (${ctn} cartons).\n\nFinalise it and carry ${left.length === 1 ? 'that pallet' : 'them'} onto Truck ${truckNo(nid)}? ${left.length === 1 ? 'It stays' : 'They stay'} on the same bays.` : `Finalise Truck ${truckNo(cur.id)} and start Truck ${truckNo(nid)}?`)) return;
+        payload.carryFrom = cur.id;
+      } else if (m.dock.rollover) {
+        const n = Object.keys(m.dock.rollover.pallets).length;
+        if (!confirm(`${n} pallet${n === 1 ? '' : 's'} held from Truck ${truckNo(m.dock.rollover.from)} join${n === 1 ? 's' : ''} Truck ${truckNo(nid)}.\n\nOK takes ${n === 1 ? 'it' : 'them'} on. Cancel starts the truck empty and lets ${n === 1 ? 'it' : 'them'} go.`)) payload.takeRollover = false;
+      }
+      await dispatch(ctx, 'truck.create', { truck: nid }, payload); await dispatch(ctx, 'truck.setLive', { truck: nid }, {});
+      st.truck = nid; st.sel = null; toast(payload.carryFrom ? `Truck ${truckNo(payload.carryFrom)} finalised · Truck ${truckNo(nid)} is receiving` : `Truck ${truckNo(nid)} is receiving`); return;
+    }
     if (act === 'golive') { await dispatch(ctx, 'truck.setLive', { truck: id }, {}); return; }
     if (act === 'goal') { const cur = t.goalAt ? fmtHM(t.goalAt) : ''; const v = prompt('Finish goal, time of day (HH:MM). Blank to clear:', cur); if (v === null) return; let goal = null; if (v.trim()) { const mm = /^(\d{1,2}):(\d{2})$/.exec(v.trim()); if (!mm) return toast('Enter a time like 14:30', 'bad'); const d = new Date(); d.setHours(+mm[1], +mm[2], 0, 0); if (d.getTime() < Date.now() - 60000) d.setDate(d.getDate() + 1); goal = d.toISOString(); } await dispatch(ctx, 'truck.setGoal', { truck: id }, { goal }); toast(goal ? `Goal ${fmtHM(goal)}` : 'Goal cleared'); return; }
-    if (act === 'finalise') { const pr = m.pr; if (!confirm(`Finalise truck ${truckNo(id)}? ${pr.done} of ${pr.total} cartons decanted. It moves to history and leaves the board.`)) return; await dispatch(ctx, 'truck.finalise', { truck: id }, {}); st.truck = null; st.sel = null; toast(`Truck ${truckNo(id)} finalised`); return; }
+    if (act === 'finalise') {
+      const pr = m.pr, left = unfinished(t);
+      if (left.some(p => p.status === 'active')) return toast('Pause or finish what is being decanted first', 'bad');
+      if (!confirm(`Finalise truck ${truckNo(id)}? ${pr.done} of ${pr.total} cartons decanted. It moves to history and leaves the board.` + (left.length ? `\n\n${left.length} unfinished pallet${left.length === 1 ? ' is' : 's are'} held for the next truck and stay${left.length === 1 ? 's' : ''} on ${left.length === 1 ? 'its bay' : 'their bays'}.` : ''))) return;
+      await dispatch(ctx, 'truck.finalise', { truck: id }, left.length ? { rollover: true } : {}); st.truck = null; st.sel = null;
+      toast(left.length ? `Truck ${truckNo(id)} finalised · ${left.length} pallet${left.length === 1 ? '' : 's'} held for the next truck` : `Truck ${truckNo(id)} finalised`); return;
+    }
     if (act === 'halt') { st.halting = !st.halting; return ctx.rerender(); }
     if (act === 'haltgo') { st.halting = false; await dispatch(ctx, 'halt.start', { truck: id }, { reason: a.dataset.reason }); toast(`Decant halted · ${HALT_NAME[a.dataset.reason]}`); return; }
     if (act === 'haltend') { await dispatch(ctx, 'halt.end', { truck: id }, {}); toast('Decant running'); return; }
     if (act === 'ptype') { st.land.ref = field('ref') || st.land.ref; st.land.cartons = field('cartons'); st.land.ptype = a.dataset.pt; return ctx.rerender(); }
-    if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const pid = v.toUpperCase().replace(/\s+/g, ''); if ((t.team || []).some(x => x.pid === pid)) return toast(`${pid} is already on the truck`); await dispatch(ctx, 'truck.team.set', { truck: id }, { team: [...(t.team || []), { pid, name: v, dnum: /^D\d+$/i.test(pid) ? pid : null }] }); return; }
+    if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const pid = dnumId(v); if (!pid) return toast('Enter a D-number, like D4. Names are not kept.', 'bad'); if ((t.team || []).some(x => x.pid === pid)) return toast(`${pid} is already on the truck`); await dispatch(ctx, 'truck.team.set', { truck: id }, { team: [...(t.team || []).map(x => x.pid), pid] }); return; }
     if (act === 'team-drop') { await dispatch(ctx, 'truck.team.set', { truck: id }, { team: (t.team || []).filter(x => x.pid !== a.dataset.pid) }); return; }
     if (act === 'cell') {
       const ref = a.dataset.ref, p = t.pallets[ref];
@@ -163,7 +195,7 @@ async function onAct(ctx, a, root) {
       catch (e) { if (e.code === 'not_on_manifest') { st.pending.push({ ref: st.sel, id: id9 }); ctx.rerender(); toast(`${id9} is not on this manifest. Old label from a reused tub?`, 'bad'); } else throw e; }
       return;
     }
-    if (act === 'pend-add') { const x = st.pending.filter(y => y.ref === st.sel)[+a.dataset.i]; st.pending = st.pending.filter(y => y !== x); const p = t.pallets[st.sel]; await dispatch(ctx, 'pallet.update', { truck: id, bay: st.sel }, { scanIds: [...p.scanIds, x.id], excluded: true }); toast(`${x.id} flagged in the receiving audit`); return; }
+    if (act === 'pend-add') { const x = st.pending.filter(y => y.ref === st.sel)[+a.dataset.i]; st.pending = st.pending.filter(y => y !== x); const p = t.pallets[st.sel]; await dispatch(ctx, 'pallet.update', { truck: id, bay: st.sel }, { scanIds: [...p.scanIds, x.id] }); toast(`${x.id} flagged in the receiving audit`); return; }
     if (act === 'pend-drop') { const x = st.pending.filter(y => y.ref === st.sel)[+a.dataset.i]; st.pending = st.pending.filter(y => y !== x); return ctx.rerender(); }
   } catch (e) { toast(e.message, 'bad'); }
 }

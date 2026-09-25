@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { initialState, apply } from '../../shared/reducers.js';
-import { addMonths } from '../../shared/reducers/floor.js';
+import { addMonths, focusDone } from '../../shared/reducers/floor.js';
 import { CATALOGUE } from '../../shared/catalogue.js';
 import { ulid } from '../../shared/ulid.js';
 
@@ -101,4 +101,16 @@ test('refresh: an unmark holds against a mark that arrives late from another dev
   assert.equal(s.refresh.weeks['2026-W38']['A8 S2'], undefined, 'the phone’s earlier tap does not bring the mark back');
   assert.equal(apply(s, ev('refresh.mark', k, {}, { at: '2026-09-20T08:09:00+08:00', actor: { role: 'floor', device: 'PHONE' } })), null);
   assert.equal(s.refresh.weeks['2026-W38']['A8 S2'].devices[0], 'PHONE', 'a fresh tap after the unmark marks again');
+});
+
+test('refresh X/100 counts focus departments only when a focus is set; a mark keeps its department', () => {
+  const s = initialState();
+  apply(s, ev('refresh.mark', { week: '2026-W37', segment: 'A16 S1' }, { dept: 'H1' }));
+  apply(s, ev('refresh.mark', { week: '2026-W37', segment: 'B2 S1' }, { dept: 'k2' }));
+  apply(s, ev('refresh.mark', { week: '2026-W37', segment: 'C3 S1' }));
+  const marks = s.refresh.weeks['2026-W37'];
+  assert.equal(marks['A16 S1'].dept, 'h1');
+  assert.equal(focusDone(marks, []), 3, 'no focus: every mark');
+  assert.equal(focusDone(marks, ['h1']), 2, 'focus h1: the h1 mark and the one with no department');
+  assert.equal(focusDone(marks, ['h1'], (seg, m) => m.dept || { 'C3 S1': 'c1' }[seg]), 1);
 });

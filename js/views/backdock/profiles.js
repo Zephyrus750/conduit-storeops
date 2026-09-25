@@ -7,6 +7,7 @@
 import { ic, esc, vh, sub, toast, mhead, ago, fmtDate } from '../../ui.js';
 import { ensureNames, nameHtml } from '../stockroom/common.js';
 import { depthOf } from '../../../shared/profiles.js';
+import { csvLines } from '../../../shared/records.js';
 
 const st = { doc: null, at: 0, error: null, loading: false, q: '', cls: 'all' };
 const CLS = { deep: ['DEEP', '#DCFCE7', '#166534', 'several cartons in the last arrival'], recent: ['RECENT', '#EDE9FE', '#5B21B6', 'arrived in the last 3 weeks'], change: ['PACK CHANGE', '#FEF3C7', '#92400E', 'the supplier re-cartoned this line'] };
@@ -47,7 +48,7 @@ export default {
       else if (a.dataset.act === 'cls') { st.cls = a.dataset.v; ctx.rerender(); }
       else if (a.dataset.act === 'export') {
         const { all } = rows();
-        const text = ['keycode,units_per_carton,manifests,consistency,last_arrival,last_units,last_cartons,pack_change_from', ...all.map(r => [r.kc, r.p.ctn, r.p.trucks, r.p.consistency, r.p.last_arrival?.date || '', r.p.last_arrival?.units ?? '', r.p.last_arrival?.cartons ?? '', r.p.pack_change?.prev_ctn ?? ''].join(','))].join('\n') + '\n';
+        const text = csvLines(['keycode', 'units_per_carton', 'manifests', 'consistency', 'last_arrival', 'last_units', 'last_cartons', 'pack_change_from'], all.map(r => [r.kc, r.p.ctn, r.p.trucks, r.p.consistency, r.p.last_arrival?.date || '', r.p.last_arrival?.units ?? '', r.p.last_arrival?.cartons ?? '', r.p.pack_change?.prev_ctn ?? '']));
         const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); const l = document.createElement('a'); l.href = url; l.download = `carton-profiles-${ctx.storeNo}.csv`; l.click(); setTimeout(() => URL.revokeObjectURL(url), 5000); toast(`${all.length} profiles exported`);
       }
     });

@@ -18,8 +18,8 @@
 //                         clearMins, haltMins, haltCount, downtime, teamRate, perPerson, perDept, audit, carriedIn } ] }
 //   /api/state?planner    { days: { YYYY-MM-DD: { slots: { n: { eta, note, team, manifest } } } } }
 //   /api/state?rollover   leftover pallets held for the next truck, or null
-// Names are withheld without the names code; Conduit keeps devices, not
-// people, so team members import by D-number.
+// Conduit keeps D-numbers, never names: team members, workers and crew
+// credit import as 'D4'.
 //
 // Closed trucks arrive as truck.import rows (the record DV computed, kept
 // as-is). Open trucks replay as the events that built them. Event ids are
@@ -27,7 +27,7 @@
 
 import { HttpError } from './http.js';
 import { importId } from './import.js';
-import { PTYPES, HALT_REASONS } from '../shared/reducers/backdock.js';
+import { PTYPES, HALT_REASONS, dnumId } from '../shared/reducers/backdock.js';
 
 const TRUCK_RE = /^\d{4}-\d{2}-\d{2}-T\d+$/;
 const iso = ms => new Date(Number(ms) || Date.now()).toISOString().replace(/\.\d{3}Z$/, '+00:00');
@@ -50,8 +50,9 @@ function manifestOf(m, warnings, where) {
 export function mapDV({ active, config, history, trucks = {}, planner, rollover }, { no } = {}) {
   const warnings = [], events = [], counts = { history: 0, trucks: 0, pallets: 0, planner: 0, events: 0 };
   const people = new Map((config?.people || []).map(p => [String(p.pid), p]));
-  const who = pid => { const p = people.get(String(pid)); return p?.dnum || String(pid); };
-  const member = pid => { const p = people.get(String(pid)) || {}; return { pid: who(pid), name: p.name || '', dnum: p.dnum || null }; };
+  // A person is their D-number; a name is never carried over.
+  const who = pid => dnumId(people.get(String(pid))?.dnum) || dnumId(pid) || String(pid);
+  const member = pid => ({ pid: who(pid) });
   const push = (seed, at, type, entity, payload = {}) => { events.push({ seed, ms: at, type, area: 'backdock', entity, payload }); };
 
   // 1. the archive
@@ -86,7 +87,10 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
     const man = manifestOf(d.manifest, warnings, id);
     if (man) push(`${id}:manifest`, base + 2000, 'manifest.attach', T, man);
     else if (d.manifest) warnings.push(`${id}: its manifest had no usable consolidations and was not attached`);
-    if ((d.team || []).length) push(`${id}:team`, base + 3000, 'truck.team.set', T, { team: d.team.map(m => member(m.pid)) });
+    // The team is the truck's team plus anyone who worked a pallet on it, so
+    // every imported segment passes the reducer's team check.
+    const crew = [...new Set([...(d.team || []).map(m => String(m.pid)), ...Object.values(d.pallets || {}).flatMap(p => (p.segments || []).map(s => String(s.pid)))].filter(x => x && x !== 'undefined'))];
+    if (crew.length) push(`${id}:team`, base + 3000, 'truck.team.set', T, { team: crew.map(member) });
     if (d.goalAt) push(`${id}:goal`, base + 4000, 'truck.setGoal', T, { goal: d.goalAt });
     const pallets = Object.values(d.pallets || {}).sort((a, b) => num(a.n) - num(b.n));
     let landAt = base + 10000, untyped = 0;
@@ -99,7 +103,7 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
       const first = segs[0] ? ms(segs[0].start) - 1000 : null;
       landAt = first && first < landAt ? first : landAt;
       const scanIds = [...new Set([...(Array.isArray(p.scanIds) ? p.scanIds : []), p.scanId].filter(Boolean).map(s => String(s).replace(/\D/g, '').slice(-9)))];
-      push(`${id}:land:${ref}`, landAt, 'pallet.land', B, { ptype: PTYPES.includes(p.ptype) ? p.ptype : 'chep', cartons: p.cartons == null ? null : num(p.cartons), ...(p.expectedBasis === 'manual' && p.expectedMins != null ? { expectedMins: num(p.expectedMins) } : {}), consolIds: (p.consolIds?.length ? p.consolIds : p.consolId ? [p.consolId] : []).map(String), scanIds, note: p.note || '', carryover: !!p.carriedFrom, excluded: !!p.excluded });
+      push(`${id}:land:${ref}`, landAt, 'pallet.land', B, { ptype: PTYPES.includes(p.ptype) ? p.ptype : 'chep', cartons: p.cartons == null || !(num(p.cartons) >= 1) ? null : Math.min(500, num(p.cartons)), ...(p.expectedBasis === 'manual' && p.expectedMins != null ? { expectedMins: num(p.expectedMins) } : {}), consolIds: (p.consolIds?.length ? p.consolIds : p.consolId ? [p.consolId] : []).map(String), scanIds, note: p.note || '', carryover: !!p.carriedFrom, excluded: !!p.excluded });
       landAt += 1000; counts.pallets += 1;
       segs.forEach((s, i) => {
         push(`${id}:seg:${ref}:${i}:start`, ms(s.start), 'pallet.start', B, { pid: who(s.pid) });
@@ -134,7 +138,7 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
   }
 
   if (rollover && (rollover.pallets || []).length) warnings.push(`${rollover.pallets.length} pallet${rollover.pallets.length === 1 ? '' : 's'} held over from ${rollover.fromId || 'the last truck'} ${rollover.pallets.length === 1 ? 'was' : 'were'} not imported: land ${rollover.pallets.length === 1 ? 'it' : 'them'} on the next truck as a carry-over`);
-  const g = config?.grid; if (g && (num(g.rows) !== 4 || num(g.cols) !== 7)) warnings.push(`DV used a ${g.rows} × ${g.cols} dock grid; Conduit's is 4 × 7`);
+  const g = config?.grid; if (g && (num(g.rows) !== 4 || num(g.cols) !== 7)) warnings.push(`DV used a ${g.rows} × ${g.cols} dock grid; set the same grid in Settings › Store before the first truck`);
   counts.events = events.length;
   return { events, warnings, counts, store: { name: config?.storeName || null, storeNumber: config?.settings?.storeNo || null } };
 }
@@ -142,6 +146,10 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
 export async function importDV(env, { no, url, dry = false, apply, fetchImpl = fetch }) {
   const base = String(url || '').trim().replace(/\/+$/, '').replace(/\/api\/state$/, '');
   if (!/^https?:\/\/[\w.-]+(:\d+)?$/.test(base)) throw new HttpError(400, 'invalid_request', 'url must be the Decant Visualiser site, like https://busselton-dock.netlify.app');
+  // The worker fetches this address, so outside dev it must be a public https
+  // site: no plain http, no bare IP address, no localhost.
+  const host = new URL(base).hostname, local = ['dev', 'test'].includes(env.ENVIRONMENT);
+  if (!local && (!base.startsWith('https://') || /^[\d.]+$/.test(host) || host === 'localhost' || !host.includes('.'))) throw new HttpError(400, 'invalid_request', 'url must be a public https site, like https://busselton-dock.netlify.app');
   if (base.startsWith('http://') && env.ENVIRONMENT !== 'dev' && env.ENVIRONMENT !== 'test') throw new HttpError(400, 'invalid_request', 'the DV site must be https');
   const get = async (q, optional = false) => {
     let r;

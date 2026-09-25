@@ -6,7 +6,7 @@
 
 import { $, ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
 import { attachConsols } from '../../../shared/manifest.js';
-import { manifestIndex, truckNo, who } from './common.js';
+import { manifestIndex, truckNo, who, dnumId } from './common.js';
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const st = { week: 0, sel: null, busy: false };
@@ -36,7 +36,7 @@ function editor(ctx, plan, dock) {
   return `<div class="card pedit"><div class="ch"><h3>Truck ${n} · ${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MON[d.getMonth()]}</h3>${t ? `<span class="tst ${esc(t.status)}">${esc(t.status)}</span>` : ''}</div>` +
     `<div class="pf"><label>ETA</label><input class="inp" data-field="eta" value="${esc(slot.eta || '')}" placeholder="06:30" maxlength="5"><span class="cs-dim">24h · the dock board sorts by it</span></div>` +
     `<div class="pf"><label>Manifest</label>${slot.manifest ? `<div class="pman">${ic('file')}<div><b>${esc(slot.manifest.manNo)}</b><span>${(slot.manifest.consols || []).length} consols · ${cartonsOf(slot.manifest)} cartons</span></div><button class="btn sm" data-act="unstage">Remove</button></div>` : ''}<div class="pman"><select class="inp" data-field="man"><option value="">${free.length ? 'Choose a published manifest…' : 'Nothing free in the library'}</option>${free.filter(m => m.manNo !== slot.manifest?.manNo).map(m => `<option value="${esc(m.manNo)}">${esc(m.manNo)} · ${m.consols} consols · ${m.totalCartons}c${m.despatch ? ' · ' + esc(m.despatch) : ''}</option>`).join('')}</select><button class="btn sm primary" data-act="stage">Stage</button></div></div>` +
-    `<div class="pf"><label>Decant team</label><div class="dk-team">${(slot.team || []).map(m => `<span class="dk-tc on"><span class="av">${esc(who(m))}</span><button class="dk-x" data-act="team-drop" data-pid="${esc(m.pid)}" title="Remove">${ic('x')}</button></span>`).join('')}<span class="dk-tc add"><input class="inp" data-field="team" placeholder="D4" maxlength="24" style="width:70px"><button class="ibtn sm" data-act="team-add" title="Add">${ic('plus')}</button></span></div><span class="cs-dim">Devices, not people. Whoever signs in on D1 is D1 for the day.</span></div>` +
+    `<div class="pf"><label>Decant team</label><div class="dk-team">${(slot.team || []).map(m => `<span class="dk-tc on"><span class="av">${esc(who(m))}</span><button class="dk-x" data-act="team-drop" data-pid="${esc(m.pid)}" title="Remove">${ic('x')}</button></span>`).join('')}<span class="dk-tc add"><input class="inp" data-field="team" placeholder="D4" maxlength="6" autocapitalize="characters" style="width:70px"><button class="ibtn sm" data-act="team-add" title="Add">${ic('plus')}</button></span></div><span class="cs-dim">D-numbers only: no names are kept on the dock.</span></div>` +
     `<div class="pf"><label>Note</label><input class="inp" data-field="note" value="${esc(slot.note || '')}" placeholder="Anything the dock should know" maxlength="200"></div>` +
     `<div class="pf-acts"><button class="btn primary" data-act="save">${ic('check')}Save</button><button class="btn" data-act="remove">Remove truck</button></div></div>`;
 }
@@ -73,7 +73,7 @@ export default {
         else if (act === 'add') { st.sel = a.dataset.slot; const { date, n } = cur(); await set(date, n, { eta: null, note: '' }); }
         else if (act === 'save') { const { date, n } = cur(); const eta = field('eta').trim(); if (eta && !/^\d{2}:\d{2}$/.test(eta)) return toast('Enter a time like 06:30', 'bad'); await set(date, n, { eta: eta || null, note: field('note') }); toast('Saved'); }
         else if (act === 'remove') { const { date, n } = cur(); if (!confirm(`Remove Truck ${n} from ${fmtDate(date)}?`)) return; await ctx.store.dispatch({ type: 'plan.remove', entity: { date, slot: n } }); st.sel = null; }
-        else if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const { date, n, slot } = cur(); const pid = v.toUpperCase().replace(/\s+/g, ''); if ((slot.team || []).some(x => x.pid === pid)) return; await set(date, n, { team: [...(slot.team || []), { pid, name: v, dnum: /^D\d+$/i.test(pid) ? pid : null }] }); }
+        else if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const { date, n, slot } = cur(); const pid = dnumId(v); if (!pid) return toast('Enter a D-number, like D4. Names are not kept.', 'bad'); if ((slot.team || []).some(x => x.pid === pid)) return; await set(date, n, { team: [...(slot.team || []), { pid }] }); }
         else if (act === 'team-drop') { const { date, n, slot } = cur(); await set(date, n, { team: (slot.team || []).filter(x => x.pid !== a.dataset.pid) }); }
         else if (act === 'stage' || act === 'stage-next') {
           let date, n, manNo;
