@@ -10,7 +10,8 @@
 
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
-import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard } from './ui.js';
+import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard, setStoreTz } from './ui.js';
+import { settingsOf } from '../shared/reducers/store.js';
 import { installCameraButtons } from './scan.js';
 import { loadMap, setMap, mapInfo, parkMap } from './map.js';
 import { initSearch } from './search.js';
@@ -70,6 +71,7 @@ async function enter() {
   admin = null; frame.classList.remove('adm');
   store.on('status', paintStatus); store.on('reject', r => toast(`${r.code}: ${r.message}`, 'bad'));
   store.on('map', onMapProjection);
+  store.on('settings', applySettings); applySettings(store.get('settings'));
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = 'Store ' + s.store;
   buildRail(); setWs('floor');
@@ -99,7 +101,28 @@ function onMapProjection(m) {
     if (current) show(current, currentArg);
   }, 500);
 }
-function closeStore() { client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
+// Store settings: the zone every day, week and cycle follows, and the idle
+// re-lock. A device idle for autoLockMins gives up its area and manager codes
+// (the worker revokes them) and the open workspace asks for its code again.
+let lockMins = 0, idleSince = Date.now(), locking = false;
+function applySettings(x) { const cfg = settingsOf(x); setStoreTz(cfg.tz); lockMins = cfg.autoLockMins; }
+for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) document.addEventListener(ev, () => { idleSince = Date.now(); }, { capture: true, passive: true });
+setInterval(idleCheck, 20_000);
+async function idleCheck() {
+  const cur = client.session.current;
+  if (locking || !store || !lockMins || !cur || cur.owner || !(cur.roles || []).some(r => r !== 'floor')) return;
+  if (Date.now() - idleSince < lockMins * 60_000) return;
+  locking = true;
+  try {
+    try { await store.flush(); } catch {}
+    await client.session.lock();
+    toast(`Locked after ${lockMins} min idle. The store PIN's floor session stays open.`);
+    const area = VIEWS[current]?.area;
+    if (area && area !== 'floor' && area !== 'admin') { setWs('floor'); show('mhome'); } else if (current) show(current, currentArg);
+  } catch { /* offline: tried again on the next check */ }
+  finally { locking = false; }
+}
+function closeStore() { setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); actasBar(null); resetAdmin(); }
 async function signOut() {
   try { await store?.flush(); } catch {}

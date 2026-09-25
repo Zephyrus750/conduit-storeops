@@ -553,3 +553,36 @@ test('catalogue: the owner builds it from the sitemaps; lookups and near-misses 
   const log = await api('GET', '/v1/admin/actions', undefined, ownerToken);
   assert.ok(log.body.actions.some(a => a.type === 'catalogue.rebuild'));
 });
+
+test('store settings: a manager sets them, the floor cannot, trucks take the grid, and idle lock drops the codes', async () => {
+  assert.equal((await reg2('2031')).status, 201);
+  const dev = (await api('POST', '/v1/auth/signin', { store: '2031', pin: '135790', device: 'pc-31' })).body;
+  const ev31 = (type, entity, payload, area) => ({ ...event(type, entity, payload, area), store: '2031' });
+  const floor = await api('POST', '/v1/store/2031/events', { events: [ev31('store.settings.set', {}, { autoLockMins: 15 }, 'store')] }, dev.token);
+  assert.equal(floor.body.results[0].code, 'unauthorised', 'the store PIN alone cannot change settings');
+
+  const mg = (await api('POST', '/v1/auth/unlock', { code: 'MG-2031' }, dev.token)).body;
+  assert.deepEqual(mg.roles, ['floor', 'manager']);
+  const set = await api('POST', '/v1/store/2031/events', { events: [
+    ev31('store.settings.set', {}, { tz: 'Australia/Adelaide', dockGrid: { rows: 5, cols: 9 }, autoLockMins: 15 }, 'store'),
+    ev31('store.settings.set', {}, { tz: 'Nowhere/Land' }, 'store'),
+    ev31('truck.create', { truck: '2026-09-07-T1' }, {}, 'backdock'),
+  ] }, mg.token);
+  assert.deepEqual(set.body.results.map(r => r.ok || r.code), [true, 'invalid_event', true]);
+
+  // Every device reads the settings (store-wide), including a floor-only one.
+  const snap = await api('GET', '/v1/store/2031/snapshot', undefined, dev.token);
+  assert.equal(snap.body.state.settings.tz, 'Australia/Adelaide'); assert.equal(snap.body.state.settings.autoLockMins, 15);
+  const full = await api('GET', '/v1/store/2031/snapshot', undefined, mg.token);
+  assert.deepEqual(full.body.state.dock.trucks['2026-09-07-T1'].grid, { rows: 5, cols: 9, rowLabels: 'ABCDE' });
+
+  // Idle lock: back to the floor session; the refresh token that carried the manager code is dead.
+  const locked = await api('POST', '/v1/auth/lock', { refresh: mg.refresh }, mg.token);
+  assert.equal(locked.status, 200); assert.deepEqual(locked.body.roles, ['floor']);
+  assert.equal((await api('POST', '/v1/auth/refresh', { refresh: mg.refresh })).status, 401);
+  const again = await api('POST', '/v1/auth/refresh', { refresh: locked.body.refresh });
+  assert.equal(again.status, 200); assert.deepEqual(again.body.roles, ['floor']);
+  const after = await api('POST', '/v1/store/2031/events', { events: [ev31('store.settings.set', {}, { autoLockMins: 30 }, 'store')] }, locked.body.token);
+  assert.equal(after.body.results[0].code, 'unauthorised');
+  assert.equal((await api('POST', '/v1/auth/lock', {}, ownerToken)).status, 400, 'the owner session does not lock');
+});

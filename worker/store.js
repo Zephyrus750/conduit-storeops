@@ -175,6 +175,8 @@ export class StoreObject extends DurableObject {
     }
     this.snapshotIfDue();
     if (applied.length) this.broadcast(applied);
+    // A new time zone moves store midnight: the rollover alarm follows it.
+    if (applied.some(e => e.type === 'store.settings.set' && 'tz' in (e.payload || {}))) this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000);
     return results.map(({ event, ...rest }) => rest);
   }
 
@@ -239,7 +241,8 @@ export class StoreObject extends DurableObject {
     try { this.rollover(); }
     finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
   }
-  tz() { return this.env.STORE_TZ || DEFAULT_TZ; }
+  // The store's own setting wins; STORE_TZ is the worker-wide fallback.
+  tz() { return this.state?.settings?.tz || this.env.STORE_TZ || DEFAULT_TZ; }
   rollover(now = new Date()) {
     if (!this.storeNo) return [];
     const at = storeIso(now, this.tz()), today = storeDay(now, this.tz());

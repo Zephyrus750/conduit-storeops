@@ -137,7 +137,7 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
   }
 
   if (rollover && (rollover.pallets || []).length) warnings.push(`${rollover.pallets.length} pallet${rollover.pallets.length === 1 ? '' : 's'} held over from ${rollover.fromId || 'the last truck'} ${rollover.pallets.length === 1 ? 'was' : 'were'} not imported: land ${rollover.pallets.length === 1 ? 'it' : 'them'} on the next truck as a carry-over`);
-  const g = config?.grid; if (g && (num(g.rows) !== 4 || num(g.cols) !== 7)) warnings.push(`DV used a ${g.rows} × ${g.cols} dock grid; Conduit's is 4 × 7`);
+  const g = config?.grid; if (g && (num(g.rows) !== 4 || num(g.cols) !== 7)) warnings.push(`DV used a ${g.rows} × ${g.cols} dock grid; set the same grid in Settings › Store before the first truck`);
   counts.events = events.length;
   return { events, warnings, counts, store: { name: config?.storeName || null, storeNumber: config?.settings?.storeNo || null } };
 }

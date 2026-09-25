@@ -2,7 +2,7 @@
 // esc() is the one rule: anything that came from another device goes
 // through it.
 
-import { storeDay, storeParts } from '../shared/time.js';
+import { storeDay, storeParts, DEFAULT_TZ } from '../shared/time.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -87,23 +87,30 @@ export function nowIso(d = new Date()) {
 }
 // The store's day, week and cycle come from the store clock (shared/time.js),
 // never UTC and never the device's zone.
-export function today() { return storeDay(); }
+// The zone is the store's setting (the shell sets it from the settings
+// projection), Perth until the store has one.
+let TZ = DEFAULT_TZ;
+export function setStoreTz(tz) { TZ = tz || DEFAULT_TZ; }
+export const storeTz = () => TZ;
+export function today() { return storeDay(new Date(), TZ); }
+// The store day an instant falls on.
+export const dayOf = at => storeDay(at, TZ);
 // ISO-ish week id, Monday start: 2026-W37
 export function weekId(d = new Date()) {
-  const { y, m, d: dd } = storeParts(d);
+  const { y, m, d: dd } = storeParts(d, TZ);
   const x = new Date(Date.UTC(y, m - 1, dd));
   const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day);
   const y0 = new Date(Date.UTC(x.getUTCFullYear(), 0, 1));
   return `${x.getUTCFullYear()}-W${String(Math.ceil(((x - y0) / 86400000 + 1) / 7)).padStart(2, '0')}`;
 }
 export function cycleId(len = 'monthly', d = new Date()) {
-  const { y, m: mo } = storeParts(d), m = String(mo).padStart(2, '0');
+  const { y, m: mo } = storeParts(d, TZ), m = String(mo).padStart(2, '0');
   if (len === 'monthly') return `${y}-${m}M`;
   const w = Number(weekId(d).slice(-2));
   return len === 'weekly' ? weekId(d) : `${y}-F${String(Math.ceil(w / 2)).padStart(2, '0')}`;
 }
 export function daysLeftInCycle(len = 'monthly', d = new Date()) {
-  const { y, m, d: dd } = storeParts(d);
+  const { y, m, d: dd } = storeParts(d, TZ);
   if (len === 'monthly') return new Date(Date.UTC(y, m, 0)).getUTCDate() - dd;
   const dow = (new Date(Date.UTC(y, m - 1, dd)).getUTCDay() + 6) % 7;
   return (len === 'weekly' ? 6 : 13 - (Number(weekId(d).slice(-2)) % 2 ? 0 : 7)) - dow;

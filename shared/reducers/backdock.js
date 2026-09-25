@@ -3,7 +3,7 @@
 // -planner, -history), ported faithfully.
 //
 //   dock.trucks   id ('YYYY-MM-DD-Tn') → { status: staged|live|closed, createdAt, landedAt, goalAt,
-//                 grid, team: [{ pid, name, dnum }], halts: [{ reason, start, end }],
+//                 grid, minsPerCarton (both from the store settings at creation), team: [{ pid, name, dnum }], halts: [{ reason, start, end }],
 //                 manifest: { manNo, dcNo, despatch, consols: [...] } | null,
 //                 pallets: ref → pallet }
 //   pallet        { ref, ptype: chep|loscam|bulk, cartons, expectedMins, expectedBasis, note,
@@ -19,6 +19,7 @@
 // through pallet.update, or ignores it).
 
 import { reject } from './util.js';
+import { settingsOf } from './store.js';
 
 export const PTYPES = ['chep', 'loscam', 'bulk'];
 export const PALLET_STATUS = ['landed', 'assigned', 'active', 'paused', 'done'];
@@ -43,7 +44,7 @@ export const backdockReducers = {
     const id = e.entity.truck;
     if (!TRUCK_RE.test(id)) return reject('invalid_event', 'truck id must be YYYY-MM-DD-Tn');
     if (s.dock.trucks[id]) return reject('truck_exists', `${id} already exists`);
-    const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, goalAt: null, grid: { ...s.dock.grid }, team: [], halts: [], manifest: null, pallets: {} };
+    const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, goalAt: null, ...truckSetup(s), team: [], halts: [], manifest: null, pallets: {} };
     // Creating from a planner slot consumes the slot's team and manifest.
     const date = id.slice(0, 10), slot = e.payload.slot ?? Number(id.slice(id.lastIndexOf('T') + 1));
     const day = s.plan.days[date];
@@ -157,17 +158,17 @@ export const backdockReducers = {
       excluded: !!p.excluded, carryover: !!p.carryover, landedAt: e.at, doneAt: null,
     };
     if (Number.isFinite(p.expectedMins)) { pal.expectedMins = Math.max(1, Math.round(p.expectedMins)); pal.expectedBasis = 'manual'; }
-    else pal.expectedMins = autoMins(cartons);
+    else pal.expectedMins = autoMins(cartons, t.minsPerCarton);
     t.pallets[ref] = pal;
     return null;
   },
   'pallet.update'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
-    const u = e.payload;
+    const u = e.payload, rate = s.dock.trucks[e.entity.truck].minsPerCarton;
     if (u.ptype !== undefined) { if (!PTYPES.includes(u.ptype)) return reject('invalid_event', 'bad ptype'); p.ptype = u.ptype; }
     if (u.cartons !== undefined && badCartons(u.cartons)) return reject('invalid_event', `cartons must be 1 to ${MAX_CARTONS}`);
-    if (u.cartons !== undefined) { p.cartons = Number.isFinite(u.cartons) ? Math.max(0, Math.round(u.cartons)) : null; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons); }
-    if (u.expectedMins !== undefined) { if (u.expectedMins === null) { p.expectedBasis = 'auto'; p.expectedMins = autoMins(p.cartons); } else { p.expectedMins = Math.max(1, Math.round(u.expectedMins)); p.expectedBasis = 'manual'; } }
+    if (u.cartons !== undefined) { p.cartons = Number.isFinite(u.cartons) ? Math.max(0, Math.round(u.cartons)) : null; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons, rate); }
+    if (u.expectedMins !== undefined) { if (u.expectedMins === null) { p.expectedBasis = 'auto'; p.expectedMins = autoMins(p.cartons, rate); } else { p.expectedMins = Math.max(1, Math.round(u.expectedMins)); p.expectedBasis = 'manual'; } }
     if (u.note !== undefined) p.note = String(u.note || '').slice(0, 120);
     if (u.consolIds !== undefined) p.consolIds = uniq(u.consolIds);
     if (u.scanIds !== undefined) p.scanIds = uniq(u.scanIds);
@@ -229,7 +230,7 @@ export const backdockReducers = {
     for (const [ref, other] of Object.entries(t.pallets)) if (ref !== p.ref && other.consolIds.includes(c.id)) return reject('consol_taken', `${c.id} is already on bay ${ref}`);
     p.consolIds.push(c.id);
     p.cartons = (p.cartons || 0) + c.cartons;
-    if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons);
+    if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons, t.minsPerCarton);
     return null;
   },
 
@@ -275,7 +276,13 @@ export const backdockReducers = {
 function capManifests(s) { const keys = Object.keys(s.dock.manifests); if (keys.length > MANIFEST_INDEX_CAP) for (const k of keys.sort((a, b) => s.dock.manifests[a].publishedAt < s.dock.manifests[b].publishedAt ? -1 : 1).slice(0, keys.length - MANIFEST_INDEX_CAP)) delete s.dock.manifests[k]; }
 function bay(e) { return String(e.entity.bay).toUpperCase(); }
 function uniq(a) { return Array.isArray(a) ? [...new Set(a.map(String))] : []; }
-function autoMins(cartons) { return cartons ? Math.max(1, Math.round(cartons * STD_MINS_PER_CARTON)) : null; }
+function autoMins(cartons, rate) { return cartons ? Math.max(1, Math.round(cartons * (rate ?? STD_MINS_PER_CARTON))) : null; }
+// A truck keeps the grid and carton rate the store had when it was created,
+// so changing a setting mid-shift never moves a landed bay or an estimate.
+function truckSetup(s) {
+  const { dockGrid, minsPerCarton } = settingsOf(s);
+  return { grid: { rows: dockGrid.rows, cols: dockGrid.cols, rowLabels: 'ABCDEFGH'.slice(0, dockGrid.rows) }, minsPerCarton };
+}
 function badCartons(v) { return v != null && (!Number.isFinite(v) || v < 1 || v > MAX_CARTONS); }
 function onGrid(g, ref) {
   const labels = (g?.rowLabels || 'ABCDEFGH').slice(0, g?.rows || 4), n = Number(ref.slice(1));
@@ -306,7 +313,7 @@ function rematchScans(t) {
       taken.add(id); p.consolIds.push(id); added += c.cartons;
     }
     p.scanIds = keep;
-    if (p.cartons == null && added) { p.cartons = added; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons); }
+    if (p.cartons == null && added) { p.cartons = added; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons, t.minsPerCarton); }
   }
 }
 function closeSegment(p, at) { const seg = p.segments[p.segments.length - 1]; if (seg && !seg.end) seg.end = at; }

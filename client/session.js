@@ -42,6 +42,14 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles };
     await save(); return snapshot();
   }
+  // Idle re-lock: back to the store PIN's floor session (the worker revokes
+  // the refresh token that carried the codes).
+  async function lock() {
+    if (!cur || cur.owner || !(cur.roles || []).some(r => r !== 'floor')) return snapshot();
+    const r = await transport.request('/v1/auth/lock', { method: 'POST', body: { refresh: cur.refresh }, token: await token() });
+    cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles };
+    await save(); return snapshot();
+  }
   // Owner acting as a store: a short store-scoped token (manager role, actor
   // 'owner') on top of the owner session, which is kept under `via` so the
   // console can be returned to and so refresh can mint the next act-as token.
@@ -94,5 +102,5 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
   function unauthorised() { cur = null; save(); emit('signin-required', { reason: 'unauthorised' }); }
   function on(k, f) { listeners[k].add(f); return () => listeners[k].delete(f); }
 
-  return { load, signIn, signInOwner, actAs, endActAs, unlock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
+  return { load, signIn, signInOwner, actAs, endActAs, unlock, lock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
 }

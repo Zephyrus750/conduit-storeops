@@ -1,9 +1,8 @@
 // Dashboard: the Floor at a glance from live projections. Stockroom and
 // The Back dock card reads the dock projection.
 
-import { storeDay } from '../../shared/time.js';
 import { focusDone } from '../../shared/reducers/floor.js';
-import { ic, esc, vh, greeting, today, weekId, cycleId, daysLeftInCycle, fmtTime, ago, status } from '../ui.js';
+import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, fmtTime, ago, status } from '../ui.js';
 import { microCount } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { openTrucks, progress, truckNo, fmtHM, openHalt, HALT_NAME } from './backdock/common.js';
@@ -19,7 +18,7 @@ export function model(ctx) {
   const issues = Object.values(s.issues), open = issues.filter(i => i.status !== 'completed');
   const sess = Object.entries(s.stocktake.sessions).filter(([, x]) => !x.ended)[0];
   const due = Object.values(s.assets).filter(a => a.due && (new Date(a.due) - Date.now()) / 86400000 <= 30).length;
-  const todayMarks = Object.values(marks).filter(m => storeDay(m.at) === today()).length;
+  const todayMarks = Object.values(marks).filter(m => dayOf(m.at) === today()).length;
   return { week, marks, focus, done: focusDone(marks, focus), todayMarks, cyc, checked: Object.keys(checks).length, total: microCount(), variances: variances.length, daysLeft: daysLeftInCycle(s.labels.cycleLen), issues, open, recurring: open.filter(i => i.recur).length, sess, due, devices: Object.keys(s.devices).length };
 }
 export default {

@@ -57,6 +57,20 @@ r.post('/v1/auth/unlock', async (req, env, ctx) => {
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, roles });
 });
 
+// Idle re-lock: the device gives up its area and manager codes and keeps
+// the store PIN's floor session. The old refresh token (which carries the
+// codes) is revoked, so the codes cannot come back without being typed.
+r.post('/v1/auth/lock', async (req, env) => {
+  const c = await requireClaims(req, env);
+  if (!c.store || c.owner) throw new HttpError(400, 'invalid_request', 'only a store device session locks');
+  const b = await readJson(req);
+  if (b.refresh) await registry(env, 'POST', '/refresh/revoke', { refresh: String(b.refresh) });
+  const roles = ['floor'];
+  const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false });
+  const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, epoch: c.epoch || 0, ttl: ttl(env) });
+  return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, roles });
+});
+
 r.post('/v1/auth/refresh', async (req, env) => {
   const b = await readJson(req);
   const res = await registry(env, 'POST', '/refresh/use', { refresh: b.refresh });

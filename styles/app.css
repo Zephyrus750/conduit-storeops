@@ -536,3 +536,18 @@ svg.barcode { background: #fff; max-width: 100%; height: auto; }
 .bcols .bcrow svg.barcode { flex: none; height: 62px; width: auto; }
 .bcols .bcrow .nm { font-size: 13px; color: var(--ink2); min-width: 0; }
 .bcols .bcrow.inc { opacity: .55; }
+
+/* Settings › Store: the store's settings form and the focus planner */
+.stg-in { height: 40px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); font: inherit; font-size: 14px; padding: 0 10px; min-width: 0; }
+.stg-in:disabled { opacity: .6; }
+.stg-num { width: 96px; }
+.stg-pair { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); }
+.stg-actions { display: flex; justify-content: flex-end; padding: 12px 0 8px; border-top: 1px solid var(--line-soft); }
+.stg-focus { display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.stg-focus > b { font-size: 13.5px; font-weight: 600; }
+.stg-focus > b small { display: block; font-weight: 400; color: var(--dim); font-size: 12px; }
+.stg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.stg-chips .chip { min-height: 32px; min-width: 44px; justify-content: center; border: 1px solid var(--line); background: var(--panel); color: var(--ink2); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.stg-chips .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+@container (max-width: 640px) { .stg-focus { grid-template-columns: 1fr; gap: 6px; } }
+@media (max-width: 640px) { .stg-focus { grid-template-columns: 1fr; gap: 6px; } .stg-store .stg-item { flex-wrap: wrap; } .stg-store .stg-ctl { flex: 1 1 100%; justify-content: flex-start; } }

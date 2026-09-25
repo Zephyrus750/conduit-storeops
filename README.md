@@ -84,6 +84,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` |
 | `POST /v1/auth/unlock` | signed-in device | live: area or manager code adds a role |
 | `POST /v1/auth/refresh` | signed-in device | live: rotates the refresh token |
+| `POST /v1/auth/lock` | signed-in store device | live: idle re-lock, drops area and manager codes back to the floor session |
 | `POST /v1/auth/signout` | holder of the refresh token | live: deletes the refresh token on the worker |
 | `GET /v1/stores` | anyone | live: number, name, region, status |
 | `GET /v1/store/:no/snapshot` | store token | live: projections for entitled areas |
