@@ -12,7 +12,7 @@
 import { VERSION } from './version.js';
 
 const listeners = new Set();
-const state = { supported: 'serviceWorker' in navigator, version: VERSION, build: null, waiting: null, checking: false, offlineReady: false };
+const state = { supported: 'serviceWorker' in navigator, version: VERSION, build: null, waiting: null, checking: false, offlineReady: false, off: false };
 let reg = null, applying = false;
 
 export const updates = {
@@ -34,8 +34,8 @@ export const updates = {
 const emit = (k) => { for (const f of listeners) { try { f(k, state); } catch (e) { console.error(e); } } };
 
 export async function initUpdates() {
-  if (!state.supported || new URLSearchParams(location.search).has('nosw')) return null;
-  try { reg = await navigator.serviceWorker.register('./sw.js'); } catch (e) { console.warn('service worker', e.message); return null; }
+  if (!state.supported || new URLSearchParams(location.search).has('nosw')) { state.off = true; return null; }
+  try { reg = await navigator.serviceWorker.register('./sw.js'); } catch (e) { console.warn('service worker', e.message); state.off = true; return null; }
   state.build = (await ask(navigator.serviceWorker.controller))?.build || null;
   state.offlineReady = !!navigator.serviceWorker.controller;
   if (reg.waiting) await announce(reg.waiting);

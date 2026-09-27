@@ -17,7 +17,7 @@ before(async () => {
     modulesRoot: new URL('../../', import.meta.url).pathname, scriptPath: new URL('../../worker/index.js', import.meta.url).pathname,
     compatibilityDate: '2026-08-06', compatibilityFlags: ['nodejs_compat'],
     durableObjects: { STORE: { className: 'StoreObject', useSQLite: true }, REGISTRY: { className: 'RegistryObject', useSQLite: true } },
-    bindings: { TOKEN_SECRET: 'test-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_SECONDS: '60', ENVIRONMENT: 'test' },
+    bindings: { TOKEN_SECRET: 'test-token-secret', OWNER_KEY_HASH: await hashSecret(OWNER_KEY, 1000), TOKEN_TTL_SECONDS: '3600', REFRESH_TTL_SECONDS: '86400', LOCKOUT_ATTEMPTS: '3', LOCKOUT_SECONDS: '60', PIN_MIN_DIGITS: '4', ENVIRONMENT: 'test' },
   });
   baseUrl = String(await mf.ready).replace(/\/$/, '');
   const owner = createClient({ baseUrl, storage: memoryStorage() });
@@ -30,7 +30,7 @@ before(async () => {
 after(async () => { await mf?.dispose(); });
 
 const until = (fn, ms = 4000) => new Promise((resolve, reject) => {
-  const t0 = Date.now(); const tick = () => { const v = fn(); if (v) return resolve(v); if (Date.now() - t0 > ms) return reject(new Error('timeout')); setTimeout(tick, 20); }; tick();
+  const t0 = Date.now(); const tick = () => { const v = fn(); if (v) return resolve(v); if (Date.now() - t0 > ms) return reject(new Error('timeout: ' + fn.toString().slice(0, 120))); setTimeout(tick, 20); }; tick();
 });
 const device = (name) => createClient({ baseUrl, storage: memoryStorage({ suite_device: name }) });
 
@@ -49,7 +49,7 @@ test('sign in persists, unlock adds a role, token refreshes', async () => {
 test('dispatch offline queues and applies locally; connect flushes; a second device sees it', async () => {
   const a = device('phone-a'), b = device('phone-b');
   await a.session.load(); await a.session.signIn({ store: '1241', pin: '2468' }); await a.session.unlock('SR-CODE');
-  await b.session.load(); await b.session.signIn({ store: '1241', pin: '2468' });
+  await b.session.load(); await b.session.signIn({ store: '1241', pin: '2468' }); await b.session.unlock('SR-CODE');
 
   // b is live first.
   const sb = await b.open('1241');
@@ -97,7 +97,7 @@ test('dispatch offline queues and applies locally; connect flushes; a second dev
 
   // Reconnect after a gap: a device whose cache is behind gets a delta from its last seq.
   const c = device('phone-c');
-  await c.session.load(); await c.session.signIn({ store: '1241', pin: '2468' });
+  await c.session.load(); await c.session.signIn({ store: '1241', pin: '2468' }); await c.session.unlock('SR-CODE');
   const sc = await c.open('1241');
   await until(() => sc.status.state === 'live' && sc.seq === 2);
   assert.equal(sc.get('cages').BSN1240417.location, 'AISLE 2');
@@ -107,7 +107,7 @@ test('dispatch offline queues and applies locally; connect flushes; a second dev
   // A device whose cache stopped at seq 1 says hello with since=1 and receives a delta, not a snapshot.
   const cached = { seq: 1, state: { cages: { BSN1240417: { ring: 'overstock', location: null, items: {}, sweeps: [], status: 'open' } } } };
   const d = createClient({ baseUrl, storage: memoryStorage({ suite_device: 'phone-d', 'snap:1241': cached }) });
-  await d.session.load(); await d.session.signIn({ store: '1241', pin: '2468' });
+  await d.session.load(); await d.session.signIn({ store: '1241', pin: '2468' }); await d.session.unlock('SR-CODE');
   const sd = await d.open('1241');
   assert.equal(sd.seq, 1, 'served from the cache before connecting');
   await until(() => sd.seq === 2);
@@ -116,11 +116,22 @@ test('dispatch offline queues and applies locally; connect flushes; a second dev
 
   // No WebSocket available: the client polls /changes and still catches up.
   const e = createClient({ baseUrl, storage: memoryStorage({ suite_device: 'phone-e' }), WebSocketImpl: null });
-  await e.session.load(); await e.session.signIn({ store: '1241', pin: '2468' });
+  await e.session.load(); await e.session.signIn({ store: '1241', pin: '2468' }); await e.session.unlock('SR-CODE');
   const se = await e.open('1241');
   await until(() => se.status.state === 'polling' && se.seq === 2);
   assert.equal(se.get('cages').BSN1240417.location, 'AISLE 2');
-  se.close(); live.close(); sb.close(); storeA.close(); storeA2.close(); forced.close();
+  se.close();
+
+  // The store PIN alone opens the Floor: no Stockroom data reaches the device.
+  const f = device('phone-f');
+  await f.session.load(); await f.session.signIn({ store: '1241', pin: '2468' });
+  const sf = await f.open('1241');
+  await until(() => sf.status.state === 'live');
+  assert.deepEqual(sf.get('cages'), {}, 'cages stay on the worker without the Stockroom code');
+  await f.session.unlock('SR-CODE');
+  await until(() => sf.get('cages').BSN1240417);   // unlocking fetches the Stockroom whole
+  assert.equal(sf.get('cages').BSN1240417.location, 'AISLE 2');
+  sf.close(); live.close(); sb.close(); storeA.close(); storeA2.close(); forced.close();
 });
 
 test('owner acts as a store, writes carry the owner, and returns to the console', async () => {

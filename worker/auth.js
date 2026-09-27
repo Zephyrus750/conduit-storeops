@@ -6,7 +6,9 @@
 // credentials live in the registry object.
 //
 // Access tokens are compact HMAC-SHA256 signed JSON: base64url(payload).sig.
-// Payload: { store, roles, caps, device, owner, actor, iat, exp, jti }.
+// Payload: { store, roles, caps, device, owner, actor, epoch, iat, exp, jti }.
+// epoch is the store's credential epoch at issue; the store object refuses a
+// token from an older epoch (a rotation, suspension or revoke signed it out).
 // Nothing in the token is secret; the signature is what matters, so the
 // worker never needs to look a token up.
 
@@ -67,10 +69,18 @@ export async function sha256(text) {
   return b64u(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(text))));
 }
 
+// ── PINs and names ─────────────────────────────────────────────────────
+// A store PIN is digits only, at least PIN_MIN_DIGITS long (6 by default;
+// dev and tests set 4), at most 8. Only new and rotated PINs are checked, so
+// a store's existing PIN keeps working until it is rotated.
+export function pinOk(pin, min = 6) { return new RegExp(`^\\d{${Math.max(4, Math.min(8, Number(min) || 6))},8}$`).test(String(pin ?? '')); }
+// Free text shown in the console and the shell: no control characters, trimmed, capped.
+export function cleanText(v, max) { return String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
+
 // ── claims ─────────────────────────────────────────────────────────────
-export function makeClaims({ store, roles, caps, device, owner = false, actor = null, ttl }) {
+export function makeClaims({ store, roles, caps, device, owner = false, actor = null, epoch = 0, ttl }) {
   const iat = Math.floor(Date.now() / 1000);
-  return { store, roles, caps, device, owner, actor, iat, exp: iat + ttl, jti: randomToken(8) };
+  return { store, roles, caps, device, owner, actor, epoch, iat, exp: iat + ttl, jti: randomToken(8) };
 }
 
 export function hasRole(claims, roles) {

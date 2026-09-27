@@ -7,6 +7,14 @@
   [headers.values]
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    # Only this origin's scripts run (SheetJS is self-hosted under vendor/);
+    # the API goes to the Conduit workers on js/config.js's WORKER_ALLOWED
+    # list, so keep that list and connect-src in step. Inline styles stay:
+    # views set style attributes. Product images come from the catalogue's
+    # https hosts. No framing, no plugins.
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://conduit-staging.zephyrus-np750.workers.dev wss://conduit-staging.zephyrus-np750.workers.dev https://conduit.zephyrus-np750.workers.dev wss://conduit.zephyrus-np750.workers.dev; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    X-Frame-Options = "DENY"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=(), payment=(), usb=()"
 # The worker script and its precache list must never be served stale, or a
 # device would keep an old release; everything else revalidates (Netlify's
 # default) and the service worker holds the release cache.

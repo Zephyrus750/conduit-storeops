@@ -7,8 +7,10 @@ import { json, fail, preflight, readJson, HttpError } from './http.js';
 import { signToken, verifyToken, verifySecret, makeClaims, hasRole } from './auth.js';
 export { StoreObject } from './store.js';
 export { RegistryObject } from './registry.js';
+export { CatalogueObject } from './catalogue-object.js';
 import { VERSION } from './version.js';
-import { parseCodes, lookup } from './catalogue.js';
+import { ulid } from '../shared/ulid.js';
+import { parseCodes, lookup, catalogueStub } from './catalogue.js';
 import { importK2B } from './import.js';
 import { importDV } from './import-dv.js';
 
@@ -20,22 +22,27 @@ r.get('/v1/health', (_req, env) => json({ ok: true, version: VERSION, env: env.E
 // ── auth ──────────────────────────────────────────────────────────────────
 r.post('/v1/auth/signin', async (req, env) => {
   const b = await readJson(req);
+  // The device id keys the devices projection and lockouts: letters, digits,
+  // dot, dash and underscore only, never a prototype name.
   const device = String(b.device || '').slice(0, 64) || null;
+  if (device && (!/^[\w.-]+$/.test(device) || ['__proto__', 'prototype', 'constructor'].includes(device))) throw new HttpError(400, 'invalid_request', 'device id must be letters, digits, dot, dash or underscore');
   if (b.ownerKey !== undefined) {
     if (!env.OWNER_KEY_HASH) throw new HttpError(503, 'not_configured', 'OWNER_KEY_HASH is not set');
-    const key = `owner:${device || 'nodevice'}`;
-    await registry(env, 'POST', '/lockout/check', { key });
+    // Per device (cleared on success), per network and one owner-wide key
+    // that a success never clears: a new device id buys no fresh attempts.
+    const ip = clientIp(req), keys = [`owner:dev:${device || 'nodevice'}`, `owner:store:all`, ...(ip ? [`owner:ip:${ip}`] : [])];
+    await registry(env, 'POST', '/lockout/check', { keys });
     if (!(await verifySecret(String(b.ownerKey).trim(), env.OWNER_KEY_HASH))) {
-      await registry(env, 'POST', '/lockout/fail', { key });
+      await registry(env, 'POST', '/lockout/fail', { keys });
       throw new HttpError(403, 'unauthorised', 'wrong owner key');
     }
-    await registry(env, 'POST', '/lockout/clear', { key });
+    await registry(env, 'POST', '/lockout/clear', { key: keys[0] });
     const claims = makeClaims({ store: null, roles: ['owner'], caps: [], device, owner: true, ttl: ttl(env) });
     const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: null, device, roles: ['owner'], owner: true });
     return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, owner: true });
   }
-  const res = await registry(env, 'POST', '/signin', { store: String(b.store || ''), pin: b.pin, device });
-  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device, ttl: ttl(env) });
+  const res = await registry(env, 'POST', '/signin', { store: String(b.store || ''), pin: b.pin, device, ip: clientIp(req) });
+  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device, epoch: res.epoch, ttl: ttl(env) });
   const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: res.store, device, roles: res.roles, owner: false });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, store: res.store, name: res.name, roles: res.roles, caps: res.caps, status: res.status });
 });
@@ -44,18 +51,40 @@ r.post('/v1/auth/unlock', async (req, env, ctx) => {
   const c = await requireClaims(req, env);
   if (!c.store) throw new HttpError(400, 'invalid_request', 'owner tokens do not unlock areas');
   const b = await readJson(req);
-  const { role } = await registry(env, 'POST', '/unlock', { store: c.store, code: b.code });
+  const { role, epoch } = await registry(env, 'POST', '/unlock', { store: c.store, code: b.code, device: c.device, ip: clientIp(req), epoch: c.epoch || 0 });
   const roles = c.roles.includes(role) ? c.roles : [...c.roles, role];
-  const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, ttl: ttl(env) });
+  const { refresh, roleExpires } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false, elevated: Date.now() });
+  const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, epoch, ttl: roleTtl(env, roleExpires) });
+  return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, roles });
+});
+
+// Idle re-lock: the device gives up its area and manager codes and keeps
+// the store PIN's floor session. The old refresh token (which carries the
+// codes) is revoked, so the codes cannot come back without being typed.
+r.post('/v1/auth/lock', async (req, env) => {
+  const c = await requireClaims(req, env);
+  if (!c.store || c.owner) throw new HttpError(400, 'invalid_request', 'only a store device session locks');
+  const b = await readJson(req);
+  if (b.refresh) await registry(env, 'POST', '/refresh/revoke', { refresh: String(b.refresh) });
+  const roles = ['floor'];
   const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false });
+  const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, epoch: c.epoch || 0, ttl: ttl(env) });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, roles });
 });
 
 r.post('/v1/auth/refresh', async (req, env) => {
   const b = await readJson(req);
   const res = await registry(env, 'POST', '/refresh/use', { refresh: b.refresh });
-  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device: res.device, owner: res.owner, ttl: ttl(env) });
+  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device: res.device, owner: res.owner, epoch: res.epoch, ttl: roleTtl(env, res.roleExpires) });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh: res.refresh, expires: claims.exp, roles: res.roles, caps: res.caps, owner: res.owner });
+});
+
+// Sign-out: the refresh token is deleted on the worker, so a lost or shared
+// device's session ends now. Holding the refresh token is the authority.
+r.post('/v1/auth/signout', async (req, env) => {
+  const b = await readJson(req);
+  if (b.refresh) await registry(env, 'POST', '/refresh/revoke', { refresh: String(b.refresh) });
+  return json({ ok: true });
 });
 
 // ── registry (public) ─────────────────────────────────────────────────────
@@ -71,7 +100,15 @@ r.get('/v1/store/:no/ws', (req, env, _ctx, p) => storeCall(req, env, p.no, '/ws'
 r.get('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/stores/_all')); });
 r.post('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'POST', '/stores', await readJson(req)), 201); });
 r.get('/v1/admin/stores/:no', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'GET', `/stores/${p.no}`)); });
-r.patch('/v1/admin/stores/:no', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'PATCH', `/stores/${p.no}`, await readJson(req))); });
+r.patch('/v1/admin/stores/:no', async (req, env, _c, p) => {
+  const c = await requireOwner(req, env);
+  const rec = await registry(env, 'PATCH', `/stores/${p.no}`, await readJson(req));
+  // The store object holds the epoch it enforces; tell it (it also closes
+  // the sockets of devices that were signed out).
+  const res = await forward(new Request('https://store/epoch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ epoch: rec.epoch || 0 }) }), env, rec.no, '/epoch', '', { ...c, store: rec.no, caps: [], roles: ['manager'] });
+  if (!res.ok) console.error('epoch push failed', rec.no, res.status);
+  return json(rec);
+});
 r.get('/v1/admin/actions', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/actions')); });
 r.get('/v1/admin/stores/:no/devices', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/devices'));
 r.get('/v1/admin/stores/:no/snapshot', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/snapshot', new URL(req.url).search));
@@ -101,6 +138,29 @@ r.get('/v1/catalogue', async (req, env, ctx) => {
   return json({ items }, 200, { 'Cache-Control': 'public, max-age=300' });
 });
 
+// One-digit near-misses of a keycode (a mistyped or misread code): public,
+// like the catalogue, and cached briefly at the edge.
+r.get('/v1/catalogue/nearmiss', async (req, env) => {
+  const stub = catalogueStub(env); if (!stub) throw new HttpError(503, 'not_configured', 'the catalogue object is not bound');
+  const res = await stub.fetch('https://catalogue/nearmiss' + new URL(req.url).search);
+  return json(await res.json(), res.status, res.ok ? { 'Cache-Control': 'public, max-age=3600' } : {});
+});
+// The owner's view of the catalogue build, and "rebuild now".
+r.get('/v1/admin/catalogue', async (req, env) => {
+  await requireOwner(req, env);
+  const stub = catalogueStub(env); if (!stub) throw new HttpError(503, 'not_configured', 'the catalogue object is not bound');
+  const status = await (await stub.fetch('https://catalogue/status')).json();
+  return json({ ...status, details: { browserRendering: !!(env.CF_ACCOUNT_ID && env.BROWSER_TOKEN), legacy: !!env.DETAILS_URL }, legacyLookup: !!env.LOOKUP_URL });
+});
+r.post('/v1/admin/catalogue/rebuild', async (req, env) => {
+  await requireOwner(req, env);
+  const stub = catalogueStub(env); if (!stub) throw new HttpError(503, 'not_configured', 'the catalogue object is not bound');
+  const b = await readJson(req).catch(() => ({}));
+  const out = await (await stub.fetch('https://catalogue/rebuild', { method: 'POST', body: JSON.stringify({ trigger: 'owner', force: b.force !== false }) })).json();
+  if (out.started) await registry(env, 'POST', '/log', { type: 'catalogue.rebuild', store: null, detail: {} });
+  return json(out, out.started ? 202 : 200);
+});
+
 // ── migration (owner) ─────────────────────────────────────────────────────
 // Import: pull the store's K2B data into its log; dry:true only counts.
 // Flip: set an area's state (legacy | migrating | live) and log it.
@@ -124,6 +184,21 @@ r.post('/v1/admin/stores/:no/import', async (req, env, _c, p) => {
   if (!b.dry) await registry(env, 'POST', '/log', { type: 'store.import', store: rec.no, detail: { source, code: summary.code || summary.url, applied: summary.applied, duplicates: summary.duplicates, rejected: summary.rejected.length, warnings: summary.warnings.length, counts: summary.counts } });
   return json(summary);
 });
+// The owner accepts or declines a suggested map edit from the console's Map
+// tab (after making the change in the map editor). An ordinary event, sent
+// with the owner's claims so it carries actor.owner.
+r.post('/v1/admin/stores/:no/mapedits/:id', async (req, env, _c, p) => {
+  const b = await readJson(req);
+  const ev = { id: ulid(), store: String(p.no), area: 'store', type: 'map.edit.resolve', entity: { edit: String(p.id) }, payload: { status: String(b.status || ''), ...(b.note ? { note: String(b.note).slice(0, 300) } : {}) }, at: new Date().toISOString(), v: 1 };
+  const res = await ownerStoreCall(new Request(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization') || '' }, body: JSON.stringify({ events: [ev] }) }), env, p.no, '/events');
+  const out = await res.json();
+  const r0 = out.results?.[0];
+  if (!res.ok || !r0) return json(out, res.status);
+  if (!r0.ok) throw new HttpError(r0.code === 'not_found' ? 404 : 400, r0.code, r0.message);
+  await registry(env, 'POST', '/log', { type: 'map.edit.resolve', store: String(p.no), detail: { edit: String(p.id), status: ev.payload.status } });
+  return json({ ok: true, edit: String(p.id), status: ev.payload.status, seq: r0.seq });
+});
+
 r.post('/v1/admin/stores/:no/flip', async (req, env, _c, p) => {
   await requireOwner(req, env);
   const b = await readJson(req);
@@ -162,11 +237,21 @@ export default {
   },
 };
 
+// The caller's address as Cloudflare saw it; absent in local tests.
+function clientIp(req) { return (req.headers.get('CF-Connecting-IP') || '').slice(0, 64) || null; }
 function ttl(env) { return Number(env.TOKEN_TTL_SECONDS || 43200); }
+// An access token carrying an unlocked role ends when the role does, so the
+// next refresh (which drops the role) comes due on time.
+function roleTtl(env, roleExpires) { return roleExpires ? Math.max(60, Math.min(ttl(env), Math.floor((roleExpires - Date.now()) / 1000))) : ttl(env); }
 
 async function requireClaims(req, env) {
+  // The token rides in the Authorization header. A browser WebSocket cannot
+  // set headers, so the socket offers it as its second subprotocol
+  // ("conduit, <token>"); ?token= is honoured on /ws only, for shells from
+  // before that, and never elsewhere, so tokens stay out of URLs and logs.
   const h = req.headers.get('Authorization') || '';
-  const token = h.startsWith('Bearer ') ? h.slice(7) : new URL(req.url).searchParams.get('token');
+  const url = new URL(req.url), proto = (req.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(x => x.trim());
+  const token = h.startsWith('Bearer ') ? h.slice(7) : proto[0] === 'conduit' && proto[1] ? proto[1] : url.pathname.endsWith('/ws') ? url.searchParams.get('token') : null;
   const claims = await verifyToken(token, env.TOKEN_SECRET);
   if (!claims) throw new HttpError(401, 'unauthorised', 'token missing, invalid or expired');
   return claims;

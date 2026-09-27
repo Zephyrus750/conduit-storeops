@@ -3,7 +3,7 @@
 // scans cartons onto a cage (cage.scan), parks it (cage.park) and sweeps
 // the room (cage.sweep). Ring colour is the physical ring on the cage.
 
-import { $, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mrows, mbig, mghost, mfoot, mscan } from '../../ui.js';
+import { $, ic, esc, vh, sub, today as storeToday, dayOf, status, fmtTime, ago, toast, mhead, mrows, mbig, mghost, mfoot, mscan } from '../../ui.js';
 import { parseKeycodes } from '../../../shared/backfill.js';
 import { RINGS } from '../../../shared/reducers/stockroom.js';
 import { RING, ring, ageOf, ensureNames, nameHtml, nameOf, send } from './common.js';
@@ -38,7 +38,7 @@ export default {
     return vh('Cages', sub(`${m.open.length} cages open`, `${m.stale.length} not seen this week`, `${m.all.filter(c => c.status === 'closed').length} closed`), `<button class="btn primary" data-act="new">${ic('plus')}New cage</button>`, 'm-cages') +
       `<div class="grid2"><div class="lcol"><div class="card"><div class="ch"><h3>Open cages</h3><span class="pills" style="margin-left:auto"><button class="${st.sort === 'age' ? 'on' : ''}" data-act="sort" data-v="age">By age</button><button class="${st.sort === 'zone' ? 'on' : ''}" data-act="sort" data-v="zone">By zone</button><button class="${st.sort === 'type' ? 'on' : ''}" data-act="sort" data-v="type">By type</button></span></div>${chips}<div class="pcard clist" style="margin-top:10px">${rows}</div></div>` +
       `<div class="card" style="margin-top:14px"><div class="ch"><h3>Sweeps</h3><span class="cs-dim">walk the room, scan every tag</span></div><div class="ad-kv"><span>Last sweep</span><b>${lastSweep(m.open)}</b><span>Not seen 7+ days</span><b>${m.stale.map(c => `<span class="mono">${esc(c.id)}</span>`).join(' · ') || 'none'}</b><span>Closed</span><b>${m.all.filter(c => c.status === 'closed').length} cage${m.all.filter(c => c.status === 'closed').length === 1 ? '' : 's'} emptied</b></div><p class="lbl">Sweeps are run from a phone: Cages › Sweep. A cage not seen for seven days shows in red.</p></div></div>` +
-      `<div class="sidecol"><div class="cfind"><div class="search">${ic('search')}<input data-field="find" value="${esc(st.find)}" placeholder="Find a cage, zone or keycode…"></div></div>${found}<div class="card" id="newCage" ${st.newOpen ? '' : 'hidden'}><div class="ch"><h3>New cage</h3></div><div class="adj-form"><input class="ad-in mono" data-field="newid" placeholder="Cage tag e.g. BSN1240421" autocapitalize="characters"><span class="ringpick"><small>Ring</small>${RINGS.map(r => `<span data-act="newring" data-v="${r}">${ring(r, st.newRing === r)}</span>`).join('')}</span><button class="btn primary" data-act="create">${ic('plus')}Open cage</button></div></div>${detail}</div></div>`;
+      `<div class="sidecol"><div class="cfind"><div class="search">${ic('search')}<input data-field="find" value="${esc(st.find)}" placeholder="Find a cage, zone or keycode…"></div></div>${found}<div class="card" id="newCage" ${st.newOpen ? '' : 'hidden'}><div class="ch"><h3>New cage</h3></div><div class="adj-form"><input class="ad-in mono" data-field="newid" placeholder="Cage tag e.g. BSN1240421" autocapitalize="characters"><span class="ringpick"><small>Ring</small>${RINGS.map(r => `<span data-act="newring" data-v="${r}" aria-label="${RING[r][0]} ring" aria-pressed="${st.newRing === r}">${ring(r, st.newRing === r)}</span>`).join('')}</span><button class="btn primary" data-act="create">${ic('plus')}Open cage</button></div></div>${detail}</div></div>`;
   },
   mobile(ctx) { return `<div id="cgmob">${mobile(ctx)}</div>`; },
   mount(ctx, root) {
@@ -106,19 +106,19 @@ async function sweepTag(ctx, raw, repaint) {
 function mobile(ctx) {
   const m = model(ctx);
   if (st.mode === 'sweep') {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = storeToday();
     const zones = {}; for (const c of m.open) (zones[c.location || 'Not parked'] ||= []).push(c);
-    const seen = m.open.filter(c => c.sweeps.some(s => s.at.slice(0, 10) === today)).length;
+    const seen = m.open.filter(c => c.sweeps.some(s => dayOf(s.at) === today)).length;
     return mhead('Cage sweep', `${seen} of ${m.open.length} seen today`) + `<div class="cs">${cagetabs('sweep')}` +
       `<div class="card swp-prog"><div class="swp-big"><b>${seen}</b><span>of ${m.open.length} seen</span></div><div class="track"><i style="width:${m.open.length ? Math.round(seen / m.open.length * 100) : 0}%"></i></div></div>` +
       mscan('Scan a cage tag', `<input data-field="msweep" autocomplete="off" autocapitalize="characters" placeholder="Cage tag" enterkeyhint="done">`, 'Or tap Seen on the cage in front of you') +
-      `<div class="card swp-list">${Object.entries(zones).map(([z, cs]) => `<div class="swp-zone"><div class="swp-zh">${esc(z)}<span>${cs.filter(c => c.sweeps.some(s => s.at.slice(0, 10) === today)).length} of ${cs.length}</span></div>${cs.map(c => { const ok = c.sweeps.some(s => s.at.slice(0, 10) === today); return `<div class="swp-row ${ok ? 'ok' : c.stale ? 'lost' : 'todo'}"><span class="swp-ic">${ic(ok ? 'check' : c.stale ? 'alert' : 'clock')}</span><span class="cg">${esc(c.id)}</span><span class="st">${ok ? 'Seen' : c.stale ? `Not seen ${ageOf(c.seen)}` : 'To find'}${ok ? '' : ` <span class="btn sm" data-act="m-seen" data-id="${esc(c.id)}">Seen</span>`}</span></div>`; }).join('')}</div>`).join('') || '<div class="cs-dim" style="padding:12px">No open cages</div>'}</div></div>`;
+      `<div class="card swp-list">${Object.entries(zones).map(([z, cs]) => `<div class="swp-zone"><div class="swp-zh">${esc(z)}<span>${cs.filter(c => c.sweeps.some(s => dayOf(s.at) === today)).length} of ${cs.length}</span></div>${cs.map(c => { const ok = c.sweeps.some(s => dayOf(s.at) === today); return `<div class="swp-row ${ok ? 'ok' : c.stale ? 'lost' : 'todo'}"><span class="swp-ic">${ic(ok ? 'check' : c.stale ? 'alert' : 'clock')}</span><span class="cg">${esc(c.id)}</span><span class="st">${ok ? 'Seen' : c.stale ? `Not seen ${ageOf(c.seen)}` : 'To find'}${ok ? '' : ` <span class="btn sm" data-act="m-seen" data-id="${esc(c.id)}">Seen</span>`}</span></div>`; }).join('')}</div>`).join('') || '<div class="cs-dim" style="padding:12px">No open cages</div>'}</div></div>`;
   }
   const t = m.open.find(c => c.id === st.target);
   if (!t) {
     return mhead('Cage scan', 'Scan a cage tag to start') + `<div class="cs">${cagetabs('scan')}` +
       mscan('Scan the cage tag', `<input data-field="mtag" autocomplete="off" autocapitalize="characters" placeholder="e.g. BSN1240417" enterkeyhint="go">`, 'A tag that is not on the register opens a new cage') +
-      `<div class="ringpick" style="margin:0 0 6px"><small>Ring for a new cage</small>${RINGS.map(r => `<span data-act="newring" data-v="${r}">${ring(r, st.newRing === r)}</span>`).join('')}</div>` +
+      `<div class="ringpick" style="margin:0 0 6px"><small>Ring for a new cage</small>${RINGS.map(r => `<span data-act="newring" data-v="${r}" aria-label="${RING[r][0]} ring" aria-pressed="${st.newRing === r}">${ring(r, st.newRing === r)}</span>`).join('')}</div>` +
       (m.open.length ? `<div class="mv-sub">Open cages</div>` + mrows(m.open.slice(0, 8).map(c => [`${ring(c.ring)} ${esc(c.id)}`, `${c.location ? esc(c.location) : 'not parked'} · ${c.units} units`, `<span class="btn sm" data-act="m-pick" data-id="${esc(c.id)}">Use</span>`, ''])) : '') + '</div>';
   }
   const lines = Object.entries(t.items);

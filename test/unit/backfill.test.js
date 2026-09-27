@@ -21,7 +21,7 @@ test('compare: add, delete, match, incorrect and the ready payload', () => {
   const system = ['43166022', '43199310', '42345501'];
   assert.deepEqual(reviewRows(sub, system).map(r => [r.code, r.status]), [['43006311', 'add'], ['42345501', 'delete'], ['43166022', 'match'], ['43199310', 'match']]);
   const c = compareCounts(sub, system);
-  assert.equal(c.match, 2); assert.equal(c.add, 1); assert.equal(c.delete, 1); assert.equal(c.incorrect, 1); assert.equal(c.expected, 3); assert.equal(c.pct, 33);
+  assert.equal(c.match, 2); assert.equal(c.add, 1); assert.equal(c.delete, 1); assert.equal(c.incorrect, 1); assert.equal(c.expected, 3); assert.equal(c.scannedCount, 2); assert.equal(c.pct, 67, 'K2B: 2 matched of max(2 real scans, 3 system)');
   assert.deepEqual(readyPayload(sub, system), { codes: { 42345501: false }, incorrect: ['43006311'] });
   assert.equal(compareCounts(sub, null).pct, null, 'no report, no accuracy');
   assert.deepEqual(reviewRows(sub, null).map(r => r.status), ['scanned', 'scanned', 'scanned']);

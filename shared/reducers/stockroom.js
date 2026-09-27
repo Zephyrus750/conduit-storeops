@@ -4,15 +4,16 @@
 //
 //   cages        cage → { ring, location, items: keycode → qty, sweeps[], status, created, seen, closed }
 //   backfill     subs: `${bay}:${date}` → { bay, date, status, codes: code → { scanned }, incorrect: [],
-//                metrics, statusAt, reopenedAt, readyAt, submittedDoneAt, autoSubmitted }
+//                system: [codes] | null, removed: code → at (tombstones), metrics, statusAt, reopenedAt, readyAt, submittedDoneAt, autoSubmitted }
 //                requested: date → [bays]      claims: bay → { by, at }
-//   adjustments  date → keycode → { qty (≤ 0), name, location, confirmed, addedAt }
+//   adjustments  date → keycode → { qty (≤ 0, system SOH), counted (found, or null), name, location, confirmed, addedAt }
 //   daylist      date → { walkers, excluded: [bays], source }
 //
 // Status enum is exactly pending | corrected | submitted ("Needs review",
 // "Ready", "Submitted"). Requested locations are a separate list, not a status.
 
 import { reject } from './util.js';
+import { backfillMetrics, scannedCodes } from '../backfill.js';
 
 export const RINGS = ['new-lines', 'overstock', 'cant-work', 'online-picks'];
 export const SUBMISSION_STATUS = ['pending', 'corrected', 'submitted'];
@@ -67,21 +68,38 @@ export const stockroomReducers = {
     return null;
   },
   // codes: { code: scanned }, merged per code; remove: [codes]; incorrect: [codes] (replaces the list)
+  // A removed code leaves a tombstone (K2B's removedCodes): a scan made
+  // before the removal (a phone's queued scan landing late) cannot bring it
+  // back; a scan made after it can. An update that only carries such stale
+  // codes is refused so the phone hears the reviewer removed them.
   'submission.update'(s, e) {
-    const sub = s.backfill.subs[subKey(e)] || (s.backfill.subs[subKey(e)] = newSub(bay(e), e.entity.date));
+    const cur = s.backfill.subs[subKey(e)];
     const p = e.payload;
-    if (p.codes && typeof p.codes === 'object') for (const [code, scanned] of Object.entries(p.codes)) sub.codes[code] = { scanned: !!scanned };
-    if (Array.isArray(p.remove)) for (const code of p.remove) delete sub.codes[String(code)];
+    const tomb = cur?.removed || {};
+    const incoming = p.codes && typeof p.codes === 'object' ? Object.entries(p.codes) : [];
+    const stale = incoming.filter(([code]) => !cur?.codes[code] && tomb[code] && Date.parse(e.at) <= Date.parse(tomb[code])).map(([code]) => code);
+    if (stale.length && stale.length === incoming.length && !(Array.isArray(p.remove) && p.remove.length) && !Array.isArray(p.incorrect)) {
+      return reject('removed_by_reviewer', `${stale.join(', ')} ${stale.length === 1 ? 'was' : 'were'} removed by the reviewer`);
+    }
+    const sub = cur || (s.backfill.subs[subKey(e)] = newSub(bay(e), e.entity.date));
+    for (const [code, scanned] of incoming) {
+      if (stale.includes(code)) continue;
+      sub.codes[code] = { scanned: !!scanned };
+      if (sub.removed) delete sub.removed[code];
+    }
+    if (Array.isArray(p.remove)) for (const code of p.remove) { const c = String(code); delete sub.codes[c]; (sub.removed ||= {})[c] = e.at; }
     if (Array.isArray(p.incorrect)) sub.incorrect = [...new Set(p.incorrect.map(String))];
     sub.updatedAt = e.at;
     return null;
   },
   // payload.metrics is honoured when present (the K2B importer carries the
-  // metrics the legacy desk computed); otherwise they come from the codes.
+  // metrics the legacy desk computed); otherwise they come from the codes and
+  // payload.system, the pasted report's list for the bay.
   'submission.ready'(s, e) {
     const sub = sub_(s, e); if (sub.code) return sub;
     if (e.at < sub.statusAt) return null;
     sub.status = 'corrected'; sub.statusAt = e.at; sub.readyAt = sub.readyAt || e.at;
+    if (Array.isArray(e.payload?.system)) sub.system = [...new Set(e.payload.system.map(String))];
     const m = e.payload?.metrics;
     sub.metrics = m && typeof m === 'object' ? { expected: Number(m.expected) || 0, scanned: Number(m.scanned) || 0, match: Number(m.match) || 0, accuracy: Number(m.accuracy) || 0, incorrect: Number(m.incorrect) || 0 } : metrics(sub);
     return null;
@@ -138,7 +156,10 @@ export const stockroomReducers = {
     const day = (s.adjustments[e.entity.date] ||= {});
     const p = e.payload;
     const loc = p.location ? String(p.location).toUpperCase() : '';
-    day[kc] = { qty: -Math.abs(p.qty), name: p.name || day[kc]?.name || '', location: loc, confirmed: !!p.confirmed, addedAt: e.at };
+    // qty is the system SOH from the report (stored ≤ 0); counted is what the
+    // person found on the shelf, kept as evidence when the phone sends it.
+    const counted = Number.isFinite(p.counted) ? Math.max(0, Math.round(p.counted)) : (day[kc]?.counted ?? null);
+    day[kc] = { qty: -Math.abs(p.qty), ...(counted != null ? { counted } : {}), name: p.name || day[kc]?.name || '', location: loc, confirmed: !!p.confirmed, addedAt: e.at };
     return null;
   },
   'adjustment.remove'(s, e) {
@@ -167,16 +188,15 @@ function openCage(s, e) {
 function bay(e) { return String(e.entity.bay).toUpperCase(); }
 function subKey(e) { return `${bay(e)}:${e.entity.date}`; }
 function newSub(bayNo, date) {
-  return { bay: bayNo, date, status: 'pending', codes: {}, incorrect: [], metrics: null, statusAt: '', reopenedAt: null, readyAt: null, submittedDoneAt: null, autoSubmitted: false, updatedAt: null };
+  return { bay: bayNo, date, status: 'pending', codes: {}, incorrect: [], metrics: null, system: null, statusAt: '', reopenedAt: null, readyAt: null, submittedDoneAt: null, autoSubmitted: false, updatedAt: null };
 }
 function sub_(s, e) {
   const sub = s.backfill.subs[subKey(e)];
   if (!sub) return reject('not_found', 'submission is not open');
   return sub;
 }
+// With no report list (a bay readied without a paste, or older events) the
+// system side is every code on the submission, scanned or system-only.
 export function metrics(sub) {
-  const expected = Object.keys(sub.codes).length;
-  const scanned = Object.values(sub.codes).filter(c => c.scanned).length;
-  const match = expected - sub.incorrect.length;
-  return { expected, scanned, match, accuracy: expected ? Math.round(match / expected * 100) : 100, incorrect: sub.incorrect.length };
+  return backfillMetrics(scannedCodes(sub), sub.system || Object.keys(sub.codes), sub.incorrect);
 }

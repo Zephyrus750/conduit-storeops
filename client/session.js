@@ -42,6 +42,14 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles };
     await save(); return snapshot();
   }
+  // Idle re-lock: back to the store PIN's floor session (the worker revokes
+  // the refresh token that carried the codes).
+  async function lock() {
+    if (!cur || cur.owner || !(cur.roles || []).some(r => r !== 'floor')) return snapshot();
+    const r = await transport.request('/v1/auth/lock', { method: 'POST', body: { refresh: cur.refresh }, token: await token() });
+    cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles };
+    await save(); return snapshot();
+  }
   // Owner acting as a store: a short store-scoped token (manager role, actor
   // 'owner') on top of the owner session, which is kept under `via` so the
   // console can be returned to and so refresh can mint the next act-as token.
@@ -84,9 +92,15 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     if (cur.expires * 1000 - now() < REFRESH_AHEAD_S * 1000) { try { await refresh(); } catch (e) { if (!(e instanceof TransportError && e.network)) return null; } }
     return cur?.token || null;
   }
-  async function signOut() { cur = null; await save(); }
+  // Sign-out ends the session on the worker too (best effort: offline, the
+  // local session still goes and the refresh token expires on its own).
+  async function signOut() {
+    const refreshes = [cur?.refresh, cur?.via?.refresh].filter(Boolean);
+    cur = null; await save();
+    for (const refresh of refreshes) { try { await transport.request('/v1/auth/signout', { method: 'POST', body: { refresh } }); } catch {} }
+  }
   function unauthorised() { cur = null; save(); emit('signin-required', { reason: 'unauthorised' }); }
   function on(k, f) { listeners[k].add(f); return () => listeners[k].delete(f); }
 
-  return { load, signIn, signInOwner, actAs, endActAs, unlock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
+  return { load, signIn, signInOwner, actAs, endActAs, unlock, lock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
 }

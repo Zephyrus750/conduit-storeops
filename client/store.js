@@ -155,10 +155,11 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     const token = await session.token();
     if (!token) { session.unauthorised(); return; }
     let sock;
-    try { sock = new WebSocketImpl(`${transport.wsBase}/v1/store/${no}/ws?token=${encodeURIComponent(token)}`); }
+    // The token travels as the second subprotocol, not in the URL.
+    try { sock = new WebSocketImpl(`${transport.wsBase}/v1/store/${no}/ws`, ['conduit', token]); }
     catch { return scheduleReconnect(); }
     ws = sock;
-    sock.onopen = () => { wsAttempt = 0; stopPolling(); sock.send(JSON.stringify({ t: 'hello', since: base.seq })); heartbeat(); };
+    sock.onopen = () => { wsAttempt = 0; stopPolling(); sock.send(JSON.stringify({ t: 'hello', since: fullNext ? 0 : base.seq })); fullNext = false; heartbeat(); };
     sock.onmessage = (m) => onFrame(JSON.parse(m.data));
     sock.onclose = () => { if (ws === sock) ws = null; if (!closed) scheduleReconnect(); };
     sock.onerror = () => { try { sock.close(); } catch {} };
@@ -209,13 +210,25 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // The socket carries the claims it was opened with. When the session
   // changes (an area unlocked, a refresh), reconnect so the next submit is
   // judged on the current roles rather than refused as unauthorised.
-  let lastToken = null;
+  // What the device may read follows its roles (the Stockroom and Back dock
+  // need their codes), so when the roles change the next hello asks for a
+  // whole snapshot: a delta would miss the newly opened area's past, and a
+  // lost role must take its area off the device.
+  let lastToken = null, lastRoles = session.current ? (session.current.roles || []).join(',') : null, fullNext = false;
   const offSession = session.on('change', snap => {
-    const t = snap ? session.current?.expires + ':' + (snap.roles || []).join(',') : null;
+    const roles = snap ? (snap.roles || []).join(',') : null;
+    const t = snap ? session.current?.expires + ':' + roles : null;
     if (t === lastToken) return;
     lastToken = t;
+    if (lastRoles !== null && roles !== lastRoles) fullNext = true;
+    lastRoles = roles;
     if (ws && !closed) { const s = ws; ws = null; try { s.close(); } catch {} wsAttempt = 0; connect(); }
+    else if (fullNext && pollTimer && !closed) snapshotNow();
   });
+  async function snapshotNow() {
+    try { const r = await transport.request(`/v1/store/${no}/snapshot`, { token: await needToken() }); replaceBase(r.seq, r.state); fullNext = false; rebuild(); await persistSnapshot(); }
+    catch (e) { setStatus({ lastError: e.message }); }
+  }
 
   function close() {
     closed = true; offSession(); timers.clearTimeout(wsTimer); timers.clearTimeout(hbTimer); timers.clearTimeout(hbSoon); stopPolling();

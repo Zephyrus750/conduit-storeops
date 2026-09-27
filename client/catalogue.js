@@ -41,5 +41,11 @@ export function createCatalogue({ transport, storage, timers = globalThis }) {
       for (const r of q.get(kc)) r(item);
     }
   }
-  return { lookup, lookupMany: kcs => Promise.all(kcs.map(lookup)) };
+  // One-digit near-misses of a keycode nobody knows (a mistyped or misread
+  // code): [{ keycode, name, url, position }], [] when offline.
+  async function nearMiss(keycode) {
+    try { return (await transport.request(`/v1/catalogue/nearmiss?kc=${encodeURIComponent(String(keycode))}`)).matches || []; }
+    catch { return []; }
+  }
+  return { lookup, lookupMany: kcs => Promise.all(kcs.map(lookup)), nearMiss };
 }

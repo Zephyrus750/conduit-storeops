@@ -13,3 +13,13 @@ test('sw-precache.js is current and complete', () => {
   assert.ok(!p.files.some(f => f.includes('/worker/') || f.includes('/test/')), 'worker and tests are not app files');
   assert.match(p.build, /^[0-9a-f]{10}$/);
 });
+
+// The shell's CSP must let it reach every worker the shell may choose.
+test('netlify CSP: connect-src lists every allowed worker, over https and wss; scripts are this origin only', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { WORKER_ALLOWED } = await import('../../js/config.js');
+  const csp = readFileSync(new URL('../../netlify.toml', import.meta.url), 'utf8').match(/Content-Security-Policy = "([^"]+)"/)[1];
+  const connect = csp.match(/connect-src ([^;]+)/)[1].split(/\s+/);
+  for (const o of WORKER_ALLOWED) { assert.ok(connect.includes(o), o); assert.ok(connect.includes(o.replace(/^https/, 'wss')), o + ' (wss)'); }
+  assert.match(csp, /script-src 'self';/); assert.match(csp, /frame-ancestors 'none'/);
+});

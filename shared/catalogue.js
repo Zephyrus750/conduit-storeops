@@ -66,7 +66,9 @@ export const CATALOGUE = {
   'truck.setLive':       T('backdock', D, ['truck']),
   'truck.setGoal':       T('backdock', D, ['truck']),                           // payload.goal ISO | null
   'truck.team.set':      T('backdock', D, ['truck'], { team: 'array' }),
-  'truck.finalise':      T('backdock', M, ['truck']),
+  'truck.setStart':      T('backdock', D, ['truck']),                           // payload.at ISO | null: the decant clock's start
+  'receiving.confirm':   T('backdock', D, ['truck']),                           // payload.confirmed (default true)
+  'truck.finalise':      T('backdock', D, ['truck']),                           // the facilitator closes (legacy: facilitator code)
   'truck.import':        T('backdock', M, ['truck']),                           // a finalised truck's record from the legacy app, as-is
   'manifest.publish':    T('backdock', D, ['manNo']),                            // payload: dcNo, despatch, filename, consols, totalCartons, keycodes
   'manifest.remove':     T('backdock', D, ['manNo']),
@@ -80,14 +82,26 @@ export const CATALOGUE = {
   'pallet.reopen':       T('backdock', D, ['truck', 'bay']),
   'pallet.remove':       T('backdock', D, ['truck', 'bay']),
   'pallet.scan':         T('backdock', D, ['truck', 'bay'], { code: 'string' }),
-  'halt.start':          T('backdock', D, ['truck'], { reason: 'string' }),
+  'pallet.move':         T('backdock', D, ['truck', 'bay'], { to: 'string' }),
+  'pallet.join':         T('backdock', D, ['truck', 'bay'], { pid: 'string' }),
+  'pallet.handover':     T('backdock', D, ['truck', 'bay'], { toPid: 'string' }),
+  'pallet.leave':        T('backdock', D, ['truck', 'bay'], { pid: 'string' }),
+  'pallet.unstart':      T('backdock', D, ['truck', 'bay']),
+  'pallet.editTimes':    T('backdock', D, ['truck', 'bay']),                    // segments [{ pid, start, end, bf }], doneAt
+  'halt.start':          T('backdock', D, ['truck'], { reason: 'string' }),   // payload.kind halt | huddle | transition | break, payload.note
   'halt.end':            T('backdock', D, ['truck']),
+  'huddle.plan':         T('backdock', D, ['truck'], { mins: 'number' }),
+  'break.start':         T('backdock', D, ['truck'], { pid: 'string' }),
+  'break.end':           T('backdock', D, ['truck'], { pid: 'string' }),
   'plan.set':            T('backdock', D, ['date', 'slot']),
   'plan.remove':         T('backdock', D, ['date', 'slot']),
 
   // ── Store-wide ───────────────────────────────────────────────────────
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
+  'store.settings.set':  T('store', M, []),
+  'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
+  'map.edit.resolve':    T('store', M, ['edit'], { status: 'string' }),       // accepted | declined; payload.note                                     // any of tz, dockGrid, minsPerCarton, autoLockMins (null = default)
   'device.heartbeat':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['device'], { app: 'string' }),
 };
 
@@ -100,5 +114,5 @@ export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist'],
   backdock: ['dock', 'plan'],
-  store: ['devices', 'map', 'roster'],
+  store: ['devices', 'map', 'roster', 'settings', 'mapedits'],
 };

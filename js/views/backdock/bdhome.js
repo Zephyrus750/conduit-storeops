@@ -3,6 +3,8 @@ import { ic, esc, mhead, mtile } from '../../ui.js';
 import { openTrucks, progress, truckNo, fmtHM, running, who } from './common.js';
 export default {
   id: 'bdhome', title: 'Back dock', icon: 'truck', area: 'backdock',
+  // Phone only: wider screens open the dock board (the shell follows desktopView).
+  desktopView: 'receiving',
   desktop() { return ''; },
   mobile(ctx) {
     const dock = ctx.store.get('dock'), open = openTrucks(dock), t = open.find(x => x.status === 'live') || open[0];
