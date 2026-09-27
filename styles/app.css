@@ -156,14 +156,19 @@ form.li { margin: 0; }
 .admap .admap-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); }
 .admap .admap-bar .zoom { margin-left: auto; display: flex; gap: 6px; }
 .admap .mapstage { height: 400px; min-height: 0; }
-.ad-depts { margin-top: 14px; font-size: 13px; }
+/* One grid for the whole list: the badge column fits the widest code
+   (CHECKOUTS, STOCKROOM) and every row's name lines up behind it. */
+.ad-depts { margin-top: 14px; font-size: 13px; display: grid; grid-template-columns: max-content 1fr auto; column-gap: 10px; }
+.ad-depts .ad-deptsh, .ad-depts .ad-deptg { grid-column: 1 / -1; }
 .ad-depts .ad-deptsh { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0 8px; border-bottom: 1px solid var(--line); }
 .ad-depts .ad-deptsh b { font-size: 14px; }
 .ad-depts .ad-deptsh span, .ad-depts .ad-deptg span { color: var(--dim); }
 .ad-depts .ad-deptg { display: flex; justify-content: space-between; padding: 10px 0 4px; font-size: 11px; letter-spacing: .06em; }
 .ad-depts .ad-deptg b { color: var(--ink2); }
-.ad-depts .ad-deptr { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
-.ad-depts .ad-deptr .dep { font-size: 11px; padding: 2px 7px; justify-self: start; }
+.ad-depts .ad-deptr { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
+@supports not (grid-template-columns: subgrid) { .ad-depts .ad-deptr { grid-template-columns: 96px 1fr auto; } }
+.ad-depts .ad-deptr .dep { font-size: 11px; padding: 2px 7px; justify-self: start; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ad-depts .ad-deptr > span:not(.dep) { min-width: 0; }
 .ad-depts .ad-deptr b { font-variant-numeric: tabular-nums; }
 
 /* Rail 10px narrower than the showcase at each of its widths: 232px
