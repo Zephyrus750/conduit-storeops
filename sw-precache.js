@@ -2,7 +2,7 @@
 // The complete app shell for one release; the build id names its cache.
 self.PRECACHE = {
   "version": "v0.2.0",
-  "build": "d5824f70b7",
+  "build": "f989f00279",
   "files": [
     "./index.html",
     "./icons.svg",

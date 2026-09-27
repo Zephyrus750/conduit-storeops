@@ -28,7 +28,7 @@ test('mapDV: the live truck replays as the events that built it, in time order',
   assert.deepEqual(ev.slice(0, 5).map(e => e.type), ['truck.create', 'truck.setLive', 'manifest.attach', 'truck.team.set', 'truck.setGoal']);
   const man = ev.find(e => e.type === 'manifest.attach').payload;
   assert.equal(man.manNo, '7031490'); assert.deepEqual(man.consols.map(c => [c.id, c.cartons, c.dept]), [['601804401', 12, '024'], ['601804402', 18, '070']], 'the bad consol is dropped, the mixed dept keeps its first');
-  assert.deepEqual(ev.find(e => e.type === 'truck.team.set').payload.team, [{ pid: 'D1' }, { pid: 'D2' }], 'D-numbers only, no names');
+  assert.deepEqual(ev.find(e => e.type === 'truck.team.set').payload.team, [{ pid: 'D1', role: 'cutter' }, { pid: 'D2', role: 'cutter' }], 'D-numbers and roles, no names');
   const lands = ev.filter(e => e.type === 'pallet.land');
   assert.deepEqual(lands.map(e => [e.entity.bay, e.payload.ptype, e.payload.cartons, e.payload.expectedMins, e.payload.consolIds, e.payload.scanIds]), [['A1', 'chep', 12, undefined, ['601804401'], []], ['A2', 'chep', 18, 14, ['601804402'], []], ['B1', 'bulk', null, undefined, [], ['601804499']]]);
   assert.ok(m.warnings.some(w => /P4 on ZZ skipped/.test(w))); assert.ok(m.warnings.some(w => /1 pallet had no type/.test(w)));
@@ -37,8 +37,9 @@ test('mapDV: the live truck replays as the events that built it, in time order',
   const a1 = ev.filter(e => e.entity.bay === 'A1' && e.type !== 'pallet.land');
   assert.deepEqual(a1.map(e => e.type), ['pallet.start', 'pallet.done'], 'the last segment of a done pallet closes with done, not pause');
   const halts = ev.filter(e => e.type.startsWith('halt.'));
-  assert.deepEqual(halts.map(e => [e.type, e.payload.reason || '']), [['halt.start', 'other'], ['halt.end', ''], ['halt.start', 'nostock']]);
-  assert.ok(m.warnings.some(w => /1 planned pause .* "Other"/.test(w)));
+  assert.deepEqual(halts.map(e => [e.type, e.payload.kind || '', e.payload.reason || '']), [['halt.start', 'huddle', 'huddle'], ['halt.end', '', ''], ['halt.start', 'halt', 'nostock']], 'hold-ups keep their kind');
+  assert.ok(!m.warnings.some(w => /planned pause/.test(w)));
+  assert.equal(Date.parse(ev[0].payload.decantStartAt), Date.parse('2026-09-18T22:12:00.000Z'), 'the decant clock keeps its own start');
   assert.ok(lands.every(l => l.ms < ev.find(e => e.type === 'pallet.start').ms), 'every pallet lands before the first start');
   assert.ok(ev[0].ms < lands[0].ms);
   assert.equal(m.counts.trucks, 1); assert.equal(m.counts.pallets, 3);

@@ -27,7 +27,7 @@
 
 import { HttpError } from './http.js';
 import { importId } from './import.js';
-import { PTYPES, HALT_REASONS, dnumId } from '../shared/reducers/backdock.js';
+import { PTYPES, HALT_REASONS, HALT_KINDS, TRANS_REASONS, TEAM_ROLES, dnumId } from '../shared/reducers/backdock.js';
 
 const TRUCK_RE = /^\d{4}-\d{2}-\d{2}-T\d+$/;
 const iso = ms => new Date(Number(ms) || Date.now()).toISOString().replace(/\.\d{3}Z$/, '+00:00');
@@ -82,7 +82,7 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
     const t0 = Math.min(ms(d.landedAt) || Infinity, ms(d.decantStartAt) || Infinity, ...Object.values(d.pallets || {}).flatMap(p => (p.segments || []).map(s => ms(s.start) || Infinity)));
     const base = Number.isFinite(t0) ? t0 - 60000 : Date.now();
     const T = { truck: id };
-    push(`${id}:create`, base, 'truck.create', T, { landedAt: d.landedAt || iso(base) });
+    push(`${id}:create`, base, 'truck.create', T, { landedAt: d.landedAt || iso(base), ...(d.decantStartAt && ms(d.decantStartAt) ? { decantStartAt: iso(ms(d.decantStartAt)) } : {}) });
     if (d.status === 'live') push(`${id}:live`, base + 1000, 'truck.setLive', T, {});
     const man = manifestOf(d.manifest, warnings, id);
     if (man) push(`${id}:manifest`, base + 2000, 'manifest.attach', T, man);
@@ -90,7 +90,9 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
     // The team is the truck's team plus anyone who worked a pallet on it, so
     // every imported segment passes the reducer's team check.
     const crew = [...new Set([...(d.team || []).map(m => String(m.pid)), ...Object.values(d.pallets || {}).flatMap(p => (p.segments || []).map(s => String(s.pid)))].filter(x => x && x !== 'undefined'))];
-    if (crew.length) push(`${id}:team`, base + 3000, 'truck.team.set', T, { team: crew.map(member) });
+    const roleOf = new Map((d.team || []).map(m => [String(m.pid), m.role]));
+    if (crew.length) push(`${id}:team`, base + 3000, 'truck.team.set', T, { team: crew.map(pid => ({ ...member(pid), ...(TEAM_ROLES.includes(roleOf.get(pid)) ? { role: roleOf.get(pid) } : {}) })) });
+    if (d.receivingConfirmed && ms(d.receivedAt)) push(`${id}:received`, ms(d.receivedAt), 'receiving.confirm', T, { confirmed: true });
     if (d.goalAt) push(`${id}:goal`, base + 4000, 'truck.setGoal', T, { goal: d.goalAt });
     const pallets = Object.values(d.pallets || {}).sort((a, b) => num(a.n) - num(b.n));
     let landAt = base + 10000, untyped = 0;
@@ -105,23 +107,32 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
       const scanIds = [...new Set([...(Array.isArray(p.scanIds) ? p.scanIds : []), p.scanId].filter(Boolean).map(s => String(s).replace(/\D/g, '').slice(-9)))];
       push(`${id}:land:${ref}`, landAt, 'pallet.land', B, { ptype: PTYPES.includes(p.ptype) ? p.ptype : 'chep', cartons: p.cartons == null || !(num(p.cartons) >= 1) ? null : Math.min(500, num(p.cartons)), ...(p.expectedBasis === 'manual' && p.expectedMins != null ? { expectedMins: num(p.expectedMins) } : {}), consolIds: (p.consolIds?.length ? p.consolIds : p.consolId ? [p.consolId] : []).map(String), scanIds, note: p.note || '', carryover: !!p.carriedFrom, excluded: !!p.excluded });
       landAt += 1000; counts.pallets += 1;
-      segs.forEach((s, i) => {
-        push(`${id}:seg:${ref}:${i}:start`, ms(s.start), 'pallet.start', B, { pid: who(s.pid) });
-        const end = ms(s.end);
-        if (end && (i < segs.length - 1 || p.status !== 'done')) push(`${id}:seg:${ref}:${i}:pause`, end, 'pallet.pause', B, {});
-      });
+      // The pallet's work in time order: a start while someone is already on
+      // it is a join; an end while others stay on is a leave; the last one
+      // off pauses it. A done pallet's final ends are its done.
+      const lastEnd = Math.max(0, ...segs.map(x => ms(x.end) || 0));
+      const marks = segs.flatMap((x, i) => [{ t: ms(x.start), i, pid: who(x.pid), start: true }, ...(ms(x.end) && !(p.status === 'done' && ms(x.end) === lastEnd) ? [{ t: ms(x.end), i, pid: who(x.pid), start: false }] : [])]).sort((a, b) => a.t - b.t || a.start - b.start);
+      const on = new Set();
+      for (const mk of marks) {
+        if (mk.start) { push(`${id}:seg:${ref}:${mk.i}:start`, mk.t, on.size ? 'pallet.join' : 'pallet.start', B, { pid: mk.pid }); on.add(mk.i); }
+        else { on.delete(mk.i); push(`${id}:seg:${ref}:${mk.i}:${on.size ? 'leave' : 'pause'}`, mk.t, on.size ? 'pallet.leave' : 'pallet.pause', B, on.size ? { pid: mk.pid } : {}); }
+      }
       if (p.status === 'done') push(`${id}:done:${ref}`, ms(p.doneAt) || (segs.length ? ms(segs[segs.length - 1].end) || Date.now() : landAt), 'pallet.done', B, {});
     }
     if (untyped) warnings.push(`${id}: ${untyped} pallet${untyped === 1 ? '' : 's'} had no type in DV and imported as Chep`);
-    let pauses = 0;
+    // Hold-ups keep their kind (halt, huddle, transition, team break) and note.
     (d.halts || []).forEach((h, i) => {
       const start = ms(h.start); if (!start) return;
-      const halt = !h.kind || h.kind === 'halt';
-      if (!halt) pauses += 1;
-      push(`${id}:halt:${i}:start`, start, 'halt.start', T, { reason: halt && HALT_REASONS.includes(h.reason) ? h.reason : 'other' });
+      const kind = HALT_KINDS.includes(h.kind) ? h.kind : 'halt';
+      const reason = kind === 'halt' ? (HALT_REASONS.includes(h.reason) ? h.reason : 'other') : kind === 'transition' ? (TRANS_REASONS.includes(h.reason) ? h.reason : 'changeover') : kind;
+      push(`${id}:halt:${i}:start`, start, 'halt.start', T, { kind, reason, ...(h.note ? { note: String(h.note).slice(0, 120) } : {}) });
       if (ms(h.end)) push(`${id}:halt:${i}:end`, ms(h.end), 'halt.end', T, {});
     });
-    if (pauses) warnings.push(`${id}: ${pauses} planned pause${pauses === 1 ? '' : 's'} (huddle, transition or team break) imported as "Other" halts`);
+    (d.breaks || []).forEach((b, i) => {
+      const start = ms(b.start); if (!start) return;
+      push(`${id}:break:${i}:start`, start, 'break.start', T, { pid: who(b.pid) });
+      if (ms(b.end)) push(`${id}:break:${i}:end`, ms(b.end), 'break.end', T, { pid: who(b.pid) });
+    });
     counts.trucks += 1;
   }
 

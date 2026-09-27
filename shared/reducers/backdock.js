@@ -35,6 +35,13 @@ import { settingsOf } from './store.js';
 export const PTYPES = ['chep', 'loscam', 'bulk'];
 export const PALLET_STATUS = ['landed', 'assigned', 'active', 'paused', 'done'];
 export const HALT_REASONS = ['hcage', 'nostock', 'equip', 'safety', 'waiting', 'other'];
+// Hold-ups (Decant Visualiser's kinds): a halt is an incident and counts as
+// downtime; a huddle (team talk), a transition (changeover prep) and a team
+// break are planned pauses, reported on their own. All of them stop the
+// decant clock.
+export const HALT_KINDS = ['halt', 'huddle', 'transition', 'break'];
+export const TRANS_REASONS = ['cages', 'tables', 'tubs', 'moving', 'changeover', 'other'];
+export const TEAM_ROLES = ['cutter', 'runner', 'cleaner'];
 export const STD_MINS_PER_CARTON = 0.5;
 const HISTORY_CAP = 500;
 const MANIFEST_INDEX_CAP = 20;
@@ -66,7 +73,9 @@ export const backdockReducers = {
       carry = s.dock.trucks[from];
       const bad = closable(carry); if (bad) return bad;
     }
-    const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, goalAt: null, ...truckSetup(s), team: [], halts: [], manifest: null, pallets: {}, carriedConsols: [] };
+    const startAt = e.payload.decantStartAt ?? null;
+    if (startAt !== null && !isIso(startAt)) return reject('invalid_event', 'decantStartAt must be an ISO time');
+    const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, decantStartAt: startAt, goalAt: null, ...truckSetup(s), team: [], halts: [], breaks: [], manifest: null, pallets: {}, carriedConsols: [], receivingConfirmed: false, receivedAt: null };
     if (carry) t.grid = widerGrid(t.grid, carry.grid);
     // Creating from a planner slot consumes the slot's team and manifest.
     const date = id.slice(0, 10), slot = e.payload.slot ?? Number(id.slice(id.lastIndexOf('T') + 1));
@@ -98,6 +107,23 @@ export const backdockReducers = {
     const g = e.payload.goal ?? null;
     if (g !== null && typeof g !== 'string') return reject('invalid_event', 'goal must be an ISO time or null');
     t.goalAt = g;
+    return null;
+  },
+  // When the decant clock starts (DV's decantStartAt): clear time, rate and
+  // the goal pace run from here, not from when the truck landed. null = landed.
+  'truck.setStart'(s, e) {
+    const t = truck(s, e); if (t.code) return t;
+    const at = e.payload.at ?? null;
+    if (at !== null && !isIso(at)) return reject('invalid_event', 'at must be an ISO time or null');
+    t.decantStartAt = at;
+    return null;
+  },
+  // The receiver hands the truck over: the layout is set. A soft marker;
+  // decant can already be running and pallets can still change after.
+  'receiving.confirm'(s, e) {
+    const t = truck(s, e); if (t.code) return t;
+    t.receivingConfirmed = e.payload.confirmed !== false;
+    t.receivedAt = t.receivingConfirmed ? e.at : null;
     return null;
   },
   'truck.team.set'(s, e) {
@@ -216,6 +242,17 @@ export const backdockReducers = {
     if (u.scanIds !== undefined) p.scanIds = uniq(u.scanIds);
     if (u.excluded !== undefined) p.excluded = !!u.excluded;
     if (u.carryover !== undefined) p.carryover = !!u.carryover;
+    if (u.suspectOk) { delete p.suspect; p.suspectOk = true; }   // the facilitator confirmed a quick finish was real
+    return null;
+  },
+  // Move a pallet to another square (it keeps its work and consols).
+  'pallet.move'(s, e) {
+    const p = pallet(s, e); if (p.code) return p;
+    const t = s.dock.trucks[e.entity.truck], to = String(e.payload.to).toUpperCase();
+    if (!BAY_RE.test(to) || !onGrid(t.grid, to)) return reject('invalid_event', `bay ${to} is not on the ${t.grid.rows} × ${t.grid.cols} dock grid`);
+    if (to === p.ref) return reject('invalid_event', `the pallet is already on ${to}`);
+    if (t.pallets[to]) return reject('bay_occupied', `bay ${to} already holds a pallet`);
+    delete t.pallets[p.ref]; p.ref = to; t.pallets[to] = p;
     return null;
   },
   'pallet.start'(s, e) {
@@ -232,6 +269,65 @@ export const backdockReducers = {
     p.status = 'paused'; closeSegment(p, e.at);
     return null;
   },
+  // A second person joins a pallet being decanted.
+  'pallet.join'(s, e) {
+    const p = pallet(s, e); if (p.code) return p;
+    if (!openSegs(p).length) return reject('invalid_event', `${p.ref} is not being decanted: start it instead`);
+    const pid = dnumId(e.payload.pid); if (!pid) return reject('invalid_event', 'the worker is a D-number (D1, D2…)');
+    if (openSegs(p).some(x => x.pid === pid)) return reject('invalid_event', `${pid} is already on ${p.ref}`);
+    const who = canWork(s.dock.trucks[e.entity.truck], p, pid); if (who) return who;
+    p.segments.push({ pid, start: e.at, end: null });
+    return null;
+  },
+  // The whole pallet passes to someone else: everyone on it steps off.
+  'pallet.handover'(s, e) {
+    const p = pallet(s, e); if (p.code) return p;
+    if (!openSegs(p).length) return reject('invalid_event', `${p.ref} is not being decanted`);
+    const pid = dnumId(e.payload.toPid); if (!pid) return reject('invalid_event', 'the worker is a D-number (D1, D2…)');
+    const who = canWork(s.dock.trucks[e.entity.truck], p, pid); if (who) return who;
+    closeSegment(p, e.at);
+    p.segments.push({ pid, start: e.at, end: null }); p.assignedTo = pid;
+    return null;
+  },
+  // One person steps off (a break, a role change); the rest keep cutting.
+  // The last one off leaves the pallet paused with their time banked.
+  'pallet.leave'(s, e) {
+    const p = pallet(s, e); if (p.code) return p;
+    const pid = dnumId(e.payload.pid), seg = openSegs(p).find(x => x.pid === pid);
+    if (!seg) return reject('invalid_event', `${e.payload.pid} is not on ${p.ref}`);
+    seg.end = e.at;
+    if (!openSegs(p).length) { p.status = 'paused'; p.assignedTo = pid; }
+    return null;
+  },
+  // Undo the last start (a mis-tap): its segment goes, and so does a done.
+  'pallet.unstart'(s, e) {
+    const p = pallet(s, e); if (p.code) return p;
+    if (!p.segments.length) return reject('invalid_event', `nothing to undo on ${p.ref}`);
+    p.segments.pop(); p.doneAt = null; delete p.suspect;
+    p.status = openSegs(p).length ? 'active' : p.segments.length ? 'paused' : p.assignedTo ? 'assigned' : 'landed';
+    return null;
+  },
+  // Fix times: the facilitator corrects the segments and/or the done time.
+  // bf marks a start filled in after the fact, so the timeline shows it as an estimate.
+  'pallet.editTimes'(s, e) {
+    const p = pallet(s, e); if (p.code) return p;
+    const t = s.dock.trucks[e.entity.truck], u = e.payload;
+    let segs = null;
+    if (u.segments !== undefined) {
+      if (!Array.isArray(u.segments) || u.segments.length > 50) return reject('invalid_event', 'segments must be a list');
+      segs = [];
+      for (const x of u.segments) {
+        const pid = dnumId(x?.pid);
+        if (!pid || !isIso(x.start) || (x.end != null && (!isIso(x.end) || Date.parse(x.end) < Date.parse(x.start)))) return reject('invalid_event', 'each segment needs a D-number, a start and an end after it');
+        segs.push({ pid, start: x.start, end: x.end ?? null, ...(x.bf ? { bf: true } : {}) });
+      }
+    }
+    if (u.doneAt !== undefined && u.doneAt !== null && !isIso(u.doneAt)) return reject('invalid_event', 'doneAt must be an ISO time or null');
+    if (segs) p.segments = segs;
+    if (u.doneAt !== undefined) { p.doneAt = u.doneAt; p.status = u.doneAt ? 'done' : openSegs(p).length ? 'active' : p.segments.length ? 'paused' : 'landed'; if (u.doneAt) closeSegment(p, u.doneAt); }
+    if (p.status === 'done') evalSuspect(t, p, e.at); else delete p.suspect;
+    return null;
+  },
   'pallet.resume'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     if (p.status !== 'paused') return null;
@@ -243,7 +339,9 @@ export const backdockReducers = {
   'pallet.done'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     if (p.status === 'done') return null;                     // second done: acknowledged no-op, credit stays
+    if (!p.segments.length) return reject('invalid_event', `no work recorded on ${p.ref}: start it first`);
     closeSegment(p, e.at); p.status = 'done'; p.doneAt = e.at;
+    evalSuspect(s.dock.trucks[e.entity.truck], p, e.at);
     return null;
   },
   'pallet.reopen'(s, e) {
@@ -281,16 +379,48 @@ export const backdockReducers = {
   // ── Halts ────────────────────────────────────────────────────────────
   'halt.start'(s, e) {
     const t = truck(s, e); if (t.code) return t;
-    if (!HALT_REASONS.includes(e.payload.reason)) return reject('invalid_event', `reason must be one of ${HALT_REASONS.join(', ')}`);
-    const open = t.halts[t.halts.length - 1];
-    if (open && !open.end) return null;
-    t.halts.push({ reason: e.payload.reason, start: e.at, end: null });
+    const kind = e.payload.kind ?? 'halt', reason = kind === 'huddle' || kind === 'break' ? kind : e.payload.reason;
+    if (!HALT_KINDS.includes(kind)) return reject('invalid_event', `kind must be one of ${HALT_KINDS.join(', ')}`);
+    const reasons = kind === 'transition' ? TRANS_REASONS : kind === 'halt' ? HALT_REASONS : [kind];
+    if (!reasons.includes(reason)) return reject('invalid_event', `reason must be one of ${reasons.join(', ')}`);
+    if (t.halts.some(h => !h.end)) return null;
+    const note = String(e.payload.note || '').slice(0, 120);
+    t.halts.push({ kind, reason, start: e.at, end: null, ...(note ? { note } : {}) });
+    return null;
+  },
+  // The booked opening huddle: a planned block from decant start, replacing
+  // an earlier booking. mins 0 clears it. Ad hoc huddles use halt.start.
+  'huddle.plan'(s, e) {
+    const t = truck(s, e); if (t.code) return t;
+    const mins = Math.round(Number(e.payload.mins));
+    if (!(mins >= 0 && mins <= 120)) return reject('invalid_event', 'mins must be 0 to 120');
+    t.halts = t.halts.filter(h => !(h.kind === 'huddle' && h.planned));
+    const from = startOf(t) || e.at;
+    if (mins) t.halts.push({ kind: 'huddle', reason: 'huddle', start: from, end: new Date(Date.parse(from) + mins * 60000).toISOString(), planned: true });
+    t.halts.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    return null;
+  },
+  // A personal break: only that person's clock stops (a halt stops everyone's).
+  'break.start'(s, e) {
+    const t = truck(s, e); if (t.code) return t;
+    const pid = dnumId(e.payload.pid);
+    if (!pid || !t.team.some(m => m.pid === pid)) return reject('not_on_team', `${e.payload.pid} is not on this truck's team`);
+    t.breaks ||= [];
+    if (t.breaks.some(b => b.pid === pid && !b.end)) return reject('invalid_event', `${pid} is already on a break`);
+    t.breaks.push({ pid, start: e.at, end: null });
+    return null;
+  },
+  'break.end'(s, e) {
+    const t = truck(s, e); if (t.code) return t;
+    const pid = dnumId(e.payload.pid), b = (t.breaks || []).find(x => x.pid === pid && !x.end);
+    if (!b) return reject('invalid_event', `${e.payload.pid} is not on a break`);
+    b.end = e.at;
     return null;
   },
   'halt.end'(s, e) {
     const t = truck(s, e); if (t.code) return t;
-    const open = t.halts[t.halts.length - 1];
-    if (open && !open.end) open.end = e.at;
+    const open = t.halts.find(h => !h.end);
+    if (open) open.end = e.at;
     return null;
   },
 
@@ -339,6 +469,7 @@ function teamOf(list) {
     const pid = dnumId(m); if (!pid) return null;
     if (seen.has(pid)) continue; seen.add(pid);
     const x = { pid, dnum: Number(pid.slice(1)) };
+    if (m && typeof m === 'object' && TEAM_ROLES.includes(m.role)) x.role = m.role;
     if (m && typeof m === 'object') for (const k of ['start', 'finish']) if (typeof m[k] === 'string') x[k] = m[k].slice(0, 40);
     out.push(x);
   }
@@ -346,7 +477,7 @@ function teamOf(list) {
 }
 // Why a truck cannot close yet, or null.
 function closable(t) {
-  const running = Object.values(t.pallets).filter(p => p.status === 'active').map(p => p.ref);
+  const running = Object.values(t.pallets).filter(p => p.status === 'active' || p.segments.some(x => !x.end)).map(p => p.ref);
   return running.length ? reject('pallets_running', `pause or finish ${running.join(', ')} before finalising`) : null;
 }
 const leftovers = t => Object.values(t.pallets).filter(p => p.status !== 'done' && !p.excluded);
@@ -398,7 +529,7 @@ function onGrid(g, ref) {
 function canWork(t, p, pid) {
   pid = String(pid);
   if (t.team.length && !t.team.some(m => m.pid === pid)) return reject('not_on_team', `${pid} is not on this truck's team`);
-  const busy = Object.values(t.pallets).find(o => o !== p && o.status === 'active' && o.assignedTo === pid);
+  const busy = Object.values(t.pallets).find(o => o !== p && o.segments.some(x => !x.end && x.pid === pid));
   if (busy) return reject('person_busy', `${pid} is already decanting ${busy.ref}`);
   return null;
 }
@@ -420,7 +551,31 @@ function rematchScans(t) {
     if (p.cartons == null && added) { p.cartons = added; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons, t.minsPerCarton); }
   }
 }
-function closeSegment(p, at) { const seg = p.segments[p.segments.length - 1]; if (seg && !seg.end) seg.end = at; }
+function closeSegment(p, at) { for (const seg of p.segments) if (!seg.end) seg.end = at; }
+const openSegs = p => p.segments.filter(x => !x.end);
+const isIso = v => typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v));
+export const startOf = t => t.decantStartAt || t.landedAt || null;
+// Worked time on a pallet: its segments, less any halt (everyone stops) and
+// the worker's own breaks. As Decant Visualiser's workedMs.
+const overlap = (a1, a2, b1, b2) => Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
+export function segWorkedMs(t, seg, nowMs) {
+  const a = Date.parse(seg.start), b = seg.end ? Date.parse(seg.end) : nowMs;
+  if (!(b > a)) return 0;
+  let off = 0;
+  for (const h of t.halts || []) off += overlap(a, b, Date.parse(h.start), h.end ? Date.parse(h.end) : nowMs);
+  for (const x of t.breaks || []) if (x.pid === seg.pid) off += overlap(a, b, Date.parse(x.start), x.end ? Date.parse(x.end) : nowMs);
+  return Math.max(0, b - a - off);
+}
+export const workedMs = (t, p, nowMs) => p.segments.reduce((n, seg) => n + segWorkedMs(t, seg, nowMs), 0);
+// A 60-minute pallet "done" in a minute is almost always a missed start:
+// flag it so its time credits nobody until the times are fixed or it is
+// confirmed. Pallets expected under 10 minutes can be quick and are exempt.
+function evalSuspect(t, p, at) {
+  if (p.suspectOk) { delete p.suspect; return; }
+  const exp = p.expectedMins ?? (p.cartons != null ? p.cartons * (t.minsPerCarton ?? STD_MINS_PER_CARTON) : null);
+  if (exp != null && exp >= 10 && workedMs(t, p, Date.parse(at)) / 60000 < exp * 0.2) p.suspect = true;
+  else delete p.suspect;
+}
 function truck(s, e) {
   const t = s.dock.trucks[e.entity.truck];
   if (!t) return reject('not_found', `truck ${e.entity.truck} does not exist`);
@@ -442,28 +597,52 @@ export function historyRow(id, t) {
   const pallets = Object.values(t.pallets).filter(p => !p.excluded);
   const done = pallets.filter(p => p.status === 'done');
   const mins = (a, b) => a && b ? Math.max(0, (Date.parse(b) - Date.parse(a)) / 60000) : 0;
-  const haltMins = t.halts.reduce((n, h) => n + mins(h.start, h.end), 0);
+  const nowMs = Date.parse(t.clearedAt) || Date.now();
+  // The decant clock (as DV): from decant start (else landed) to the last
+  // pallet done (else the finalise).
+  const from = startOf(t), lastDone = done.map(p => p.doneAt).filter(Boolean).sort().at(-1) || t.clearedAt;
+  const clearMins = mins(from, lastDone);
+  const spans = k => t.halts.filter(h => (h.kind || 'halt') === k && h.end).reduce((n, h) => n + mins(h.start, h.end), 0);
+  const haltMins = spans('halt');
+  // Downtime is real halts and transitions, by reason; huddles and team
+  // breaks are planned and reported on their own.
   const downtime = {};
-  for (const h of t.halts) { const d = (downtime[h.reason] ||= { reason: h.reason, mins: 0, count: 0 }); d.mins += mins(h.start, h.end); d.count += 1; }
+  for (const h of t.halts) {
+    const kind = h.kind || 'halt'; if (kind === 'huddle' || kind === 'break' || !h.end) continue;
+    const d = (downtime[kind + ':' + h.reason] ||= { kind, reason: h.reason, mins: 0, count: 0 }); d.mins += mins(h.start, h.end); d.count += 1;
+  }
+  // Credit: each pallet's cartons shared by worked time (halts and the
+  // person's breaks taken out). A suspect pallet credits nobody.
   const perPerson = {};
-  for (const p of done) for (const seg of p.segments) { const r = (perPerson[seg.pid] ||= { pid: seg.pid, mins: 0, pallets: new Set(), cartons: 0 }); r.mins += mins(seg.start, seg.end); r.pallets.add(p.ref); }
-  for (const p of done) { const pids = [...new Set(p.segments.map(x => x.pid))]; for (const pid of pids) perPerson[pid].cartons += (p.cartons || 0) / pids.length; }
+  for (const p of done) {
+    if (p.suspect) continue;
+    const by = {}; let total = 0;
+    for (const seg of p.segments) { const w = segWorkedMs(t, seg, nowMs); by[seg.pid] = (by[seg.pid] || 0) + w; total += w; }
+    const n = Object.keys(by).length;
+    for (const [pid, w] of Object.entries(by)) {
+      const share = total ? w / total : 1 / n, r = (perPerson[pid] ||= { pid, mins: 0, pallets: 0, bays: new Set(), cartons: 0, expected: 0 });
+      r.mins += w / 60000; r.pallets += share >= 0.5 || n === 1 ? 1 : share; r.bays.add(p.ref); r.cartons += (p.cartons || 0) * share; r.expected += (p.expectedMins || 0) * share;
+    }
+  }
   const cartons = done.reduce((n, p) => n + (p.cartons || 0), 0);
-  const clearMins = mins(t.landedAt, t.clearedAt);
   const carried = pallets.filter(p => p.carryover), gone = new Set(t.carriedOutIds || []), all = consolsOf(t).filter(c => !gone.has(c.id));
   // Cartons per department: the manifest consols that landed on a done
   // pallet, by the consol's department.
   const byDept = {};
   if (all.length) { const consol = new Map(all.map(c => [c.id, c])); for (const p of done) for (const id of p.consolIds) { const c = consol.get(id); if (!c) continue; const d = (byDept[c.dept || '?'] ||= { dept: c.dept || '', cartons: 0, pallets: new Set() }); d.cartons += Number(c.cartons) || 0; d.pallets.add(p.ref); } }
+  const active = clearMins - haltMins;
   return {
-    id, date: id.slice(0, 10), landedAt: t.landedAt, clearedAt: t.clearedAt,
+    id, date: id.slice(0, 10), landedAt: t.landedAt, decantStartAt: t.decantStartAt || null, clearedAt: t.clearedAt,
     cartons, pallets: done.length, palletsLanded: pallets.length,
-    clearMins: Math.round(clearMins), haltMins: Math.round(haltMins), haltCount: t.halts.length,
-    downtime: Object.values(downtime).map(d => ({ ...d, mins: Math.round(d.mins) })),
-    teamRate: clearMins > haltMins ? Math.round(cartons / ((clearMins - haltMins) / 60)) : 0,
+    clearMins: Math.round(clearMins), haltMins: Math.round(haltMins), haltCount: t.halts.filter(h => (h.kind || 'halt') === 'halt').length,
+    huddleMins: Math.round(spans('huddle')), transitionMins: Math.round(spans('transition')), teamBreakMins: Math.round(spans('break')),
+    breakMins: Math.round((t.breaks || []).filter(b => b.end).reduce((n, b) => n + mins(b.start, b.end), 0)),
+    downtime: Object.values(downtime).map(d => ({ ...d, mins: Math.round(d.mins) })).sort((a, b) => b.mins - a.mins),
+    teamRate: active > 0 ? Math.round(cartons / (active / 60)) : 0,
+    suspect: done.filter(p => p.suspect).length,
     audit: all.length ? auditOf(all, pallets) : null,
     carriedIn: carried.length ? { pallets: carried.length, cartons: carried.reduce((n, p) => n + (p.cartons || 0), 0), from: carried[0].carriedFrom || null } : null,
-    perPerson: Object.values(perPerson).map(r => ({ pid: r.pid, cartons: Math.round(r.cartons), pallets: r.pallets.size, bays: [...r.pallets], mins: Math.round(r.mins), rate: r.mins ? Math.round(r.cartons / (r.mins / 60)) : 0 })),
+    perPerson: Object.values(perPerson).map(r => ({ pid: r.pid, cartons: Math.round(r.cartons), pallets: Math.round(r.pallets * 10) / 10, bays: [...r.bays], mins: Math.round(r.mins), rate: r.mins ? Math.round(r.cartons / (r.mins / 60)) : 0, deltaPct: r.expected ? Math.round((r.mins - r.expected) / r.expected * 100) : null })),
     byDept: Object.values(byDept).map(d => ({ dept: d.dept, cartons: d.cartons, pallets: d.pallets.size })).sort((a, b) => b.cartons - a.cartons),
     manifest: t.manifest ? { manNo: t.manifest.manNo, despatch: t.manifest.despatch, dcNo: t.manifest.dcNo } : null,
   };

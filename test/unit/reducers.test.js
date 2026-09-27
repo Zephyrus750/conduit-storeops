@@ -73,12 +73,14 @@ test('halts need a known reason; finalise closes an open halt and writes a histo
   const s = initialState(); const t = live(s);
   assert.equal(apply(s, ev('halt.start', { truck: t }, { reason: 'lunch' })).code, 'invalid_event');
   assert.equal(apply(s, ev('halt.start', { truck: t }, { reason: 'equip' }, { at: '2026-09-07T09:00:00+08:00' })), null);
+  apply(s, ev('halt.end', { truck: t }, {}, { at: '2026-09-07T09:05:00+08:00' }));
   apply(s, ev('pallet.land', { truck: t, bay: 'B1' }, { ptype: 'bulk', cartons: 10, carryover: true }));
   apply(s, ev('pallet.start', { truck: t, bay: 'B1' }, { pid: 'D2' }, { at: '2026-09-07T09:10:00+08:00' }));
   apply(s, ev('pallet.done', { truck: t, bay: 'B1' }, {}, { at: '2026-09-07T09:20:00+08:00' }));
+  apply(s, ev('halt.start', { truck: t }, { reason: 'waiting' }, { at: '2026-09-07T09:25:00+08:00' }));
   assert.equal(apply(s, ev('truck.finalise', { truck: t }, {}, { at: '2026-09-07T09:30:00+08:00', actor: { role: 'manager', device: 'DESK' } })), null);
   const row = s.dock.history[0];
-  assert.equal(row.id, t); assert.equal(row.cartons, 10); assert.equal(row.pallets, 1); assert.equal(row.haltMins, 30); assert.equal(row.haltCount, 1);
+  assert.equal(row.id, t); assert.equal(row.cartons, 10); assert.equal(row.pallets, 1); assert.equal(row.haltMins, 10, 'the open halt closed at finalise'); assert.equal(row.haltCount, 2);
   assert.deepEqual(row.carriedIn, { pallets: 1, cartons: 10, from: null });
   assert.equal(row.perPerson[0].pid, 'D2'); assert.deepEqual(row.perPerson[0].bays, ['B1']); assert.equal(row.perPerson[0].mins, 10);
   assert.deepEqual(row.byDept, [], 'no manifest on this truck, so no department split');
@@ -112,7 +114,7 @@ test('planner slots feed truck.create', () => {
 });
 
 test('replay rebuilds the same state from the log', () => {
-  const log = [ev('truck.create', { truck: '2026-09-07-T1' }), ev('truck.setLive', { truck: '2026-09-07-T1' }), ev('pallet.land', { truck: '2026-09-07-T1', bay: 'A1' }, { ptype: 'chep', cartons: 9 }), ev('pallet.done', { truck: '2026-09-07-T1', bay: 'A1' })];
+  const log = [ev('truck.create', { truck: '2026-09-07-T1' }), ev('truck.setLive', { truck: '2026-09-07-T1' }), ev('pallet.land', { truck: '2026-09-07-T1', bay: 'A1' }, { ptype: 'chep', cartons: 9 }), ev('pallet.start', { truck: '2026-09-07-T1', bay: 'A1' }, { pid: 'D1' }), ev('pallet.done', { truck: '2026-09-07-T1', bay: 'A1' })];
   const a = initialState(); replay(a, log);
   const b = initialState(); replay(b, log);
   assert.deepEqual(a, b);
