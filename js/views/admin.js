@@ -301,7 +301,8 @@ async function publishMap(ctx, form) {
   if (!floors.length) { err.textContent = 'Choose the map file: the editor\'s .js or .json export, or the ground floor SVG.'; return; }
   st.pubVersion = version; btn.disabled = true; err.textContent = '';
   try {
-    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: { version, name, floors, departments } });
+    const extra = st.pubDoc ? { ...(st.pubDoc.storeInfo ? { storeInfo: st.pubDoc.storeInfo } : {}), ...(st.pubDoc.metresPerUnit ? { metresPerUnit: st.pubDoc.metresPerUnit } : {}) } : {};
+    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: { version, name, floors, departments, ...extra } });
     st.pubDoc = null;
     toast(`Map ${r.version} published · ${r.floors.map(f => `${f.id} ${f.shelves} shelves`).join(', ')}`);
     st.pubVersion = null; st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); ctx.rerender();

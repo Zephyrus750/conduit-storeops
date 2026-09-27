@@ -100,11 +100,35 @@ function readString(src, i) {
 // stores beside them.
 export function renderMap(data) {
   const floors = (data.floors || []).map(f => renderFloor(f, data));
+  const info = cleanStoreInfo(data.storeInfo), mpu = Number(data.metresPerUnit);
   return {
     store: String(data.storeNumber || ''), name: String(data.storeName || ''), editorVersion: String(data.version || ''),
     departments: (data.departments || []).map(d => ({ id: d.id, name: d.name, color: d.color, parent: d.parent })),
-    floors,
+    floors, ...(info ? { storeInfo: info } : {}), ...(mpu > 0 && mpu < 100 ? { metresPerUnit: mpu } : {}),
   };
+}
+
+// The editor's store details (Store Info tab), allow-listed field by field:
+// every device shows them, so only short text, coordinates and https links
+// survive, and empty fields are dropped. The assembly point and directions
+// serve the evacuation route; address, hours and holidays the store details.
+// Runs in the console before publishing and again on the worker.
+export function cleanStoreInfo(info) {
+  if (!info || typeof info !== 'object') return null;
+  const txt = (v, max = 200) => (typeof v === 'string' || typeof v === 'number') ? String(v).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max) : '';
+  const coord = (v, lim) => { const n = Number(v); return v !== '' && v != null && Number.isFinite(n) && Math.abs(n) <= lim ? n : null; };
+  const link = v => { const u = txt(v, 500); try { return u && new URL(u).protocol === 'https:' ? u : ''; } catch { return ''; } };
+  const out = {};
+  for (const k of ['brand', 'storeType', 'storeStyle', 'storeSize', 'zone', 'parkingTip', 'assemblyNotes', 'lastUpdated']) { const v = txt(info[k], k.endsWith('Notes') || k === 'parkingTip' ? 300 : 60); if (v) out[k] = v; }
+  for (const [k, lim] of [['lat', 90], ['lng', 180], ['parkingLat', 90], ['parkingLng', 180], ['assemblyLat', 90], ['assemblyLng', 180]]) { const v = coord(info[k], lim); if (v !== null) out[k] = v; }
+  for (const k of ['directionsGoogle', 'directionsApple']) { const v = link(info[k]); if (v) out[k] = v; }
+  const lines = Array.isArray(info.addressLines) ? info.addressLines.map(l => txt(l, 120)).filter(Boolean).slice(0, 5) : [];
+  if (lines.length) out.addressLines = lines;
+  const hours = Array.isArray(info.hoursDays) ? info.hoursDays.filter(d => Array.isArray(d) && txt(d[1])).slice(0, 7).map(d => [txt(d[0], 20), txt(d[1], 60)]) : [];
+  if (hours.length) out.hoursDays = hours;
+  const hol = Array.isArray(info.publicHolidays) ? info.publicHolidays.filter(h => h && (h.name || h.date)).slice(0, 30).map(h => ({ name: txt(h.name, 60), date: txt(h.date, 20), hours: txt(h.hours, 60) })) : [];
+  if (hol.length) out.publicHolidays = hol;
+  return Object.keys(out).length ? out : null;
 }
 
 export function renderFloor(floor, data) {

@@ -575,3 +575,28 @@ svg.barcode { background: #fff; max-width: 100%; height: auto; }
 .ad-subh { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 18px 0 6px; }
 .ad-edacts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .bdr-held .li .nm { white-space: normal; }
+
+/* Evacuation route (Emergency › Nearest exit): a green route with a dark
+   casing so it reads over any department colour, white pulses the way to
+   go, a dashed leg where there is no walk path, rings on the exit and the
+   assembly point. The route layer only; shelves never animate. */
+.evac-layer path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.evac-route-casing { stroke: #052e16; stroke-width: calc(var(--evac-w, 8) * 1.9px); opacity: .85; }
+.evac-route-line { stroke: #16a34a; stroke-width: calc(var(--evac-w, 8) * 1px); stroke-dasharray: calc(var(--evac-w, 8) * 2.4px) calc(var(--evac-w, 8) * 1.2px); animation: evac-flow 1.1s linear infinite; }
+.evac-route-line.assembly { stroke: #22c55e; }
+.evac-route-line.straight, .evac-route-casing.straight { stroke-dasharray: calc(var(--evac-w, 8) * 1.2px) calc(var(--evac-w, 8) * 1.4px); animation: none; }
+.evac-origin { fill: #2563eb; stroke: #fff; stroke-width: 4px; }
+.evac-ring { fill: none; stroke: #16a34a; stroke-width: 5px; }
+@keyframes evac-flow { to { stroke-dashoffset: calc(var(--evac-w, 8) * -3.6px); } }
+@media (prefers-reduced-motion: reduce) { .evac-route-line { animation: none; } }
+.em-evac { border-left: 4px solid #16a34a; }
+.em-evac .ch h3 { color: #15803d; }
+.em-evac .em-steps { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; }
+.em-evac .em-steps li { display: list-item; margin: 3px 0; padding: 0; line-height: 1.45; }
+.em-asm { display: flex; gap: 10px; align-items: flex-start; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: var(--r-card); padding: 12px 14px; color: #064e3b; }
+.em-asm svg.i { flex: none; color: #059669; width: 20px; height: 20px; margin-top: 1px; }
+.em-asm b { display: block; }
+.em-asm .em-asm-links { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.frame.dark .em-asm { background: #052e16; border-color: #14532d; color: #d1fae5; }
+.btn.evac, .mv-big.evac { background: #16a34a; border-color: #16a34a; color: #fff; }
+.btn.evac.on { background: #b91c1c; border-color: #b91c1c; }

@@ -22,7 +22,7 @@ if (!store || !version || (!floors.length && !file) || !ownerKey) {
   console.error('usage: publish-map --store <no> --version <v> (--file <map.js|map.json> | --floor ground=<file.svg> [--floor stockroom=<file>]) [--name <name>] [--worker <url>]   (OWNER_KEY in env or --owner-key)');
   process.exit(1);
 }
-let departments;
+let departments, storeInfo, metresPerUnit;
 const rendered = [];
 if (file) {
   const parsed = parseMapFile(fs.readFileSync(file, 'utf8'), path.basename(file));
@@ -30,7 +30,7 @@ if (file) {
   else {
     const doc = renderMap(parsed.data);
     for (const f of doc.floors) { if (!f.shelves && !f.markers) { console.error(`skipping empty floor ${f.name}`); continue; } rendered.push({ id: f.id, name: f.name, type: f.type, svg: f.svg, ...(f.paths ? { paths: f.paths } : {}) }); console.error(`rendered ${f.name} (${f.type}): ${f.shelves} shelves, ${f.markers} markers`); }
-    departments = doc.departments; if (!name) name = doc.name;
+    departments = doc.departments; storeInfo = doc.storeInfo; metresPerUnit = doc.metresPerUnit; if (!name) name = doc.name;
   }
 }
 const call = async (path, body, token) => {
@@ -40,6 +40,6 @@ const call = async (path, body, token) => {
   return j;
 };
 const { token } = await call('/v1/auth/signin', { ownerKey, device: 'publish-map' });
-const body = { version, name, departments, floors: [...rendered.filter(r => !floors.some(f => f.id === r.id)), ...floors.map(f => ({ id: f.id, name: f.id === 'ground' ? 'Ground' : f.id, type: f.id === 'stockroom' ? 'boh' : 'foh', svg: fs.readFileSync(f.file, 'utf8') }))] };
+const body = { version, name, departments, ...(storeInfo ? { storeInfo } : {}), ...(metresPerUnit ? { metresPerUnit } : {}), floors: [...rendered.filter(r => !floors.some(f => f.id === r.id)), ...floors.map(f => ({ id: f.id, name: f.id === 'ground' ? 'Ground' : f.id, type: f.id === 'stockroom' ? 'boh' : 'foh', svg: fs.readFileSync(f.file, 'utf8') }))] };
 const r = await call(`/v1/store/${store}/map`, body, token);
 console.log(`published ${store} map ${r.version} at ${r.at}: ` + r.floors.map(f => `${f.id} ${f.shelves} shelves ${(f.bytes / 1024).toFixed(0)} KB${f.paths ? ` · ${f.paths.nodes} path nodes` : ''}`).join(', '));

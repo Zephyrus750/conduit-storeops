@@ -102,3 +102,25 @@ export function pathsOf(floor) {
   const nodes = floor?.pathNodes || floor?.paths?.nodes, edges = floor?.pathEdges || floor?.paths?.edges;
   return Array.isArray(nodes) && nodes.length >= 2 && Array.isArray(edges) && edges.length ? { nodes: nodes.map(n => ({ id: String(n.id), x: +n.x, y: +n.y, ...(n.type ? { type: String(n.type) } : {}) })), edges: edges.map(e => ({ a: String(e.a), b: String(e.b) })) } : null;
 }
+
+// Evacuation ("Nearest exit", ported from the legacy viewer): from where
+// someone is, the shortest walk to an exit on the floor, then on to the
+// nearest assembly point. An assembly point off the walk network (a car
+// park) gets a straight leg. A floor with no walk paths still answers, as
+// straight lines marked `straight`, so the nearest exit is never withheld.
+//   exits, assemblies: [{ x, y, … }] on the same floor as origin
+//   → { exit: { target, points, dist, straight }, assembly: … | null } | null
+export function evacuationRoute(graph, origin, exits, assemblies = []) {
+  const straight = (A, B) => ({ points: [{ x: A.x, y: A.y }, { x: B.x, y: B.y }], dist: Math.hypot(A.x - B.x, A.y - B.y), straight: true });
+  const walk = (A, B) => { const r = graph ? routeBetween(graph, A, B) : null; return r && isFinite(r.dist) ? { points: r.points, dist: r.dist, straight: false } : null; };
+  let exit = null;
+  for (const x of exits || []) { const leg = walk(origin, x) || (graph ? null : straight(origin, x)); if (leg && (!exit || leg.dist < exit.dist)) exit = { target: x, ...leg }; }
+  if (!exit) return null;
+  let assembly = null;
+  for (const a of assemblies || []) { const leg = walk(exit.target, a); if (leg && (!assembly || leg.dist < assembly.dist)) assembly = { target: a, ...leg }; }
+  if (!assembly && assemblies?.length) {
+    const a = assemblies.reduce((b, x) => (Math.hypot(x.x - exit.target.x, x.y - exit.target.y) < Math.hypot(b.x - exit.target.x, b.y - exit.target.y) ? x : b));
+    assembly = { target: a, ...straight(exit.target, a) };
+  }
+  return { exit, assembly };
+}

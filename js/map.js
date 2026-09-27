@@ -4,7 +4,7 @@
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
 import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments } from './ui.js';
-import { build as buildGraph, routeBetween, orderStops, pathsOf } from '../shared/route.js';
+import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute } from '../shared/route.js';
 import { markerGlyph } from '../shared/maprender.js';
 
 let floors = [], mapMeta = null;
@@ -21,7 +21,7 @@ export function setMap(doc) {
   if (live?.isConnected) live.remove();
   live = pv = null;
   if (!doc) { floors = []; mapMeta = null; return; }
-  floors = parseFloors(doc); mapMeta = { version: doc.version, at: doc.at, name: doc.name, floors: floors.map(f => ({ id: f.id, name: f.name, type: f.type })), departments: doc.departments || [] };
+  floors = parseFloors(doc); mapMeta = { version: doc.version, at: doc.at, name: doc.name, floors: floors.map(f => ({ id: f.id, name: f.name, type: f.type })), departments: doc.departments || [], storeInfo: doc.storeInfo || null, metresPerUnit: Number(doc.metresPerUnit) || null };
   setDepartments(doc.departments);
 }
 export function parseFloors(doc) {
@@ -379,6 +379,29 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       }
       return [...out, ...missing];
     },
+    // Nearest exit from a point on the shown floor: the walk to the closest
+    // exit marker, then on to the nearest assembly point on the floor, drawn
+    // as a green route with a dark casing (legible over any department
+    // colour) and white pulses the way to go. Returns the route or null.
+    evacuate(origin) {
+      api.clearOverlays();
+      const here = api.markers().filter(m => m.floor === cur?.id);
+      const exits = here.filter(m => m.type === 'exit' || m.type === 'fire-exit'), asm = here.filter(m => m.type === 'assembly');
+      const r = evacuationRoute(graphFor(cur), { x: origin[0], y: origin[1] }, exits, asm);
+      if (!r) return null;
+      const NS = 'http://www.w3.org/2000/svg', full = vb0.split(' ').map(Number), dim = Math.min(full[2], full[3]) || 1000;
+      const layer = document.createElementNS(NS, 'g'); layer.setAttribute('class', 'route-layer evac-layer'); layer.setAttribute('pointer-events', 'none');
+      layer.style.setProperty('--evac-w', Math.max(6, dim * 0.007).toFixed(1));
+      const d = pts => pts.map((p, k) => (k ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+      for (const [leg, cls] of [[r.exit, ''], [r.assembly, ' assembly']]) {
+        if (!leg) continue;
+        for (const part of ['casing', 'line']) { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d(leg.points)); p.setAttribute('class', `evac-route-${part}${cls}${leg.straight ? ' straight' : ''}`); layer.appendChild(p); }
+      }
+      const dot = document.createElementNS(NS, 'circle'); dot.setAttribute('cx', origin[0]); dot.setAttribute('cy', origin[1]); dot.setAttribute('r', Math.max(14, dim * 0.018)); dot.setAttribute('class', 'evac-origin'); layer.appendChild(dot);
+      for (const t of [r.exit.target, r.assembly?.target]) { if (!t) continue; const c = document.createElementNS(NS, 'circle'); c.setAttribute('cx', t.x); c.setAttribute('cy', t.y); c.setAttribute('r', Math.max(24, dim * 0.028)); c.setAttribute('class', 'evac-ring'); layer.appendChild(c); }
+      svg.classList.add('has-route'); svg.appendChild(layer);
+      return r;
+    },
     drawPins(pins) {   // [{ x, y, colour, label }] in map coordinates
       const NS = 'http://www.w3.org/2000/svg';
       for (const p of pins) {
@@ -407,6 +430,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
         id: `${m.getAttribute('data-equip-type')}_${Math.round(+m.getAttribute('data-x'))}_${Math.round(+m.getAttribute('data-y'))}`,
         type: m.getAttribute('data-equip-type'), label: m.getAttribute('data-label') || '', location: m.getAttribute('data-location') || '',
         dept: (m.getAttribute('data-loc-dept') || '').toLowerCase(), extClass: m.getAttribute('data-ext-class') || '', method: m.getAttribute('data-method') || '', operation: m.getAttribute('data-operation') || '',
+        detail: m.getAttribute('data-detail') || '', floor: m.closest('.mfl')?.getAttribute('data-fid') || null,
         x: +m.getAttribute('data-x'), y: +m.getAttribute('data-y'), el: m,
       }));
     },
@@ -446,8 +470,9 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const hit = document.elementFromPoint(e.clientX, e.clientY) || e.target;
     const g = hit.closest?.('.shelf-group[data-shelf]');
     const m = hit.closest?.('.emergency-marker[data-equip-type]');
-    if (g && g.getAttribute('data-shelf')) { api.select(g.getAttribute('data-shelf')); onSelect?.({ kind: 'shelf', ...api.shelfInfo(g), el: g, long: Date.now() - t > 500 }); }
-    else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m) });
+    const point = api.pointAt(e.clientX, e.clientY);
+    if (g && g.getAttribute('data-shelf')) { api.select(g.getAttribute('data-shelf')); onSelect?.({ kind: 'shelf', ...api.shelfInfo(g), el: g, point, long: Date.now() - t > 500 }); }
+    else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m), point });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
   });
   stage.addEventListener('pointercancel', e => { lift(e); drag = null; });

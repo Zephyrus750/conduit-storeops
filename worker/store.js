@@ -32,6 +32,7 @@ import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '..
 import { buildProfiles } from '../shared/profiles.js';
 import { rolloverDue } from '../shared/backfill.js';
 import { sanitizeSvg } from '../shared/svgsafe.js';
+import { cleanStoreInfo } from '../shared/maprender.js';
 import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/time.js';
 
 const SNAPSHOT_EVERY = 1000;
@@ -302,7 +303,7 @@ export class StoreObject extends DurableObject {
     if (!rows.length) throw new HttpError(404, 'not_found', 'no map has been published for this store');
     const cur = rows.find(r => r.version === this.state.map.version) || rows[0];
     const meta = JSON.parse(cur.meta);
-    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at })) };
+    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at })) };
   }
   mapDoc(version, ifNoneMatch) {
     if (version === 'latest') version = this.state.map.version || this.sql.exec('SELECT version FROM maps ORDER BY at DESC LIMIT 1').toArray()[0]?.version;
@@ -312,7 +313,7 @@ export class StoreObject extends DurableObject {
     if (ifNoneMatch && ifNoneMatch.split(',').map(s => s.trim()).includes(etag)) return new Response(null, { status: 304, headers: { ETag: etag } });
     const meta = JSON.parse(row.meta);
     const svgs = Object.fromEntries(this.sql.exec('SELECT floor, svg FROM map_floors WHERE version = ?', row.version).toArray().map(r => [r.floor, r.svg]));
-    const doc = { v: 1, kind: 'map', store: this.storeNo, version: row.version, at: row.at, by: JSON.parse(row.by), name: meta.name, departments: meta.departments, floors: meta.floors.map(f => ({ ...f, svg: svgs[f.id] || '' })) };
+    const doc = { v: 1, kind: 'map', store: this.storeNo, version: row.version, at: row.at, by: JSON.parse(row.by), name: meta.name, departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, floors: meta.floors.map(f => ({ ...f, svg: svgs[f.id] || '' })) };
     return json(doc, 200, { ETag: etag, 'Cache-Control': 'private, max-age=31536000' });
   }
   publishMap(body, claims) {
@@ -346,7 +347,8 @@ export class StoreObject extends DurableObject {
       metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), shelves: (svg.match(/class="shelf-group"/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}) });
     }
     const departments = Array.isArray(body.departments) ? body.departments.slice(0, 64).map(d => ({ id: String(d.id || '').slice(0, 16), name: String(d.name || '').slice(0, 64), color: String(d.color || '').slice(0, 16), parent: String(d.parent || '').slice(0, 16) })) : [];
-    const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments };
+    const info = cleanStoreInfo(body.storeInfo), mpu = Number(body.metresPerUnit);
+    const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments, ...(info ? { storeInfo: info } : {}), ...(mpu > 0 && mpu < 100 ? { metresPerUnit: mpu } : {}) };
     const at = new Date().toISOString(), by = { device: claims.device || null, owner: true };
     this.sql.exec('INSERT INTO maps (version, meta, at, by) VALUES (?, ?, ?, ?)', version, JSON.stringify(meta), at, JSON.stringify(by));
     for (const f of clean) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, f.id, f.svg);
