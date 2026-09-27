@@ -5,7 +5,7 @@ import { focusDone } from '../../shared/reducers/floor.js';
 import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, fmtTime, ago, status } from '../ui.js';
 import { microCount } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
-import { openTrucks, progress, truckNo, fmtHM, openHalt, HALT_NAME } from './backdock/common.js';
+import { openTrucks, progress, truckNo, fmtHM, openHalt, holdName } from './backdock/common.js';
 
 const TARGET = 100;
 function kpi(cls, icon, title, go, n, d, hl, rows, pct) {
@@ -57,5 +57,5 @@ function backdockCard(ctx) {
   const open = openTrucks(ctx.store.get('dock')), live = open.filter(t => t.status === 'live'), t = live[0] || open[0];
   if (!t) return `<div class="card kpi"><div class="kh">${ic('m-receiving')}<h3>Back dock</h3><a class="open" data-go="receiving">Open ${ic('arrow')}</a></div><div class="hero"><span class="n">0</span><span class="d">trucks on the dock</span></div><div class="hl">Nothing receiving. Start a truck from Receiving or a dock phone.</div></div>`;
   const pr = progress(t), halt = openHalt(t);
-  return `<div class="card kpi"><div class="kh">${ic('m-receiving')}<h3>Back dock</h3><a class="open" data-go="receiving">Open ${ic('arrow')}</a></div><div class="hero"><span class="n">${pr.pct}%</span><span class="d">Truck ${esc(truckNo(t.id))} ${t.status === 'live' ? 'decanted' : 'staged'}</span></div><div class="hl">${pr.done} / ${pr.total} cartons · ${pr.count} pallets · ${pr.active} decanting${halt ? ` · <b class="c-red">halted · ${esc(HALT_NAME[halt.reason] || halt.reason)}</b>` : ''}</div><div class="rows"><div class="row">Landed<b>${t.landedAt ? fmtHM(t.landedAt) : '—'}</b></div><div class="row">Goal<b>${t.goalAt ? fmtHM(t.goalAt) : '—'}</b></div><div class="row">Trucks on the board<b>${open.length}</b></div></div><div class="prog"><div class="track"><i style="width:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
+  return `<div class="card kpi"><div class="kh">${ic('m-receiving')}<h3>Back dock</h3><a class="open" data-go="receiving">Open ${ic('arrow')}</a></div><div class="hero"><span class="n">${pr.pct}%</span><span class="d">Truck ${esc(truckNo(t.id))} ${t.status === 'live' ? 'decanted' : 'staged'}</span></div><div class="hl">${pr.done} / ${pr.total} cartons · ${pr.count} pallets · ${pr.active} decanting${halt ? ` · <b class="c-red">halted · ${escholdName(halt)}</b>` : ''}</div><div class="rows"><div class="row">Landed<b>${t.landedAt ? fmtHM(t.landedAt) : '—'}</b></div><div class="row">Goal<b>${t.goalAt ? fmtHM(t.goalAt) : '—'}</b></div><div class="row">Trucks on the board<b>${open.length}</b></div></div><div class="prog"><div class="track"><i style="width:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
 }

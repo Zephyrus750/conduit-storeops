@@ -6,7 +6,13 @@ export const PTYPES = [['chep', 'Chep tubs', '#2953D6'], ['loscam', 'Load pallet
 export const PT_LETTER = { chep: 'c', loscam: 'l', bulk: 'b' };
 export const PT_NAME = Object.fromEntries(PTYPES.map(p => [p[0], p[1]]));
 export const PT_COLOUR = Object.fromEntries(PTYPES.map(p => [p[0], p[2]]));
-export const HALT_NAME = { hcage: 'Home cage', nostock: 'No stock', equip: 'Equipment', safety: 'Safety', waiting: 'Waiting', other: 'Other' };
+export const HALT_NAME = { hcage: 'Cages out', nostock: 'No stock', equip: 'Equipment', safety: 'Safety', waiting: 'Waiting', other: 'Other' };
+// Hold-up kinds (DV): a halt is downtime; a huddle, a transition and a team
+// break are planned pauses. All of them stop the decant clock.
+export const KIND_NAME = { halt: 'Halt', huddle: 'Huddle', transition: 'Transition', break: 'Team break' };
+export const TRANS_NAME = { cages: 'Cages', tables: 'Tables', tubs: 'Tubs', moving: 'Moving stock', changeover: 'Changeover', other: 'Other' };
+export const ROLE_NAME = { cutter: 'Cutter', runner: 'Runner', cleaner: 'Cleaner' };
+export function holdName(h) { const k = h?.kind || 'halt'; return k === 'halt' ? HALT_NAME[h.reason] || 'Halt' : k === 'transition' ? `Transition · ${TRANS_NAME[h.reason] || h.reason}` : KIND_NAME[k]; }
 export const STD_MINS_PER_CARTON = 0.5;
 
 export const todayKey = () => today();
@@ -24,8 +30,41 @@ export function progress(t) {
   return { total, done, pct: total ? Math.round(done / total * 100) : 0, count: ps.length, active: ps.filter(p => p.status === 'active').length, doneCount: ps.filter(p => p.status === 'done').length };
 }
 export function openHalt(t) { const h = t?.halts || []; for (let i = h.length - 1; i >= 0; i--) if (!h[i].end) return h[i]; return null; }
-// Who is on which pallet right now.
-export function running(t) { const out = {}; for (const p of pallets(t)) { const seg = (p.segments || []).find(s => !s.end); if (seg) out[seg.pid] = p.ref; } return out; }
+// Who is on which pallet right now (two can share one).
+export function running(t) { const out = {}; for (const p of pallets(t)) for (const seg of p.segments || []) if (!seg.end) out[seg.pid] = p.ref; return out; }
+export const onBreak = (t, pid) => (t?.breaks || []).find(b => b.pid === pid && !b.end) || null;
+export const openSegs = p => (p?.segments || []).filter(x => !x.end);
+
+// ── the decant clock ───────────────────────────────────────────────────
+// Worked minutes on a pallet now (halts and the worker's breaks taken out),
+// and how it stands against its estimate: over, near (80%+) or on pace.
+export { startOf };
+export const workedMin = (t, p, now = Date.now()) => workedMs(t, p, now) / 60000;
+export function pace(t, p, now = Date.now()) {
+  const exp = p.expectedMins; if (!exp) return '';
+  const w = workedMin(t, p, p.status === 'done' ? Date.parse(p.doneAt) || now : now);
+  if (p.status === 'done') return w > exp * 1.15 ? 'over' : w < exp * 0.85 ? 'under' : 'on';
+  if (p.status !== 'active' && p.status !== 'paused') return '';
+  return w > exp ? 'over' : w > exp * 0.8 ? 'near' : 'on';
+}
+export const fmtMins = m => { m = Math.max(0, Math.round(m)); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; };
+export const fmtClock = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// Forecast finish (DV's plain estimate): the minutes still expected on
+// unfinished pallets, shared across the crew not on a break; an open
+// hold-up adds nothing yet (it ends when it ends).
+export function forecast(t, now = Date.now()) {
+  const left = pallets(t).filter(p => p.status !== 'done');
+  const remain = left.reduce((n, p) => n + Math.max(0, (p.expectedMins || 0) - workedMin(t, p, now)), 0);
+  const crew = Math.max(1, (t.team || []).filter(m => !onBreak(t, m.pid)).length);
+  return { remain, crew, at: remain ? now + remain / crew * 60000 : null };
+}
+// Where the team should be by now to make the goal: the share of the time
+// from decant start to the goal that has gone.
+export function goalPace(t, now = Date.now()) {
+  const from = Date.parse(startOf(t)), goal = Date.parse(t.goalAt);
+  if (!(from < goal)) return null;
+  return Math.max(0, Math.min(1, (now - from) / (goal - from)));
+}
 // People are D-numbers on the dock, never names.
 export const who = m => m.pid;
 export { dnumId } from '../../../shared/reducers/backdock.js';
@@ -36,6 +75,7 @@ export const startable = p => p && (p.status === 'landed' || p.status === 'assig
 
 // ── manifests ──────────────────────────────────────────────────────────
 import { today } from '../../ui.js';
+import { workedMs, startOf } from '../../../shared/reducers/backdock.js';
 import { parseManifestSheets, manifestDoc, attachConsols } from '../../../shared/manifest.js';
 import { MICRO } from '../../data/micros.js';
 export function microDept(code) { const c = String(code || '').padStart(3, '0'); for (const [d, list] of Object.entries(MICRO)) if (list.some(x => x.startsWith(c + ' '))) return d; return ''; }
