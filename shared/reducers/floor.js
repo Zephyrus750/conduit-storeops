@@ -8,7 +8,7 @@
 //   labels    cycleLen, assign micro → [shelves], checks cycle → micro → { at, device },
 //             variances cycle → [ { micro, keycode, note, at, device } ]
 //   stocktake sessions session → { phase, startedAt, startedBy, ended, shelves: shelf → { state, by, at, vby } }
-//   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, log[] }
+//   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, log[], removed? }
 //   assets    asset → { intMonths, due, log[], updated }
 //   picklists device → { items: [ { code, completed } ], at }
 
@@ -58,6 +58,16 @@ export const floorReducers = {
   },
   'refresh.clearWeek'(s, e) {
     s.refresh.weeks[e.entity.week] = {};
+    return null;
+  },
+  // Reset one department for the week (ShelfSearcher's per-department
+  // Reset): clears marks carrying that department plus the segments the
+  // device listed (marks made before marks carried a department), and holds
+  // them unmarked like refresh.unmark so a late mark cannot bring one back.
+  'refresh.clearDept'(s, e) {
+    const dept = String(e.payload.dept).toLowerCase().slice(0, 16), listed = Array.isArray(e.payload.segments) ? e.payload.segments.filter(x => typeof x === 'string').slice(0, 5000) : [];
+    const week = s.refresh.weeks[e.entity.week] || {}, gone = ((s.refresh.unmarked ||= {})[e.entity.week] ||= {});
+    for (const seg of new Set([...Object.keys(week).filter(k => week[k].dept === dept), ...listed.filter(k => week[k])])) { delete week[seg]; gone[seg] = e.at; }
     return null;
   },
   'refresh.focus.set'(s, e) {
@@ -196,6 +206,17 @@ export const floorReducers = {
     return null;
   },
 
+  // A logged-in-error or duplicate issue leaves the lists. The issue and
+  // its log stay in state (events are never deleted), marked removed, so a
+  // device that missed the removal cannot bring it back.
+  'issue.remove'(s, e) {
+    const i = issue(s, e); if (i.code) return i;
+    if (i.removed) return reject('invalid_event', 'issue already removed');
+    i.removed = { at: e.at, by: e.actor?.device || null }; i.updated = e.at;
+    i.log.push({ t: e.at, a: 'Removed', n: e.payload.note || '' });
+    return null;
+  },
+
   // ── Emergency assets ─────────────────────────────────────────────────
   'asset.service'(s, e) {
     const a = (s.assets[e.entity.asset] ||= { intMonths: 12, due: null, log: [], updated: null });
@@ -232,6 +253,7 @@ function openSession(s, e) {
 function issue(s, e) {
   const i = s.issues[e.entity.issue];
   if (!i) return reject('not_found', `issue ${e.entity.issue} does not exist`);
+  if (i.removed && e.type !== 'issue.remove') return reject('not_found', `issue ${e.entity.issue} was removed`);
   return i;
 }
 function num(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }

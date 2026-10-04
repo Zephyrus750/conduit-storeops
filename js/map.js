@@ -3,8 +3,8 @@
 // filter. Ported from the showcase's map chrome; the map document itself
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
-import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments } from './ui.js';
-import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute } from '../shared/route.js';
+import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast } from './ui.js';
+import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords } from '../shared/route.js';
 import { markerGlyph } from '../shared/maprender.js';
 
 let floors = [], mapMeta = null;
@@ -55,6 +55,17 @@ export function shelfForLocation(code) {
   const C = canonCode(code), digits = (/\d{3,}/.exec(C) || [])[0];
   return locIndex.idx.get(C) || (digits && locIndex.idx.get(digits)) || null;
 }
+// What the published map covers, per floor: named shelves and walk-path
+// nodes (the store details' map status). Counted once per map version.
+let statsCache = null;
+export function mapStats() {
+  if (!floors.length) return null;
+  if (statsCache?.v !== mapMeta?.version) {
+    const doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => `<g data-fid="${esc(f.id)}">${f.inner}</g>`).join('')}</svg>`, 'image/svg+xml');
+    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const names = new Set([...(g?.querySelectorAll('.shelf-group[data-shelf]') || [])].map(x => x.getAttribute('data-shelf')).filter(n => n && !n.startsWith('_u'))); return { id: f.id, name: f.name, type: f.type, shelves: names.size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }) };
+  }
+  return statsCache;
+}
 export function mapFloors() { return floors.map(f => ({ id: f.id, name: f.name, type: f.type })); }
 export async function loadMap(url) {
   const res = await fetch(url);
@@ -71,7 +82,7 @@ export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttr
 // same module; "A16" is the whole shelf. Upper case, no spaces or dashes.
 // Printed shelf labels pad numbers ("A013S02" is A13 S2), so a leading zero
 // after a letter is dropped: the label and the map meet in one form.
-export function canonCode(code) { return String(code || '').toUpperCase().replace(/[\s-]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1'); }
+export function canonCode(code) { return String(code || '').toUpperCase().replace(/[\s\-_.]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1'); }
 // The groups a code points at: a shelf name first (a shelf can itself be
 // called "S1"), then a shelf plus a module suffix (S1, S2, E1, E2). Any
 // place that takes a typed or scanned location goes through here, so a
@@ -90,6 +101,29 @@ export function groupsFor(root, code) {
   // A stockroom bay number (7001) names the shelf that lists it in data-locations.
   if (/^\d{3,6}$/.test(C)) return all.filter(g => (g.getAttribute('data-locations') || '').split(/[\s,]+/).includes(C));
   return [];
+}
+// A typed or wedge-scanned shelf label (Refresh, Stocktake): a USB or
+// Bluetooth scanner types the code and presses Enter, which lands here like
+// a tap on that shelf; the camera button feeds the same field.
+export function shelfScanField(placeholder = 'Scan or type a shelf label') {
+  return `<div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}">${camButton('shelfscan', true)}</div>`;
+}
+export function bindShelfScan(root, map, onShelf) {
+  root.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || !e.target.matches?.('[data-field="shelfscan"]')) return;
+    e.preventDefault();
+    const code = e.target.value.trim(); e.target.value = ''; if (!code) return;
+    const g = groupsFor(map.svg, code)[0];
+    if (!g) return toast(`${code} is not a shelf on this map`, 'bad');
+    onShelf(map.shelfInfo(g));
+  });
+}
+// Repaint a panel that holds the scan field without dropping its focus, so
+// a scan-walk can keep going while marks land.
+export function keepScanFocus(root, paint) {
+  const had = document.activeElement?.matches?.('[data-field="shelfscan"]');
+  paint();
+  if (had) root.querySelector('[data-field="shelfscan"]')?.focus();
 }
 // Split a code into { shelf, sub } once it is known on the map.
 export function splitCode(root, code) { const gs = groupsFor(root, code); if (!gs.length) return null; const C = canonCode(code), shelf = gs[0].getAttribute('data-shelf'); return { shelf, sub: canonCode(shelf) === C ? '' : canonCode(gs[0].getAttribute('data-subname')), groups: gs }; }
@@ -354,12 +388,18 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       const layer = document.createElementNS(NS, 'g'); layer.setAttribute('class', 'route-layer'); layer.setAttribute('pointer-events', 'none');
       const graph = graphFor(cur), full = vb0.split(' ').map(Number), dim = Math.min(full[2], full[3]) || 1000;
       const onFloor = stops.filter(st => st.here), firstUndone = onFloor.findIndex(st => !st.done);
+      // Stops on other floors: the walk comes in from the stairs nearest
+      // where the last floor left off and goes out by the stairs nearest the
+      // last stop here (ShelfSearcher's per-floor entry and exit).
+      const legs = api.stairsLegs(ids)[cur?.id] || {};
+      const wps = [...(legs.entry ? [{ c: [legs.entry.x, legs.entry.y], stairs: 'in' }] : []), ...onFloor, ...(legs.exit ? [{ c: [legs.exit.x, legs.exit.y], stairs: 'out' }] : [])];
+      const off = legs.entry ? 1 : 0;
       let total = 0;
-      for (let i = 0; i < onFloor.length - 1; i++) {
-        const A = { x: onFloor[i].c[0], y: onFloor[i].c[1] }, B = { x: onFloor[i + 1].c[0], y: onFloor[i + 1].c[1] };
+      for (let i = 0; i < wps.length - 1; i++) {
+        const A = { x: wps[i].c[0], y: wps[i].c[1] }, B = { x: wps[i + 1].c[0], y: wps[i + 1].c[1] };
         const leg = graph ? routeBetween(graph, A, B) : null, pts = leg ? leg.points : [A, B];
         total += leg ? leg.dist : Math.hypot(A.x - B.x, A.y - B.y);
-        const d = pts.map((p, k) => (k ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' '), active = i === firstUndone - 1;
+        const d = pts.map((p, k) => (k ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' '), active = firstUndone < 0 ? (legs.exit && i === wps.length - 2) : i === firstUndone + off - 1;
         const line = document.createElementNS(NS, 'path'); line.setAttribute('d', d); line.setAttribute('class', 'pick-route-line' + (active ? ' active' : '')); layer.appendChild(line);
         const flow = document.createElementNS(NS, 'path'); flow.setAttribute('d', d); flow.setAttribute('class', 'pick-route-flow'); layer.appendChild(flow);
         const size = Math.max(8, dim * 0.011);
@@ -376,10 +416,41 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
         const t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'path-badge-text'); t.setAttribute('font-size', fs); t.textContent = String(st.n); g.appendChild(t);
         layer.appendChild(g);
       }
+      for (const w of wps) {
+        if (!w.stairs) continue;
+        const rr = Math.max(16, dim * 0.018), u = rr * 0.42, [x, y] = w.c, g = document.createElementNS(NS, 'g'); g.setAttribute('class', `route-stairs-marker ${w.stairs}`);
+        g.innerHTML = `<circle cx="${x}" cy="${y}" r="${rr}"/><path class="route-stairs-glyph" d="M${x - u * 1.3} ${y + u * 1.1} h${u} v-${u} h${u} v-${u} h${u}"/>`;
+        layer.appendChild(g);
+      }
       for (const st of stops) for (const g of api.groups(st.id)) { g.setAttribute('data-onroute', st.done ? 'done' : '1'); for (const b of $$(`.shelf-badges [data-shelf="${cssq(g.getAttribute('data-shelf'))}"]`, svg)) b.setAttribute('data-onroute', '1'); }
       svg.classList.add('has-route');
       svg.appendChild(layer);
-      return { dist: total, stops: onFloor.length, network: !!graph };
+      const mpu = mapMeta?.metresPerUnit;
+      return { dist: total, metres: mpu ? Math.round(total * mpu) : null, stops: onFloor.length, network: !!graph, entry: !!legs.entry, exit: !!legs.exit };
+    },
+    // The floors a list visits, in the order it reaches them, with each
+    // floor's codes: the plan the pick list shows floor by floor.
+    floorPlan(ids) {
+      const seq = [];
+      for (const id of ids) { const fid = api.groups(id)[0]?.closest('.mfl')?.getAttribute('data-fid'); if (!fid) continue; let f = seq.find(x => x.id === fid); if (!f) { const fl0 = fl.find(x => x.id === fid); f = { id: fid, name: fl0?.name || fid, type: fl0?.type || 'foh', codes: [] }; seq.push(f); } f.codes.push(id); }
+      return seq;
+    },
+    // Per floor: where the walk enters (stairs nearest the previous floor's
+    // exit, stairwells pair across floors by position) and leaves (stairs
+    // nearest the last stop by walk), for a list in walk order.
+    stairsLegs(ids) {
+      const out = {}, plan = api.floorPlan(ids); let prev = null;
+      plan.forEach((f, i) => {
+        const graph = graphFor(fl.find(x => x.id === f.id)), legs = (out[f.id] = {});
+        if (i > 0 && graph && prev) legs.entry = nearestStairsByCoords(graph, prev);
+        if (i < plan.length - 1) {
+          const c = api.centreOf(f.codes[f.codes.length - 1]), last = c ? { x: c[0], y: c[1] } : null;
+          const ex = graph && last ? nearestStairsByWalk(graph, last) : null;
+          if (ex) legs.exit = ex.node;
+          prev = ex ? { x: ex.node.x, y: ex.node.y } : last;
+        }
+      });
+      return out;
     },
     // The walk order for a list of codes: the first stays the start, the
     // rest follow the shortest walk over the network (per floor, floors
@@ -389,13 +460,20 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       for (const id of ids) { const g = api.groups(id)[0]; if (!g) { missing.push(id); continue; } const fid = g.closest('.mfl')?.getAttribute('data-fid'); if (!byFloor.has(fid)) byFloor.set(fid, []); byFloor.get(fid).push(id); }
       const first = byFloor.keys().next().value;
       const seq = [...byFloor.keys()].sort((a, b) => (a === first ? -1 : b === first ? 1 : 0) || fl.findIndex(f => f.id === a) - fl.findIndex(f => f.id === b));
-      const out = [];
-      for (const fid of seq) {
+      const out = []; let prev = null;
+      seq.forEach((fid, fi) => {
         const codes = byFloor.get(fid), f = fl.find(x => x.id === fid), graph = graphFor(f);
         const pts = codes.map(id => { const c = api.centreOf(id); return { x: c[0], y: c[1] }; });
-        if (!graph || codes.length <= 2) { out.push(...nearestNeighbour(codes, pts)); continue; }
-        out.push(...orderStops(graph, pts).order.map(i => codes[i]));
-      }
+        // After the first floor, the walk starts at the stairs it arrives by.
+        const entry = fi > 0 && graph && prev ? nearestStairsByCoords(graph, prev) : null;
+        let ordered;
+        if (entry) ordered = (graph ? orderStops(graph, [{ x: entry.x, y: entry.y }, ...pts]).order : nearestNeighbour([...Array(codes.length + 1).keys()], [{ x: entry.x, y: entry.y }, ...pts])).filter(i => i > 0).map(i => codes[i - 1]);
+        else ordered = !graph || codes.length <= 2 ? nearestNeighbour(codes, pts) : orderStops(graph, pts).order.map(i => codes[i]);
+        out.push(...ordered);
+        const lc = api.centreOf(ordered[ordered.length - 1]), last = lc ? { x: lc[0], y: lc[1] } : null;
+        const ex = fi < seq.length - 1 && graph && last ? nearestStairsByWalk(graph, last) : null;
+        prev = ex ? { x: ex.node.x, y: ex.node.y } : last;
+      });
       return [...out, ...missing];
     },
     // Nearest exit from a point on the shown floor: the walk to the closest
@@ -425,7 +503,12 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       const NS = 'http://www.w3.org/2000/svg';
       for (const p of pins) {
         const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'pin'); g.setAttribute('transform', `translate(${p.x},${p.y})`);
-        g.innerHTML = `<path d="M0 0c-14-22-30-34-30-58a30 30 0 0 1 60 0c0 24-16 36-30 58z" fill="${p.colour}" stroke="#fff" stroke-width="5"/><circle cx="0" cy="-58" r="20" fill="#fff"/><text x="0" y="-58" style="fill:${p.colour}">${esc(p.label)}</text>`;
+        // A glyph (markup in a -8..8 box, stroked) replaces the label; a
+        // badge (a count) sits on the pin's shoulder.
+        const mid = p.glyph ? `<g transform="translate(0,-58) scale(2.1)" fill="none" style="color:${p.colour}" stroke="${p.colour}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p.glyph}</g>` : `<text x="0" y="-58" style="fill:${p.colour}">${esc(p.label)}</text>`;
+        const badge = p.badge ? `<circle cx="24" cy="-80" r="14" fill="#6F4527" stroke="#fff" stroke-width="3"/><text x="24" y="-80" class="pin-badge">${esc(p.badge)}</text>` : '';
+        g.innerHTML = `<path d="M0 0c-14-22-30-34-30-58a30 30 0 0 1 60 0c0 24-16 36-30 58z" fill="${p.colour}" stroke="#fff" stroke-width="5"/><circle cx="0" cy="-58" r="20" fill="#fff"/>${mid}${badge}`;
+        if (p.title) { const t = document.createElementNS(NS, 'title'); t.textContent = p.title; g.appendChild(t); }
         svg.appendChild(g);
       }
     },

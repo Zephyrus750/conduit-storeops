@@ -174,7 +174,7 @@ function overTab(rec, c) {
   const devs = Object.entries(c.devices || {}), online = devs.filter(([, d]) => d.online !== false && Date.now() - new Date(d.last) < 10 * 60000).length;
   const queued = devs.reduce((n, [, d]) => n + (d.outbox || 0), 0);
   const s = c.snap || {};
-  const floor = s.refresh ? `Refresh ${Object.values(s.refresh.weeks || {}).map(w => Object.keys(w).length).reduce((a, b) => a + b, 0)} marks · ${Object.values(s.issues || {}).filter(i => i.status !== 'completed').length} open issues` : 'not entitled';
+  const floor = s.refresh ? `Refresh ${Object.values(s.refresh.weeks || {}).map(w => Object.keys(w).length).reduce((a, b) => a + b, 0)} marks · ${Object.values(s.issues || {}).filter(i => !i.removed && i.status !== 'completed').length} open issues` : 'not entitled';
   const sr = s.cages ? `${Object.values(s.cages).filter(x => x.status === 'open').length} cages open · ${Object.keys(s.backfill || {}).length} backfill locations` : 'not entitled';
   const bd = s.dock ? `${Object.keys(s.dock.pallets || s.dock || {}).length} dock records` : 'not entitled';
   return `<div class="ad-tiles">${tile(devs.length, 'devices seen', c.devices ? `${online} online in the last 10 min` : 'loading')}${tile(c.seq ?? '…', 'events in the log', 'seq of the newest event')}${tile(queued, 'queued on devices', queued ? 'waiting to sync' : 'all devices in sync', queued ? 'warn' : '')}${tile(`<span class="mono">${esc(rec.mapVersion || '—')}</span>`, 'map version', rec.mapVersion ? 'published' : 'no map published yet')}</div>` +

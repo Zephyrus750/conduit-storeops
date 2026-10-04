@@ -15,6 +15,7 @@ import { settingsOf } from '../shared/reducers/store.js';
 import { installCameraButtons } from './scan.js';
 import { loadMap, setMap, mapInfo, parkMap } from './map.js';
 import { initSearch } from './search.js';
+import { takeDeepLink } from './share.js';
 import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { ensureArea, hasArea } from './unlock.js';
@@ -52,10 +53,22 @@ applyPrefs(frame);
 $('#footDate').textContent = fmtLong();
 $('#footVer').textContent = 'Conduit ' + VERSION;
 client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: 'Owner session expired. Sign in again.' } : {}); });
+// A shared shelf link (?store=…&shelf=…): open the map on that shelf once
+// signed in to that store. A store parked on this device is switched to; a
+// device that is not signed in gets the sign-in with that store chosen.
+let pendingLink = takeDeepLink();
 (async () => {
-  const s = await client.session.load();
+  let s = await client.session.load();
+  if (pendingLink && s?.store && !s.actas && s.store !== pendingLink.store) {
+    try { if ((await client.session.parked()).some(p => p.store === pendingLink.store)) s = await client.session.switchTo(pendingLink.store); } catch {}
+  }
   if (s?.store) await enter(); else if (s?.owner) await enterAdmin(); else showSignin();
 })();
+function openPendingLink(s) {
+  const l = pendingLink; pendingLink = null; if (!l) return false;
+  if (l.store !== s.store) { toast(`That shelf link is for store ${l.store}. Add that store from Store details to open it.`); return false; }
+  show('map', { select: l.shelf }); return true;
+}
 
 // ── store mode ────────────────────────────────────────────────────────
 async function enter() {
@@ -77,7 +90,7 @@ async function enter() {
   buildRail(); setWs('floor');
   actasBar(s.actas ? s : null);
   hideCover();
-  show(isMobile() ? 'mhome' : 'dashboard');
+  if (!openPendingLink(s)) show(isMobile() ? 'mhome' : 'dashboard');
 }
 // The published map: the store's `map` projection names the current
 // version, the maps client holds one copy per device, and a store with
@@ -184,6 +197,7 @@ async function showSignin({ error, owner } = {}) {
     `<div class="si-foot"><span>${ic('check')}Offline ready</span><span>${stores.length} store${stores.length === 1 ? '' : 's'}</span><a class="si-owner-link" data-shell-act="owner-signin">Owner sign-in</a><span class="ver">Conduit ${VERSION}</span></div></form>`;
   const hero = `<div class="si-hero"><div class="si-brand">${mark()}<b>Conduit</b></div><div class="si-greet">${greeting()}</div><h1>Run the <span>whole store</span>.</h1><p>Live maps, back-dock receiving and stockroom backfill. One team, one sign-in, on and off the wifi.</p><div class="si-off">${ic('check')}Works offline once it is on this device</div></div>`;
   const el = cover(mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${hero}${form}</div>`);
+  if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || `Sign in to open shelf ${pendingLink.shelf}.`; }
   $('#siForm', el).addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target); const btn = e.target.querySelector('.si-cta'); btn.disabled = true;
@@ -346,7 +360,7 @@ document.addEventListener('click', e => {
   const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
   if (e.target.closest('.mdepts')) { if (store) openLauncher(); return; }
   // The store chip opens the device and store page (Settings); store details are still to come.
-  if (e.target.closest('.storechip')) { if (store) show('settings'); return; }
+  if (e.target.closest('.storechip')) { if (store) show('storeinfo'); return; }
   const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else show(g.getAttribute('data-go'), g.dataset.bay ? { bay: g.dataset.bay } : undefined); return; }
   if (e.target.closest('[data-act="close-more"]') || (e.target.id === 'msheet')) $('#msheet')?.classList.remove('open');
   if (e.target.closest('#railToggle')) { $('#app').classList.toggle('railmin'); }

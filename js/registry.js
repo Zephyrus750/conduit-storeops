@@ -12,6 +12,7 @@ import maintenance from './views/maintenance.js';
 import mapedits from './views/mapedits.js';
 import stocktake from './views/stocktake.js';
 import settings from './views/settings.js';
+import storeinfo from './views/storeinfo.js';
 import { ADMIN_VIEWS } from './views/admin.js';
 import bfreview from './views/stockroom/bfreview.js';
 import cages from './views/stockroom/cages.js';
@@ -27,7 +28,7 @@ import rhistory from './views/backdock/rhistory.js';
 import profiles from './views/backdock/profiles.js';
 import { dockscreen, teamboard } from './views/backdock/screens.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, settings, bfreview, cages, adjust, daylist, srhistory, srhome, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
 // Rail sections and the phone tab strip per workspace. Rows without a view
 // yet are inert and say so.

@@ -3,6 +3,7 @@
 
 import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtTime, cycleId } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
+import { openShare } from '../share.js';
 
 let selected = null;
 function shelfFacts(ctx, map, id) {
@@ -23,13 +24,13 @@ export function selCard(ctx, map, id) {
   return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>Selected shelf</h3><span class="go" data-act="clear">Clear</span></div>` +
     `<div class="sid">${esc(cd.shelf)}${cd.sub ? `<small class="sub">${esc(cd.sub)}</small>` : ''}${dep(info.dept)}</div><div class="meta">${DEPT_NAME[info.dept] || info.dept} · ${cd.sub ? `module ${esc(cd.sub)} of ${info.segments}` : `${info.segments} module${info.segments === 1 ? '' : 's'}`} · aisle ${esc(cd.shelf.charAt(0))}, bay ${esc(cd.shelf.slice(1))}</div>` +
     `<div class="rows" style="margin-top:12px;border-top:1px solid var(--line-soft)">${row('Refreshed this week', f.refreshed ? fmtTime(f.refreshed.at) : 'not yet')}${row('Label micro-depts', f.micros.length ? `${f.checked.length}/${f.micros.length} checked` : 'none assigned')}${row('Planned', f.plan.length ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${f.plan[0]};vertical-align:-1px"></i> yes` : 'no')}</div>` +
-    `<div class="acts2"><a class="btn primary sm" data-go="picklist">${ic('m-picklist')}Pick list</a><a class="btn sm" data-go="refresh">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint">${ic('m-labelint')}Label check</a></div></div>`;
+    `<div class="acts2"><a class="btn primary sm" data-go="picklist">${ic('m-picklist')}Pick list</a><a class="btn sm" data-go="refresh">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint">${ic('m-labelint')}Label check</a><button class="btn sm" data-act="share" data-shelf="${esc(id)}">${ic('qr')}Share</button></div></div>`;
 }
 export function mvSel(ctx, map, id) {
   if (!id) return `<div class="what"><span>Tap a shelf to see what is there, or search above.</span></div>`;
   const g = map.groups(id)[0]; if (!g) return '';
   const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id);
-  return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b><span class="shid"><b>${esc(id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div><div class="what"><span>${info.sub.startsWith('E') ? 'End' : 'Side'} · ${info.segments} module${info.segments === 1 ? '' : 's'} · aisle ${esc(id.charAt(0))}, bay ${esc(id.slice(1))}${f.refreshed ? ' · refreshed ' + fmtTime(f.refreshed.at) : ''}</span></div>`;
+  return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b><span class="shid"><b>${esc(id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div><div class="what"><span>${info.sub.startsWith('E') ? 'End' : 'Side'} · ${info.segments} module${info.segments === 1 ? '' : 's'} · aisle ${esc(id.charAt(0))}, bay ${esc(id.slice(1))}${f.refreshed ? ' · refreshed ' + fmtTime(f.refreshed.at) : ''}</span><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div>`;
 }
 
 export default {
@@ -54,7 +55,10 @@ export default {
       const mc = $('#mvcrumb', root); if (mc && selected) { const d = map.shelfInfo(map.groups(selected)[0]).dept; mc.innerHTML = `Floor › <i class="cb" style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${DEPT_NAME[d] || d}</b> › ${esc(selected)}`; }
     };
     paint();
-    root.addEventListener('click', e => { if (e.target.closest('[data-act="clear"]')) { selected = null; map.select(''); paint(); } });
+    root.addEventListener('click', e => {
+      if (e.target.closest('[data-act="clear"]')) { selected = null; map.select(''); paint(); }
+      const sh = e.target.closest('[data-act="share"]'); if (sh) { const id = sh.dataset.shelf, g = map.groups(id)[0]; openShare({ storeNo: ctx.storeNo, storeName: ctx.storeName, shelf: id, dept: g ? map.shelfInfo(g).dept : '' }); }
+    });
     map.stage.addEventListener('mapselect', e => { selected = e.detail.code; paint(); });
     return [ctx.store.on('refresh', paint), ctx.store.on('labels', paint)];
   },

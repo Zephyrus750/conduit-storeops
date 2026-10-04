@@ -15,7 +15,7 @@ export function model(ctx) {
   const s = ctx.store.get();
   const week = weekId(), marks = s.refresh.weeks[week] || {}, focus = s.refresh.focus[week] || [];
   const cyc = cycleId(s.labels.cycleLen), checks = s.labels.checks[cyc] || {}, variances = s.labels.variances[cyc] || [];
-  const issues = Object.values(s.issues), open = issues.filter(i => i.status !== 'completed');
+  const issues = Object.values(s.issues).filter(i => !i.removed), open = issues.filter(i => i.status !== 'completed');
   const sess = Object.entries(s.stocktake.sessions).filter(([, x]) => !x.ended)[0];
   const due = Object.values(s.assets).filter(a => a.due && (new Date(a.due) - Date.now()) / 86400000 <= 30).length;
   const todayMarks = Object.values(marks).filter(m => dayOf(m.at) === today()).length;

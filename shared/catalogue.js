@@ -20,6 +20,7 @@ export const CATALOGUE = {
   'refresh.mark':        T('floor', F, ['segment', 'week']),
   'refresh.unmark':      T('floor', F, ['segment', 'week']),
   'refresh.clearWeek':   T('floor', F, ['week']),
+  'refresh.clearDept':   T('floor', F, ['week'], { dept: 'string' }),            // payload.segments: the dept's marked segments the device saw
   'refresh.focus.set':   T('floor', F, ['week'], { departments: 'array' }),
   'refresh.plan.paint':  T('floor', F, ['segment'], { colour: 'string' }),       // '#rrggbb' or 'erase'
   'label.cycle.set':     T('floor', F, [], { cycleLen: 'string' }),              // weekly | fortnightly | monthly
@@ -38,6 +39,7 @@ export const CATALOGUE = {
   'issue.progress':      T('floor', F, ['issue']),
   'issue.close':         T('floor', F, ['issue']),
   'issue.reopen':        T('floor', F, ['issue']),
+  'issue.remove':        T('floor', F, ['issue']),                                // tombstone; payload.note
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),
