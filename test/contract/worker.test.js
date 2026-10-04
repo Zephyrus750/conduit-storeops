@@ -49,6 +49,7 @@ before(async () => {
       REGISTRY: { className: 'RegistryObject', useSQLite: true },
       CATALOGUE: { className: 'CatalogueObject', useSQLite: true },
     },
+    r2Buckets: ['PHOTOS'],
     // Catalogue upstreams are stubbed: the lookup worker answers ?codes=,
     // the details worker answers the POST, and one code is unknown.
     outboundService(req) {
@@ -628,4 +629,27 @@ test('carton profiles: the stockroom code reads them too (a stockroom-only store
   const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-2033' }, dev.token)).body;
   const r = await api('GET', '/v1/store/2033/profiles', undefined, sr.token);
   assert.equal(r.status, 200); assert.equal(r.body.schema, 'dv-profiles/1'); assert.deepEqual(r.body.profiles, {});
+});
+
+test('issue photos: a store device adds a JPEG, the store and owner read it, others cannot, delete drops it', async () => {
+  assert.equal((await reg2('2044')).status, 201);
+  const dev = (await api('POST', '/v1/auth/signin', { store: '2044', pin: '135790', device: 'ph-44' })).body;
+  const other = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'ph-other' })).body;
+  const raw = (method, path, token, body, type = 'image/jpeg') => mf.dispatchFetch('http://conduit.test' + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': type } : {}) }, body });
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(500).fill(7), 0xff, 0xd9]);
+  assert.equal((await raw('POST', '/v1/store/2044/photo', null, jpeg)).status, 401);
+  assert.equal((await raw('POST', '/v1/store/2044/photo', dev.token, new Uint8Array([0x89, 0x50, 0x4e, 0x47]), 'image/png')).status, 415, 'not a JPEG');
+  assert.equal((await raw('POST', '/v1/store/2044/photo', dev.token, new Uint8Array(900_000).fill(0xff))).status, 413, 'too big');
+  const up = await raw('POST', '/v1/store/2044/photo', dev.token, jpeg); assert.equal(up.status, 201);
+  const { id } = await up.json(); assert.match(id, /^[0-9A-Z]{26}$/);
+  const got = await raw('GET', `/v1/store/2044/photo/${id}`, dev.token); assert.equal(got.status, 200); assert.equal(got.headers.get('Content-Type'), 'image/jpeg'); assert.equal((await got.arrayBuffer()).byteLength, jpeg.length);
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${id}`, other.token)).status, 403, 'another store');
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${id}`, ownerToken)).status, 200, 'the owner');
+  // The issue.photo event attaches it.
+  const log = { id: ulid(), store: '2044', area: 'floor', type: 'issue.log', entity: { issue: 'mp1' }, payload: { cat: 'leak', title: 'Drip', sev: 1 }, at: at(), v: 1 };
+  const att = { id: ulid(), store: '2044', area: 'floor', type: 'issue.photo', entity: { issue: 'mp1' }, payload: { photo: id }, at: at(), v: 1 };
+  const r = await api('POST', '/v1/store/2044/events', { events: [log, att] }, dev.token);
+  assert.deepEqual(r.body.results.map(x => x.ok), [true, true]);
+  assert.equal((await raw('DELETE', `/v1/store/2044/photo/${id}`, dev.token)).status, 200);
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${id}`, dev.token)).status, 404);
 });

@@ -48,6 +48,8 @@ export default {
     return mvMap({ badge: `<b>${m.done}</b> of ${m.total} · ${cycleLabel(m.cycle)}` }) + `<div class="mv-sel mode" id="limob"></div>`;
   },
   mount(ctx, root) {
+    // From Settings › Departments: open assigning that micro-department.
+    if (ctx.arg?.micro && ALL.includes(ctx.arg.micro) && selected !== ctx.arg.micro) { selected = ctx.arg.micro; openSub = selected.split('-')[0]; setTimeout(() => ctx.rerender(), 0); }
     const map = mountMap($('#mapstage', root), { cls: 'li', onSelect: info => {
       if (info.kind !== 'shelf' || !selected) return;
       const m = model(ctx); const cur = m.L.assign[selected] || [];

@@ -40,7 +40,7 @@ export const RAIL = [
 export const STRIP = {
   floor: [['mhome', 'home', 'Home'], ['refresh', 'm-refresh', 'Refresh'], ['labelint', 'm-labelint', 'Labels'], ['picklist', 'm-picklist', 'Route'], ['emergency', 'm-emergency', 'Emergency'], ['more', 'dots', 'More']],
   stockroom: [['mhome', 'home', 'Home'], ['bfreview', 'barcode', 'Scan'], ['cages', 'm-cages', 'Cages'], ['adjust', 'm-adjust', 'Adjust'], ['more', 'dots', 'More']],
-  backdock: [['mhome', 'home', 'Home'], ['receiving', 'm-receiving', 'Dock'], ['more', 'dots', 'More']],
+  backdock: [['mhome', 'home', 'Home'], ['receiving', 'm-receiving', 'Land'], ['teamboard', 'users', 'Board'], ['more', 'dots', 'More']],
   admin: [['admin', 'grid', 'Stores'], ['adminreg', 'plus', 'Register'], ['adminactions', 'history', 'Actions'], ['settings', 'm-settings', 'Settings']],
 };
 // Phone home per workspace, and the workspaces the launcher offers.
@@ -48,4 +48,8 @@ export const HOME = { floor: 'map', stockroom: 'srhome', backdock: 'bdhome', adm
 export const WORKSPACES = [['floor', 'Floor', 'm-map', 'Map, refresh, labels, stocktake, issues'], ['stockroom', 'Stockroom', 'box', 'Backfill scan, cages, adjustments, day list'], ['backdock', 'Back dock', 'truck', 'Land and decant pallets, run the truck']];
 // The owner console's rail: stores are added at runtime, these are the system rows.
 export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
-export const MORE = { floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['maintenance', 'm-maintenance', 'Report an issue'], ['mapedits', 'edit', 'Suggest map edits'], ['settings', 'm-settings', 'Settings']], stockroom: [['daylist', 'm-daylist', 'Day list'], ['srhistory', 'm-srhistory', 'History'], ['settings', 'm-settings', 'Settings']], backdock: [['teamboard', 'users', 'Team Board'], ['dockscreen', 'grid', 'Dock screen'], ['rhistory', 'm-rhistory', 'History'], ['settings', 'm-settings', 'Settings']] };
+export const MORE = {
+  floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['maintenance', 'm-maintenance', 'Report an issue'], ['mapedits', 'edit', 'Suggest map edits'], ['storeinfo', 'm-map', 'Store details'], ['settings', 'm-settings', 'Settings']],
+  stockroom: [['daylist', 'm-daylist', 'Day list'], ['srhistory', 'm-srhistory', 'History'], ['storeinfo', 'm-map', 'Store details'], ['settings', 'm-settings', 'Settings']],
+  backdock: [['manifests', 'file', 'Manifests'], ['profiles', 'box', 'Carton profiles'], ['planner', 'm-planner', 'Planner'], ['rhistory', 'm-rhistory', 'History'], ['dockscreen', 'grid', 'Dock screen'], ['storeinfo', 'm-map', 'Store details'], ['settings', 'm-settings', 'Settings']],
+};

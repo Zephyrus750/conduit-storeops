@@ -43,3 +43,16 @@ export function storeIso(when = new Date(), tz = DEFAULT_TZ) {
   const pad = n => String(Math.abs(n)).padStart(2, '0');
   return `${storeDay(t, tz)}T${pad(p.hh)}:${pad(p.mm)}:${pad(s)}${off >= 0 ? '+' : '-'}${pad(Math.trunc(off / 60))}:${pad(off % 60)}`;
 }
+
+// The retail period and week in the footer ("P3W3"), as Vector computed it
+// (desktop-shell.js): twelve periods of four weeks from the week of Monday
+// 29 June 2026 (P1W1, a July year). A fixed 48-week cycle, so it drifts from
+// a 52-week retail calendar after a year; the anchor is the one place to fix
+// when the real calendar is known.
+export const RETAIL_ANCHOR = '2026-06-29';
+export function retailPeriod(day) {
+  const d = typeof day === 'string' ? new Date(day + 'T00:00:00Z') : new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()));
+  const monday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  const weeks = Math.round((monday - Date.parse(RETAIL_ANCHOR + 'T00:00:00Z')) / (7 * 86400e3)), L = ((weeks % 48) + 48) % 48;
+  return `P${Math.floor(L / 4) + 1}W${(L % 4) + 1}`;
+}

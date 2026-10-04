@@ -8,7 +8,7 @@
 //   labels    cycleLen, assign micro → [shelves], checks cycle → micro → { at, device },
 //             variances cycle → [ { micro, keycode, note, at, device } ]
 //   stocktake sessions session → { phase, startedAt, startedBy, ended, shelves: shelf → { state, by, at, vby } }
-//   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, log[], removed? }
+//   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, log[], removed?, photos?[] }
 //   assets    asset → { intMonths, due, log[], updated }
 //   picklists device → { items: [ { code, completed } ], at }
 
@@ -214,6 +214,19 @@ export const floorReducers = {
     if (i.removed) return reject('invalid_event', 'issue already removed');
     i.removed = { at: e.at, by: e.actor?.device || null }; i.updated = e.at;
     i.log.push({ t: e.at, a: 'Removed', n: e.payload.note || '' });
+    return null;
+  },
+
+  // A photo (an id the worker issued for the uploaded JPEG) on an issue, up
+  // to four; remove detaches it. The log records both.
+  'issue.photo'(s, e) {
+    const i = issue(s, e); if (i.code) return i;
+    const id = String(e.payload.photo);
+    if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(id)) return reject('invalid_event', 'photo must be a photo id');
+    const list = (i.photos ||= []), has = list.some(p => p.id === id);
+    if (e.payload.remove) { if (!has) return reject('not_found', 'that photo is not on this issue'); i.photos = list.filter(p => p.id !== id); i.log.push({ t: e.at, a: 'Photo removed', n: '' }); }
+    else { if (has) return reject('exists', 'that photo is already on this issue'); if (list.length >= 4) return reject('invalid_event', 'an issue holds up to four photos'); list.push({ id, at: e.at, by: e.actor?.device || null }); i.log.push({ t: e.at, a: 'Photo added', n: '' }); }
+    i.updated = e.at;
     return null;
   },
 

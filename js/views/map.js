@@ -1,7 +1,7 @@
 // Store map and the selected shelf card. Also the phone's Home: the map with
 // the selected shelf beneath it.
 
-import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtTime, cycleId } from '../ui.js';
+import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtTime, cycleId, toast } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
 import { openShare } from '../share.js';
 
@@ -24,13 +24,13 @@ export function selCard(ctx, map, id) {
   return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>Selected shelf</h3><span class="go" data-act="clear">Clear</span></div>` +
     `<div class="sid">${esc(cd.shelf)}${cd.sub ? `<small class="sub">${esc(cd.sub)}</small>` : ''}${dep(info.dept)}</div><div class="meta">${DEPT_NAME[info.dept] || info.dept} · ${cd.sub ? `module ${esc(cd.sub)} of ${info.segments}` : `${info.segments} module${info.segments === 1 ? '' : 's'}`} · aisle ${esc(cd.shelf.charAt(0))}, bay ${esc(cd.shelf.slice(1))}</div>` +
     `<div class="rows" style="margin-top:12px;border-top:1px solid var(--line-soft)">${row('Refreshed this week', f.refreshed ? fmtTime(f.refreshed.at) : 'not yet')}${row('Label micro-depts', f.micros.length ? `${f.checked.length}/${f.micros.length} checked` : 'none assigned')}${row('Planned', f.plan.length ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${f.plan[0]};vertical-align:-1px"></i> yes` : 'no')}</div>` +
-    `<div class="acts2"><a class="btn primary sm" data-go="picklist">${ic('m-picklist')}Pick list</a><a class="btn sm" data-go="refresh">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint">${ic('m-labelint')}Label check</a><button class="btn sm" data-act="share" data-shelf="${esc(id)}">${ic('qr')}Share</button></div></div>`;
+    `<div class="acts2"><button class="btn primary sm" data-act="pick-add" data-shelf="${esc(id)}">${ic('m-picklist')}Add to pick list</button><a class="btn sm" data-go="refresh">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint">${ic('m-labelint')}Label check</a><button class="btn sm" data-act="share" data-shelf="${esc(id)}">${ic('qr')}Share</button></div></div>`;
 }
 export function mvSel(ctx, map, id) {
   if (!id) return `<div class="what"><span>Tap a shelf to see what is there, or search above.</span></div>`;
   const g = map.groups(id)[0]; if (!g) return '';
   const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id);
-  return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b><span class="shid"><b>${esc(id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div><div class="what"><span>${info.sub.startsWith('E') ? 'End' : 'Side'} · ${info.segments} module${info.segments === 1 ? '' : 's'} · aisle ${esc(id.charAt(0))}, bay ${esc(id.slice(1))}${f.refreshed ? ' · refreshed ' + fmtTime(f.refreshed.at) : ''}</span><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div>`;
+  return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b><span class="shid"><b>${esc(id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div><div class="what"><span>${info.sub.startsWith('E') ? 'End' : 'Side'} · ${info.segments} module${info.segments === 1 ? '' : 's'} · aisle ${esc(id.charAt(0))}, bay ${esc(id.slice(1))}${f.refreshed ? ' · refreshed ' + fmtTime(f.refreshed.at) : ''}</span><button class="mv-share" data-act="pick-add" data-shelf="${esc(id)}" aria-label="Add ${esc(id)} to the pick list" title="Add to pick list">${ic('m-picklist')}</button><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div>`;
 }
 
 export default {
@@ -47,7 +47,9 @@ export default {
     const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { selected = info.id; paint(); } } });
     bindMapChrome(root, map);
     if (ctx.arg?.select) { map.select(selected); map.zoomTo(selected); }
-    if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
+    // From the phone's Departments picker: one department, or 'all' to clear.
+    if (ctx.arg?.dept && ctx.isMobile) { const d = String(ctx.arg.dept).toLowerCase(); map.zoomDept(d === 'all' ? [] : [d]); }
+    else if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
     const paint = () => {
       const host = $('#selhost', root); if (host) host.innerHTML = selCard(ctx, map, selected);
       const mv = $('#mvsel', root); if (mv) mv.innerHTML = mvSel(ctx, map, selected);
@@ -57,9 +59,20 @@ export default {
     paint();
     root.addEventListener('click', e => {
       if (e.target.closest('[data-act="clear"]')) { selected = null; map.select(''); paint(); }
+      const pa = e.target.closest('[data-act="pick-add"]'); if (pa) addToPickList(ctx, pa.dataset.shelf);
       const sh = e.target.closest('[data-act="share"]'); if (sh) { const id = sh.dataset.shelf, g = map.groups(id)[0]; openShare({ storeNo: ctx.storeNo, storeName: ctx.storeName, shelf: id, dept: g ? map.shelfInfo(g).dept : '' }); }
     });
     map.stage.addEventListener('mapselect', e => { selected = e.detail.code; paint(); });
     return [ctx.store.on('refresh', paint), ctx.store.on('labels', paint)];
   },
 };
+
+// The shelf card's "Add to pick list": onto this device's list, as the
+// legacy shelf sheet did (pickListBulkAdd), with its messages.
+async function addToPickList(ctx, code) {
+  const cur = ctx.store.get('picklists')[ctx.session.device]?.items || [];
+  if (cur.some(i => i.code === code)) return toast(`${code} is already on the list`);
+  if (cur.length >= 200) return toast('Pick list is full', 'bad');
+  try { await ctx.store.dispatch({ type: 'picklist.set', entity: { device: ctx.session.device }, payload: { items: [...cur, { code, completed: false }] } }); toast(`${code} added to pick list`, '', { label: 'Open', run: () => ctx.go('picklist') }); }
+  catch { toast('Couldn’t add to the pick list.', 'bad'); }
+}

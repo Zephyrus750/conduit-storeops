@@ -10,12 +10,15 @@
 
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
-import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard, setStoreTz } from './ui.js';
+import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS } from './ui.js';
 import { settingsOf } from '../shared/reducers/store.js';
+import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
-import { loadMap, setMap, mapInfo, parkMap } from './map.js';
+import { loadMap, setMap, mapInfo, parkMap, mapStats } from './map.js';
 import { initSearch } from './search.js';
 import { takeDeepLink } from './share.js';
+import { installLog } from './diag.js';
+installLog();
 import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { ensureArea, hasArea } from './unlock.js';
@@ -50,7 +53,9 @@ const isMobile = () => frame.clientWidth <= 600;
 
 // ── boot ──────────────────────────────────────────────────────────────
 applyPrefs(frame);
-$('#footDate').textContent = fmtLong();
+// Footer: the date and the retail week, kept current across midnight.
+const paintFootDate = () => { $('#footDate').textContent = `${fmtLong()} · ${retailPeriod(new Date())}`; };
+paintFootDate(); setInterval(paintFootDate, 60_000);
 $('#footVer').textContent = 'Conduit ' + VERSION;
 client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: 'Owner session expired. Sign in again.' } : {}); });
 // A shared shelf link (?store=…&shelf=…): open the map on that shelf once
@@ -72,6 +77,7 @@ function openPendingLink(s) {
 
 // ── store mode ────────────────────────────────────────────────────────
 async function enter() {
+  let last = null; try { last = localStorage.getItem('last_workspace'); } catch {}    // before setWs('floor') below overwrites it
   showLoading();
   const s = client.session.current;
   try {
@@ -85,12 +91,19 @@ async function enter() {
   store.on('status', paintStatus); store.on('reject', r => toast(`${r.code}: ${r.message}`, 'bad'));
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
+  store.on('backfill', paintBadges); store.on('cages', paintBadges);
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = 'Store ' + s.store;
-  buildRail(); setWs('floor');
+  buildRail(); paintBadges(); setWs('floor');
   actasBar(s.actas ? s : null);
   hideCover();
-  if (!openPendingLink(s)) show(isMobile() ? 'mhome' : 'dashboard');
+  if (openPendingLink(s)) return;
+  if (!isMobile()) return show('dashboard');
+  // The phone goes back to the area it was last used in when this device can
+  // still open it; otherwise it asks where you are working.
+  const caps = s.caps || [];
+  if (last && caps.includes(last) && (last === 'floor' || hasArea(client.session, last))) { setWs(last); show(HOME[last] || 'mhome'); }
+  else { show('mhome'); openLauncher(); }
 }
 // The published map: the store's `map` projection names the current
 // version, the maps client holds one copy per device, and a store with
@@ -265,11 +278,23 @@ document.addEventListener('mouseover', e => { const b = e.target.closest?.('.rro
 document.addEventListener('mouseout', e => { const b = e.target.closest?.('.rrow[data-view]'); if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) railTip(b, false); });
 document.addEventListener('click', () => railTip(null, false));
 function buildRail() {
-  const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}<span class="rl">${v.rail || v.title}</span></button>`;
+  const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}<span class="rl">${v.rail || v.title}</span>${BADGED.includes(v.id) ? `<span class="badge" data-badge="${v.id}" hidden></span>` : ''}</button>`;
   $('#railscroll').innerHTML = RAIL.map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? rows(VIEWS[r]) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">Soon</span></button>`).join('')).join('');
 }
+// Rail badges (the showcase's): Backfill review carries today's locations
+// waiting for review; Cages, in red, the open cages not seen for a week.
+// Each reads its area's projection, which is empty until the device holds
+// that area's code, so a badge stays hidden without it.
+const BADGED = ['bfreview', 'cages'];
+function paintBadges() {
+  if (!store) return;
+  const day = today(), bf = store.get('backfill'), cages = store.get('cages') || {};
+  const n = { bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length };
+  for (const el of $$('[data-badge]')) { const v = n[el.dataset.badge] || 0; el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v); el.classList.toggle('red', el.dataset.badge === 'cages'); el.title = el.dataset.badge === 'cages' ? `${v} cage${v === 1 ? '' : 's'} not seen this week` : `${v} location${v === 1 ? '' : 's'} to review today`; }
+}
 function setWs(w) {
-  ws = w; $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
+  ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
+  const md = $('.mdepts'); if (md) { const l = w === 'floor' ? 'Departments' : 'Switch area'; md.title = l; md.setAttribute('aria-label', l); }
   $('#mstrip').innerHTML = STRIP[w].map(m => `<button data-view="${m[0]}">${ic(m[1])}${m[2]}</button>`).join('');
 }
 function paintStatus(s) {
@@ -288,6 +313,7 @@ function markRail() {
 // ── views ─────────────────────────────────────────────────────────────
 function show(id, arg) {
   if (!store && !admin) return;
+  const prev = current;
   const mobile = isMobile();
   if (id === 'mhome') id = admin ? 'admin' : mobile ? (HOME[ws] || 'map') : 'dashboard';
   if (id === 'more') return openMore();
@@ -321,7 +347,9 @@ function show(id, arg) {
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   content.scrollTop = 0;
   markRail();
-  $('#msheet')?.classList.remove('open');
+  // A sheet closes when the view changes; a repaint of the same view (a
+  // store update) leaves it open, so the launcher survives sign-in.
+  if (prev !== view.id) $('#msheet')?.classList.remove('open');
   $('#crumb').textContent = view.title;
 }
 async function actAs(no) {
@@ -333,7 +361,19 @@ async function actAs(no) {
 function openLauncher() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const caps = client.session.current?.caps || [];
-  sh.innerHTML = `<div class="sheet"><h3>Workspace</h3><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  sh.innerHTML = `<div class="sheet"><h3>Where are you working?</h3><p class="mv-sheet-sub">Pick your area to begin. Stockroom and Back dock take their crew code once on this device.</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  sh.classList.add('open');
+}
+// The phone's Departments picker (the showcase's): the whole floor, or one
+// department, grouped Home, Clothing, Kids, Other with its shelf count; a
+// department fades the rest of the map and zooms to it.
+function openDepts() {
+  let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
+  const counts = mapStats()?.depts || {};
+  const tile = d => `<button class="md-tile" data-pickdept="${esc(d)}"><i style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b><span>${esc(DEPT_NAME[d] || '')}</span><small>${counts[d] || 0} shelves</small></button>`;
+  sh.innerHTML = `<div class="sheet md-sheet"><h3>Departments</h3><button class="md-all" data-pickdept="all">${ic('map')}<span><b>All departments</b><small>Whole floor, every colour</small></span></button>` +
+    DEPT_GROUPS.map(g => { const ds = g[2].filter(d => counts[d]); return ds.length ? `<div class="md-grp">${esc(g[0])}</div><div class="md-tiles">${ds.map(tile).join('')}</div>` : ''; }).join('') +
+    `<button class="mv-ghost" data-act="close-more">Close</button></div>`;
   sh.classList.add('open');
 }
 function openMore() {
@@ -358,7 +398,8 @@ document.addEventListener('click', e => {
   // the console's store rows.
   const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no } : undefined); return; }
   const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
-  if (e.target.closest('.mdepts')) { if (store) openLauncher(); return; }
+  if (e.target.closest('.mdepts')) { if (store) (ws === 'floor' ? openDepts : openLauncher)(); return; }
+  const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }
   // The store chip opens the device and store page (Settings); store details are still to come.
   if (e.target.closest('.storechip')) { if (store) show('storeinfo'); return; }
   const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else show(g.getAttribute('data-go'), g.dataset.bay ? { bay: g.dataset.bay } : undefined); return; }

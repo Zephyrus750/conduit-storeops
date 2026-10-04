@@ -40,6 +40,11 @@ const MANIFEST_MAX = 8_000_000;
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
 const DELTA_LIMIT = 5000;
 const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
+// Issue photos (R2 bucket PHOTOS): a JPEG the device already shrank, at most
+// PHOTO_DAY_CAP a store in any 24 hours, and the bytes dropped 90 days after
+// an issue is completed or removed (a photo can show people; it is kept no
+// longer than it helps).
+const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
 const EVENT_MAX = 2_000_000;          // one event's payload (a manifest.attach carries its consols)
 const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
@@ -61,6 +66,7 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, at TEXT NOT NULL, by TEXT NOT NULL, size INTEGER NOT NULL);
     `);
     this.state = null;
     this.storeNo = this.sql.exec("SELECT value FROM meta WHERE key = 'store'").toArray()[0]?.value || null;
@@ -113,6 +119,9 @@ export class StoreObject extends DurableObject {
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
+          if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
+          const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
+          if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1]));
           if (url.pathname === '/manifest' && request.method === 'POST') return this.publishManifest(await request.json(), claims);
           if (url.pathname === '/profiles') { const dk = needArea(claims, 'backdock'), sr = needArea(claims, 'stockroom'); if (dk && sr) return dk;   // carton depths serve the dock and the stockroom (K2B read them)
            const docs = this.sql.exec('SELECT doc, at FROM manifests').toArray().map(r => ({ ...JSON.parse(r.doc), at: r.at })); return json(buildProfiles(docs, { store: this.storeNo })); }
@@ -240,7 +249,7 @@ export class StoreObject extends DurableObject {
   // the ordinary write path with a system actor, then the next alarm is set
   // for the coming store midnight (plus a minute of slack).
   async alarm() {
-    try { this.rollover(); }
+    try { this.rollover(); await this.sweepPhotos(); }
     finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
   }
   // The store's own setting wins; STORE_TZ is the worker-wide fallback.
@@ -251,6 +260,52 @@ export class StoreObject extends DurableObject {
     const events = rolloverDue(this.state.backfill, today).map(entity => ({ id: ulid(), store: this.storeNo, area: 'stockroom', type: 'submission.submit', entity, payload: { auto: true }, at, v: 1 }));
     if (!events.length) return [];
     return this.submit(events, { store: this.storeNo, roles: ['manager'], caps: ['stockroom'], device: 'system', owner: false, actor: 'system' });
+  }
+
+  // ── issue photos ──────────────────────────────────────────────────────
+  // The bytes live in R2 under <store>/<id>.jpg; the issue.photo event
+  // attaches the id to an issue. Any device of the store may add one (the
+  // Floor reports issues); reads go through here so a signed-out device
+  // (an old epoch) cannot fetch them.
+  photos() { if (!this.env.PHOTOS) throw new HttpError(501, 'not_implemented', 'issue photos need the PHOTOS R2 bucket bound to the worker'); return this.env.PHOTOS; }
+  photoKey(id) { return `${this.storeNo}/${id}.jpg`; }
+  async putPhoto(request, claims) {
+    const bucket = this.photos();
+    if (!claims.store || claims.store !== this.storeNo) throw new HttpError(403, 'unauthorised', 'a photo is added by a device of this store');
+    const buf = new Uint8Array(await request.arrayBuffer());
+    if (buf.length > PHOTO_MAX) throw new HttpError(413, 'payload_too_large', `a photo must be under ${PHOTO_MAX / 1000} KB`);
+    if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) throw new HttpError(415, 'unsupported_media', 'a photo must be a JPEG');
+    const n = this.sql.exec('SELECT COUNT(*) AS n FROM photos WHERE at >= ?', new Date(Date.now() - 86400e3).toISOString()).toArray()[0].n;
+    if (n >= PHOTO_DAY_CAP) throw new HttpError(429, 'rate_limited', `this store has added ${PHOTO_DAY_CAP} photos in the last day`);
+    const id = ulid(), at = new Date().toISOString(), by = String(claims.device || 'unknown').slice(0, 64);
+    await bucket.put(this.photoKey(id), buf, { httpMetadata: { contentType: 'image/jpeg' }, customMetadata: { store: String(this.storeNo), by, at } });
+    this.sql.exec('INSERT INTO photos (id, at, by, size) VALUES (?, ?, ?, ?)', id, at, by, buf.length);
+    return json({ id, size: buf.length, at }, 201);
+  }
+  async getPhoto(id) {
+    if (!this.sql.exec('SELECT id FROM photos WHERE id = ?', id).toArray().length) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
+    const obj = await this.photos().get(this.photoKey(id));
+    if (!obj) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
+    return new Response(obj.body, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400', ...CORS } });
+  }
+  async deletePhoto(id, claims) {
+    if (!claims.owner && claims.store !== this.storeNo) throw new HttpError(403, 'unauthorised', 'not this store');
+    await this.photos().delete(this.photoKey(id));
+    this.sql.exec('DELETE FROM photos WHERE id = ?', id);
+    return json({ id, deleted: true });
+  }
+  // Nightly: drop the bytes of photos on issues completed or removed more
+  // than PHOTO_KEEP_DAYS ago, and of uploads never attached to an issue.
+  async sweepPhotos(now = Date.now()) {
+    if (!this.env.PHOTOS || !this.storeNo) return 0;
+    const keep = new Set(), old = now - PHOTO_KEEP_DAYS * 86400e3;
+    for (const i of Object.values(this.state.issues || {})) {
+      const closed = i.removed || i.status === 'completed';
+      if (!(closed && Date.parse(i.updated) < old)) for (const p of i.photos || []) keep.add(p.id);
+    }
+    const stale = this.sql.exec('SELECT id, at FROM photos').toArray().filter(r => !keep.has(r.id) && Date.parse(r.at) < now - 86400e3);
+    for (const r of stale) { await this.env.PHOTOS.delete(this.photoKey(r.id)); this.sql.exec('DELETE FROM photos WHERE id = ?', r.id); }
+    return stale.length;
   }
 
   // ── manifests ─────────────────────────────────────────────────────────

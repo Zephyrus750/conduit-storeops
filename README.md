@@ -106,6 +106,9 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
 | `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
+| `POST /v1/store/:no/photo` | store token for that store | live: an issue photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
+| `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo, until 90 days after its issue is completed or removed |
+| `DELETE /v1/store/:no/photo/:id` | store token or owner | live: deletes the photo's bytes (the `issue.photo` remove event detaches it from the issue) |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `revoked` (signed out by a rotation, suspension

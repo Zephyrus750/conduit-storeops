@@ -179,7 +179,7 @@ function overTab(rec, c) {
   const bd = s.dock ? `${Object.keys(s.dock.pallets || s.dock || {}).length} dock records` : 'not entitled';
   return `<div class="ad-tiles">${tile(devs.length, 'devices seen', c.devices ? `${online} online in the last 10 min` : 'loading')}${tile(c.seq ?? '…', 'events in the log', 'seq of the newest event')}${tile(queued, 'queued on devices', queued ? 'waiting to sync' : 'all devices in sync', queued ? 'warn' : '')}${tile(`<span class="mono">${esc(rec.mapVersion || '—')}</span>`, 'map version', rec.mapVersion ? 'published' : 'no map published yet')}</div>` +
     `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Areas</h3></div><div class="list">${AREAS.map(a => `<div class="li"><span class="loc">${AREA_NAME[a]}</span><span class="nm">${rec.entitlements?.[a] ? (rec.areas?.[a] === 'live' ? 'Live on Conduit' : rec.areas?.[a] === 'migrating' ? 'Migrating' : 'Entitled · still on the legacy app') + ' · ' + esc(a === 'floor' ? floor : a === 'stockroom' ? sr : bd) : 'Not entitled'}</span>${rec.entitlements?.[a] ? tst(rec.areas?.[a]) : '<span class="tst">off</span>'}</div>`).join('')}</div></div>` +
-    `<div class="card"><div class="ch"><h3>Roster</h3><span class="cs-dim">shared codes per store</span></div><div class="ad-kv"><span>Store PIN</span><b>•••••• · set</b>${CODES.map(([k, l]) => `<span>${l}</span><b>${rec.codes?.includes(k) ? '•••••• · set' : '—'}</b>`).join('')}<span>Last rotated</span><b>${when(s.roster?.rotatedAt)}</b></div><p class="lbl">Rotate from the Access tab. Rotating signs that area out on every device.</p></div></div>`;
+    `<div class="card"><div class="ch"><h3>Roster</h3><span class="cs-dim">shared codes per store</span></div><div class="ad-kv"><span>Store PIN</span><b>•••••• · set</b>${CODES.map(([k, l]) => `<span>${l}</span><b>${rec.codes?.includes(k) ? '•••••• · set' : '—'}</b>`).join('')}<span>Last rotated</span><b>${when(s.roster?.rotatedAt)}</b></div><p class="lbl">Rotate from the Access tab. Rotating signs that area out on every device.</p></div></div>` + feedbackCard(s.feedback);
 }
 function eventsTab(c) {
   const pills = ['all', 'floor', 'stockroom', 'backdock', 'store'].map(a => `<button class="${st.area === a ? 'on' : ''}" data-act="area" data-area="${a}">${a === 'all' ? 'All areas' : AREA_NAME[a]}</button>`).join('');
@@ -238,6 +238,13 @@ async function runImport(ctx, form, dry) {
     if (!dry) { st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); }
     ctx.rerender();
   } catch (e) { btns.forEach(b => { b.disabled = false; }); err.textContent = e.code === 'legacy_pin' ? `K2B refused that PIN. (${e.message})` : e.code === 'legacy_store' ? `K2B does not know that store code. (${e.message})` : e.code === 'legacy_unreachable' ? `The legacy worker could not be reached. (${e.message})` : e.code === 'not_entitled' ? 'Turn the Stockroom on in Access first.' : `${e.code}: ${e.message}`; }
+}
+// Feedback sent from the store's Settings › Feedback and report, newest
+// first, with the view, version and diagnostics the device attached.
+const FB_KIND = { wrong: 'Something is wrong', idea: 'An idea', question: 'A question', other: 'Other' };
+function feedbackCard(list) {
+  const rows = (list || []).slice().reverse().slice(0, 30);
+  return `<div class="card" style="margin-top:16px"><div class="ch"><h3>Feedback</h3><span class="cs-dim">${(list || []).length} from this store</span></div>${rows.length ? `<div class="list">${rows.map(f => `<div class="li fb-li"><span class="nm" style="white-space:normal"><b>${esc(FB_KIND[f.kind] || f.kind)}</b> · ${esc(f.text)}<small class="cs-dim" style="display:block">${when(f.at)} · ${esc(f.by || '')}${f.role ? ' · ' + esc(f.role) : ''} · on ${esc(f.view || '?')} · ${esc(f.version || '')}</small>${f.diag ? `<details><summary class="cs-dim">Diagnostics</summary><pre class="mono fb-diag">${esc(f.diag)}</pre></details>` : ''}</span></div>`).join('')}</div>` : '<p class="lbl">Nothing sent yet. Stores send it from Settings › Feedback and report.</p>'}</div>`;
 }
 function mapTab(rec, c) {
   const m = c.map;

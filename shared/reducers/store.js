@@ -65,6 +65,7 @@ export function storeState() {
     roster: { rotatedAt: null, rotatedBy: null },
     settings: settingsState(),
     mapedits: {},                      // id → suggestion (see map.edit.suggest)
+    feedback: [],                      // newest last, capped (see feedback.send)
   };
 }
 
@@ -76,7 +77,23 @@ export const MAP_EDIT_KINDS = ['rename', 'flag'];
 const EDITS_KEPT = 300;
 const text = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
+// Feedback from Settings › Feedback and report: what happened, the view, the
+// version and a diagnostics summary, for the owner. Kept to the newest 200.
+export const FEEDBACK_KINDS = ['wrong', 'idea', 'question', 'other'];
+const FEEDBACK_KEPT = 200;
+
 export const storeReducers = {
+  'feedback.send'(s, e) {
+    const p = e.payload, kind = FEEDBACK_KINDS.includes(p.kind) ? p.kind : null;
+    if (!kind) return reject('invalid_event', `kind must be one of ${FEEDBACK_KINDS.join(', ')}`);
+    const body = String(p.text ?? '').trim().slice(0, 2000);
+    if (!body) return reject('invalid_event', 'say what happened');
+    const list = (s.feedback ||= []);
+    if (list.some(f => f.id === e.entity.note)) return reject('exists', 'that feedback was already sent');
+    list.push({ id: String(e.entity.note).slice(0, 40), kind, text: body, view: text(p.view, 40), version: text(p.version, 20), diag: text(p.diag, 2000), at: e.at, by: e.actor?.device || null, role: e.actor?.role || null });
+    if (list.length > FEEDBACK_KEPT) list.splice(0, list.length - FEEDBACK_KEPT);
+    return null;
+  },
   'device.heartbeat'(s, e) {
     s.devices[e.entity.device] = { app: e.payload.app, last: e.at, role: e.actor?.role || null };
     return null;

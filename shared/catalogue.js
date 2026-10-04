@@ -40,6 +40,7 @@ export const CATALOGUE = {
   'issue.close':         T('floor', F, ['issue']),
   'issue.reopen':        T('floor', F, ['issue']),
   'issue.remove':        T('floor', F, ['issue']),                                // tombstone; payload.note
+  'issue.photo':         T('floor', F, ['issue'], { photo: 'string' }),           // payload.remove: true detaches it
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),
@@ -105,6 +106,7 @@ export const CATALOGUE = {
   'store.settings.set':  T('store', M, []),
   'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
   'map.edit.resolve':    T('store', M, ['edit'], { status: 'string' }),       // accepted | declined; payload.note                                     // any of tz, dockGrid, minsPerCarton, autoLockMins (null = default)
+  'feedback.send':       T('store', ['floor', 'stockroom', 'dock', 'manager'], ['note'], { kind: 'string', text: 'string' }),   // payload.view, version, diag
   'device.heartbeat':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['device'], { app: 'string' }),
 };
 
@@ -117,5 +119,5 @@ export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist'],
   backdock: ['dock', 'plan'],
-  store: ['devices', 'map', 'roster', 'settings', 'mapedits'],
+  store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback'],
 };

@@ -38,7 +38,8 @@ export function prefs() { if (!cur) { try { cur = { ...DEFAULTS, ...(JSON.parse(
 export function setPref(k, v) { prefs()[k] = v; try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch {} applyPrefs(); }
 export function applyPrefs(frame = document.querySelector('.frame')) {
   if (!frame) return;
-  const p = prefs(), a = ACCENTS[p.accent] || ACCENTS[0], dark = p.skin === 'dark';
+  // Auto follows the device's light or dark setting, and changes with it.
+  const p = prefs(), a = ACCENTS[p.accent] || ACCENTS[0], dark = p.skin === 'dark' || (p.skin === 'auto' && osDark());
   frame.classList.toggle('dark', dark);
   for (const c of ['rail-light', 'rail-tint', 'rail-solid', 'rail-deep', 'bars-plain', 'bars-tint', 'bars-strong', 'hdr-classic', 'hdr-title']) frame.classList.remove(c);
   frame.classList.add('rail-' + p.rail, 'bars-' + p.bars, 'hdr-' + p.hdr);
@@ -50,3 +51,7 @@ export function applyPrefs(frame = document.querySelector('.frame')) {
   const app = frame.querySelector('#app'); if (app) app.classList.toggle('railmin', !!p.railmin);
   const z = Number(p.scale) || 1; s.zoom = z === 1 ? '' : String(z);
 }
+
+const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+const osDark = () => !!mq?.matches;
+mq?.addEventListener?.('change', () => { if (prefs().skin === 'auto') applyPrefs(); });

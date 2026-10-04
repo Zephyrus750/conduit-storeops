@@ -79,3 +79,17 @@ test('department ranges: validated, sorted, the narrowest range wins', async () 
   assert.deepEqual(r.map(x => x.dept), ['h', 'h1']);
   assert.deepEqual([deptForBay(r, '7012'), deptForBay(r, '7042A'), deptForBay(r, '8000'), deptForBay(r, 'A1')], ['h1', 'h', null, null]);
 });
+
+test('feedback.send: kept with its view and version, kinds checked, newest 200 kept', async () => {
+  const { initialState, apply } = await import('../../shared/reducers.js');
+  const { CATALOGUE } = await import('../../shared/catalogue.js');
+  const { ulid } = await import('../../shared/ulid.js');
+  const s = initialState(), ev = (note, payload) => ({ id: ulid(), store: '1241', area: CATALOGUE['feedback.send'].area, type: 'feedback.send', entity: { note }, payload, actor: { role: 'floor', device: 'P1' }, at: '2026-10-04T09:00:00+08:00', v: 1 });
+  assert.equal(apply(s, ev('f1', { kind: 'wrong', text: 'The map froze', view: 'refresh', version: 'v0.2.0', diag: 'sync live' })), null);
+  assert.deepEqual([s.feedback[0].kind, s.feedback[0].view, s.feedback[0].by], ['wrong', 'refresh', 'P1']);
+  assert.equal(apply(s, ev('f2', { kind: 'rant', text: 'x' })).code, 'invalid_event');
+  assert.equal(apply(s, ev('f3', { kind: 'idea', text: '   ' })).code, 'invalid_event');
+  assert.equal(apply(s, ev('f1', { kind: 'idea', text: 'again' })).code, 'exists');
+  for (let i = 0; i < 205; i++) apply(s, ev('n' + i, { kind: 'idea', text: 'more ' + i }));
+  assert.equal(s.feedback.length, 200); assert.equal(s.feedback.at(-1).text, 'more 204');
+});

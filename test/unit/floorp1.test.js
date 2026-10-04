@@ -35,3 +35,15 @@ test('issue.remove: a tombstone that hides the issue and blocks later changes', 
   assert.equal(apply(s, ev('issue.remove', { issue: 'm1' })).code, 'invalid_event');
   assert.equal(apply(s, ev('issue.remove', { issue: 'nope' })).code, 'not_found');
 });
+
+test('issue.photo: attach up to four, detach, refuse bad ids and duplicates', () => {
+  const s = initialState(), id = n => '01K' + String(n).padStart(23, '0');
+  apply(s, ev('issue.log', { issue: 'm2' }, { cat: 'light', title: 'Tube out', sev: 0 }));
+  for (let n = 1; n <= 4; n++) assert.equal(apply(s, ev('issue.photo', { issue: 'm2' }, { photo: id(n) })), null);
+  assert.equal(apply(s, ev('issue.photo', { issue: 'm2' }, { photo: id(5) })).code, 'invalid_event');
+  assert.equal(apply(s, ev('issue.photo', { issue: 'm2' }, { photo: id(1) })).code, 'exists');
+  assert.equal(apply(s, ev('issue.photo', { issue: 'm2' }, { photo: '../etc' })).code, 'invalid_event');
+  assert.equal(apply(s, ev('issue.photo', { issue: 'm2' }, { photo: id(2), remove: true })), null);
+  assert.deepEqual(s.issues.m2.photos.map(p => p.id), [id(1), id(3), id(4)]);
+  assert.equal(s.issues.m2.log.filter(l => /Photo/.test(l.a)).length, 5);
+});

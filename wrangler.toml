@@ -45,9 +45,12 @@ new_sqlite_classes = ["StoreObject", "RegistryObject"]
 tag = "v2"
 new_sqlite_classes = ["CatalogueObject"]
 
-# Archive and files arrive with the D1 nightly and manifests:
+# Issue photos live in R2 (create each bucket once):
+#   npx wrangler r2 bucket create store-photos-staging
+#   npx wrangler r2 bucket create store-photos
+# Without the PHOTOS binding the photo routes answer 501 and the app hides
+# the photo button. The archive arrives with the D1 nightly:
 #   npx wrangler d1 create conduit-archive-staging
-#   npx wrangler r2 bucket create conduit-files-staging
 # Published maps live in each store object (SQLite) and the catalogue uses
 # the edge Cache API, so neither needs a KV namespace.
 # Service bindings to the other workers on the account. A Worker may not
@@ -67,6 +70,9 @@ durable_objects.bindings = [
   { name = "REGISTRY", class_name = "RegistryObject" },
   { name = "CATALOGUE", class_name = "CatalogueObject" }
 ]
+r2_buckets = [
+  { binding = "PHOTOS", bucket_name = "store-photos-staging" }
+]
 
 [env.production]
 name = "conduit"
@@ -80,4 +86,7 @@ durable_objects.bindings = [
   { name = "STORE", class_name = "StoreObject" },
   { name = "REGISTRY", class_name = "RegistryObject" },
   { name = "CATALOGUE", class_name = "CatalogueObject" }
+]
+r2_buckets = [
+  { binding = "PHOTOS", bucket_name = "store-photos" }
 ]

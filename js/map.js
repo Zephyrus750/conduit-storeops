@@ -6,6 +6,7 @@
 import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast } from './ui.js';
 import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords } from '../shared/route.js';
 import { markerGlyph } from '../shared/maprender.js';
+import { prefs } from './prefs.js';
 
 let floors = [], mapMeta = null;
 // The shell sets the map from the published document (client.maps.get) or
@@ -62,7 +63,7 @@ export function mapStats() {
   if (!floors.length) return null;
   if (statsCache?.v !== mapMeta?.version) {
     const doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => `<g data-fid="${esc(f.id)}">${f.inner}</g>`).join('')}</svg>`, 'image/svg+xml');
-    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const names = new Set([...(g?.querySelectorAll('.shelf-group[data-shelf]') || [])].map(x => x.getAttribute('data-shelf')).filter(n => n && !n.startsWith('_u'))); return { id: f.id, name: f.name, type: f.type, shelves: names.size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }) };
+    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const names = new Set([...(g?.querySelectorAll('.shelf-group[data-shelf]') || [])].map(x => x.getAttribute('data-shelf')).filter(n => n && !n.startsWith('_u'))); return { id: f.id, name: f.name, type: f.type, shelves: names.size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }), depts: (() => { const by = {}; for (const g of doc.querySelectorAll('.shelf-group[data-shelf][data-dept]')) { const n = g.getAttribute('data-shelf'), d = g.getAttribute('data-dept').toLowerCase(); if (!n || n.startsWith('_u')) continue; (by[d] ||= new Set()).add(n); } return Object.fromEntries(Object.entries(by).map(([d, set]) => [d, set.size])); })() };
   }
   return statsCache;
 }
@@ -580,7 +581,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   stage.addEventListener('pointercancel', e => { lift(e); drag = null; });
 
   // hover tooltip (mouse only; a touch shows nothing, the tap selects)
-  if (tips) {
+  if (tips && prefs().mapTips !== false) {
     let tipEl = null, tipFor = null;
     const hide = () => { if (tipEl) tipEl.classList.remove('on'); tipFor = null; };
     stage.addEventListener('pointermove', e => {
