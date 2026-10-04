@@ -27,7 +27,7 @@ export function mlast(code, name, meta) { return `<div class="mv-last"><small>La
 // A scan prompt with a typed field: hardware scanners type into it and press Enter; the camera arrives later.
 // A phone scan block. The input's data-field also names the camera button
 // beside it (js/scan.js opens the camera for it; each read presses Enter).
-const CONTINUOUS_FIELDS = new Set(['mscan', 'msweep', 'pscan']);
+const CONTINUOUS_FIELDS = new Set(['mscan', 'msweep', 'pscan', 'mreadd']);
 export function camButton(field, continuous = CONTINUOUS_FIELDS.has(field)) {
   return `<button type="button" class="mv-cam" data-camera="${esc(field)}"${continuous ? ' data-camera-continuous' : ''} aria-label="Scan with the camera" title="Scan with the camera">${ic('camera')}</button>`;
 }

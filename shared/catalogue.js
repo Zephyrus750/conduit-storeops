@@ -57,6 +57,7 @@ export const CATALOGUE = {
   'submission.delete':   T('stockroom', S, ['bay', 'date']),
   'submission.request':  T('stockroom', S, ['bay', 'date']),                    // requested list; payload.remove
   'submission.claim':    T('stockroom', S, ['bay', 'date']),                    // payload.release
+  'submission.readd':    T('stockroom', S, ['bay', 'date'], { code: 'string' }), // payload.done: scanned back in
   'adjustment.set':      T('stockroom', S, ['keycode', 'date'], { qty: 'number' }),
   'adjustment.remove':   T('stockroom', S, ['keycode', 'date']),
   'daylist.set':         T('stockroom', S, ['date'], { walkers: 'number' }),

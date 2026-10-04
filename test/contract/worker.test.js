@@ -620,3 +620,12 @@ test('suggested map edits: a floor device suggests, the owner resolves from the 
   assert.equal(dock.trucks['2026-09-07-T1'].status, 'closed');
   assert.equal(dock.history.at(-1).carriedOut.to, '2026-09-07-T2');
 });
+
+test('carton profiles: the stockroom code reads them too (a stockroom-only store gets an empty set)', async () => {
+  assert.equal((await reg2('2033', { entitlements: { floor: true, stockroom: true, backdock: false }, codes: { stockroom: 'SR-2033', manager: 'MG-2033' } })).status, 201);
+  const dev = (await api('POST', '/v1/auth/signin', { store: '2033', pin: '135790', device: 'ph-33' })).body;
+  assert.equal((await api('GET', '/v1/store/2033/profiles', undefined, dev.token)).status, 403, 'the store PIN alone does not');
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-2033' }, dev.token)).body;
+  const r = await api('GET', '/v1/store/2033/profiles', undefined, sr.token);
+  assert.equal(r.status, 200); assert.equal(r.body.schema, 'dv-profiles/1'); assert.deepEqual(r.body.profiles, {});
+});

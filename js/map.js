@@ -36,6 +36,25 @@ export function parseFloors(doc) {
 }
 export function mapInfo() { return mapMeta; }
 export function hasMap() { return floors.length > 0; }
+// The shelf a typed location names, without mounting the map: a shelf name
+// or module (A16S1), or a stockroom bay number listed in a shelf's
+// data-locations (7012, or 7042A by its digits, as K2B's storeMapFindLoc).
+// Indexed once per published map.
+let locIndex = null;
+export function shelfForLocation(code) {
+  if (!floors.length) return null;
+  if (!locIndex || locIndex.v !== mapMeta?.version) {
+    const idx = new Map(), doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => f.inner).join('')}</svg>`, 'image/svg+xml');
+    for (const g of doc.querySelectorAll('.shelf-group[data-shelf]')) {
+      const shelf = g.getAttribute('data-shelf'); if (!shelf) continue;
+      if (!idx.has(canonCode(shelf))) idx.set(canonCode(shelf), shelf);
+      for (const l of (g.getAttribute('data-locations') || '').split(/[\s,]+/)) if (l && !idx.has(l)) idx.set(l, shelf);
+    }
+    locIndex = { v: mapMeta?.version, idx };
+  }
+  const C = canonCode(code), digits = (/\d{3,}/.exec(C) || [])[0];
+  return locIndex.idx.get(C) || (digits && locIndex.idx.get(digits)) || null;
+}
 export function mapFloors() { return floors.map(f => ({ id: f.id, name: f.name, type: f.type })); }
 export async function loadMap(url) {
   const res = await fetch(url);

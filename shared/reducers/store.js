@@ -12,9 +12,11 @@ import { DEFAULT_TZ } from '../time.js';
 //   minsPerCarton the dock's standard rate for auto estimates on new trucks
 //   autoLockMins  idle minutes before a device drops its area and manager
 //                 codes (0 = never; legacy DV locked after 5–60)
-export const SETTINGS_DEFAULTS = { tz: DEFAULT_TZ, dockGrid: { rows: 4, cols: 7 }, minsPerCarton: 0.5, autoLockMins: 0 };
+//   deptRanges    stockroom bay ranges → department: [{ from, to, dept }]
+//                 (K2B's deptmap; the narrowest range holding a bay wins)
+export const SETTINGS_DEFAULTS = { tz: DEFAULT_TZ, dockGrid: { rows: 4, cols: 7 }, minsPerCarton: 0.5, autoLockMins: 0, deptRanges: [] };
 export const AUTO_LOCK_CHOICES = [0, 5, 10, 15, 30, 60, 120];
-export function settingsState() { return { tz: null, dockGrid: null, minsPerCarton: null, autoLockMins: null, at: null, by: null }; }
+export function settingsState() { return { tz: null, dockGrid: null, minsPerCarton: null, autoLockMins: null, deptRanges: null, at: null, by: null }; }
 // The effective settings: stored values over the defaults. Takes the whole
 // state or the settings projection alone.
 export function settingsOf(x) {
@@ -35,7 +37,25 @@ const SETTING = {
   dockGrid: v => v && typeof v === 'object' && isInt(v.rows, 1, 8) && isInt(v.cols, 1, 12) ? { v: { rows: v.rows, cols: v.cols } } : 'dockGrid needs rows 1 to 8 and cols 1 to 12',
   minsPerCarton: v => typeof v === 'number' && v >= 0.05 && v <= 10 ? { v: Math.round(v * 100) / 100 } : 'minsPerCarton must be between 0.05 and 10',
   autoLockMins: v => AUTO_LOCK_CHOICES.includes(v) ? { v } : `autoLockMins must be one of ${AUTO_LOCK_CHOICES.join(', ')}`,
+  deptRanges: v => {
+    if (!Array.isArray(v) || v.length > 200) return 'deptRanges must be a list of up to 200 ranges';
+    const out = [];
+    for (const r of v) {
+      const from = Number(r?.from), to = Number(r?.to), dept = String(r?.dept ?? '').trim().toLowerCase();
+      if (!isInt(from, 0, 999999) || !isInt(to, from, 999999) || !/^[a-z0-9]{1,12}$/.test(dept)) return 'each range needs from ≤ to (numbers) and a department code';
+      out.push({ from, to, dept });
+    }
+    return { v: out.sort((a, b) => a.from - b.from || a.to - b.to) };
+  },
 };
+// The department a stockroom bay belongs to: its first 3+ digit number in
+// the narrowest range that holds it (K2B's getDeptForLocation).
+export function deptForBay(ranges, bay) {
+  const m = /\d{3,}/.exec(String(bay || '')); if (!m) return null;
+  const n = Number(m[0]); let best = null;
+  for (const r of ranges || []) if (n >= r.from && n <= r.to && (!best || r.to - r.from < best.to - best.from)) best = r;
+  return best ? best.dept : null;
+}
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 export function storeState() {

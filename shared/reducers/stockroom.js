@@ -4,7 +4,9 @@
 //
 //   cages        cage → { ring, location, items: keycode → qty, sweeps[], status, created, seen, closed }
 //   backfill     subs: `${bay}:${date}` → { bay, date, status, codes: code → { scanned }, incorrect: [],
-//                system: [codes] | null, removed: code → at (tombstones), metrics, statusAt, reopenedAt, readyAt, submittedDoneAt, autoSubmitted }
+//                system: [codes] | null, removed: code → at (tombstones), metrics, statusAt, reopenedAt, readyAt, submittedDoneAt, autoSubmitted,
+//                devices: [device ids that scanned it] (a phone's "My locations"),
+//                readd: code → { at, by, doneAt } (K2B's Re-add: stock found after the bay was finalised, scanned back in) }
 //                requested: date → [bays]      claims: bay → { by, at }
 //   adjustments  date → keycode → { qty (≤ 0, system SOH), counted (found, or null), name, location, confirmed, addedAt }
 //   daylist      date → { walkers, excluded: [bays], source }
@@ -82,6 +84,8 @@ export const stockroomReducers = {
       return reject('removed_by_reviewer', `${stale.join(', ')} ${stale.length === 1 ? 'was' : 'were'} removed by the reviewer`);
     }
     const sub = cur || (s.backfill.subs[subKey(e)] = newSub(bay(e), e.entity.date));
+    const dev = e.actor?.device;
+    if (dev && incoming.some(([, v]) => v)) { sub.devices ||= []; if (!sub.devices.includes(dev)) sub.devices.push(dev); }
     for (const [code, scanned] of incoming) {
       if (stale.includes(code)) continue;
       sub.codes[code] = { scanned: !!scanned };
@@ -131,6 +135,23 @@ export const stockroomReducers = {
   'submission.delete'(s, e) {
     delete s.backfill.subs[subKey(e)];
     delete s.backfill.claims[bay(e)];
+    return null;
+  },
+  // Re-add (K2B's scan-back): an item found on the shelf after the bay was
+  // finalised on the PDT is tagged to the bay, then scanned back in on the
+  // PDT and ticked off (payload.done). Tagging needs the bay on the board.
+  'submission.readd'(s, e) {
+    const sub = sub_(s, e); if (sub.code) return sub;
+    const code = String(e.payload.code || '');
+    if (!/^\d{6,13}$/.test(code)) return reject('invalid_event', 'code must be a keycode or item barcode');
+    const r = (sub.readd ||= {});
+    if (e.payload.done) {
+      if (!r[code]) return reject('not_found', `${code} is not tagged to ${sub.bay}`);
+      if (r[code].doneAt) return reject('invalid_event', `${code} is already scanned back in`);
+      r[code].doneAt = e.at; return null;
+    }
+    if (r[code]) return reject('invalid_event', `${code} is already tagged to ${sub.bay}`);
+    r[code] = { at: e.at, by: e.actor?.device || null, doneAt: null };
     return null;
   },
   'submission.request'(s, e) {

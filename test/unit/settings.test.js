@@ -26,7 +26,7 @@ test('store.settings.set validates the whole payload before changing anything', 
   }
   assert.equal(s.settings.tz, null, 'a rejected set leaves the zone untouched');
   assert.equal(apply(s, set({ tz: 'Australia/Adelaide', dockGrid: { rows: 5, cols: 8, extra: 1 }, minsPerCarton: 0.333, autoLockMins: 15 })), null);
-  assert.deepEqual(settingsOf(s), { tz: 'Australia/Adelaide', dockGrid: { rows: 5, cols: 8 }, minsPerCarton: 0.33, autoLockMins: 15 });
+  assert.deepEqual(settingsOf(s), { tz: 'Australia/Adelaide', dockGrid: { rows: 5, cols: 8 }, minsPerCarton: 0.33, autoLockMins: 15, deptRanges: [] });
   assert.equal(s.settings.by, 'PC1');
 });
 
@@ -67,4 +67,15 @@ test('a truck from before settings (no rate stored) keeps the standard rate', ()
   delete s.dock.trucks['2026-09-07-T1'].minsPerCarton;
   apply(s, ev('pallet.land', { truck: '2026-09-07-T1', bay: 'A1' }, { ptype: 'chep', cartons: 30 }));
   assert.equal(s.dock.trucks['2026-09-07-T1'].pallets.A1.expectedMins, 15);
+});
+
+test('department ranges: validated, sorted, the narrowest range wins', async () => {
+  const { deptForBay } = await import('../../shared/reducers/store.js');
+  const s = initialState();
+  assert.equal(apply(s, set({ deptRanges: [{ from: 7040, to: 7001, dept: 'h1' }] }))?.code, 'invalid_event', 'from must not pass to');
+  assert.equal(apply(s, set({ deptRanges: [{ from: 7001, to: 7040, dept: 'Home Kitchen!' }] }))?.code, 'invalid_event');
+  assert.equal(apply(s, set({ deptRanges: [{ from: 7001, to: 7099, dept: 'H' }, { from: 7010, to: 7019, dept: 'h1' }] })), null);
+  const r = settingsOf(s).deptRanges;
+  assert.deepEqual(r.map(x => x.dept), ['h', 'h1']);
+  assert.deepEqual([deptForBay(r, '7012'), deptForBay(r, '7042A'), deptForBay(r, '8000'), deptForBay(r, 'A1')], ['h1', 'h', null, null]);
 });
