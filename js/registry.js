@@ -21,6 +21,7 @@ import daylist from './views/stockroom/daylist.js';
 import srhistory from './views/stockroom/srhistory.js';
 import srhome from './views/stockroom/srhome.js';
 import srintel from './views/stockroom/intel.js';
+import srtrends from './views/stockroom/srtrends.js';
 import receiving from './views/backdock/receiving.js';
 import bdhome from './views/backdock/bdhome.js';
 import manifests from './views/backdock/manifests.js';
@@ -31,14 +32,14 @@ import { dockscreen, teamboard } from './views/backdock/screens.js';
 import wallboard from './views/backdock/wallboard.js';
 import danalytics from './views/backdock/danalytics.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srintel, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srintel, srtrends, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
 // Rail sections and the phone tab strip per workspace. Rows without a view
 // yet are inert and say so.
 export const RAIL = [
   { sec: 'Store', rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake', 'mapedits'] },
   { sec: 'Back dock', rows: ['receiving', 'teamboard', 'dockscreen', 'wallboard', 'rhistory', 'danalytics', 'manifests', 'profiles'] },
-  { sec: 'Stockroom', rows: ['bfreview', 'cages', 'adjust', 'daylist', 'srintel', 'srhistory'] },
+  { sec: 'Stockroom', rows: ['bfreview', 'cages', 'adjust', 'daylist', 'srintel', 'srtrends', 'srhistory'] },
 ];
 export const STRIP = {
   floor: [['mhome', 'home', 'Home'], ['refresh', 'm-refresh', 'Refresh'], ['labelint', 'm-labelint', 'Labels'], ['picklist', 'm-picklist', 'Route'], ['emergency', 'm-emergency', 'Emergency'], ['more', 'dots', 'More']],
