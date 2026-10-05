@@ -101,3 +101,21 @@ test('a plain finalise with leftovers still closes; the pallets stay on its reco
   assert.equal(s.dock.history.at(-1).palletsLanded, 3);
   assert.equal(apply(s, ev('truck.create', { truck: T2 })), null, 'nothing open, so a plain create');
 });
+
+test('reopen: a finalised truck goes back to live and its history row comes off; not while another truck is open', () => {
+  const s = initialState(); truckOne(s);
+  assert.equal(apply(s, ev('truck.finalise', { truck: T1 }, { rollover: true })), null);
+  assert.equal(s.dock.history.length, 1);
+  assert.equal(apply(s, ev('truck.reopen', { truck: T1 })), null);
+  assert.equal(s.dock.trucks[T1].status, 'live'); assert.equal(s.dock.trucks[T1].clearedAt, null);
+  assert.equal(s.dock.history.length, 0, 'the row and its rate credit are gone until it closes again');
+  assert.equal(s.dock.rollover, null); assert.deepEqual(Object.keys(s.dock.trucks[T1].pallets).sort(), ['A1', 'A2', 'A3'], 'held pallets come back');
+  assert.equal(s.dock.trucks[T1].pallets.A2.carryover, undefined);
+  assert.equal(apply(s, ev('truck.reopen', { truck: T1 }))?.code, 'truck_open', 'an open truck cannot be reopened');
+  apply(s, ev('pallet.start', { truck: T1, bay: 'A2' }, { pid: 'D1' })); apply(s, ev('pallet.done', { truck: T1, bay: 'A2' }));
+  assert.equal(apply(s, ev('truck.finalise', { truck: T1 }, { rollover: true })), null);
+  assert.equal(s.dock.history.length, 1); assert.equal(s.dock.history[0].pallets, 2, 'the second close counts the work done after reopening');
+  apply(s, ev('truck.create', { truck: T2 }));
+  assert.equal(apply(s, ev('truck.reopen', { truck: T1 }))?.code, 'truck_open', 'one truck at a time');
+  assert.equal(apply(s, ev('truck.reopen', { truck: T3 }))?.code, 'not_found');
+});

@@ -73,6 +73,7 @@ export const CATALOGUE = {
   'truck.setStart':      T('backdock', D, ['truck']),                           // payload.at ISO | null: the decant clock's start
   'receiving.confirm':   T('backdock', D, ['truck']),                           // payload.confirmed (default true)
   'truck.finalise':      T('backdock', D, ['truck']),                           // the facilitator closes (legacy: facilitator code)
+  'truck.reopen':        T('backdock', M, ['truck']),                           // back to live: its history row and rate credit come off until it closes again
   'truck.import':        T('backdock', M, ['truck']),                           // a finalised truck's record from the legacy app, as-is
   'manifest.publish':    T('backdock', D, ['manNo']),                            // payload: dcNo, despatch, filename, consols, totalCartons, keycodes
   'manifest.remove':     T('backdock', D, ['manNo']),

@@ -164,6 +164,30 @@ export const backdockReducers = {
     return null;
   },
 
+  // Reopen a finalised truck (DV's review → reopen): it goes back to live,
+  // its history row and the rate credit in it come off until it is
+  // finalised again. One truck at a time, so not while another is open.
+  'truck.reopen'(s, e) {
+    const id = e.entity.truck, t = s.dock.trucks[id];
+    if (!t) return reject('not_found', `truck ${id} is not on the dock (an imported record cannot be reopened)`);
+    if (t.status !== 'closed') return reject('truck_open', `truck ${id} is not finalised`);
+    const other = Object.keys(s.dock.trucks).find(k => k !== id && s.dock.trucks[k].status !== 'closed');
+    if (other) return reject('truck_open', `truck ${other} is on the dock: finalise it before reopening ${id}`);
+    t.status = 'live'; t.clearedAt = null; t.reopenedAt = e.at; t.receivingConfirmed = false;
+    // Pallets it held for the next truck come back onto their bays.
+    const held = s.dock.rollover;
+    if (held?.from === id) {
+      const back = new Set();
+      for (const [ref, p] of Object.entries(held.pallets)) { const q = { ...p }; if (q.carriedFrom === id) { delete q.carryover; delete q.carriedFrom; } t.pallets[ref] = q; for (const c of q.consolIds || []) back.add(c); }
+      const onManifest = new Set((t.manifest?.consols || []).map(c => c.id));
+      t.carriedConsols = [...(t.carriedConsols || []), ...held.consols.filter(c => !onManifest.has(c.id))];
+      t.carriedOutIds = (t.carriedOutIds || []).filter(c => !back.has(c));
+      s.dock.rollover = null;
+    }
+    s.dock.history = s.dock.history.filter(r => r.id !== id);
+    return null;
+  },
+
   // A record imported from Decant Visualiser (or any legacy archive): the
   // history row as the legacy app computed it, whitelisted field by field.
   // Replaces an earlier import of the same truck, so re-running is safe.

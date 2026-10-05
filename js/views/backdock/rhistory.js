@@ -11,6 +11,7 @@ import { HALT_NAME, holdName, truckNo, fmtHM, microDept, todayKey, manifestIndex
 import { printAudit } from './audit.js';
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
 import { ratesFor } from './plan.js';
+import { layout } from './wallboard.js';
 
 const st = { open: null, q: '', late: null };
 const WINDOW_DAYS = 21;
@@ -39,7 +40,7 @@ function detail(r, win, truck) {
   const cmp = (v, a, fmt, better) => { if (!win.length || !a) return ''; const d = v - a; if (!d) return '<i class="cs-dim">on average</i>'; const good = better === 'low' ? d < 0 : d > 0; return `<i class="${good ? 'c-green' : 'c-red'}">${d > 0 ? '+' : '−'}${fmt(Math.abs(d))}</i>`; };
   const halts = (r.downtime || []).slice().sort((a, b) => b.mins - a.mins);
   return `<div class="card"><div class="ch">${ic('truck')}<h3>${esc(fmtDate(r.date))} · Truck ${esc(truckNo(r.id))}</h3><span class="status good" style="margin-left:auto">decanted</span>${truck ? `<button class="btn sm" data-act="audit">${ic('print')}Audit</button>` : ''}</div>` +
-    `<div class="facts6"><div class="f6"><b>${r.cartons}</b><span>cartons decanted</span></div><div class="f6"><b>${r.pallets}<small> / ${r.palletsLanded}</small></b><span>pallets done of landed</span></div><div class="f6"><b>${hm(r.clearMins)}</b><span>${r.decantStartAt ? 'decant start' : 'landed'} to the last pallet</span></div><div class="f6"><b>${r.teamRate}</b><span>ctn/hr team rate</span></div><div class="f6"><b>${r.manifest?.dcNo ? 'DC ' + esc(r.manifest.dcNo) : '—'}</b><span>${r.manifest?.despatch ? 'despatched ' + esc(r.manifest.despatch) : 'no manifest attached'}</span></div><div class="f6"><b>${fmtHM(r.landedAt)}</b><span>landed · cleared ${fmtHM(r.clearedAt)}</span></div></div>` +
+    `<div class="facts6"><div class="f6"><b>${r.cartons}</b><span>cartons decanted</span></div><div class="f6"><b>${r.pallets}<small> / ${r.palletsLanded}</small></b><span>pallets done of landed</span></div><div class="f6"><b>${hm(r.clearMins)}</b><span>${r.decantStartAt ? 'decant start' : 'landed'} to the last pallet</span></div><div class="f6"><b>${r.teamRate}</b><span>ctn/hr team rate</span></div><div class="f6"><b>${r.manifest?.dcNo ? 'DC ' + esc(r.manifest.dcNo) : r.manifest ? esc(r.manifest.manNo) : '—'}</b><span>${r.manifest?.despatch ? 'despatched ' + esc(r.manifest.despatch) : r.manifest ? 'manifest · no DC details' : 'no manifest attached'}</span></div><div class="f6"><b>${fmtHM(r.landedAt)}</b><span>landed · cleared ${fmtHM(r.clearedAt)}</span></div></div>` +
     `<div class="k rh-k">Where the time went · ${hm(r.clearMins)}</div>` +
     `<div class="tl"><i style="width:${Math.round(active / total * 100)}%;background:#16A34A" title="Active decanting ${hm(active)}"></i>${halts.map(h => `<i style="width:${Math.round(h.mins / total * 100)}%;background:${downColour(h)}" title="${esc(holdName(h))} ${hm(h.mins)}"></i>`).join('')}${PLANNED.filter(([k]) => r[k]).map(([k, l, c]) => `<i style="width:${Math.round(r[k] / total * 100)}%;background:${c}" title="${l} ${hm(r[k])}"></i>`).join('')}</div>` +
     `<div class="tlk"><span><i style="background:#16A34A"></i>Active decanting <b>${hm(active)}</b></span>${halts.map(h => `<span><i style="background:${downColour(h)}"></i>${esc(holdName(h))} (${h.count}) <b>${hm(h.mins)}</b></span>`).join('')}${!halts.length ? '<span class="cs-dim">No downtime</span>' : ''}</div>` +
@@ -66,7 +67,7 @@ export default {
     return head + `<div class="rh"><div class="card rhlist"><div class="ch"><h3>Decanted trucks</h3><div class="search rh-find">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="Truck day, manifest or DC…" aria-label="Find a truck"></div></div>` +
       (list ? `<div class="list">${list}</div>${m.rows.length > 60 ? `<div class="cs-dim" style="padding:8px 0">Showing 60 of ${m.rows.length}</div>` : ''}` : `<div class="ohint">${m.all.length ? 'Nothing matches.' : 'No truck has been finalised yet. Finalise a truck at Receiving and its record lands here.'}</div>`) +
       (rates.length > 1 ? `<div class="k rh-k">Team rate · cartons per hour</div><div class="rhbars">${rates.map((r, i) => `<div class="${i === rates.length - 1 ? 'hi' : ''}" style="height:${Math.max(4, Math.round(r.teamRate / max * 100))}%" title="${esc(fmtDate(r.date))} Truck ${esc(truckNo(r.id))}"><span>${r.teamRate}</span></div>`).join('')}</div><div class="lbl" style="margin-top:20px">Oldest → newest across the ${WINDOW_DAYS}-day window.</div>` : '') + '</div>' +
-      `<div class="sidecol">${o ? lateBar(ctx, o) + detail(o, m.win, ctx.store.get('dock').trucks?.[o.id]) : `<div class="card"><div class="ch"><h3>Pick a truck</h3></div><p class="lbl">Open one from the list to see where its time went, the manifest reconciliation and the crew credit.</p></div>`}</div></div>`;
+      `<div class="sidecol">${o ? lateBar(ctx, o) + detail(o, m.win, ctx.store.get('dock').trucks?.[o.id]) + pastLayout(ctx, o) : `<div class="card"><div class="ch"><h3>Pick a truck</h3></div><p class="lbl">Open one from the list to see where its time went, the manifest reconciliation and the crew credit.</p></div>`}</div></div>`;
   },
   mobile(ctx) {
     const m = model(ctx), recent = m.all.slice(0, 8);
@@ -81,6 +82,10 @@ export default {
       else if (a.dataset.act === 'late-link' || a.dataset.act === 'll-close') { st.late = a.dataset.act === 'll-close' ? null : 'link'; ctx.rerender(); }
       else if (a.dataset.act === 'late-man') { try { await attachManifest(ctx, a.dataset.truck, a.dataset.man); toast(`${a.dataset.man} attached to Truck ${truckNo(a.dataset.truck)} · history rebuilt`); st.late = 'link'; } catch (err) { toast(err.message, 'bad'); } }
       else if (a.dataset.act === 'll-apply') { const o = model(ctx).open, dock = ctx.store.get('dock'), t = dock.trucks?.[o.id]; try { await applyLinks(ctx, { id: o.id, ...t }, ratesFor(dock)); st.late = null; } catch (err) { toast(err.message, 'bad'); } }
+      else if (a.dataset.act === 'reopen') {
+        const id = a.dataset.id; if (!confirm(`Reopen Truck ${truckNo(id)}? It goes back to live and its history row + rate credit are removed until it's closed again.`)) return;
+        try { await ctx.store.dispatch({ type: 'truck.reopen', entity: { truck: id } }); toast(`Truck ${truckNo(id)} is live again`); st.open = null; ctx.go('receiving'); } catch (err) { toast(err.message, 'bad'); }
+      }
       else if (a.dataset.act === 'export') {
         a.disabled = true;
         try { const text = await ctx.api(`/v1/store/${ctx.storeNo}/export/receiving`, { text: true }); const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); const l = document.createElement('a'); l.href = url; l.download = `receiving-${ctx.storeNo}.csv`; l.click(); setTimeout(() => URL.revokeObjectURL(url), 5000); toast('CSV downloaded'); }
@@ -107,4 +112,13 @@ function lateBar(ctx, r) {
     return chips + pick + (st.late === 'link' && t.manifest ? linkSheet(tt, ratesFor(dock)) : '');
   }
   return '';
+}
+
+// The dock as this truck left it (kept while the truck is on record), and
+// for a manager the way back: reopen it.
+function pastLayout(ctx, r) {
+  const dock = ctx.store.get('dock'), t = dock.trucks?.[r.id], manager = (ctx.session.current?.roles || []).includes('manager') || ctx.session.current?.owner;
+  if (!t) return '';
+  const blocked = Object.keys(dock.trucks).some(k => k !== r.id && dock.trucks[k].status !== 'closed');
+  return layout({ id: r.id, ...t }) + (manager ? `<div class="card"><div class="ch"><h3>Reopen</h3></div><p class="lbl">${blocked ? 'Another truck is on the dock: finalise it first, then this one can be reopened.' : 'Back to live to fix a missed pallet or time. The history row and its rate credit come off until it is finalised again.'}</p><button class="btn sm" data-act="reopen" data-id="${esc(r.id)}"${blocked ? ' disabled' : ''}>${ic('refresh')}Reopen Truck ${esc(truckNo(r.id))}</button></div>` : '');
 }
