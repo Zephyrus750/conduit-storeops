@@ -30,6 +30,8 @@ import { HttpError, json, fail, CORS } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
+import { isoWeek } from '../shared/stockintel.js';
+import { SOH_KEEP } from '../shared/reducers/stockroom.js';
 import { rolloverDue } from '../shared/backfill.js';
 import { sanitizeSvg } from '../shared/svgsafe.js';
 import { cleanStoreInfo } from '../shared/maprender.js';
@@ -37,6 +39,7 @@ import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/tim
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
+const SOH_MAX = 4_000_000, SOH_ROWS = 20_000;     // one SOH report: a whole store's stockroom
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
 const DELTA_LIMIT = 5000;
 const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
@@ -65,6 +68,7 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS maps (version TEXT PRIMARY KEY, meta TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, at TEXT NOT NULL, by TEXT NOT NULL, size INTEGER NOT NULL);
     `);
@@ -82,7 +86,8 @@ export class StoreObject extends DurableObject {
   // ── state ─────────────────────────────────────────────────────────────
   load() {
     const snap = this.sql.exec('SELECT seq, state FROM snapshots ORDER BY seq DESC LIMIT 1').toArray()[0];
-    this.state = snap ? JSON.parse(snap.state) : initialState();
+    // A saved state from before a new slice was added gets that slice empty.
+    this.state = snap ? { ...initialState(), ...JSON.parse(snap.state) } : initialState();
     const since = snap ? snap.seq : 0;
     const rows = this.sql.exec('SELECT * FROM events WHERE seq > ? ORDER BY seq', since).toArray();
     replay(this.state, rows.map(rowToEvent));
@@ -122,6 +127,9 @@ export class StoreObject extends DurableObject {
           if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1]));
+          if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readBounded(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12)); }
+          const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
+          if (sohDay) { const no = needArea(claims, 'stockroom'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
           if (url.pathname === '/manifest' && request.method === 'POST') return this.publishManifest(await request.json(), claims);
           if (url.pathname === '/profiles') { const dk = needArea(claims, 'backdock'), sr = needArea(claims, 'stockroom'); if (dk && sr) return dk;   // carton depths serve the dock and the stockroom (K2B read them)
            const docs = this.sql.exec('SELECT doc, at FROM manifests').toArray().map(r => ({ ...JSON.parse(r.doc), at: r.at })); return json(buildProfiles(docs, { store: this.storeNo })); }
@@ -347,6 +355,46 @@ export class StoreObject extends DurableObject {
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
     return json({ ok: true, manNo });
+  }
+
+  // ── SOH snapshots ─────────────────────────────────────────────────────
+  // The stock-on-hand report pasted at the stockroom desk, kept one per day
+  // (a re-paste the same day replaces it) and indexed by a soh.publish event,
+  // like a manifest. The newest SOH_KEEP are kept; the classes read them
+  // back as a history. Needs the stockroom or manager role.
+  publishSoh(body, claims) {
+    if (!hasRole(claims, ['stockroom', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'saving a snapshot needs the stockroom code');
+    const date = String(body?.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, 'invalid_request', 'date must be YYYY-MM-DD');
+    if (!Array.isArray(body.rows) || !body.rows.length || body.rows.length > SOH_ROWS) throw new HttpError(400, 'invalid_request', `a snapshot needs 1 to ${SOH_ROWS} rows`);
+    const rows = [];
+    for (const r of body.rows) {
+      const kc = String(r?.kc || ''), loc = String(r?.loc || ''), soh = Number(r?.soh);
+      if (!/^\d{6,8}$/.test(kc) || !/^\d{1,5}$/.test(loc) || !Number.isFinite(soh)) throw new HttpError(400, 'invalid_request', `row ${rows.length + 1}: keycode, location and SOH are needed`);
+      rows.push({ kc, loc, soh: Math.round(soh), ...(Number.isFinite(Number(r.price)) && r.price !== null ? { price: Number(r.price) } : {}), ...(r.name ? { name: String(r.name).slice(0, 80) } : {}) });
+    }
+    const at = new Date().toISOString(), by = claims.device || (claims.owner ? 'owner' : ''), week = isoWeek(date), locs = new Set(rows.map(r => r.loc)).size;
+    const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.publish', entity: { date }, payload: { rows: rows.length, locs, week }, at, v: 1 };
+    const [r] = this.submit([ev], claims);
+    if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
+    this.sql.exec('INSERT OR REPLACE INTO soh (date, doc, at, by) VALUES (?, ?, ?, ?)', date, JSON.stringify({ date, week, rows }), at, by);
+    const keep = Object.keys(this.state.soh?.snaps || {});
+    for (const old of this.sql.exec('SELECT date FROM soh').toArray().map(x => x.date)) if (!keep.includes(old)) this.sql.exec('DELETE FROM soh WHERE date = ?', old);
+    return json({ ok: true, date, week, rows: rows.length, locs, seq: r.seq }, 201);
+  }
+  sohDocs(n) {
+    const lim = Math.max(1, Math.min(SOH_KEEP, Number.isFinite(n) ? Math.round(n) : 12));
+    const snaps = this.sql.exec('SELECT doc FROM soh ORDER BY date DESC LIMIT ?', lim).toArray().map(r => JSON.parse(r.doc)).reverse();
+    return json({ snaps });
+  }
+  removeSoh(date, claims) {
+    if (!hasRole(claims, ['stockroom', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a snapshot needs the stockroom code');
+    if (!this.sql.exec('SELECT 1 FROM soh WHERE date = ?', date).toArray().length) throw new HttpError(404, 'not_found', `no SOH snapshot for ${date}`);
+    const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.remove', entity: { date }, payload: {}, at: new Date().toISOString(), v: 1 };
+    const [r] = this.submit([ev], claims);
+    if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
+    this.sql.exec('DELETE FROM soh WHERE date = ?', date);
+    return json({ ok: true, date });
   }
 
   // ── published maps ────────────────────────────────────────────────────

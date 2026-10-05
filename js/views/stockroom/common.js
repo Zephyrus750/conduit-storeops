@@ -73,3 +73,4 @@ export async function send(ctx, type, entity, payload = {}) {
   try { return await ctx.store.dispatch({ type, entity, payload }); }
   catch (e) { const { toast } = await import('../../ui.js'); toast(e.message, 'bad'); return null; }
 }
+export const allProfiles = () => profiles || {};

@@ -105,6 +105,8 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
+| `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }] }`, ≤ 20,000 rows; a re-save that day replaces it); logs `soh.publish`; the newest 26 are kept |
+| `GET /v1/store/:no/soh?n=12`, `DELETE /v1/store/:no/soh/:date` | stockroom code, manager or owner | live: the newest n snapshots, oldest first, for the stock classes; remove logs `soh.remove` |
 | `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
 | `POST /v1/store/:no/photo` | store token for that store | live: an issue photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
 | `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo, until 90 days after its issue is completed or removed |

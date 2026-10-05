@@ -352,6 +352,32 @@ test('a keycode’s life, the history lists and the CSV export read the stockroo
   assert.match(text, /2026-09-17,7012,submitted,/);
 });
 
+test('SOH snapshots: save one a day, list through the projection, read the history, verify a count, remove', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'sr-desk' })).body.token;
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, dev)).body.token;
+  const rows = [{ kc: '43307685', loc: '7001', soh: 12, price: 8, name: 'Kids tee' }, { kc: '42977636', loc: '7002', soh: 0 }];
+  assert.equal((await api('POST', '/v1/store/1241/soh', { date: '2026-09-28', rows }, dev)).status, 403, 'the store PIN alone cannot save one');
+  assert.equal((await api('POST', '/v1/store/1241/soh', { date: '28/09/2026', rows }, sr)).status, 400);
+  assert.equal((await api('POST', '/v1/store/1241/soh', { date: '2026-09-28', rows: [{ kc: 'x', loc: '7001', soh: 1 }] }, sr)).status, 400);
+  const a = await api('POST', '/v1/store/1241/soh', { date: '2026-09-28', rows }, sr);
+  assert.equal(a.status, 201); assert.deepEqual([a.body.rows, a.body.locs, a.body.week], [2, 2, '2026-W40']);
+  assert.equal((await api('POST', '/v1/store/1241/soh', { date: '2026-10-05', rows: rows.map(r => ({ ...r, soh: r.soh - 1 })) }, sr)).status, 201);
+  assert.equal((await api('POST', '/v1/store/1241/soh', { date: '2026-10-05', rows }, sr)).status, 201, 'a re-save the same day replaces it');
+  const snap = await api('GET', '/v1/store/1241/snapshot', undefined, sr);
+  assert.deepEqual(Object.keys(snap.body.state.soh.snaps).sort(), ['2026-09-28', '2026-10-05']);
+  assert.equal((await api('GET', '/v1/store/1241/soh', undefined, dev)).status, 403, 'reading them takes the stockroom code too');
+  const got = await api('GET', '/v1/store/1241/soh?n=5', undefined, sr);
+  assert.equal(got.status, 200); assert.deepEqual(got.body.snaps.map(x => x.date), ['2026-09-28', '2026-10-05'], 'oldest first');
+  assert.deepEqual(got.body.snaps[1].rows[0], { kc: '43307685', loc: '7001', soh: 12, price: 8, name: 'Kids tee' });
+  const ev = (type, entity, payload) => ({ id: ulid(), store: '1241', area: 'stockroom', type, entity, payload, at: new Date().toISOString(), v: 1 });
+  const v = await api('POST', '/v1/store/1241/events', { events: [ev('soh.verify', { date: '2026-10-05', keycode: '43307685' }, { loc: '7001' }), ev('soh.verify', { date: '2026-01-01', keycode: '43307685' }, { loc: '7001' })] }, sr);
+  assert.deepEqual(v.body.results.map(x => x.ok || x.code), [true, 'not_found']);
+  assert.equal((await api('DELETE', '/v1/store/1241/soh/2026-09-28', undefined, dev)).status, 403);
+  assert.equal((await api('DELETE', '/v1/store/1241/soh/2026-09-28', undefined, sr)).status, 200);
+  assert.equal((await api('DELETE', '/v1/store/1241/soh/2026-09-28', undefined, sr)).status, 404);
+  assert.deepEqual((await api('GET', '/v1/store/1241/soh', undefined, sr)).body.snaps.map(x => x.date), ['2026-10-05']);
+});
+
 test('manifests: publish the report, list it through the projection, read it, attach it to a truck, scan against it, remove it', async () => {
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'dock-1' })).body.token;
   const unlocked = (await api('POST', '/v1/auth/unlock', { code: 'DK-CODE' }, dev)).body.token || dev;

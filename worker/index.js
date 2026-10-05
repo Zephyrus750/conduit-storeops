@@ -213,6 +213,10 @@ r.get('/v1/store/:no/life/:keycode', (req, env, _c, p) => anyStoreCall(req, env,
 r.get('/v1/store/:no/history/:kind', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/history/${p.kind}`, new URL(req.url).search));
 r.get('/v1/store/:no/export/:kind', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/export/${p.kind}`));
 
+// ── SOH snapshots: the stockroom's stock-on-hand report, one a day ────────
+r.post('/v1/store/:no/soh', (req, env, _c, p) => storeCall(req, env, p.no, '/soh'));
+r.get('/v1/store/:no/soh', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/soh', new URL(req.url).search));   // stockroom-gated in the store object
+r.delete('/v1/store/:no/soh/:date', (req, env, _c, p) => storeCall(req, env, p.no, `/soh/${p.date}`));
 // ── manifests: the DC report published whole, read on demand ──────────────
 r.post('/v1/store/:no/manifest', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/manifest'));
 r.get('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));

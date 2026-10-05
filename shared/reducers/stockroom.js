@@ -10,6 +10,8 @@
 //                requested: date → [bays]      claims: bay → { by, at }
 //   adjustments  date → keycode → { qty (≤ 0, system SOH), counted (found, or null), name, location, confirmed, addedAt }
 //   daylist      date → { walkers, excluded: [bays], source }
+//   soh          snaps: date → { rows, locs, week, at, by } (the SOH report snapshots; the rows live on
+//                the worker, published whole like a manifest), verify: date → `${keycode}|${loc}` → at
 //
 // Status enum is exactly pending | corrected | submitted ("Needs review",
 // "Ready", "Submitted"). Requested locations are a separate list, not a status.
@@ -20,6 +22,8 @@ import { backfillMetrics, scannedCodes } from '../backfill.js';
 export const RINGS = ['new-lines', 'overstock', 'cant-work', 'online-picks'];
 export const SUBMISSION_STATUS = ['pending', 'corrected', 'submitted'];
 export const DAYLIST_SOURCES = ['requested', 'snapshot', ''];
+export const SOH_KEEP = 26;                     // snapshots kept (about six months of weekly pastes)
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function stockroomState() {
   return {
@@ -27,6 +31,7 @@ export function stockroomState() {
     backfill: { subs: {}, requested: {}, claims: {} },
     adjustments: {},
     daylist: {},
+    soh: { snaps: {}, verify: {} },
   };
 }
 
@@ -190,6 +195,30 @@ export const stockroomReducers = {
   },
 
   // ── Day list ─────────────────────────────────────────────────────────
+  // ── SOH snapshots (the worker emits soh.publish when it stores one) ───
+  'soh.publish'(s, e) {
+    const d = String(e.entity.date); if (!DAY_RE.test(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');
+    const p = e.payload || {}, soh = (s.soh ||= { snaps: {}, verify: {} });
+    soh.snaps[d] = { rows: Number(p.rows) || 0, locs: Number(p.locs) || 0, week: String(p.week || '').slice(0, 9), at: e.at, by: e.actor?.device || null };
+    const keep = Object.keys(soh.snaps).sort().slice(-SOH_KEEP);
+    for (const k of Object.keys(soh.snaps)) if (!keep.includes(k)) { delete soh.snaps[k]; delete soh.verify[k]; }
+    return null;
+  },
+  'soh.remove'(s, e) {
+    const d = String(e.entity.date), soh = (s.soh ||= { snaps: {}, verify: {} });
+    if (!soh.snaps[d]) return reject('not_found', `no SOH snapshot for ${d}`);
+    delete soh.snaps[d]; delete soh.verify[d];
+    return null;
+  },
+  // A count checked on the walk (K2B's verify tick); payload.done false clears it.
+  'soh.verify'(s, e) {
+    const d = String(e.entity.date), kc = String(e.entity.keycode), soh = (s.soh ||= { snaps: {}, verify: {} });
+    if (!soh.snaps[d]) return reject('not_found', `no SOH snapshot for ${d}`);
+    if (!/^\d{6,8}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 8 digits');
+    const key = `${kc}|${String(e.payload.loc)}`, v = (soh.verify[d] ||= {});
+    if (e.payload.done === false) delete v[key]; else v[key] = e.at;
+    return null;
+  },
   'daylist.set'(s, e) {
     const w = e.payload.walkers;
     if (!(Number.isInteger(w) && w >= 1 && w <= 4)) return reject('invalid_event', 'walkers must be 1..4');
