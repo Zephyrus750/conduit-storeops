@@ -16,6 +16,7 @@ import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { printSheet, code as pcode, tick, table, section, signoff } from '../../print.js';
 import { addDays } from '../../../shared/time.js';
+import { openScreenScan } from '../../screenscan.js';
 import { STATUS, todayKey, ensureNames, nameHtml, nameOf, send, copyText, loadProfiles, depthChip } from './common.js';
 
 // Desk state. report: the pasted SIM report { at, byLoc, range, delta, bayAt }
@@ -165,7 +166,7 @@ function middle(ctx, m) {
   const ro = s.status === 'submitted';
   const stat = STATUS[s.status];
   const head = `<div class="smid-h"><span class="bigloc">${esc(s.bay)}</span>${ro ? '' : `<span class="ico" title="Correct this bay number" data-act="rename">${ic('edit')}</span>`}<span class="bc" title="Bay ${esc(s.bay)}: scan into the PDT">${barcodeSvg(s.bay, { module: 1.3, height: 30, text: false })}</span><span class="status ${stat[1]}">${ro ? ic('check') : ''}${stat[0]}</span>${ro ? `<span class="cs-dim subat">at ${fmtTime(s.submittedDoneAt)}${s.autoSubmitted ? ' · auto' : ''}</span>` : ''}<span class="hm"><span><b>${c.expected}</b>expected</span><span><b>${c.scannedCount}</b>scanned</span><span><b class="c-green">${c.match}</b>match</span><span><b style="color:${pcol(c.pct)}">${c.pct == null ? '—' : c.pct + '%'}</b>accuracy</span><span><b class="${c.incorrect ? 'c-red' : ''}">${c.incorrect}</b>incorrect</span></span><span class="sp"></span>` +
-    (ro ? '' : `<button class="btn" data-act="bay-paste" title="Paste this bay's inventory list from SIM">${ic('clip')}${sys ? 'Re-check' : 'Paste list'}</button>`) + pin(s.bay) +
+    (ro ? '' : `<button class="btn" data-act="bay-paste" title="Paste this bay's inventory list from SIM">${ic('clip')}${sys ? 'Re-check' : 'Paste list'}</button><button class="btn" data-act="bay-screen" title="Read this bay's list off the SIM screen">${ic('expand')}Screen scan</button>`) + pin(s.bay) +
     (s.status === 'pending' ? `<button class="btn ready" data-act="ready" title="Mark ready: writes these metrics to History and frees the bay (Enter)">${ic('check')}Ready</button>` : s.status === 'corrected' ? `<button class="btn submitb" data-act="submit">${ic('checks')}Submit</button><button class="btn" data-act="reopen">${ic('refresh')}Reopen</button>` : `<button class="btn" data-act="unfinalise" title="Back to Ready: it was not finalised on the PDT after all">${ic('refresh')}Unfinalise</button><button class="btn" data-act="reopen" title="Back into review">Reopen</button>`) +
     `<span class="ico bin" title="Delete this bay" data-act="delete">${ic('trash')}</span></div>`;
   const ctl = `<div class="smid-ctl"><span class="pills"><button class="${st.view === 'list' ? 'on' : ''}" data-act="view" data-v="list">List</button><button class="${st.view === 'detail' ? 'on' : ''}" data-act="view" data-v="detail">Detail</button><button class="${st.view === 'codes' ? 'on' : ''}" data-act="view" data-v="codes" title="Each code to add or remove as a barcode, to scan into the PDT">Barcodes</button><button class="${st.view === 'focus' ? 'on' : ''}" data-act="view" data-v="focus" title="One code at a time, keyboard first (F)">Focus</button></span><button class="btn sm" data-act="print-sheet" title="Print the To add / To remove worksheet">${ic('print')}Worksheet</button><button class="btn sm" data-act="copy-all" title="Copy every code to add or remove, one a line">${ic('file')}Copy all</button><span class="cpill match">${c.match} match</span><span class="cpill add">${c.add + c.scanned} add</span><span class="cpill del">${c.delete} delete</span>${ro ? `<span class="cpill lock">${ic('lock')}read only</span>` : ''}${!sys ? `<span class="cpill lock">${ic('alert')}no report for this bay</span>` : ''}</div>`;
@@ -238,6 +239,13 @@ async function onClick(e, ctx, root, repaint) {
   }
   else if (act === 'bay-paste') { st.bayPaste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="baypaste"]')?.focus(), 30); }
   else if (act === 'bay-paste-close') { st.bayPaste = false; ctx.rerender(); }
+  else if (act === 'bay-screen') {
+    const s = cur(); if (!s) return;
+    openScreenScan(ctx, { mode: 'compare', expected: s.bay, onUse: ({ codes }) => {
+      st.bayPaste = true; ctx.rerender();
+      setTimeout(() => { const t = document.querySelector('#content [data-field="baypaste"]'); if (!t) return; t.value = codes.join('\n'); t.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('#content [data-act="bay-paste-save"]')?.click(); }, 40);
+    } });
+  }
   else if (act === 'bay-paste-save' || act === 'bay-paste-clear') {
     const s = cur(); if (!s) return;
     const byLoc = { ...(st.report?.byLoc || {}) }, bayAt = { ...(st.report?.bayAt || {}) };

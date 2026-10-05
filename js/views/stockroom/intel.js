@@ -7,6 +7,7 @@
 
 import { ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
 import { todayKey, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf } from './common.js';
+import { openScreenScan } from '../../screenscan.js';
 import { parseReport, sohBand, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
 
 // The snapshot history, fetched when the index changes.
@@ -43,7 +44,7 @@ function pastePanel(ctx, data) {
   const today = todayKey(), replaces = data?.index?.[today];
   return `<div class="card sri-paste"><div class="ch"><h3>Paste the SOH report</h3><span class="cs-dim">LOCATION · KEYCODE · APN · DESC · COLOUR · STATUS · PRICE · SOH</span></div>` +
     `<textarea class="sri-ta" data-field="report" placeholder="Paste the report text here: the whole report, or one more page at a time" spellcheck="false">${esc(st.text)}</textarea>` +
-    `<div class="sri-acts"><button class="btn primary sm" data-act="sri-read">${ic('check')}Read it</button>${p ? `<button class="btn sm" data-act="sri-clear">Clear</button>` : ''}<span class="cs-dim">${p ? `${items.length} keycodes at ${locs.length} locations${p.skipped ? ` · ${p.skipped} lines skipped` : ''}` : 'Paste more and read again: rows merge by keycode, so a page pasted twice changes nothing.'}</span></div>` +
+    `<div class="sri-acts"><button class="btn primary sm" data-act="sri-read">${ic('check')}Read it</button><button class="btn sm" data-act="sri-screen" title="Read the report off the SIM screen">${ic('expand')}Screen scan</button>${p ? `<button class="btn sm" data-act="sri-clear">Clear</button>` : ''}<span class="cs-dim">${p ? `${items.length} keycodes at ${locs.length} locations${p.skipped ? ` · ${p.skipped} lines skipped` : ''}` : 'Paste more and read again: rows merge by keycode, so a page pasted twice changes nothing.'}</span></div>` +
     (p && items.length ? `<div class="sri-sum"><span class="sri-soh r">${bands.r} at 0 or less</span><span class="sri-soh a">${bands.a} under two cartons</span><span class="sri-soh g">${bands.g} healthy</span>${pending ? `<span class="cs-dim">checking ${pending} names…</span>` : ''}${unknown ? `<span class="warn">${unknown} not in the catalogue</span>` : ''}</div>` +
       `<div class="sri-locs">${locs.slice(0, 80).map(l => `<span class="sri-loc">${esc(l)}${req.has(l) ? '<b class="req">REQ</b>' : '<b class="pre">PRE</b>'}</span>`).join('')}${missing.map(l => `<span class="sri-loc miss">${esc(l)}<b>MISSING</b></span>`).join('')}</div>` +
       outBack.slice(0, 6).map(([l, z, n]) => `<p class="lbl">▤ ${esc(l)}: ${z} of ${n} items here read 0 on hand but the carton profiles show depth: the stock is most likely out the back.</p>`).join('') +
@@ -86,6 +87,7 @@ export default {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
       if (act === 'sri-read') { st.text = root.querySelector('[data-field="report"]')?.value || ''; const r = parseReport(st.text, st.parsed?.items ? { ...st.parsed.items } : {}); if (!Object.keys(r.items).length) return toast('No item rows found: the report needs a keycode, a location and an SOH on each row', 'bad'); st.parsed = { items: r.items, skipped: (st.parsed?.skipped || 0) + r.skipped }; st.text = ''; ctx.rerender(); }
+      else if (act === 'sri-screen') openScreenScan(ctx, { mode: 'rows', onUse: ({ items }) => { const merged = { ...(st.parsed?.items || {}) }; for (const r of Object.values(items)) merged[r.kc] = merged[r.kc] ? { ...merged[r.kc], loc: r.loc, soh: r.soh, price: r.price ?? merged[r.kc].price } : r; st.parsed = { items: merged, skipped: st.parsed?.skipped || 0 }; toast(`${Object.keys(items).length} rows read off the screen`); ctx.rerender(); } });
       else if (act === 'sri-clear') { st.parsed = null; st.text = ''; st.keep = false; ctx.rerender(); }
       else if (act === 'sri-filter') { st.filter = a.dataset.f; ctx.rerender(); }
       else if (act === 'sri-save') {

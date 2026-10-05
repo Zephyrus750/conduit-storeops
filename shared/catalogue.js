@@ -64,6 +64,7 @@ export const CATALOGUE = {
   'adjustment.set':      T('stockroom', S, ['keycode', 'date'], { qty: 'number' }),
   'adjustment.remove':   T('stockroom', S, ['keycode', 'date']),
   'daylist.set':         T('stockroom', S, ['date'], { walkers: 'number' }),
+  'scan.preset':         T('stockroom', S, ['size']),                           // payload: kind codes | rows, x, y, w, h (fractions) | remove
   'soh.publish':         T('stockroom', S, ['date']),                           // emitted by the worker on POST /soh: rows, locs, week
   'soh.remove':          T('stockroom', S, ['date']),
   'soh.verify':          T('stockroom', S, ['date', 'keycode'], { loc: 'string' }), // payload.done false clears the tick
@@ -125,7 +126,7 @@ export function typeInfo(type) {
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
-  stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh'],
+  stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets'],
   backdock: ['dock', 'plan'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback'],
 };

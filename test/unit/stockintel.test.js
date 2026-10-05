@@ -55,3 +55,13 @@ test('checks by location and the walker split: contiguous, balanced by 1 + check
   assert.deepEqual(splitWalkers(['1', '2'], {}, 4), [['1'], ['2']], 'never more walkers than locations');
   assert.deepEqual(splitWalkers([], {}, 2), []);
 });
+
+test('scan.preset: a region per kind and screen size, inside the screen; remove clears it', async () => {
+  const { initialState, apply } = await import('../../shared/reducers.js');
+  const s = initialState(), ev = (entity, payload) => ({ type: 'scan.preset', entity, payload, at: '2026-10-05T01:00:00Z', actor: { device: 'desk' } });
+  assert.equal(apply(s, ev({ size: '1920x1080' }, { kind: 'codes', x: 0.1, y: 0.2, w: 0.3, h: 0.6 })), null);
+  assert.deepEqual(s.scanPresets['codes:1920x1080'], { x: 0.1, y: 0.2, w: 0.3, h: 0.6, at: '2026-10-05T01:00:00Z', by: 'desk' });
+  assert.equal(apply(s, ev({ size: '1920x1080' }, { kind: 'rows', x: 0.8, y: 0, w: 0.3, h: 1 }))?.code, 'invalid_event', 'off the right edge');
+  assert.equal(apply(s, ev({ size: 'big' }, { x: 0, y: 0, w: 1, h: 1 }))?.code, 'invalid_event');
+  apply(s, ev({ size: '1920x1080' }, { kind: 'codes', remove: true })); assert.deepEqual(s.scanPresets, {});
+});

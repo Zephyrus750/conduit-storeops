@@ -10,6 +10,8 @@
 //                requested: date → [bays]      claims: bay → { by, at }
 //   adjustments  date → keycode → { qty (≤ 0, system SOH), counted (found, or null), name, location, confirmed, addedAt }
 //   daylist      date → { walkers, excluded: [bays], source }
+//   scanPresets  `${kind}:${W}x${H}` → { x, y, w, h (fractions of the shared screen), at, by }: the
+//                screen scan's region for a screen size, store-wide (K2B's ss presets)
 //   soh          snaps: date → { rows, locs, week, at, by } (the SOH report snapshots; the rows live on
 //                the worker, published whole like a manifest), verify: date → `${keycode}|${loc}` → at
 //
@@ -32,6 +34,7 @@ export function stockroomState() {
     adjustments: {},
     daylist: {},
     soh: { snaps: {}, verify: {} },
+    scanPresets: {},
   };
 }
 
@@ -195,6 +198,18 @@ export const stockroomReducers = {
   },
 
   // ── Day list ─────────────────────────────────────────────────────────
+  // ── Screen scan: a store-wide region for one screen size ─────────────
+  'scan.preset'(s, e) {
+    const size = String(e.entity.size || ''), kind = e.payload.kind === 'rows' ? 'rows' : 'codes';
+    if (!/^\d{3,5}x\d{3,5}$/.test(size)) return reject('invalid_event', 'size must be WIDTHxHEIGHT');
+    const key = `${kind}:${size}`, presets = (s.scanPresets ||= {});
+    if (e.payload.remove) { delete presets[key]; return null; }
+    const f = ['x', 'y', 'w', 'h'].map(k => Number(e.payload[k]));
+    if (f.some(v => !Number.isFinite(v) || v < 0 || v > 1) || f[2] < 0.01 || f[3] < 0.01 || f[0] + f[2] > 1.0001 || f[1] + f[3] > 1.0001) return reject('invalid_event', 'the region must lie inside the screen (fractions 0 to 1)');
+    presets[key] = { x: f[0], y: f[1], w: f[2], h: f[3], at: e.at, by: e.actor?.device || null };
+    return null;
+  },
+
   // ── SOH snapshots (the worker emits soh.publish when it stores one) ───
   'soh.publish'(s, e) {
     const d = String(e.entity.date); if (!DAY_RE.test(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');
