@@ -98,6 +98,9 @@ export const CATALOGUE = {
   'break.start':         T('backdock', D, ['truck'], { pid: 'string' }),
   'break.end':           T('backdock', D, ['truck'], { pid: 'string' }),
   'plan.set':            T('backdock', D, ['date', 'slot']),
+  'plan.queues':         T('backdock', D, ['truck'], { queues: 'object' }),       // payload.basis x2 | personal
+  'truck.take5':         T('backdock', D, ['truck'], { items: 'array' }),
+  'dock.roster':         T('backdock', D, [], { pids: 'array' }),
   'plan.remove':         T('backdock', D, ['date', 'slot']),
 
   // ── Store-wide ───────────────────────────────────────────────────────

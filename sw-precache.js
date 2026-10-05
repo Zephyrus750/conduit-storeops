@@ -2,7 +2,7 @@
 // The complete app shell for one release; the build id names its cache.
 self.PRECACHE = {
   "version": "v0.2.0",
-  "build": "d0d2f53cec",
+  "build": "f9fbf0b3be",
   "files": [
     "./index.html",
     "./icons.svg",
@@ -27,6 +27,7 @@ self.PRECACHE = {
     "./js/views/backdock/bdhome.js",
     "./js/views/backdock/common.js",
     "./js/views/backdock/manifests.js",
+    "./js/views/backdock/plan.js",
     "./js/views/backdock/planner.js",
     "./js/views/backdock/profiles.js",
     "./js/views/backdock/receiving.js",
@@ -60,6 +61,7 @@ self.PRECACHE = {
     "./shared/backfill.js",
     "./shared/barcode.js",
     "./shared/catalogue.js",
+    "./shared/dockplan.js",
     "./shared/manifest.js",
     "./shared/maprender.js",
     "./shared/profiles.js",

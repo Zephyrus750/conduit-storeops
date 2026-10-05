@@ -12,6 +12,7 @@ import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, 
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast } from './backdock/common.js';
+import { ratesFor } from './backdock/plan.js';
 
 const TARGET = 100, DAILY = 20;
 const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month']];
@@ -72,7 +73,7 @@ function dockCard(ctx, r) {
   if (period === 'today') {
     const t = openTrucks(dock)[0];
     if (!t) { const closed = (dock.history || []).filter(h => h.id.slice(0, 10) === r.to); return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>Back dock</h3><a class="open" data-go="receiving">Open ${ic('arrow')}</a></div><div class="hero"><span class="n">${closed.length}</span><span class="d">truck${closed.length === 1 ? '' : 's'} cleared today</span></div><div class="hl">${closed.length ? closed.map(h => `T${esc(truckNo(h.id))} · ${h.cartons} cartons · ${fmtMins(h.clearMins || 0)}`).join(' · ') : 'Nothing on the dock. Land a truck from Receiving.'}</div></div>`; }
-    const pr = progress(t), halt = openHalt(t), fc = forecast(t), crew = (t.team || []).length;
+    const pr = progress(t), halt = openHalt(t), fc = forecast(t, Date.now(), ratesFor(ctx.store.get('dock'))), crew = (t.team || []).length;
     return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>Back dock</h3><a class="open" data-go="receiving">Open ${ic('arrow')}</a></div><div class="hero"><span class="n">${pr.done}</span><span class="d">/ ${pr.total} cartons decanted</span></div><div class="hl">Truck ${esc(truckNo(t.id))} · ${t.landedAt ? fmtHM(t.landedAt) : 'staged'} · ${pr.count} pallets · ${pr.active} decanting${t.goalAt ? ` · goal ${fmtHM(t.goalAt)}` : ''}${crew ? ` · ${crew} crew` : ''}</div>` +
       `<div class="rows">${halt ? `<div class="row">On hold<b class="c-red">${esc(holdName(halt))} since ${fmtHM(halt.start)}</b></div>` : ''}<div class="row">Pallets done<b>${pr.doneCount} / ${pr.count}</b></div><div class="row">Forecast finish<b>${fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}</b></div></div><div class="prog"><div class="track"><i style="width:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
   }

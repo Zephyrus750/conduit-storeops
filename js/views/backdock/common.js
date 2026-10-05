@@ -49,15 +49,17 @@ export function pace(t, p, now = Date.now()) {
 }
 export const fmtMins = m => { m = Math.max(0, Math.round(m)); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; };
 export const fmtClock = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-// Forecast finish (DV's plain estimate): the minutes still expected on
-// unfinished pallets, shared across the crew not on a break; an open
-// hold-up adds nothing yet (it ends when it ends).
-export function forecast(t, now = Date.now()) {
-  const left = pallets(t).filter(p => p.status !== 'done');
+// Forecast finish (DV's fEstClear): each person's run (what they are on,
+// then their queue) from their rostered start, and every unstarted pallet
+// dealt to whoever frees first; nothing while a hold-up is open. Personal
+// rates apply when the truck's plan says so and rates are passed.
+export function forecast(t, now = Date.now(), rates = null) {
+  const opts = { basis: t.plan?.basis || 'x2', rates, mpc: t.minsPerCarton ?? STD_MINS_PER_CARTON };
+  const at = estClear(t, now, opts), left = pallets(t).filter(p => p.status !== 'done');
   const remain = left.reduce((n, p) => n + Math.max(0, (p.expectedMins || 0) - workedMin(t, p, now)), 0);
-  const crew = Math.max(1, (t.team || []).filter(m => !onBreak(t, m.pid)).length);
-  return { remain, crew, at: remain ? now + remain / crew * 60000 : null };
+  return { remain, crew: (t.team || []).length, at, opts };
 }
+export const planOpts = (t, rates) => ({ basis: t.plan?.basis || 'x2', rates, mpc: t.minsPerCarton ?? STD_MINS_PER_CARTON });
 // Where the team should be by now to make the goal: the share of the time
 // from decant start to the goal that has gone.
 export function goalPace(t, now = Date.now()) {
@@ -76,6 +78,7 @@ export const startable = p => p && (p.status === 'landed' || p.status === 'assig
 // ── manifests ──────────────────────────────────────────────────────────
 import { today } from '../../ui.js';
 import { workedMs, startOf } from '../../../shared/reducers/backdock.js';
+import { estClear } from '../../../shared/dockplan.js';
 import { parseManifestSheets, manifestDoc, attachConsols } from '../../../shared/manifest.js';
 import { MICRO } from '../../data/micros.js';
 export function microDept(code) { const c = String(code || '').padStart(3, '0'); for (const [d, list] of Object.entries(MICRO)) if (list.some(x => x.startsWith(c + ' '))) return d; return ''; }

@@ -48,10 +48,11 @@ const MANIFEST_INDEX_CAP = 20;
 const BAY_RE = /^[A-Z]\d{1,2}$/;
 const MAX_CARTONS = 500;
 const TRUCK_RE = /^\d{4}-\d{2}-\d{2}-T\d+$/;
+export const TAKE5_IDS = ['brief', 'safe', 'equip', 'area', 'goal'];
 
 export function backdockState() {
   return {
-    dock: { trucks: {}, history: [], manifests: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' }, rollover: null },
+    dock: { trucks: {}, history: [], manifests: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' }, rollover: null, roster: null },
     plan: { days: {} },
   };
 }
@@ -80,7 +81,19 @@ export const backdockReducers = {
     // Creating from a planner slot consumes the slot's team and manifest.
     const date = id.slice(0, 10), slot = e.payload.slot ?? Number(id.slice(id.lastIndexOf('T') + 1));
     const day = s.plan.days[date];
-    if (day && day.slots[slot]) { const sl = day.slots[slot]; t.team = teamOf(sl.team) || []; t.manifest = sl.manifest || null; delete day.slots[slot]; }
+    if (day && day.slots[slot]) {
+      const sl = day.slots[slot]; t.team = teamOf(sl.team) || []; t.manifest = sl.manifest || null;
+      // A member's start follows the slot's ETA unless planned otherwise.
+      if (sl.eta) for (const m of t.team) if (!m.start) m.start = sl.eta;
+      if (sl.huddleMins) { const from = startAt || e.at; t.halts.push({ kind: 'huddle', reason: 'huddle', start: from, end: new Date(Date.parse(from) + sl.huddleMins * 60000).toISOString(), planned: true }); }
+      if (sl.breakMins) t.plannedBreakMins = sl.breakMins;
+      delete day.slots[slot];
+    }
+    // No slot team: the week's roster starts the truck.
+    if (!t.team.length && s.dock.roster?.pids?.length) t.team = s.dock.roster.pids.map(pid => ({ pid, dnum: Number(pid.slice(1)) }));
+    // A default goal from the last ten clear times (three or more), as DV.
+    const recent = (s.dock.history || []).filter(r => r.clearMins > 0).slice(-10);
+    if (recent.length >= 3) { const avg = recent.reduce((n, r) => n + r.clearMins, 0) / recent.length, from = Date.parse(startAt || e.at); if (avg > 10 && from) t.goalAt = new Date(from + Math.ceil(avg / 5) * 5 * 60000).toISOString(); }
     // Pallets held at the last finalise join this truck (unless declined).
     const held = s.dock.rollover;
     if (held) {
@@ -438,12 +451,51 @@ export const backdockReducers = {
     if (p.note !== undefined) cur.note = String(p.note || '').slice(0, 200);
     if (team !== undefined) cur.team = team;
     if (p.manifest !== undefined) cur.manifest = p.manifest;
+    // Booked minutes: a huddle at the decant start (it stops the clock and
+    // is reported apart from downtime) and the team break the plan allows.
+    for (const k of ['huddleMins', 'breakMins']) if (p[k] !== undefined) {
+      const v = p[k] == null ? 0 : Math.round(Number(p[k]));
+      if (!(v >= 0 && v <= 120)) return reject('invalid_event', `${k} must be 0 to 120`);
+      cur[k] = v || null;
+    }
     day.slots[slot] = cur;
     return null;
   },
   'plan.remove'(s, e) {
     const day = s.plan.days[e.entity.date];
     if (day) delete day.slots[Number(e.entity.slot)];
+    return null;
+  },
+  // Each cutter's queue of pallets (DV's plan.setQueues): the whole set is
+  // replaced; refs must be pallets on the truck, people on its team.
+  'plan.queues'(s, e) {
+    const t = truck(s, e); if (t.code) return t;
+    const q = e.payload.queues, basis = e.payload.basis ?? t.plan?.basis ?? 'x2';
+    if (!['x2', 'personal'].includes(basis)) return reject('invalid_event', 'basis must be x2 or personal');
+    if (!q || typeof q !== 'object' || Array.isArray(q)) return reject('invalid_event', 'queues must be { D4: [refs] }');
+    const team = new Set((t.team || []).map(m => m.pid)), seen = new Set(), out = {};
+    for (const [pid, refs] of Object.entries(q)) {
+      if (!team.has(pid)) return reject('invalid_event', `${pid} is not on this truck's team`);
+      if (!Array.isArray(refs)) return reject('invalid_event', 'each queue is a list of bays');
+      out[pid] = [];
+      for (const r of refs.map(x => String(x).toUpperCase())) { if (!t.pallets[r]) return reject('not_found', `no pallet at ${r}`); if (seen.has(r)) continue; seen.add(r); out[pid].push(r); }
+    }
+    t.plan = { basis, queues: out, at: e.at };
+    return null;
+  },
+  // Take 5 before the decant: every item ticked, recorded with who and when.
+  'truck.take5'(s, e) {
+    const t = truck(s, e); if (t.code) return t;
+    const items = [...new Set((e.payload.items || []).map(String))];
+    if (!TAKE5_IDS.every(k => items.includes(k))) return reject('invalid_event', `tick all five: ${TAKE5_IDS.join(', ')}`);
+    t.take5 = { at: e.at, by: e.actor?.device || null, items: TAKE5_IDS.slice() };
+    return null;
+  },
+  // The week's decant roster: new trucks start with these D-numbers.
+  'dock.roster'(s, e) {
+    const team = teamOf(e.payload.pids);
+    if (team === null) return reject('invalid_event', 'the roster is D-numbers (D1, D2…); names are not kept');
+    s.dock.roster = { pids: team.map(m => m.pid), at: e.at };
     return null;
   },
 };
@@ -642,10 +694,27 @@ export function historyRow(id, t) {
     suspect: done.filter(p => p.suspect).length,
     audit: all.length ? auditOf(all, pallets) : null,
     carriedIn: carried.length ? { pallets: carried.length, cartons: carried.reduce((n, p) => n + (p.cartons || 0), 0), from: carried[0].carriedFrom || null } : null,
-    perPerson: Object.values(perPerson).map(r => ({ pid: r.pid, cartons: Math.round(r.cartons), pallets: Math.round(r.pallets * 10) / 10, bays: [...r.bays], mins: Math.round(r.mins), rate: r.mins ? Math.round(r.cartons / (r.mins / 60)) : 0, deltaPct: r.expected ? Math.round((r.mins - r.expected) / r.expected * 100) : null })),
+    perDept: perDeptOf(t, done, all, nowMs),
+    perPerson: Object.values(perPerson).map(r => ({ pid: r.pid, cartons: Math.round(r.cartons), pallets: Math.round(r.pallets * 10) / 10, bays: [...r.bays], mins: Math.round(r.mins), workedMins: Math.round(r.mins * 10) / 10, rate: r.mins ? Math.round(r.cartons / (r.mins / 60)) : 0, deltaPct: r.expected ? Math.round((r.mins - r.expected) / r.expected * 100) : null })),
     byDept: Object.values(byDept).map(d => ({ dept: d.dept, cartons: d.cartons, pallets: d.pallets.size })).sort((a, b) => b.cartons - a.cartons),
     manifest: t.manifest ? { manNo: t.manifest.manNo, despatch: t.manifest.despatch, dcNo: t.manifest.dcNo } : null,
   };
+}
+// Worked minutes and cartons by department, split by each consol's true
+// mix (DV's computeSummary perDept): a done pallet's time is shared over
+// its consols by cartons, then over each consol's departments by its mix.
+function perDeptOf(t, done, consols, nowMs) {
+  const byId = new Map(consols.map(c => [c.id, c])), acc = {};
+  for (const p of done) {
+    if (p.suspect) continue;
+    const cs = p.consolIds.map(id => byId.get(id)).filter(Boolean); if (!cs.length) continue;
+    const mins = p.segments.reduce((n, seg) => n + segWorkedMs(t, seg, nowMs), 0) / 60000, ctn = cs.reduce((n, c) => n + (c.cartons || 0), 0) || cs.length;
+    for (const c of cs) {
+      const mix = (c.mix && c.mix.length ? c.mix : [[String(c.dept || '?').split('/')[0], c.cartons || 1]]), msum = mix.reduce((n, m) => n + (Number(m[1]) || 0), 0) || 1, cShare = (c.cartons || 1) / ctn;
+      for (const [dept, cc] of mix) { const share = cShare * (Number(cc) || 0) / msum, d = (acc[dept] ||= { dept, pallets: 0, cartons: 0, workedMins: 0 }); d.pallets += share; d.cartons += (p.cartons || 0) * share; d.workedMins += mins * share; }
+    }
+  }
+  return Object.values(acc).filter(d => d.workedMins >= 0.5 || d.cartons >= 1).map(d => ({ dept: d.dept, pallets: Math.round(d.pallets * 10) / 10, cartons: Math.round(d.cartons), workedMins: Math.round(d.workedMins * 10) / 10 })).sort((a, b) => b.cartons - a.cartons);
 }
 function auditOf(consols, pallets) {
   const on = new Set(pallets.flatMap(p => p.consolIds));

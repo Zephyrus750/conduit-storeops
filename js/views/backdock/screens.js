@@ -12,6 +12,7 @@
 
 import { ic, esc } from '../../ui.js';
 import { PT_LETTER, PT_NAME, truckNo, fmtHM, openTrucks, pallets, progress, openHalt, running, onBreak, openSegs, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, holdName, grid, ROLE_NAME } from './common.js';
+import { ratesFor } from './plan.js';
 
 function current(ctx) {
   const dock = ctx.store.get('dock'), open = openTrucks(dock);
@@ -57,7 +58,7 @@ function teamBoard(ctx) {
   const { dock, t } = current(ctx);
   const head = `<div class="scr-head"><div><h2>Team Board</h2><span>${t ? `Truck ${esc(truckNo(t.id))} · landed ${fmtHM(t.landedAt)}` : ''}</span></div>${tools('team')}</div>`;
   if (!t) return `<div class="scr">${head}${empty('The Team Board', dock)}</div>`;
-  const pr = progress(t), fc = forecast(t), late = fc.at && t.goalAt && fc.at > Date.parse(t.goalAt);
+  const pr = progress(t), fc = forecast(t, Date.now(), ratesFor(ctx.store.get('dock'))), late = fc.at && t.goalAt && fc.at > Date.parse(t.goalAt);
   const kpis = `<div class="scr-kpis"><div><span>Goal</span><b>${t.goalAt ? fmtHM(t.goalAt) : '—'}</b></div><div class="${late ? 'bad' : fc.at && t.goalAt ? 'good' : ''}"><span>Forecast finish</span><b data-forecast>${fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}</b><small>${fc.at && t.goalAt ? (late ? `${fmtMins((fc.at - Date.parse(t.goalAt)) / 60000)} behind` : `${fmtMins((Date.parse(t.goalAt) - fc.at) / 60000)} ahead`) : fc.remain ? `${fmtMins(fc.remain)} of work left · ${fc.crew} on` : ''}</small></div><div><span>Cartons</span><b>${pr.done}<small> / ${pr.total}</small></b></div><div><span>Pallets</span><b>${pr.doneCount}<small> / ${pr.count}</small></b></div></div>`;
   const now = [];
   for (const p of pallets(t)) for (const seg of openSegs(p)) now.push({ pid: seg.pid, p });
