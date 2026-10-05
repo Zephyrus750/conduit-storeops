@@ -52,7 +52,7 @@ export const TAKE5_IDS = ['brief', 'safe', 'equip', 'area', 'goal'];
 
 export function backdockState() {
   return {
-    dock: { trucks: {}, history: [], manifests: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' }, rollover: null, roster: null },
+    dock: { trucks: {}, history: [], manifests: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' }, rollover: null, roster: null, ledger: {} },
     plan: { days: {} },
   };
 }
@@ -204,8 +204,10 @@ export const backdockReducers = {
   },
   'manifest.remove'(s, e) { delete s.dock.manifests[String(e.entity.manNo)]; return null; },
   // consols: [{ id (last 9 digits), cons (18–22 digits), cartons, dept, mix, desc, items }]
+  // A late manifest can still go on a truck already finalised, the same day
+  // and by a manager (DV): its history row is rebuilt with the manifest.
   'manifest.attach'(s, e) {
-    const t = truck(s, e); if (t.code) return t;
+    const t = lateTruck(s, e, 'attaching a manifest to a finalised truck'); if (t.code) return t;
     const p = e.payload;
     const consols = [];
     for (const c of p.consols) {
@@ -216,9 +218,38 @@ export const backdockReducers = {
     }
     t.manifest = { manNo: String(p.manNo), dcNo: p.dcNo || '', despatch: p.despatch || '', consols, attachedAt: e.at, by: e.actor?.device || null };
     rematchScans(t);
+    // The ledger: each consol is manifested to this truck; one already seen
+    // on an earlier truck is marked as landed earlier.
+    const day = e.entity.truck.slice(0, 10);
+    for (const c of consols) { const seen = ledgerFind(s, c.id, ['off', 'land'], e.entity.truck).find(x => x.d < day); if (seen) c.landedEarlier = seen; ledgerAdd(s, c.id, { t: e.entity.truck, d: day, k: 'man' }, e.at); }
+    for (const pal of Object.values(t.pallets)) for (const id of pal.consolIds) ledgerAdd(s, id, { t: e.entity.truck, d: day, k: 'land', ref: pal.ref }, e.at);
+    if (t.status === 'closed') rebuildHistory(s, e.entity.truck, t);
     const cur = s.dock.manifests[String(p.manNo)] || {};
     s.dock.manifests[String(p.manNo)] = { ...cur, manNo: String(p.manNo), dcNo: p.dcNo || cur.dcNo || '', despatch: p.despatch || cur.despatch || '', truck: e.entity.truck, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), consols: consols.length, keycodes: cur.keycodes || new Set(consols.flatMap(c => c.items.map(i => i.k))).size, publishedAt: cur.publishedAt || e.at, attachedAt: e.at };
     capManifests(s);
+    return null;
+  },
+
+  // Link pallets landed before the manifest (or without a scan) to its
+  // consols (DV's manifest.linkLate): how each match was made is kept.
+  'manifest.linkLate'(s, e) {
+    const t = lateTruck(s, e, 'linking pallets on a finalised truck'); if (t.code) return t;
+    if (!t.manifest) return reject('invalid_event', 'attach the manifest first');
+    const links = e.payload.links; if (links.length > 80) return reject('invalid_event', 'at most 80 links at once');
+    const ids = new Set(t.manifest.consols.map(c => c.id)), byId = new Map(t.manifest.consols.map(c => [c.id, c])), day = e.entity.truck.slice(0, 10);
+    const taken = new Map(); for (const pal of Object.values(t.pallets)) for (const id of pal.consolIds) taken.set(id, pal.ref);
+    let linked = 0;
+    for (const l of links) {
+      const pal = t.pallets[String(l?.bay || '').toUpperCase()]; if (!pal || pal.carriedFrom) continue;
+      if (!['scan', 'cartons', 'time', 'manual'].includes(l.basis)) return reject('invalid_event', 'basis must be scan, cartons, time or manual');
+      const want = uniq(l.consolIds).filter(id => ids.has(id) && (!taken.has(id) || taken.get(id) === pal.ref)).slice(0, 8); if (!want.length) continue;
+      pal.consolIds = want; pal.linkBasis = l.basis; pal.linkedLateAt = e.at; pal.scanIds = pal.scanIds.filter(x => !want.includes(x));
+      for (const id of want) { taken.set(id, pal.ref); ledgerAdd(s, id, { t: e.entity.truck, d: day, k: 'land', ref: pal.ref }, e.at); }
+      if (pal.cartons == null) { pal.cartons = want.reduce((n, id) => n + (byId.get(id)?.cartons || 0), 0) || null; if (pal.expectedBasis !== 'manual') pal.expectedMins = autoMins(pal.cartons, t.minsPerCarton); }
+      linked += 1;
+    }
+    if (!linked) return reject('invalid_event', 'nothing to link: every pick was already taken or not on the manifest');
+    if (t.status === 'closed') rebuildHistory(s, e.entity.truck, t);
     return null;
   },
 
@@ -252,7 +283,7 @@ export const backdockReducers = {
     if (u.expectedMins !== undefined) { if (u.expectedMins === null) { p.expectedBasis = 'auto'; p.expectedMins = autoMins(p.cartons, rate); } else { p.expectedMins = Math.max(1, Math.round(u.expectedMins)); p.expectedBasis = 'manual'; } }
     if (u.note !== undefined) p.note = String(u.note || '').slice(0, 120);
     if (u.consolIds !== undefined) p.consolIds = uniq(u.consolIds);
-    if (u.scanIds !== undefined) p.scanIds = uniq(u.scanIds);
+    if (u.scanIds !== undefined) { const before = new Set(p.scanIds); p.scanIds = uniq(u.scanIds); for (const id of p.scanIds) if (!before.has(id)) sighting(s, e, p, id); }
     if (u.excluded !== undefined) p.excluded = !!u.excluded;
     if (u.carryover !== undefined) p.carryover = !!u.carryover;
     if (u.suspectOk) { delete p.suspect; p.suspectOk = true; }   // the facilitator confirmed a quick finish was real
@@ -378,12 +409,13 @@ export const backdockReducers = {
     const raw = String(e.payload.code).replace(/\D/g, '');
     if (raw.length < 9) return reject('invalid_event', 'scan must carry at least 9 digits');
     const id9 = raw.slice(-9);
-    if (!t.manifest) { if (!p.scanIds.includes(id9)) p.scanIds.push(id9); return null; }
+    if (!t.manifest) { if (!p.scanIds.includes(id9)) p.scanIds.push(id9); sighting(s, e, p, id9); return null; }
     const c = t.manifest.consols.find(c => c.id === id9 || c.id === raw || c.cons.endsWith(raw) || c.cons.startsWith(raw));
     if (!c) return reject('not_on_manifest', `${id9} is not on manifest ${t.manifest.manNo}`);
     if (p.consolIds.includes(c.id)) return null;
     for (const [ref, other] of Object.entries(t.pallets)) if (ref !== p.ref && other.consolIds.includes(c.id)) return reject('consol_taken', `${c.id} is already on bay ${ref}`);
     p.consolIds.push(c.id);
+    ledgerAdd(s, c.id, { t: e.entity.truck, d: e.entity.truck.slice(0, 10), k: 'land', ref: p.ref }, e.at);
     p.cartons = (p.cartons || 0) + c.cartons;
     if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons, t.minsPerCarton);
     return null;
@@ -501,6 +533,43 @@ export const backdockReducers = {
 };
 
 // ── helpers ────────────────────────────────────────────────────────────
+// A truck for a late manifest action: open, or finalised today with the
+// manager's role.
+function lateTruck(s, e, what) {
+  const t = s.dock.trucks[e.entity.truck];
+  if (!t) return reject('not_found', `truck ${e.entity.truck} does not exist`);
+  if (t.status !== 'closed') return t;
+  if (e.entity.truck.slice(0, 10) !== String(e.at).slice(0, 10)) return reject('truck_closed', `${what} is same-day only`);
+  if (e.actor?.role !== 'manager' && !e.actor?.owner) return reject('forbidden', `${what} needs the manager code`);
+  return t;
+}
+function rebuildHistory(s, id, t) {
+  const i = s.dock.history.findIndex(r => r.id === id); if (i < 0) return;
+  s.dock.history[i] = { ...historyRow(id, t), ...(s.dock.history[i].carriedOut ? { carriedOut: s.dock.history[i].carriedOut } : {}) };
+}
+// The consol ledger (DV's): where each consolidation (by its last nine
+// digits) was manifested (man), landed on a pallet (land) or scanned off
+// the manifest (off), for 60 days, eight sightings an id.
+const LEDGER_DAYS = 60;
+const led9 = x => { const d = String(x || '').replace(/\D/g, ''); return d.length >= 6 ? d.slice(-9) : null; };
+function ledgerAdd(s, id, entry, at) {
+  const k = led9(id); if (!k) return;
+  const L = (s.dock.ledger ||= {}), list = (L[k] ||= []);
+  if (!list.some(x => x.t === entry.t && x.k === entry.k)) { list.push(entry); if (list.length > 8) list.splice(0, list.length - 8); }
+  const cutoff = new Date(Date.parse(at) - LEDGER_DAYS * 86400000).toISOString().slice(0, 10);
+  for (const [key, xs] of Object.entries(L)) { const keep = xs.filter(x => x.d >= cutoff); if (keep.length) L[key] = keep; else delete L[key]; }
+}
+function ledgerFind(s, id, kinds, notTruck) {
+  const k = led9(id); return k ? (s.dock.ledger?.[k] || []).filter(x => kinds.includes(x.k) && x.t !== notTruck).sort((a, b) => b.d.localeCompare(a.d)) : [];
+}
+// An off-manifest scan: manifested to an earlier truck is a late arrival;
+// seen on another truck before is a possible duplicate.
+function sighting(s, e, p, id) {
+  const day = e.entity.truck.slice(0, 10), man = ledgerFind(s, id, ['man'], e.entity.truck).find(x => x.d <= day);
+  if (man) p.lateFrom = { t: man.t, d: man.d };
+  else if (!p.seenBefore) { const seen = ledgerFind(s, id, ['off', 'land'], e.entity.truck)[0]; if (seen) p.seenBefore = seen; }
+  ledgerAdd(s, id, { t: e.entity.truck, d: day, k: 'off', ref: p.ref }, e.at);
+}
 function capManifests(s) { const keys = Object.keys(s.dock.manifests); if (keys.length > MANIFEST_INDEX_CAP) for (const k of keys.sort((a, b) => s.dock.manifests[a].publishedAt < s.dock.manifests[b].publishedAt ? -1 : 1).slice(0, keys.length - MANIFEST_INDEX_CAP)) delete s.dock.manifests[k]; }
 function bay(e) { return String(e.entity.bay).toUpperCase(); }
 function uniq(a) { return Array.isArray(a) ? [...new Set(a.map(String))] : []; }

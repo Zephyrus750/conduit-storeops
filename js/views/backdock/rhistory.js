@@ -7,10 +7,12 @@
 // /export/receiving route gives the CSV.
 
 import { ic, esc, vh, sub, toast, dep, mhead, mrows, fmtDate } from '../../ui.js';
-import { HALT_NAME, holdName, truckNo, fmtHM, microDept } from './common.js';
+import { HALT_NAME, holdName, truckNo, fmtHM, microDept, todayKey, manifestIndex, attachManifest } from './common.js';
 import { printAudit } from './audit.js';
+import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
+import { ratesFor } from './plan.js';
 
-const st = { open: null, q: '' };
+const st = { open: null, q: '', late: null };
 const WINDOW_DAYS = 21;
 const hm = m => { m = Math.max(0, Math.round(m || 0)); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; };
 const HALT_COLOUR = { hcage: '#7C3AED', nostock: '#DC2626', equip: '#2563EB', safety: '#F59E0B', waiting: '#0891B2', other: '#64748B' };
@@ -64,7 +66,7 @@ export default {
     return head + `<div class="rh"><div class="card rhlist"><div class="ch"><h3>Decanted trucks</h3><div class="search rh-find">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="Truck day, manifest or DC…" aria-label="Find a truck"></div></div>` +
       (list ? `<div class="list">${list}</div>${m.rows.length > 60 ? `<div class="cs-dim" style="padding:8px 0">Showing 60 of ${m.rows.length}</div>` : ''}` : `<div class="ohint">${m.all.length ? 'Nothing matches.' : 'No truck has been finalised yet. Finalise a truck at Receiving and its record lands here.'}</div>`) +
       (rates.length > 1 ? `<div class="k rh-k">Team rate · cartons per hour</div><div class="rhbars">${rates.map((r, i) => `<div class="${i === rates.length - 1 ? 'hi' : ''}" style="height:${Math.max(4, Math.round(r.teamRate / max * 100))}%" title="${esc(fmtDate(r.date))} Truck ${esc(truckNo(r.id))}"><span>${r.teamRate}</span></div>`).join('')}</div><div class="lbl" style="margin-top:20px">Oldest → newest across the ${WINDOW_DAYS}-day window.</div>` : '') + '</div>' +
-      `<div class="sidecol">${o ? detail(o, m.win, ctx.store.get('dock').trucks?.[o.id]) : `<div class="card"><div class="ch"><h3>Pick a truck</h3></div><p class="lbl">Open one from the list to see where its time went, the manifest reconciliation and the crew credit.</p></div>`}</div></div>`;
+      `<div class="sidecol">${o ? lateBar(ctx, o) + detail(o, m.win, ctx.store.get('dock').trucks?.[o.id]) : `<div class="card"><div class="ch"><h3>Pick a truck</h3></div><p class="lbl">Open one from the list to see where its time went, the manifest reconciliation and the crew credit.</p></div>`}</div></div>`;
   },
   mobile(ctx) {
     const m = model(ctx), recent = m.all.slice(0, 8);
@@ -75,6 +77,10 @@ export default {
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'open') { st.open = a.dataset.id; ctx.rerender(); }
       else if (a.dataset.act === 'audit') { const o = model(ctx).open, dock = ctx.store.get('dock'), t = o && dock.trucks?.[o.id]; if (t) printAudit({ id: o.id, ...t }, dock); }
+      else if (a.dataset.act === 'late-attach') { st.late = st.late === 'attach' ? null : 'attach'; ctx.rerender(); }
+      else if (a.dataset.act === 'late-link' || a.dataset.act === 'll-close') { st.late = a.dataset.act === 'll-close' ? null : 'link'; ctx.rerender(); }
+      else if (a.dataset.act === 'late-man') { try { await attachManifest(ctx, a.dataset.truck, a.dataset.man); toast(`${a.dataset.man} attached to Truck ${truckNo(a.dataset.truck)} · history rebuilt`); st.late = 'link'; } catch (err) { toast(err.message, 'bad'); } }
+      else if (a.dataset.act === 'll-apply') { const o = model(ctx).open, dock = ctx.store.get('dock'), t = dock.trucks?.[o.id]; try { await applyLinks(ctx, { id: o.id, ...t }, ratesFor(dock)); st.late = null; } catch (err) { toast(err.message, 'bad'); } }
       else if (a.dataset.act === 'export') {
         a.disabled = true;
         try { const text = await ctx.api(`/v1/store/${ctx.storeNo}/export/receiving`, { text: true }); const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); const l = document.createElement('a'); l.href = url; l.download = `receiving-${ctx.storeNo}.csv`; l.click(); setTimeout(() => URL.revokeObjectURL(url), 5000); toast('CSV downloaded'); }
@@ -82,7 +88,23 @@ export default {
         a.disabled = false;
       }
     });
+    root.addEventListener('change', e => { if (e.target.dataset.ll != null) linkPick(e.target.dataset.ll, e.target.value); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="q"]')) { st.q = e.target.value; const v = e.target.value; ctx.rerender(); setTimeout(() => { const i = root.querySelector('[data-field="q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 0); } });
     return [ctx.store.on('dock', () => ctx.rerender())];
   },
 };
+
+// A late manifest on a truck finalised today: a manager can still attach
+// the DC report and link the pallets that landed without one (DV's review
+// chips); the history row is rebuilt with the reconciliation.
+function lateBar(ctx, r) {
+  const dock = ctx.store.get('dock'), t = dock.trucks?.[r.id], manager = (ctx.session.current?.roles || []).includes('manager') || ctx.session.current?.owner;
+  if (!t || r.date !== todayKey() || !manager) return '';
+  const tt = { id: r.id, ...t }, n = t.manifest ? unlinked(tt).length : 0;
+  if (!t.manifest || n || st.late) {
+    const chips = `<div class="card late-bar"><div class="ch"><h3>Late manifest</h3><span class="cs-dim">same day · manager</span></div><div class="acts2" style="display:flex;gap:8px;flex-wrap:wrap">${!t.manifest ? `<button class="btn sm primary" data-act="late-attach">Attach manifest</button>` : ''}${t.manifest && n ? `<button class="btn sm primary" data-act="late-link">Link ${n} pallet${n === 1 ? '' : 's'}</button>` : ''}</div></div>`;
+    const pick = st.late === 'attach' ? `<div class="card"><div class="ch"><h3>Pick the manifest for Truck ${esc(truckNo(r.id))}</h3></div><div class="list">${manifestIndex(dock).filter(x => !x.truck).map(x => `<div class="li"><span class="loc">${esc(x.manNo)}</span><span class="nm">${x.consols} consols · ${x.totalCartons} cartons${x.despatch ? ' · despatch ' + esc(x.despatch) : ''}</span><button class="btn sm primary" data-act="late-man" data-man="${esc(x.manNo)}" data-truck="${esc(r.id)}">Attach</button></div>`).join('') || '<p class="lbl">No unattached manifest in the library. Publish today’s report from Manifests first.</p>'}</div></div>` : '';
+    return chips + pick + (st.late === 'link' && t.manifest ? linkSheet(tt, ratesFor(dock)) : '');
+  }
+  return '';
+}

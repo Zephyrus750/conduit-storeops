@@ -5,7 +5,7 @@
 // crew credit by D-number. A finalised truck's record comes from its
 // history row; its pallets are still on the truck in the dock projection.
 
-import { esc } from '../../ui.js';
+import { esc, fmtDate } from '../../ui.js';
 import { printSheet, table, signoff, section, tick } from '../../print.js';
 import { historyRow, consolsOf, workedMs } from '../../../shared/reducers/backdock.js';
 import { PT_NAME, truckNo, fmtHM, fmtMins, holdName, pallets } from './common.js';
@@ -24,7 +24,7 @@ export function printAudit(t, dock) {
     const crew = [...new Set(p.segments.map(x => x.pid))].join(', '), w = p.segments.length ? workedMs(t, p, p.status === 'done' ? Date.parse(p.doneAt) || now : now) / 60000 : 0;
     const cons = p.consolIds.map(id => byId.get(id)).filter(Boolean);
     const state = p.status === 'done' ? `done ${fmtHM(p.doneAt)}` : p.status;
-    return [`<b>${esc(p.ref)}</b>`, esc(PT_NAME[p.ptype] || p.ptype), p.cartons ?? '–', esc(cons.map(c => c.id).join(' ') || (p.scanIds.length ? `${p.scanIds.length} off-manifest` : '—')), esc(crew || '—'), p.segments.length ? fmtHM(p.segments[0].start) : '—', esc(state) + (p.suspect ? ' ⚠' : '') + (p.carryover ? ' · carried' : ''), p.segments.length ? `${fmtMins(w)}${p.expectedMins ? ` / ${p.expectedMins}m` : ''}` : '—', tick];
+    return [`<b>${esc(p.ref)}</b>`, esc(PT_NAME[p.ptype] || p.ptype), p.cartons ?? '–', esc(cons.map(c => c.id).join(' ') || (p.scanIds.length ? `${p.scanIds.length} off-manifest` : '—')), esc(crew || '—'), p.segments.length ? fmtHM(p.segments[0].start) : '—', esc(state) + (p.suspect ? ' ⚠' : '') + (p.carryover ? ' · carried' : '') + (p.lateFrom ? ` · LATE — manifested ${esc(fmtDate(p.lateFrom.d))}` : '') + (p.seenBefore ? ` · SEEN ${esc(fmtDate(p.seenBefore.d))}` : '') + (p.linkedLateAt ? ` · linked late (${esc(p.linkBasis || 'manual')})` : ''), p.segments.length ? `${fmtMins(w)}${p.expectedMins ? ` / ${p.expectedMins}m` : ''}` : '—', tick];
   });
   const pal = section('Pallets', table(['Bay', 'Type', 'Ctn', 'Consols', 'Crew', 'Started', 'Status', 'Worked / est', '✓'], palletRows, ['', '', 'n', 'mono', '', '', '', 'n', 'tk']) + (ps.some(p => p.suspect) ? '<p class="ps-note">⚠ Done very fast for its size: its time credits nobody until the times are fixed or it is confirmed.</p>' : ''));
 

@@ -7,9 +7,11 @@
 import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate, camButton } from '../../ui.js';
 import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, publishManifestFile, attachManifest } from './common.js';
 import { printAudit } from './audit.js';
+import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, ss } from './phonesearch.js';
+import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
 import { planCard, take5Card, needsTake5, queuePicker, onPlanAct, onPlanChange, ratesFor, guard, decantBoard } from './plan.js';
 
-const st = { truck: null, land: { ref: '', ptype: 'chep', cartons: '' }, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, pending: [], manPick: false };
+const st = { truck: null, land: { ref: '', ptype: 'chep', cartons: '' }, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, pending: [], manPick: false, linking: false };
 const dispatch = (ctx, type, entity, payload) => ctx.store.dispatch({ type, entity, payload });
 
 function model(ctx) {
@@ -69,7 +71,7 @@ function desktop(ctx) {
     (team.length ? `<div class="bdr-team">${team.map(mm => { const br = onBreak(t, mm.pid); return `<div class="bdr-tc${m.run[mm.pid] ? ' on' : ''}${br ? ' brk' : ''}"><b class="bdr-who">${esc(who(mm))}</b><span class="bdr-state">${br ? `on a break since ${fmtHM(br.start)}` : m.run[mm.pid] ? `decanting <b>${esc(m.run[mm.pid])}</b>` : 'between pallets'}</span><select class="bdr-role" data-act-change="role" data-pid="${esc(mm.pid)}" aria-label="Role for ${esc(mm.pid)}">${Object.entries(ROLE_NAME).map(([k, v]) => `<option value="${k}"${(mm.role || 'cutter') === k ? ' selected' : ''}>${v}</option>`).join('')}</select>${live ? `<button class="btn sm" data-act="${br ? 'break-end' : 'break-start'}" data-pid="${esc(mm.pid)}">${br ? 'Back' : 'Break'}</button>` : ''}<button class="bdr-x" data-act="team-drop" data-pid="${esc(mm.pid)}" title="Remove from this truck">${ic('x')}</button></div>`; }).join('')}</div>` : '') +
     `<div class="bdr-teamadd"><input class="bdr-in mono" data-field="team" placeholder="Add a D-number, e.g. D4" maxlength="6" autocapitalize="characters"><button class="btn sm" data-act="team-add">${ic('plus')}Add</button></div><p class="lbl">D-numbers only: no names are kept on the dock.</p></div>`;
   const landed = pallets(t).slice().sort((a, b) => (a.landedAt || '').localeCompare(b.landedAt || ''));
-  const landedcard = `<div class="card"><div class="ch"><h3>Landed today</h3><span class="cs-dim">${landed.length ? `${landed.length} pallets · newest last` : `Truck ${truckNo(t.id)}`}</span></div>${landed.length ? `<div class="list rcv-list bdr-landed">${landed.map(p => `<div class="li${st.sel === p.ref ? ' sel' : ''}" data-act="cell" data-ref="${esc(p.ref)}"><span class="loc">${esc(p.ref)}</span><span class="nm">${esc(PT_NAME[p.ptype] || p.ptype)}${p.carryover ? ' · carryover' : ''} · ${p.cartons ?? '–'} cartons${p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}</span><span class="rcv-st ${p.status}">${p.status === 'done' ? 'Done' : p.status === 'active' ? 'Decanting' : p.status === 'paused' ? 'Paused' : 'Waiting'}</span><span class="rt">${p.carryover ? 'Yesterday' : fmtHM(p.landedAt)}</span></div>`).join('')}</div>` : `<div class="pempty">Nothing landed yet</div>`}${st.sel && t.pallets[st.sel] ? palletPanel(t, t.pallets[st.sel], true) : ''}</div>`;
+  const landedcard = `<div class="card"><div class="ch"><h3>Landed today</h3><span class="cs-dim">${landed.length ? `${landed.length} pallets · newest last` : `Truck ${truckNo(t.id)}`}</span></div>${landed.length ? `<div class="list rcv-list bdr-landed">${landed.map(p => `<div class="li${st.sel === p.ref ? ' sel' : ''}" data-act="cell" data-ref="${esc(p.ref)}"><span class="loc">${esc(p.ref)}</span><span class="nm">${esc(PT_NAME[p.ptype] || p.ptype)}${p.carryover ? ' · carryover' : ''} · ${p.cartons ?? '–'} cartons${p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}${sightBadge(p)}</span><span class="rcv-st ${p.status}">${p.status === 'done' ? 'Done' : p.status === 'active' ? 'Decanting' : p.status === 'paused' ? 'Paused' : 'Waiting'}</span><span class="rt">${p.carryover ? 'Yesterday' : fmtHM(p.landedAt)}</span></div>`).join('')}</div>` : `<div class="pempty">Nothing landed yet</div>`}${st.sel && t.pallets[st.sel] ? palletPanel(t, t.pallets[st.sel], true) : ''}</div>`;
   const picker = !st.manPick ? '' : (() => {
     const idx = manifestIndex(m.dock).sort((a, b) => (a.truck ? 1 : 0) - (b.truck ? 1 : 0));
     return `<div class="card bdr-manpick"><div class="ch"><h3>${t.manifest ? `Manifest ${esc(t.manifest.manNo)} on Truck ${esc(truckNo(t.id))}` : `Attach a manifest to Truck ${esc(truckNo(t.id))}`}</h3><span class="go" data-act="manpick">Close</span></div>` +
@@ -77,7 +79,9 @@ function desktop(ctx) {
       `<div class="list">${idx.map(x => `<div class="li"><span class="loc">${esc(x.manNo)}</span><span class="nm">${x.consols} consols · ${x.totalCartons} cartons${x.despatch ? ' · despatch ' + esc(x.despatch) : ''}${x.truck ? ` · on Truck ${esc(truckNo(x.truck))}` : ''}</span><button class="btn sm${x.truck === t.id ? '' : ' primary'}" data-act="manattach" data-man="${esc(x.manNo)}"${x.truck === t.id ? ' disabled' : ''}>${x.truck === t.id ? 'Attached' : 'Attach'}</button></div>`).join('') || '<div class="ohint">Nothing in the library yet.</div>'}</div>` +
       `<div class="bdr-manup"><label class="btn" style="cursor:pointer"><input type="file" accept=".xls,.xlsx,.csv" data-field="manfile" style="display:none">${ic('file')}Upload today's report and attach it</label><span class="cs-dim">The DC's Manifest Report .xls from the email. It is published to the library and attached to this truck.</span></div></div>`;
   })();
-  return head + strip + picker + `<div class="bdr-stack">${needsTake5(t) && (t.team || []).length ? take5Card(t) : ''}${headcard}${dock}${teamcard}${planCard(t, rates)}${landedcard}</div>`;
+  const nUn = man ? unlinked(t).length : 0;
+  const late = !man ? '' : st.linking ? linkSheet(t, rates) : nUn && pr.count ? `<div class="card ll-warn"><div class="ch"><h3>${ic('alert')}${nUn} pallet${nUn === 1 ? '' : 's'} not linked to manifest ${esc(man.manNo)}</h3><button class="btn sm primary" data-act="ll-open">Link landed pallets →</button></div><p class="lbl">Landed before the manifest was attached, or without a readable label. Link them so the reconciliation and the clear forecast use the manifest's cartons.</p></div>` : '';
+  return head + strip + picker + late + `<div class="bdr-stack">${needsTake5(t) && (t.team || []).length ? take5Card(t) : ''}${headcard}${dock}${teamcard}${planCard(t, rates)}${landedcard}</div>`;
 }
 
 // One pallet's controls: type, cartons, note, decant verbs, scanned
@@ -98,11 +102,11 @@ function palletPanel(t, p, desk) {
   const scans = p.consolIds.map(id => { const c = cons.find(x => x.id === id); return `<div class="bdk-vrow ok"><span>✓</span><b class="mono">${esc(id)}</b><span>${c ? `${c.cartons} ctn${c.dept ? ' · ' + esc(c.dept) : ''}` : 'on this pallet'}</span></div>`; }).join('') +
     p.scanIds.filter(id => !p.consolIds.includes(id)).map(id => `<div class="bdk-vrow"><span>·</span><b class="mono">${esc(id)}</b><span>saved · matches when a manifest is attached</span></div>`).join('') +
     st.pending.filter(x => x.ref === p.ref).map((x, i) => `<div class="bdk-vrow warn"><span>⚠</span><b class="mono">${esc(x.id)}</b><span>not on this manifest</span><span class="bdk-vbtns"><button class="btn sm" data-act="pend-add" data-i="${i}">Add &amp; flag</button><button class="btn sm" data-act="pend-drop" data-i="${i}">Ignore</button></span></div>`).join('');
-  return `<div class="bdk-pal${desk ? ' desk' : ''}"><div class="bdk-pal-h"><b>Pallet ${esc(p.ref)}</b><span class="tst ${s === 'done' ? 'done' : s === 'active' ? 'live' : 'staged'}">${s}</span>${p.carryover ? '<span class="status warn">carryover</span>' : ''}<button class="ibtn" data-act="closepal" title="Close">${ic('x')}</button></div>` +
+  return `<div class="bdk-pal${desk ? ' desk' : ''}"><div class="bdk-pal-h"><b>Pallet ${esc(p.ref)}</b><span class="tst ${s === 'done' ? 'done' : s === 'active' ? 'live' : 'staged'}">${s}</span>${p.carryover ? '<span class="status warn">carryover</span>' : ''}${sightBadge(p)}<button class="ibtn" data-act="closepal" title="Close">${ic('x')}</button></div>` +
     `<div class="bdk-pal-b"><div class="bdk-ptrow">${PTYPES.map(x => `<button class="bdr-pt${p.ptype === x[0] ? ' on' : ''}" data-act="pal-pt" data-pt="${x[0]}"><i style="background:${x[2]}"></i>${x[1]}</button>`).join('')}</div>` +
     `<div class="bdk-fields"><label>Cartons<input class="bdr-in mono" data-field="pcartons" inputmode="numeric" maxlength="3" value="${p.cartons ?? ''}"></label><label>Est. mins<input class="bdr-in mono${p.expectedBasis === 'manual' ? '' : ' auto'}" data-field="pexp" inputmode="numeric" maxlength="4" value="${p.expectedMins ?? ''}" title="${p.expectedBasis === 'manual' ? 'set by hand' : `auto · ${t.minsPerCarton ?? STD_MINS_PER_CARTON} min per carton`}"></label><label>Note<input class="bdr-in" data-field="pnote" maxlength="120" placeholder="optional" value="${esc(p.note || '')}"></label></div>` +
     `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="pscan" inputmode="numeric" enterkeyhint="done" placeholder="Scan or type a pallet label" autocomplete="off">${camButton('pscan')}<button class="btn sm" data-act="pscan">${ic('barcode')}Add</button></div>${scans ? `<div class="bdk-verified">${scans}</div>` : ''}` +
-    `<div class="bdk-decant"><div class="bdk-declab">Decant${on.length ? ` · ${esc(on.join(' + '))}` : p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}</div>${worked}${sus}${s !== 'done' ? picker : ''}${desk ? queuePicker(t, p) : ''}<div class="bdk-verbs">${verbs}</div>${st.fix === p.ref ? fixTimes(p) : ''}</div>` +
+    palletContents(t, p) + `<div class="bdk-decant"><div class="bdk-declab">Decant${on.length ? ` · ${esc(on.join(' + '))}` : p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}</div>${worked}${sus}${s !== 'done' ? picker : ''}${desk ? queuePicker(t, p) : ''}<div class="bdk-verbs">${verbs}</div>${st.fix === p.ref ? fixTimes(p) : ''}</div>` +
     `<div class="bdk-palacts"><button class="btn sm" data-act="pal-save">${ic('check')}Update</button>${p.segments.length && st.fix !== p.ref ? `<button class="btn sm" data-act="dec" data-dec="fix">${ic('clock')}Fix times</button>` : ''}${s !== 'done' ? `<button class="btn sm" data-act="dec" data-dec="move">⇲ Move</button>` : ''}<button class="btn sm" data-act="pal-remove">${ic('trash')}Remove</button></div></div></div>`;
 }
 // Fix times: each stretch of work (who, from, to) and the done time, as
@@ -138,7 +142,8 @@ function mobile(ctx) {
   const team = t.team || [];
   const strip = run ? (team.length ? `<div class="bdk-strip">${team.map(mm => { const br = onBreak(t, mm.pid); return `<button class="bdk-fchip${st.arm === mm.pid ? ' armed' : ''}${br ? ' brk' : ''}" data-act="arm" data-pid="${esc(mm.pid)}"${br ? ' disabled' : ''}><i class="${m.run[mm.pid] ? 'a' : ''}"></i><b>${esc(who(mm))}</b><span>${br ? 'on a break' : m.run[mm.pid] ? '▶ ' + esc(m.run[mm.pid]) : 'free'}</span></button>`; }).join('')}</div>` : `<div class="mv-note">${ic('users')}No crew on this truck yet. Add the team on the desktop board.</div>`) : '';
   const sel = st.sel ? (t.pallets[st.sel] ? palletPanel(t, t.pallets[st.sel], false) : landPanel(st.sel)) : '';
-  return head + chips + (needsTake5(t) && (t.team || []).length ? take5Card(t) : '') + toggle + prog + runbar + `<div class="bdk">${dockGrid(t, false)}</div>` + strip + sel;
+  const tools = `<div class="ps-tools"><button class="btn sm${ss.open ? ' primary' : ''}" data-act="ps-open">${ic('search')}Search</button><button class="btn sm${ss.info ? ' primary' : ''}" data-act="ps-info">${ic('packages')}Manifest${t.manifest ? ' ' + esc(t.manifest.manNo) : ''}</button></div>`;
+  return head + chips + (needsTake5(t) && (t.team || []).length ? take5Card(t) : '') + toggle + tools + searchSheet(ctx, t) + infoSheet(t) + prog + runbar + `<div class="bdk">${dockGrid(t, false)}</div>` + strip + sel;
 }
 function landPanel(ref) {
   return `<div class="bdk-pal"><div class="bdk-pal-h"><b>Land pallet ${esc(ref)}</b><button class="ibtn" data-act="closepal" title="Close">${ic('x')}</button></div><div class="bdk-pal-b"><div class="bdk-ptrow">${PTYPES.map(x => `<button class="bdr-pt${st.land.ptype === x[0] ? ' on' : ''}" data-act="ptype" data-pt="${x[0]}"><i style="background:${x[2]}"></i>${x[1]}</button>`).join('')}</div>` +
@@ -153,6 +158,7 @@ async function onAct(ctx, a, root) {
   const num = v => { const n = parseInt(String(v).replace(/\D/g, ''), 10); return Number.isFinite(n) ? n : null; };
   const rates = ratesFor(m.dock);
   try {
+    if (t && await onSearchAct(ctx, t, a, root)) return;
     if (t && await onPlanAct(ctx, t, a, rates)) return;
     if (act === 'pick') { st.truck = a.dataset.id; st.sel = null; st.arm = null; st.manPick = false; return ctx.rerender(); }
     if (act === 'manpick') { st.manPick = !st.manPick; return ctx.rerender(); }
@@ -264,11 +270,13 @@ async function onAct(ctx, a, root) {
     if (act === 'pscan') {
       const raw = field('pscan').replace(/\D/g, ''); if (raw.length < 9) return toast('A pallet label has at least 9 digits', 'bad');
       const id9 = raw.slice(-9);
-      try { await dispatch(ctx, 'pallet.scan', { truck: id, bay: st.sel }, { code: raw }); toast(`${id9} on ${st.sel}`); }
+      try { const was = sightOf(t.pallets[st.sel]); await dispatch(ctx, 'pallet.scan', { truck: id, bay: st.sel }, { code: raw }); sightToast(ctx, st.sel, was) || toast(`${id9} on ${st.sel}`); }
       catch (e) { if (e.code === 'not_on_manifest') { st.pending.push({ ref: st.sel, id: id9 }); ctx.rerender(); toast(`${id9} is not on this manifest. Old label from a reused tub?`, 'bad'); } else throw e; }
       return;
     }
-    if (act === 'pend-add') { const x = st.pending.filter(y => y.ref === st.sel)[+a.dataset.i]; st.pending = st.pending.filter(y => y !== x); const p = t.pallets[st.sel]; await dispatch(ctx, 'pallet.update', { truck: id, bay: st.sel }, { scanIds: [...p.scanIds, x.id] }); toast(`${x.id} flagged in the receiving audit`); return; }
+    if (act === 'pend-add') { const x = st.pending.filter(y => y.ref === st.sel)[+a.dataset.i]; st.pending = st.pending.filter(y => y !== x); const p = t.pallets[st.sel], was = sightOf(p); await dispatch(ctx, 'pallet.update', { truck: id, bay: st.sel }, { scanIds: [...p.scanIds, x.id] }); sightToast(ctx, st.sel, was) || toast(`${x.id} flagged in the receiving audit`); return; }
+    if (act === 'll-open' || act === 'll-close') { st.linking = act === 'll-open'; return ctx.rerender(); }
+    if (act === 'll-apply') { await applyLinks(ctx, t, ratesFor(ctx.store.get('dock'))); st.linking = false; return ctx.rerender(); }
     if (act === 'pend-drop') { const x = st.pending.filter(y => y.ref === st.sel)[+a.dataset.i]; st.pending = st.pending.filter(y => y !== x); return ctx.rerender(); }
   } catch (e) { toast(e.message, 'bad'); }
 }
@@ -279,6 +287,8 @@ export default {
   mobile(ctx) { return mobile(ctx); },
   mount(ctx, root) {
     root.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (a) onAct(ctx, a, root); });
+    root.addEventListener('input', e => onSearchInput(ctx, e, root));
+    root.addEventListener('change', e => { if (e.target.dataset.ll != null) linkPick(e.target.dataset.ll, e.target.value); });
     root.addEventListener('change', async e => {
       if (!e.target.matches('[data-field="manfile"]')) return;
       const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
@@ -309,7 +319,20 @@ export default {
       }
     };
     tick(); const timer = setInterval(tick, 1000);
-    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const f = e.target.dataset?.field; if (f === 'cartons' || f === 'ref') { e.preventDefault(); root.querySelector('[data-act="land"]')?.click(); } else if (f === 'pscan') { e.preventDefault(); root.querySelector('[data-act="pscan"]')?.click(); } else if (f === 'team') { e.preventDefault(); root.querySelector('[data-act="team-add"]')?.click(); } });
+    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const f = e.target.dataset?.field; if (f === 'ps-code') { e.preventDefault(); root.querySelector('[data-act="ps-find"]')?.click(); return; } if (f === 'cartons' || f === 'ref') { e.preventDefault(); root.querySelector('[data-act="land"]')?.click(); } else if (f === 'pscan') { e.preventDefault(); root.querySelector('[data-act="pscan"]')?.click(); } else if (f === 'team') { e.preventDefault(); root.querySelector('[data-act="team-add"]')?.click(); } });
     return [ctx.store.on('dock', () => ctx.rerender()), () => clearInterval(timer)];
   },
 };
+
+// Sightings from the dock's ledger: a consol manifested on an earlier
+// truck (a late arrival) or already scanned on another (a duplicate?).
+const sightOf = p => JSON.stringify([p?.lateFrom || null, p?.seenBefore || null]);
+function sightToast(ctx, ref, was) {
+  const p = model(ctx).t?.pallets?.[ref]; if (!p || sightOf(p) === was) return false;
+  const [lf] = JSON.parse(was);
+  if (p.lateFrom && JSON.stringify(p.lateFrom) !== JSON.stringify(lf)) toast(`⚠ landed ${ref} — this consol was manifested ${fmtDate(p.lateFrom.d)} (Truck ${truckNo(p.lateFrom.t)}). Late arrival recorded.`, 'bad');
+  else if (p.seenBefore) toast(`⚠ landed ${ref} — this consol was already scanned ${fmtDate(p.seenBefore.d)} on Truck ${truckNo(p.seenBefore.t)}. Duplicate?`, 'bad');
+  else return false;
+  return true;
+}
+export const sightBadge = p => (p.lateFrom ? ` <span class="status warn" title="Manifested on Truck ${esc(truckNo(p.lateFrom.t))}">LATE — manifested ${esc(fmtDate(p.lateFrom.d))}</span>` : '') + (p.seenBefore ? ` <span class="status warn" title="Scanned on Truck ${esc(truckNo(p.seenBefore.t))}${p.seenBefore.ref ? ' at ' + esc(p.seenBefore.ref) : ''}">SEEN ${esc(fmtDate(p.seenBefore.d))}</span>` : '') + (p.linkedLateAt ? ` <span class="status">linked late · ${esc(p.linkBasis || 'manual')}</span>` : '');
