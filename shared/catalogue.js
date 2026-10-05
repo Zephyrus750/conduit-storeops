@@ -48,9 +48,13 @@ export const CATALOGUE = {
   // ── Stockroom ────────────────────────────────────────────────────────
   'cage.create':         T('stockroom', S, ['cage'], { ring: 'string' }),
   'cage.scan':           T('stockroom', S, ['cage'], { keycode: 'string', qty: 'number' }),
-  'cage.park':           T('stockroom', S, ['cage'], { location: 'string' }),
-  'cage.sweep':          T('stockroom', S, ['cage']),
+  'cage.park':           T('stockroom', S, ['cage'], { location: 'string' }),        // payload.x, y, floor: parked on the map
+  'cage.sweep':          T('stockroom', S, ['cage']),                           // payload.session, payload.location (the sweeper's zone)
   'cage.close':          T('stockroom', S, ['cage']),
+  'cage.retag':          T('stockroom', S, ['cage'], { to: 'string' }),
+  'cage.sweepStart':     T('stockroom', S, ['sweep']),
+  'cage.sweepEnd':       T('stockroom', S, ['sweep']),
+  'cage.pair':           T('stockroom', S, ['apn'], { keycode: 'string' }),
   'submission.open':     T('stockroom', S, ['bay', 'date']),
   'submission.update':   T('stockroom', S, ['bay', 'date']),                    // codes {code: scanned}, remove [], incorrect []
   'submission.ready':    T('stockroom', S, ['bay', 'date']),                    // status → corrected
@@ -126,7 +130,7 @@ export function typeInfo(type) {
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
-  stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets'],
+  stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback'],
 };

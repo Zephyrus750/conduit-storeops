@@ -2,7 +2,11 @@
 // day list. Shapes follow K2B's worker docs (stockroom-review, stockroom-adjust,
 // stockroom-scan), ported faithfully; cages are new and come from the design doc.
 //
-//   cages        cage → { ring, location, items: keycode → qty, sweeps[], status, created, seen, closed }
+//   cages        cage → { ring, location, x, y, floor (parked on the map), items: keycode → qty, sweeps[], status,
+//                created, seen, closed, log: [{ at, k, d, by }] (open, in, out, park, move, seen, found, missing, lost,
+//                retag, close), missing: { since, n } | null, lost }
+//   cageSweeps   current: { id, at, by, seen: cage → at, moved, found, open } | null, history: [summary] (last 20)
+//   apnPairs     item barcode (GTIN, 13 or 14 digits) → { kc, at, by }
 //   backfill     subs: `${bay}:${date}` → { bay, date, status, codes: code → { scanned }, incorrect: [],
 //                system: [codes] | null, removed: code → at (tombstones), metrics, statusAt, reopenedAt, readyAt, submittedDoneAt, autoSubmitted,
 //                devices: [device ids that scanned it] (a phone's "My locations"),
@@ -20,10 +24,12 @@
 
 import { reject } from './util.js';
 import { backfillMetrics, scannedCodes } from '../backfill.js';
+import { gs1Parse } from '../gs1.js';
 
 export const RINGS = ['new-lines', 'overstock', 'cant-work', 'online-picks'];
 export const SUBMISSION_STATUS = ['pending', 'corrected', 'submitted'];
 export const DAYLIST_SOURCES = ['requested', 'snapshot', ''];
+export const CAGE_LOG = 40;                     // activity entries kept per cage
 export const SOH_KEEP = 26;                     // snapshots kept (about six months of weekly pastes)
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -35,16 +41,23 @@ export function stockroomState() {
     daylist: {},
     soh: { snaps: {}, verify: {} },
     scanPresets: {},
+    cageSweeps: { current: null, history: [] },
+    apnPairs: {},
   };
 }
 
 export const stockroomReducers = {
   // ── Cages ────────────────────────────────────────────────────────────
+  // Each cage keeps a short log (its activity feed) and, when parked from the
+  // map, where it stands (x, y, floor). A sweep session counts which cages
+  // were seen; a cage seen somewhere other than where it was parked is moved
+  // there; one not seen is missing, and lost after two sweeps in a row.
   'cage.create'(s, e) {
     const id = e.entity.cage;
     if (s.cages[id] && s.cages[id].status !== 'closed') return reject('cage_exists', `${id} is already open`);
     if (!RINGS.includes(e.payload.ring)) return reject('invalid_event', `ring must be one of ${RINGS.join(', ')}`);
-    s.cages[id] = { ring: e.payload.ring, location: null, items: {}, sweeps: [], status: 'open', created: e.at, seen: e.at };
+    s.cages[id] = { ring: e.payload.ring, location: null, items: {}, sweeps: [], status: 'open', created: e.at, seen: e.at, log: [] };
+    cageLog(s.cages[id], e, 'open', RINGS.includes(e.payload.ring) ? e.payload.ring : '');
     return null;
   },
   'cage.scan'(s, e) {
@@ -52,22 +65,79 @@ export const stockroomReducers = {
     const kc = e.payload.keycode;
     c.items[kc] = (c.items[kc] || 0) + e.payload.qty;
     if (c.items[kc] <= 0) delete c.items[kc];
-    c.seen = e.at;
+    c.seen = e.at; cageLog(c, e, e.payload.qty < 0 ? 'out' : 'in', `${kc} ×${Math.abs(e.payload.qty)}${e.payload.apn ? ` (item barcode ${String(e.payload.apn).slice(0, 14)})` : ''}`);
     return null;
   },
   'cage.park'(s, e) {
     const c = openCage(s, e); if (c.code) return c;
-    c.location = String(e.payload.location).toUpperCase(); c.seen = e.at;
+    const p = e.payload, to = String(p.location).toUpperCase().slice(0, 40), from = c.location;
+    const hasXY = Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y));
+    c.location = to; c.seen = e.at;
+    if (hasXY) { c.x = Math.round(Number(p.x) * 10) / 10; c.y = Math.round(Number(p.y) * 10) / 10; c.floor = p.floor ? String(p.floor).slice(0, 40) : null; }
+    else if (from !== to) { delete c.x; delete c.y; delete c.floor; }
+    cageLog(c, e, from && from !== to ? 'move' : 'park', from && from !== to ? `${from} → ${to}` : to);
     return null;
   },
+  // payload.session: the sweep it belongs to; payload.location: where the
+  // sweeper is standing, which moves the cage when it differs.
   'cage.sweep'(s, e) {
     const c = openCage(s, e); if (c.code) return c;
-    c.sweeps.push({ at: e.at, device: e.actor?.device || null }); c.seen = e.at;
+    const p = e.payload || {}, sw = s.cageSweeps?.current, inSession = sw && p.session === sw.id;
+    if (p.session && !inSession) return reject('not_found', 'that sweep has finished: start a new one');
+    const at = p.location ? String(p.location).toUpperCase().slice(0, 40) : null;
+    c.sweeps.push({ at: e.at, device: e.actor?.device || null }); if (c.sweeps.length > 30) c.sweeps.splice(0, c.sweeps.length - 30);
+    c.seen = e.at;
+    if (c.missing || c.lost) { cageLog(c, e, 'found', at || c.location || ''); if (inSession && !sw.found.includes(e.entity.cage)) sw.found.push(e.entity.cage); }
+    c.missing = null; c.lost = false;
+    if (at && c.location && at !== c.location) {
+      if (inSession) sw.moved.push({ id: e.entity.cage, from: c.location, to: at });
+      cageLog(c, e, 'move', `${c.location} → ${at} (seen on a sweep)`); c.location = at; delete c.x; delete c.y; delete c.floor;
+    } else { if (at && !c.location) c.location = at; cageLog(c, e, 'seen', at || c.location || ''); }
+    if (inSession) sw.seen[e.entity.cage] = e.at;
     return null;
   },
   'cage.close'(s, e) {
     const c = openCage(s, e); if (c.code) return c;
-    c.status = 'closed'; c.closed = e.at;
+    c.status = 'closed'; c.closed = e.at; cageLog(c, e, 'close', '');
+    return null;
+  },
+  // A damaged or lost tag replaced: the cage carries on under its new tag.
+  'cage.retag'(s, e) {
+    const c = openCage(s, e); if (c.code) return c;
+    const to = String(e.payload.to || '').trim().toUpperCase();
+    if (!/^[A-Z0-9-]{3,24}$/.test(to)) return reject('invalid_event', 'a cage tag is 3 to 24 letters, digits or dashes');
+    if (s.cages[to] && s.cages[to].status !== 'closed') return reject('cage_exists', `${to} is already an open cage`);
+    cageLog(c, e, 'retag', `${e.entity.cage} → ${to}`);
+    s.cages[to] = c; delete s.cages[e.entity.cage];
+    return null;
+  },
+  'cage.sweepStart'(s, e) {
+    const sw = (s.cageSweeps ||= { current: null, history: [] }), id = String(e.entity.sweep);
+    if (sw.current && Date.parse(e.at) - Date.parse(sw.current.at) < 12 * 3600e3) return reject('sweep_open', `a sweep started at ${sw.current.at.slice(11, 16)} is still running: finish it first`);
+    sw.current = { id, at: e.at, by: e.actor?.device || null, seen: {}, moved: [], found: [], open: Object.keys(s.cages).filter(k => s.cages[k].status === 'open').length };
+    return null;
+  },
+  'cage.sweepEnd'(s, e) {
+    const sw = (s.cageSweeps ||= { current: null, history: [] }), cur = sw.current;
+    if (!cur || cur.id !== String(e.entity.sweep)) return reject('not_found', 'no sweep is running under that id');
+    const missing = [], lost = [];
+    for (const [id, c] of Object.entries(s.cages)) {
+      if (c.status !== 'open' || cur.seen[id] || Date.parse(c.created) > Date.parse(cur.at)) continue;
+      c.missing = { since: c.missing?.since || cur.at, n: (c.missing?.n || 0) + 1 }; missing.push(id);
+      if (c.missing.n >= 2 && !c.lost) { c.lost = true; lost.push(id); cageLog(c, e, 'lost', `missed ${c.missing.n} sweeps`); } else if (!c.lost) cageLog(c, e, 'missing', 'not seen on the sweep');
+    }
+    sw.history.push({ id: cur.id, at: cur.at, ended: e.at, by: cur.by, seen: Object.keys(cur.seen).length, total: Object.values(s.cages).filter(c => c.status === 'open').length, moved: cur.moved, found: cur.found, missing, lost });
+    if (sw.history.length > 20) sw.history.splice(0, sw.history.length - 20);
+    sw.current = null;
+    return null;
+  },
+  // An item barcode (EAN / UPC / GTIN) paired with its keycode, so the next
+  // scan of that barcode onto a cage needs no keycode.
+  'cage.pair'(s, e) {
+    const g = gs1Parse(e.entity.apn), kc = String(e.payload.keycode || '');
+    if (!g?.gtin) return reject('invalid_event', 'that is not a valid item barcode (UPC-A, EAN-13 or GTIN-14)');
+    if (!/^\d{6,8}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 8 digits');
+    (s.apnPairs ||= {})[g.gtin] = { kc, at: e.at, by: e.actor?.device || null };
     return null;
   },
 
@@ -245,6 +315,7 @@ export const stockroomReducers = {
 };
 
 // ── helpers ────────────────────────────────────────────────────────────
+function cageLog(c, e, k, d) { const l = (c.log ||= []); l.push({ at: e.at, k, d: String(d || '').slice(0, 80), by: e.actor?.device || null }); if (l.length > CAGE_LOG) l.splice(0, l.length - CAGE_LOG); }
 function openCage(s, e) {
   const c = s.cages[e.entity.cage];
   if (!c || c.status === 'closed') return reject('not_found', `cage ${e.entity.cage} is not open`);
