@@ -2,7 +2,7 @@
 // completed, reopen as recurring. Reads store.get('issues').
 
 import { $, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
-import { mountMap, mapbar, crumbx, bindMapChrome } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome } from '../map.js';
 import { ISSUE_CATS } from '../../shared/reducers/floor.js';
 
 const SEV = [['Low', '#6B7280'], ['Medium', '#D97706'], ['High', '#DC2626'], ['Urgent', '#7F1D1D']];
@@ -84,7 +84,11 @@ export default {
       `<div class="mapleg">${crumbx('Maintenance', ctx.storeNo)}<span><i style="background:#DC2626;border-radius:50%"></i>Open</span><span><i style="background:#D97706;border-radius:50%"></i>Done, to check</span><span><i style="background:#16A34A;border-radius:50%"></i>Completed</span><span style="color:var(--faint)">${draft ? (draft.editId ? 'Tap the map to move this issue' : 'Tap the map to place the new issue') : 'Log a new issue, then tap the map to place it'}</span></div></div>` +
       `<div class="sidecol fill" id="mtside"></div></div>`;
   },
-  mobile(ctx) { return `<div id="mtmob"></div>`; },
+  // The phone gets the map too, so a report is pinned where the fault is.
+  mobile(ctx) {
+    const m = model(ctx);
+    return mvMap({ badge: `<b>${m.open.length}</b> open${m.recurring ? ` · ${m.recurring} recurring` : ''}` }) + `<div id="mtmob"></div>`;
+  },
   mount(ctx, root) {
     let map = null;
     const stage = $('#mapstage', root);
@@ -111,6 +115,7 @@ export default {
       const sel = m.all.find(x => x.id === selected); if (sel?.photos?.length) loadThumbs(ctx, sel.photos.map(p => p.id), paint);
       const side = $('#mtside', root); if (side) side.innerHTML = sidebar(m);
       const mob = $('#mtmob', root); if (mob) mob.innerHTML = mobile(m);
+      const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.open.length}</b> open${m.recurring ? ` · ${m.recurring} recurring` : ''}`;
       const hs = root.querySelector('.vh .sub'); if (hs) hs.innerHTML = sub(`${m.open.length} open`, `${m.overdue} overdue`, `${m.recurring} recurring`, m.open.length ? `oldest ${m.oldest} days` : '');
     };
     paint();
@@ -178,9 +183,9 @@ function readDraft(root) {
 function draftForm(mobileMode, m) {
   const sevs = SEV.map((s, i) => `<button class="${draft.sev === i ? 'on' : ''}" data-act="draft-sev" data-sev="${i}">${s[0]}</button>`).join('');
   const cats = `<select data-draft="cat">${ISSUE_CATS.map(c => `<option value="${c}"${draft.cat === c ? ' selected' : ''}>${CAT_NAME[c]}</option>`).join('')}</select>`;
-  if (mobileMode) return mhead('Report an issue', 'Where · what · how urgent') +
+  if (mobileMode) return mhead(draft.editId ? 'Edit issue' : 'Report an issue', draft.x != null ? 'Pinned on the map · where · what · how urgent' : 'Tap the map above to pin it · where · what · how urgent') +
     `<div class="mv-field"><small>Where</small><input data-draft="loc" placeholder="Aisle K2, bay 8963" value="${esc(draft.loc)}"></div><div class="mv-field"><small>What</small><input data-draft="title" placeholder="Fluorescent tube out over the end bay" value="${esc(draft.title)}"></div><div class="mv-field"><small>Type</small>${cats}</div><div class="mv-sub">How urgent</div><div class="mv-chips">${sevs}</div>` +
-    draftPhotos() + mfoot(mbig('Send report', '', 'check', ' data-act="draft-save"') + mghost('Cancel', ' data-act="draft-cancel"'));
+    draftPhotos() + mfoot(mbig(draft.editId ? 'Save changes' : 'Send report', '', 'check', ' data-act="draft-save"') + mghost('Cancel', ' data-act="draft-cancel"'));
   const dup = m ? nearby(m, draft).length : 0;
   return `<div class="card mtdet"><div class="ch"><h3>${draft.editId ? 'Edit issue' : 'New issue'}</h3><span class="cs-dim">${draft.x != null ? 'placed on the map' : 'tap the map to place it'}</span></div>` +
     (dup ? `<div class="mt-dup">${ic('alert')}${dup} previous issue${dup === 1 ? '' : 's'} logged near here. Check the list before saving.</div>` : '') +

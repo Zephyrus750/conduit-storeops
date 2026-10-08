@@ -417,7 +417,7 @@ document.addEventListener('click', e => {
   const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }
   // The store chip opens the device and store page (Settings); store details are still to come.
   if (e.target.closest('.storechip')) { if (store) show('storeinfo'); return; }
-  const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else show(g.getAttribute('data-go'), g.dataset.bay ? { bay: g.dataset.bay } : undefined); return; }
+  const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else { const ga = {}; if (g.dataset.bay) ga.bay = g.dataset.bay; if (g.dataset.select) ga.select = g.dataset.select; if (g.dataset.dept) ga.dept = g.dataset.dept; show(g.getAttribute('data-go'), Object.keys(ga).length ? ga : undefined); } return; }
   if (e.target.closest('[data-act="close-more"]') || (e.target.id === 'msheet')) $('#msheet')?.classList.remove('open');
   if (e.target.closest('#railToggle')) { $('#app').classList.toggle('railmin'); }
   if (e.target.closest('#hsearch,.bsearch,#msearch')) { if (admin) toast('Find a store from the rail for now'); else search.open($('#msearch input')?.value || ''); }

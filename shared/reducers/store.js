@@ -1,6 +1,9 @@
-// Store-wide reducers: devices, published map version, roster rotation marker,
-// the store's settings and suggested map edits. Credentials themselves live in the registry
-// object; the events here are the audit trail the store's projections can show.
+// Store-wide reducers: published map version, roster rotation marker, the
+// store's settings and suggested map edits. Credentials themselves live in the
+// registry object; the events here are the audit trail the store's
+// projections can show. Device presence (state.devices) is a projection too,
+// but written directly from the socket 'hb' frame or POST /hb, never logged:
+// see StoreObject.recordHb.
 
 import { reject } from './util.js';
 import { DEFAULT_TZ } from '../time.js';
@@ -94,10 +97,6 @@ export const storeReducers = {
     if (list.some(f => f.id === e.entity.note)) return reject('exists', 'that feedback was already sent');
     list.push({ id: String(e.entity.note).slice(0, 40), kind, text: body, view: text(p.view, 40), version: text(p.version, 20), diag: text(p.diag, 2000), at: e.at, by: e.actor?.device || null, role: e.actor?.role || null });
     if (list.length > FEEDBACK_KEPT) list.splice(0, list.length - FEEDBACK_KEPT);
-    return null;
-  },
-  'device.heartbeat'(s, e) {
-    s.devices[e.entity.device] = { app: e.payload.app, last: e.at, role: e.actor?.role || null };
     return null;
   },
   'map.publish'(s, e) {

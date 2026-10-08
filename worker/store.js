@@ -9,6 +9,7 @@
 //   POST /events  { events: [] }   → { results: [{ id, ok, seq } | { id, ok:false, code, message }] }
 //   GET  /ws                       → WebSocket upgrade
 //   GET  /devices                  → devices projection (owner)
+//   POST /hb                       → record this device's presence (HTTP twin of the WS 'hb' frame)
 //   GET  /tail?limit=              → raw log, newest first (owner)
 //   GET  /map                      → { version, at, by, floors:[{id,name,type,bytes}], versions:[…] } (404 until published)
 //   GET  /map/:version             → the published document; `latest` allowed; floors carry their svg
@@ -121,6 +122,7 @@ export class StoreObject extends DurableObject {
         case '/events': { const body = await readBounded(request, BATCH_MAX); return json({ results: this.submit(body.events, claims) }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
+        case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readBounded(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true }); }
         case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [] }));
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await request.json(), claims) : json(this.mapInfo());
@@ -501,20 +503,22 @@ export class StoreObject extends DurableObject {
         return;
       }
       case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
-      // The one write outside the event log, on purpose: heartbeats are
-      // device telemetry every minute from every device, not store history,
-      // so they live in the devices projection only (owner and manager read
-      // it) and never become events. Every field is capped.
-      case 'hb': {
-        this.state.devices[claims.device || 'nodevice'] = {
-          app: msg.app ? String(msg.app).slice(0, 64) : null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
-          area: msg.area ? String(msg.area).slice(0, 64) : null, online: msg.online !== false, outbox: Math.max(0, Math.min(1e6, Number(msg.outbox) || 0)), lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
-        };
-        return;
-      }
+      case 'hb': return this.recordHb(claims, msg);
       case 'ping': return ws.send(JSON.stringify({ t: 'pong', seq: this.state.seq }));
       default: return ws.send(JSON.stringify({ t: 'error', code: 'invalid_request', message: `unknown frame ${msg.t}` }));
     }
+  }
+  // Device presence: the one write outside the event log, on purpose.
+  // Heartbeats are device telemetry every few minutes from every device, not
+  // store history, so they live in the devices projection only (owner and
+  // manager read it) and never become events; the append-only log is never
+  // pruned. The socket 'hb' frame and POST /hb (a device on the polling
+  // fallback) both land here. Every field is capped.
+  recordHb(claims, msg) {
+    this.state.devices[claims.device || 'nodevice'] = {
+      app: msg.app ? String(msg.app).slice(0, 64) : null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
+      area: msg.area ? String(msg.area).slice(0, 64) : null, online: msg.online !== false, outbox: Math.max(0, Math.min(1e6, Number(msg.outbox) || 0)), lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
+    };
   }
   webSocketClose(ws) { try { ws.close(); } catch {} }
   webSocketError(ws) { try { ws.close(); } catch {} }

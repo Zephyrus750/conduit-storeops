@@ -134,6 +134,16 @@ test('dispatch offline queues and applies locally; connect flushes; a second dev
   sf.close(); live.close(); sb.close(); storeA.close(); storeA2.close(); forced.close();
 });
 
+test('a device on the polling fallback still reports presence over POST /hb', async () => {
+  let hbPosts = 0;
+  const c = device('phone-hb'); await c.session.load(); await c.session.signIn({ store: '1241', pin: '2468' });
+  const counting = { ...c.transport, request: (p, opts) => { if (/\/hb$/.test(p)) hbPosts += 1; return c.transport.request(p, opts); } };
+  const st = (await import('../../client/store.js')).createStore({ storeNo: '1241', session: c.session, transport: counting, storage: memoryStorage(), WebSocketImpl: null, online: () => true });
+  await st.load(); await st.connect();
+  await until(() => hbPosts >= 1);
+  st.close();
+});
+
 test('owner acts as a store, writes carry the owner, and returns to the console', async () => {
   const o = createClient({ baseUrl, storage: memoryStorage({ suite_device: 'dev-laptop' }) });
   await o.session.load();

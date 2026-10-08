@@ -141,6 +141,9 @@ export default {
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.counted}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}`;
     });
     paint();
+    // Carried from a shelf selected on the map: zoom to it and ring it. No
+    // mark: a tap here toggles the refresh, so arriving only brings it into view.
+    if (ctx.arg?.select) { const code = canonCode(ctx.arg.select); if (map.groups(code).length) { map.select(code); map.zoomTo(code); } }
     bindShelfScan(root, map, info => tap(ctx, info));
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;

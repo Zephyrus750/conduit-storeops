@@ -223,6 +223,20 @@ test('events: entitlement, role, validation, duplicate, conflict rule, and a sec
   ws.close();
 });
 
+test('device presence: POST /hb records the device (the polling fallback for the socket hb frame)', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'poll-phone' })).body.token;
+  const hb = await api('POST', '/v1/store/1241/hb', { app: 'floor', online: true, outbox: 3, area: 'floor', lastError: 'x'.repeat(500) }, dev);
+  assert.equal(hb.status, 200); assert.equal(hb.body.ok, true);
+  const devs = await api('GET', '/v1/admin/stores/1241/devices', undefined, ownerToken);
+  assert.equal(devs.status, 200);
+  const rec = devs.body.devices['poll-phone'];
+  assert.ok(rec, 'the heartbeat registered the device');
+  assert.equal(rec.app, 'floor'); assert.equal(rec.online, true); assert.equal(rec.outbox, 3); assert.ok(rec.last);
+  assert.equal(rec.lastError.length, 200, 'fields are capped as the socket frame caps them');
+  // The token is scoped to its store: it cannot heartbeat another store.
+  assert.equal((await api('POST', '/v1/store/1187/hb', {}, dev)).status, 403);
+});
+
 test('owner diagnostics and act-as', async () => {
   const tail = await api('GET', '/v1/admin/stores/1241/tail', undefined, ownerToken);
   assert.equal(tail.status, 200); assert.equal(tail.body.events[0].type, 'refresh.mark');
