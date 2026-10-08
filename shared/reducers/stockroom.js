@@ -197,6 +197,7 @@ export const stockroomReducers = {
   },
   'submission.reopen'(s, e) {
     const sub = sub_(s, e); if (sub.code) return sub;
+    if (sub.trimmed) return reject('record_trimmed', `${sub.bay} on ${sub.date} is older than two weeks: its code list was trimmed, so it can't go back into review`);
     sub.status = 'pending'; sub.statusAt = e.at; sub.reopenedAt = e.at; sub.autoSubmitted = false;
     return null;
   },

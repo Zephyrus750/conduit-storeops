@@ -38,7 +38,8 @@ import { SOH_KEEP } from '../shared/reducers/stockroom.js';
 import { rolloverDue } from '../shared/backfill.js';
 import { sanitizeSvg } from '../shared/svgsafe.js';
 import { cleanStoreInfo } from '../shared/maprender.js';
-import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/time.js';
+import { storeDay, storeIso, msToStoreMidnight, addDays, DEFAULT_TZ } from '../shared/time.js';
+import { retiring, rowKey } from '../shared/retain.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
@@ -53,6 +54,7 @@ const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
 const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'store.retain']);
 const EVENT_MAX = 2_000_000;          // one event's payload (a manifest.attach carries its consols)
+const SNAPSHOT_MAX = 1_900_000;       // the state is saved as one row, and a Durable Object row holds 2 MB
 const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
 export class StoreObject extends DurableObject {
@@ -75,6 +77,7 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, at TEXT NOT NULL, by TEXT NOT NULL, size INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS archive (kind TEXT NOT NULL, key TEXT NOT NULL, date TEXT NOT NULL, row TEXT NOT NULL, PRIMARY KEY (kind, key));
     `);
     this.state = null;
     this.storeNo = this.sql.exec("SELECT value FROM meta WHERE key = 'store'").toArray()[0]?.value || null;
@@ -99,11 +102,20 @@ export class StoreObject extends DurableObject {
     this.state.seq = last?.m || 0;
     this.sinceSnapshot = rows.length;
   }
+  // The state is saved as one row, which holds at most 2 MB. The events are
+  // already logged when this runs, so a snapshot that fails (or would be too
+  // big) is skipped and said loudly, never allowed to fail the write: the
+  // store rebuilds from the last good snapshot plus the log. Retention keeps
+  // it well under (shared/retain.js); the console flags a store over 1.2 MB.
   snapshotIfDue() {
     if (this.sinceSnapshot < SNAPSHOT_EVERY) return;
-    this.sql.exec('INSERT OR REPLACE INTO snapshots (seq, state, at) VALUES (?, ?, ?)', this.state.seq, JSON.stringify(this.state), new Date().toISOString());
-    this.sql.exec('DELETE FROM snapshots WHERE seq < ?', this.state.seq);
-    this.sinceSnapshot = 0;
+    const text = JSON.stringify(this.state);
+    if (text.length > SNAPSHOT_MAX) { console.error(`store ${this.storeNo}: state is ${text.length} bytes, over the snapshot limit; snapshot skipped`); return; }
+    try {
+      this.sql.exec('INSERT OR REPLACE INTO snapshots (seq, state, at) VALUES (?, ?, ?)', this.state.seq, text, new Date().toISOString());
+      this.sql.exec('DELETE FROM snapshots WHERE seq < ?', this.state.seq);
+      this.sinceSnapshot = 0;
+    } catch (e) { console.error(`store ${this.storeNo}: snapshot failed (${text.length} bytes)`, e?.message || e); }
   }
 
   // ── HTTP ──────────────────────────────────────────────────────────────
@@ -124,7 +136,7 @@ export class StoreObject extends DurableObject {
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
         case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readBounded(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true }); }
-        case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [] }));
+        case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await request.json(), claims) : json(this.mapInfo());
         default: {
@@ -147,7 +159,8 @@ export class StoreObject extends DurableObject {
           if (hist) {
             if (!HISTORY_KINDS.includes(hist[2])) return fail(400, 'invalid_request', `kind must be one of ${HISTORY_KINDS.join(', ')}`);
             const no = needArea(claims, HISTORY_AREA[hist[2]]); if (no) return no;
-            const rows = historyRows(this.state, hist[2]);
+            const live = historyRows(this.state, hist[2]), have = new Set(live.map(r => rowKey(hist[2], r)));
+            const rows = [...live, ...this.archived(hist[2]).filter(r => !have.has(rowKey(hist[2], r)))];   // the live state, then what retention archived
             if (hist[1] === 'export') return new Response(toCsv(rows), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${this.storeNo}-${hist[2]}.csv"`, ...CORS } });
             const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));
             return json({ kind: hist[2], total: rows.length, offset, limit, rows: rows.slice(offset, offset + limit) });
@@ -269,9 +282,12 @@ export class StoreObject extends DurableObject {
   // the ordinary write path with a system actor, then the next alarm is set
   // for the coming store midnight (plus a minute of slack).
   async alarm() {
-    try { this.rollover(); await this.sweepPhotos(); }
+    try { this.rollover(); if (this.atNight()) this.retainNow(); await this.sweepPhotos(); }
     finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
   }
+  // Retention runs on the midnight alarm only, not the catch-up one a new
+  // store object sets itself: a night it misses runs the next night.
+  atNight(now = Date.now()) { return storeDay(new Date(now - 3 * 3_600_000), this.tz()) !== storeDay(new Date(now), this.tz()); }
   // The store's own setting wins; STORE_TZ is the worker-wide fallback.
   tz() { return this.state?.settings?.tz || this.env.STORE_TZ || DEFAULT_TZ; }
   rollover(now = new Date()) {
@@ -281,6 +297,22 @@ export class StoreObject extends DurableObject {
     if (!events.length) return [];
     return this.submit(events, { store: this.storeNo, roles: ['manager'], caps: ['stockroom'], device: 'system', owner: false, actor: 'system' });
   }
+
+  // Nightly retention: the history rows about to leave the live state are
+  // copied into the archive table (History and exports read both), then
+  // store.retain is logged so every device trims the same way. Archived rows
+  // are kept two years. Once a day.
+  retainNow(now = new Date()) {
+    if (!this.storeNo) return null;
+    const day = storeDay(now, this.tz());
+    if (this.state.retention?.day === day) return null;
+    for (const a of retiring(this.state, day)) this.sql.exec('INSERT OR REPLACE INTO archive (kind, key, date, row) VALUES (?, ?, ?, ?)', a.kind, a.key, a.date, JSON.stringify(a.row));
+    this.sql.exec('DELETE FROM archive WHERE date < ?', addDays(day, -730));
+    const ev = { id: ulid(), store: this.storeNo, area: 'store', type: 'store.retain', entity: {}, payload: { day }, at: storeIso(now, this.tz()), v: 1 };
+    const [r] = this.submit([ev], { store: this.storeNo, roles: ['manager'], caps: [], device: 'system', owner: false }, { internal: true });
+    return r;
+  }
+  archived(kind) { return this.sql.exec('SELECT row FROM archive WHERE kind = ? ORDER BY date DESC, key', kind).toArray().map(r => JSON.parse(r.row)); }
 
   // ── issue photos ──────────────────────────────────────────────────────
   // The bytes live in R2 under <store>/<id>.jpg; the issue.photo event
