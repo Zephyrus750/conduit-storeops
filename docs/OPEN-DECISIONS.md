@@ -59,6 +59,16 @@ differs from the default.
 | 26 | Heat with no shelves assigned | A department with no Label-integrity shelves spreads over its whole sub-department; legacy painted nothing for it | `js/views/inventory.js` `paintMap` | Inventory › a load › Whole load heat, before and after assigning shelves |
 | 27 | The map scale | Shelf sizes and pick-list metres show only when the editor's Set Scale is saved (`metresPerUnit`); no shipped map has one, and nothing is guessed | `js/map.js` `shelfDetail` | Set the scale, republish, open a shelf card |
 
+## From the October audit (added 2026-10-08)
+
+| # | Decision | What Conduit does today | Suggested | Where |
+|---|---|---|---|---|
+| 28 | Voice search and pick-list dictation (ShelfSearcher had both) | Removed; no decision was recorded | Drop for now; the floor scans | `js/search.js`, `js/views/picklist.js` |
+| 29 | How long closed trucks, backfill bays and inventory loads stay in the live state | Forever, which will hit the 2 MB snapshot row (audit 1.1) | Full detail 14 days, summary rows 60 days, older on the worker only | `worker/store.js` snapshot, the reducers |
+| 30 | Finalise with pallets left | Always held for the next truck | Offer hold or clear the dock, as DV did | `js/views/backdock/receiving.js` |
+| 31 | Whose clock times dock work | Each device's (up to 10 minutes ahead accepted) | Stamp on the worker | `worker/store.js`, `shared/reducers/backdock.js` |
+| 32 | Label integrity on the phone | A selected micro-department makes map taps assign shelves store-wide | Phone checks only; assigning stays on the desk | `js/views/labelint.js` |
+
 ## The test pass on a real PC (1920×1080 first)
 
 Use store 1241 Busselton with the real map. Things only a real desk, real

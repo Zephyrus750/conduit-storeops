@@ -10,6 +10,8 @@ background. The audit
 The decisions these wait on are in `docs/OPEN-DECISIONS.md` (numbers in
 brackets below).
 
+**October audit (`docs/AUDIT-2026-10.md`):** its §1 fixes (data safety) and §8 order come before the list below. Notably, the print composer, the evacuation map print and maintenance work orders are still to build (§2).
+
 ## Next to build, in the suggested order
 
 1. **Make switching an area off as live as switching a tool off.** Turning
