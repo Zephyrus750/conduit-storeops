@@ -64,7 +64,7 @@ differs from the default.
 | # | Decision | What Conduit does today | Suggested | Where |
 |---|---|---|---|---|
 | 28 | Voice search and pick-list dictation (ShelfSearcher had both) | Removed; no decision was recorded | Drop for now; the floor scans | `js/search.js`, `js/views/picklist.js` |
-| 29 | How long closed trucks, backfill bays and inventory loads stay in the live state | Forever, which will hit the 2 MB snapshot row (audit 1.1) | Full detail 14 days, summary rows 60 days, older on the worker only | `worker/store.js` snapshot, the reducers |
+| 29 | How long closed trucks, backfill bays and inventory loads stay in the live state | The suggestion, applied as the default (nightly `store.retain`); History reads the worker's archive for older rows | Full detail 14 days, summary rows 60 days, older on the worker only | `shared/retain.js` (`KEEP_DETAIL_DAYS`, `KEEP_DAYS`) |
 | 30 | Finalise with pallets left | Always held for the next truck | Offer hold or clear the dock, as DV did | `js/views/backdock/receiving.js` |
 | 31 | Whose clock times dock work | Each device's (up to 10 minutes ahead accepted) | Stamp on the worker | `worker/store.js`, `shared/reducers/backdock.js` |
 | 32 | Label integrity on the phone | A selected micro-department makes map taps assign shelves store-wide | Phone checks only; assigning stays on the desk | `js/views/labelint.js` |
