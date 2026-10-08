@@ -3,6 +3,8 @@ import { ic, esc, mhead, mtile, fmtDate } from '../../ui.js';
 import { todayKey } from './common.js';
 export default {
   id: 'srhome', title: 'Stockroom', icon: 'box', area: 'stockroom',
+  // Phone only: wider screens open the desk (the shell follows desktopView).
+  desktopView: 'bfreview',
   desktop() { return ''; },
   mobile(ctx) {
     const date = todayKey(), bf = ctx.store.get('backfill');

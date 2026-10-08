@@ -7,12 +7,19 @@
 // /export/receiving route gives the CSV.
 
 import { ic, esc, vh, sub, toast, dep, mhead, mrows, fmtDate } from '../../ui.js';
-import { HALT_NAME, truckNo, fmtHM, microDept } from './common.js';
+import { HALT_NAME, holdName, truckNo, fmtHM, microDept, todayKey, manifestIndex, attachManifest } from './common.js';
+import { printAudit } from './audit.js';
+import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
+import { ratesFor } from './plan.js';
+import { layout } from './wallboard.js';
 
-const st = { open: null, q: '' };
+const st = { open: null, q: '', late: null };
 const WINDOW_DAYS = 21;
 const hm = m => { m = Math.max(0, Math.round(m || 0)); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; };
 const HALT_COLOUR = { hcage: '#7C3AED', nostock: '#DC2626', equip: '#2563EB', safety: '#F59E0B', waiting: '#0891B2', other: '#64748B' };
+// Planned pauses stop the clock too but are not downtime: shown apart.
+const PLANNED = [['huddleMins', 'Huddles', '#93C5FD'], ['teamBreakMins', 'Team breaks', '#C4B5FD']];
+const downColour = h => h.kind === 'transition' ? '#0EA5E9' : HALT_COLOUR[h.reason] || '#64748B';
 const dchip = d => { const dd = microDept(d) || String(d || '').toLowerCase(); return dd ? dep(dd) : '<span class="dep" style="background:#64748B">?</span>'; };
 const avg = (rows, f) => rows.length ? rows.reduce((n, r) => n + (f(r) || 0), 0) / rows.length : 0;
 
@@ -26,23 +33,26 @@ function model(ctx) {
   return { all, rows, win, open };
 }
 
-function detail(r, win) {
-  const active = Math.max(0, r.clearMins - r.haltMins), total = Math.max(1, r.clearMins);
+function detail(r, win, truck) {
+  const stopped = (r.downtime || []).reduce((n, h) => n + h.mins, 0) + PLANNED.reduce((n, [k]) => n + (r[k] || 0), 0);
+  const active = Math.max(0, r.clearMins - stopped), total = Math.max(1, r.clearMins);
   const audit = r.audit, pct = audit && audit.total ? Math.round(audit.matched / audit.total * 100) : null;
   const cmp = (v, a, fmt, better) => { if (!win.length || !a) return ''; const d = v - a; if (!d) return '<i class="cs-dim">on average</i>'; const good = better === 'low' ? d < 0 : d > 0; return `<i class="${good ? 'c-green' : 'c-red'}">${d > 0 ? '+' : '−'}${fmt(Math.abs(d))}</i>`; };
   const halts = (r.downtime || []).slice().sort((a, b) => b.mins - a.mins);
-  return `<div class="card"><div class="ch">${ic('truck')}<h3>${esc(fmtDate(r.date))} · Truck ${esc(truckNo(r.id))}</h3><span class="status good" style="margin-left:auto">decanted</span></div>` +
-    `<div class="facts6"><div class="f6"><b>${r.cartons}</b><span>cartons decanted</span></div><div class="f6"><b>${r.pallets}<small> / ${r.palletsLanded}</small></b><span>pallets done of landed</span></div><div class="f6"><b>${hm(r.clearMins)}</b><span>landed to cleared</span></div><div class="f6"><b>${r.teamRate}</b><span>ctn/hr team rate</span></div><div class="f6"><b>${r.manifest?.dcNo ? 'DC ' + esc(r.manifest.dcNo) : '—'}</b><span>${r.manifest?.despatch ? 'despatched ' + esc(r.manifest.despatch) : 'no manifest attached'}</span></div><div class="f6"><b>${fmtHM(r.landedAt)}</b><span>landed · cleared ${fmtHM(r.clearedAt)}</span></div></div>` +
+  return `<div class="card"><div class="ch">${ic('truck')}<h3>${esc(fmtDate(r.date))} · Truck ${esc(truckNo(r.id))}</h3><span class="status good" style="margin-left:auto">decanted</span>${truck ? `<button class="btn sm" data-act="audit">${ic('print')}Audit</button>` : ''}</div>` +
+    `<div class="facts6"><div class="f6"><b>${r.cartons}</b><span>cartons decanted</span></div><div class="f6"><b>${r.pallets}<small> / ${r.palletsLanded}</small></b><span>pallets done of landed</span></div><div class="f6"><b>${hm(r.clearMins)}</b><span>${r.decantStartAt ? 'decant start' : 'landed'} to the last pallet</span></div><div class="f6"><b>${r.teamRate}</b><span>ctn/hr team rate</span></div><div class="f6"><b>${r.manifest?.dcNo ? 'DC ' + esc(r.manifest.dcNo) : r.manifest ? esc(r.manifest.manNo) : '—'}</b><span>${r.manifest?.despatch ? 'despatched ' + esc(r.manifest.despatch) : r.manifest ? 'manifest · no DC details' : 'no manifest attached'}</span></div><div class="f6"><b>${fmtHM(r.landedAt)}</b><span>landed · cleared ${fmtHM(r.clearedAt)}</span></div></div>` +
     `<div class="k rh-k">Where the time went · ${hm(r.clearMins)}</div>` +
-    `<div class="tl"><i style="width:${Math.round(active / total * 100)}%;background:#16A34A" title="Active decanting ${hm(active)}"></i>${halts.map(h => `<i style="width:${Math.round(h.mins / total * 100)}%;background:${HALT_COLOUR[h.reason] || '#64748B'}" title="${esc(HALT_NAME[h.reason] || h.reason)} ${hm(h.mins)}"></i>`).join('')}</div>` +
-    `<div class="tlk"><span><i style="background:#16A34A"></i>Active decanting <b>${hm(active)}</b></span>${halts.map(h => `<span><i style="background:${HALT_COLOUR[h.reason] || '#64748B'}"></i>${esc(HALT_NAME[h.reason] || h.reason)} (${h.count}) <b>${hm(h.mins)}</b></span>`).join('')}${!halts.length ? '<span class="cs-dim">No halts</span>' : ''}</div>` +
-    (r.carriedIn ? `<div class="chips" style="margin-top:8px"><span class="chip">Carried in · ${r.carriedIn.pallets} pallet${r.carriedIn.pallets === 1 ? '' : 's'} · ${r.carriedIn.cartons} ctn</span></div>` : '') +
+    `<div class="tl"><i style="width:${Math.round(active / total * 100)}%;background:#16A34A" title="Active decanting ${hm(active)}"></i>${halts.map(h => `<i style="width:${Math.round(h.mins / total * 100)}%;background:${downColour(h)}" title="${esc(holdName(h))} ${hm(h.mins)}"></i>`).join('')}${PLANNED.filter(([k]) => r[k]).map(([k, l, c]) => `<i style="width:${Math.round(r[k] / total * 100)}%;background:${c}" title="${l} ${hm(r[k])}"></i>`).join('')}</div>` +
+    `<div class="tlk"><span><i style="background:#16A34A"></i>Active decanting <b>${hm(active)}</b></span>${halts.map(h => `<span><i style="background:${downColour(h)}"></i>${esc(holdName(h))} (${h.count}) <b>${hm(h.mins)}</b></span>`).join('')}${!halts.length ? '<span class="cs-dim">No downtime</span>' : ''}</div>` +
+    (PLANNED.some(([k]) => r[k]) || r.breakMins ? `<div class="tlk rh-planned"><span class="cs-dim">Planned pauses, not downtime:</span>${PLANNED.filter(([k]) => r[k]).map(([k, l, c]) => `<span><i style="background:${c}"></i>${l} <b>${hm(r[k])}</b></span>`).join('')}${r.breakMins ? `<span>Personal breaks <b>${hm(r.breakMins)}</b></span>` : ''}</div>` : '') +
+    (r.suspect ? `<div class="chips" style="margin-top:8px"><span class="chip warn">${r.suspect} pallet${r.suspect === 1 ? '' : 's'} done too fast for ${r.suspect === 1 ? 'its' : 'their'} size: not credited</span></div>` : '') +
+    (r.carriedIn || r.carriedOut ? `<div class="chips" style="margin-top:8px">${r.carriedIn ? `<span class="chip">Carried in${r.carriedIn.from ? ` from T${esc(truckNo(r.carriedIn.from))}` : ''} · ${r.carriedIn.pallets} pallet${r.carriedIn.pallets === 1 ? '' : 's'} · ${r.carriedIn.cartons} ctn</span>` : ''}${r.carriedOut ? `<span class="chip">Carried out${r.carriedOut.to ? ` to T${esc(truckNo(r.carriedOut.to))}` : ' · held for the next truck'} · ${r.carriedOut.pallets} pallet${r.carriedOut.pallets === 1 ? '' : 's'} · ${r.carriedOut.cartons} ctn</span>` : ''}</div>` : '') +
     `<div class="cmp"><span class="cmp-t">Against the ${WINDOW_DAYS}-day window · ${win.length} truck${win.length === 1 ? '' : 's'}</span><span>Clear time <b>${hm(r.clearMins)}</b> vs avg ${hm(avg(win, x => x.clearMins))} ${cmp(r.clearMins, avg(win, x => x.clearMins), hm, 'low')}</span><span>Team rate <b>${r.teamRate}</b> vs avg ${Math.round(avg(win, x => x.teamRate))} ${cmp(r.teamRate, avg(win, x => x.teamRate), v => Math.round(v) + ' ctn/hr', 'high')}</span><span>Halts <b>${r.haltCount}</b> vs avg ${avg(win, x => x.haltCount).toFixed(1)}</span><span>Cartons <b>${r.cartons}</b> vs avg ${Math.round(avg(win, x => x.cartons))}${win.length > 1 && r.cartons >= Math.max(...win.map(x => x.cartons)) ? ' <i class="c-green">largest truck</i>' : ''}</span></div></div>` +
     `<div class="rh2"><div class="card"><div class="ch">${ic('packages')}<h3>Manifest reconciliation</h3></div>` +
     (audit ? `<div class="facts6" style="grid-template-columns:repeat(2,1fr)"><div class="f6"><b class="c-green">${audit.matched}</b><span>consols matched</span></div><div class="f6"><b class="${audit.missing ? 'c-red' : ''}">${audit.missing}</b><span>missing from the dock</span></div><div class="f6"><b>${audit.total}</b><span>on manifest ${esc(r.manifest.manNo)}</span></div><div class="f6"><b class="${audit.extra ? 'c-amber' : ''}">${audit.extra}</b><span>off-manifest · held for review</span></div></div><div class="prog"><div class="track"><i style="width:${pct}%;background:#16A34A"></i></div><b>${pct}%</b></div>` +
       `<div class="audit">${(audit.missingIds || []).map(m => `<div class="au-row miss"><span class="au-tag">Missing</span><span class="au-id">${esc(m.id)}</span>${dchip(m.dept)}<span class="cs-dim">${m.cartons} ctn · never landed · raise with DC</span></div>`).join('')}${(audit.extraIds || []).map(x => `<div class="au-row held"><span class="au-tag">Off-manifest</span><span class="au-id">${esc(x.id)}</span><span class="cs-dim">landed ${esc(x.bay)} · not on ${esc(r.manifest.manNo)} · held</span></div>`).join('')}${!audit.missing && !audit.extra ? '<div class="cs-dim" style="padding:8px 2px">Every consolidation on the manifest landed and nothing else did.</div>' : ''}</div>` +
       `<div class="acts2" style="display:flex;gap:8px;margin-top:10px"><button class="btn sm" data-view="manifests">${ic('packages')}Open manifest</button></div>` : '<p class="lbl">No manifest was attached to this truck, so there is nothing to reconcile. Attach the DC report at Receiving next time and the dock verifies every pallet as it lands.</p>') + '</div>' +
-    `<div class="card"><div class="ch">${ic('users')}<h3>Crew credit</h3></div>${r.perPerson?.length ? `<table class="rhtab"><tr><th>Device</th><th class="n">Cartons</th><th class="n">Pallets</th><th class="n">Rate</th></tr>${r.perPerson.slice().sort((a, b) => b.cartons - a.cartons).map(c => `<tr><td>${esc(c.pid)}<small class="cs-dim rh-sm">${esc((c.bays || []).join(' '))}</small></td><td class="n">${c.cartons}</td><td class="n">${c.pallets}</td><td class="n">${c.rate} ctn/hr<small class="cs-dim rh-sm">${hm(c.mins)} on pallets</small></td></tr>`).join('')}</table>` : '<p class="lbl">No pallet was started on a device, so there is no credit to give.</p>'}<p class="lbl" style="margin-top:8px">Devices, never people, in the archive. Pallets shared between devices split their cartons evenly.</p></div></div>` +
+    `<div class="card"><div class="ch">${ic('users')}<h3>Crew credit</h3></div>${r.perPerson?.length ? `<table class="rhtab"><tr><th>D-number</th><th class="n">Cartons</th><th class="n">Pallets</th><th class="n">Rate</th><th class="n">vs est</th></tr>${r.perPerson.slice().sort((a, b) => b.cartons - a.cartons).map(c => `<tr><td>${esc(c.pid)}<small class="cs-dim rh-sm">${esc((c.bays || []).join(' '))}</small></td><td class="n">${c.cartons}</td><td class="n">${c.pallets}</td><td class="n">${c.rate} ctn/hr<small class="cs-dim rh-sm">${hm(c.mins)} on pallets</small></td><td class="n">${c.deltaPct == null ? '—' : `<span class="${c.deltaPct > 15 ? 'c-red' : c.deltaPct < -15 ? 'c-green' : ''}">${c.deltaPct > 0 ? '+' : ''}${c.deltaPct}%</span>`}</td></tr>`).join('')}</table>` : '<p class="lbl">No pallet was started on a device, so there is no credit to give.</p>'}<p class="lbl" style="margin-top:8px">D-numbers, never names, in the archive. A shared pallet's cartons are split by time worked; a pallet done too fast for its size credits nobody.</p></div></div>` +
     (r.byDept?.length ? `<div class="card"><div class="ch">${ic('layers')}<h3>By department</h3><span class="cs-dim">from the manifest</span></div><table class="rhtab"><tr><th>Department</th><th class="n">Cartons</th><th class="n">Pallets</th></tr>${r.byDept.map(d => `<tr><td>${dchip(d.dept)} ${esc(d.dept)}</td><td class="n">${d.cartons}</td><td class="n">${d.pallets}</td></tr>`).join('')}</table></div>` : '');
 }
 
@@ -57,7 +67,7 @@ export default {
     return head + `<div class="rh"><div class="card rhlist"><div class="ch"><h3>Decanted trucks</h3><div class="search rh-find">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="Truck day, manifest or DC…" aria-label="Find a truck"></div></div>` +
       (list ? `<div class="list">${list}</div>${m.rows.length > 60 ? `<div class="cs-dim" style="padding:8px 0">Showing 60 of ${m.rows.length}</div>` : ''}` : `<div class="ohint">${m.all.length ? 'Nothing matches.' : 'No truck has been finalised yet. Finalise a truck at Receiving and its record lands here.'}</div>`) +
       (rates.length > 1 ? `<div class="k rh-k">Team rate · cartons per hour</div><div class="rhbars">${rates.map((r, i) => `<div class="${i === rates.length - 1 ? 'hi' : ''}" style="height:${Math.max(4, Math.round(r.teamRate / max * 100))}%" title="${esc(fmtDate(r.date))} Truck ${esc(truckNo(r.id))}"><span>${r.teamRate}</span></div>`).join('')}</div><div class="lbl" style="margin-top:20px">Oldest → newest across the ${WINDOW_DAYS}-day window.</div>` : '') + '</div>' +
-      `<div class="sidecol">${o ? detail(o, m.win) : `<div class="card"><div class="ch"><h3>Pick a truck</h3></div><p class="lbl">Open one from the list to see where its time went, the manifest reconciliation and the crew credit.</p></div>`}</div></div>`;
+      `<div class="sidecol">${o ? lateBar(ctx, o) + detail(o, m.win, ctx.store.get('dock').trucks?.[o.id]) + pastLayout(ctx, o) : `<div class="card"><div class="ch"><h3>Pick a truck</h3></div><p class="lbl">Open one from the list to see where its time went, the manifest reconciliation and the crew credit.</p></div>`}</div></div>`;
   },
   mobile(ctx) {
     const m = model(ctx), recent = m.all.slice(0, 8);
@@ -67,6 +77,15 @@ export default {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'open') { st.open = a.dataset.id; ctx.rerender(); }
+      else if (a.dataset.act === 'audit') { const o = model(ctx).open, dock = ctx.store.get('dock'), t = o && dock.trucks?.[o.id]; if (t) printAudit({ id: o.id, ...t }, dock); }
+      else if (a.dataset.act === 'late-attach') { st.late = st.late === 'attach' ? null : 'attach'; ctx.rerender(); }
+      else if (a.dataset.act === 'late-link' || a.dataset.act === 'll-close') { st.late = a.dataset.act === 'll-close' ? null : 'link'; ctx.rerender(); }
+      else if (a.dataset.act === 'late-man') { try { await attachManifest(ctx, a.dataset.truck, a.dataset.man); toast(`${a.dataset.man} attached to Truck ${truckNo(a.dataset.truck)} · history rebuilt`); st.late = 'link'; } catch (err) { toast(err.message, 'bad'); } }
+      else if (a.dataset.act === 'll-apply') { const o = model(ctx).open, dock = ctx.store.get('dock'), t = dock.trucks?.[o.id]; try { await applyLinks(ctx, { id: o.id, ...t }, ratesFor(dock)); st.late = null; } catch (err) { toast(err.message, 'bad'); } }
+      else if (a.dataset.act === 'reopen') {
+        const id = a.dataset.id; if (!confirm(`Reopen Truck ${truckNo(id)}? It goes back to live and its history row + rate credit are removed until it's closed again.`)) return;
+        try { await ctx.store.dispatch({ type: 'truck.reopen', entity: { truck: id } }); toast(`Truck ${truckNo(id)} is live again`); st.open = null; ctx.go('receiving'); } catch (err) { toast(err.message, 'bad'); }
+      }
       else if (a.dataset.act === 'export') {
         a.disabled = true;
         try { const text = await ctx.api(`/v1/store/${ctx.storeNo}/export/receiving`, { text: true }); const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); const l = document.createElement('a'); l.href = url; l.download = `receiving-${ctx.storeNo}.csv`; l.click(); setTimeout(() => URL.revokeObjectURL(url), 5000); toast('CSV downloaded'); }
@@ -74,7 +93,32 @@ export default {
         a.disabled = false;
       }
     });
+    root.addEventListener('change', e => { if (e.target.dataset.ll != null) linkPick(e.target.dataset.ll, e.target.value); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="q"]')) { st.q = e.target.value; const v = e.target.value; ctx.rerender(); setTimeout(() => { const i = root.querySelector('[data-field="q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 0); } });
     return [ctx.store.on('dock', () => ctx.rerender())];
   },
 };
+
+// A late manifest on a truck finalised today: a manager can still attach
+// the DC report and link the pallets that landed without one (DV's review
+// chips); the history row is rebuilt with the reconciliation.
+function lateBar(ctx, r) {
+  const dock = ctx.store.get('dock'), t = dock.trucks?.[r.id], manager = (ctx.session.current?.roles || []).includes('manager') || ctx.session.current?.owner;
+  if (!t || r.date !== todayKey() || !manager) return '';
+  const tt = { id: r.id, ...t }, n = t.manifest ? unlinked(tt).length : 0;
+  if (!t.manifest || n || st.late) {
+    const chips = `<div class="card late-bar"><div class="ch"><h3>Late manifest</h3><span class="cs-dim">same day · manager</span></div><div class="acts2" style="display:flex;gap:8px;flex-wrap:wrap">${!t.manifest ? `<button class="btn sm primary" data-act="late-attach">Attach manifest</button>` : ''}${t.manifest && n ? `<button class="btn sm primary" data-act="late-link">Link ${n} pallet${n === 1 ? '' : 's'}</button>` : ''}</div></div>`;
+    const pick = st.late === 'attach' ? `<div class="card"><div class="ch"><h3>Pick the manifest for Truck ${esc(truckNo(r.id))}</h3></div><div class="list">${manifestIndex(dock).filter(x => !x.truck).map(x => `<div class="li"><span class="loc">${esc(x.manNo)}</span><span class="nm">${x.consols} consols · ${x.totalCartons} cartons${x.despatch ? ' · despatch ' + esc(x.despatch) : ''}</span><button class="btn sm primary" data-act="late-man" data-man="${esc(x.manNo)}" data-truck="${esc(r.id)}">Attach</button></div>`).join('') || '<p class="lbl">No unattached manifest in the library. Publish today’s report from Manifests first.</p>'}</div></div>` : '';
+    return chips + pick + (st.late === 'link' && t.manifest ? linkSheet(tt, ratesFor(dock)) : '');
+  }
+  return '';
+}
+
+// The dock as this truck left it (kept while the truck is on record), and
+// for a manager the way back: reopen it.
+function pastLayout(ctx, r) {
+  const dock = ctx.store.get('dock'), t = dock.trucks?.[r.id], manager = (ctx.session.current?.roles || []).includes('manager') || ctx.session.current?.owner;
+  if (!t) return '';
+  const blocked = Object.keys(dock.trucks).some(k => k !== r.id && dock.trucks[k].status !== 'closed');
+  return layout({ id: r.id, ...t }) + (manager ? `<div class="card"><div class="ch"><h3>Reopen</h3></div><p class="lbl">${blocked ? 'Another truck is on the dock: finalise it first, then this one can be reopened.' : 'Back to live to fix a missed pallet or time. The history row and its rate credit come off until it is finalised again.'}</p><button class="btn sm" data-act="reopen" data-id="${esc(r.id)}"${blocked ? ' disabled' : ''}>${ic('refresh')}Reopen Truck ${esc(truckNo(r.id))}</button></div>` : '');
+}

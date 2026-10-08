@@ -48,19 +48,131 @@ export function reviewRows(sub, system) {
   rows.sort((a, b) => (order[a.status] - order[b.status]) || (a.code < b.code ? -1 : 1));
   return rows;
 }
+// Accuracy, ported from K2B's review (app.js ~8095): a code the reviewer
+// marked incorrect drops out of whichever side it is extra on, then
+// accuracy = matches / the larger of (real scanned, real system), so both
+// over- and under-scanning pull it down. The desk, the reducer and imported
+// K2B history all use this one formula.
+export function backfillMetrics(scanned, system, incorrect) {
+  const sc = new Set(scanned), sy = new Set(system), bad = new Set(incorrect || []);
+  let match = 0, badScanned = 0, badSystem = 0;
+  for (const c of sc) { if (sy.has(c)) match += 1; else if (bad.has(c)) badScanned += 1; }
+  for (const c of sy) if (!sc.has(c) && bad.has(c)) badSystem += 1;
+  const realScanned = Math.max(0, sc.size - badScanned), realSystem = Math.max(0, sy.size - badSystem);
+  const denom = Math.max(realScanned, realSystem);
+  return { expected: realSystem, scanned: realScanned, match, accuracy: denom ? Math.round(match / denom * 100) : 0, incorrect: badScanned + badSystem };
+}
+export const scannedCodes = sub => Object.entries(sub?.codes || {}).filter(([, c]) => c.scanned).map(([code]) => code);
+
 export function compareCounts(sub, system) {
   const c = { match: 0, add: 0, delete: 0, scanned: 0, incorrect: 0 };
   for (const r of reviewRows(sub, system)) { c[r.status] += 1; if (r.incorrect) c.incorrect += 1; }
-  const expected = system ? system.length : c.scanned;
-  const scannedN = c.match + c.add + c.scanned;
-  c.pct = !system ? null : expected ? Math.round(Math.max(0, c.match - c.incorrect) / expected * 100) : 100;
-  c.expected = expected; c.scannedCount = scannedN;
+  if (!system) { c.pct = null; c.expected = c.scanned; c.scannedCount = c.scanned; return c; }
+  const m = backfillMetrics(scannedCodes(sub), system, sub?.incorrect);
+  c.pct = m.accuracy; c.expected = m.expected; c.scannedCount = m.scanned; c.incorrect = m.incorrect;
   return c;
 }
-// What "Ready" writes so the worker's metrics match the desk's compare:
-// every system code the phone did not scan is merged as scanned:false.
+// What "Ready" writes: every system code the phone did not scan is merged as
+// scanned:false (History shows it as "system only"), and the ready event
+// carries the report's list so the reducer computes the desk's metrics.
 export function readyPayload(sub, system) {
   const codes = {};
   for (const code of system || []) if (!sub.codes[code]) codes[code] = false;
   return { codes, incorrect: sub.incorrect || [] };
+}
+
+// End-of-day rollover, ported from K2B's runRollover (worker:1586-1690): a
+// bay still pending or ready on an earlier store day is submitted as
+// "auto" so it reaches History instead of dropping off the board. Requested
+// bays that were never scanned stay on their day's requested list, which is
+// the "requested, not verified" record (the K2B importer lands them the same
+// way). Returns the entities to submit, oldest first.
+export function rolloverDue(backfill, today) {
+  return Object.values(backfill?.subs || {})
+    .filter(s => s.date < today && (s.status === 'pending' || s.status === 'corrected'))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.bay.localeCompare(b.bay))
+    .map(s => ({ bay: s.bay, date: s.date }));
+}
+
+// ── Desk paste and freshness (ported from K2B's parseKeycodeText and
+// parseReqInput, and Vector's review: freshBand, the range chip, the gap
+// note). ──────────────────────────────────────────────────────────────────
+
+// A pasted inventory list for one bay. Line mode: each digit line of 6–9
+// digits is a code (Kmart's newer keycodes run to 9 digits; 13-digit item
+// barcodes stay out); lines with two or more letters are report furniture.
+// When fewer than 60% of the digit lines read that way, the paste is a
+// glued blob: runs of 8+ digits cut into 8-digit codes, anything that does
+// not fit an 8-digit boundary reported as a leftover.
+//   → { codes, leftovers, duplicates, mode: 'lines' | 'glued' }
+export function parseKeycodeText(raw) {
+  const lines = String(raw || '').split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+  const lineCodes = []; let total = 0;
+  for (const l of lines) {
+    if (!/\d/.test(l) || (l.match(/[A-Za-z]/g) || []).length >= 2) continue;
+    total += 1;
+    const d = l.replace(/\D/g, '');
+    if (d.length >= 6 && d.length <= 9) lineCodes.push(d);
+  }
+  let codes = [], leftovers = [], mode = 'lines';
+  if (total > 0 && lineCodes.length >= Math.ceil(total * 0.6)) codes = lineCodes;
+  else {
+    mode = 'glued';
+    for (const run of String(raw || '').split(/\D+/)) {
+      if (!run || run.length < 8) continue;
+      for (let i = 0; i + 8 <= run.length; i += 8) codes.push(run.slice(i, i + 8));
+      if (run.length % 8) leftovers.push(run.slice(-(run.length % 8)));
+    }
+  }
+  const unique = [...new Set(codes)];
+  return { codes: unique, leftovers, duplicates: codes.length - unique.length, mode };
+}
+
+// A pasted requested list: bays separated by spaces, commas, semicolons or
+// lines; each needs a digit; at most 100.
+export function parseRequested(text) {
+  const seen = new Set(), out = [];
+  for (const t of String(text || '').toUpperCase().split(/[\s,;]+/)) {
+    const b = t.replace(/[^A-Z0-9\-_.]/g, '').slice(0, 40);
+    if (b && /\d/.test(b) && !seen.has(b)) { seen.add(b); out.push(b); }
+    if (out.length >= 100) break;
+  }
+  return out;
+}
+
+// The range a whole-report paste covers: a "7001 – 7090" in its first eight
+// lines, else the lowest to highest location parsed.
+export function reportRange(text, byLoc) {
+  const head = String(text || '').split(/\r?\n/).slice(0, 8).join('\n');
+  const m = /\b(\d{3,5})\s*[–\-/]\s*(\d{3,5})\b/.exec(head);
+  const locs = Object.keys(byLoc || {});
+  if (m) return { from: m[1], to: m[2], n: locs.length };
+  const nums = locs.filter(l => /^\d+$/.test(l)).map(Number).sort((a, b) => a - b);
+  return nums.length ? { from: String(nums[0]), to: String(nums[nums.length - 1]), n: locs.length } : null;
+}
+
+// How fresh a report is: green under 10 minutes, amber under 30, red after.
+export const freshBand = mins => mins < 10 ? 'g' : mins < 30 ? 'a' : 'r';
+export const freshLabel = mins => mins < 1 ? 'just now' : `${Math.round(mins)}m ago`;
+
+// The gap between the report and a bay's scans: a bay scanned 3+ minutes
+// after the report, or a report 30+ minutes old, should be re-pasted.
+//   → { ageMin, afterBy, warn } (minutes; afterBy < 0 when scanned before)
+export function reportGap(reportAt, bayUpdatedAt, now = Date.now()) {
+  const ageMin = (now - reportAt) / 60000, afterBy = bayUpdatedAt ? (Date.parse(bayUpdatedAt) - reportAt) / 60000 : -Infinity;
+  return { ageMin, afterBy, warn: afterBy >= 3 || ageMin >= 30 };
+}
+
+// What changed for each bay between two report pastes (new to K2B and
+// Vector, which overwrote the old list): codes now in the report that were
+// not, and codes that left it. Only bays in both pastes are compared.
+export function pasteDelta(prevByLoc, nextByLoc) {
+  const out = {};
+  for (const [loc, list] of Object.entries(nextByLoc || {})) {
+    const prev = prevByLoc?.[loc]; if (!prev) continue;
+    const a = new Set(prev), b = new Set(list);
+    const added = list.filter(c => !a.has(c)), removed = prev.filter(c => !b.has(c));
+    if (added.length || removed.length) out[loc] = { added, removed };
+  }
+  return out;
 }

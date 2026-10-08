@@ -12,6 +12,7 @@
 // right. Rows aggregate per consolidation: distinct cartons plus contents.
 
 const cs = v => String(v ?? '').trim();
+export const ITEM_CAP = 250, CONSOL_CAP = 500;     // lines kept per consolidation; consolidations the worker takes
 
 export function parseManifestSheets(sheets) {
   const report = parseReport(sheets);
@@ -44,16 +45,23 @@ function parseReport(sheets) {
     // A numeric cell cannot be a trustworthy consolidation number: Excel
     // stores it as a float, so the last 9 digits are already wrong.
     const consStr = x => (typeof x === 'number' ? '' : cs(x));
-    const agg = {};
+    const agg = {}, skipped = { numericCons: 0, badKeycode: 0, other: 0 }; let read = 0;
     for (let i = hdr + 1; i < rows.length; i++) {
       const v = rows[i] || [];
       const c0 = consStr(v[0]), c1 = consStr(v[1]);
       let cons, carton;
       if (/^\d{18,22}$/.test(c0)) { cons = c0; carton = /^\d{18,22}$/.test(c1) ? c1 : ''; }
       else if (!c0 && /^\d{18,22}$/.test(c1)) { cons = c1; carton = ''; }   // full-pallet line
-      else continue;
+      else {
+        // What did not read: a rounded (numeric) consolidation, or a row that
+        // looks like data but fits no layout. Headers and totals are not counted.
+        if (typeof v[0] === 'number' && v[0] > 1e15 || typeof v[1] === 'number' && v[1] > 1e15) skipped.numericCons++;
+        else if (v.some(x => /\d{12,}/.test(cs(x)))) skipped.other++;
+        continue;
+      }
       const off = 2, key = cs(v[off]);
-      if (!/^\d{6,10}$/.test(key)) continue;
+      if (!/^\d{6,10}$/.test(key)) { skipped.badKeycode++; continue; }
+      read++;
       let dept = cs(v[off + 2]).replace(/\D/g, ''); if (dept && dept.length < 3) dept = ('00' + dept).slice(-3);
       const q = parseInt(cs(v[off + 3]), 10) || 1;
       const id = cons.slice(-9);
@@ -74,10 +82,11 @@ function parseReport(sheets) {
       const mix = [...new Set([...Object.keys(mixC), ...Object.keys(a.deptU)])].map(d => [d, mixC[d] || 0, a.deptU[d] || 0]).sort((x, y) => y[1] - x[1] || y[2] - x[2]).slice(0, 20);
       return {
         id: a.id, cons: a.cons, cartons: a.cartonIds.size + a.loose, dept: mix.slice(0, 3).map(([d]) => d).join('/') || null, mix, desc: null,
-        items: a.order.map(k => { const c = (a.itemC[k]?.size || 0) + (a.itemL[k] || 0); const cc = [...(a.itemC[k] || [])]; return { ...a.items[k], ...(c > 0 ? { c } : {}), ...(cc.length ? { cc } : {}) }; }).slice(0, 250),
+        items: a.order.map(k => { const c = (a.itemC[k]?.size || 0) + (a.itemL[k] || 0); const cc = [...(a.itemC[k] || [])]; return { ...a.items[k], ...(c > 0 ? { c } : {}), ...(cc.length ? { cc } : {}) }; }).slice(0, ITEM_CAP),
+        ...(a.order.length > ITEM_CAP ? { itemsCut: a.order.length - ITEM_CAP } : {}),
       };
     });
-    if (consols.length) return { sheet: name, kind: 'report', manNo, storeNo, despatch, dcNo, consols };
+    if (consols.length) return { sheet: name, kind: 'report', manNo, storeNo, despatch, dcNo, consols, rowsRead: read, skipped };
     if (diag == null) {
       const hc = (rows[hdr] || []).findIndex(c => /consolidation/i.test(cs(c)));
       let numeric = false, longText = false;
@@ -129,10 +138,45 @@ function excelDate(v) { const d = new Date(Math.round((v - 25569) * 86400000)); 
 // ?manifest=put shape: v 1, kind report), from a parse.
 export function manifestDoc(parsed, { filename = '', by = '', manNo } = {}) {
   const no = String(manNo || parsed.manNo || '').trim();
-  const consols = parsed.consols.map(c => ({ id: String(c.id || String(c.cons).slice(-9)), cons: String(c.cons || c.id), cartons: Number(c.cartons) || 0, dept: c.dept || null, mix: c.mix || [], desc: c.desc || null, items: c.items || [] }));
+  const consols = parsed.consols.map(c => ({ id: String(c.id || String(c.cons).slice(-9)), cons: String(c.cons || c.id), cartons: Number(c.cartons) || 0, dept: c.dept || null, mix: c.mix || [], desc: c.desc || null, items: c.items || [] }));   // itemsCut stays on the preview
   return { v: 1, kind: 'report', manNo: no, storeNo: parsed.storeNo || '', despatch: parsed.despatch || '', dcNo: parsed.dcNo || '', filename: String(filename).slice(0, 80), by: String(by).slice(0, 40), sheet: parsed.sheet || null,
     consols, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), keycodes: new Set(consols.flatMap(c => c.items.map(i => i.k))).size };
 }
 // What manifest.attach carries onto the truck: the consols without carton
 // ids or names (the published document keeps those).
 export function attachConsols(doc) { return doc.consols.map(c => ({ id: c.id, cons: c.cons, cartons: c.cartons, dept: c.dept, mix: (c.mix || []).slice(0, 5), items: (c.items || []).map(({ k, q, dept, c: cc }) => ({ k, q, dept, ...(cc ? { c: cc } : {}) })) })); }
+
+// The upload preview's checks: what was read and anything to look at before
+// it is published. Pure, so the preview and tests agree.
+//   ctx: { storeNo, index: dock.manifests, today: 'YYYY-MM-DD', mpc }
+// → { stats, depts: [[dept, cartons]], checks: [{ level: ok | warn | bad, text }], blocking }
+export function manifestCheck(parsed, { storeNo = '', index = {}, today = '', mpc = 0.5 } = {}) {
+  const cons = parsed.consols || [], checks = [], add = (level, text) => checks.push({ level, text });
+  const cartons = cons.reduce((n, c) => n + (Number(c.cartons) || 0), 0), items = cons.flatMap(c => c.items || []);
+  const units = items.reduce((n, i) => n + (Number(i.q) || 0), 0), keycodes = new Set(items.map(i => i.k)).size;
+  const dc = {}; for (const c of cons) for (const [d, ctn] of (c.mix?.length ? c.mix.map(m => [m[0], m[1]]) : [[c.dept || '???', c.cartons]])) dc[d || '???'] = (dc[d || '???'] || 0) + (Number(ctn) || 0);
+  const stats = { consols: cons.length, cartons, keycodes, units, lines: items.length, workMins: Math.round(cartons * mpc), rowsRead: parsed.rowsRead ?? null };
+  // Blocking: what the worker would refuse.
+  const sNo = String(parsed.storeNo || '').replace(/\D/g, '');
+  if (sNo && storeNo && sNo !== String(storeNo)) add('bad', `This report is for store ${parsed.storeNo}, not ${storeNo}. Check you saved the right email attachment.`);
+  if (cons.length > CONSOL_CAP) add('bad', `${cons.length} consolidations: a manifest takes up to ${CONSOL_CAP}. Split the report.`);
+  if (!cons.length) add('bad', 'No consolidations were read.');
+  // Warnings: publishable, but worth a look.
+  const sk = parsed.skipped || {};
+  if (sk.numericCons) add('warn', `${sk.numericCons} row${sk.numericCons === 1 ? ' had its consolidation stored as a number (Excel rounds those) and was' : 's had the consolidation stored as a number (Excel rounds those) and were'} left out. Format the column as Text and re-export to keep them.`);
+  if (sk.badKeycode) add('warn', `${sk.badKeycode} row${sk.badKeycode === 1 ? ' had no readable keycode and was' : 's had no readable keycode and were'} left out.`);
+  if (sk.other) add('warn', `${sk.other} row${sk.other === 1 ? ' looked like data but matched no layout, and was' : 's looked like data but matched no layout, and were'} left out.`);
+  const cut = cons.filter(c => c.itemsCut); if (cut.length) add('warn', `${cut.length} consolidation${cut.length === 1 ? ' has' : 's have'} more than ${ITEM_CAP} lines; the first ${ITEM_CAP} of each are kept.`);
+  const zero = cons.filter(c => !(Number(c.cartons) > 0)); if (zero.length) add('warn', `${zero.length} consolidation${zero.length === 1 ? '' : 's'} with no cartons (${zero.slice(0, 3).map(c => c.id).join(', ')}${zero.length > 3 ? '…' : ''}).`);
+  const ids = {}; for (const c of cons) ids[c.id] = (ids[c.id] || 0) + 1; const twin = Object.keys(ids).filter(k => ids[k] > 1);
+  if (twin.length) add('warn', `${twin.length} pallet label id${twin.length === 1 ? ' is' : 's are'} shared by two consolidations (${twin.slice(0, 3).join(', ')}): a scan of ${twin.length === 1 ? 'it' : 'them'} matches the first.`);
+  const noDept = items.filter(i => !i.dept).length; if (noDept) add('warn', `${noDept} line${noDept === 1 ? '' : 's'} without a department.`);
+  if (parsed.kind === 'generic') add('warn', 'Read as a plain sheet of consolidations and cartons: there are no keycodes, so the explorer’s products and the carton profiles stay empty.');
+  const no = String(parsed.manNo || '').trim();
+  if (!/^[\w-]{1,20}$/.test(no)) add('warn', 'The report has no manifest number: enter one below.');
+  else if (index[no]) add('warn', `Manifest ${no} is already published (${String(index[no].publishedAt || '').slice(0, 10)})${index[no].truck ? ` and attached to Truck ${String(index[no].truck).replace(/^.*-T/, '')}` : ''}: publishing replaces the library copy${index[no].truck ? '; the truck keeps the copy it has' : ''}.`);
+  const dd = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(parsed.despatch || ''), iso = dd ? `${dd[3]}-${dd[2]}-${dd[1]}` : '';
+  if (iso && today) { const days = Math.round((Date.parse(today) - Date.parse(iso)) / 86400000); if (days > 14) add('warn', `Despatched ${parsed.despatch}, ${days} days ago: is this an old report?`); else if (days < -3) add('warn', `Despatch date ${parsed.despatch} is ${-days} days ahead.`); }
+  if (!checks.some(c => c.level !== 'ok')) add('ok', `Every row read${parsed.rowsRead ? ` (${parsed.rowsRead} lines)` : ''}.`);
+  return { stats, depts: Object.entries(dc).sort((a, b) => b[1] - a[1]), checks, blocking: checks.some(c => c.level === 'bad') };
+}

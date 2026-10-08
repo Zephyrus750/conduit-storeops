@@ -21,17 +21,44 @@ export function validateEvent(ev) {
   if ((ev.v ?? 1) !== info.v) return { code: 'invalid_event', message: `${ev.type} is at schema v${info.v}` };
 
   const entity = ev.entity || {};
-  if (typeof entity !== 'object') return bad('entity must be an object');
+  if (typeof entity !== 'object' || Array.isArray(entity)) return bad('entity must be an object');
   for (const k of info.entity) {
     if (entity[k] === undefined || entity[k] === null || entity[k] === '') return bad(`entity.${k} is required`);
   }
+  // Entity values become map keys in the reducers (weeks, bays, trucks,
+  // cycles…): plain short strings or numbers, never a prototype name.
+  for (const [k, v] of Object.entries(entity)) {
+    if (RESERVED.has(k)) return bad(`entity key ${k} is not allowed`);
+    if (typeof v === 'number' ? !Number.isFinite(v) : typeof v !== 'string') return bad(`entity.${k} must be a string or number`);
+    if (String(v).length > ENTITY_MAX) return bad(`entity.${k} is over ${ENTITY_MAX} characters`);
+    if (RESERVED.has(String(v).trim())) return bad(`entity.${k} is not allowed`);
+  }
 
   const payload = ev.payload ?? {};
-  if (typeof payload !== 'object') return bad('payload must be an object');
+  if (typeof payload !== 'object' || Array.isArray(payload)) return bad('payload must be an object');
+  const where = reservedIn(payload, 'payload');
+  if (where) return bad(`${where} is not allowed`);
   for (const [k, t] of Object.entries(info.payload)) {
     const v = payload[k];
     if (v === undefined) return bad(`payload.${k} is required`);
     if (!isType(v, t)) return bad(`payload.${k} must be ${t}`);
+  }
+  return null;
+}
+
+// Names that reach an object's prototype when used as a key. Payload maps
+// (codes, departments…) are keyed by what devices send, so no key or string
+// anywhere in a payload may be one of these.
+const RESERVED = new Set(['__proto__', 'prototype', 'constructor']);
+const ENTITY_MAX = 100;
+function reservedIn(v, path, depth = 0) {
+  if (depth > 12) return `${path} (nested too deep)`;
+  if (typeof v === 'string') return RESERVED.has(v.trim()) ? path : null;
+  if (!v || typeof v !== 'object') return null;
+  for (const k of Object.keys(v)) {
+    if (RESERVED.has(k)) return `${path}.${k}`;
+    const hit = reservedIn(v[k], Array.isArray(v) ? `${path}[${k}]` : `${path}.${k}`, depth + 1);
+    if (hit) return hit;
   }
   return null;
 }

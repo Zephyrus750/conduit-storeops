@@ -42,6 +42,14 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles };
     await save(); return snapshot();
   }
+  // Idle re-lock: back to the store PIN's floor session (the worker revokes
+  // the refresh token that carried the codes).
+  async function lock() {
+    if (!cur || cur.owner || !(cur.roles || []).some(r => r !== 'floor')) return snapshot();
+    const r = await transport.request('/v1/auth/lock', { method: 'POST', body: { refresh: cur.refresh }, token: await token() });
+    cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles };
+    await save(); return snapshot();
+  }
   // Owner acting as a store: a short store-scoped token (manager role, actor
   // 'owner') on top of the owner session, which is kept under `via` so the
   // console can be returned to and so refresh can mint the next act-as token.
@@ -84,9 +92,49 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     if (cur.expires * 1000 - now() < REFRESH_AHEAD_S * 1000) { try { await refresh(); } catch (e) { if (!(e instanceof TransportError && e.network)) return null; } }
     return cur?.token || null;
   }
-  async function signOut() { cur = null; await save(); }
+  // Other stores on this device (switch store without signing out): signing
+  // in to a second store parks the current store's session under
+  // `suite_parked`, and switching swaps them. A parked store keeps only its
+  // PIN session: any crew or manager codes are dropped first (best effort
+  // offline; they expire with the shift either way). Each store keeps its
+  // own snapshot and outbox, so queued changes wait for their store.
+  const parkedAll = async () => (await storage.get('suite_parked')) || {};
+  async function park() {
+    if (!cur || cur.owner) return;
+    if ((cur.roles || []).some(r => r !== 'floor')) { try { await lock(); } catch {} }
+    const p = await parkedAll(); p[cur.store] = cur; await storage.set('suite_parked', p);
+  }
+  async function signInAnother({ store, pin }) {
+    if (cur && !cur.owner && String(store) === cur.store) throw new TransportError(400, 'invalid_request', `already signed in to ${store}`);
+    const r = await transport.request('/v1/auth/signin', { method: 'POST', body: { store: String(store), pin: String(pin), device } });
+    await park();
+    const p = await parkedAll(); delete p[r.store]; await storage.set('suite_parked', p);
+    cur = { token: r.token, refresh: r.refresh, expires: r.expires, store: r.store, name: r.name, roles: r.roles, caps: r.caps, owner: false };
+    await save(); return snapshot();
+  }
+  async function switchTo(storeNo) {
+    const p = await parkedAll(), next = p[String(storeNo)];
+    if (!next) throw new TransportError(404, 'not_found', `store ${storeNo} is not on this device`);
+    delete p[String(storeNo)]; await storage.set('suite_parked', p);
+    await park(); cur = next; await save(); return snapshot();
+  }
+  async function forget(storeNo) {
+    const p = await parkedAll(), s = p[String(storeNo)]; if (!s) return;
+    delete p[String(storeNo)]; await storage.set('suite_parked', p);
+    try { await transport.request('/v1/auth/signout', { method: 'POST', body: { refresh: s.refresh } }); } catch {}
+  }
+  async function parked() { return Object.values(await parkedAll()).map(s => ({ store: s.store, name: s.name })).sort((a, b) => a.store.localeCompare(b.store)); }
+  // Sign-out ends the session on the worker too (best effort: offline, the
+  // local session still goes and the refresh token expires on its own).
+  // It signs out of every store on the device: a shared device is left clean.
+  async function signOut() {
+    const p = await parkedAll();
+    const refreshes = [cur?.refresh, cur?.via?.refresh, ...Object.values(p).map(s => s.refresh)].filter(Boolean);
+    cur = null; await save(); await storage.del('suite_parked');
+    for (const refresh of refreshes) { try { await transport.request('/v1/auth/signout', { method: 'POST', body: { refresh } }); } catch {} }
+  }
   function unauthorised() { cur = null; save(); emit('signin-required', { reason: 'unauthorised' }); }
   function on(k, f) { listeners[k].add(f); return () => listeners[k].delete(f); }
 
-  return { load, signIn, signInOwner, actAs, endActAs, unlock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
+  return { load, signIn, signInOwner, signInAnother, switchTo, forget, parked, actAs, endActAs, unlock, lock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
 }

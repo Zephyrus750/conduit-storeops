@@ -6,26 +6,35 @@ import { buildProfiles, depthOf } from '../../shared/profiles.js';
 
 const man = (manNo, despatch, lines) => ({ manNo, despatch, consols: [{ id: '1', cartons: 9, items: lines.map(([k, q, c]) => ({ k, q, c })) }] });
 
-test('buildProfiles: units per carton by keycode, the mode wins, arrivals in date order', () => {
+test('buildProfiles: units per carton by keycode, the mode wins, gates drop thin or inconsistent lines', () => {
   const docs = [
     man('7031440', '01/09/2026', [['43307685', 48, 2], ['42977636', 12, 1]]),
     man('7031471', '03/09/2026', [['43307685', 72, 3], ['42977636', 24, 2], ['99', 5, 1]]),
     man('7031482', '05/09/2026', [['43307685', 24, 1], ['42977636', 6, 1]]),
   ];
   const doc = buildProfiles(docs, { store: '1241', now: new Date('2026-09-06T00:00:00Z') });
-  assert.equal(doc.schema, 'dv-profiles/1'); assert.equal(doc.store, '1241'); assert.equal(doc.trucks_sampled, 3); assert.equal(doc.keycodes, 2, 'a two-digit code is not a keycode');
+  assert.equal(doc.schema, 'dv-profiles/1'); assert.equal(doc.store, '1241'); assert.equal(doc.trucks_sampled, 3);
+  assert.deepEqual(doc.gates, { min_trucks: 3, min_consistency: 0.7, min_units_per_ctn: 3 });
   const p = doc.profiles['43307685'];
   assert.equal(p.ctn, 24); assert.equal(p.trucks, 3); assert.equal(p.consistency, 1);
   assert.deepEqual(p.last_arrival, { date: '2026-09-05', units: 24, cartons: 1, manNo: '7031482' });
   assert.deepEqual(p.arrivals.map(a => a.date), ['2026-09-01', '2026-09-03', '2026-09-05']);
-  const q = doc.profiles['42977636'];
-  assert.equal(q.ctn, 12); assert.equal(q.consistency, 0.67, 'two of three manifests agreed on 12'); assert.equal(q.pack_change, undefined);
+  assert.equal(doc.profiles['42977636'], undefined, 'two of three agreeing (0.67) is under the 0.7 gate');
+  assert.equal(doc.keycodes, 1);
 });
 
-test('buildProfiles: a pack change when the latest manifests agree on a new value', () => {
-  const docs = [man('a', '01/08/2026', [['43302210', 36, 1]]), man('b', '08/08/2026', [['43302210', 72, 2]]), man('c', '15/08/2026', [['43302210', 24, 1]]), man('d', '22/08/2026', [['43302210', 48, 2]])];
-  const p = buildProfiles(docs).profiles['43302210'];
-  assert.equal(p.ctn, 24); assert.deepEqual(p.pack_change, { prev_ctn: 36, since_trucks: 2, changed: '2026-08-15' });
+test('buildProfiles: the carton fallback shares a consol\'s cartons over its keycodes; 26 and 10 week windows', () => {
+  const m = (manNo, despatch) => ({ manNo, despatch, consols: [{ id: '1', cartons: 4, items: [{ k: '43302210', q: 48 }, { k: '43302211', q: 24 }] }] });
+  const doc = buildProfiles([m('o', '01/01/2026'), m('a', '01/08/2026'), m('b', '08/08/2026'), m('c', '15/08/2026')], { now: new Date('2026-09-06T00:00:00Z') });
+  const p = doc.profiles['43302210'];
+  assert.equal(p.ctn, 24, '48 units over 2 cartons (4 cartons, 2 keycodes)'); assert.equal(p.trucks, 3, 'January is outside 26 weeks');
+  assert.deepEqual(p.arrivals.map(a => a.date), ['2026-08-01', '2026-08-08', '2026-08-15'], 'the last 10 weeks');
+});
+
+test('buildProfiles: a pack change when the latest three or more trucks agree on a new value', () => {
+  const docs = ['01/07', '08/07', '15/07', '22/07', '29/07'].map((d, i) => man(String(i), d + '/2026', [['43302210', i < 2 ? 36 : 24, 1]]));
+  const p = buildProfiles(docs, { now: new Date('2026-08-01T00:00:00Z') }).profiles['43302210'];
+  assert.equal(p.ctn, 24); assert.deepEqual(p.pack_change, { prev_ctn: 36, prev_trucks: 2, since_trucks: 3, changed: '2026-07-15' });
   assert.deepEqual(buildProfiles([]).profiles, {});
   assert.equal(buildProfiles([man('x', 'no date', [['43302210', 36, 1]])]).keycodes, 0, 'a manifest with no usable date is skipped');
 });

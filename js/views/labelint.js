@@ -4,6 +4,7 @@
 import { $, $$, ic, esc, vh, sub, prog, dep, DEPT_COLOUR, cycleId, daysLeftInCycle, fmtDate, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome } from '../map.js';
 import { SUBS, MICRO, microId, microCode, microName, microCount } from '../data/micros.js';
+import { printSheet, table, signoff } from '../print.js';
 
 let selected = null, openSub = null, varianceFor = null;
 
@@ -18,16 +19,26 @@ function marksFor(m) {
   const out = {};
   const wrong = new Set(m.variances.map(v => v.micro));
   for (const [micro, shelves] of Object.entries(m.L.assign)) for (const s of shelves) { if (wrong.has(micro)) out[s] = 'wrong'; else if (m.checks[micro]) out[s] = 'checked'; }
-  if (selected) for (const s of m.L.assign[selected] || []) if (!out[s]) out[s] = 'focus';
+  if (selected) {
+    for (const s of m.L.assign[selected] || []) out[s] = 'focus';
+    // Unassigned shelves in the selected micro's sub-department are the
+    // likely ones: dashed, as ShelfSearcher's assignment workshop.
+    const sub = selected.split('-')[0], taken = new Set(Object.values(m.L.assign).flat());
+    for (const id of shelvesOfDept(sub)) if (!taken.has(id) && !out[id]) out[id] = 'cand';
+  }
   return out;
 }
+let deptShelves = {};
+const shelvesOfDept = d => deptShelves[d] || [];
+// Every micro in catalogue order: the workshop's Prev / Next walks this.
+const ALL = SUBS.flatMap(sd => (MICRO[sd[0]] || []).map(x => microId(sd[0], x)));
 const cycleLabel = c => c.endsWith('M') ? new Date(c.slice(0, 4), Number(c.slice(5, 7)) - 1, 1).toLocaleString('en-AU', { month: 'long', year: 'numeric' }) : c;
 
 export default {
   id: 'labelint', title: 'Label integrity', icon: 'm-labelint',
   desktop(ctx) {
     const m = model(ctx);
-    return vh('Label integrity', sub(cycleLabel(m.cycle), `${m.L.cycleLen[0].toUpperCase() + m.L.cycleLen.slice(1)} cycle · ${m.daysLeft} days left`, `${m.total} numbered micro-departments`), `<button class="btn primary" data-act="check-selected">${ic('barcode')}Check a micro-dept</button>`, 'm-labelint') +
+    return vh('Label integrity', sub(cycleLabel(m.cycle), `${m.L.cycleLen[0].toUpperCase() + m.L.cycleLen.slice(1)} cycle · ${m.daysLeft} days left`, `${m.total} numbered micro-departments`), `<button class="btn" data-act="print-sheets" title="Marking sheets for the open sub-department, or all of them">${ic('print')}Marking sheets</button><button class="btn primary" data-act="check-selected">${ic('barcode')}Check a micro-dept</button>`, 'm-labelint') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx('Label integrity', ctx.storeNo)}<span><i style="background:#2563EB"></i>Checked this cycle</span><span><i style="background:#DC2626"></i>Wrong label found</span><span><i style="background:transparent;border:2px solid #D24E0E"></i>Selected micro-dept</span><span><i style="background:#CBD0D8"></i>Not yet checked</span></div></div>` +
       `<div class="sidecol" id="liside"></div></div>`;
@@ -37,6 +48,8 @@ export default {
     return mvMap({ badge: `<b>${m.done}</b> of ${m.total} · ${cycleLabel(m.cycle)}` }) + `<div class="mv-sel mode" id="limob"></div>`;
   },
   mount(ctx, root) {
+    // From Settings › Departments: open assigning that micro-department.
+    if (ctx.arg?.micro && ALL.includes(ctx.arg.micro) && selected !== ctx.arg.micro) { selected = ctx.arg.micro; openSub = selected.split('-')[0]; setTimeout(() => ctx.rerender(), 0); }
     const map = mountMap($('#mapstage', root), { cls: 'li', onSelect: info => {
       if (info.kind !== 'shelf' || !selected) return;
       const m = model(ctx); const cur = m.L.assign[selected] || [];
@@ -44,6 +57,32 @@ export default {
       ctx.store.dispatch({ type: 'label.assign', entity: { micro: selected }, payload: { shelves: next } }).catch(e => toast(e.message, 'bad'));
     } });
     bindMapChrome(root, map);
+    deptShelves = {}; for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(), id = g.getAttribute('data-shelf'); const l = (deptShelves[d] ||= []); if (!l.includes(id)) l.push(id); }
+    // Drag-paint (mouse): with a micro selected, press on a shelf and drag
+    // across others. The first shelf decides add or remove for the stroke;
+    // one label.assign saves it on release. Touch keeps panning; a tap
+    // assigns one shelf through onSelect.
+    const stage = $('#mapstage', root); let stroke = null;
+    const shelfAt = (x, y) => document.elementFromPoint(x, y)?.closest?.('.shelf-group[data-shelf]')?.getAttribute('data-shelf') || null;
+    stage?.addEventListener('pointerdown', e => {
+      if (!selected || e.pointerType !== 'mouse' || e.button !== 0) return;
+      const id = shelfAt(e.clientX, e.clientY); if (!id) return;
+      e.stopPropagation(); e.preventDefault();
+      const list = new Set(model(ctx).L.assign[selected] || []);
+      stroke = { list, op: list.has(id) ? 'remove' : 'add', touched: new Set() };
+      paintShelf(id);
+    }, true);
+    const paintShelf = id => {
+      if (!stroke || stroke.touched.has(id)) return; stroke.touched.add(id);
+      if (stroke.op === 'add') stroke.list.add(id); else stroke.list.delete(id);
+      map.mark(id, stroke.op === 'add' ? 'focus' : null);
+    };
+    stage?.addEventListener('pointermove', e => { if (!stroke) return; e.stopPropagation(); const id = shelfAt(e.clientX, e.clientY); if (id) paintShelf(id); }, true);
+    const endStroke = async e => {
+      if (!stroke) return; e.stopPropagation(); const st = stroke; stroke = null;
+      try { await ctx.store.dispatch({ type: 'label.assign', entity: { micro: selected }, payload: { shelves: [...st.list] } }); } catch (err) { toast(err.message, 'bad'); paint(); }
+    };
+    stage?.addEventListener('pointerup', endStroke, true); stage?.addEventListener('pointercancel', endStroke, true);
     const paint = () => {
       const m = model(ctx);
       map.setMarks(marksFor(m));
@@ -57,8 +96,11 @@ export default {
       const act = a.getAttribute('data-act'), m = model(ctx);
       try {
         if (act === 'select') { selected = a.getAttribute('data-micro'); openSub = selected.split('-')[0]; paint(); }
+        else if (act === 'step') { const i = ALL.indexOf(selected) + Number(a.dataset.d); if (i >= 0 && i < ALL.length) { selected = ALL[i]; openSub = selected.split('-')[0]; paint(); } }
+        else if (act === 'done-assign') { selected = null; paint(); }
         else if (act === 'toggle-sub') { const s = a.getAttribute('data-sub'); openSub = openSub === s ? null : s; paint(); }
         else if (act === 'check' || act === 'check-selected') { const micro = a.getAttribute('data-micro') || selected; if (!micro) return toast('Pick a micro-department first'); await ctx.store.dispatch({ type: m.checks[micro] ? 'label.uncheck' : 'label.check', entity: { micro, cycle: m.cycle } }); }
+        else if (act === 'print-sheets') printMarkingSheets(m, typeof openSub === 'string' && openSub ? openSub : null, `${ctx.storeName || ''} · ${ctx.storeNo}`);
         else if (act === 'cycle') await ctx.store.dispatch({ type: 'label.cycle.set', entity: {}, payload: { cycleLen: a.getAttribute('data-len') } });
         else if (act === 'variance') { varianceFor = a.getAttribute('data-micro') || selected; paint(); }
         else if (act === 'variance-cancel') { varianceFor = null; paint(); }
@@ -85,11 +127,13 @@ function sidebar(m) {
   if (selected) {
     const [subId, code] = selected.split('-'); const entry = (MICRO[subId] || []).find(x => microCode(x) === code) || code;
     const c = m.checks[selected], vs = m.variances.filter(v => v.micro === selected), shelves = m.L.assign[selected] || [];
-    sel = `<div class="pcard lisel"><div class="pt3">Selected micro-department<span class="cs-dim">tap a shelf on the map to assign it</span></div><div class="lisel-h"><span class="lisel-code">${esc(code)}</span><div><b>${esc(microName(entry))}</b><small>${subId.toUpperCase()} · ${shelves.length} shelves assigned${shelves.length ? ' · ' + shelves.join(', ') : ''}</small></div></div>` +
+    const i = ALL.indexOf(selected), withShelves = SUBS.filter(sd => sd[0] === subId).flatMap(sd => MICRO[sd[0]] || []).filter(x => (m.L.assign[microId(subId, x)] || []).length).length;
+    sel = `<div class="pcard lisel"><div class="li-ws"><button class="btn sm" data-act="step" data-d="-1"${i <= 0 ? ' disabled' : ''}>‹ Prev</button><span>${i + 1} / ${ALL.length}</span><button class="btn sm" data-act="step" data-d="1"${i >= ALL.length - 1 ? ' disabled' : ''}>Next ›</button></div><div class="pt3">Assigning · ${esc(microName(entry))}</div><p class="lbl">Click or drag-paint shelves on the map. Dashed shelves are unassigned ${esc(subId.toUpperCase())} candidates. <b>${shelves.length}</b> assigned · ${withShelves}/${(MICRO[subId] || []).length} micros in ${esc(subId.toUpperCase())} have shelving.</p><div class="lisel-h"><span class="lisel-code">${esc(code)}</span><div><b>${esc(microName(entry))}</b><small>${subId.toUpperCase()} · ${shelves.length} shelves assigned${shelves.length ? ' · ' + shelves.join(', ') : ''}</small></div></div>` +
       `<div class="lisel-facts"><span><b>This cycle</b>${c ? 'Checked ' + fmtDate(c.at) : 'Not checked yet'}</span><span><b>Wrong labels</b>${vs.length ? vs.map(v => esc(v.keycode) + (v.note ? ' · ' + esc(v.note) : '')).join('<br>') : 'none logged'}</span></div>` +
-      `<div class="acts2" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><span class="btn primary sm" data-act="check" data-micro="${selected}">${ic(c ? 'x' : 'check')}${c ? 'Uncheck' : 'Mark checked'}</span><span class="btn sm" data-act="variance" data-micro="${selected}">${ic('alert')}Wrong label</span>${subId ? `<span class="btn sm" data-act="zoom-dept" data-dept="${subId}">${ic('pin')}Show ${subId.toUpperCase()}</span>` : ''}</div></div>`;
+      `<div class="acts2" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><span class="btn primary sm" data-act="check" data-micro="${selected}">${ic(c ? 'x' : 'check')}${c ? 'Uncheck' : 'Mark checked'}</span><span class="btn sm" data-act="variance" data-micro="${selected}">${ic('alert')}Wrong label</span>${subId ? `<span class="btn sm" data-act="zoom-dept" data-dept="${subId}">${ic('pin')}Show ${subId.toUpperCase()}</span>` : ''}<span class="btn sm" data-act="done-assign">Done assigning</span></div></div>`;
   }
-  const acc = `<div class="subacc">${SUBS.map(sd => {
+  const shelved = ALL.filter(id => (m.L.assign[id] || []).length).length;
+  const acc = `<div class="li-shelved"><b>${shelved}</b> of <b>${ALL.length}</b> micro-departments have shelving</div><div class="subacc">${SUBS.map(sd => {
     const micros = MICRO[sd[0]] || []; const n = micros.filter(x => m.checks[microId(sd[0], x)]).length; const open = openSub === sd[0];
     const rows = micros.map(x => { const id = microId(sd[0], x), on = !!m.checks[id], wrong = m.variances.some(v => v.micro === id); return `<div class="micro${selected === id ? ' sel' : ''}" data-act="select" data-micro="${id}"><span class="tk${on ? ' on' : ''}" data-act="check" data-micro="${id}">${ic('check')}</span><span class="mc">${microCode(x)}</span><span class="mn">${esc(microName(x))}</span>${on ? `<span class="md">${fmtDate(m.checks[id].at)}</span>` : ''}${wrong ? '<span class="md" style="color:var(--red)">wrong</span>' : ''}<span class="sc">${(m.L.assign[id] || []).length} ▦</span></div>`; }).join('');
     return `<div class="subrow"><div class="sh" data-act="toggle-sub" data-sub="${sd[0]}"><span class="pt" style="background:${DEPT_COLOUR[sd[0]]}"></span><span class="code">${sd[1]}</span><span class="nm">${sd[2]}</span><span class="ct${n === micros.length ? ' full' : ''}">${n}/${micros.length}</span><span class="ib">${ic(open ? 'minus' : 'plus')}</span></div><div class="micros"${open ? '' : ' hidden'}>${rows}</div></div>`;
@@ -102,4 +146,21 @@ function mobileBar(m) {
     (openSub ? `<div class="mv-rows">${(MICRO[openSub] || []).map(x => { const id = microId(openSub, x); return `<div class="mv-row" data-act="select" data-micro="${id}"><span class="a">${microCode(x)}</span><span class="b">${esc(microName(x))}</span><span class="c">${m.checks[id] ? '✓' : ''}</span></div>`; }).join('')}</div>` : '');
   const [subId, code] = selected.split('-'); const entry = (MICRO[subId] || []).find(x => microCode(x) === code) || code; const c = m.checks[selected];
   return `<div class="mv-mh">${ic('m-labelint')}<b>${esc(code)} ${esc(microName(entry))}</b><span>${m.done} / ${m.total}</span></div><div class="mv-hint">${cycleLabel(m.cycle)} · <b>${m.daysLeft}d left</b> · ${subId.toUpperCase()} · ${c ? 'checked ' + fmtDate(c.at) : 'not checked yet'}</div><div class="mv-two">${mbig(c ? 'Uncheck' : 'Checked', c ? 'sec' : '', 'check', ` data-act="check" data-micro="${selected}"`)}${mbig('Price is wrong', 'warn', 'alert', ` data-act="variance" data-micro="${selected}"`)}</div><div class="mv-hint"><a data-act="toggle-sub" data-sub="${subId}">Choose another</a></div>`;
+}
+
+// ShelfSearcher's marking sheets: one page per micro-department with 100
+// numbered boxes to tick as labels are checked, a table for the wrong ones
+// and a sign-off. For the open sub-department, or every one.
+function printMarkingSheets(m, subId, storeLine = '') {
+  const subs = SUBS.filter(sd => !subId || sd[0] === subId);
+  const pages = [];
+  for (const [sid, sc, sname] of subs) for (const entry of MICRO[sid] || []) {
+    const done = m.checks[microId(sid, entry)];
+    pages.push(`<div class="${pages.length ? 'ps-page' : ''}"><h2>Label Integrity · Correction &amp; Marking Sheet</h2>`
+      + `<div class="ps-facts"><div><span>Store</span><b>${esc(storeLine)}</b></div><div><span>Cycle</span><b>${esc(cycleLabel(m.cycle))}</b></div><div><span>Sub-department</span><b>${esc(sc)} ${esc(sname)}</b></div><div><span>Micro-department</span><b>${esc(microCode(entry))} ${esc(microName(entry))}${done ? ' · already checked' : ''}</b></div></div>`
+      + `<h2>Labels checked · tick each as you go (100)</h2><div class="ps-grid">${Array.from({ length: 100 }, (_, i) => `<span>${i + 1}</span>`).join('')}</div>`
+      + `<h2>Incorrect labels found</h2>` + table(['Location / keycode', 'Incorrect label description', 'True cost'], Array.from({ length: 16 }, () => ['', '', '']), ['w30', 'wd', 'w20'])
+      + signoff() + '</div>');
+  }
+  printSheet({ title: 'Label integrity marking sheets', subtitle: `${esc(cycleLabel(m.cycle))} · ${subId ? esc(subs[0]?.[1] + ' ' + subs[0]?.[2]) : 'all sub-departments'} · ${pages.length} sheet${pages.length === 1 ? '' : 's'}`, body: pages.join('') });
 }
