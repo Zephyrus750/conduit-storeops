@@ -49,7 +49,9 @@ export default {
     // REQ: on today's requested list. PRE: in the pasted report but not
     // requested (banked ahead). The diff mark: the report covers the bay and
     // is not stale, so it opens straight to compare.
-    const tags = s => (reqd.has(s.bay) ? '<span class="rq-tag req" title="On today’s requested list">REQ</span>' : m.sys?.[s.bay] ? '<span class="rq-tag pre" title="In the paste but not on today’s plan: banked ahead">PRE</span>' : '') + (s.status === 'pending' && m.sys?.[s.bay] && band !== 'r' ? `<span class="rq-cmp" title="Report loaded for this bay: opens straight to compare">${ic('sort')}</span>` : '');
+    const tags = s => (reqd.has(s.bay) ? '<span class="rq-tag req" title="On today’s requested list">REQ</span>' : m.sys?.[s.bay] ? '<span class="rq-tag pre" title="In the paste but not on today’s plan: banked ahead">PRE</span>' : '') + (s.status === 'pending' && m.sys?.[s.bay] && band !== 'r' ? `<span class="rq-cmp" title="Report loaded for this bay: opens straight to compare">${ic('sort')}</span>` : '') +
+      (s.status === 'pending' && s.lateScans ? `<span class="rq-tag late" title="Back in review: ${s.lateScans} scan${s.lateScans === 1 ? '' : 's'} landed after it was readied">LATE</span>` : '') +
+      (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) ? '<span class="rq-tag scan" title="The phone has not sent this bay to review yet">SCANNING</span>' : '');
     const slc = (s, c, extra = '') => `<button class="slc${st.sel === key(s) ? ' sel' : ''}${extra}" data-act="sel" data-sel="${esc(key(s))}"><div class="sl"><div class="tp"><span class="loc">${esc(s.bay)}</span>${tags(s)}${m.claims[s.bay] && m.claims[s.bay].by !== ctx.session.device ? `<span class="lock" title="Being reviewed on another device">${ic('lock')}</span>` : ''}</div><div class="meta"><b title="scanned / expected">${c.scannedCount}/${c.expected}</b> scanned · ${s.updatedAt ? fmtTime(s.updatedAt) : ''}</div></div><div class="sr">${c.pct == null ? `<span class="pc" style="color:var(--dim)">—</span><span class="dc">no report</span>` : `<span class="pc" style="color:${pcol(c.pct)}">${c.pct}%</span><span class="dc">${c.add ? `<b class="a">+${c.add}</b> ` : ''}${c.delete ? `<b class="d">−${c.delete}</b>` : ''}${!c.add && !c.delete ? 'clean' : ''}</span>`}</div></button>`;
     const left = `<div class="srail left"><div class="srail-t">Review<span class="ct amber">${m.pending.length}</span><span class="tb"><select class="sortb" data-act="sort" title="Sort">${Object.entries(SORTS).map(([k, l]) => `<option value="${k}" ${st.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></span></div><div class="srail-list">` +
       m.pending.map(s => slc(s, s.c)).join('') +
@@ -182,7 +184,7 @@ function middle(ctx, m) {
   const hist = m.history.filter(h => h.bay === s.bay && h.metrics).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
   const tail = `<div class="matches"><b>${matches.length} codes match</b> ${sys ? 'the pasted report and need nothing' : '· no report pasted for this bay yet'}${s.readyAt ? ` · marked ready ${fmtTime(s.readyAt)}` : ''}</div>` +
     (Object.keys(s.readd || {}).length ? `<div class="lochist readd"><span class="lh-t">Re-add · found after finalising</span>${Object.entries(s.readd).map(([c, r]) => `<span><b class="mono">${esc(c)}</b> ${r.doneAt ? `scanned back ${fmtTime(r.doneAt)}` : 'to scan back in'}${r.by ? ` · ${esc(r.by)}` : ''}</span>`).join('')}</div>` : '') +
-    (hist.length ? `<div class="lochist"><span class="lh-t">${esc(s.bay)} before today</span>${hist.map(h => `<span><b>${esc(h.date)}</b> ${h.metrics.scanned}/${h.metrics.expected} · ${h.metrics.accuracy}%</span>`).join('')}<a data-go="srhistory">Open in History</a></div>` : '');
+    (hist.length ? `<div class="lochist"><span class="lh-t">${esc(s.bay)} before today</span>${hist.map(h => `<span><b>${esc(h.date)}</b> ${h.metrics.accuracy == null ? `${h.metrics.scanned} scanned · no report` : `${h.metrics.scanned}/${h.metrics.expected} · ${h.metrics.accuracy}%`}</span>`).join('')}<a data-go="srhistory">Open in History</a></div>` : '');
   return head + ctl + gapNote(s, sys) + (st.bayPaste ? bayPasteSheet(s) : '') + body + tail;
 }
 
@@ -284,7 +286,7 @@ async function onClick(e, ctx, root, repaint) {
   // phone
   else if (act === 'm-start') { await startBay(ctx, root.querySelector('[data-field="mbay"]')?.value || a.dataset.bay || '', repaint); }
   else if (act === 'm-resume') { st.mBay = a.dataset.bay; st.mStep = 2; repaint(); focusScan(root); }
-  else if (act === 'm-send') { mineAdd(st.mBay, date); st.mStep = 3; repaint(); }
+  else if (act === 'm-send') { mineAdd(st.mBay, date); await send(ctx, 'submission.update', { bay: st.mBay, date }, { sent: true }); st.mStep = 3; repaint(); }
   else if (act === 'm-mine') { st.mView = 'mine'; repaint(); }
   else if (act === 'm-home') { st.mView = null; st.mStep = 1; repaint(); }
   else if (act === 'm-check') { st.mView = 'check'; repaint(); }
@@ -308,6 +310,7 @@ async function onClick(e, ctx, root, repaint) {
 // metrics match), free it, and with next open the bay that slides into its
 // place on the review list (Vector's Enter = ready and next).
 async function readyBay(ctx, s, m, next) {
+  if (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) && !confirm(`${s.bay} has not been sent to review from the phone yet, so it may still be scanning. Mark it ready anyway?`)) return;
   const date = todayKey(), sys = m.sys?.[s.bay] || null, p = readyPayload(s, sys), order = m.pending.map(key), idx = order.indexOf(key(s));
   if (Object.keys(p.codes).length || p.incorrect.length) await send(ctx, 'submission.update', { bay: s.bay, date }, p);
   const r = await send(ctx, 'submission.ready', { bay: s.bay, date }, sys ? { system: sys } : {}); if (!r) return;

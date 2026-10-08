@@ -46,7 +46,7 @@ function backfillCard(ctx, r) {
   if (!hasArea(ctx.session, 'stockroom')) return lockedCard('Stockroom', 'box', 'bfreview');
   const subs = Object.values(ctx.store.get('backfill').subs).filter(x => inRange(x.date, r));
   const pend = subs.filter(x => x.status === 'pending').length, ready = subs.filter(x => x.status === 'corrected').length, done = subs.filter(x => x.status === 'submitted').length;
-  const reviewed = subs.filter(x => x.status !== 'pending'), acc = reviewed.length ? Math.round(reviewed.reduce((n, x) => n + (x.metrics?.accuracy || 0), 0) / reviewed.length) : null;
+  const reviewed = subs.filter(x => x.status !== 'pending'), scored = reviewed.filter(x => Number.isFinite(x.metrics?.accuracy)), acc = scored.length ? Math.round(scored.reduce((n, x) => n + x.metrics.accuracy, 0) / scored.length) : null;   // bays with no report are not scored
   const codes = subs.reduce((n, x) => n + Object.values(x.codes || {}).filter(c => c.scanned).length, 0);
   const accRow = ['Average accuracy', acc == null ? '—' : acc + '%', acc == null ? '' : acc >= 90 ? 'c-green' : acc >= 75 ? '' : 'c-red'];
   if (period === 'today') return kpi('hot', 'm-bfreview', 'Backfill review', 'bfreview', pend, `/ ${subs.length}`, 'Locations pending on today’s board', [accRow, ['Keycodes scanned', codes.toLocaleString()], ['Ready · submitted', `${ready} · ${done}`]], subs.length ? (ready + done) / subs.length * 100 : 0);

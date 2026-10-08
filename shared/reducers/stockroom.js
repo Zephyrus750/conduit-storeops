@@ -147,7 +147,11 @@ export const stockroomReducers = {
     if (!s.backfill.subs[k]) s.backfill.subs[k] = newSub(bay(e), e.entity.date);
     return null;
   },
-  // codes: { code: scanned }, merged per code; remove: [codes]; incorrect: [codes] (replaces the list)
+  // codes: { code: scanned }, merged per code; remove: [codes]; incorrect: [codes] (replaces the list);
+  // sent: the phone finished the bay ("Send to review"). A new scan clears it.
+  // A scan the bay did not have, landing on a Ready or Submitted bay (a
+  // phone's late or queued scan), puts it back in review, as K2B did: its
+  // metrics are cleared and worked out again when it is readied.
   // A removed code leaves a tombstone (K2B's removedCodes): a scan made
   // before the removal (a phone's queued scan landing late) cannot bring it
   // back; a scan made after it can. An update that only carries such stale
@@ -161,8 +165,13 @@ export const stockroomReducers = {
     if (stale.length && stale.length === incoming.length && !(Array.isArray(p.remove) && p.remove.length) && !Array.isArray(p.incorrect)) {
       return reject('removed_by_reviewer', `${stale.join(', ')} ${stale.length === 1 ? 'was' : 'were'} removed by the reviewer`);
     }
+    if (cur?.trimmed) return reject('record_trimmed', `${cur.bay} on ${cur.date} is older than two weeks and can't change`);
     const sub = cur || (s.backfill.subs[subKey(e)] = newSub(bay(e), e.entity.date));
     const dev = e.actor?.device;
+    const fresh = incoming.filter(([code, v]) => v && !stale.includes(code) && !sub.codes[code]?.scanned);
+    if (fresh.length && sub.status !== 'pending') { sub.status = 'pending'; sub.statusAt = e.at; sub.reopenedAt = e.at; sub.autoSubmitted = false; sub.metrics = null; sub.lateScans = (sub.lateScans || 0) + fresh.length; }
+    if (fresh.length) sub.sentAt = null;
+    if (e.payload.sent === true) sub.sentAt = e.at;
     if (dev && incoming.some(([, v]) => v)) { sub.devices ||= []; if (!sub.devices.includes(dev)) sub.devices.push(dev); }
     for (const [code, scanned] of incoming) {
       if (stale.includes(code)) continue;
@@ -183,7 +192,7 @@ export const stockroomReducers = {
     sub.status = 'corrected'; sub.statusAt = e.at; sub.readyAt = sub.readyAt || e.at;
     if (Array.isArray(e.payload?.system)) sub.system = [...new Set(e.payload.system.map(String))];
     const m = e.payload?.metrics;
-    sub.metrics = m && typeof m === 'object' ? { expected: Number(m.expected) || 0, scanned: Number(m.scanned) || 0, match: Number(m.match) || 0, accuracy: Number(m.accuracy) || 0, incorrect: Number(m.incorrect) || 0 } : metrics(sub);
+    sub.metrics = m && typeof m === 'object' ? { expected: numOrNull(m.expected), scanned: Number(m.scanned) || 0, match: numOrNull(m.match), accuracy: numOrNull(m.accuracy), incorrect: Number(m.incorrect) || 0 } : metrics(sub);
     return null;
   },
   'submission.submit'(s, e) {
@@ -332,8 +341,14 @@ function sub_(s, e) {
   if (!sub) return reject('not_found', 'submission is not open');
   return sub;
 }
-// With no report list (a bay readied without a paste, or older events) the
-// system side is every code on the submission, scanned or system-only.
+// With no report list the bay is unscored, as K2B left it: its scans count
+// but expected, match and accuracy are null, and averages leave it out
+// (scoring it against its own scans read as 100%, or 0% when empty). Older
+// events that merged the report's codes as system-only, with no list on the
+// ready, still score against every code on the submission.
 export function metrics(sub) {
-  return backfillMetrics(scannedCodes(sub), sub.system || Object.keys(sub.codes), sub.incorrect);
+  const scanned = scannedCodes(sub);
+  if (!sub.system && !Object.values(sub.codes || {}).some(c => !c.scanned)) return { expected: null, scanned: scanned.length, match: null, accuracy: null, incorrect: (sub.incorrect || []).length };
+  return backfillMetrics(scanned, sub.system || Object.keys(sub.codes), sub.incorrect);
 }
+const numOrNull = v => v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
