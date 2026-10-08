@@ -286,7 +286,7 @@ async function onClick(e, ctx, root, repaint) {
   // phone
   else if (act === 'm-start') { await startBay(ctx, root.querySelector('[data-field="mbay"]')?.value || a.dataset.bay || '', repaint); }
   else if (act === 'm-resume') { st.mBay = a.dataset.bay; st.mStep = 2; repaint(); focusScan(root); }
-  else if (act === 'm-send') { mineAdd(st.mBay, date); await send(ctx, 'submission.update', { bay: st.mBay, date }, { sent: true }); st.mStep = 3; repaint(); }
+  else if (act === 'm-send') { mineAdd(st.mBay, date); if (ctx.store.get('backfill').subs[`${st.mBay}:${date}`]) await send(ctx, 'submission.update', { bay: st.mBay, date }, { sent: true }); st.mStep = 3; repaint(); }
   else if (act === 'm-mine') { st.mView = 'mine'; repaint(); }
   else if (act === 'm-home') { st.mView = null; st.mStep = 1; repaint(); }
   else if (act === 'm-check') { st.mView = 'check'; repaint(); }

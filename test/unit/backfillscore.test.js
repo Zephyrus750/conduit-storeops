@@ -100,3 +100,13 @@ test('a trimmed bay takes no more scans', () => {
   assert.equal(apply(s, ev('submission.update', old, { codes: { 43000002: true } })).code, 'record_trimmed');
   assert.equal(JSON.stringify(s), before);
 });
+
+test('"sent" or a desk edit never brings back a bay the desk deleted', () => {
+  const s = initialState();
+  apply(s, ev('submission.update', A, { codes: { 43000001: true } }));
+  apply(s, ev('submission.delete', A));
+  assert.equal(apply(s, ev('submission.update', A, { sent: true })).code, 'not_found');
+  assert.equal(apply(s, ev('submission.update', A, { incorrect: [] })).code, 'not_found');
+  assert.equal(s.backfill.subs[`7023:${DAY}`], undefined);
+  assert.equal(apply(s, ev('submission.update', A, { codes: { 43000002: true } })), null, 'a fresh scan still opens it');
+});

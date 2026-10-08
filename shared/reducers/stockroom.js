@@ -165,6 +165,7 @@ export const stockroomReducers = {
     if (stale.length && stale.length === incoming.length && !(Array.isArray(p.remove) && p.remove.length) && !Array.isArray(p.incorrect)) {
       return reject('removed_by_reviewer', `${stale.join(', ')} ${stale.length === 1 ? 'was' : 'were'} removed by the reviewer`);
     }
+    if (!cur && !incoming.length) return reject('not_found', 'submission is not open');   // "sent" or a desk edit never brings back a deleted bay
     if (cur?.trimmed) return reject('record_trimmed', `${cur.bay} on ${cur.date} is older than two weeks and can't change`);
     const sub = cur || (s.backfill.subs[subKey(e)] = newSub(bay(e), e.entity.date));
     const dev = e.actor?.device;
