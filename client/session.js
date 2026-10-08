@@ -9,6 +9,7 @@
 import { TransportError } from './transport.js';
 
 const REFRESH_AHEAD_S = 600;   // refresh when under ten minutes remain
+const AUTH_GONE = new Set([401, 403, 404]);   // the worker says this session is over (revoked, suspended, unregistered)
 
 export function createSession({ transport, storage, app = 'conduit', now = () => Date.now() }) {
   const listeners = { change: new Set(), 'signin-required': new Set() };
@@ -68,6 +69,7 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
   async function refresh() {
     if (!cur) throw new TransportError(401, 'unauthorised', 'not signed in');
     if (refreshing) return refreshing;
+    let used = null;
     refreshing = (async () => {
       try {
         if (cur.actas) {
@@ -76,11 +78,20 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
           cur = { ...cur, token: r.token, expires: r.expires, caps: r.caps, via: { token: o.token, refresh: o.refresh, expires: o.expires } };
           await save(); return snapshot();
         }
+        used = cur.refresh;
         const r = await transport.request('/v1/auth/refresh', { method: 'POST', body: { refresh: cur.refresh } });
         cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles, caps: r.caps, owner: !!r.owner };
         await save(); return snapshot();
       } catch (e) {
-        if (e instanceof TransportError && !e.network) { cur = null; await save(); emit('signin-required', { reason: e.code }); }
+        // Only an answer that says the session is gone signs the device out.
+        // A server error, a rate limit or a timeout keeps it: the next try
+        // may work. Another tab of this app may have spent the refresh token
+        // a moment ago; if the stored session moved on, take that one.
+        if (e instanceof TransportError && AUTH_GONE.has(e.status)) {
+          const stored = await storage.get('suite_session');
+          if (stored?.refresh && used && stored.refresh !== used && stored.expires * 1000 > now()) { cur = stored; emit('change', snapshot()); return snapshot(); }
+          cur = null; await save(); emit('signin-required', { reason: e.code });
+        }
         throw e;
       } finally { refreshing = null; }
     })();
@@ -89,7 +100,9 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
   // The access token, refreshed first when it is about to expire.
   async function token() {
     if (!cur) return null;
-    if (cur.expires * 1000 - now() < REFRESH_AHEAD_S * 1000) { try { await refresh(); } catch (e) { if (!(e instanceof TransportError && e.network)) return null; } }
+    // A refresh that fails for a passing reason (offline, a server error, a
+    // rate limit) keeps the current token: it is usually still valid.
+    if (cur.expires * 1000 - now() < REFRESH_AHEAD_S * 1000) { try { await refresh(); } catch (e) { if (!(e instanceof TransportError) || AUTH_GONE.has(e.status)) return null; } }
     return cur?.token || null;
   }
   // Other stores on this device (switch store without signing out): signing

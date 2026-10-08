@@ -31,7 +31,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   let pending = [];                            // queued events in order
   const applied = new Set();                   // event ids already folded into base
   const appliedOrder = [];
-  let ws = null, wsAttempt = 0, wsTimer = null, pollTimer = null, hbTimer = null, closed = false;
+  let ws = null, wsAttempt = 0, wsTimer = null, pollTimer = null, hbTimer = null, closed = false, opening = false;
   let status = { state: 'offline', queued: 0, lastError: null, seq: 0 };
   const breaker = new Breaker();
   let flushing = null;
@@ -53,13 +53,21 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     changed(Object.keys(state).filter(k => before[k] !== state[k] && JSON.stringify(before[k]) !== JSON.stringify(state[k])));
   }
   function remember(id) { applied.add(id); appliedOrder.push(id); if (appliedOrder.length > APPLIED_KEEP) applied.delete(appliedOrder.shift()); }
-  function foldIntoBase(events) {
+  // base.seq means "every event this device may read, up to here, is in
+  // base". Events from the socket and /changes arrive in log order, so they
+  // move it on (gaps are events this device may not read). One of our own
+  // events acknowledged over HTTP can be far ahead of what we have seen, so
+  // it is folded in but moves base.seq only when it is the very next one;
+  // otherwise the events other devices logged in between would be skipped.
+  // An event at or below base.seq is already in base (a poll that returns
+  // after a snapshot replaced it) and is never applied twice.
+  function foldIntoBase(events, { own = false } = {}) {
     let n = 0;
     for (const e of events) {
-      if (applied.has(e.id)) continue;
-      apply(base, e); remember(e.id);
-      if (typeof e.seq === 'number' && e.seq > base.seq) base.seq = e.seq;
-      n += 1;
+      const seq = typeof e.seq === 'number' ? e.seq : null;
+      if (!own && seq != null && seq <= base.seq) { remember(e.id); continue; }
+      if (!applied.has(e.id)) { apply(base, { ...e, seq: undefined }); remember(e.id); n += 1; }   // apply() would set base.seq itself
+      if (seq != null && (own ? seq === base.seq + 1 : seq > base.seq)) base.seq = seq;
     }
     return n;
   }
@@ -128,7 +136,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
       await storage.del(`outbox:${no}:${ev.id}`);
       if (r.ok) {
         // If the broadcast frame has not folded it in yet (HTTP path, or our own frame delayed), fold now.
-        if (!applied.has(ev.id)) foldIntoBase([{ ...ev, seq: r.seq, actor: { role: session.current?.roles?.[0] || null, device: session.device, owner: !!session.current?.owner } }]);
+        if (!applied.has(ev.id)) foldIntoBase([{ ...ev, seq: r.seq, actor: { role: session.current?.roles?.[0] || null, device: session.device, owner: !!session.current?.owner } }], { own: true });
       } else rejected.push({ ...r, event: ev });
     }
     rebuild(); await persistSnapshot(); setStatus({});
@@ -150,9 +158,11 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   async function connect() {
     closed = false;
     if (!WebSocketImpl) return startPolling();
-    if (ws) return;
+    if (ws || opening) return;                 // one socket: a second call while the token is fetched waits its turn
     setStatus({ state: 'connecting' });
-    const token = await session.token();
+    opening = true;
+    let token; try { token = await session.token(); } finally { opening = false; }
+    if (ws || closed) return;
     if (!token) { session.unauthorised(); return; }
     let sock;
     // The token travels as the second subprotocol, not in the URL.
