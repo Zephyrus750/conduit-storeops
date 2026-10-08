@@ -1,6 +1,7 @@
-# Open decisions and the test pass (kept 2026-10-05)
+# Open decisions and the test pass (kept 2026-10-05, updated 2026-10-08)
 
-Every call below is still open. Each one says what Conduit does today (the
+Every call below is still open. What is left to build, and which of these
+each piece waits on, is in `docs/TODO.md`. Each one says what Conduit does today (the
 default it ships with), where that lives, and what to look at when testing
 on a real PC. Decide each one, then move it to the audit's §7
 (`docs/AUDIT-2026-09.md`) as "Decided" and change the code if the answer
@@ -38,6 +39,16 @@ differs from the default.
 | 16 | The seven-language UI from ShelfSearcher | Not built: English only | — |
 | 17 | K2B's app hub (`registry=apps`), feature flags, beta rings | Not built | — |
 
+## Access and the owner console (added 2026-10-08)
+
+| # | Decision | What Conduit does today | Where | How to test |
+|---|---|---|---|---|
+| 18 | How fine the tool switches are | 20 tools. Receiving, Team Board and Dock screen are one tool; Wallboard and Analytics are one; Backfill review and its History are one. The store map, Settings, Store details and the workspace homes cannot be switched off | `shared/tools.js` | Console › a store › Access: switch one off, watch a signed-in store device lose it within seconds |
+| 19 | Switching a whole area off | Takes effect when each device's token renews (up to 12 hours), unlike tools, which apply at once | `worker/registry.js`, `worker/index.js` | Turn an area off and see how long a signed-in device keeps it |
+| 20 | Who may publish a team message | Not built (Shell P2) | — | — |
+| 21 | What the console flags as set-up | No map; no stockroom bay ranges; no manifest yet; two trucks open; no device ever or none in 24 hours; device errors; changes stuck in outboxes; bays auto-closed yesterday (shown as information) | `shared/kpis.js` | Console Overview's Set-up column and a store's Overview |
+| 22 | Fleet's "newest" app version | The highest version string any device reported in the last day; others show as behind | `js/views/admin.js` `fleetCard` | Open the console with two devices on different releases |
+
 ## The test pass on a real PC (1920×1080 first)
 
 Use store 1241 Busselton with the real map. Things only a real desk, real
@@ -56,3 +67,8 @@ reports and real devices can show:
    after a few real trucks, reopen a truck.
 6. **Cage tags:** print, laminate, scan on a phone; a sweep with zones.
 7. **Phone sizes:** a TC52x (360×640) as well as 420×860.
+8. **Owner console:**
+   - The per-store numbers against what you know happened that day.
+   - Switch a tool off with a store device signed in and watch it go.
+   - Export the registry CSV and open it in Excel.
+9. **Manifest upload preview:** a real DC `.xls`, including a report saved for the wrong store.
