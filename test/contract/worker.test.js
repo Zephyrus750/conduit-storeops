@@ -352,6 +352,24 @@ test('a keycode’s life, the history lists and the CSV export read the stockroo
   assert.match(text, /2026-09-17,7012,submitted,/);
 });
 
+test('tools: the owner switches one off, every device sees it in the projection, and the worker refuses its changes and routes', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'tools-desk' })).body.token;
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, dev)).body.token;
+  const ev = type => ({ id: ulid(), store: '1241', area: 'stockroom', type, entity: { cage: 'TL1' }, payload: { ring: 'overstock' }, at: new Date().toISOString(), v: 1 });
+  assert.equal((await api('PATCH', '/v1/admin/stores/1241', { tools: { nope: false } }, ownerToken)).status, 400, 'an unknown tool is refused');
+  const off = await api('PATCH', '/v1/admin/stores/1241', { tools: { cages: false, intel: false } }, ownerToken);
+  assert.equal(off.status, 200); assert.deepEqual(off.body.toolsOff.sort(), ['cages', 'intel']);
+  assert.deepEqual((await api('GET', '/v1/store/1241/snapshot', undefined, sr)).body.state.tools.off, ['cages', 'intel']);
+  assert.equal((await api('POST', '/v1/store/1241/events', { events: [ev('cage.create')] }, sr)).body.results[0].code, 'tool_off');
+  assert.equal((await api('GET', '/v1/store/1241/soh', undefined, sr)).status, 403, 'a switched-off tool’s route is refused too');
+  const self = { id: ulid(), store: '1241', area: 'store', type: 'store.tools.set', entity: {}, payload: { off: [] }, at: new Date().toISOString(), v: 1 };
+  const mgr = (await api('POST', '/v1/auth/unlock', { code: 'MGR-CODE' }, dev)).body.token;
+  assert.equal((await api('POST', '/v1/store/1241/events', { events: [self] }, mgr)).body.results[0].code, 'unauthorised', 'a store manager cannot switch tools back on');
+  const on = await api('PATCH', '/v1/admin/stores/1241', { tools: { cages: true, intel: true } }, ownerToken);
+  assert.deepEqual(on.body.toolsOff, []);
+  assert.equal((await api('POST', '/v1/store/1241/events', { events: [ev('cage.create')] }, sr)).body.results[0].ok, true);
+});
+
 test('SOH snapshots: save one a day, list through the projection, read the history, verify a count, remove', async () => {
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'sr-desk' })).body.token;
   const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, dev)).body.token;

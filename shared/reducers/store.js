@@ -4,6 +4,7 @@
 
 import { reject } from './util.js';
 import { DEFAULT_TZ } from '../time.js';
+import { TOOL_IDS } from '../tools.js';
 
 // Store settings: null means "the default", so a store that never set one
 // follows the defaults as they are now. A manager changes them from Settings.
@@ -66,6 +67,7 @@ export function storeState() {
     settings: settingsState(),
     mapedits: {},                      // id → suggestion (see map.edit.suggest)
     feedback: [],                      // newest last, capped (see feedback.send)
+    tools: { off: [], at: null },      // tools the owner switched off (see store.tools.set)
   };
 }
 
@@ -131,6 +133,16 @@ export const storeReducers = {
   },
   // Validated whole before anything changes; a set that changes nothing is
   // refused so the log only holds changes.
+  // The tools the owner switched off for this store (shared/tools.js). Only
+  // the owner: the worker logs it from the console's Access tab.
+  'store.tools.set'(s, e) {
+    if (!e.actor?.owner) return reject('unauthorised', 'only the owner switches tools on and off');
+    const off = Array.isArray(e.payload.off) ? [...new Set(e.payload.off.map(String))] : null;
+    if (!off) return reject('invalid_event', 'off must be a list of tool ids');
+    const bad = off.find(id => !TOOL_IDS.includes(id)); if (bad) return reject('invalid_event', `unknown tool ${bad}`);
+    s.tools = { off: off.sort(), at: e.at };
+    return null;
+  },
   'store.settings.set'(s, e) {
     const cur = s.settings || settingsState(), next = { ...cur }, keys = Object.keys(e.payload || {});
     if (!keys.length) return reject('invalid_event', 'no settings given');

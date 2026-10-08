@@ -13,7 +13,7 @@
 //   GET  /stores/_all                                      → full records (owner)
 //   GET  /stores/:no                                       → full record (owner)
 //   POST /stores        { no, name, region, pin, codes, entitlements } (owner)
-//   PATCH /stores/:no   { entitlements?, status?, pin?, codes?, name?, region?, revoke? } (owner; pin, codes, suspended and revoke bump the epoch)
+//   PATCH /stores/:no   { entitlements?, tools? { id: bool }, status?, pin?, codes?, name?, region?, revoke? } (owner; pin, codes, suspended and revoke bump the epoch)
 //   POST /lockout/fail  { key }   POST /lockout/clear { key }   (used by owner sign-in)
 //   GET  /actions                                          → owner action tail
 //   POST /log          { type, store, detail }             → append an owner action
@@ -23,6 +23,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { hashSecret, verifySecret, randomToken, sha256, pinOk, cleanText } from './auth.js';
 import { HttpError, json } from './http.js';
+import { TOOL_IDS } from '../shared/tools.js';
 
 const ALL_AREAS = ['floor', 'stockroom', 'backdock'];
 // 'suspended' refuses sign-in, unlock and refresh, and signs every device out.
@@ -58,9 +59,10 @@ export class RegistryObject extends DurableObject {
         seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, type TEXT NOT NULL, store TEXT, detail TEXT
       );
     `);
-    // Columns added after first deploy: a lockout window start, and the
-    // store's credential epoch (bumped to revoke every session).
-    for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT', 'ALTER TABLE refresh ADD COLUMN elevated INTEGER']) {
+    // Columns added after first deploy: a lockout window start, the store's
+    // credential epoch (bumped to revoke every session), and the tools
+    // switched off inside its entitled areas ({ toolId: false }).
+    for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT', 'ALTER TABLE refresh ADD COLUMN elevated INTEGER', "ALTER TABLE stores ADD COLUMN tools TEXT NOT NULL DEFAULT '{}'"]) {
       try { this.sql.exec(ddl); } catch { /* already there */ }
     }
   }
@@ -241,6 +243,11 @@ export class RegistryObject extends DurableObject {
       const ent = JSON.parse(row.entitlements); for (const a of ALL_AREAS) if (a in b.entitlements) ent[a] = !!b.entitlements[a];
       sets.push('entitlements = ?'); vals.push(JSON.stringify(ent)); this.log('store.entitle', no, ent);
     }
+    if (b.tools) {
+      const tools = JSON.parse(row.tools || '{}');
+      for (const [id, on] of Object.entries(b.tools)) { if (!TOOL_IDS.includes(id)) throw new HttpError(400, 'invalid_request', `unknown tool ${id}`); if (on) delete tools[id]; else tools[id] = false; }
+      sets.push('tools = ?'); vals.push(JSON.stringify(tools)); this.log('store.tools', no, { off: Object.keys(tools) });
+    }
     if (b.areas) {
       const areas = JSON.parse(row.areas);
       for (const a of ALL_AREAS) if (a in b.areas) {
@@ -276,7 +283,7 @@ export class RegistryObject extends DurableObject {
   caps(row) { const ent = JSON.parse(row.entitlements); return ALL_AREAS.filter(a => ent[a]); }
   present(row) {
     return { no: row.no, name: row.name, region: row.region, format: row.format, status: row.status,
-      entitlements: JSON.parse(row.entitlements), areas: JSON.parse(row.areas), codes: Object.keys(JSON.parse(row.codes)),
+      entitlements: JSON.parse(row.entitlements), toolsOff: Object.keys(JSON.parse(row.tools || '{}')), areas: JSON.parse(row.areas), codes: Object.keys(JSON.parse(row.codes)),
       mapVersion: row.map_version, epoch: row.epoch || 0, created: row.created, updated: row.updated };
   }
   log(type, store, detail) {

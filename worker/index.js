@@ -102,15 +102,24 @@ r.post('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); r
 r.get('/v1/admin/stores/:no', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'GET', `/stores/${p.no}`)); });
 r.patch('/v1/admin/stores/:no', async (req, env, _c, p) => {
   const c = await requireOwner(req, env);
-  const rec = await registry(env, 'PATCH', `/stores/${p.no}`, await readJson(req));
+  const body = await readJson(req), rec = await registry(env, 'PATCH', `/stores/${p.no}`, body);
   // The store object holds the epoch it enforces; tell it (it also closes
   // the sockets of devices that were signed out).
   const res = await forward(new Request('https://store/epoch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ epoch: rec.epoch || 0 }) }), env, rec.no, '/epoch', '', { ...c, store: rec.no, caps: [], roles: ['manager'] });
   if (!res.ok) console.error('epoch push failed', rec.no, res.status);
+  // Switched tools go into the store's log, so its devices see them at once
+  // and the store object refuses the tools that are off.
+  if (body.tools) {
+    const ev = { id: ulid(), store: String(rec.no), area: 'store', type: 'store.tools.set', entity: {}, payload: { off: rec.toolsOff || [] }, at: new Date().toISOString(), v: 1 };
+    const tr = await ownerStoreCall(new Request(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization') || '' }, body: JSON.stringify({ events: [ev] }) }), env, rec.no, '/events');
+    const r0 = (await tr.json()).results?.[0];
+    if (!tr.ok || !r0?.ok) throw new HttpError(502, 'tools_not_applied', `the registry saved the tools but the store did not take them: ${r0?.message || tr.status}`);
+  }
   return json(rec);
 });
 r.get('/v1/admin/actions', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/actions')); });
 r.get('/v1/admin/stores/:no/devices', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/devices'));
+r.get('/v1/admin/stores/:no/kpis', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/kpis'));
 r.get('/v1/admin/stores/:no/snapshot', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/snapshot', new URL(req.url).search));
 r.get('/v1/admin/stores/:no/tail', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/tail', new URL(req.url).search));
 r.post('/v1/admin/actas/:no', async (req, env, _c, p) => {

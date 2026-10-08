@@ -31,6 +31,8 @@ import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
 import { isoWeek } from '../shared/stockintel.js';
+import { toolForEvent, toolOff } from '../shared/tools.js';
+import { storeKpis } from '../shared/kpis.js';
 import { SOH_KEEP } from '../shared/reducers/stockroom.js';
 import { rolloverDue } from '../shared/backfill.js';
 import { sanitizeSvg } from '../shared/svgsafe.js';
@@ -119,6 +121,7 @@ export class StoreObject extends DurableObject {
         case '/events': { const body = await readBounded(request, BATCH_MAX); return json({ results: this.submit(body.events, claims) }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
+        case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [] }));
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await request.json(), claims) : json(this.mapInfo());
         default: {
@@ -127,10 +130,10 @@ export class StoreObject extends DurableObject {
           if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1]));
-          if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readBounded(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12)); }
+          if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readBounded(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12)); }
           const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
-          if (sohDay) { const no = needArea(claims, 'stockroom'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
-          if (url.pathname === '/manifest' && request.method === 'POST') return this.publishManifest(await request.json(), claims);
+          if (sohDay) { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
+          if (url.pathname === '/manifest' && request.method === 'POST') return this.needTool('manifests') || this.publishManifest(await request.json(), claims);
           if (url.pathname === '/profiles') { const dk = needArea(claims, 'backdock'), sr = needArea(claims, 'stockroom'); if (dk && sr) return dk;   // carton depths serve the dock and the stockroom (K2B read them)
            const docs = this.sql.exec('SELECT doc, at FROM manifests').toArray().map(r => ({ ...JSON.parse(r.doc), at: r.at })); return json(buildProfiles(docs, { store: this.storeNo })); }
           const man = url.pathname.match(/^\/manifest\/([\w-]{1,20})$/);
@@ -211,6 +214,7 @@ export class StoreObject extends DurableObject {
     if (raw.store !== claims.store) return { id, ok: false, code: 'unauthorised', message: 'event is for another store' };
     const info = typeInfo(raw.type);
     if (info.area !== 'store' && !claims.caps.includes(info.area)) return { id, ok: false, code: 'not_entitled', message: `store is not entitled to ${info.area}` };
+    const tool = toolForEvent(raw.type); if (tool && toolOff(this.state.tools?.off, tool)) return { id, ok: false, code: 'tool_off', message: `${tool.name} is switched off for this store` };
     if (!hasRole(claims, info.roles)) return { id, ok: false, code: 'unauthorised', message: `${raw.type} needs ${info.roles.join(' or ')}` };
 
     const dup = this.sql.exec('SELECT seq FROM events WHERE id = ?', id).toArray()[0];
@@ -356,6 +360,8 @@ export class StoreObject extends DurableObject {
     this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
     return json({ ok: true, manNo });
   }
+
+  needTool(id) { return toolOff(this.state.tools?.off, id) ? fail(403, 'tool_off', 'that tool is switched off for this store') : null; }
 
   // ── SOH snapshots ─────────────────────────────────────────────────────
   // The stock-on-hand report pasted at the stockroom desk, kept one per day

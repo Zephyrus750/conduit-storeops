@@ -117,6 +117,7 @@ export const CATALOGUE = {
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
   'store.settings.set':  T('store', M, []),
+  'store.tools.set':     T('store', M, [], { off: 'array' }),                    // owner only: the tools switched off (shared/tools.js)
   'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
   'map.edit.resolve':    T('store', M, ['edit'], { status: 'string' }),       // accepted | declined; payload.note                                     // any of tz, dockGrid, minsPerCarton, autoLockMins (null = default)
   'feedback.send':       T('store', ['floor', 'stockroom', 'dock', 'manager'], ['note'], { kind: 'string', text: 'string' }),   // payload.view, version, diag
@@ -132,5 +133,5 @@ export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan'],
-  store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback'],
+  store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools'],
 };

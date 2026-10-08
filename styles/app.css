@@ -1342,3 +1342,17 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .mp-acts .btn { justify-content: center; }
 @media (max-width: 860px) { .mp-body { grid-template-columns: minmax(0, 1fr); } .mp-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .mp-main .pt3, .mp-side .pt3 { display: flex; align-items: baseline; gap: 8px; }
+
+/* Owner console: tool switches in Access */
+.ad-tool { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink2); background: none; border: 0; padding: 3px 4px; border-radius: 6px; text-align: left; cursor: pointer; }
+.ad-tool:hover:not(:disabled) { background: var(--hover); }
+.ad-tool[aria-checked="false"] { color: var(--dim); text-decoration: line-through; }
+.ad-tool:disabled { cursor: default; }
+.ad-reg { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.ad-reg .search { flex: 1; min-width: 200px; }
+.ad-reg select.ad-in { width: auto; }
+.ad-tbl td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ad-tbl td small { color: var(--dim); }
+.ad-alert { font-size: 12px; font-weight: 700; color: #B45309; background: rgba(245,158,11,.14); padding: 1px 7px; border-radius: 6px; white-space: nowrap; }
+.ad-alert.bad { color: #B91C1C; background: rgba(220,38,38,.12); }
+.c-amber { color: #B45309; }

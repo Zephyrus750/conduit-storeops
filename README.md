@@ -91,8 +91,8 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/changes?since=` | store token | live: events after a seq |
 | `POST /v1/store/:no/events` | store token | live: batch submit, per-event ack or rejection |
 | `GET /v1/store/:no/ws` | store token | live: hello, submit, hb, ping; event fan-out |
-| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate; a new PIN or code, `status: suspended` or `revoke: true` signs every device out (the store's credential epoch moves on) |
-| `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections |
+| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate; a new PIN or code, `status: suspended` or `revoke: true` signs every device out (the store's credential epoch moves on); `tools: { id: bool }` switches tools inside an area (`shared/tools.js`), logged into the store as `store.tools.set` so devices hide them at once and the worker refuses them |
+| `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `/kpis`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections; `/kpis` is the console's numbers for one store (backfill, dock, issues, devices, set-up alerts) |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
 | `POST /v1/admin/stores/:no/mapedits/:id` | owner | live: accept or decline a suggested map edit (`{ status, note }`), logged as an owner action |
 | `GET /v1/store/:no/map`, `GET …/map/:version` (`latest` allowed) | store token or owner | live: published map metadata and document, ETag / 304 |

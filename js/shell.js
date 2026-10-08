@@ -21,6 +21,7 @@ import { installLog } from './diag.js';
 installLog();
 import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
+import { toolForView, toolOff } from '../shared/tools.js';
 import { ensureArea, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
@@ -92,6 +93,9 @@ async function enter() {
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
   store.on('backfill', paintBadges); store.on('cages', paintBadges);
+  // The owner switched a tool on or off: the rail follows, and a view that
+  // has just been switched off closes.
+  store.on('tools', () => { if (offList().join() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = 'Store ' + s.store;
   buildRail(); paintBadges(); setWs('floor');
@@ -277,9 +281,15 @@ function railTip(b, show) {
 document.addEventListener('mouseover', e => { const b = e.target.closest?.('.rrow[data-view]'); if (b && !b.disabled) railTip(b, true); });
 document.addEventListener('mouseout', e => { const b = e.target.closest?.('.rrow[data-view]'); if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) railTip(b, false); });
 document.addEventListener('click', () => railTip(null, false));
+// A tool the owner switched off for this store (the tools projection):
+// hidden everywhere and refused when opened.
+const offList = () => (store?.get('tools')?.off) || [];
+const offView = id => toolOff(offList(), toolForView(id));
+let toolsSig = null;
 function buildRail() {
+  toolsSig = offList().join();
   const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}<span class="rl">${v.rail || v.title}</span>${BADGED.includes(v.id) ? `<span class="badge" data-badge="${v.id}" hidden></span>` : ''}</button>`;
-  $('#railscroll').innerHTML = RAIL.map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? rows(VIEWS[r]) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">Soon</span></button>`).join('')).join('');
+  $('#railscroll').innerHTML = RAIL.map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? (offView(r) ? '' : rows(VIEWS[r])) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">Soon</span></button>`).join('')).join('');
 }
 // Rail badges (the showcase's): Backfill review carries today's locations
 // waiting for review; Cages, in red, the open cages not seen for a week.
@@ -295,7 +305,7 @@ function paintBadges() {
 function setWs(w) {
   ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
   const md = $('.mdepts'); if (md) { const l = w === 'floor' ? 'Departments' : 'Switch area'; md.title = l; md.setAttribute('aria-label', l); }
-  $('#mstrip').innerHTML = STRIP[w].map(m => `<button data-view="${m[0]}">${ic(m[1])}${m[2]}</button>`).join('');
+  $('#mstrip').innerHTML = STRIP[w].filter(m => !offView(m[0])).map(m => `<button data-view="${m[0]}">${ic(m[1])}${m[2]}</button>`).join('');
 }
 function paintStatus(s) {
   const el = $('#footSync'); if (!el) return;
@@ -328,6 +338,8 @@ function show(id, arg) {
     ensureArea({ session: client.session, frame, area: view.area }).then(ok => { if (ok) show(id, arg); });
     return;
   }
+  if (store && offList().join() !== toolsSig) { buildRail(); paintBadges(); setWs(ws); }
+  if (store && offView(view.id)) { toast(`${toolForView(view.id).name} is switched off for this store`); if (current && current !== view.id && !offView(current)) return; view = VIEWS[mobile ? HOME[view.area] || 'map' : 'dashboard']; }
   if (store && view.area && view.area !== ws && view.area !== 'admin') setWs(view.area);
   // A phone-only view (a workspace home) opens its desktop counterpart on a wide screen.
   if (!mobile && view.desktopView && VIEWS[view.desktopView]) return show(view.desktopView, arg);
@@ -378,7 +390,7 @@ function openDepts() {
 }
 function openMore() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
-  sh.innerHTML = `<div class="sheet"><h3>More</h3><div class="mv-tiles">${MORE[ws].map(m => `<button class="mv-tile" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><span class="tx"><b>${m[2]}</b></span><span></span>${ic('chev')}</button>`).join('')}<button class="mv-tile" data-shell-act="switch-area"><span class="ti">${ic('grid')}</span><span class="tx"><b>Switch area</b></span><span></span>${ic('chev')}</button><button class="mv-tile" data-shell-act="signout"><span class="ti">${ic('lock')}</span><span class="tx"><b>${client.session.current?.actas ? 'Back to the console' : 'Sign out'}</b></span><span></span>${ic('chev')}</button></div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  sh.innerHTML = `<div class="sheet"><h3>More</h3><div class="mv-tiles">${MORE[ws].filter(m => !offView(m[0])).map(m => `<button class="mv-tile" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><span class="tx"><b>${m[2]}</b></span><span></span>${ic('chev')}</button>`).join('')}<button class="mv-tile" data-shell-act="switch-area"><span class="ti">${ic('grid')}</span><span class="tx"><b>Switch area</b></span><span></span>${ic('chev')}</button><button class="mv-tile" data-shell-act="signout"><span class="ti">${ic('lock')}</span><span class="tx"><b>${client.session.current?.actas ? 'Back to the console' : 'Sign out'}</b></span><span></span>${ic('chev')}</button></div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
   sh.classList.add('open');
 }
 document.addEventListener('click', e => {
@@ -418,7 +430,7 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>Updating…</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string').map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]) });
+const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]) });
 $('#msearch input')?.addEventListener('focus', e => { if (!admin && store) { e.target.blur(); search.open(e.target.value); } });
 let lastMobile = isMobile();
 window.addEventListener('resize', () => { const m = isMobile(); if (m !== lastMobile) { lastMobile = m; if (current) show(current, currentArg); } });
