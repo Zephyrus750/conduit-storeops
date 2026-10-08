@@ -31,6 +31,7 @@
 
 import { reject } from './util.js';
 import { settingsOf } from './store.js';
+import { storeDay, DEFAULT_TZ } from '../time.js';
 
 export const PTYPES = ['chep', 'loscam', 'bulk'];
 export const PALLET_STATUS = ['landed', 'assigned', 'active', 'paused', 'done'];
@@ -589,7 +590,7 @@ function lateTruck(s, e, what) {
   const t = s.dock.trucks[e.entity.truck];
   if (!t) return reject('not_found', `truck ${e.entity.truck} does not exist`);
   if (t.status !== 'closed') return t;
-  if (e.entity.truck.slice(0, 10) !== String(e.at).slice(0, 10)) return reject('truck_closed', `${what} is same-day only`);
+  if (e.entity.truck.slice(0, 10) !== storeDay(new Date(e.at), s.settings?.tz || DEFAULT_TZ)) return reject('truck_closed', `${what} is same-day only`);   // the store's day: a 7am Perth event is the previous day in UTC
   if (e.actor?.role !== 'manager' && !e.actor?.owner) return reject('forbidden', `${what} needs the manager code`);
   return t;
 }

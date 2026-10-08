@@ -93,11 +93,14 @@ function markKeysFor(marks, info) {
   const full = canonCode(info.full), shelf = canonCode(info.id);
   return Object.keys(marks).filter(k => { const c = canonCode(k); return c === full || c === shelf; });
 }
-async function tap(ctx, info) {
+// A tap toggles; a scan only marks (a shelf already done says so), so a
+// second read of the same label, or a wedge double-read, never unmarks it.
+async function tap(ctx, info, { scanned = false } = {}) {
   const m = model(ctx);
   try {
     if (mode === 'plan') { const cur = m.plan[info.full]; await ctx.store.dispatch({ type: 'refresh.plan.paint', entity: { segment: info.full }, payload: { colour: planColour === 'erase' || cur === planColour ? 'erase' : planColour } }); return; }
     const covered = markKeysFor(m.marks, info);
+    if (covered.length && scanned) return toast(`${info.full} is already done this week`);
     if (covered.length) {
       for (const seg of covered) await ctx.store.dispatch({ type: 'refresh.unmark', entity: { segment: seg, week: m.week } });
       toast(`${info.full} unmarked`, '', { label: 'Undo', run: () => ctx.store.dispatch({ type: 'refresh.mark', entity: { segment: info.full, week: m.week }, payload: { dept: info.dept } }).catch(e => toast(e.message, 'bad')) });
@@ -144,19 +147,19 @@ export default {
     // Carried from a shelf selected on the map: zoom to it and ring it. No
     // mark: a tap here toggles the refresh, so arriving only brings it into view.
     if (ctx.arg?.select) { const code = canonCode(ctx.arg.select); if (map.groups(code).length) { map.select(code); map.zoomTo(code); } }
-    bindShelfScan(root, map, info => tap(ctx, info));
+    bindShelfScan(root, map, info => tap(ctx, info, { scanned: true }));
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act'), m = model(ctx);
       try {
         if (act === 'mode') { mode = a.getAttribute('data-mode'); paint(); }
         // Walk the aisle scanning shelf labels: each read marks that shelf
-        // module refreshed (or unmarks it, as a tap would). "A013S02" and
+        // module refreshed (one already done says so). "A013S02" and
         // "A13 S2" name one module (groupsFor).
         else if (act === 'scan-shelf') openScanner({ title: 'Scan shelf labels', hint: 'Each label marks its shelf refreshed', continuous: true, onCode: code => {
           const g = groupsFor(map.svg, code)[0];
           if (!g) return toast(`${code} is not a shelf on this map`, 'bad');
-          tap(ctx, map.shelfInfo(g));
+          tap(ctx, map.shelfInfo(g), { scanned: true });
         } });
         else if (act === 'chart') { chartMode = a.dataset.v; try { localStorage.setItem(CHART_KEY, chartMode); } catch {} paint(); }
         else if (act === 'open-dept') { openDept = a.dataset.dept || null; paint(); }

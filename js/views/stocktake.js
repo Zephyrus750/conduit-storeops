@@ -2,7 +2,7 @@
 // counted → verified, phase counting | final. Reads store.get('stocktake').
 
 import { $, ic, esc, vh, sub, prog, status, DEPT_COLOUR, DEPT_NAME, today, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, segmentId, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
 import { openScanner } from '../scan.js';
 import { printSheet, tick, table, section, signoff } from '../print.js';
 import { csvLines } from '../../shared/records.js';
@@ -26,23 +26,28 @@ function sessionModel(id, sess) {
 // store can print its report or CSV again later.
 const pastSessions = ctx => Object.entries(ctx.store.get('stocktake').sessions).filter(([, s]) => s.ended).sort((a, b) => (a[1].ended < b[1].ended ? 1 : -1)).map(([id, s]) => sessionModel(id, s));
 const MARK = { pending: 'counting', counted: 'counted', verified: 'verified' };
+// Counts are per module ("A11 S1"), as ShelfSearcher counted; a shelf with
+// no modules is its own one. A session opened before counts were per module
+// holds whole-shelf keys, which still count for every module of the shelf.
+const stOf = (m, mod, shelf) => m.shelves[mod] || m.shelves[shelf];
+const moduleTotal = map => new Set(map.segments().map(segmentId)).size;
 function marksFor(m) { const out = {}; for (const [id, r] of Object.entries(m.shelves)) out[id] = MARK[r.state]; return out; }
 function byDept(map, m) {
   const tot = {}, done = {};
-  for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(), id = g.getAttribute('data-shelf'); (tot[d] ||= new Set()).add(id); if (m.shelves[id] && m.shelves[id].state !== 'pending') (done[d] ||= new Set()).add(id); }
+  for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(), id = segmentId(g), r = stOf(m, id, g.getAttribute('data-shelf')); (tot[d] ||= new Set()).add(id); if (r && r.state !== 'pending') (done[d] ||= new Set()).add(id); }
   return Object.keys(tot).filter(d => DEPT_NAME[d] && !['checkouts', 'stockroom'].includes(d)).map(d => ({ d, done: done[d]?.size || 0, total: tot[d].size }));
 }
 async function tap(ctx, info, hold) {
   const m = model(ctx); if (!m.id) return toast('No stocktake session is open. Start one on the desktop.');
-  const cur = m.shelves[info.id];
+  const key = info.full, cur = m.shelves[key];
   try {
-    if (hold) { const back = !cur ? null : cur.state === 'verified' ? 'counted' : cur.state === 'counted' ? 'pending' : 'cleared'; if (back === 'counted') await ctx.store.dispatch({ type: 'stocktake.verify', entity: { session: m.id, shelf: info.id }, payload: { verified: false } }); else if (back) await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: info.id }, payload: { state: back } }); return; }
+    if (hold) { const back = !cur ? null : cur.state === 'verified' ? 'counted' : cur.state === 'counted' ? 'pending' : 'cleared'; if (back === 'counted') await ctx.store.dispatch({ type: 'stocktake.verify', entity: { session: m.id, shelf: key }, payload: { verified: false } }); else if (back) await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: key }, payload: { state: back } }); return; }
     // First tap starts the count (yellow "counting"), the second marks it counted, as in ShelfSearcher.
     if (!cur && m.sess?.phase === 'final') return toast('Counting is closed; the final check only verifies', 'bad');
-    if (!cur) await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: info.id }, payload: { state: 'pending' } });
-    else if (cur.state === 'pending') await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: info.id }, payload: { state: 'counted' } });
-    else if (cur.state === 'counted' && !ctx.isMobile) await ctx.store.dispatch({ type: 'stocktake.verify', entity: { session: m.id, shelf: info.id }, payload: { verified: true } });
-    else if (cur.state === 'verified' && !ctx.isMobile) await ctx.store.dispatch({ type: 'stocktake.verify', entity: { session: m.id, shelf: info.id }, payload: { verified: false } });
+    if (!cur) await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: key }, payload: { state: 'pending' } });
+    else if (cur.state === 'pending') await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: key }, payload: { state: 'counted' } });
+    else if (cur.state === 'counted' && !ctx.isMobile) await ctx.store.dispatch({ type: 'stocktake.verify', entity: { session: m.id, shelf: key }, payload: { verified: true } });
+    else if (cur.state === 'verified' && !ctx.isMobile) await ctx.store.dispatch({ type: 'stocktake.verify', entity: { session: m.id, shelf: key }, payload: { verified: false } });
   } catch (e) { toast(e.message, 'bad'); }
 }
 
@@ -65,7 +70,7 @@ export default {
     const paint = () => keepScanFocus(root, () => {
       const m = model(ctx); map.setMarks(marksFor(m));
       const side = $('#stside', root); if (side) side.innerHTML = sidebar(map, m) + missingCard(map, m) + historyCard(pastSessions(ctx));
-      const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(m);
+      const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(m, moduleTotal(map));
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = m.sess ? `<b>${m.done}</b> counted · ${m.counts.verified} ✓✓ · ${esc(m.id)}` : 'No session open';
     });
     paint();
@@ -78,7 +83,7 @@ export default {
         const past = a.dataset.session ? pastSessions(ctx).find(x => x.id === a.dataset.session) : null;
         if (act === 'report') printReport(map, past || model(ctx));
         if (act === 'csv') exportCsv(map, past || model(ctx));
-        if (act === 'locate') { const id = a.dataset.shelf; map.zoomTo(id, 500); map.select(id); flash(map, id); }
+        if (act === 'locate') { const id = a.dataset.shelf, gs = map.segments().filter(g => segmentId(g) === id), shelf = gs[0]?.getAttribute('data-shelf') || id; map.zoomTo(shelf, 500); map.select(shelf); flash(gs.length ? gs : map.groups(id)); }
         if (act === 'missing-dept') { missingDept = missingDept === a.dataset.dept ? null : a.dataset.dept; paint(); }
         if (act === 'scan-shelf') openScanner({ title: 'Scan shelf labels', hint: 'First read starts the count, the next marks it counted', continuous: true, onCode: code => {
           const g = groupsFor(map.svg, code)[0];
@@ -97,21 +102,22 @@ export default {
 };
 function sidebar(map, m) {
   if (!m.sess) return `<div class="card"><div class="ch"><h3>Session</h3>${status('info', 'Closed')}</div><p class="lbl">Start a session to begin counting. Phones count once it is open; verification stays on the desktop.</p><div class="pfoot" style="margin-top:14px"><button class="btn primary" data-act="start">${ic('plus')}Start a session</button></div></div>`;
-  const total = map.segments().reduce((s, g) => s.add(g.getAttribute('data-shelf')), new Set()).size;
+  const total = moduleTotal(map);
   return `<div class="card"><div class="ch"><h3>Session ${esc(m.id)}</h3>${status(m.sess.phase === 'final' ? 'info' : 'warn', m.sess.phase === 'final' ? 'Final check' : 'Counting')}</div>${shelfScanField('Scan or type a shelf label to count it')}<div class="big">${m.done}<span class="of">/</span>${total}</div><div class="lbl">Shelves counted · ${m.counts.verified} verified · ${m.counts.pending} counting</div>${prog(m.done / Math.max(1, total) * 100)}` +
     `<div class="pfoot" style="flex-direction:column;gap:8px;margin-top:14px"><button class="btn" data-act="phase">${ic('refresh')}${m.sess.phase === 'final' ? 'Back to counting' : 'Flip to Final Check'}</button><button class="btn" data-act="report">${ic('print')}Report and missing list</button><button class="btn" data-act="csv">${ic('file')}Export CSV</button><button class="btn" data-act="verify-all">${ic('checks')}Bulk verify all counted</button><button class="btn" style="color:var(--red)" data-act="end">End session</button></div></div>` +
     `<div class="card"><div class="ch"><h3>By department</h3></div><div class="chips">${byDept(map, m).map(d => `<span class="chip" data-act="zoom-dept" data-dept="${d.d}"><span class="sw" style="background:${DEPT_COLOUR[d.d]}"></span>${d.d.toUpperCase()} ${d.done}/${d.total}</span>`).join('')}</div><p class="lbl" style="margin-top:14px">Tap a shelf to start counting it (yellow), again when it is counted (green); tap a counted shelf to verify it (blue).</p></div>`;
 }
-function mobileBar(m) {
+const pct = (n, total) => total ? Math.min(100, Math.round(n / total * 100)) : 0;
+function mobileBar(m, total) {
   if (!m.sess) return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b></div><div class="mv-hint">No session is open. Sessions start on the desktop.</div>`;
-  return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b><span class="phase">${m.sess.phase === 'final' ? 'Final' : 'Counting'}</span></div><div class="st-prog"><i><u class="v" style="width:${Math.min(100, m.counts.verified)}%"></u><u class="c" style="width:${Math.min(100, m.done)}%"></u></i><span><b>${m.done}</b> counted · ${m.counts.verified} ✓✓</span></div>${shelfScanField()}<div class="mv-hint">Tap or scan a shelf to start counting, again when counted, hold to step back. Session <b>${esc(m.id)}</b> is controlled from the desktop.</div>`;
+  return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b><span class="phase">${m.sess.phase === 'final' ? 'Final' : 'Counting'}</span></div><div class="st-prog"><i><u class="v" style="width:${pct(m.counts.verified, total)}%"></u><u class="c" style="width:${pct(m.done, total)}%"></u></i><span><b>${m.done}</b> counted · ${m.counts.verified} ✓✓</span></div>${shelfScanField()}<div class="mv-hint">Tap or scan a shelf to start counting, again when counted, hold to step back. Session <b>${esc(m.id)}</b> is controlled from the desktop.</div>`;
 }
 
 // Every shelf on the map with its department and this session's state.
 function shelfStates(map, m) {
   const seen = new Map();
-  for (const g of map.segments()) { const id = g.getAttribute('data-shelf'), d = (g.getAttribute('data-dept') || '').toLowerCase(); if (id && !seen.has(id) && DEPT_NAME[d] && !['checkouts', 'stockroom'].includes(d)) seen.set(id, d); }
-  return [...seen].map(([id, d]) => ({ id, dept: d, ...(m.shelves[id] || { state: 'not started' }) })).sort((a, b) => a.dept.localeCompare(b.dept) || a.id.localeCompare(b.id, undefined, { numeric: true }));
+  for (const g of map.segments()) { const id = segmentId(g), d = (g.getAttribute('data-dept') || '').toLowerCase(); if (id && !seen.has(id) && DEPT_NAME[d] && !['checkouts', 'stockroom'].includes(d)) seen.set(id, [d, g.getAttribute('data-shelf')]); }
+  return [...seen].map(([id, [d, shelf]]) => ({ id, dept: d, ...(stOf(m, id, shelf) || { state: 'not started' }) })).sort((a, b) => a.dept.localeCompare(b.dept) || a.id.localeCompare(b.id, undefined, { numeric: true }));
 }
 // ShelfSearcher's report: department tallies, then every shelf not yet
 // counted, grouped by department with a tick to walk and find it.
@@ -147,7 +153,7 @@ function historyCard(past) {
   return `<div class="card"><div class="ch"><h3>Past sessions</h3><span class="cs-dim">${past.length}</span></div><div class="list">${past.slice(0, 12).map(p => `<div class="li st-past"><span class="loc">${esc(p.id)}</span><span class="nm">${fmtTime(p.sess.startedAt)} – ${fmtTime(p.sess.ended)}<small>${p.done} counted · ${p.counts.verified} verified</small></span><span class="ibtn" data-act="report" data-session="${esc(p.id)}" title="Print the report">${ic('print')}</span><span class="ibtn" data-act="csv" data-session="${esc(p.id)}" title="Download CSV">${ic('file')}</span></div>`).join('')}</div></div>`;
 }
 // A located shelf pulses for a moment so the eye finds it.
-function flash(map, id) {
-  const gs = map.groups(id); for (const g of gs) g.setAttribute('data-flash', '1');
+function flash(gs) {
+  for (const g of gs) g.setAttribute('data-flash', '1');
   setTimeout(() => { for (const g of gs) g.removeAttribute("data-flash"); }, 4000);
 }

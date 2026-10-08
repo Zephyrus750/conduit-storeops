@@ -67,7 +67,7 @@ export default {
         if (act === 'select') { selected = a.getAttribute('data-id'); const r = map.markers().find(x => x.id === selected); if (r) map.setVb([r.x - 600, r.y - 400, 1200, 800]); paint(); }
         else if (act === 'close') { selected = null; paint(); }
         else if (act === 'filter') { filterType = a.getAttribute('data-type'); paint(); }
-        else if (act === 'service') { if (!selected) return toast('Tap a marker on the map first'); const note = prompt('Technician / docket #', '') ?? ''; await ctx.store.dispatch({ type: 'asset.service', entity: { asset: selected }, payload: { note } }); toast('Service logged'); }
+        else if (act === 'service') { if (!selected) return toast('Tap a marker on the map first'); const note = prompt('Technician / docket #', ''); if (note == null) return; await ctx.store.dispatch({ type: 'asset.service', entity: { asset: selected }, payload: { note } }); toast('Service logged'); }
         else if (act === 'schedule') { const cur = ctx.store.get('assets')[selected]?.intMonths || 12; const v = prompt('Service interval in months', String(cur)); const n = Number(v); if (!v || !Number.isInteger(n)) return; await ctx.store.dispatch({ type: 'asset.schedule', entity: { asset: selected }, payload: { months: n } }); }
       } catch (err) { toast(err.message, 'bad'); }
     });

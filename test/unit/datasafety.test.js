@@ -76,3 +76,22 @@ test('marker glyph colours from a published map are a hex or a name, nothing els
   assert.match(markerGlyph('aed', '#eab308'), /stroke="#eab308"/);
   assert.doesNotMatch(markerGlyph('aed', 'x" onload="alert(1)'), /onload/);
 });
+
+// October audit, wrong numbers: days are the store's days, not UTC's.
+test('a late manifest on a truck finalised today counts today on the store clock', () => {
+  const s = dock();
+  apply(s, { ...ev('truck.finalise', { truck: T1 }, {}, 'manager'), at: '2026-09-07T11:00:00+08:00' });
+  // 6:30am on the 7th in Perth is still the 6th in UTC.
+  const early = { ...ev('manifest.linkLate', { truck: T1 }, { links: [{ bay: 'A1', consolIds: ['400000001'], basis: 'scan' }] }, 'manager'), at: '2026-09-06T22:30:00.000Z' };
+  assert.notEqual(apply(s, early)?.code, 'truck_closed');
+  const nextDay = { ...ev('manifest.linkLate', { truck: T1 }, { links: [{ bay: 'A2', consolIds: ['400000002'], basis: 'scan' }] }, 'manager'), at: '2026-09-07T16:30:00.000Z' };
+  assert.equal(apply(s, nextDay).code, 'truck_closed', '00:30 on the 8th in Perth');
+});
+
+test('a service due date follows the store day', () => {
+  const s = initialState();
+  apply(s, { ...ev('asset.service', { asset: 'aed1' }, {}, 'floor'), at: '2026-09-30T17:00:00.000Z' });   // 1am on 1 October in Perth
+  assert.equal(s.assets.aed1.due, '2027-10-01');
+  apply(s, { ...ev('asset.schedule', { asset: 'aed1' }, { months: 6 }, 'manager'), at: '2026-10-02T00:00:00.000Z' });
+  assert.equal(s.assets.aed1.due, '2027-04-01');
+});

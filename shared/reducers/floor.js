@@ -15,6 +15,7 @@
 //             offsiteAt, offsiteSrc; loads id → { id, label, date, status, recvDate, src, pallets[{pid, items[{k,d,q,dept}]}], at, by }
 
 import { reject } from './util.js';
+import { storeDay, DEFAULT_TZ } from '../time.js';
 import { OFFSITE_CAP, LOAD_CAP, LOAD_PALLET_CAP, LOAD_LINE_CAP, LOAD_STATUS } from '../inventory.js';
 
 export const ISSUE_CATS = ['leak', 'light', 'elec', 'ac', 'plumb', 'struct', 'fixture', 'door', 'safety', 'pest', 'other'];
@@ -242,7 +243,7 @@ export const floorReducers = {
   'asset.service'(s, e) {
     const a = (s.assets[e.entity.asset] ||= { intMonths: 12, due: null, log: [], updated: null });
     a.log.push({ t: e.at, a: 'Serviced', n: e.payload.note || '' });
-    a.due = addMonths(e.at, a.intMonths); a.updated = e.at;
+    a.due = addMonths(storeDayOf(s, e.at), a.intMonths); a.updated = e.at;   // the store's day, not UTC's
     return null;
   },
   'asset.schedule'(s, e) {
@@ -251,7 +252,7 @@ export const floorReducers = {
     const a = (s.assets[e.entity.asset] ||= { intMonths: 12, due: null, log: [], updated: null });
     a.intMonths = m;
     const last = a.log.filter(l => l.a === 'Serviced').map(l => l.t).sort().pop() || e.at;
-    a.due = addMonths(last, m); a.updated = e.at;
+    a.due = addMonths(storeDayOf(s, last), m); a.updated = e.at;
     a.log.push({ t: e.at, a: 'Schedule set', n: `${m} months` });
     return null;
   },
@@ -342,6 +343,7 @@ function issue(s, e) {
 function num(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
 
 // Adds calendar months to an ISO timestamp and returns an ISO date (YYYY-MM-DD).
+const storeDayOf = (s, at) => storeDay(new Date(at), s.settings?.tz || DEFAULT_TZ);
 export function addMonths(iso, months) {
   const d = new Date(iso);
   const day = d.getUTCDate();
