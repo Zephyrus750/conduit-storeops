@@ -3,7 +3,7 @@
 // diagnosis, the generic fallback, and the documents built from a parse.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseManifestSheets, manifestDoc, attachConsols } from '../../shared/manifest.js';
+import { parseManifestSheets, manifestDoc, attachConsols, manifestCheck } from '../../shared/manifest.js';
 
 const C1 = '093008012601804381', C2 = '093008012601804382';
 const report = [{ name: 'Manifest Report', rows: [
@@ -54,4 +54,23 @@ test('manifestDoc and attachConsols: the stored document keeps carton ids, the t
   const att = attachConsols(doc);
   assert.deepEqual(Object.keys(att[0]), ['id', 'cons', 'cartons', 'dept', 'mix', 'items']); assert.deepEqual(att[0].items[0], { k: '43307685', q: 12, dept: '024', c: 2 });
   assert.equal(manifestDoc({ consols: [{ cons: '093008012601804399', cartons: 4 }] }, { manNo: 'M-1' }).consols[0].id, '601804399');
+});
+
+test('the upload preview: what was read, what was left out, and what blocks a publish', () => {
+  const r = parseManifestSheets(report);
+  assert.equal(r.rowsRead, 5); assert.deepEqual(r.skipped, { numericCons: 0, badKeycode: 1, other: 0 });
+  const ok = manifestCheck(r, { storeNo: '1241', index: {}, today: '2026-09-08', mpc: 0.5 });
+  assert.deepEqual(ok.stats, { consols: 2, cartons: 6, keycodes: 4, units: 29, lines: 4, workMins: 3, rowsRead: 5 });
+  assert.equal(ok.blocking, false);
+  assert.deepEqual(ok.checks.map(c => c.level), ['warn'], 'only the unreadable keycode row');
+  assert.match(ok.checks[0].text, /1 row had no readable keycode/);
+  assert.deepEqual(ok.depts[0], ['084', 4]);
+  const other = manifestCheck(r, { storeNo: '2033', index: { 7031482: { publishedAt: '2026-09-07T01:00:00Z', truck: '2026-09-07-T2' } }, today: '2026-10-05' });
+  assert.equal(other.blocking, true);
+  const t = other.checks.map(c => c.text).join(' | ');
+  assert.match(t, /for store 1241, not 2033/); assert.match(t, /already published \(2026-09-07\) and attached to Truck 2/); assert.match(t, /29 days ago/);
+  const mixed = parseManifestSheets([{ name: 'S', rows: [['Manifest No', '', ''], ['Consolidation', 'Carton', 'Keycode', 'Description', 'Dept', 'Qty'], [C1, '000000000000000001', '43307685', 'x', '24', 6], [93008012601804382, 1, '43307686', 'x', '24', 6], ['x', '9341234567890123', '', '', '', '']] }]);
+  assert.deepEqual(mixed.skipped, { numericCons: 1, badKeycode: 0, other: 1 });
+  const m = manifestCheck(mixed, {}).checks.map(c => c.text).join(' | ');
+  assert.match(m, /stored as a number/); assert.match(m, /matched no layout/); assert.match(m, /no manifest number/);
 });

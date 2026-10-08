@@ -14,16 +14,18 @@ export class TransportError extends Error {
 export function createTransport({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs = REQUEST_TIMEOUT_MS }) {
   const base = baseUrl.replace(/\/+$/, '');
   // timeoutMs per call for the few slow ones (an import reads a whole legacy store).
-  // text: true returns the body as text (a CSV export) instead of parsed JSON.
-  async function request(path, { method = 'GET', body, token, timeoutMs: perCall, text = false } = {}) {
+  // text: true returns the body as text (a CSV export) instead of parsed JSON;
+  // blob: true returns it as a Blob (a photo). raw sends bytes as they are
+  // (a Blob or typed array) with rawType as the content type.
+  async function request(path, { method = 'GET', body, token, timeoutMs: perCall, text = false, blob = false, raw, rawType = 'application/octet-stream' } = {}) {
     const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), perCall || timeoutMs) : null;
     let res;
     try {
       res = await fetchImpl(base + path, {
         method,
-        headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers: { ...(raw !== undefined ? { 'Content-Type': rawType } : body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: raw !== undefined ? raw : body === undefined ? undefined : JSON.stringify(body),
         signal: ctl?.signal,
       });
     } catch (e) {
@@ -31,6 +33,7 @@ export function createTransport({ baseUrl, fetchImpl = globalThis.fetch, timeout
     } finally { if (timer) clearTimeout(timer); }
     let data = null;
     if (text && res.ok) return res.text();
+    if (blob && res.ok) return res.blob();
     try { data = await res.json(); } catch { data = null; }
     if (!res.ok) throw new TransportError(res.status, data?.code || 'http_error', data?.message || `HTTP ${res.status}`, data || {});
     return data;

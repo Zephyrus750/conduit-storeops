@@ -100,16 +100,40 @@ function readString(src, i) {
 // stores beside them.
 export function renderMap(data) {
   const floors = (data.floors || []).map(f => renderFloor(f, data));
+  const info = cleanStoreInfo(data.storeInfo), mpu = Number(data.metresPerUnit);
   return {
     store: String(data.storeNumber || ''), name: String(data.storeName || ''), editorVersion: String(data.version || ''),
     departments: (data.departments || []).map(d => ({ id: d.id, name: d.name, color: d.color, parent: d.parent })),
-    floors,
+    floors, ...(info ? { storeInfo: info } : {}), ...(mpu > 0 && mpu < 100 ? { metresPerUnit: mpu } : {}),
   };
+}
+
+// The editor's store details (Store Info tab), allow-listed field by field:
+// every device shows them, so only short text, coordinates and https links
+// survive, and empty fields are dropped. The assembly point and directions
+// serve the evacuation route; address, hours and holidays the store details.
+// Runs in the console before publishing and again on the worker.
+export function cleanStoreInfo(info) {
+  if (!info || typeof info !== 'object') return null;
+  const txt = (v, max = 200) => (typeof v === 'string' || typeof v === 'number') ? String(v).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max) : '';
+  const coord = (v, lim) => { const n = Number(v); return v !== '' && v != null && Number.isFinite(n) && Math.abs(n) <= lim ? n : null; };
+  const link = v => { const u = txt(v, 500); try { return u && new URL(u).protocol === 'https:' ? u : ''; } catch { return ''; } };
+  const out = {};
+  for (const k of ['brand', 'storeType', 'storeStyle', 'storeSize', 'zone', 'parkingTip', 'assemblyNotes', 'lastUpdated']) { const v = txt(info[k], k.endsWith('Notes') || k === 'parkingTip' ? 300 : 60); if (v) out[k] = v; }
+  for (const [k, lim] of [['lat', 90], ['lng', 180], ['parkingLat', 90], ['parkingLng', 180], ['assemblyLat', 90], ['assemblyLng', 180]]) { const v = coord(info[k], lim); if (v !== null) out[k] = v; }
+  for (const k of ['directionsGoogle', 'directionsApple']) { const v = link(info[k]); if (v) out[k] = v; }
+  const lines = Array.isArray(info.addressLines) ? info.addressLines.map(l => txt(l, 120)).filter(Boolean).slice(0, 5) : [];
+  if (lines.length) out.addressLines = lines;
+  const hours = Array.isArray(info.hoursDays) ? info.hoursDays.filter(d => Array.isArray(d) && txt(d[1])).slice(0, 7).map(d => [txt(d[0], 20), txt(d[1], 60)]) : [];
+  if (hours.length) out.hoursDays = hours;
+  const hol = Array.isArray(info.publicHolidays) ? info.publicHolidays.filter(h => h && (h.name || h.date)).slice(0, 30).map(h => ({ name: txt(h.name, 60), date: txt(h.date, 20), hours: txt(h.hours, 60) })) : [];
+  if (hol.length) out.publicHolidays = hol;
+  return Object.keys(out).length ? out : null;
 }
 
 export function renderFloor(floor, data) {
   const id = String(floor.id || 'ground');
-  const inner = (floor.svg ? stripOuter(floor.svg) : floorInner(floor, data)) + emergencyMarkers(floor.emergencyMarkers, data) + priceChecks(floor.priceChecks, data);
+  const inner = (floor.svg ? stripOuter(floor.svg) : floorInner(floor, data)) + emergencyMarkers(floor.emergencyMarkers, data) + priceChecks(floor.priceChecks, data) + zoomBoxes(floor.deptZoomBoxes);
   const vb = floorViewBox(floor, data);
   const svg = `<svg class="map real" viewBox="${vb}" xmlns="${NS}" preserveAspectRatio="xMidYMid meet" style="--badge-opacity:1;--label-opacity:0;--label-bg-opacity:0">` +
     `<g id="floor-${esc(id)}" class="map-floor zoom-out" data-floor="${esc(id)}" data-floor-type="${esc(floor.type || 'foh')}" style="opacity:1;pointer-events:auto;visibility:visible">${inner}</g></svg>`;
@@ -122,7 +146,7 @@ export function renderFloor(floor, data) {
 function stripOuter(svg) {
   let s = String(svg).replace(/^\s*<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').replace(/<style>[\s\S]*?<\/style>/, '')
     .replace(/<circle[^>]*data-emergency[^>]*\/>/g, '').replace(/<text[^>]*>[☀-➿\uD83C-􏰀-\uDFFF][^<]*<\/text>/g, '');
-  s = stripGroup(s, 'emergency-markers'); s = stripGroup(s, 'price-checks');
+  s = stripGroup(s, 'emergency-markers'); s = stripGroup(s, 'price-checks'); s = stripGroup(s, 'dept-zoom-boxes');
   return s;
 }
 function stripGroup(s, cls) {
@@ -223,7 +247,7 @@ function landmark(z) {
 }
 
 const autoFixture = s => { const sn = String(s.subname || '').toUpperCase(); return /^S\d/.test(sn) ? 'side' : /^[EP]\d/.test(sn) ? 'end' : null; };
-function locationRange(locations) {
+export function locationRange(locations) {
   if (!locations || !locations.length) return ''; if (locations.length === 1) return locations[0];
   const sorted = [...locations].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); const first = sorted[0], last = sorted[sorted.length - 1];
   let prefix = ''; for (let i = 0; i < Math.min(first.length, last.length); i++) { if (first[i] === last[i]) prefix += first[i]; else break; }
@@ -237,7 +261,7 @@ function shelves(list, data) {
   const badges = [], groups = [];
   list.forEach((s, idx) => {
     const color = colour[s.dept] || '#888', opacity = s.inactive ? 0.25 : 0.75, full = (s.name || '') + (s.subname ? ' ' + s.subname : '');
-    const attrs = ` data-shelf="${esc(s.name || '')}" data-subname="${esc(s.subname || '')}" data-dept="${esc(s.dept || '')}" data-full="${esc(full)}"${s.locations && s.locations.length >= 2 ? ` data-locations="${esc(s.locations.join(','))}"` : ''}${s.fixture && s.fixture !== autoFixture(s) ? ` data-fixture="${esc(s.fixture)}"` : ''}`;
+    const attrs = ` data-shelf="${esc(s.name || '')}" data-subname="${esc(s.subname || '')}" data-dept="${esc(s.dept || '')}" data-full="${esc(full)}"${s.locations && s.locations.length >= 2 ? ` data-locations="${esc(s.locations.join(','))}"` : ''}${s.fixture && s.fixture !== autoFixture(s) ? ` data-fixture="${esc(s.fixture)}"` : ''}${s.sharedName ? ' data-shared="1"' : ''}`;
     if (s.type === 'sixway') {
       const r = s.radius || 20; let g = `<g class="shelf-group"${attrs}><circle cx="${s.x}" cy="${s.y}" r="${r}" class="shelf" fill="${color}" fill-opacity="${opacity * 0.73}" stroke="${color}"/>`;
       for (let i = 0; i < 6; i++) { const a = (i * 60 - 90) * Math.PI / 180; g += `<line x1="${s.x + Math.cos(a) * r * 0.22}" y1="${s.y + Math.sin(a) * r * 0.22}" x2="${s.x + Math.cos(a) * r * 0.88}" y2="${s.y + Math.sin(a) * r * 0.88}" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" stroke-linecap="round"/>`; }
@@ -290,6 +314,9 @@ const GLYPH = {
   'spill-kit': '<path d="M-7 -6h14l-2 12h-10z" fill="none" stroke="C" stroke-width="1.8" stroke-linejoin="round"/><path d="M-7 -6a7 3 0 0 1 14 0" fill="none" stroke="C" stroke-width="1.8"/>',
   hazard: '<path d="M0 -8l8 14h-16z" fill="none" stroke="C" stroke-width="1.8" stroke-linejoin="round"/><path d="M0 -2v4" stroke="C" stroke-width="2" stroke-linecap="round"/><circle cx="0" cy="4.5" r="1" fill="C"/>',
 };
+// The glyph for a marker type in a colour, or '' (maps published as raw SVG
+// by the legacy viewer carry icon-font text the shell swaps for these).
+export function markerGlyph(type, colour) { const g = GLYPH[markerType(type)]; return g ? g.replace(/"C"/g, `"${colour}"`) : ''; }
 function signInner(type, extClass) {
   const RED = '#e4002b', GREEN = '#009639', base = bg => `<rect class="em-icon-bg" x="-13" y="-13" width="26" height="26" rx="3" fill="${bg}" stroke="#ffffff" stroke-width="2"/>`;
   const BANDS = { foam: '#0057b8', powder: '#ffffff', co2: '#111111', wet_chem: '#e8b98a', liquid: '#ffd500' };
@@ -359,3 +386,30 @@ function priceChecks(list, data) {
   }
   return svg + '</g>';
 }
+
+// The editor's department zoom boxes: the frame a department opens to. The
+// legacy export drops each box's id and the viewer looked them up by id, so
+// they never took effect there; here they are keyed by department and ride
+// in the floor as hidden rects the map reads (js/map.js zoomDeptOn).
+function zoomBoxes(list) {
+  const ok = (list || []).filter(b => b && b.dept && [b.x, b.y, b.w, b.h].every(Number.isFinite) && b.w > 0 && b.h > 0);
+  if (!ok.length) return '';
+  return '<g class="dept-zoom-boxes" visibility="hidden" pointer-events="none">' + ok.map(b => `<rect class="dept-zoom" data-dept="${esc(String(b.dept).toLowerCase())}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="none"/>`).join('') + '</g>';
+}
+
+// One map symbol as a small standalone svg, for the symbols legend: the
+// emergency signs as the map draws them, the price-check and order-screen
+// discs, and the landmark icons.
+export function markerSymbol(kind, size = 26) {
+  const box = inner => `<svg viewBox="-15 -15 30 30" width="${size}" height="${size}" aria-hidden="true">${inner}</svg>`;
+  if (kind === 'pc' || kind === 'order') {
+    const C = '#14b8a6', glyph = kind === 'order' ? `<g stroke="${C}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="-6" y="-6" width="12" height="8" rx="1"/><line x1="0" y1="2" x2="0" y2="4.6"/><line x1="-3.4" y1="5.4" x2="3.4" y2="5.4"/></g>` : `<g transform="translate(-6.5,-6.5) scale(0.5417)" stroke="${C}" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M5 12h14"/></g>`;
+    return box(`<circle r="13" fill="#042f2e" stroke="${C}" stroke-width="2.5"/>${glyph}`);
+  }
+  if (kind.startsWith('lm:')) { const ic = ICONS[kind.slice(3)]; return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><rect width="24" height="24" rx="5" fill="#1F2937"/><g transform="translate(4,4) scale(.6667)" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ic || ''}</g></svg>`; }
+  if (kind === 'tory') return `<svg viewBox="0 0 30 30" width="${size}" height="${size}" aria-hidden="true"><path d="M3 22 L13 12 L27 12" fill="none" stroke="#ff69b4" stroke-width="2.5" stroke-dasharray="5 3" stroke-linecap="round"/></svg>`;
+  const type = markerType(kind), [color, bg] = MARKER[type] || MARKER.exit, sign = signInner(type, '');
+  return box(sign || `<circle r="14" fill="${bg}" stroke="${color}" stroke-width="2.5"/>${(GLYPH[type] || GLYPH.hazard).replace(/"C"/g, `"${color}"`)}`);
+}
+export const MARKER_NAMES = { exit: 'Exit', 'fire-exit': 'Fire exit', 'fire-ext': 'Fire extinguisher', 'ext-set': 'Extinguisher set', 'first-aid': 'First aid kit', aed: 'AED defibrillator', assembly: 'Assembly point', hazard: 'Hazard', 'spill-kit': 'Spill kit', hose: 'Hose reel', hydrant: 'Fire hydrant', 'call-point': 'Fire alarm call point', 'emergency-phone': 'Emergency phone' };
+export const LANDMARK_NAMES = { desk: 'Service desk', register: 'Registers', fitting: 'Fitting rooms', entry: 'Entry', exit: 'Exit door', tearoom: 'Tearoom', stairs: 'Stairs', toilet: 'Toilets', lift: 'Lift', storage: 'Storage', receival: 'Receival', dock: 'Loading dock', compactor: 'Compactor', kiosk: 'Kiosk', trolley: 'Trolley bay', orderscreen: 'Order screen' };

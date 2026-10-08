@@ -7,15 +7,19 @@
 // Reads are cached per store while the console is open; a Refresh button
 // or any write clears the relevant cache.
 
-import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName, DEPTS_DEFAULT } from '../ui.js';
 import { parseMapFile, renderMap } from '../../shared/maprender.js';
 import { mountMap, bindMapChrome } from '../map.js';
+import { MAP_EDITOR_URL } from '../config.js';
+import { TOOLS } from '../../shared/tools.js';
+import { csvLines } from '../../shared/records.js';
 
 const AREAS = ['floor', 'stockroom', 'backdock'];
 const AREA_NAME = { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock', store: 'Store', owner: 'Owner' };
 const CODES = [['stockroom', 'Stockroom code', 'unlocks the Stockroom area on a device'], ['dock', 'Dock code', 'unlocks the Back dock on a device'], ['manager', 'Manager code', 'opens every entitled area on a device']];
-const STATUSES = ['registered', 'migrating', 'live', 'legacy'];
-const TOOLS = { floor: ['Store map', 'Pick list', 'Location refresh', 'Label integrity', 'Emergency', 'Maintenance', 'Stocktake'], stockroom: ['Backfill review', 'Cages', 'Adjustments', 'Day list', 'History'], backdock: ['Receiving', 'Decant', 'Manifests', 'Carton profiles', 'Planner', 'Receiving history'] };
+const STATUSES = ['registered', 'migrating', 'live', 'legacy', 'suspended'];
+// Tools inside each area that the owner can switch off (shared/tools.js).
+const toolsIn = area => TOOLS.filter(t => t.area === area);
 
 // Credential formats: PIN six digits; SR-/BD- four digits; MG- six digits.
 // Codes compare with case, spaces and hyphens ignored, so these stay readable.
@@ -23,7 +27,7 @@ const digits = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b
 export const gen = { pin: () => digits(6), stockroom: () => 'SR-' + digits(4), dock: () => 'BD-' + digits(4), manager: () => 'MG-' + digits(6) };
 
 // ── state and cache ───────────────────────────────────────────────────
-const st = { no: null, tab: 'over', filter: '', area: 'all', rot: null, edit: false, reg: null, regDone: null, health: null, actions: null };
+const st = { no: null, tab: 'over', filter: '', area: 'all', rot: null, edit: false, reg: null, regDone: null, health: null, actions: null, kpis: null, q: '', status: 'all', larea: 'all' };
 const cache = {};                     // no → { rec, devices, tail, snap }
 const forStore = no => cache[no] || (cache[no] = {});
 export function invalidate(no) { if (no) delete cache[no]; else for (const k of Object.keys(cache)) delete cache[k]; st.actions = null; }
@@ -43,7 +47,7 @@ const fail = e => toast(e.code === 'unauthorised' ? 'Owner session expired. Sign
 
 // ── shared bits ───────────────────────────────────────────────────────
 const tile = (n, label, small, cls = '') => `<div class="ad-tile${cls ? ' ' + cls : ''}"><b>${n}</b><span>${label}</span>${small ? `<small>${small}</small>` : ''}</div>`;
-const tst = (s) => `<span class="tst ${s === 'live' ? 'live' : s === 'migrating' ? 'staged' : ''}">${esc(s || 'off')}</span>`;
+const tst = (s) => `<span class="tst ${s === 'live' ? 'live' : s === 'migrating' ? 'staged' : s === 'suspended' ? 'bad' : ''}">${esc(s || 'off')}</span>`;
 const areaChips = rec => `<span class="ad-areas">${AREAS.map(a => { const on = rec.entitlements?.[a], v = rec.areas?.[a]; return `<i class="${!on ? '' : v === 'live' ? 'on' : v === 'migrating' ? 'mig' : 'leg'}" title="${a} · ${on ? esc(v) : 'off'}">${AREA_NAME[a]}</i>`; }).join('')}</span>`;
 const health = rec => !AREAS.some(a => rec.entitlements?.[a]) ? 'leg' : rec.status === 'live' ? 'ok' : rec.status === 'migrating' ? 'mig' : 'leg';
 const when = iso => iso ? `${fmtTime(iso)} · ${ago(iso)}` : '—';
@@ -56,32 +60,100 @@ const actor = a => a?.owner ? 'owner' : esc(a?.device || '—');
 const short = v => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s.length > 90 ? s.slice(0, 87) + '…' : s; };
 const ent = e => Object.entries(e || {}).map(([k, v]) => `${k} ${v}`).join(' · ');
 
+// ── catalogue ─────────────────────────────────────────────────────────
+// Conduit's own product catalogue (the Kmart sitemaps, read weekly): size,
+// last build, what is still on a legacy worker, and "Rebuild now".
+async function loadCatalogue(ctx) { try { st.cat = await ctx.admin.api('/v1/admin/catalogue'); } catch (e) { st.cat = { error: e.message }; } }
+function catalogueCard(c) {
+  if (!c) return `<div class="card"><div class="ch"><h3>Product catalogue</h3></div><div class="cs-dim">Loading…</div></div>`;
+  if (c.error) return `<div class="card"><div class="ch"><h3>Product catalogue</h3></div><div class="cs-dim">${esc(c.error)}</div></div>`;
+  const lb = c.lastbuild, b = c.build;
+  const state = b ? `<span class="tst staged">building · ${b.done} of ${b.of || '?'} files</span>` : lb ? `<span class="tst ${lb.status === 'ok' ? 'live' : lb.status === 'partial' ? 'staged' : 'bad'}">${esc(lb.status)}</span>` : '<span class="tst">never built</span>';
+  const legacy = [c.total ? '' : 'names and links still come from the legacy suite worker until the first build', c.details?.browserRendering ? '' : c.details?.legacy ? 'prices and images still come from the legacy details worker (set CF_ACCOUNT_ID and BROWSER_TOKEN to move them)' : 'prices and images are off until CF_ACCOUNT_ID and BROWSER_TOKEN are set'].filter(Boolean);
+  return `<div class="card"><div class="ch"><h3>Product catalogue</h3>${state}<button class="btn sm" data-act="cat-rebuild" style="margin-left:auto"${b ? ' disabled' : ''}>${ic('refresh')}Rebuild now</button></div>` +
+    `<div class="ad-kv"><span>Products</span><b>${Number(c.total || 0).toLocaleString()}</b><span>Sitemap files</span><b>${c.files || 0}</b>` +
+    `<span>Last build</span><b>${lb ? `${fmtTime(new Date(lb.at).toISOString())} · ${esc(lb.trigger || '')} · ${esc(lb.discovery || '')}${lb.errors ? ` · ${lb.errors} error${lb.errors === 1 ? '' : 's'}` : ''}` : '—'}</b>` +
+    `${lb?.reason ? `<span>Reason</span><b>${esc(lb.reason)}</b>` : ''}${lb?.sweepHeld ? `<span>Held</span><b>${lb.sweepHeld} files looked gone at once; kept as a suspected outage</b>` : ''}` +
+    `<span>Next weekly read</span><b>${c.next ? fmtTime(new Date(c.next).toISOString()) : '—'}</b></div>` +
+    (legacy.length ? `<div class="cs-dim" style="margin-top:10px">${legacy.map(esc).join('<br>')}</div>` : '') + `</div>`;
+}
+
+// ── the console's numbers and the fleet ───────────────────────────────
+// Each store's numbers (/kpis), fetched together; a store that cannot be
+// reached shows why in its row.
+async function loadKpis(ctx) {
+  const stores = ctx.admin.stores || [], out = {};
+  await Promise.all(stores.map(s => ctx.admin.api(`/v1/admin/stores/${s.no}/kpis`).then(k => { out[s.no] = k; }).catch(e => { out[s.no] = { error: e.code || 'unreachable', devices: { seen24h: 0, versions: {}, errors: [] }, alerts: [] }; })));
+  st.kpis = out;
+}
+// Fleet: the app versions the stores' devices ran in the last day, and the
+// devices reporting an error.
+function fleetCard(stores) {
+  if (!st.kpis) return '';
+  const versions = {}, errors = [];
+  for (const s of stores) { const k = st.kpis[s.no]; if (!k?.devices) continue; for (const [v, n] of Object.entries(k.devices.versions || {})) (versions[v] ||= { n: 0, stores: new Set() }).n += n, versions[v].stores.add(s.no); for (const e of k.devices.errors || []) errors.push({ ...e, no: s.no }); }
+  const vs = Object.entries(versions).sort((a, b) => b[0].localeCompare(a[0], 'en', { numeric: true })), latest = vs[0]?.[0];
+  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Fleet · app versions</h3><span class="cs-dim">devices seen in the last day</span></div>${vs.length ? `<div class="list">${vs.map(([v, x]) => `<div class="li"><span class="loc mono">${esc(v)}</span><span class="nm">${x.n} device${x.n === 1 ? '' : 's'} · ${[...x.stores].map(esc).join(', ')}</span>${v === latest ? '<span class="status good">newest</span>' : '<span class="status warn">behind</span>'}</div>`).join('')}</div>` : '<p class="lbl">No device has checked in today.</p>'}</div>` +
+    `<div class="card"><div class="ch"><h3>Fleet · errors</h3><span class="cs-dim">last error each device reported</span></div>${errors.length ? `<div class="list">${errors.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12).map(e => `<div class="li" data-view="adminstore" data-no="${esc(e.no)}"><span class="loc mono">${esc(e.no)}</span><span class="nm"><span class="mono">${esc(e.id)}</span> · ${esc(e.error)}</span><span class="rt">${fmtTime(e.at)}</span></div>`).join('')}</div>` : '<p class="lbl">No device is reporting an error.</p>'}</div></div>`;
+}
+function setupCard(k) {
+  if (!k) return '';
+  const b = k.backfill, d = k.dock;
+  const facts = [b ? `Backfill: ${b.today} done today of ${b.requested || b.today + b.pending} · ${b.week} in 7 days${b.accuracy != null ? ` at ${b.accuracy}%` : ''}${b.autoClosed ? ` · ${b.autoClosed} auto-closed yesterday` : ''}` : '', d ? `Dock: ${d.trucks} truck${d.trucks === 1 ? '' : 's'} in 7 days, ${d.cartons} cartons${d.clearMins != null ? `, ${d.clearMins} min average clear` : ''} · ${d.manifests} manifest${d.manifests === 1 ? '' : 's'} published` : '', k.floor ? `Floor: ${k.floor.openIssues} open issue${k.floor.openIssues === 1 ? '' : 's'}${k.floor.urgent ? `, ${k.floor.urgent} high or urgent` : ''}` : '', `Devices: ${k.devices.seen24h} seen today of ${k.devices.total}`].filter(Boolean);
+  return `<div class="card" style="margin-top:14px"><div class="ch"><h3>This week and set-up</h3></div><div class="list">${facts.map(f => `<div class="li"><span class="nm">${esc(f)}</span></div>`).join('')}</div>${k.alerts.length ? `<ul class="mp-checks" style="margin-top:10px">${k.alerts.map(a => `<li class="${a.level === 'bad' ? 'bad' : a.level === 'info' ? 'ok' : 'warn'}">${esc(a.text)}</li>`).join('')}</ul>` : '<p class="lbl">Nothing missing.</p>'}</div>`;
+}
+function exportRegistry(stores) {
+  const head = ['store', 'name', 'region', 'status', 'floor', 'stockroom', 'backdock', 'tools off', 'map', 'backfill today', 'backfill 7 days', 'accuracy %', 'auto-closed yesterday', 'trucks 7 days', 'devices 24h', 'alerts', 'updated'];
+  const rows = stores.map(s => { const k = st.kpis?.[s.no] || {}, b = k.backfill || {}; return [s.no, s.name, s.region || '', s.status, ...AREAS.map(a => s.entitlements?.[a] ? (s.areas?.[a] || 'legacy') : ''), (s.toolsOff || []).join(' '), s.mapVersion || '', b.today ?? '', b.week ?? '', b.accuracy ?? '', b.autoClosed ?? '', k.dock?.trucks ?? '', k.devices?.seen24h ?? '', (k.alerts || []).map(x => x.text).join(' / '), s.updated || '']; });
+  const url = URL.createObjectURL(new Blob(['\uFEFF' + csvLines(head, rows)], { type: 'text/csv' })), l = document.createElement('a');
+  l.href = url; l.download = `stores-${new Date().toISOString().slice(0, 10)}.csv`; l.click(); setTimeout(() => URL.revokeObjectURL(url), 3000); toast(`${rows.length} stores exported`);
+}
+
 // ── views ─────────────────────────────────────────────────────────────
 const overview = {
   id: 'admin', title: 'Stores', icon: 'grid',
   desktop(ctx) {
     const stores = ctx.admin.stores || [];
     const live = stores.filter(s => s.status === 'live').length, mig = stores.filter(s => s.status === 'migrating').length;
-    const rows = stores.map(s => `<tr class="ad-row" data-view="adminstore" data-no="${esc(s.no)}"><td><b class="mono">${esc(s.no)}</b></td><td><b>${esc(s.name)}</b><small>${esc(s.region || '')}</small></td><td>${tst(s.status)}</td><td>${areaChips(s)}</td><td class="mono">${esc(s.mapVersion || '—')}</td><td class="mono">${fmtTime(s.updated)}</td><td><span class="btn sm">Open</span></td></tr>`);
+    // Registry filter: text over number, name and region; status; an area.
+    const q = st.q.trim().toLowerCase(), shown = stores.filter(s => (!q || `${s.no} ${s.name} ${s.region || ''}`.toLowerCase().includes(q)) && (st.status === 'all' || s.status === st.status) && (st.larea === 'all' || s.entitlements?.[st.larea]));
+    const kp = no => st.kpis?.[no], num = (v, suf = '') => v == null ? '<span class="cs-dim">—</span>' : `${v}${suf}`;
+    const rows = shown.map(s => { const k = kp(s.no), b = k?.backfill, al = (k?.alerts || []).filter(x => x.level !== 'info'); return `<tr class="ad-row" data-view="adminstore" data-no="${esc(s.no)}"><td><b class="mono">${esc(s.no)}</b></td><td><b>${esc(s.name)}</b><small>${esc(s.region || '')}</small></td><td>${tst(s.status)}</td><td>${areaChips(s)}</td><td class="n">${!k ? '…' : b ? `${b.today}<small>/${b.requested || b.today + b.pending}</small>` : num(null)}</td><td class="n">${!k ? '' : b ? num(b.week) : num(null)}</td><td class="n">${!k ? '' : b ? num(b.accuracy, '%') : num(null)}</td><td class="n">${!k ? '' : b?.autoClosed ? `<b class="c-amber">${b.autoClosed}</b>` : num(b ? 0 : null)}</td><td class="n">${!k ? '' : k.dock ? num(k.dock.trucks) : num(null)}</td><td class="n">${!k ? '' : `${k.devices.seen24h}`}</td><td>${!k ? '' : k.error ? `<span class="tst">${esc(k.error)}</span>` : al.length ? `<span class="ad-alert ${al.some(x => x.level === 'bad') ? 'bad' : ''}" title="${esc(al.map(x => x.text).join('\n'))}">${al.length} to look at</span>` : '<span class="status good">ok</span>'}</td><td><span class="btn sm">Open</span></td></tr>`; });
+    const filters = `<div class="ad-filters ad-reg"><div class="search">${ic('search')}<input data-field="regq" value="${esc(st.q)}" placeholder="Store number, name or region"></div><select class="ad-in" data-field="regstatus" aria-label="Status">${['all', 'live', 'migrating', 'registered', 'suspended'].map(v => `<option value="${v}"${st.status === v ? ' selected' : ''}>${v === 'all' ? 'Any status' : v}</option>`).join('')}</select><select class="ad-in" data-field="regarea" aria-label="Area">${['all', ...AREAS].map(v => `<option value="${v}"${st.larea === v ? ' selected' : ''}>${v === 'all' ? 'Any area' : AREA_NAME[v]}</option>`).join('')}</select><span class="cs-dim">${shown.length} of ${stores.length}</span><button class="btn sm" data-act="reg-export">${ic('file')}Export CSV</button></div>`;
     const acts = (st.actions || []).slice(0, 8).map(a => `<div class="li"><span class="rt" style="min-width:92px">${fmtTime(a.at)}</span><span class="nm">${actionText(a)}</span></div>`).join('') || '<div class="li cs-dim">No owner actions logged yet</div>';
     const h = st.health;
-    return vh('Stores', sub('Owner mode', 'read-only until you act as a store', 'every owner action is logged'), `<a class="btn primary" data-view="adminreg">${ic('plus')}Register a store</a><button class="btn" data-act="refresh">${ic('refresh')}Refresh</button>`) +
+    return vh('Stores', sub('Owner mode', 'read-only until you act as a store', 'every owner action is logged'), `<a class="btn primary" data-view="adminreg">${ic('plus')}Register a store</a>${editorBtn()}<button class="btn" data-act="refresh">${ic('refresh')}Refresh</button>`) +
       banner(`<b>Owner</b> · you are viewing every store the system knows about. Opening a store shows its log and devices read-only; <b>Act as store</b> switches to writes that carry your owner id.`) +
       `<div class="ad-tiles">${tile(stores.length, `store${stores.length === 1 ? '' : 's'} registered`, `${live} live · ${mig} migrating · ${stores.length - live - mig} registered or legacy`)}${tile(stores.filter(s => s.entitlements?.floor).length, 'with the Floor', `${stores.filter(s => s.entitlements?.stockroom).length} Stockroom · ${stores.filter(s => s.entitlements?.backdock).length} Back dock`)}${tile((st.actions || []).length, 'owner actions', 'last 200 kept in the registry')}${tile(h ? esc(h.version) : '…', 'worker', h ? `${esc(h.env)} · ${esc(ctx.admin.base)}` : 'checking health')}</div>` +
-      `<div class="card"><div class="ch"><h3>Registered stores</h3><span class="cs-dim">tap a row to open it</span></div>${table(['Store', 'Name', 'Status', 'Areas', 'Map', 'Updated', ''], rows, 'ad-tbl')}</div>` +
+      `<div class="card"><div class="ch"><h3>Registered stores</h3><span class="cs-dim">tap a row to open it · backfill today / requested, last 7 days</span></div>${filters}${table(['Store', 'Name', 'Status', 'Areas', 'Backfill today', '7 days', 'Accuracy', 'Auto-closed', 'Trucks 7d', 'Devices 24h', 'Set-up', ''], rows, 'ad-tbl')}</div>` + fleetCard(stores) +
       `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Recent owner actions</h3><a class="go" data-view="adminactions">All</a></div><div class="list">${acts}</div></div>` +
-      `<div class="card"><div class="ch"><h3>Service</h3></div><div class="ad-kv"><span>Worker</span><b class="mono">${h ? esc(h.version) + ' · ' + esc(h.env) : '…'}</b><span>Endpoint</span><b class="mono">${esc(ctx.admin.base)}</b><span>Owner device</span><b class="mono">${esc(ctx.session.device)}</b><span>Session</span><b>expires ${fmtTime(new Date(ctx.session.current.expires * 1000).toISOString())}</b></div></div></div>`;
+      `<div class="card"><div class="ch"><h3>Service</h3></div><div class="ad-kv"><span>Worker</span><b class="mono">${h ? esc(h.version) + ' · ' + esc(h.env) : '…'}</b><span>Endpoint</span><b class="mono">${esc(ctx.admin.base)}</b><span>Owner device</span><b class="mono">${esc(ctx.session.device)}</b><span>Session</span><b>expires ${fmtTime(new Date(ctx.session.current.expires * 1000).toISOString())}</b></div></div></div>` + catalogueCard(st.cat);
   },
   mount(ctx, root) {
     const need = [];
     if (!st.health) need.push(ctx.admin.api('/v1/health').then(h => { st.health = h; }));
     if (!st.actions) need.push(ctx.admin.api('/v1/admin/actions').then(r => { st.actions = r.actions || []; }));
+    if (!st.cat) need.push(loadCatalogue(ctx));
+    if (!st.kpis) need.push(loadKpis(ctx));
     if (need.length) Promise.all(need).then(() => ctx.rerender()).catch(fail);
+    let typing = null;
+    root.addEventListener('input', e => { if (e.target.matches('[data-field="regq"]')) { st.q = e.target.value; clearTimeout(typing); typing = setTimeout(() => { const v = st.q; ctx.rerender(); const i = document.querySelector('#content [data-field="regq"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 200); } });
+    root.addEventListener('change', e => { if (e.target.matches('[data-field="regstatus"]')) { st.status = e.target.value; ctx.rerender(); } if (e.target.matches('[data-field="regarea"]')) { st.larea = e.target.value; ctx.rerender(); } });
+    // While a build runs, the card follows it every two seconds.
+    let poll = null;
+    const follow = () => { clearTimeout(poll); if (st.cat?.build) poll = setTimeout(async () => { await loadCatalogue(ctx); ctx.rerender(); }, 2000); };
+    follow();
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
-      if (a.dataset.act === 'refresh') { invalidate(); st.health = null; try { await ctx.admin.refreshStores(); } catch (err) { return fail(err); } ctx.rerender(); }
+      if (a.dataset.act === 'open-editor') return openEditor();
+      if (a.dataset.act === 'reg-export') return exportRegistry(ctx.admin.stores || []);
+      if (a.dataset.act === 'refresh') { invalidate(); st.health = null; st.cat = null; st.kpis = null; try { await ctx.admin.refreshStores(); } catch (err) { return fail(err); } ctx.rerender(); }
+      if (a.dataset.act === 'cat-rebuild') {
+        try { const r = await ctx.admin.api('/v1/admin/catalogue/rebuild', { method: 'POST', body: {} }); toast(r.started ? 'Catalogue rebuild started' : r.reason || 'Not started'); await loadCatalogue(ctx); ctx.rerender(); }
+        catch (err) { fail(err); }
+      }
     });
-    return [];
+    return [() => clearTimeout(poll)];
   },
 };
 
@@ -101,8 +173,9 @@ const storeView = {
   },
   mount(ctx, root) {
     if (!st.no) return [];
-    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map', 'mapdoc'] : ['rec', 'devices', 'snap'];
+    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map', 'mapdoc', 'snap'] : ['rec', 'devices', 'snap'];
     load(ctx, st.no, keys).then(did => { if (did) ctx.rerender(); }).catch(fail);
+    if (st.tab === 'over' && !st.kpis?.[st.no]) ctx.admin.api(`/v1/admin/stores/${st.no}/kpis`).then(k => { st.kpis = { ...(st.kpis || {}), [st.no]: k }; ctx.rerender(); }).catch(() => {});
     root.addEventListener('click', e => onStoreClick(e, ctx));
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="filter"]')) { st.filter = e.target.value; const t = $('#adTail', root); if (t) t.innerHTML = tailRows(forStore(st.no)); } });
@@ -124,7 +197,8 @@ function deptShelving(doc, info) {
   const groups = new Map();
   const add = (parent, row) => { if (!groups.has(parent)) groups.set(parent, []); groups.get(parent).push(row); };
   for (const d of depts) { const id = String(d.id || '').toLowerCase(); if (!id) continue; add(d.parent ? String(d.parent).toLowerCase() : 'other', { id, name: deptCommonName(d), color: d.color || '#64748B' }); }
-  for (const id of Object.keys(counts)) if (!depts.some(d => String(d.id || '').toLowerCase() === id)) add('other', { id, name: id, color: '#64748B' });
+  // Ids the map uses but the published list does not name fall back to the registry's names and groups.
+  for (const id of Object.keys(counts)) if (!depts.some(d => String(d.id || '').toLowerCase() === id)) { const r = DEPTS_DEFAULT.find(d => d.id === id); add(r ? r.group : 'other', { id, name: r ? r.name : id.toUpperCase(), color: r ? r.color : '#64748B' }); }
   return { total, counts, groups };
 }
 function shelvingHtml(doc, info) {
@@ -144,12 +218,12 @@ function overTab(rec, c) {
   const devs = Object.entries(c.devices || {}), online = devs.filter(([, d]) => d.online !== false && Date.now() - new Date(d.last) < 10 * 60000).length;
   const queued = devs.reduce((n, [, d]) => n + (d.outbox || 0), 0);
   const s = c.snap || {};
-  const floor = s.refresh ? `Refresh ${Object.values(s.refresh.weeks || {}).map(w => Object.keys(w).length).reduce((a, b) => a + b, 0)} marks · ${Object.values(s.issues || {}).filter(i => i.status !== 'completed').length} open issues` : 'not entitled';
+  const floor = s.refresh ? `Refresh ${Object.values(s.refresh.weeks || {}).map(w => Object.keys(w).length).reduce((a, b) => a + b, 0)} marks · ${Object.values(s.issues || {}).filter(i => !i.removed && i.status !== 'completed').length} open issues` : 'not entitled';
   const sr = s.cages ? `${Object.values(s.cages).filter(x => x.status === 'open').length} cages open · ${Object.keys(s.backfill || {}).length} backfill locations` : 'not entitled';
   const bd = s.dock ? `${Object.keys(s.dock.pallets || s.dock || {}).length} dock records` : 'not entitled';
   return `<div class="ad-tiles">${tile(devs.length, 'devices seen', c.devices ? `${online} online in the last 10 min` : 'loading')}${tile(c.seq ?? '…', 'events in the log', 'seq of the newest event')}${tile(queued, 'queued on devices', queued ? 'waiting to sync' : 'all devices in sync', queued ? 'warn' : '')}${tile(`<span class="mono">${esc(rec.mapVersion || '—')}</span>`, 'map version', rec.mapVersion ? 'published' : 'no map published yet')}</div>` +
     `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Areas</h3></div><div class="list">${AREAS.map(a => `<div class="li"><span class="loc">${AREA_NAME[a]}</span><span class="nm">${rec.entitlements?.[a] ? (rec.areas?.[a] === 'live' ? 'Live on Conduit' : rec.areas?.[a] === 'migrating' ? 'Migrating' : 'Entitled · still on the legacy app') + ' · ' + esc(a === 'floor' ? floor : a === 'stockroom' ? sr : bd) : 'Not entitled'}</span>${rec.entitlements?.[a] ? tst(rec.areas?.[a]) : '<span class="tst">off</span>'}</div>`).join('')}</div></div>` +
-    `<div class="card"><div class="ch"><h3>Roster</h3><span class="cs-dim">shared codes per store</span></div><div class="ad-kv"><span>Store PIN</span><b>•••••• · set</b>${CODES.map(([k, l]) => `<span>${l}</span><b>${rec.codes?.includes(k) ? '•••••• · set' : '—'}</b>`).join('')}<span>Last rotated</span><b>${when(s.roster?.rotatedAt)}</b></div><p class="lbl">Rotate from the Access tab. Rotating signs that area out on every device.</p></div></div>`;
+    `<div class="card"><div class="ch"><h3>Roster</h3><span class="cs-dim">shared codes per store</span></div><div class="ad-kv"><span>Store PIN</span><b>•••••• · set</b>${CODES.map(([k, l]) => `<span>${l}</span><b>${rec.codes?.includes(k) ? '•••••• · set' : '—'}</b>`).join('')}<span>Last rotated</span><b>${when(s.roster?.rotatedAt)}</b></div><p class="lbl">Rotate from the Access tab. Rotating signs that area out on every device.</p></div></div>` + setupCard(st.kpis?.[rec.no]) + feedbackCard(s.feedback);
 }
 function eventsTab(c) {
   const pills = ['all', 'floor', 'stockroom', 'backdock', 'store'].map(a => `<button class="${st.area === a ? 'on' : ''}" data-act="area" data-area="${a}">${a === 'all' ? 'All areas' : AREA_NAME[a]}</button>`).join('');
@@ -166,12 +240,12 @@ function devicesTab(c) {
   return `<div class="card"><div class="ch"><h3>Devices</h3><span class="cs-dim">heartbeat every 3 min while a device is open · ${rows.length} seen</span></div>${table(['Device', 'Role', 'App', 'State', 'Last seen', 'Outbox', 'Last error'], rows, 'ad-dev')}</div>`;
 }
 function accessTab(rec) {
-  const areas = `<div class="ad-ent">${AREAS.map(a => { const on = !!rec.entitlements?.[a]; return `<div class="card"><div class="ch"><h3>${AREA_NAME[a]}</h3><span class="ad-tgl ${on ? 'on' : ''}" data-act="entitle" data-area="${a}" role="switch" aria-checked="${on}"><i></i></span></div><div class="ad-tools${on ? '' : ' off'}">${TOOLS[a].map(x => `<label><span class="tick ${on ? 'on' : ''}">${on ? ic('check') : ''}</span>${x}</label>`).join('')}</div>${on ? `<div class="ad-inrow" style="margin-top:10px"><span class="lbl" style="margin:0">State</span><select class="ad-in" data-act="areastate" data-area="${a}">${['legacy', 'migrating', 'live'].map(v => `<option value="${v}" ${rec.areas?.[a] === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>` : ''}</div>`; }).join('')}</div>`;
+  const areas = `<div class="ad-ent">${AREAS.map(a => { const on = !!rec.entitlements?.[a]; return `<div class="card"><div class="ch"><h3>${AREA_NAME[a]}</h3><span class="ad-tgl ${on ? 'on' : ''}" data-act="entitle" data-area="${a}" role="switch" aria-checked="${on}"><i></i></span></div><div class="ad-tools${on ? '' : ' off'}">${toolsIn(a).map(t => { const live = on && !(rec.toolsOff || []).includes(t.id); return `<button type="button" class="ad-tool" data-act="tool" data-tool="${t.id}" role="switch" aria-checked="${live}"${on ? '' : ' disabled'} title="${live ? 'On: click to switch it off for this store' : 'Off: click to switch it on'}"><span class="tick ${live ? 'on' : ''}">${live ? ic('check') : ''}</span>${esc(t.name)}</button>`; }).join('')}</div>${on && toolsIn(a).some(t => (rec.toolsOff || []).includes(t.id)) ? `<p class="lbl" style="margin:8px 0 0">${toolsIn(a).filter(t => (rec.toolsOff || []).includes(t.id)).length} switched off: hidden on every device now, and the worker refuses their changes.</p>` : ''}${on ? `<div class="ad-inrow" style="margin-top:10px"><span class="lbl" style="margin:0">State</span><select class="ad-in" data-act="areastate" data-area="${a}">${['legacy', 'migrating', 'live'].map(v => `<option value="${v}" ${rec.areas?.[a] === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>` : ''}</div>`; }).join('')}</div>`;
   const rotRow = (name, label, desc, on) => {
     if (st.rot === name) return `<form class="li" data-form="rotate"><span class="loc" style="min-width:120px">${label}</span><span class="ad-inrow" style="flex:1">${inp('value', st.rotValue, name === 'pin' ? '6 digits' : '', 'mono', 'required')}<button class="btn sm" type="button" data-act="gen" data-name="value" data-kind="${name}">${ic('refresh')}Generate</button><button class="btn sm primary" type="submit">Save</button><button class="btn sm" type="button" data-act="rot-cancel">Cancel</button></span></form>`;
     return `<div class="li"><span class="loc" style="min-width:120px">${label}</span><span class="nm">${desc}</span>${on ? `<span class="btn sm" data-act="rot" data-name="${name}">${ic('refresh')}${rec.codes?.includes(name) || name === 'pin' ? 'Rotate' : 'Set'}</span>` : '<span class="cs-dim">not entitled</span>'}</div>`;
   };
-  const creds = `<div class="card"><div class="ch"><h3>Credentials</h3><span class="cs-dim">shared per store, no individual logins</span></div><div class="list">${rotRow('pin', 'Store PIN', 'opens the Floor on any device', true)}${CODES.map(([k, l, d]) => rotRow(k, l, d, k !== 'dock' || rec.entitlements?.backdock)).join('')}</div>${st.rotDone ? `<div class="ad-done" style="margin:12px 0 0"><span class="ck">${ic('check')}</span><div><b>${esc(st.rotDone.label)} is now <span class="mono">${esc(st.rotDone.value)}</span></b><span>Shown once. Hand it to the store; devices need it the next time they unlock.</span></div></div>` : ''}<p class="lbl">Rotating a code signs that area out on every device the next time its token refreshes. The registry keeps only a hash.</p></div>`;
+  const creds = `<div class="card"><div class="ch"><h3>Credentials</h3><span class="cs-dim">shared per store, no individual logins</span></div><div class="list">${rotRow('pin', 'Store PIN', 'opens the Floor on any device', true)}${CODES.map(([k, l, d]) => rotRow(k, l, d, k !== 'dock' || rec.entitlements?.backdock)).join('')}<div class="li"><span class="loc" style="min-width:120px">Sessions</span><span class="nm">For a lost or shared device when the codes can stay.</span><button type="button" class="btn sm" data-act="revoke">${ic('lock')}Sign out every device</button></div></div>${st.rotDone ? `<div class="ad-done" style="margin:12px 0 0"><span class="ck">${ic('check')}</span><div><b>${esc(st.rotDone.label)} is now <span class="mono">${esc(st.rotDone.value)}</span></b><span>Shown once. Hand it to the store; devices need it the next time they unlock.</span></div></div>` : ''}<p class="lbl">A new PIN or code signs every device at the store out straight away; each needs the store PIN again. The registry keeps only a hash.</p></div>`;
   const identity = st.edit
     ? `<form class="card" data-form="edit"><div class="ch"><h3>Store</h3></div><div class="ad-grid2">${field('Name', inp('name', rec.name, 'Store name', '', 'required'))}${field('Region', inp('region', rec.region, 'e.g. WA South'))}${field('Status', `<select class="ad-in" name="status">${STATUSES.map(v => `<option value="${v}" ${rec.status === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`, 'live once any area is live on Conduit')}</div><div class="acts" style="margin-top:12px"><button class="btn primary sm" type="submit">${ic('check')}Save</button><button class="btn sm" type="button" data-act="edit-cancel">Cancel</button></div></form>`
     : `<div class="card"><div class="ch"><h3>Store</h3><span class="btn sm" data-act="edit">${ic('edit')}Edit</span></div><div class="ad-kv"><span>Number</span><b class="mono">${esc(rec.no)}</b><span>Name</span><b>${esc(rec.name)}</b><span>Region</span><b>${esc(rec.region || '—')}</b><span>Status</span><b>${tst(rec.status)}</b><span>Created</span><b>${fmtTime(rec.created)}</b><span>Updated</span><b>${fmtTime(rec.updated)}</b></div></div>`;
@@ -209,6 +283,13 @@ async function runImport(ctx, form, dry) {
     ctx.rerender();
   } catch (e) { btns.forEach(b => { b.disabled = false; }); err.textContent = e.code === 'legacy_pin' ? `K2B refused that PIN. (${e.message})` : e.code === 'legacy_store' ? `K2B does not know that store code. (${e.message})` : e.code === 'legacy_unreachable' ? `The legacy worker could not be reached. (${e.message})` : e.code === 'not_entitled' ? 'Turn the Stockroom on in Access first.' : `${e.code}: ${e.message}`; }
 }
+// Feedback sent from the store's Settings › Feedback and report, newest
+// first, with the view, version and diagnostics the device attached.
+const FB_KIND = { wrong: 'Something is wrong', idea: 'An idea', question: 'A question', other: 'Other' };
+function feedbackCard(list) {
+  const rows = (list || []).slice().reverse().slice(0, 30);
+  return `<div class="card" style="margin-top:16px"><div class="ch"><h3>Feedback</h3><span class="cs-dim">${(list || []).length} from this store</span></div>${rows.length ? `<div class="list">${rows.map(f => `<div class="li fb-li"><span class="nm" style="white-space:normal"><b>${esc(FB_KIND[f.kind] || f.kind)}</b> · ${esc(f.text)}<small class="cs-dim" style="display:block">${when(f.at)} · ${esc(f.by || '')}${f.role ? ' · ' + esc(f.role) : ''} · on ${esc(f.view || '?')} · ${esc(f.version || '')}</small>${f.diag ? `<details><summary class="cs-dim">Diagnostics</summary><pre class="mono fb-diag">${esc(f.diag)}</pre></details>` : ''}</span></div>`).join('')}</div>` : '<p class="lbl">Nothing sent yet. Stores send it from Settings › Feedback and report.</p>'}</div>`;
+}
 function mapTab(rec, c) {
   const m = c.map;
   const cur = m === undefined ? `<div class="ohint">Loading…</div>` : m === null ? `<p class="lbl">No map has been published for this store. Devices show a placeholder until one is.</p>` : m.error ? `<p class="lbl">Could not read the map: ${esc(m.error)}</p>` :
@@ -220,7 +301,26 @@ function mapTab(rec, c) {
   const form = `<form class="card" data-form="publish"><div class="ch"><h3>Publish a map</h3><span class="cs-dim">the Map Editor's export, or rendered floor SVGs</span></div><div class="ad-grid2">${field('Version', inp('version', st.pubVersion ?? next, 'e.g. 4.4', 'mono', 'required pattern="[\\w.\\-]{1,32}"'), 'must be new; devices switch to it on their next sync')}${field('Map name', inp('name', rec.name, 'e.g. Busselton'))}</div>` +
     `<div class="ad-grid2" style="margin-top:12px">${field('Map file', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".js,.json,.svg,text/javascript,application/json,image/svg+xml" data-floor="ground" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'the editor\'s .js export (what ShelfSearcher read) or its .json save: every floor in it is rendered and published. A rendered ground-floor .svg still works.')}${field('Stockroom floor SVG (optional)', `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="stockroom" style="display:none"><span>${ic('file')} Choose file…</span><small class="cs-dim" style="display:block"></small></label>`, 'only with an .svg map file; an editor export carries its own floors')}</div>` +
     `<div class="si-err" id="pubErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit">${ic('check')}Publish</button></div><p class="lbl">Publishing writes the document to the store and logs a <span class="mono">map.publish</span> event with your owner id. Every signed-in device downloads the new version once and keeps it offline.</p></form>`;
-  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3><span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}${preview}</div>${form}</div>`;
+  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3>${editorBtn('sm')}<span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}${preview}</div><div class="ad-col">${form}${editsCard(c.snap?.mapedits)}</div></div>`;
+}
+// The store's suggested edits: the owner makes each change in the map
+// editor, publishes, then accepts it (or declines it) here.
+function editsCard(edits) {
+  if (edits === undefined) return `<div class="card"><div class="ch"><h3>Suggested edits</h3></div><div class="ohint">Loading…</div></div>`;
+  const all = Object.entries(edits || {}).map(([id, x]) => ({ id, ...x }));
+  const open = all.filter(x => x.status === 'open').sort((a, b) => (a.at < b.at ? -1 : 1));
+  const done = all.filter(x => x.status !== 'open').sort((a, b) => (a.resolvedAt < b.resolvedAt ? 1 : -1)).slice(0, 8);
+  const what = x => x.kind === 'rename' ? `Rename to <b>${esc(x.to)}</b>${x.note ? ` · ${esc(x.note)}` : ''}` : `Flag · ${esc(x.note)}`;
+  const row = x => `<tr><td class="mono"><b>${esc(x.shelf)}</b>${x.floor ? `<small>${esc(x.floor)}</small>` : ''}</td><td style="white-space:normal">${what(x)}</td><td class="mono">${fmtTime(x.at)}<small>${esc(x.by || '')}</small></td><td>${x.status === 'open' ? `<span class="ad-edacts"><button class="btn sm primary" data-act="edit-accept" data-id="${esc(x.id)}">${ic('check')}Accept</button><button class="btn sm" data-act="edit-decline" data-id="${esc(x.id)}">Decline</button></span>` : `${status(x.status === 'accepted' ? 'good' : '', x.status === 'accepted' ? 'Accepted' : 'Declined')}<small>${fmtTime(x.resolvedAt)}${x.reply ? ' · ' + esc(x.reply) : ''}</small>`}</td></tr>`;
+  return `<div class="card"><div class="ch"><h3>Suggested edits</h3><span class="cs-dim">${open.length} waiting · from the store's Suggest map edits</span></div>` +
+    table(['Shelf', 'Suggestion', 'Sent', ''], open.map(row), 'ad-tbl') +
+    (done.length ? `<div class="ad-subh">Recently resolved</div>` + table(['Shelf', 'Suggestion', 'Sent', ''], done.map(row), 'ad-tbl') : '') +
+    `<p class="lbl">A suggestion never changes the map. Make the change in the map editor, publish the new version here, then accept it; the store sees it resolved.</p></div>`;
+}
+const editorBtn = (cls = '') => `<button class="btn${cls ? ' ' + cls : ''}" data-act="open-editor" title="Open the full map editor in a new tab">${ic('edit')}Map editor</button>`;
+function openEditor() {
+  if (!MAP_EDITOR_URL) return toast('Set MAP_EDITOR_URL in js/config.js to where the map editor is hosted', 'bad');
+  window.open(MAP_EDITOR_URL, '_blank', 'noopener');
 }
 const bump = v => { const m = String(v).match(/^(.*?)(\d+)$/); return m ? m[1] + (Number(m[2]) + 1) : v + '.1'; };
 // A chosen map file: an editor export is parsed and rendered here in the
@@ -252,7 +352,8 @@ async function publishMap(ctx, form) {
   if (!floors.length) { err.textContent = 'Choose the map file: the editor\'s .js or .json export, or the ground floor SVG.'; return; }
   st.pubVersion = version; btn.disabled = true; err.textContent = '';
   try {
-    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: { version, name, floors, departments } });
+    const extra = st.pubDoc ? { ...(st.pubDoc.storeInfo ? { storeInfo: st.pubDoc.storeInfo } : {}), ...(st.pubDoc.metresPerUnit ? { metresPerUnit: st.pubDoc.metresPerUnit } : {}) } : {};
+    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: { version, name, floors, departments, ...extra } });
     st.pubDoc = null;
     toast(`Map ${r.version} published · ${r.floors.map(f => `${f.id} ${f.shelves} shelves`).join(', ')}`);
     st.pubVersion = null; st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); ctx.rerender();
@@ -268,9 +369,20 @@ async function onStoreClick(e, ctx) {
   const act = a.dataset.act, no = st.no, c = forStore(no);
   if (act === 'tab') { st.tab = a.dataset.tab; st.rot = null; st.rotDone = null; st.edit = false; ctx.rerender(); }
   else if (act === 'refresh') { invalidate(no); ctx.rerender(); }
+  else if (act === 'open-editor') openEditor();
+  else if (act === 'edit-accept' || act === 'edit-decline') {
+    const status = act === 'edit-accept' ? 'accepted' : 'declined';
+    const note = prompt(status === 'accepted' ? 'Accepted: the change is in a published map version. Note for the store (optional):' : 'Decline this suggestion. Why? (optional)', '');
+    if (note === null) return;
+    a.disabled = true;
+    try { await ctx.admin.api(`/v1/admin/stores/${no}/mapedits/${encodeURIComponent(a.dataset.id)}`, { method: 'POST', body: { status, ...(note.trim() ? { note: note.trim() } : {}) } }); delete c.snap; st.actions = null; toast(`Suggestion ${status}`); ctx.rerender(); }
+    catch (err) { a.disabled = false; fail(err); }
+  }
   else if (act === 'area') { st.area = a.dataset.area; ctx.rerender(); }
   else if (act === 'actas') { a.disabled = true; try { await ctx.actAs(no); } catch (err) { a.disabled = false; fail(err); } }
+  else if (act === 'tool') { const id = a.dataset.tool, off = (c.rec?.toolsOff || []).includes(id), t = TOOLS.find(x => x.id === id); if (!off && !confirm(`Switch ${t.name} off for ${no}? It disappears from every device now and the worker refuses its changes. Its records stay.`)) return; await patchStore(ctx, { tools: { [id]: off } }); toast(`${t.name} ${off ? 'on' : 'off'} for ${no}`); }
   else if (act === 'entitle') { const area = a.dataset.area, on = !c.rec?.entitlements?.[area]; if (!on && !confirm(`Turn ${AREA_NAME[area]} off for ${no}? Devices lose the area the next time their token refreshes.`)) return; await patchStore(ctx, { entitlements: { [area]: on } }); }
+  else if (act === 'revoke') { if (confirm(`Sign out every device at store ${st.no}? Each one needs the store PIN again.`) && await patchStore(ctx, { revoke: true })) toast('Every device is signed out'); }
   else if (act === 'rot') { st.rot = a.dataset.name; st.rotValue = gen[a.dataset.name](); st.rotDone = null; ctx.rerender(); }
   else if (act === 'rot-cancel') { st.rot = null; ctx.rerender(); }
   else if (act === 'gen') { const kind = a.dataset.kind || a.dataset.name; const el = a.closest('.ad-inrow')?.querySelector('input'); if (el && gen[kind]) el.value = gen[kind](); }
@@ -362,6 +474,7 @@ function actionText(a) {
     case 'store.status': return `${s}status set to ${esc(d.status)}`;
     case 'store.entitle': return `${s}entitlements: ${AREAS.filter(x => d[x]).map(x => AREA_NAME[x]).join(', ') || 'none'}`;
     case 'area.flip': return `${s}areas: ${AREAS.map(x => `${AREA_NAME[x]} ${esc(d[x] || '')}`).join(' · ')}`;
+    case 'sessions.revoke': return `${s}signed every device out (${esc(d.why || 'owner')})`;
     case 'roster.rotate': return `${s}rotated ${d.pin ? 'the store PIN' : (d.codes || []).join(', ') + ' code'}`;
     case 'store.import': return `${s}imported from ${d.source === 'dv' ? 'Decant Visualiser' : 'K2B'} ${esc(d.code || '')}: ${d.applied} events written, ${d.duplicates} already there${d.rejected ? `, ${d.rejected} rejected` : ''}`;
     default: return `${s}${esc(a.type)} ${esc(short(d))}`;

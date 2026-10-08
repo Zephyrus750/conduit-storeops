@@ -70,7 +70,9 @@ commands and `npm run deploy:staging`.
 **Shell (Netlify).** Import this repository as a new site: publish directory
 `.`, no build command (netlify.toml already says so). The shell talks to the
 staging worker by default (`js/config.js`); open it once with
-`?worker=<url>` to point a device elsewhere.
+`?worker=<url>` to point a device at another worker on `WORKER_ALLOWED` in
+the same file (any other origin is ignored, so a link cannot send a store's
+PIN elsewhere). The sign-in names the worker when it is not the default.
 
 D1, R2 and KV bindings are added when the features that need them land
 (history, manifests and exports, map cache). See `wrangler.toml`.
@@ -82,28 +84,72 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` |
 | `POST /v1/auth/unlock` | signed-in device | live: area or manager code adds a role |
 | `POST /v1/auth/refresh` | signed-in device | live: rotates the refresh token |
+| `POST /v1/auth/lock` | signed-in store device | live: idle re-lock, drops area and manager codes back to the floor session |
+| `POST /v1/auth/signout` | holder of the refresh token | live: deletes the refresh token on the worker |
 | `GET /v1/stores` | anyone | live: number, name, region, status |
 | `GET /v1/store/:no/snapshot` | store token | live: projections for entitled areas |
 | `GET /v1/store/:no/changes?since=` | store token | live: events after a seq |
 | `POST /v1/store/:no/events` | store token | live: batch submit, per-event ack or rejection |
 | `GET /v1/store/:no/ws` | store token | live: hello, submit, hb, ping; event fan-out |
-| `POST /v1/store/:no/hb` | store token | live: record this device's presence — the HTTP twin of the socket `hb` frame, for devices on the polling fallback |
-| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate |
-| `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections |
+| `POST /v1/store/:no/hb` | store token | live: record this device's presence, the HTTP twin of the socket `hb` frame, for a device on the polling fallback |
+| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate; a new PIN or code, `status: suspended` or `revoke: true` signs every device out (the store's credential epoch moves on); `tools: { id: bool }` switches tools inside an area (`shared/tools.js`), logged into the store as `store.tools.set` so devices hide them at once and the worker refuses them |
+| `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `/kpis`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections; `/kpis` is the console's numbers for one store (backfill, dock, issues, devices, set-up alerts) |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
+| `POST /v1/admin/stores/:no/mapedits/:id` | owner | live: accept or decline a suggested map edit (`{ status, note }`), logged as an owner action |
 | `GET /v1/store/:no/map`, `GET …/map/:version` (`latest` allowed) | store token or owner | live: published map metadata and document, ETag / 304 |
 | `POST /v1/store/:no/map` | owner | live: publish a version; logs `map.publish`, sets the registry's map version |
 | `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B (`source: k2b`) and Decant Visualiser (`source: dv`) importers with dry run; area state flip |
 | `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
+| `GET /v1/catalogue/nearmiss?kc=` | anyone | live: catalogue keycodes one digit away (a mistyped or misread code) |
+| `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
+| `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }] }`, ≤ 20,000 rows; a re-save that day replaces it); logs `soh.publish`; the newest 26 are kept |
+| `GET /v1/store/:no/soh?n=12`, `DELETE /v1/store/:no/soh/:date` | stockroom code, manager or owner | live: the newest n snapshots, oldest first, for the stock classes; remove logs `soh.remove` |
 | `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
+| `POST /v1/store/:no/photo` | store token for that store | live: an issue photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
+| `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo, until 90 days after its issue is completed or removed |
+| `DELETE /v1/store/:no/photo/:id` | store token or owner | live: deletes the photo's bytes (the `issue.photo` remove event detaches it from the issue) |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
-`not_registered`, `locked_out`, `invalid_event`, `duplicate` (a success),
+`not_registered`, `locked_out`, `revoked` (signed out by a rotation, suspension
+or revoke), `suspended`, `invalid_event`, `duplicate` (a success),
 `not_implemented`, plus reducer codes such as `bay_occupied` and `cage_exists`.
+
+Sign-in and unlock lock out per device (5 wrong), per store (30 in an hour)
+and per network address (200 in an hour; stores may share one), each for
+15 minutes. `LOCKOUT_ATTEMPTS`, `LOCKOUT_STORE_ATTEMPTS`,
+`LOCKOUT_IP_ATTEMPTS`, `LOCKOUT_WINDOW_SECONDS` and `LOCKOUT_SECONDS` tune them.
+Reading follows the same codes as writing: the store PIN opens the Floor, and
+Stockroom or Back dock data (snapshot, changes, the socket, history, export,
+keycode life, manifests, profiles) reach a device only when it holds that
+area's code or the manager code. The owner reads every entitled area.
+New and rotated store PINs are 6 to 8 digits (`PIN_MIN_DIGITS`; the dev
+store keeps 2468 with it set to 4). An events body is at most 8 MB and one
+event's payload 2 MB; a device's `at` must be within 10 minutes ahead and 30
+days behind the worker's clock or the event is refused as `clock_skew`.
+An area or manager code lasts a shift (`ROLE_TTL_SECONDS`, 12 h); after that
+the device keeps the Floor and asks for the code again. The WebSocket carries
+its token as the second subprotocol (`conduit, <token>`), never in the URL.
+
+## Catalogue
+
+Product names and links come from Conduit's own catalogue object
+(`worker/catalogue-object.js`), which reads Kmart's public product sitemaps:
+the sitemap index first, lettered files when the index names none, one file
+per alarm step, rows replaced per file, and a two-strike sweep before a
+file's products are dropped (K2B's rules, ported). It reads weekly, Mondays
+01:00 store time, and the owner console's Stores page shows the last build
+with a **Rebuild now** button. Run it once after the first deploy.
+
+Price, was, image and clearance come from the product page through
+Cloudflare Browser Rendering (`worker/details.js`) once `CF_ACCOUNT_ID`
+(variable) and `BROWSER_TOKEN` (secret) are set. Until the first build lands
+and those are set, the legacy suite and details workers (`LOOKUP_URL`,
+`DETAILS_URL`) answer instead; after that they can be removed from
+`wrangler.toml`. `npm run dev` serves stand-in sitemaps on :8791.
 
 ## Admin console
 
@@ -220,6 +266,15 @@ document once (`client/maps.js`, kept under `map:<store>` on the device).
 A store with no map published yet falls back to a bundled `maps/<no>.svg`
 if the shell ships one, else a placeholder.
 
+**Map editing.** The full map editor stays its own owner tool, outside the
+store app: the console's **Map editor** buttons open it in a new tab
+(`MAP_EDITOR_URL` in `js/config.js`). Inside the store app there is only
+**Suggest map edits** (Store section): anyone signed in taps a shelf and
+suggests a new name or flags what is wrong (`map.edit.suggest`). A
+suggestion never changes the map. The owner sees the queue on the store's
+Map tab, makes the change in the editor, publishes, then accepts or
+declines it (`map.edit.resolve`, also open to a manager in the store).
+
 **Catalogue.** `GET /v1/catalogue?kc=` proxies two existing upstreams (the
 suite lookup worker for keycode → name and product URL; the details worker
 for price, was, image and clearance) and caches per keycode in the edge
@@ -273,9 +328,20 @@ a view is `{ id, title, icon, desktop(ctx), mobile?(ctx), mount?(ctx, root) }`
 and renders into the content region; it owns no chrome and no stylesheet.
 
 Floor views live on real data: Store map, Pick list, Location refresh, Label
-integrity, Emergency, Maintenance, Stocktake, plus Dashboard and Settings
-(skin, accent, rail, bars, title bar). Back dock and Stockroom rows are inert
-until their ports land.
+integrity, Emergency, Maintenance, Stocktake, Inventory (off-site register,
+loads, heat on the map, trends, clearance watch), plus Dashboard (with the
+layered store map, Today at and logistics cards), Settings, Help (the tour)
+and Field Mode (a manager captures shelf codes for the map editor and exports
+them as a `field-capture/1` file).
+
+The map (`js/map.js`) zooms with an eased animation, double-tap or
+double-click (×1.8), Ctrl + / − / 0 and a pinch; a flick coasts. Price checks
+open a card and cycle normal, large or hidden; tory lines switch on for a
+back-of-house floor; an editor's department zoom box frames its department;
+shelf tips and cards show the fixture, location range, shared names and, when
+the map has a scale, the size in metres. `js/lowpoly.js` draws the sign-in
+background from the accent and ground tokens. `js/device.js` holds haptics
+and the phone portrait lock.
 
 ## Where things stand
 
@@ -284,10 +350,10 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 
 | Area | Reducers | Ported from |
 | --- | --- | --- |
-| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list | ShelfSearcher refresh, label-integrity, stocktake, maintenance, em-service modes |
+| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list, inventory (off-site register: set, add, update; loads: add, status, remove) | ShelfSearcher refresh, label-integrity, stocktake, maintenance, em-service and inventory modes |
 | Stockroom | cages with ring colours, backfill submissions (pending, corrected, submitted; requested list; claims; rename), negative-SOH adjustments, day list | K2B review, adjust and scan modules |
 | Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits, pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4, history rows on finalise | Decant Visualiser receiving, manifests, planner, history |
-| Store | map publish, roster rotation marker (device presence is a projection written directly from the socket `hb` frame / `POST /hb`, not an event) | |
+| Store | map publish, roster rotation marker, settings, tools, map edit suggestions, feedback (device presence is a projection written directly from the socket `hb` frame or `POST /hb`, not an event) | |
 
 A catalogued type without a reducer would be rejected `not_implemented`; the
 unit suite asserts there are none.

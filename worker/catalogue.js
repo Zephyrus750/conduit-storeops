@@ -1,9 +1,15 @@
 // Product catalogue: keycode → name, product URL, price, was, image,
-// clearance. The worker proxies two existing upstreams (the suite lookup
-// worker's ?codes= map built from public sitemaps, and the details worker
-// that reads the public product pages) and caches per keycode in the edge
-// Cache API, so a code is fetched once per colo per TTL and the device
-// library caches it again for a week. Nothing here needs a token.
+// clearance. Names and links come from Conduit's own catalogue object (the
+// Kmart product sitemaps, read weekly: worker/catalogue-object.js); price,
+// was, image and clearance from the product page through Browser Rendering
+// (worker/details.js). Answers are cached per keycode in the edge Cache API,
+// so a code is looked up once per colo per TTL and the device library caches
+// it again for a week. Nothing here needs a token.
+//
+// Cutover: until the catalogue object has finished its first build, links
+// come from the legacy suite worker (LOOKUP_URL); until Browser Rendering is
+// configured, details come from the legacy details worker (DETAILS_URL).
+// Once both are in place the legacy workers are not called at all.
 //
 //   GET /v1/catalogue?kc=42977636,43307685[&fields=link]
 //   → { items: { "42977636": { kc, name, url, price, was, img, clr, at } | null } }
@@ -13,6 +19,7 @@
 
 import { HttpError } from './http.js';
 import { upstream } from './upstream.js';
+import { detailsConfigured, renderDetails } from './details.js';
 
 export const MAX_CODES = 50;
 const LINK_TTL_S = 7 * 86400;       // name and URL do not change
@@ -72,8 +79,21 @@ async function cachePut(cache, kc, item, now) {
   try { await cache.put(cacheKey(kc), new Response(JSON.stringify(item), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ttl}`, 'X-Cached-At': String(now) } })); } catch {}
 }
 
+export const catalogueStub = env => env.CATALOGUE ? env.CATALOGUE.get(env.CATALOGUE.idFromName('catalogue')) : null;
+// Conduit's own catalogue: { built, found }. built is false until its first
+// build has landed products, which is what keeps the legacy fallback alive.
+async function ownLinks(env, codes) {
+  const stub = catalogueStub(env); if (!stub) return { built: false, found: {} };
+  try {
+    const j = await (await stub.fetch(`https://catalogue/lookup?kc=${codes.join(',')}`)).json();
+    const found = {}; for (const kc of codes) if (j.items?.[kc]) found[kc] = { url: j.items[kc].url, name: j.items[kc].name };
+    return { built: j.total > 0, found };
+  } catch { return { built: false, found: {} }; }
+}
 async function fetchLinks(env, codes, fetchImpl) {
-  const base = env.LOOKUP_URL; if (!base) return {};
+  const own = await ownLinks(env, codes);
+  if (own.built) return own.found;
+  const base = env.LOOKUP_URL; if (!base) return own.found;
   const doFetch = upstream(env, 'LOOKUP', fetchImpl);
   const out = {};
   for (let i = 0; i < codes.length; i += 40) {
@@ -88,7 +108,14 @@ async function fetchLinks(env, codes, fetchImpl) {
   return out;
 }
 async function fetchDetails(env, items, fetchImpl) {
-  const url = env.DETAILS_URL; if (!url || !items.length) return {};
+  if (!items.length) return {};
+  if (detailsConfigured(env)) {
+    const out = {};
+    for (let i = 0; i < items.length; i += 20) { try { Object.assign(out, await renderDetails(env, items.slice(i, i + 20), fetchImpl)); } catch { /* details are optional */ } }
+    for (const kc of Object.keys(out)) if (!out[kc].found) delete out[kc];
+    return out;
+  }
+  const url = env.DETAILS_URL; if (!url) return {};
   const doFetch = upstream(env, 'DETAILS', fetchImpl);
   const out = {};
   for (let i = 0; i < items.length; i += 20) {

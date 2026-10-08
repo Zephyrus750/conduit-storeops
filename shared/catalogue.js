@@ -20,6 +20,7 @@ export const CATALOGUE = {
   'refresh.mark':        T('floor', F, ['segment', 'week']),
   'refresh.unmark':      T('floor', F, ['segment', 'week']),
   'refresh.clearWeek':   T('floor', F, ['week']),
+  'refresh.clearDept':   T('floor', F, ['week'], { dept: 'string' }),            // payload.segments: the dept's marked segments the device saw
   'refresh.focus.set':   T('floor', F, ['week'], { departments: 'array' }),
   'refresh.plan.paint':  T('floor', F, ['segment'], { colour: 'string' }),       // '#rrggbb' or 'erase'
   'label.cycle.set':     T('floor', F, [], { cycleLen: 'string' }),              // weekly | fortnightly | monthly
@@ -38,16 +39,28 @@ export const CATALOGUE = {
   'issue.progress':      T('floor', F, ['issue']),
   'issue.close':         T('floor', F, ['issue']),
   'issue.reopen':        T('floor', F, ['issue']),
+  'issue.remove':        T('floor', F, ['issue']),                                // tombstone; payload.note
+  'issue.photo':         T('floor', F, ['issue'], { photo: 'string' }),           // payload.remove: true detaches it
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),
+  'inventory.offsite.set':    T('floor', F, [], { rows: 'array' }),             // the off-site master list, whole; payload.src
+  'inventory.offsite.add':    T('floor', F, ['pid']),                           // one pallet sent off-site: sent, desc, req, cb, note, products
+  'inventory.offsite.update': T('floor', F, ['pid']),                           // cb, rec ('' = still off-site), note
+  'inventory.load.add':       T('floor', F, ['load'], { label: 'string', pallets: 'array' }),   // date, status, recvDate, src
+  'inventory.load.status':    T('floor', F, ['load'], { status: 'string' }),   // incoming | received | offsite; recvDate
+  'inventory.load.remove':    T('floor', F, ['load']),
 
   // ── Stockroom ────────────────────────────────────────────────────────
   'cage.create':         T('stockroom', S, ['cage'], { ring: 'string' }),
   'cage.scan':           T('stockroom', S, ['cage'], { keycode: 'string', qty: 'number' }),
-  'cage.park':           T('stockroom', S, ['cage'], { location: 'string' }),
-  'cage.sweep':          T('stockroom', S, ['cage']),
+  'cage.park':           T('stockroom', S, ['cage'], { location: 'string' }),        // payload.x, y, floor: parked on the map
+  'cage.sweep':          T('stockroom', S, ['cage']),                           // payload.session, payload.location (the sweeper's zone)
   'cage.close':          T('stockroom', S, ['cage']),
+  'cage.retag':          T('stockroom', S, ['cage'], { to: 'string' }),
+  'cage.sweepStart':     T('stockroom', S, ['sweep']),
+  'cage.sweepEnd':       T('stockroom', S, ['sweep']),
+  'cage.pair':           T('stockroom', S, ['apn'], { keycode: 'string' }),
   'submission.open':     T('stockroom', S, ['bay', 'date']),
   'submission.update':   T('stockroom', S, ['bay', 'date']),                    // codes {code: scanned}, remove [], incorrect []
   'submission.ready':    T('stockroom', S, ['bay', 'date']),                    // status → corrected
@@ -57,16 +70,24 @@ export const CATALOGUE = {
   'submission.delete':   T('stockroom', S, ['bay', 'date']),
   'submission.request':  T('stockroom', S, ['bay', 'date']),                    // requested list; payload.remove
   'submission.claim':    T('stockroom', S, ['bay', 'date']),                    // payload.release
+  'submission.readd':    T('stockroom', S, ['bay', 'date'], { code: 'string' }), // payload.done: scanned back in
   'adjustment.set':      T('stockroom', S, ['keycode', 'date'], { qty: 'number' }),
   'adjustment.remove':   T('stockroom', S, ['keycode', 'date']),
   'daylist.set':         T('stockroom', S, ['date'], { walkers: 'number' }),
+  'scan.preset':         T('stockroom', S, ['size']),                           // payload: kind codes | rows, x, y, w, h (fractions) | remove
+  'soh.publish':         T('stockroom', S, ['date']),                           // emitted by the worker on POST /soh: rows, locs, week
+  'soh.remove':          T('stockroom', S, ['date']),
+  'soh.verify':          T('stockroom', S, ['date', 'keycode'], { loc: 'string' }), // payload.done false clears the tick
 
   // ── Back dock ────────────────────────────────────────────────────────
   'truck.create':        T('backdock', D, ['truck']),                           // payload.landedAt, payload.slot
   'truck.setLive':       T('backdock', D, ['truck']),
   'truck.setGoal':       T('backdock', D, ['truck']),                           // payload.goal ISO | null
   'truck.team.set':      T('backdock', D, ['truck'], { team: 'array' }),
-  'truck.finalise':      T('backdock', M, ['truck']),
+  'truck.setStart':      T('backdock', D, ['truck']),                           // payload.at ISO | null: the decant clock's start
+  'receiving.confirm':   T('backdock', D, ['truck']),                           // payload.confirmed (default true)
+  'truck.finalise':      T('backdock', D, ['truck']),                           // the facilitator closes (legacy: facilitator code)
+  'truck.reopen':        T('backdock', M, ['truck']),                           // back to live: its history row and rate credit come off until it closes again
   'truck.import':        T('backdock', M, ['truck']),                           // a finalised truck's record from the legacy app, as-is
   'manifest.publish':    T('backdock', D, ['manNo']),                            // payload: dcNo, despatch, filename, consols, totalCartons, keycodes
   'manifest.remove':     T('backdock', D, ['manNo']),
@@ -80,14 +101,32 @@ export const CATALOGUE = {
   'pallet.reopen':       T('backdock', D, ['truck', 'bay']),
   'pallet.remove':       T('backdock', D, ['truck', 'bay']),
   'pallet.scan':         T('backdock', D, ['truck', 'bay'], { code: 'string' }),
-  'halt.start':          T('backdock', D, ['truck'], { reason: 'string' }),
+  'pallet.move':         T('backdock', D, ['truck', 'bay'], { to: 'string' }),
+  'pallet.join':         T('backdock', D, ['truck', 'bay'], { pid: 'string' }),
+  'pallet.handover':     T('backdock', D, ['truck', 'bay'], { toPid: 'string' }),
+  'pallet.leave':        T('backdock', D, ['truck', 'bay'], { pid: 'string' }),
+  'pallet.unstart':      T('backdock', D, ['truck', 'bay']),
+  'pallet.editTimes':    T('backdock', D, ['truck', 'bay']),                    // segments [{ pid, start, end, bf }], doneAt
+  'halt.start':          T('backdock', D, ['truck'], { reason: 'string' }),   // payload.kind halt | huddle | transition | break, payload.note
   'halt.end':            T('backdock', D, ['truck']),
+  'huddle.plan':         T('backdock', D, ['truck'], { mins: 'number' }),
+  'break.start':         T('backdock', D, ['truck'], { pid: 'string' }),
+  'break.end':           T('backdock', D, ['truck'], { pid: 'string' }),
   'plan.set':            T('backdock', D, ['date', 'slot']),
+  'manifest.linkLate':   T('backdock', M, ['truck'], { links: 'array' }),        // [{ bay, consolIds, basis: scan|cartons|time|manual }]
+  'plan.queues':         T('backdock', D, ['truck'], { queues: 'object' }),       // payload.basis x2 | personal
+  'truck.take5':         T('backdock', D, ['truck'], { items: 'array' }),
+  'dock.roster':         T('backdock', D, [], { pids: 'array' }),
   'plan.remove':         T('backdock', D, ['date', 'slot']),
 
   // ── Store-wide ───────────────────────────────────────────────────────
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
+  'store.settings.set':  T('store', M, []),
+  'store.tools.set':     T('store', M, [], { off: 'array' }),                    // owner only: the tools switched off (shared/tools.js)
+  'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
+  'map.edit.resolve':    T('store', M, ['edit'], { status: 'string' }),       // accepted | declined; payload.note                                     // any of tz, dockGrid, minsPerCarton, autoLockMins (null = default)
+  'feedback.send':       T('store', ['floor', 'stockroom', 'dock', 'manager'], ['note'], { kind: 'string', text: 'string' }),   // payload.view, version, diag
 };
 
 export function typeInfo(type) {
@@ -96,8 +135,8 @@ export function typeInfo(type) {
 
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
-  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
-  stockroom: ['cages', 'backfill', 'adjustments', 'daylist'],
+  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'inventory'],
+  stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan'],
-  store: ['devices', 'map', 'roster'],
+  store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools'],
 };

@@ -12,8 +12,12 @@
 import { VERSION } from './version.js';
 
 const listeners = new Set();
-const state = { supported: 'serviceWorker' in navigator, version: VERSION, build: null, waiting: null, checking: false, offlineReady: false };
-let reg = null, applying = false;
+const state = { supported: 'serviceWorker' in navigator, version: VERSION, build: null, waiting: null, checking: false, offlineReady: false, off: false };
+let reg = null, applying = false, installPrompt = null;
+state.installed = typeof matchMedia === 'function' && (matchMedia('(display-mode: standalone)').matches || navigator.standalone === true);
+state.installable = false;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; state.installable = true; emit('install'); });
+addEventListener('appinstalled', () => { state.installed = true; state.installable = false; emit('install'); });
 
 export const updates = {
   state,
@@ -23,6 +27,21 @@ export const updates = {
     state.checking = true; emit('checking');
     try { await reg.update(); } catch {} finally { state.checking = false; emit('checked'); }
     return state.waiting;
+  },
+  // Force reload: drop the cached release and the worker, then load fresh
+  // from the network. Maps, the session, snapshots and queued changes live
+  // in IndexedDB and are kept; the worker installs again on this load.
+  async forceReload() {
+    try { for (const r of await navigator.serviceWorker?.getRegistrations?.() || []) await r.unregister(); } catch {}
+    try { for (const k of await caches.keys()) if (k.startsWith('suite-app-')) await caches.delete(k); } catch {}
+    location.reload();
+  },
+  // Install to the home screen when the browser offers it (Chromium's
+  // beforeinstallprompt); iOS adds it from the share sheet instead.
+  async install() {
+    const p = installPrompt; if (!p) return false;
+    installPrompt = null; state.installable = false; p.prompt();
+    const r = await p.userChoice.catch(() => null); emit('install'); return r?.outcome === 'accepted';
   },
   async apply() {
     const w = reg?.waiting; if (!w || applying) return false;
@@ -34,8 +53,8 @@ export const updates = {
 const emit = (k) => { for (const f of listeners) { try { f(k, state); } catch (e) { console.error(e); } } };
 
 export async function initUpdates() {
-  if (!state.supported || new URLSearchParams(location.search).has('nosw')) return null;
-  try { reg = await navigator.serviceWorker.register('./sw.js'); } catch (e) { console.warn('service worker', e.message); return null; }
+  if (!state.supported || new URLSearchParams(location.search).has('nosw')) { state.off = true; return null; }
+  try { reg = await navigator.serviceWorker.register('./sw.js'); } catch (e) { console.warn('service worker', e.message); state.off = true; return null; }
   state.build = (await ask(navigator.serviceWorker.controller))?.build || null;
   state.offlineReady = !!navigator.serviceWorker.controller;
   if (reg.waiting) await announce(reg.waiting);

@@ -31,11 +31,28 @@ import { HttpError, json, fail, CORS } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
+import { isoWeek } from '../shared/stockintel.js';
+import { toolForEvent, toolOff } from '../shared/tools.js';
+import { storeKpis } from '../shared/kpis.js';
+import { SOH_KEEP } from '../shared/reducers/stockroom.js';
+import { rolloverDue } from '../shared/backfill.js';
+import { sanitizeSvg } from '../shared/svgsafe.js';
+import { cleanStoreInfo } from '../shared/maprender.js';
+import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/time.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
+const SOH_MAX = 4_000_000, SOH_ROWS = 20_000;     // one SOH report: a whole store's stockroom
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
-const DELTA_LIMIT = 5000;     // above this gap a hello gets a snapshot instead of a delta
+const DELTA_LIMIT = 5000;
+const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
+// Issue photos (R2 bucket PHOTOS): a JPEG the device already shrank, at most
+// PHOTO_DAY_CAP a store in any 24 hours, and the bytes dropped 90 days after
+// an issue is completed or removed (a photo can show people; it is kept no
+// longer than it helps).
+const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
+const EVENT_MAX = 2_000_000;          // one event's payload (a manifest.attach carries its consols)
+const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
 export class StoreObject extends DurableObject {
   constructor(ctx, env) {
@@ -54,16 +71,26 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS maps (version TEXT PRIMARY KEY, meta TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, at TEXT NOT NULL, by TEXT NOT NULL, size INTEGER NOT NULL);
     `);
     this.state = null;
-    this.storeNo = null;
-    ctx.blockConcurrencyWhile(async () => this.load());
+    this.storeNo = this.sql.exec("SELECT value FROM meta WHERE key = 'store'").toArray()[0]?.value || null;
+    this.epoch = Number(this.sql.exec("SELECT value FROM meta WHERE key = 'epoch'").toArray()[0]?.value || 0);
+    ctx.blockConcurrencyWhile(async () => {
+      this.load();
+      // The end-of-day rollover runs on an alarm at store midnight. A store
+      // object with no alarm (new, or woken after a deploy) catches up now.
+      if (await ctx.storage.getAlarm() == null) await ctx.storage.setAlarm(Date.now() + 1000);
+    });
   }
 
   // ── state ─────────────────────────────────────────────────────────────
   load() {
     const snap = this.sql.exec('SELECT seq, state FROM snapshots ORDER BY seq DESC LIMIT 1').toArray()[0];
-    this.state = snap ? JSON.parse(snap.state) : initialState();
+    // A saved state from before a new slice was added gets that slice empty.
+    this.state = snap ? { ...initialState(), ...JSON.parse(snap.state) } : initialState();
     const since = snap ? snap.seq : 0;
     const rows = this.sql.exec('SELECT * FROM events WHERE seq > ? ORDER BY seq', since).toArray();
     replay(this.state, rows.map(rowToEvent));
@@ -83,22 +110,34 @@ export class StoreObject extends DurableObject {
     const url = new URL(request.url);
     const claims = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
     if (!claims) return fail(401, 'unauthorised', 'no claims');
-    this.storeNo = claims.store;
+    // A device token from before the store's last rotation, suspension or
+    // revoke is refused; the device refreshes (which fails) and signs in.
+    if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) return fail(401, 'revoked', 'this device was signed out; sign in again');
+    if (url.pathname === '/epoch') return this.setEpoch(await request.json(), claims);
+    if (claims.store && claims.store !== this.storeNo) { this.storeNo = claims.store; this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('store', ?)", String(claims.store)); }
     try {
       switch (url.pathname) {
         case '/snapshot': return json(this.snapshot(claims, url.searchParams.get('areas')));
         case '/changes': return json(this.changes(Number(url.searchParams.get('since') || 0), claims));
-        case '/events': { const body = await request.json(); return json({ results: this.submit(body.events, claims) }); }
+        case '/events': { const body = await readBounded(request, BATCH_MAX); return json({ results: this.submit(body.events, claims) }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
-        case '/hb': { const b = await request.json().catch(() => ({})); this.recordHb(claims, b); return json({ ok: true }); }
+        case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readBounded(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true }); }
+        case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [] }));
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await request.json(), claims) : json(this.mapInfo());
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
-          if (url.pathname === '/manifest' && request.method === 'POST') return this.publishManifest(await request.json(), claims);
-          if (url.pathname === '/profiles') { const no = needArea(claims, 'backdock'); if (no) return no; const docs = this.sql.exec('SELECT doc, at FROM manifests').toArray().map(r => ({ ...JSON.parse(r.doc), at: r.at })); return json(buildProfiles(docs, { store: this.storeNo })); }
+          if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
+          const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
+          if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1]));
+          if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readBounded(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12)); }
+          const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
+          if (sohDay) { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
+          if (url.pathname === '/manifest' && request.method === 'POST') return this.needTool('manifests') || this.publishManifest(await request.json(), claims);
+          if (url.pathname === '/profiles') { const dk = needArea(claims, 'backdock'), sr = needArea(claims, 'stockroom'); if (dk && sr) return dk;   // carton depths serve the dock and the stockroom (K2B read them)
+           const docs = this.sql.exec('SELECT doc, at FROM manifests').toArray().map(r => ({ ...JSON.parse(r.doc), at: r.at })); return json(buildProfiles(docs, { store: this.storeNo })); }
           const man = url.pathname.match(/^\/manifest\/([\w-]{1,20})$/);
           if (man) { const no = needArea(claims, 'backdock'); if (no) return no; return request.method === 'DELETE' ? this.removeManifest(man[1], claims) : this.manifestDoc(man[1]); }
           const life = url.pathname.match(/^\/life\/(\d{6,13})$/);
@@ -123,9 +162,10 @@ export class StoreObject extends DurableObject {
 
   snapshot(claims, areasParam) {
     // Store-wide projections (map version, roster marker, devices) ride along
-    // with every snapshot; area projections follow the token's capabilities.
-    const wanted = areasParam ? areasParam.split(',') : [...claims.caps, 'store'];
-    const allowed = new Set([...claims.caps, 'store']);
+    // with every snapshot; area projections follow what the token may read
+    // (entitlement and role, see readable()).
+    const wanted = areasParam ? areasParam.split(',') : [...readable(claims), 'store'];
+    const allowed = new Set([...readable(claims), 'store']);
     const out = { v: this.state.v };
     for (const area of wanted) {
       if (!allowed.has(area)) continue;
@@ -137,7 +177,8 @@ export class StoreObject extends DurableObject {
 
   changes(since, claims) {
     const rows = this.sql.exec('SELECT * FROM events WHERE seq > ? ORDER BY seq LIMIT ?', since, DELTA_LIMIT).toArray();
-    const events = rows.map(rowToEvent).filter(e => claims.owner || claims.caps.includes(e.area) || e.area === 'store');
+    const can = new Set(readable(claims));
+    const events = rows.map(rowToEvent).filter(e => claims.owner || can.has(e.area) || e.area === 'store');
     return { seq: this.state.seq, events, more: rows.length === DELTA_LIMIT };
   }
 
@@ -158,6 +199,8 @@ export class StoreObject extends DurableObject {
     }
     this.snapshotIfDue();
     if (applied.length) this.broadcast(applied);
+    // A new time zone moves store midnight: the rollover alarm follows it.
+    if (applied.some(e => e.type === 'store.settings.set' && 'tz' in (e.payload || {}))) this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000);
     return results.map(({ event, ...rest }) => rest);
   }
 
@@ -165,9 +208,15 @@ export class StoreObject extends DurableObject {
     const id = raw?.id;
     const bad = validateEvent(raw);
     if (bad) return { id, ok: false, ...bad };
+    if (JSON.stringify(raw.payload ?? {}).length > EVENT_MAX) return { id, ok: false, code: 'invalid_event', message: `payload is over ${EVENT_MAX / 1_000_000} MB` };
+    // A device's clock decides "first at wins", so its `at` must be near the
+    // worker's: at most 10 minutes ahead, at most 30 days behind (an outbox
+    // that sat offline). The owner's imports carry legacy times and are exempt.
+    if (!claims.owner) { const t = Date.parse(raw.at), now = Date.now(); if (!(t <= now + FUTURE_MS && t >= now - PAST_MS)) return { id, ok: false, code: 'clock_skew', message: `at ${raw.at} is too far from the worker's clock; check this device's date and time` }; }
     if (raw.store !== claims.store) return { id, ok: false, code: 'unauthorised', message: 'event is for another store' };
     const info = typeInfo(raw.type);
     if (info.area !== 'store' && !claims.caps.includes(info.area)) return { id, ok: false, code: 'not_entitled', message: `store is not entitled to ${info.area}` };
+    const tool = toolForEvent(raw.type); if (tool && toolOff(this.state.tools?.off, tool)) return { id, ok: false, code: 'tool_off', message: `${tool.name} is switched off for this store` };
     if (!hasRole(claims, info.roles)) return { id, ok: false, code: 'unauthorised', message: `${raw.type} needs ${info.roles.join(' or ')}` };
 
     const dup = this.sql.exec('SELECT seq FROM events WHERE id = ?', id).toArray()[0];
@@ -192,6 +241,85 @@ export class StoreObject extends DurableObject {
     this.state.seq = cur.seq;
     this.sinceSnapshot += 1;
     return { id, ok: true, seq: cur.seq, event };
+  }
+
+  // ── session revocation ──────────────────────────────────────────────
+  setEpoch(body, claims) {
+    if (!claims.owner) return fail(403, 'unauthorised', 'owner only');
+    const epoch = Math.max(this.epoch, Number(body?.epoch) || 0);
+    if (epoch !== this.epoch) {
+      this.epoch = epoch;
+      this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('epoch', ?)", String(epoch));
+      for (const ws of this.ctx.getWebSockets()) {
+        const { claims: c } = ws.deserializeAttachment() || {};
+        if (c && !c.owner && (Number(c.epoch) || 0) < epoch) { try { ws.send(JSON.stringify({ t: 'error', code: 'revoked', message: 'signed out' })); ws.close(1008, 'revoked'); } catch {} }
+      }
+    }
+    return json({ ok: true, epoch: this.epoch });
+  }
+
+  // ── end-of-day rollover ───────────────────────────────────────────────
+  // Earlier-day bays still pending or ready are submitted as auto, through
+  // the ordinary write path with a system actor, then the next alarm is set
+  // for the coming store midnight (plus a minute of slack).
+  async alarm() {
+    try { this.rollover(); await this.sweepPhotos(); }
+    finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
+  }
+  // The store's own setting wins; STORE_TZ is the worker-wide fallback.
+  tz() { return this.state?.settings?.tz || this.env.STORE_TZ || DEFAULT_TZ; }
+  rollover(now = new Date()) {
+    if (!this.storeNo) return [];
+    const at = storeIso(now, this.tz()), today = storeDay(now, this.tz());
+    const events = rolloverDue(this.state.backfill, today).map(entity => ({ id: ulid(), store: this.storeNo, area: 'stockroom', type: 'submission.submit', entity, payload: { auto: true }, at, v: 1 }));
+    if (!events.length) return [];
+    return this.submit(events, { store: this.storeNo, roles: ['manager'], caps: ['stockroom'], device: 'system', owner: false, actor: 'system' });
+  }
+
+  // ── issue photos ──────────────────────────────────────────────────────
+  // The bytes live in R2 under <store>/<id>.jpg; the issue.photo event
+  // attaches the id to an issue. Any device of the store may add one (the
+  // Floor reports issues); reads go through here so a signed-out device
+  // (an old epoch) cannot fetch them.
+  photos() { if (!this.env.PHOTOS) throw new HttpError(501, 'not_implemented', 'issue photos need the PHOTOS R2 bucket bound to the worker'); return this.env.PHOTOS; }
+  photoKey(id) { return `${this.storeNo}/${id}.jpg`; }
+  async putPhoto(request, claims) {
+    const bucket = this.photos();
+    if (!claims.store || claims.store !== this.storeNo) throw new HttpError(403, 'unauthorised', 'a photo is added by a device of this store');
+    const buf = new Uint8Array(await request.arrayBuffer());
+    if (buf.length > PHOTO_MAX) throw new HttpError(413, 'payload_too_large', `a photo must be under ${PHOTO_MAX / 1000} KB`);
+    if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) throw new HttpError(415, 'unsupported_media', 'a photo must be a JPEG');
+    const n = this.sql.exec('SELECT COUNT(*) AS n FROM photos WHERE at >= ?', new Date(Date.now() - 86400e3).toISOString()).toArray()[0].n;
+    if (n >= PHOTO_DAY_CAP) throw new HttpError(429, 'rate_limited', `this store has added ${PHOTO_DAY_CAP} photos in the last day`);
+    const id = ulid(), at = new Date().toISOString(), by = String(claims.device || 'unknown').slice(0, 64);
+    await bucket.put(this.photoKey(id), buf, { httpMetadata: { contentType: 'image/jpeg' }, customMetadata: { store: String(this.storeNo), by, at } });
+    this.sql.exec('INSERT INTO photos (id, at, by, size) VALUES (?, ?, ?, ?)', id, at, by, buf.length);
+    return json({ id, size: buf.length, at }, 201);
+  }
+  async getPhoto(id) {
+    if (!this.sql.exec('SELECT id FROM photos WHERE id = ?', id).toArray().length) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
+    const obj = await this.photos().get(this.photoKey(id));
+    if (!obj) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
+    return new Response(obj.body, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400', ...CORS } });
+  }
+  async deletePhoto(id, claims) {
+    if (!claims.owner && claims.store !== this.storeNo) throw new HttpError(403, 'unauthorised', 'not this store');
+    await this.photos().delete(this.photoKey(id));
+    this.sql.exec('DELETE FROM photos WHERE id = ?', id);
+    return json({ id, deleted: true });
+  }
+  // Nightly: drop the bytes of photos on issues completed or removed more
+  // than PHOTO_KEEP_DAYS ago, and of uploads never attached to an issue.
+  async sweepPhotos(now = Date.now()) {
+    if (!this.env.PHOTOS || !this.storeNo) return 0;
+    const keep = new Set(), old = now - PHOTO_KEEP_DAYS * 86400e3;
+    for (const i of Object.values(this.state.issues || {})) {
+      const closed = i.removed || i.status === 'completed';
+      if (!(closed && Date.parse(i.updated) < old)) for (const p of i.photos || []) keep.add(p.id);
+    }
+    const stale = this.sql.exec('SELECT id, at FROM photos').toArray().filter(r => !keep.has(r.id) && Date.parse(r.at) < now - 86400e3);
+    for (const r of stale) { await this.env.PHOTOS.delete(this.photoKey(r.id)); this.sql.exec('DELETE FROM photos WHERE id = ?', r.id); }
+    return stale.length;
   }
 
   // ── manifests ─────────────────────────────────────────────────────────
@@ -222,12 +350,59 @@ export class StoreObject extends DurableObject {
     if (!row) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published (expired or removed)`);
     return new Response(row.doc, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', ...CORS } });
   }
+  // The role is checked and the manifest.remove event accepted before the
+  // document goes: a refused remove changes nothing, and every removal that
+  // happens is in the log.
   removeManifest(manNo, claims) {
-    this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
+    if (!hasRole(claims, ['dock', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a manifest needs the dock code');
+    if (!this.sql.exec('SELECT 1 FROM manifests WHERE manNo = ?', manNo).toArray().length) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published`);
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.remove', entity: { manNo }, payload: {}, at: new Date().toISOString(), v: 1 };
     const [r] = this.submit([ev], claims);
-    if (!r.ok) throw new HttpError(400, r.code, r.message);
+    if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
+    this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
     return json({ ok: true, manNo });
+  }
+
+  needTool(id) { return toolOff(this.state.tools?.off, id) ? fail(403, 'tool_off', 'that tool is switched off for this store') : null; }
+
+  // ── SOH snapshots ─────────────────────────────────────────────────────
+  // The stock-on-hand report pasted at the stockroom desk, kept one per day
+  // (a re-paste the same day replaces it) and indexed by a soh.publish event,
+  // like a manifest. The newest SOH_KEEP are kept; the classes read them
+  // back as a history. Needs the stockroom or manager role.
+  publishSoh(body, claims) {
+    if (!hasRole(claims, ['stockroom', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'saving a snapshot needs the stockroom code');
+    const date = String(body?.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, 'invalid_request', 'date must be YYYY-MM-DD');
+    if (!Array.isArray(body.rows) || !body.rows.length || body.rows.length > SOH_ROWS) throw new HttpError(400, 'invalid_request', `a snapshot needs 1 to ${SOH_ROWS} rows`);
+    const rows = [];
+    for (const r of body.rows) {
+      const kc = String(r?.kc || ''), loc = String(r?.loc || ''), soh = Number(r?.soh);
+      if (!/^\d{6,8}$/.test(kc) || !/^\d{1,5}$/.test(loc) || !Number.isFinite(soh)) throw new HttpError(400, 'invalid_request', `row ${rows.length + 1}: keycode, location and SOH are needed`);
+      rows.push({ kc, loc, soh: Math.round(soh), ...(Number.isFinite(Number(r.price)) && r.price !== null ? { price: Number(r.price) } : {}), ...(r.name ? { name: String(r.name).slice(0, 80) } : {}) });
+    }
+    const at = new Date().toISOString(), by = claims.device || (claims.owner ? 'owner' : ''), week = isoWeek(date), locs = new Set(rows.map(r => r.loc)).size;
+    const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.publish', entity: { date }, payload: { rows: rows.length, locs, week }, at, v: 1 };
+    const [r] = this.submit([ev], claims);
+    if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
+    this.sql.exec('INSERT OR REPLACE INTO soh (date, doc, at, by) VALUES (?, ?, ?, ?)', date, JSON.stringify({ date, week, rows }), at, by);
+    const keep = Object.keys(this.state.soh?.snaps || {});
+    for (const old of this.sql.exec('SELECT date FROM soh').toArray().map(x => x.date)) if (!keep.includes(old)) this.sql.exec('DELETE FROM soh WHERE date = ?', old);
+    return json({ ok: true, date, week, rows: rows.length, locs, seq: r.seq }, 201);
+  }
+  sohDocs(n) {
+    const lim = Math.max(1, Math.min(SOH_KEEP, Number.isFinite(n) ? Math.round(n) : 12));
+    const snaps = this.sql.exec('SELECT doc FROM soh ORDER BY date DESC LIMIT ?', lim).toArray().map(r => JSON.parse(r.doc)).reverse();
+    return json({ snaps });
+  }
+  removeSoh(date, claims) {
+    if (!hasRole(claims, ['stockroom', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a snapshot needs the stockroom code');
+    if (!this.sql.exec('SELECT 1 FROM soh WHERE date = ?', date).toArray().length) throw new HttpError(404, 'not_found', `no SOH snapshot for ${date}`);
+    const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.remove', entity: { date }, payload: {}, at: new Date().toISOString(), v: 1 };
+    const [r] = this.submit([ev], claims);
+    if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
+    this.sql.exec('DELETE FROM soh WHERE date = ?', date);
+    return json({ ok: true, date });
   }
 
   // ── published maps ────────────────────────────────────────────────────
@@ -240,7 +415,7 @@ export class StoreObject extends DurableObject {
     if (!rows.length) throw new HttpError(404, 'not_found', 'no map has been published for this store');
     const cur = rows.find(r => r.version === this.state.map.version) || rows[0];
     const meta = JSON.parse(cur.meta);
-    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at })) };
+    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at })) };
   }
   mapDoc(version, ifNoneMatch) {
     if (version === 'latest') version = this.state.map.version || this.sql.exec('SELECT version FROM maps ORDER BY at DESC LIMIT 1').toArray()[0]?.version;
@@ -250,7 +425,7 @@ export class StoreObject extends DurableObject {
     if (ifNoneMatch && ifNoneMatch.split(',').map(s => s.trim()).includes(etag)) return new Response(null, { status: 304, headers: { ETag: etag } });
     const meta = JSON.parse(row.meta);
     const svgs = Object.fromEntries(this.sql.exec('SELECT floor, svg FROM map_floors WHERE version = ?', row.version).toArray().map(r => [r.floor, r.svg]));
-    const doc = { v: 1, kind: 'map', store: this.storeNo, version: row.version, at: row.at, by: JSON.parse(row.by), name: meta.name, departments: meta.departments, floors: meta.floors.map(f => ({ ...f, svg: svgs[f.id] || '' })) };
+    const doc = { v: 1, kind: 'map', store: this.storeNo, version: row.version, at: row.at, by: JSON.parse(row.by), name: meta.name, departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, floors: meta.floors.map(f => ({ ...f, svg: svgs[f.id] || '' })) };
     return json(doc, 200, { ETag: etag, 'Cache-Control': 'private, max-age=31536000' });
   }
   publishMap(body, claims) {
@@ -260,13 +435,16 @@ export class StoreObject extends DurableObject {
     if (this.sql.exec('SELECT 1 FROM maps WHERE version = ?', version).toArray().length) throw new HttpError(409, 'exists', `map version ${version} is already published; publish a new version`);
     const floors = Array.isArray(body.floors) ? body.floors : [];
     if (!floors.length) throw new HttpError(400, 'invalid_request', 'floors must list at least one floor with its svg');
-    const metaFloors = [];
+    const metaFloors = [], clean = [];
+    let stripped = 0;
     for (const f of floors) {
-      const id = String(f?.id ?? '').trim(), svg = String(f?.svg ?? '');
+      const id = String(f?.id ?? '').trim();
+      // Allow-list the markup: every device inserts it into the page.
+      const safe = sanitizeSvg(String(f?.svg ?? '')), svg = safe.svg;
+      stripped += safe.stripped; clean.push({ id, svg });
       if (!/^[\w-]{1,32}$/.test(id)) throw new HttpError(400, 'invalid_request', 'each floor needs an id of letters, digits or dashes');
       if (!/^\s*<svg[\s>]/i.test(svg) || !/<\/svg>\s*$/i.test(svg)) throw new HttpError(400, 'invalid_request', `floor ${id}: svg must be a complete <svg> document`);
       if (svg.length > MAP_FLOOR_MAX) throw new HttpError(413, 'payload_too_large', `floor ${id}: svg is over ${MAP_FLOOR_MAX / 1_000_000} MB`);
-      if (/<script[\s>]/i.test(svg) || /\son[a-z]+\s*=/i.test(svg)) throw new HttpError(400, 'invalid_request', `floor ${id}: svg must not contain scripts or event handlers`);
       // The walk-path network the editor authored for this floor rides in
       // the metadata: a few hundred nodes, so it stays with the floor row.
       let paths = null;
@@ -281,17 +459,18 @@ export class StoreObject extends DurableObject {
       metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), shelves: (svg.match(/class="shelf-group"/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}) });
     }
     const departments = Array.isArray(body.departments) ? body.departments.slice(0, 64).map(d => ({ id: String(d.id || '').slice(0, 16), name: String(d.name || '').slice(0, 64), color: String(d.color || '').slice(0, 16), parent: String(d.parent || '').slice(0, 16) })) : [];
-    const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments };
+    const info = cleanStoreInfo(body.storeInfo), mpu = Number(body.metresPerUnit);
+    const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments, ...(info ? { storeInfo: info } : {}), ...(mpu > 0 && mpu < 100 ? { metresPerUnit: mpu } : {}) };
     const at = new Date().toISOString(), by = { device: claims.device || null, owner: true };
     this.sql.exec('INSERT INTO maps (version, meta, at, by) VALUES (?, ?, ?, ?)', version, JSON.stringify(meta), at, JSON.stringify(by));
-    for (const f of floors) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, String(f.id).trim(), String(f.svg));
+    for (const f of clean) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, f.id, f.svg);
     // The publish is an ordinary store event, so every device learns the
     // new version through its projection and the log shows who published.
     const ev = { id: ulid(), store: this.storeNo, area: 'store', type: 'map.publish', entity: { version }, payload: { floors: metaFloors.map(f => f.id), name: meta.name }, at, v: 1 };
     const r = this.applyOne(ev, { ...claims, roles: ['manager'], caps: claims.caps || [] });
     if (!r.ok) throw new HttpError(500, 'internal', `map stored but map.publish was refused: ${r.message}`);
     this.snapshotIfDue(); this.broadcast([r.event]);
-    return json({ ok: true, version, at, seq: r.seq, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
+    return json({ ok: true, version, at, seq: r.seq, stripped, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────────
@@ -301,30 +480,21 @@ export class StoreObject extends DurableObject {
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server, [claims.device || 'nodevice']);
     server.serializeAttachment({ claims });
-    return new Response(null, { status: 101, webSocket: client });
-  }
-
-  // Device presence is a deliberate projection side channel, not an event: a
-  // heartbeat every few minutes per device would bloat the append-only log
-  // with "who is on right now", which the events table never prunes. The WS
-  // 'hb' frame and POST /hb both land here and nothing is logged. (If presence
-  // ever needs an audit trail, reintroduce a device.heartbeat event WITH a
-  // pruning / TTL story for the log — not a straight append.)
-  recordHb(claims, msg) {
-    this.state.devices[claims.device || 'nodevice'] = {
-      app: msg.app || null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
-      area: msg.area || null, online: msg.online !== false, outbox: Number(msg.outbox) || 0,
-      lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
-    };
+    // A socket that offered the conduit subprotocol (token as the second) gets it back.
+    const offered = (request.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(x => x.trim());
+    return new Response(null, { status: 101, webSocket: client, headers: offered[0] === 'conduit' ? { 'Sec-WebSocket-Protocol': 'conduit' } : {} });
   }
 
   async webSocketMessage(ws, message) {
     let msg;
+    const size = typeof message === 'string' ? message.length : message.byteLength;
+    if (size > BATCH_MAX) return ws.send(JSON.stringify({ t: 'error', code: 'payload_too_large', message: 'frame is too large' }));
     try { msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)); }
     catch { return ws.send(JSON.stringify({ t: 'error', code: 'invalid_json', message: 'frames must be JSON' })); }
     const { claims } = ws.deserializeAttachment() || {};
     if (!claims) return ws.close(1008, 'no claims');
     if (claims.exp * 1000 < Date.now()) { ws.send(JSON.stringify({ t: 'error', code: 'unauthorised', message: 'token expired' })); return ws.close(1008, 'expired'); }
+    if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) { ws.send(JSON.stringify({ t: 'error', code: 'revoked', message: 'signed out' })); return ws.close(1008, 'revoked'); }
     switch (msg.t) {
       case 'hello': {
         const since = Number(msg.since || 0);
@@ -333,10 +503,22 @@ export class StoreObject extends DurableObject {
         return;
       }
       case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
-      case 'hb': this.recordHb(claims, msg); return;
+      case 'hb': return this.recordHb(claims, msg);
       case 'ping': return ws.send(JSON.stringify({ t: 'pong', seq: this.state.seq }));
       default: return ws.send(JSON.stringify({ t: 'error', code: 'invalid_request', message: `unknown frame ${msg.t}` }));
     }
+  }
+  // Device presence: the one write outside the event log, on purpose.
+  // Heartbeats are device telemetry every few minutes from every device, not
+  // store history, so they live in the devices projection only (owner and
+  // manager read it) and never become events; the append-only log is never
+  // pruned. The socket 'hb' frame and POST /hb (a device on the polling
+  // fallback) both land here. Every field is capped.
+  recordHb(claims, msg) {
+    this.state.devices[claims.device || 'nodevice'] = {
+      app: msg.app ? String(msg.app).slice(0, 64) : null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
+      area: msg.area ? String(msg.area).slice(0, 64) : null, online: msg.online !== false, outbox: Math.max(0, Math.min(1e6, Number(msg.outbox) || 0)), lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
+    };
   }
   webSocketClose(ws) { try { ws.close(); } catch {} }
   webSocketError(ws) { try { ws.close(); } catch {} }
@@ -345,13 +527,19 @@ export class StoreObject extends DurableObject {
     for (const ws of this.ctx.getWebSockets()) {
       const { claims } = ws.deserializeAttachment() || {};
       for (const e of events) {
-        if (!claims || (!claims.owner && e.area !== 'store' && !claims.caps.includes(e.area))) continue;
+        if (!claims || (!claims.owner && e.area !== 'store' && !readable(claims).includes(e.area))) continue;
         try { ws.send(JSON.stringify({ t: 'event', event: e })); } catch {}
       }
     }
   }
 }
 
+// A JSON body no bigger than max (Content-Length may be absent or wrong).
+async function readBounded(request, max) {
+  const text = await request.text();
+  if (text.length > max) throw new HttpError(413, 'payload_too_large', `body is over ${max / 1_000_000} MB`);
+  try { return JSON.parse(text); } catch { throw new HttpError(400, 'invalid_json', 'body must be JSON'); }
+}
 function rowToEvent(r) {
   return { id: r.id, seq: r.seq, type: r.type, area: r.area, entity: JSON.parse(r.entity), payload: JSON.parse(r.payload), actor: JSON.parse(r.actor), at: r.at, v: r.v };
 }
@@ -361,6 +549,19 @@ function primaryRole(claims, roles) {
   return claims.roles.includes('manager') ? 'manager' : claims.roles[0];
 }
 
-// A read that belongs to one area needs that area on the token (the store's
-// entitlement, carried as a capability).
-function needArea(claims, area) { return (claims.caps || []).includes(area) ? null : fail(403, 'not_entitled', `${area} is not enabled for this store`); }
+// What a token may read. The store PIN opens the Floor; Stockroom and Back
+// dock data need that area's code (or the manager code) on the token as
+// well as the store's entitlement. The owner reads every entitled area.
+const ROLE_AREAS = { stockroom: ['stockroom'], dock: ['backdock'], manager: ['floor', 'stockroom', 'backdock'] };
+export function readable(claims) {
+  const caps = claims?.caps || [];
+  if (claims?.owner) return caps;
+  const roles = claims?.roles || [];
+  return caps.filter(a => a === 'floor' || roles.some(r => ROLE_AREAS[r]?.includes(a)));
+}
+// A read that belongs to one area: the store must be entitled to it and the
+// token must hold a role that opens it.
+function needArea(claims, area) {
+  if (!(claims.caps || []).includes(area)) return fail(403, 'not_entitled', `${area} is not enabled for this store`);
+  return readable(claims).includes(area) ? null : fail(403, 'unauthorised', `reading ${area === 'backdock' ? 'the Back dock' : 'the Stockroom'} needs its code`);
+}

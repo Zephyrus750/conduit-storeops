@@ -11,9 +11,14 @@ main = "worker/index.js"
 compatibility_date = "2026-08-06"
 compatibility_flags = ["nodejs_compat"]
 
-# Catalogue upstreams: the suite lookup worker (keycode → product URL and
-# name, from the public sitemaps) and the details worker (price, was, image,
-# clearance from the public product pages). Cached per keycode at the edge.
+# Catalogue: Conduit's own CatalogueObject reads the Kmart product sitemaps
+# weekly (Mondays 01:00 store time; "Rebuild now" in the owner console).
+# Price, was, image and clearance come from the product page through
+# Cloudflare Browser Rendering once these are set on the worker:
+#   CF_ACCOUNT_ID  (variable)  and  BROWSER_TOKEN  (secret: Browser Rendering › Edit)
+# Until the first build lands and those are set, LOOKUP_URL and DETAILS_URL
+# (the legacy suite and details workers) answer instead; remove them, and
+# the LOOKUP and DETAILS services below, once the catalogue is live.
 [vars]
 ENVIRONMENT = "dev"
 TOKEN_TTL_SECONDS = "43200"
@@ -28,16 +33,24 @@ DETAILS_URL = "https://k2b-details.zephyrus-np750.workers.dev"
 [durable_objects]
 bindings = [
   { name = "STORE", class_name = "StoreObject" },
-  { name = "REGISTRY", class_name = "RegistryObject" }
+  { name = "REGISTRY", class_name = "RegistryObject" },
+  { name = "CATALOGUE", class_name = "CatalogueObject" }
 ]
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["StoreObject", "RegistryObject"]
 
-# Archive and files arrive with the D1 nightly and manifests:
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["CatalogueObject"]
+
+# Issue photos live in R2 (create each bucket once):
+#   npx wrangler r2 bucket create store-photos-staging
+#   npx wrangler r2 bucket create store-photos
+# Without the PHOTOS binding the photo routes answer 501 and the app hides
+# the photo button. The archive arrives with the D1 nightly:
 #   npx wrangler d1 create conduit-archive-staging
-#   npx wrangler r2 bucket create conduit-files-staging
 # Published maps live in each store object (SQLite) and the catalogue uses
 # the edge Cache API, so neither needs a KV namespace.
 # Service bindings to the other workers on the account. A Worker may not
@@ -54,7 +67,11 @@ services = [
 vars = { ENVIRONMENT = "staging", TOKEN_TTL_SECONDS = "43200", REFRESH_TTL_SECONDS = "2592000", LOCKOUT_ATTEMPTS = "5", LOCKOUT_SECONDS = "900", LOOKUP_URL = "https://shrill-voice-f46f.zephyrus-np750.workers.dev", DETAILS_URL = "https://k2b-details.zephyrus-np750.workers.dev" }
 durable_objects.bindings = [
   { name = "STORE", class_name = "StoreObject" },
-  { name = "REGISTRY", class_name = "RegistryObject" }
+  { name = "REGISTRY", class_name = "RegistryObject" },
+  { name = "CATALOGUE", class_name = "CatalogueObject" }
+]
+r2_buckets = [
+  { binding = "PHOTOS", bucket_name = "store-photos-staging" }
 ]
 
 [env.production]
@@ -67,5 +84,9 @@ services = [
 vars = { ENVIRONMENT = "production", TOKEN_TTL_SECONDS = "43200", REFRESH_TTL_SECONDS = "2592000", LOCKOUT_ATTEMPTS = "5", LOCKOUT_SECONDS = "900", LOOKUP_URL = "https://shrill-voice-f46f.zephyrus-np750.workers.dev", DETAILS_URL = "https://k2b-details.zephyrus-np750.workers.dev" }
 durable_objects.bindings = [
   { name = "STORE", class_name = "StoreObject" },
-  { name = "REGISTRY", class_name = "RegistryObject" }
+  { name = "REGISTRY", class_name = "RegistryObject" },
+  { name = "CATALOGUE", class_name = "CatalogueObject" }
+]
+r2_buckets = [
+  { binding = "PHOTOS", bucket_name = "store-photos" }
 ]
