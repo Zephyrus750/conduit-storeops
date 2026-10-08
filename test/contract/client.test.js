@@ -89,7 +89,7 @@ test('dispatch offline queues and applies locally; connect flushes; a second dev
   // A rejection surfaces on the dispatching device and rolls the projection back.
   const rejects = [];
   live.on('reject', r => rejects.push(r));
-  const bad = { id: '01ARZ3NDEKTSV4RRFFQ69G5FAV', store: '1241', area: 'stockroom', type: 'cage.close', entity: { cage: 'NOPE' }, payload: {}, at: '2026-09-07T08:00:00+08:00', v: 1 };
+  const bad = { id: '01ARZ3NDEKTSV4RRFFQ69G5FAV', store: '1241', area: 'stockroom', type: 'cage.close', entity: { cage: 'NOPE' }, payload: {}, at: new Date().toISOString(), v: 1 };
   const forced = (await import('../../client/store.js')).createStore({ storeNo: '1241', session: a.session, transport: a.transport, storage: memoryStorage({ ['outbox:1241:' + bad.id]: bad }), WebSocketImpl: null });
   const rej = []; forced.on('reject', r => rej.push(r));
   await forced.load(); await forced.flush();

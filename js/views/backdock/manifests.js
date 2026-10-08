@@ -9,7 +9,8 @@
 
 import { ic, esc, vh, sub, toast, dep, mhead, ago, fmtDate } from '../../ui.js';
 import { ensureNames, nameOf } from '../stockroom/common.js';
-import { manifestIndex, microDept, publishManifestFile, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
+import { previewManifest } from './mpreview.js';
+import { manifestIndex, microDept, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
 import { retailPeriod } from '../../../shared/time.js';
 
 const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {} };
@@ -163,8 +164,7 @@ export default {
     root.addEventListener('change', async e => {
       if (!e.target.matches('[data-field="file"]')) return;
       const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
-      toast(`Reading ${f.name}…`);
-      try { const r = await publishManifestFile(ctx, f); st.open = r.manNo; st.docFor = null; toast(`Manifest ${r.manNo} published · ${r.consols} consols, ${r.totalCartons} cartons`); }
+      try { const r = await previewManifest(ctx, f); if (!r) return; st.open = r.manNo; st.docFor = null; toast(`Manifest ${r.manNo} published · ${r.consols} consols, ${r.totalCartons} cartons`); ctx.rerender(); }
       catch (err) { toast(`Could not publish ${f.name}: ${err.message}`, 'bad'); }
     });
     let typing = null;

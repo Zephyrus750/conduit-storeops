@@ -105,12 +105,12 @@ export async function readManifestFile(file) {
   if (!parsed.consols.length) throw new Error(parsed.diag || 'no consolidations found in that file');
   return parsed;
 }
-// Read, ask for a manifest number when the report carries none, publish.
-export async function publishManifestFile(ctx, file) {
-  const parsed = await readManifestFile(file);
-  let manNo = parsed.manNo;
-  if (!/^[\w-]{1,20}$/.test(manNo)) { manNo = (prompt(`${file.name}: the report has no manifest number. Enter one:`, '') || '').trim(); if (!manNo) throw new Error('a manifest needs a number'); }
-  const doc = manifestDoc(parsed, { filename: file.name, by: ctx.session.current?.device || '', manNo });
+// Publish a read report under its manifest number (the preview asks for one
+// when the report carries none: js/views/backdock/mpreview.js).
+export async function publishParsed(ctx, parsed, { filename = '', manNo } = {}) {
+  const no = String(manNo || parsed.manNo || '').trim();
+  if (!/^[\w-]{1,20}$/.test(no)) throw new Error('a manifest needs a number: 1 to 20 letters, digits or dashes');
+  const doc = manifestDoc(parsed, { filename, by: ctx.session.current?.device || '', manNo: no });
   const r = await ctx.api(`/v1/store/${ctx.storeNo}/manifest`, { method: 'POST', body: doc, timeoutMs: 60000 });
   return { ...r, doc };
 }

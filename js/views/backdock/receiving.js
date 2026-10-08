@@ -5,7 +5,8 @@
 // backdock-receiving and backdock-decant over the backdock reducers.
 
 import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate, camButton } from '../../ui.js';
-import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, publishManifestFile, attachManifest } from './common.js';
+import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
+import { previewManifest } from './mpreview.js';
 import { printAudit } from './audit.js';
 import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, ss } from './phonesearch.js';
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
@@ -293,8 +294,7 @@ export default {
       if (!e.target.matches('[data-field="manfile"]')) return;
       const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
       const t = model(ctx).t; if (!t) return;
-      toast(`Reading ${f.name}…`);
-      try { const r = await publishManifestFile(ctx, f); await attachManifest(ctx, t.id, r.manNo); st.manPick = false; toast(`Manifest ${r.manNo} attached · ${r.consols} consols, ${r.totalCartons} cartons`); }
+      try { const r = await previewManifest(ctx, f, { attachTo: t.id }); if (!r) return; st.manPick = false; ctx.rerender(); toast(`Manifest ${r.manNo} attached · ${r.consols} consols, ${r.totalCartons} cartons`); }
       catch (err) { toast(`Could not use ${f.name}: ${err.message}`, 'bad'); }
     });
     root.addEventListener('change', async e => {
