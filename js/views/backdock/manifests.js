@@ -30,7 +30,7 @@ function entries(ctx) {
   for (const m of manifestIndex(dock)) put(m.manNo, { ...m, day: (m.publishedAt || '').slice(0, 10) });
   for (const [date, day] of Object.entries(plan.days || {})) for (const [slot, sl] of Object.entries(day.slots || {})) if (sl.manifest?.manNo) put(sl.manifest.manNo, { status: 'planned', day: date, slot, consols: by.get(sl.manifest.manNo)?.consols ?? (sl.manifest.consols?.length || 0) });
   for (const r of dock.history || []) if (r.manifest?.manNo) put(r.manifest.manNo, { status: 'done', day: r.date, truck: r.id, totalCartons: by.get(r.manifest.manNo)?.totalCartons || r.manifest.cartons || 0 });
-  for (const [id, t] of Object.entries(dock.trucks || {})) if (t.manifest?.manNo) put(t.manifest.manNo, { status: t.status === 'closed' ? 'done' : t.status, day: id.slice(0, 10), truck: id, consols: t.manifest.consols.length, totalCartons: t.manifest.consols.reduce((n, c) => n + c.cartons, 0) });
+  for (const [id, t] of Object.entries(dock.trucks || {})) if (t.manifest?.manNo) put(t.manifest.manNo, { status: t.status === 'closed' ? 'done' : t.status, day: id.slice(0, 10), truck: id, consols: (t.manifest.consols || []).length, totalCartons: t.manifest.consols.reduce((n, c) => n + c.cartons, 0) });
   return [...by.values()].sort((a, b) => (b.day || '').localeCompare(a.day || '') || (b.publishedAt || '').localeCompare(a.publishedAt || ''));
 }
 

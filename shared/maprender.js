@@ -316,7 +316,7 @@ const GLYPH = {
 };
 // The glyph for a marker type in a colour, or '' (maps published as raw SVG
 // by the legacy viewer carry icon-font text the shell swaps for these).
-export function markerGlyph(type, colour) { const g = GLYPH[markerType(type)]; return g ? g.replace(/"C"/g, `"${colour}"`) : ''; }
+export function markerGlyph(type, colour) { const g = GLYPH[markerType(type)]; const c = /^(#[0-9a-f]{3,8}|[a-z]{3,20})$/i.test(String(colour)) ? colour : '#ffffff'; return g ? g.replace(/"C"/g, `"${c}"`) : ''; }   // the colour comes from a published file: only a hex or a name passes
 function signInner(type, extClass) {
   const RED = '#e4002b', GREEN = '#009639', base = bg => `<rect class="em-icon-bg" x="-13" y="-13" width="26" height="26" rx="3" fill="${bg}" stroke="#ffffff" stroke-width="2"/>`;
   const BANDS = { foam: '#0057b8', powder: '#ffffff', co2: '#111111', wet_chem: '#e8b98a', liquid: '#ffd500' };

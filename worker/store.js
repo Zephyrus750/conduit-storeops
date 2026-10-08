@@ -51,6 +51,7 @@ const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // an issue is completed or removed (a photo can show people; it is kept no
 // longer than it helps).
 const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
+const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'store.retain']);
 const EVENT_MAX = 2_000_000;          // one event's payload (a manifest.attach carries its consols)
 const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
@@ -187,12 +188,17 @@ export class StoreObject extends DurableObject {
   }
 
   // ── apply ─────────────────────────────────────────────────────────────
-  submit(events, claims) {
+  submit(events, claims, { internal = false } = {}) {
     if (!Array.isArray(events)) throw new HttpError(400, 'invalid_request', 'events must be an array');
     if (events.length > 500) throw new HttpError(400, 'invalid_request', 'at most 500 events per batch');
     const results = [];
     const applied = [];
     for (const raw of events) {
+      // These are written by the worker itself, next to the documents they
+      // index (a map version, a manifest, an SOH snapshot) or on its own
+      // schedule (retention). A device sending one would point the store at
+      // documents that do not exist, or delete real ones.
+      if (!internal && WORKER_ONLY.has(raw?.type)) { results.push({ id: raw?.id, ok: false, code: 'worker_only', message: `${raw.type} is written by the worker, not sent by a device` }); continue; }
       const r = this.applyOne(raw, claims);
       results.push(r);
       if (r.ok && r.event) applied.push(r.event);
@@ -341,7 +347,7 @@ export class StoreObject extends DurableObject {
     this.sql.exec('INSERT OR REPLACE INTO manifests (manNo, doc, at, by) VALUES (?, ?, ?, ?)', manNo, text, at, by);
     const totalCartons = doc.consols.reduce((n, c) => n + (Number(c.cartons) || 0), 0), keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size;
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.publish', entity: { manNo }, payload: { dcNo: doc.dcNo || '', despatch: doc.despatch || '', filename: String(doc.filename || '').slice(0, 80), consols: doc.consols.length, totalCartons, keycodes }, at, v: 1 };
-    const [r] = this.submit([ev], claims);
+    const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(400, r.code, r.message);
     return json({ ok: true, manNo, at, consols: doc.consols.length, totalCartons, keycodes, seq: r.seq }, 201);
   }
@@ -357,7 +363,7 @@ export class StoreObject extends DurableObject {
     if (!hasRole(claims, ['dock', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a manifest needs the dock code');
     if (!this.sql.exec('SELECT 1 FROM manifests WHERE manNo = ?', manNo).toArray().length) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published`);
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.remove', entity: { manNo }, payload: {}, at: new Date().toISOString(), v: 1 };
-    const [r] = this.submit([ev], claims);
+    const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
     return json({ ok: true, manNo });
@@ -383,7 +389,7 @@ export class StoreObject extends DurableObject {
     }
     const at = new Date().toISOString(), by = claims.device || (claims.owner ? 'owner' : ''), week = isoWeek(date), locs = new Set(rows.map(r => r.loc)).size;
     const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.publish', entity: { date }, payload: { rows: rows.length, locs, week }, at, v: 1 };
-    const [r] = this.submit([ev], claims);
+    const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('INSERT OR REPLACE INTO soh (date, doc, at, by) VALUES (?, ?, ?, ?)', date, JSON.stringify({ date, week, rows }), at, by);
     const keep = Object.keys(this.state.soh?.snaps || {});
@@ -399,7 +405,7 @@ export class StoreObject extends DurableObject {
     if (!hasRole(claims, ['stockroom', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a snapshot needs the stockroom code');
     if (!this.sql.exec('SELECT 1 FROM soh WHERE date = ?', date).toArray().length) throw new HttpError(404, 'not_found', `no SOH snapshot for ${date}`);
     const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.remove', entity: { date }, payload: {}, at: new Date().toISOString(), v: 1 };
-    const [r] = this.submit([ev], claims);
+    const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('DELETE FROM soh WHERE date = ?', date);
     return json({ ok: true, date });

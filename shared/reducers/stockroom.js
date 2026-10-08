@@ -222,14 +222,14 @@ export const stockroomReducers = {
     const sub = sub_(s, e); if (sub.code) return sub;
     const code = String(e.payload.code || '');
     if (!/^\d{6,13}$/.test(code)) return reject('invalid_event', 'code must be a keycode or item barcode');
-    const r = (sub.readd ||= {});
+    const r = sub.readd || {};
     if (e.payload.done) {
       if (!r[code]) return reject('not_found', `${code} is not tagged to ${sub.bay}`);
       if (r[code].doneAt) return reject('invalid_event', `${code} is already scanned back in`);
       r[code].doneAt = e.at; return null;
     }
     if (r[code]) return reject('invalid_event', `${code} is already tagged to ${sub.bay}`);
-    r[code] = { at: e.at, by: e.actor?.device || null, doneAt: null };
+    (sub.readd ||= {})[code] = { at: e.at, by: e.actor?.device || null, doneAt: null };
     return null;
   },
   'submission.request'(s, e) {
@@ -272,11 +272,11 @@ export const stockroomReducers = {
   'scan.preset'(s, e) {
     const size = String(e.entity.size || ''), kind = e.payload.kind === 'rows' ? 'rows' : 'codes';
     if (!/^\d{3,5}x\d{3,5}$/.test(size)) return reject('invalid_event', 'size must be WIDTHxHEIGHT');
-    const key = `${kind}:${size}`, presets = (s.scanPresets ||= {});
-    if (e.payload.remove) { delete presets[key]; return null; }
+    const key = `${kind}:${size}`;
+    if (e.payload.remove) { if (s.scanPresets) delete s.scanPresets[key]; return null; }
     const f = ['x', 'y', 'w', 'h'].map(k => Number(e.payload[k]));
     if (f.some(v => !Number.isFinite(v) || v < 0 || v > 1) || f[2] < 0.01 || f[3] < 0.01 || f[0] + f[2] > 1.0001 || f[1] + f[3] > 1.0001) return reject('invalid_event', 'the region must lie inside the screen (fractions 0 to 1)');
-    presets[key] = { x: f[0], y: f[1], w: f[2], h: f[3], at: e.at, by: e.actor?.device || null };
+    (s.scanPresets ||= {})[key] = { x: f[0], y: f[1], w: f[2], h: f[3], at: e.at, by: e.actor?.device || null };
     return null;
   },
 

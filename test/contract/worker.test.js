@@ -223,6 +223,17 @@ test('events: entitlement, role, validation, duplicate, conflict rule, and a sec
   ws.close();
 });
 
+test('devices cannot send the events only the worker writes (map, manifest and SOH indexes, retention)', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'mgr-phone' })).body.token;
+  const mgr = (await api('POST', '/v1/auth/unlock', { code: 'MGR-CODE' }, dev)).body.token;
+  const at = new Date().toISOString();
+  const evs = [['map.publish', 'store', { version: 'ghost' }], ['manifest.remove', 'backdock', { manNo: 'M1' }], ['soh.publish', 'stockroom', { date: '2099-01-01' }], ['store.retain', 'store', {}]]
+    .map(([type, area, entity], i) => ({ id: '01J9WORKERONLY' + String(i).padStart(13, '0'), store: '1241', area, type, entity, payload: {}, at, v: 1 }));
+  const r = await api('POST', '/v1/store/1241/events', { events: evs }, mgr);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.results.map(x => x.code), ['worker_only', 'worker_only', 'worker_only', 'worker_only']);
+});
+
 test('device presence: POST /hb records the device (the polling fallback for the socket hb frame)', async () => {
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'poll-phone' })).body.token;
   const hb = await api('POST', '/v1/store/1241/hb', { app: 'floor', online: true, outbox: 3, area: 'floor', lastError: 'x'.repeat(500) }, dev);
