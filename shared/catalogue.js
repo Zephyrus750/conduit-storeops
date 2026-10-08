@@ -44,6 +44,12 @@ export const CATALOGUE = {
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),
+  'inventory.offsite.set':    T('floor', F, [], { rows: 'array' }),             // the off-site master list, whole; payload.src
+  'inventory.offsite.add':    T('floor', F, ['pid']),                           // one pallet sent off-site: sent, desc, req, cb, note, products
+  'inventory.offsite.update': T('floor', F, ['pid']),                           // cb, rec ('' = still off-site), note
+  'inventory.load.add':       T('floor', F, ['load'], { label: 'string', pallets: 'array' }),   // date, status, recvDate, src
+  'inventory.load.status':    T('floor', F, ['load'], { status: 'string' }),   // incoming | received | offsite; recvDate
+  'inventory.load.remove':    T('floor', F, ['load']),
 
   // ── Stockroom ────────────────────────────────────────────────────────
   'cage.create':         T('stockroom', S, ['cage'], { ring: 'string' }),
@@ -130,7 +136,7 @@ export function typeInfo(type) {
 
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
-  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
+  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'inventory'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools'],

@@ -230,3 +230,7 @@ function openPhoto(url) {
   const close = () => { el.remove(); document.removeEventListener('keydown', k); }, k = e => { if (e.key === 'Escape') close(); };
   el.addEventListener('click', close); document.addEventListener('keydown', k); document.body.appendChild(el);
 }
+
+// An issue as a map pin, for other views that show the maintenance layer
+// (the dashboard's map).
+export const issuePin = i => ({ x: i.x, y: i.y, colour: colour(i), glyph: GLYPH[i.cat] || GLYPH.other, badge: i.recur ? (i.recur > 9 ? '9+' : String(i.recur)) : '', title: `${i.title} · ${CAT_NAME[i.cat] || 'Other'}` });

@@ -87,7 +87,7 @@ export const manifestIndex = dock => Object.values(dock.manifests || {}).sort((a
 // SheetJS reads the .xls (Crystal export) and .xlsx; it loads on first use
 // from the CDN, since publishing a report is a desktop job with a network.
 let xlsxLoading = null;
-function loadXLSX() {
+export function loadXLSX() {
   if (window.XLSX) return Promise.resolve(window.XLSX);
   if (xlsxLoading) return xlsxLoading;
   xlsxLoading = new Promise((resolve, reject) => {

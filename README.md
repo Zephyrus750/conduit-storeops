@@ -327,9 +327,20 @@ a view is `{ id, title, icon, desktop(ctx), mobile?(ctx), mount?(ctx, root) }`
 and renders into the content region; it owns no chrome and no stylesheet.
 
 Floor views live on real data: Store map, Pick list, Location refresh, Label
-integrity, Emergency, Maintenance, Stocktake, plus Dashboard and Settings
-(skin, accent, rail, bars, title bar). Back dock and Stockroom rows are inert
-until their ports land.
+integrity, Emergency, Maintenance, Stocktake, Inventory (off-site register,
+loads, heat on the map, trends, clearance watch), plus Dashboard (with the
+layered store map, Today at and logistics cards), Settings, Help (the tour)
+and Field Mode (a manager captures shelf codes for the map editor and exports
+them as a `field-capture/1` file).
+
+The map (`js/map.js`) zooms with an eased animation, double-tap or
+double-click (×1.8), Ctrl + / − / 0 and a pinch; a flick coasts. Price checks
+open a card and cycle normal, large or hidden; tory lines switch on for a
+back-of-house floor; an editor's department zoom box frames its department;
+shelf tips and cards show the fixture, location range, shared names and, when
+the map has a scale, the size in metres. `js/lowpoly.js` draws the sign-in
+background from the accent and ground tokens. `js/device.js` holds haptics
+and the phone portrait lock.
 
 ## Where things stand
 
@@ -338,7 +349,7 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 
 | Area | Reducers | Ported from |
 | --- | --- | --- |
-| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list | ShelfSearcher refresh, label-integrity, stocktake, maintenance, em-service modes |
+| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list, inventory (off-site register: set, add, update; loads: add, status, remove) | ShelfSearcher refresh, label-integrity, stocktake, maintenance, em-service and inventory modes |
 | Stockroom | cages with ring colours, backfill submissions (pending, corrected, submitted; requested list; claims; rename), negative-SOH adjustments, day list | K2B review, adjust and scan modules |
 | Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits, pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4, history rows on finalise | Decant Visualiser receiving, manifests, planner, history |
 | Store | device heartbeat, map publish, roster rotation marker | |

@@ -22,6 +22,7 @@ export const TOOLS = [
   T('maintenance', 'floor', 'Maintenance', ['maintenance'], ['issue.', 'asset.']),
   T('stocktake', 'floor', 'Stocktake', ['stocktake'], ['stocktake.']),
   T('mapedits', 'floor', 'Suggest map edits', ['mapedits'], ['map.edit.suggest']),
+  T('inventory', 'floor', 'Inventory and pallet hub', ['inventory'], ['inventory.']),
   T('backfill', 'stockroom', 'Backfill review and history', ['bfreview', 'srhistory'], ['submission.']),
   T('cages', 'stockroom', 'Cages', ['cages'], ['cage.']),
   T('adjust', 'stockroom', 'Adjustments', ['adjust'], ['adjustment.']),

@@ -13,6 +13,10 @@ import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast } from './backdock/common.js';
 import { ratesFor } from './backdock/plan.js';
+import { mountMap, bindMapChrome, hasMap, mapSymbols } from '../map.js';
+import { issuePin } from './maintenance.js';
+import { registerSummary, isFixture, consolidate } from '../../shared/inventory.js';
+import { prefs } from '../prefs.js';
 
 const TARGET = 100, DAILY = 20;
 const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month']];
@@ -144,20 +148,104 @@ function register(ctx, r) {
   return { html, count: rows.length, need: need.length };
 }
 
-export default {
-  id: 'dashboard', title: 'Dashboard', icon: 'm-dashboard',
-  desktop(ctx) {
+// ── Today at the store, logistics and the combined map (Floor P2) ───────
+// Five tiles for what the floor did today (ShelfSearcher's "Today at"),
+// three logistics cards from the inventory hub, and the store map with its
+// layers switched by chips: emergency signs, open maintenance issues, price
+// checks and label checks. The map mounts once in its own container; the
+// cards above it re-render without touching it.
+function todayAt(ctx) {
+  const t = today(), wk = weekId(), R = ctx.store.get('refresh'), marks = Object.values(R.weeks[wk] || {});
+  const rToday = marks.filter(m => dayOf(m.at) === t).length;
+  const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen), checks = Object.values(L.checks[cyc] || {}), lToday = checks.filter(c => dayOf(c.at) === t).length;
+  const issues = Object.values(ctx.store.get('issues')).filter(i => !i.removed), logged = issues.filter(i => dayOf(i.created) === t).length;
+  const serviced = Object.values(ctx.store.get('assets') || {}).reduce((n, a) => n + (a.log || []).filter(l => l.a === 'Serviced' && dayOf(l.t) === t).length, 0);
+  const sess = Object.entries(ctx.store.get('stocktake').sessions).find(([, x]) => !x.ended), counted = sess ? Object.values(sess[1].shelves).filter(x => x.state === 'counted' || x.state === 'verified').length : null;
+  const tile = (go, icon, n, label, small) => `<button class="tday" data-go="${go}">${ic(icon)}<b>${n}</b><span>${label}</span><small>${small}</small></button>`;
+  return `<div class="card tdays"><div class="ch"><h3>Today at ${esc(ctx.storeName || 'the store')}</h3><span class="cs-dim">${esc(new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }))} · ${esc(ctx.storeNo || '')}</span></div><div class="tday-row">` +
+    tile('refresh', 'm-refresh', rToday, 'Refreshes', `today · ${marks.length} this week`) + tile('labelint', 'm-labelint', lToday, 'Label checks', `today · ${checks.length} this cycle`) +
+    tile('maintenance', 'tool', logged, 'Maintenance', `new log${logged === 1 ? '' : 's'} today`) + tile('emergency', 'm-emergency', serviced, 'Em. service', 'serviced today') +
+    tile('stocktake', 'm-stocktake', counted == null ? '—' : counted, 'Stocktake', sess ? `counted · session ${esc(sess[0])}` : 'no session') + `</div></div>`;
+}
+function logistics(ctx) {
+  const I = ctx.store.get('inventory') || { offsite: {}, loads: {} }, t = today(), sum = registerSummary(I.offsite, t);
+  const loads = Object.values(I.loads).sort((a, b) => (b.recvDate || b.date || '').localeCompare(a.recvDate || a.date || '')), units = l => l.pallets.reduce((n, p) => n + p.items.reduce((k, i) => k + i.q, 0), 0);
+  const next = loads.filter(l => l.status === 'incoming').sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0], latest = loads.find(l => l.status === 'received') || loads[0];
+  let clr = null; try { const c = JSON.parse(localStorage.getItem(`inventory_prices:${ctx.storeNo}`) || 'null'); if (c) { const on = new Set(Object.entries(c.items || {}).filter(([, v]) => v.clr).map(([k]) => k)); clr = { items: on.size, pallets: Object.values(I.offsite).filter(r => !r.rec && r.products.some(p => on.has(p.kc))).length }; } } catch {}
+  const inv = `<div class="card kpi logi"><div class="kh">${ic('m-inventory')}<h3>Inventory</h3><a class="open" data-go="inventory">Open ${ic('arrow')}</a></div><div class="rows">` +
+    `<div class="row">Loads<b>${loads.length} · ${loads.reduce((n, l) => n + l.pallets.length, 0)} pallets</b></div>` +
+    `<div class="row">Next in<b>${next ? `${esc(next.label)} · ${esc(fmtDay(next.date))}` : loads.length ? 'All loads received' : '—'}</b></div>` +
+    `<div class="row">Off-site<b>${sum.live} pallet${sum.live === 1 ? '' : 's'}${sum.nextCallback ? ` · callback ${esc(fmtDay(sum.nextCallback))}` : ''}</b></div>` +
+    (clr ? `<div class="row">Clearance<b class="${clr.items ? 'c-red' : ''}">${clr.items ? `▼ ${clr.items} item${clr.items === 1 ? '' : 's'} · ${clr.pallets} pallet${clr.pallets === 1 ? '' : 's'} worth calling back` : 'nothing held is marked down'}</b></div>` : '') + `</div></div>`;
+  const live = sum.byCallback.slice(0, 4);
+  const off = `<div class="card kpi logi"><div class="kh">${ic('box')}<h3>Off-site pallets</h3><a class="open" data-go="inventory">Hub ${ic('arrow')}</a></div><div class="hero"><span class="n">${sum.live}</span><span class="d">${sum.fixtures} fixtures${sum.overdue.length ? ` · <b class="c-red">${sum.overdue.length} overdue</b>` : ''}</span></div><div class="rows">` +
+    (live.length ? live.map(r => `<div class="row"><span class="l"><b class="mono">${esc(r.pid)}</b> ${esc((r.title || r.desc || '').slice(0, 28))}${isFixture(r) ? ' <span class="inv-pill fx">Fixtures</span>' : ''}</span><b class="${r.cb && r.cb < t ? 'c-red' : ''}">${r.cb ? 'cb ' + esc(fmtDay(r.cb)) : '—'}</b></div>`).join('') + (sum.live > 4 ? `<div class="row cs-dim">+${sum.live - 4} more in the hub</div>` : '') : '<div class="row">No pallets off-site<b>✓</b></div>') + `</div></div>`;
+  const top = latest ? consolidate(latest.pallets).slice(0, 4) : [];
+  const lt = `<div class="card kpi logi"><div class="kh">${ic('truck')}<h3>Latest load</h3><a class="open" data-go="inventory">Open ${ic('arrow')}</a></div>` + (latest ? `<div class="hl"><b style="color:var(--ink)">${esc(latest.label)}</b> · ${esc(latest.status)}${latest.recvDate ? ' ' + esc(fmtDay(latest.recvDate)) : ''}</div><div class="rows"><div class="row">Pallets · units<b>${latest.pallets.length} · ${units(latest).toLocaleString('en-AU')}</b></div>${top.map(([d, u]) => `<div class="row"><span class="l"><b class="mono">${esc(d)}</b> ${esc(codeName(d))}</span><b>${u.toLocaleString('en-AU')}</b></div>`).join('')}</div>` : '<div class="hl">No loads yet. Import a manifest or CSV in the Inventory hub.</div>') + `</div>`;
+  return `<div class="logis">${inv}${off}${lt}</div>`;
+}
+const fmtDay = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '';
+const CODE_NAME = new Map(); for (const list of Object.values(MICRO)) for (const e of list) if (!CODE_NAME.has(microCode(e))) CODE_NAME.set(microCode(e), microName(e));
+const codeName = c => CODE_NAME.get(c) || '';
+
+const LAYERS = [['em', 'Emergency', '#DC2626', 'm-emergency'], ['mt', 'Maintenance', '#6F4527', 'tool'], ['pc', 'Price checks', '#0FA3A3', 'barcode'], ['li', 'Label checks', '#7C3AED', 'm-labelint']];
+const LKEY = 'dash_layers', MKEY = 'dash_map';
+const layers = () => { try { return { em: true, mt: true, pc: true, li: false, ...JSON.parse(localStorage.getItem(LKEY) || '{}') }; } catch { return { em: true, mt: true, pc: true, li: false }; } };
+const mapOpen = () => { try { return localStorage.getItem(MKEY) !== '0'; } catch { return true; } };
+function mapCard() {
+  if (!hasMap()) return '';
+  const on = layers(), hasPc = mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order');
+  return `<div class="card dmap${mapOpen() ? '' : ' closed'}" id="dmap"><div class="ch"><h3>${ic('m-map')}Store map</h3><div class="dlayers">${LAYERS.filter(l => l[0] !== 'pc' || hasPc).map(([k, label, col, icon]) => `<button class="dlay${on[k] ? ' on' : ''}" data-layer="${k}" style="--lc:${col}" aria-pressed="${!!on[k]}">${ic(icon)}${label}</button>`).join('')}</div><button class="btn sm" data-act="dmap-toggle">${mapOpen() ? 'Hide map' : 'Show map'}</button></div>` +
+    `<div class="dmap-body"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="dmap-tools"><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span></div></div><div class="dmap-leg" id="dmapLeg"></div></div></div>`;
+}
+
+function dashTop(ctx) {
     const r = range(), reg = register(ctx, r);
     const tabs = `<div class="tabs" id="ptabs">${PERIODS.map(([k, l]) => `<button class="${period === k ? 'on' : ''}" data-period="${k}">${l}</button>`).join('')}</div>`;
     return vh(`<span class="greet">${greeting()}</span><span id="dashTitle">How we’re tracking</span>`, '', tabs, 'm-dashboard') +
       `<div class="dash"><div class="kpis">${backfillCard(ctx, r)}${refreshCard(ctx, r)}${labelsCard(ctx, r)}</div><div class="side2">${dockCard(ctx, r)}${maintCard(ctx, r)}</div>` +
-      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>Operations register</h3></div><div class="hl">${reg.count} modules · <b style="color:var(--ink);font-weight:600">${reg.need} need attention</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">Modules</div>${reg.html}</div></div>`;
+      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>Operations register</h3></div><div class="hl">${reg.count} modules · <b style="color:var(--ink);font-weight:600">${reg.need} need attention</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">Modules</div>${reg.html}</div></div>` +
+      `<div class="dash2">${todayAt(ctx)}${logistics(ctx)}</div>`;
+}
+
+export default {
+  id: 'dashboard', title: 'Dashboard', icon: 'm-dashboard',
+  desktop(ctx) {
+    return `<div id="dashTop">${dashTop(ctx)}</div>` + mapCard();
   },
   mount(ctx, root) {
-    const re = () => { root.innerHTML = this.desktop(ctx); };
+    const re = () => { const top = root.querySelector('#dashTop'); if (top) top.innerHTML = dashTop(ctx); paintLayers(); };
+    // The combined map: mounted once, its layers repainted when they change.
+    const stage = root.querySelector('#dmap #mapstage');
+    const map = stage && mapOpen() ? mountMap(stage, { badges: true }) : null;
+    if (map) bindMapChrome(root.querySelector('#dmap'), map);
+    const paintLayers = () => {
+      if (!map) return;
+      const on = layers();
+      map.svg.classList.toggle('showem', !!on.em);
+      map.priceChecks(on.pc ? (prefs().priceChecks === 'off' ? 'small' : prefs().priceChecks || 'small') : 'off');
+      map.clearOverlays();
+      const fids = map.floors().map(f => f.id), here = i => !i.floor || !fids.includes(i.floor) || i.floor === map.floorId();
+      const open = on.mt ? Object.values(ctx.store.get('issues')).filter(i => !i.removed && i.status !== 'completed' && i.x != null && here(i)) : [];
+      if (open.length) map.drawPins(open.map(issuePin));
+      // Label checks: shelves of the micro-departments checked this cycle in
+      // blue, assigned but not yet checked in amber.
+      const marks = {};
+      if (on.li) { const L = ctx.store.get('labels'), done = L.checks[cycleId(L.cycleLen)] || {}; for (const [m, shelves] of Object.entries(L.assign || {})) for (const sh of shelves) if (done[m]) marks[sh] = 'checked'; else if (!marks[sh]) marks[sh] = 'lidue'; }
+      map.setMarks(marks);
+      const leg = root.querySelector('#dmapLeg');
+      if (leg) leg.innerHTML = [on.em && `<span><i style="background:#DC2626"></i>Emergency signs</span>`, on.mt && `<span><i style="background:#DC2626;border-radius:50%"></i>${open.length} open issue${open.length === 1 ? '' : 's'}</span>`, on.pc && `<span><i style="background:#0FA3A3;border-radius:50%"></i>Price checks</span>`, on.li && `<span><i style="background:#2563EB"></i>Checked this cycle</span><span><i style="background:#F59E0B"></i>Assigned, not checked</span>`].filter(Boolean).join('') || '<span class="cs-dim">No layers on</span>';
+    };
+    paintLayers();
+    if (map) map.stage.addEventListener('mapfloor', paintLayers);
+    root.addEventListener('click', e => {
+      const lb = e.target.closest('[data-layer]');
+      if (lb) { const on = layers(); on[lb.dataset.layer] = !on[lb.dataset.layer]; try { localStorage.setItem(LKEY, JSON.stringify(on)); } catch {} lb.classList.toggle('on', on[lb.dataset.layer]); lb.setAttribute('aria-pressed', String(on[lb.dataset.layer])); paintLayers(); return; }
+      if (e.target.closest('[data-act="dmap-toggle"]')) { try { localStorage.setItem(MKEY, mapOpen() ? '0' : '1'); } catch {} ctx.rerender(); }
+    });
     root.addEventListener('click', e => { const b = e.target.closest('[data-period]'); if (b) { period = b.dataset.period; re(); } });
     // Today's pasted report lives on the desk that pasted it (bfreview).
     if (ctx.storage && ctx.storeNo) ctx.storage.get(`simreport:${ctx.storeNo}:${today()}`).then(v => { const had = !!report; report = v || null; if (report || had) re(); }).catch(() => {});
-    return ['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock', 'plan'].map(k => ctx.store.on(k, re));
+    return ['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock', 'plan', 'inventory'].map(k => ctx.store.on(k, re));
   },
 };

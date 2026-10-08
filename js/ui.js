@@ -3,6 +3,7 @@
 // through it.
 
 import { storeDay, storeParts, DEFAULT_TZ } from '../shared/time.js';
+import { haptic } from './device.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -128,6 +129,7 @@ export function greeting() { const h = new Date().getHours(); return h < 12 ? 'G
 export function toast(msg, kind = '', action = null) {
   let host = $('#toasts'); if (!host) { host = document.createElement('div'); host.id = 'toasts'; document.body.appendChild(host); }
   const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = msg; host.appendChild(t);
+  if (kind === 'bad') haptic('error');
   const close = () => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); };
   if (action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-act'; b.textContent = action.label; b.addEventListener('click', () => { close(); action.run(); }); t.appendChild(b); t.classList.add('has-act'); }
   setTimeout(() => t.classList.add('show'), 10); setTimeout(close, action ? 6000 : 3500);

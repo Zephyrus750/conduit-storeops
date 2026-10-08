@@ -6,6 +6,7 @@
 // then on to the assembly point. The store's assembly point from the map
 // editor's Store Info shows as a banner with directions.
 
+import { haptic } from '../device.js';
 import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo } from '../map.js';
 
@@ -38,7 +39,7 @@ export default {
         const p = info.point || (info.kind === 'marker' ? [info.x, info.y] : info.id ? map.centreOf(info.id) : null); if (!p) return;
         const r = map.evacuate(p);
         if (!r) { evac = null; toast('No exit is marked on this floor of the map. Follow the green exit signs.', 'bad'); }
-        else { evac = { r, floor: map.floors?.().find(f => f.id === map.floorId())?.name || '' }; try { navigator.vibrate?.([80, 60, 80]); } catch {} }
+        else { evac = { r, floor: map.floors?.().find(f => f.id === map.floorId())?.name || '' }; haptic('warning'); }
         paint(); return;
       }
       if (info.kind === 'marker') { selected = info.id; paint(); }

@@ -133,7 +133,7 @@ export function cleanStoreInfo(info) {
 
 export function renderFloor(floor, data) {
   const id = String(floor.id || 'ground');
-  const inner = (floor.svg ? stripOuter(floor.svg) : floorInner(floor, data)) + emergencyMarkers(floor.emergencyMarkers, data) + priceChecks(floor.priceChecks, data);
+  const inner = (floor.svg ? stripOuter(floor.svg) : floorInner(floor, data)) + emergencyMarkers(floor.emergencyMarkers, data) + priceChecks(floor.priceChecks, data) + zoomBoxes(floor.deptZoomBoxes);
   const vb = floorViewBox(floor, data);
   const svg = `<svg class="map real" viewBox="${vb}" xmlns="${NS}" preserveAspectRatio="xMidYMid meet" style="--badge-opacity:1;--label-opacity:0;--label-bg-opacity:0">` +
     `<g id="floor-${esc(id)}" class="map-floor zoom-out" data-floor="${esc(id)}" data-floor-type="${esc(floor.type || 'foh')}" style="opacity:1;pointer-events:auto;visibility:visible">${inner}</g></svg>`;
@@ -146,7 +146,7 @@ export function renderFloor(floor, data) {
 function stripOuter(svg) {
   let s = String(svg).replace(/^\s*<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').replace(/<style>[\s\S]*?<\/style>/, '')
     .replace(/<circle[^>]*data-emergency[^>]*\/>/g, '').replace(/<text[^>]*>[☀-➿\uD83C-􏰀-\uDFFF][^<]*<\/text>/g, '');
-  s = stripGroup(s, 'emergency-markers'); s = stripGroup(s, 'price-checks');
+  s = stripGroup(s, 'emergency-markers'); s = stripGroup(s, 'price-checks'); s = stripGroup(s, 'dept-zoom-boxes');
   return s;
 }
 function stripGroup(s, cls) {
@@ -247,7 +247,7 @@ function landmark(z) {
 }
 
 const autoFixture = s => { const sn = String(s.subname || '').toUpperCase(); return /^S\d/.test(sn) ? 'side' : /^[EP]\d/.test(sn) ? 'end' : null; };
-function locationRange(locations) {
+export function locationRange(locations) {
   if (!locations || !locations.length) return ''; if (locations.length === 1) return locations[0];
   const sorted = [...locations].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); const first = sorted[0], last = sorted[sorted.length - 1];
   let prefix = ''; for (let i = 0; i < Math.min(first.length, last.length); i++) { if (first[i] === last[i]) prefix += first[i]; else break; }
@@ -261,7 +261,7 @@ function shelves(list, data) {
   const badges = [], groups = [];
   list.forEach((s, idx) => {
     const color = colour[s.dept] || '#888', opacity = s.inactive ? 0.25 : 0.75, full = (s.name || '') + (s.subname ? ' ' + s.subname : '');
-    const attrs = ` data-shelf="${esc(s.name || '')}" data-subname="${esc(s.subname || '')}" data-dept="${esc(s.dept || '')}" data-full="${esc(full)}"${s.locations && s.locations.length >= 2 ? ` data-locations="${esc(s.locations.join(','))}"` : ''}${s.fixture && s.fixture !== autoFixture(s) ? ` data-fixture="${esc(s.fixture)}"` : ''}`;
+    const attrs = ` data-shelf="${esc(s.name || '')}" data-subname="${esc(s.subname || '')}" data-dept="${esc(s.dept || '')}" data-full="${esc(full)}"${s.locations && s.locations.length >= 2 ? ` data-locations="${esc(s.locations.join(','))}"` : ''}${s.fixture && s.fixture !== autoFixture(s) ? ` data-fixture="${esc(s.fixture)}"` : ''}${s.sharedName ? ' data-shared="1"' : ''}`;
     if (s.type === 'sixway') {
       const r = s.radius || 20; let g = `<g class="shelf-group"${attrs}><circle cx="${s.x}" cy="${s.y}" r="${r}" class="shelf" fill="${color}" fill-opacity="${opacity * 0.73}" stroke="${color}"/>`;
       for (let i = 0; i < 6; i++) { const a = (i * 60 - 90) * Math.PI / 180; g += `<line x1="${s.x + Math.cos(a) * r * 0.22}" y1="${s.y + Math.sin(a) * r * 0.22}" x2="${s.x + Math.cos(a) * r * 0.88}" y2="${s.y + Math.sin(a) * r * 0.88}" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" stroke-linecap="round"/>`; }
@@ -386,3 +386,30 @@ function priceChecks(list, data) {
   }
   return svg + '</g>';
 }
+
+// The editor's department zoom boxes: the frame a department opens to. The
+// legacy export drops each box's id and the viewer looked them up by id, so
+// they never took effect there; here they are keyed by department and ride
+// in the floor as hidden rects the map reads (js/map.js zoomDeptOn).
+function zoomBoxes(list) {
+  const ok = (list || []).filter(b => b && b.dept && [b.x, b.y, b.w, b.h].every(Number.isFinite) && b.w > 0 && b.h > 0);
+  if (!ok.length) return '';
+  return '<g class="dept-zoom-boxes" visibility="hidden" pointer-events="none">' + ok.map(b => `<rect class="dept-zoom" data-dept="${esc(String(b.dept).toLowerCase())}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="none"/>`).join('') + '</g>';
+}
+
+// One map symbol as a small standalone svg, for the symbols legend: the
+// emergency signs as the map draws them, the price-check and order-screen
+// discs, and the landmark icons.
+export function markerSymbol(kind, size = 26) {
+  const box = inner => `<svg viewBox="-15 -15 30 30" width="${size}" height="${size}" aria-hidden="true">${inner}</svg>`;
+  if (kind === 'pc' || kind === 'order') {
+    const C = '#14b8a6', glyph = kind === 'order' ? `<g stroke="${C}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="-6" y="-6" width="12" height="8" rx="1"/><line x1="0" y1="2" x2="0" y2="4.6"/><line x1="-3.4" y1="5.4" x2="3.4" y2="5.4"/></g>` : `<g transform="translate(-6.5,-6.5) scale(0.5417)" stroke="${C}" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M5 12h14"/></g>`;
+    return box(`<circle r="13" fill="#042f2e" stroke="${C}" stroke-width="2.5"/>${glyph}`);
+  }
+  if (kind.startsWith('lm:')) { const ic = ICONS[kind.slice(3)]; return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><rect width="24" height="24" rx="5" fill="#1F2937"/><g transform="translate(4,4) scale(.6667)" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ic || ''}</g></svg>`; }
+  if (kind === 'tory') return `<svg viewBox="0 0 30 30" width="${size}" height="${size}" aria-hidden="true"><path d="M3 22 L13 12 L27 12" fill="none" stroke="#ff69b4" stroke-width="2.5" stroke-dasharray="5 3" stroke-linecap="round"/></svg>`;
+  const type = markerType(kind), [color, bg] = MARKER[type] || MARKER.exit, sign = signInner(type, '');
+  return box(sign || `<circle r="14" fill="${bg}" stroke="${color}" stroke-width="2.5"/>${(GLYPH[type] || GLYPH.hazard).replace(/"C"/g, `"${color}"`)}`);
+}
+export const MARKER_NAMES = { exit: 'Exit', 'fire-exit': 'Fire exit', 'fire-ext': 'Fire extinguisher', 'ext-set': 'Extinguisher set', 'first-aid': 'First aid kit', aed: 'AED defibrillator', assembly: 'Assembly point', hazard: 'Hazard', 'spill-kit': 'Spill kit', hose: 'Hose reel', hydrant: 'Fire hydrant', 'call-point': 'Fire alarm call point', 'emergency-phone': 'Emergency phone' };
+export const LANDMARK_NAMES = { desk: 'Service desk', register: 'Registers', fitting: 'Fitting rooms', entry: 'Entry', exit: 'Exit door', tearoom: 'Tearoom', stairs: 'Stairs', toilet: 'Toilets', lift: 'Lift', storage: 'Storage', receival: 'Receival', dock: 'Loading dock', compactor: 'Compactor', kiosk: 'Kiosk', trolley: 'Trolley bay', orderscreen: 'Order screen' };

@@ -27,6 +27,8 @@ import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
 import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
+import { polyBackground } from './lowpoly.js';
+import { applyOrientation } from './device.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -48,6 +50,7 @@ const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
 let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor';
 const frame = $('.frame');
 installKeyboard();
+applyOrientation();
 installCameraButtons(document);
 let content = $('#content');
 const isMobile = () => frame.clientWidth <= 600;
@@ -211,9 +214,9 @@ async function showSignin({ error, owner } = {}) {
     `<label>Store PIN</label><input class="si-pin" name="pin" inputmode="numeric" autocomplete="off" placeholder="••••" required>` +
     `<div class="si-role">${ic('users')}<div>The store PIN opens the Floor. Stockroom and Back dock take their crew code once per device; a manager code opens everything.</div></div>` +
     `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit">Enter store${ic('arrow')}</button>` +
-    `<div class="si-foot"><span>${ic('check')}Offline ready</span><span>${stores.length} store${stores.length === 1 ? '' : 's'}</span><a class="si-owner-link" data-shell-act="owner-signin">Owner sign-in</a><span class="ver">Conduit ${VERSION}</span></div></form>`;
+    `<div class="si-foot"><span>${ic('check')}Offline ready</span><span class="si-count">${stores.length} store${stores.length === 1 ? '' : 's'}</span><a class="si-owner-link" data-shell-act="owner-signin">Owner sign-in</a><span class="ver">Conduit ${VERSION}</span></div></form>`;
   const hero = `<div class="si-hero"><div class="si-brand">${mark()}<b>Conduit</b></div><div class="si-greet">${greeting()}</div><h1>Run the <span>whole store</span>.</h1><p>Live maps, back-dock receiving and stockroom backfill. One team, one sign-in, on and off the wifi.</p><div class="si-off">${ic('check')}Works offline once it is on this device</div></div>`;
-  const el = cover(mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${hero}${form}</div>`);
+  const el = cover(polyBackground() + (mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${hero}${form}</div>`));
   if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || `Sign in to open shelf ${pendingLink.shelf}.`; }
   $('#siForm', el).addEventListener('submit', async e => {
     e.preventDefault();
@@ -223,7 +226,7 @@ async function showSignin({ error, owner } = {}) {
   });
 }
 function showOwnerSignin(error) {
-  const el = cover(`<div class="si-panel si-owner"><form class="si-own" id="siOwner"><div class="si-brand">${mark()}<b>Conduit</b><span class="own">Owner</span></div><h2>Owner sign-in</h2><p>For the developer. Store teams sign in on the store screen and never see this.</p>` +
+  const el = cover(polyBackground() + `<div class="si-panel si-owner"><form class="si-own" id="siOwner"><div class="si-brand">${mark()}<b>Conduit</b><span class="own">Owner</span></div><h2>Owner sign-in</h2><p>For the developer. Store teams sign in on the store screen and never see this.</p>` +
     `<label for="ownerKey">Owner key</label><div class="si-pin own"><input id="ownerKey" name="ownerKey" type="password" autocomplete="current-password" placeholder="••••••••••••" required>${ic('lock')}</div>` +
     `<label>This device</label><div class="si-field own"><span>${esc(client.session.device || 'this device')}</span><small>${esc(WORKER.replace(/^https?:\/\//, ''))}</small></div>` +
     `<div class="si-err" id="siErr">${error ? esc(error) : ''}</div>${workerLine()}<button class="si-cta own" type="submit">Open the admin console${ic('arrow')}</button>` +

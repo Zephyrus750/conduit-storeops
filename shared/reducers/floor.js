@@ -11,8 +11,11 @@
 //   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, log[], removed?, photos?[] }
 //   assets    asset → { intMonths, due, log[], updated }
 //   picklists device → { items: [ { code, completed } ], at }
+//   inventory offsite pid → { pid, sent, time, desc, title, products[{kc,q}], req, cb, rec, note, at },
+//             offsiteAt, offsiteSrc; loads id → { id, label, date, status, recvDate, src, pallets[{pid, items[{k,d,q,dept}]}], at, by }
 
 import { reject } from './util.js';
+import { OFFSITE_CAP, LOAD_CAP, LOAD_PALLET_CAP, LOAD_LINE_CAP, LOAD_STATUS } from '../inventory.js';
 
 export const ISSUE_CATS = ['leak', 'light', 'elec', 'ac', 'plumb', 'struct', 'fixture', 'door', 'safety', 'pest', 'other'];
 export const ISSUE_STATUS = ['open', 'progress', 'completed'];
@@ -29,6 +32,7 @@ export function floorState() {
     issues: {},
     assets: {},
     picklists: {},
+    inventory: { offsite: {}, offsiteAt: null, offsiteSrc: '', loads: {} },
   };
 }
 
@@ -254,7 +258,69 @@ export const floorReducers = {
     s.picklists[e.entity.device] = { items, at: e.at };
     return null;
   },
+
+  // ── Inventory hub ────────────────────────────────────────────────────
+  // The off-site master list replaces the register whole, as ShelfSearcher's
+  // upload did; single pallets are added, called back and received by hand.
+  'inventory.offsite.set'(s, e) {
+    const rows = e.payload.rows.map(r => offsiteRow(r, e.at)).filter(Boolean);
+    if (e.payload.rows.length && !rows.length) return reject('invalid_payload', 'no row has a pallet number');
+    if (rows.length > OFFSITE_CAP) return reject('too_large', `the register keeps at most ${OFFSITE_CAP} pallets`);
+    inv(s).offsite = Object.fromEntries(rows.map(r => [r.pid, r]));
+    inv(s).offsiteAt = e.at; inv(s).offsiteSrc = String(e.payload.src || '').slice(0, 80);
+    return null;
+  },
+  'inventory.offsite.add'(s, e) {
+    const r = offsiteRow({ ...e.payload, pid: e.entity.pid }, e.at); if (!r) return reject('invalid_payload', 'a pallet number is needed');
+    if (inv(s).offsite[r.pid]) return reject('exists', `pallet ${r.pid} is already on the register`);
+    if (Object.keys(inv(s).offsite).length >= OFFSITE_CAP) return reject('too_large', `the register keeps at most ${OFFSITE_CAP} pallets`);
+    inv(s).offsite[r.pid] = r; return null;
+  },
+  // A callback date, a received day ('' brings it back to off-site), a note.
+  'inventory.offsite.update'(s, e) {
+    const r = inv(s).offsite[String(e.entity.pid)]; if (!r) return reject('not_found', 'no such pallet on the register');
+    const p = e.payload || {};
+    for (const k of ['cb', 'rec']) if (k in p && !(p[k] === '' || p[k] === 'yes' || DAY.test(p[k]))) return reject('invalid_payload', `${k} must be a date (YYYY-MM-DD) or empty`);
+    if ('cb' in p) r.cb = p.cb; if ('rec' in p) r.rec = p.rec; if ('note' in p) r.note = String(p.note || '').slice(0, 200);
+    r.at = e.at; return null;
+  },
+  'inventory.load.add'(s, e) {
+    const p = e.payload, id = String(e.entity.load);
+    if (inv(s).loads[id]) return reject('exists', 'that load is already in the hub');
+    const pallets = p.pallets.filter(x => x && x.pid && Array.isArray(x.items)).slice(0, LOAD_PALLET_CAP + 1);
+    if (!pallets.length) return reject('invalid_payload', 'a load needs at least one pallet');
+    if (pallets.length > LOAD_PALLET_CAP) return reject('too_large', `a load keeps at most ${LOAD_PALLET_CAP} pallets`);
+    let lines = 0; for (const x of pallets) lines += x.items.length;
+    if (lines > LOAD_LINE_CAP) return reject('too_large', `a load keeps at most ${LOAD_LINE_CAP} lines`);
+    const status = LOAD_STATUS.includes(p.status) ? p.status : 'incoming';
+    inv(s).loads[id] = { id, label: String(p.label).slice(0, 60), date: DAY.test(p.date || '') ? p.date : e.at.slice(0, 10), status, recvDate: status === 'received' ? (DAY.test(p.recvDate || '') ? p.recvDate : e.at.slice(0, 10)) : '', src: String(p.src || '').slice(0, 80),
+      pallets: pallets.map(x => ({ pid: String(x.pid).slice(0, 20), items: x.items.filter(i => i && i.k).map(i => ({ k: String(i.k).slice(0, 20), d: String(i.d || '').slice(0, 60), q: Number(i.q) || 0, dept: /^\d{3}$/.test(i.dept || '') ? i.dept : '' })) })), at: e.at, by: e.actor?.device || null };
+    const ids = Object.keys(inv(s).loads);
+    if (ids.length > LOAD_CAP) for (const k of ids.sort((a, b) => (inv(s).loads[a].at < inv(s).loads[b].at ? -1 : 1)).slice(0, ids.length - LOAD_CAP)) delete inv(s).loads[k];
+    return null;
+  },
+  'inventory.load.status'(s, e) {
+    const l = inv(s).loads[String(e.entity.load)]; if (!l) return reject('not_found', 'no such load');
+    if (!LOAD_STATUS.includes(e.payload.status)) return reject('invalid_payload', `status is one of ${LOAD_STATUS.join(', ')}`);
+    const rd = e.payload.recvDate; if (rd && !DAY.test(rd)) return reject('invalid_payload', 'recvDate must be YYYY-MM-DD');
+    l.status = e.payload.status; l.recvDate = l.status === 'received' ? (rd || l.recvDate || e.at.slice(0, 10)) : '';
+    return null;
+  },
+  'inventory.load.remove'(s, e) {
+    if (!inv(s).loads[String(e.entity.load)]) return reject('not_found', 'no such load');
+    delete inv(s).loads[String(e.entity.load)]; return null;
+  },
 };
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const inv = s => (s.inventory ||= { offsite: {}, offsiteAt: null, offsiteSrc: '', loads: {} });
+function offsiteRow(r, at) {
+  const pid = String(r?.pid ?? '').trim().slice(0, 20); if (!pid) return null;
+  const day = v => (typeof v === 'string' && (DAY.test(v) || v === 'yes') ? v : '');
+  return { pid, sent: day(r.sent), time: String(r.time || '').slice(0, 8), desc: String(r.desc || '').slice(0, 200), title: String(r.title || '').slice(0, 80),
+    products: (Array.isArray(r.products) ? r.products : []).filter(x => x && /^\d{6,10}$/.test(String(x.kc))).slice(0, 20).map(x => ({ kc: String(x.kc), q: Number(x.q) || 0 })),
+    req: String(r.req || '').slice(0, 40), cb: day(r.cb), rec: day(r.rec), note: String(r.note || '').slice(0, 200), at };
+}
 
 // ── helpers ────────────────────────────────────────────────────────────
 function openSession(s, e) {

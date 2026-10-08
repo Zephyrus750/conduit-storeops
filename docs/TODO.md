@@ -1,8 +1,10 @@
 # What's left (kept 2026-10-08)
 
-Done so far: every P0 and P1 list, the Back dock and Stockroom P2 lists, the
-manifest upload preview, and the owner-console access items (per-tool
-switches, console numbers, Fleet, registry filter and export). The audit
+Done so far: every P0 and P1 list, the Back dock, Stockroom and Floor P2
+lists (Floor except the languages and the `P` suffix), the manifest upload
+preview, the owner-console access items (per-tool switches, console numbers,
+Fleet, registry filter and export), the 360×640 layout and the sign-in
+background. The audit
 (`docs/AUDIT-2026-09.md` §5) has a status note per area.
 
 The decisions these wait on are in `docs/OPEN-DECISIONS.md` (numbers in
@@ -18,29 +20,14 @@ brackets below).
    store (published by a manager or the owner, sanitised), What's New with
    short guides per release, and a first-run walkthrough. Needs: who may
    publish a message (20).
-3. **The 360×640 layout** for the TC52x phones the showcase targets, and the
-   low-poly sign-in background. Needs: a TC52x to test on, if you have one.
-4. **Owner console, the rest:** a Boards tab (each store's wallboard and
+3. **Owner console, the rest:** a Boards tab (each store's wallboard and
    Team Board read-only), a Service page (worker version, catalogue, R2,
    cron runs, errors), and a map editor page that folds in the suggestions
    queue. Needs: decision 2 (where the editor lives).
-5. **Floor P2** (the largest list):
-   - **Map chrome:**
-     - a price-check sheet;
-     - tooltips on markers and landmarks;
-     - fixture type and shared name in the shelf card;
-     - "7001-03" range badges and department zoom boxes;
-     - double-tap zoom, Ctrl +/−/0, inertia and animated transitions;
-     - a symbols legend and real-world shelf size.
-   - **Dashboard:** a combined map with layer chips, "Today at" tiles and logistics cards.
-   - **Inventory and pallet hub:**
-     - an off-site master register and returns by callback date;
-     - a generic CSV import with column mapping;
-     - consolidation and heat paint on the map;
-     - trends and a clearance watch.
-   - **Field Mode,** haptics, portrait lock, and help with a tutorial.
-   - Needs: decisions 1 (the `P` suffix) and 16 (languages); the inventory hub needs a sample of the files it would import.
-6. **Importer gaps** (only if the legacy data matters):
+4. **Floor leftovers:** the seven languages if they are wanted (16), and the
+   `P` suffix once its meaning is known (1). The map editor's importer needs
+   to accept Field Mode's `field-capture/1` file (24).
+5. **Importer gaps** (only if the legacy data matters):
    - K2B: the department map, the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH, and history scanned flags.
    - DV: anything still missing once a real store is imported.
 
@@ -53,4 +40,6 @@ brackets below).
 - Give each floor's walk paths a `stairs` node so pick lists can cross floors (4).
 - Enter the stockroom bay ranges in Settings › Store; the console flags every store without them.
 - Set `RETAIL_ANCHOR` in `shared/time.js` once the real retail calendar is known (5).
+- Set the map's scale in the editor (Set Scale) and republish, so shelf sizes and pick-list distances show in metres (27).
+- Add the store's price checks and department zoom boxes in the editor if you want them on the map; none of the shipped maps has any.
 - Run the real-PC test pass at the end of `docs/OPEN-DECISIONS.md`.

@@ -3,6 +3,8 @@
 // own settings, as store.settings.set events a manager sends, and the refresh
 // focus for the coming weeks). Device preferences persist under suite_prefs.
 
+import { openTour } from '../tour.js';
+import { haptic, applyOrientation, isPhone } from '../device.js';
 import { $, ic, esc, vh, sub, toast, ago, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR } from '../ui.js';
 import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/reducers/store.js';
 import { ACCENTS, SCALES, prefs, setPref } from '../prefs.js';
@@ -18,6 +20,7 @@ let sec = 'general';
 const currentSec = () => sec;
 const row = (t, d, ctl) => `<div class="stg-item"><div><b>${t}</b><span>${d}</span></div><div class="stg-ctl">${ctl}</div></div>`;
 const tgl = (on, act) => `<span class="tgl${on ? ' on' : ''}" data-act="${act}"></span>`;
+const segOf = (act, opts, cur) => `<span class="seg stg-seg">${opts.map(o => `<button class="${cur === o[0] ? 'on' : ''}" data-act="${act}" data-v="${o[0]}">${o[1]}</button>`).join('')}</span>`;
 
 export default {
   id: 'settings', title: 'Settings and utilities', rail: 'Settings', icon: 'm-settings',
@@ -35,6 +38,8 @@ export default {
       if (act === 'sec') { sec = a.getAttribute('data-sec'); ctx.rerender(); }
       else if (act === 'scan-sound') setPref('scanSound', prefs().scanSound === false), ctx.rerender();
       else if (act === 'scan-vibrate') setPref('scanVibrate', prefs().scanVibrate === false), ctx.rerender();
+      else if (act === 'haptics') { setPref('haptics', prefs().haptics === false); haptic('select'); ctx.rerender(); }
+      else if (act === 'portrait') { setPref('allowLandscape', !prefs().allowLandscape); applyOrientation(); ctx.rerender(); }
       else if (act === 'skin') setPref('skin', a.getAttribute('data-skin')), ctx.rerender();
       else if (act === 'accent') setPref('accent', Number(a.getAttribute('data-acc'))), ctx.rerender();
       else if (act === 'rail') setPref('rail', a.getAttribute('data-v')), ctx.rerender();
@@ -47,12 +52,14 @@ export default {
       else if (act === 'force-reload') { if (confirm('Reload Conduit from the worker? You stay signed in; queued changes are kept.')) await updates.forceReload(); }
       else if (act === 'install') { if (!(await updates.install())) toast('Use the browser menu › Install app, or Share › Add to Home Screen on an iPhone'); ctx.rerender(); }
       else if (act === 'map-tips') setPref('mapTips', prefs().mapTips === false), ctx.rerender();
+      else if (act === 'pc-mode') setPref('priceChecks', a.getAttribute('data-v')), ctx.rerender();
       else if (act === 'clear-pot') await clearPot(ctx, a.dataset.prefix);
       else if (act === 'clear-maps-cache') { try { await caches.delete('suite-maps-v1'); toast('Map cache cleared'); } catch {} paintStorage(ctx, root); }
       else if (act === 'copy-diag') { const t = await bundle(ctx, 'settings'); try { await navigator.clipboard.writeText(t); toast('Diagnostics copied'); } catch { prompt('Copy the diagnostics:', t); } }
       else if (act === 'send-feedback') await sendFeedback(ctx, root);
       else if (act === 'assign-micro') ctx.go('labelint', { micro: a.dataset.micro });
       else if (act === 'print-howto') printHowto();
+      else if (act === 'tour') openTour();
       else if (act === 'check-update') { a.textContent = 'Checking…'; await updates.check(); ctx.rerender(); if (!updates.state.waiting) toast('You are on the current release'); }
       else if (act === 'update-now') updates.apply();
       else if (act === 'resync') ctx.store?.resync();
@@ -89,9 +96,9 @@ function body(ctx, sec = currentSec()) {
   const who = ctx.store ? row('Store', `${esc(ctx.storeNo)} ${esc(ctx.storeName)} · verified against the worker${cur?.actas ? ' · acting as the store as owner' : ''}`, '<span class="chip">Signed in</span>') : row('Owner', 'Signed in with the owner key · every action is logged in the registry', '<span class="chip">Owner</span>');
   const sync = s ? row('Sync', `${esc(s.state)} · ${s.queued} queued · seq ${s.seq}${s.lastError ? ' · ' + esc(s.lastError) : ''}`, `<span class="btn sm" data-act="resync">${ic('refresh')}Resync</span>`) : '';
   return `<div class="stg-card"><div class="stg-h">This device</div>${who}${row('Device id', esc(ctx.session.device), '')}${row('Roles', esc((cur?.roles || []).join(', ')), '<span class="stg-dim">hard-restricted by role</span>')}${sync}</div>` +
-    `<div class="stg-card"><div class="stg-h">Scanner</div>${row('Beep on a read', 'The camera scanner beeps when it reads a code.', tgl(prefs().scanSound !== false, 'scan-sound'))}${row('Vibrate on a read', 'The phone buzzes when a code is read.', tgl(prefs().scanVibrate !== false, 'scan-vibrate'))}</div>` +
+    `<div class="stg-card"><div class="stg-h">Scanner and feedback</div>${row('Beep on a read', 'The camera scanner beeps when it reads a code.', tgl(prefs().scanSound !== false, 'scan-sound'))}${row('Vibrate on a read', 'The phone buzzes when a code is read.', tgl(prefs().scanVibrate !== false, 'scan-vibrate'))}${row('Vibration feedback', 'A short buzz when a shelf is tapped, a department opens, a search finds or misses, and on errors (phones only).', tgl(prefs().haptics !== false, 'haptics'))}${isPhone() ? row('Rotation', prefs().allowLandscape ? 'Rotation allowed: the app turns with the phone.' : 'Portrait locked: the app stays upright when the phone turns (installed app).', tgl(!prefs().allowLandscape, 'portrait')) : ''}</div>` +
     `<div class="stg-card"><div class="stg-h">Updates</div>${updatesRow()}${row('Force reload', 'Clears the cached release and reloads from the worker. Signed-in state, maps and queued changes are kept.', `<span class="btn sm" data-act="force-reload">${ic('refresh')}Force reload</span>`)}${installRow()}</div>` +
-    `<div class="stg-card"><div class="stg-h">Map</div>${row('Hover details', 'Show a shelf’s department, modules and status when the pointer rests on it (desktop).', tgl(prefs().mapTips !== false, 'map-tips'))}</div>` +
+    `<div class="stg-card"><div class="stg-h">Map</div>${row('Hover details', 'Show a shelf’s department, modules and status when the pointer rests on it (desktop).', tgl(prefs().mapTips !== false, 'map-tips'))}${row('Price checks', 'How price checks and order screens show on the map: normal, large (the same size at any zoom) or hidden.', segOf('pc-mode', [['small', 'Normal'], ['large', 'Large'], ['off', 'Hidden']], prefs().priceChecks || 'small'))}</div>` +
     `<div class="stg-card"><div class="stg-h">Account</div>${row('Sign out', ctx.store ? (cur?.actas ? 'Returns to the owner console. Queued changes are sent first.' : 'Forgets the store on this device. Queued changes are sent first.') : 'Forgets the owner session on this device.', `<span class="btn sm" style="color:var(--red)" data-act="signout">${cur?.actas ? 'Back to the console' : 'Sign out'}</span>`)}</div>`;
 }
 function updatesRow() {
@@ -111,6 +118,7 @@ function storeBody(ctx) {
   const zones = ZONES.some(z => z[0] === cfg.tz) ? ZONES : [[cfg.tz, cfg.tz], ...ZONES];
   const sel = (field, list, cur, label) => `<select class="stg-in" data-field="${field}" aria-label="${label}"${dis}>${opts(list, cur)}</select>`;
   const changed = raw?.at ? `Last changed ${esc(ago(raw.at))}${raw.by ? ' from ' + esc(raw.by) : ''}.` : 'Every value is the default.';
+  const field = `<div class="stg-card"><div class="stg-h">Field Mode</div>${row('Capture shelf codes', edit ? 'Walk the floor with a phone, scan each shelf’s label and add a comment, then export the file for the map editor. Captures stay on this device.' : 'A manager code opens Field Mode.', `<span class="btn sm${edit ? '' : ' disabled'}"${edit ? ' data-go="fieldmode"' : ''}>${ic('m-map')}Open</span>`)}</div>`;
   const settings = `<div class="stg-card stg-store"><div class="stg-h">Store settings</div><p class="stg-p">${edit ? 'These apply to every device in the store.' : 'A manager code changes these.'} ${changed}</p>` +
     row('Time zone', 'The store’s day, week and cycle, and the end-of-day backfill rollover, follow this clock.', sel('tz', zones.map(z => [z[0], z[1]]), cfg.tz, 'Time zone')) +
     row('Dock grid', `Pallet bays on the back dock: rows (A, B, C…) by bays per row. Trucks created afterwards use it. Default ${SETTINGS_DEFAULTS.dockGrid.rows} × ${SETTINGS_DEFAULTS.dockGrid.cols}.`, `<span class="stg-pair">${sel('rows', range(1, 8), cfg.dockGrid.rows, 'Dock rows')}<span>×</span>${sel('cols', range(1, 12), cfg.dockGrid.cols, 'Bays per row')}</span>`) +
@@ -118,7 +126,7 @@ function storeBody(ctx) {
     row('Stockroom departments', 'Bay ranges to department, one a line, e.g. “7001-7040 h1”. History groups bays by these; the narrowest range wins.', `<textarea class="stg-in stg-ranges mono" data-field="ranges" rows="4" aria-label="Stockroom department ranges"${dis}>${esc(cfg.deptRanges.map(r => `${r.from}-${r.to} ${r.dept}`).join('\n'))}</textarea>`) +
     row('Idle re-lock', 'A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.', sel('lock', AUTO_LOCK_CHOICES.map(n => [n, n ? `${n} min` : 'Never']), cfg.autoLockMins, 'Idle re-lock')) +
     (edit ? `<div class="stg-actions"><span class="btn sm primary" data-act="save-store">${ic('check')}Save store settings</span></div>` : '') + '</div>';
-  return settings;
+  return settings + field;
 }
 // Location refresh: the focus departments for this week and the next three,
 // each named by its retail week too.
@@ -203,8 +211,8 @@ const HOWTO = [
   ['Back dock', ['Land a truck, attach its manifest, start the decant.', 'Crew work pallets by D-number; hold-ups and breaks stop the clock.', 'The Dock screen and Team Board show progress on a big screen.']],
   ['On the phone', ['The strip at the bottom holds the area’s main views; More holds the rest and Switch area.', 'The grid button on the Floor picks a department.', 'Everything keeps working offline; changes send when the connection is back.']],
 ];
-function howtoBody() {
-  return `<div class="stg-card"><div class="stg-h">How to use</div><p class="stg-p">A short walk through the shell, the map views and each workspace.</p><div class="stg-acts"><span class="btn sm" data-act="print-howto">${ic('print')}Print the one-pager</span></div>${HOWTO.map(([h, ls]) => `<div class="stg-howto"><b>${esc(h)}</b><ul>${ls.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>`).join('')}</div>`;
+export function howtoBody() {
+  return `<div class="stg-card"><div class="stg-h">How to use</div><p class="stg-p">A short walk through the shell, the map views and each workspace.</p><div class="stg-acts"><span class="btn sm primary" data-act="tour">${ic('star')}Take the tour</span><span class="btn sm" data-act="print-howto">${ic('print')}Print the one-pager</span></div>${HOWTO.map(([h, ls]) => `<div class="stg-howto"><b>${esc(h)}</b><ul>${ls.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>`).join('')}</div>`;
 }
 function printHowto() {
   printSheet({ title: 'Conduit · how to use', subtitle: `${VERSION}`, body: HOWTO.map(([h, ls]) => section(esc(h), `<ul>${ls.map(l => `<li>${esc(l)}</li>`).join('')}</ul>`)).join('') });
