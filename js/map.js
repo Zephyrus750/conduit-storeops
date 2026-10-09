@@ -39,8 +39,9 @@ export function parseFloors(doc) {
 export function mapInfo() { return mapMeta; }
 export function hasMap() { return floors.length > 0; }
 // The shelf a typed location names, without mounting the map: a shelf name
-// or module (A16S1), or a stockroom bay number listed in a shelf's
+// or module (A16S1), or a stockroom bay number listed in a module's
 // data-locations (7012, or 7042A by its digits, as K2B's storeMapFindLoc).
+// A bay answers with its module's code ("A16S2"), never the whole run.
 // Indexed once per published map.
 let locIndex = null;
 export function shelfForLocation(code) {
@@ -49,8 +50,10 @@ export function shelfForLocation(code) {
     const idx = new Map(), doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => f.inner).join('')}</svg>`, 'image/svg+xml');
     for (const g of doc.querySelectorAll('.shelf-group[data-shelf]')) {
       const shelf = g.getAttribute('data-shelf'); if (!shelf) continue;
+      const mod = canonCode(shelf + (g.getAttribute('data-subname') || ''));
       if (!idx.has(canonCode(shelf))) idx.set(canonCode(shelf), shelf);
-      for (const l of (g.getAttribute('data-locations') || '').split(/[\s,]+/)) if (l && !idx.has(l)) idx.set(l, shelf);
+      if (!idx.has(mod)) idx.set(mod, mod);
+      for (const l of (g.getAttribute('data-locations') || '').split(/[\s,]+/)) if (l && !idx.has(canonCode(l))) idx.set(canonCode(l), mod);
     }
     locIndex = { v: mapMeta?.version, idx };
   }
@@ -110,13 +113,21 @@ export function groupsFor(root, code) {
 export function shelfScanField(placeholder = 'Scan or type a shelf label') {
   return `<div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}">${camButton('shelfscan', true)}</div>`;
 }
+// The one module a scanned or typed label names, or why not: a run's name
+// ("A16") covers several modules, and a scan never quietly picks one of them.
+export function moduleFor(root, code) {
+  const gs = groupsFor(root, code); if (!gs.length) return { error: `${code} is not a shelf on this map` };
+  const mods = [...new Set(gs.map(segmentId))];
+  if (mods.length > 1) return { error: `${String(code).toUpperCase()} has ${mods.length} modules: scan the module's own label (${mods.slice(0, 3).join(', ')}${mods.length > 3 ? '…' : ''})` };
+  return { g: gs[0] };
+}
 export function bindShelfScan(root, map, onShelf) {
   root.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || !e.target.matches?.('[data-field="shelfscan"]')) return;
     e.preventDefault();
     const code = e.target.value.trim(); e.target.value = ''; if (!code) return;
-    const g = groupsFor(map.svg, code)[0];
-    if (!g) return toast(`${code} is not a shelf on this map`, 'bad');
+    const { g, error } = moduleFor(map.svg, code);
+    if (!g) return toast(error, 'bad');
     onShelf(map.shelfInfo(g));
   });
 }
@@ -143,9 +154,9 @@ function tipHtml(api, g, tip) {
   const mark = g.getAttribute('data-mark') || '';
   let mx = tip ? tip({ ...info, mark }, g) : undefined;
   if (mx === undefined) { const m = MARK_LINE[mark]; mx = m ? tipLine(m[0], m[1], m[2]) : ''; }
-  const d = shelfDetail(api, info.id);
+  const d = shelfDetail(api, info.code);   // this module's own locations and size, not the whole run's
   return `<div class="md"><span class="dep" style="background:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
-    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${info.segments} module${info.segments === 1 ? '' : 's'}</span><span>${ic('orient')}${horiz ? 'Horizontal run' : 'Vertical run'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
+    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${info.sub && info.segments > 1 ? `module ${esc(info.sub)} of ${info.segments}` : `${info.segments} module${info.segments === 1 ? '' : 's'}`}</span><span>${ic('orient')}${horiz ? 'Horizontal run' : 'Vertical run'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
 }
 // Tooltips for what is not a shelf: an emergency sign, a price check or
 // order screen, a landmark (ShelfSearcher's desktop hover tips).
@@ -706,7 +717,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const point = api.pointAt(e.clientX, e.clientY);
     if (touch && (pc || g)) haptic('tap');
     if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
-    else if (g && g.getAttribute('data-shelf')) { api.select(g.getAttribute('data-shelf')); onSelect?.({ kind: 'shelf', ...api.shelfInfo(g), el: g, point, long: Date.now() - t > 500 }); }
+    else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, el: g, point, long: Date.now() - t > 500 }); }   // the module tapped, never its whole run
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m), point });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
   });

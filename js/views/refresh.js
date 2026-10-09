@@ -3,7 +3,7 @@
 
 import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
 import { focusDone } from '../../shared/reducers/floor.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, moduleFor, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
 import { openScanner } from '../scan.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
@@ -157,8 +157,8 @@ export default {
         // module refreshed (one already done says so). "A013S02" and
         // "A13 S2" name one module (groupsFor).
         else if (act === 'scan-shelf') openScanner({ title: 'Scan shelf labels', hint: 'Each label marks its shelf refreshed', continuous: true, onCode: code => {
-          const g = groupsFor(map.svg, code)[0];
-          if (!g) return toast(`${code} is not a shelf on this map`, 'bad');
+          const { g, error } = moduleFor(map.svg, code);
+          if (!g) return toast(error, 'bad');
           tap(ctx, map.shelfInfo(g), { scanned: true });
         } });
         else if (act === 'chart') { chartMode = a.dataset.v; try { localStorage.setItem(CHART_KEY, chartMode); } catch {} paint(); }
@@ -215,7 +215,7 @@ function groupsHtml(map, m) {
 // A located segment rings orange for three seconds, as ShelfSearcher's flash.
 function flashSeg(map, seg) {
   const gs = map.segments().filter(g => segmentId(g) === seg); if (!gs.length) return false;
-  const shelf = gs[0].getAttribute('data-shelf'); map.zoomTo(shelf, 500);
+  map.zoomTo(seg, 500);   // the module, not its run
   for (const g of gs) g.setAttribute('data-flash', '1');
   setTimeout(() => { for (const g of gs) g.removeAttribute('data-flash'); }, 3000);
   return true;

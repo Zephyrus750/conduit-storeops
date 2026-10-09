@@ -281,7 +281,7 @@ for price, was, image and clearance) and caches per keycode in the edge
 Cache API: links for a week, details for a day, misses for an hour. The
 device library (`client/catalogue.js`) batches lookups and keeps hits for a
 week. The shell's search palette (Ctrl K, the header and phone search)
-understands a keycode, a shelf such as H14-3, a department and a tool.
+understands a keycode, a shelf such as A16 S2, a department and a tool.
 
 ## Event envelope
 

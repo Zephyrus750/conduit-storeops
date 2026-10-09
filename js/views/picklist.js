@@ -18,7 +18,7 @@ export default {
   },
   mobile(ctx) { return mvMap({ badge: '<span id="pkbadge"></span>' }) + `<div class="mv-sel route" id="pkmob"></div>`; },
   mount(ctx, root) {
-    const map = mountMap($('#mapstage', root), { onSelect: info => { if (info.kind !== 'shelf') return; const m = model(ctx); if (m.items.some(i => i.code === info.id)) return; save(ctx, replan(map, [...m.items, { code: info.id, completed: false }], 1)); } });
+    const map = mountMap($('#mapstage', root), { cls: 'pk', onSelect: info => { if (info.kind !== 'shelf') return; const m = model(ctx); if (m.items.some(i => canonCode(i.code) === info.code)) return; save(ctx, replan(map, [...m.items, { code: info.code, completed: false }], 1)); } });
     bindMapChrome(root, map);
     const paint = () => {
       const m = model(ctx);

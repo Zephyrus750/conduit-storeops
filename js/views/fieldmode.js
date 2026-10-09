@@ -56,7 +56,7 @@ export default {
       const caps = read(ctx.storeNo), ids = [...new Set(map.segments().filter(g => g.closest('.mfl')?.getAttribute('data-fid') === map.floorId()).map(segmentId))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       const from = sel ? ids.indexOf(sel) : -1, next = [...ids.slice(from + 1), ...ids.slice(0, from + 1)].find(id => !caps[id]);
       if (!next) { toast('Every module on this floor is captured', 'good'); sel = null; return paint(); }
-      sel = next; const g = map.segments().find(x => segmentId(x) === next); if (g) map.zoomTo(g.getAttribute('data-shelf'), 400);
+      sel = next; const g = map.segments().find(x => segmentId(x) === next); if (g) map.zoomTo(next, 400);
       paint(true);
     };
     root.addEventListener('submit', e => {

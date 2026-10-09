@@ -5,7 +5,7 @@
 // search, Ctrl K, and the phone's search bar.
 
 import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast } from './ui.js';
-import { mountMap, hasMap, canonCode, splitCanon } from './map.js';
+import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation } from './map.js';
 import { VIEWS, RAIL } from './registry.js';
 
 const KIND = { prod: 'Product code', shelf: 'Shelf', loc: 'Shelf or bay', name: 'Name', none: 'Type to search' };
@@ -29,7 +29,7 @@ const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
 export function initSearch({ client, frame, go, tools = () => [], life = () => null }) {
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
-  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like H14-3, a department or a tool…" autocomplete="off" inputmode="search"><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
+  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like A16 S2, a department or a tool…" autocomplete="off" inputmode="search"><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
   frame.appendChild(el);
   const input = $('#oq', el), body = $('#obody', el), prev = $('#oprev', el), pal = $('.pal', el);
   let shelves = null, seq = 0, sel = 0;
@@ -39,7 +39,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (shelves) return shelves;
     shelves = [];
     const stage = document.createElement('div');
-    try { const m = mountMap(stage, { mono: true, badges: false, tips: false, clone: true }); const by = new Map(); for (const g of m.segments()) { const info = m.shelfInfo(g); const e = by.get(info.id) || { id: info.id, dept: info.dept, segments: info.segments, subs: [] }; if (info.sub) e.subs.push(info.sub.toUpperCase()); by.set(info.id, e); } shelves.push(...by.values()); } catch {}
+    try { const m = mountMap(stage, { mono: true, badges: false, tips: false, clone: true }); const by = new Map(); for (const g of m.segments()) { const info = m.shelfInfo(g); const e = by.get(info.id) || { id: info.id, c: canonCode(info.id), dept: info.dept, segments: info.segments, subs: [] }; if (info.sub) e.subs.push(canonCode(info.sub)); by.set(info.id, e); } shelves.push(...by.values()); } catch {}
     return shelves;
   }
   function invalidate() { shelves = null; }
@@ -60,7 +60,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const r = recent();
       if (r.length) out += grp('Recent') + r.map(x => orow(x[1] === 'prod' ? 'p' : x[1] === 'name' ? '' : 's', 'history', esc(x[0]), KIND[x[1]] || '', 'Search again', `data-q="${esc(x[0])}"`)).join('');
       out += grp('Jump to') + tools().slice(0, 6).map(t => orow('', t.icon, esc(t.title), 'Open the view', 'Open', `data-view="${t.id}"`)).join('');
-      out += `<div class="ohint"><b>It understands</b><span>keycode 42977636</span><span>shelf H14-3</span><span>bay A12</span><span>a department like Toys</span><span>a tool like Refresh</span></div>`;
+      out += `<div class="ohint"><b>It understands</b><span>keycode 42977636</span><span>shelf A16 S2</span><span>bay A12</span><span>a department like Toys</span><span>a tool like Refresh</span></div>`;
     } else if (k === 'prod') {
       out += grp('Products') + `<div class="ohint">Looking up ${esc(Q)}…</div>`;
       body.innerHTML = out; prev.hidden = true; pal.classList.remove('wide');
@@ -85,10 +85,14 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     } else if (k === 'shelf' || k === 'loc') {
       // "A16S1", "A16 S1" and "A16-S1" name one module of A16: the row and
       // the map keep that module rather than widening to the whole shelf.
-      const C = canonCode(U), { shelf: id, sub: suffix } = splitCanon(C);
-      const hits = hasMap() ? shelfIndex().filter(s => s.id === C || s.id === id || (!suffix && s.id.startsWith(id))).slice(0, 8) : [];
-      const modOf = s => suffix && s.subs.includes(suffix) ? suffix : '';
+      // A stockroom bay number (7002) is found through the module that lists
+      // it, and shows that module, not the run.
+      const bay = hasMap() && /^\d{3,6}[A-Z]?$/.test(canonCode(U)) ? shelfForLocation(canonCode(U)) : null;
+      const C = bay || canonCode(U), { shelf: id, sub: suffix } = splitCanon(C);
+      const hits = hasMap() ? shelfIndex().filter(s => s.c === C || s.c === id || (!suffix && !bay && s.c.startsWith(id))).slice(0, 8) : [];
+      const modOf = s => suffix && s.c !== C && s.subs.includes(suffix) ? suffix : '';
       const sel = s => esc(s.id + modOf(s));
+      if (bay && hits.length) out += `<div class="ohint">Bay ${esc(U)} is on ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}.</div>`;
       out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `Shelf ${hi(s.id, id)}${modOf(s) ? ` <small>module ${esc(modOf(s))}</small>` : suffix ? ` <small class="warn">no module ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${s.segments} module${s.segments === 1 ? '' : 's'}${s.subs.length ? ' · ' + esc(s.subs.join(' ')) : ''}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
       if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>Shelf ${esc(hits[0].id)}${modOf(hits[0]) ? ' · ' + esc(modOf(hits[0])) : ''}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}Show on the store map</a>`;
     } else {
@@ -97,7 +101,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const ts = tools().filter(t => t.title.toLowerCase().includes(ql));
       if (depts.length) out += grp('Departments', depts.length) + depts.map(([d, n]) => orow('s', 'map', `${hi(n, Q)} ${dep(d)}`, 'Show the department on the map', 'Show', `data-view="map" data-dept="${d}"`)).join('');
       if (ts.length) out += grp('Tools', ts.length) + ts.map(t => orow('', t.icon, hi(t.title, Q), 'Open the view', 'Open', `data-view="${t.id}"`)).join('');
-      if (!depts.length && !ts.length) out += `<div class="ohint">Nothing matches “${esc(Q)}”. Try a keycode, a shelf like H14-3, a department or a tool.</div>`;
+      if (!depts.length && !ts.length) out += `<div class="ohint">Nothing matches “${esc(Q)}”. Try a keycode, a shelf like A16 S2, a department or a tool.</div>`;
     }
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();

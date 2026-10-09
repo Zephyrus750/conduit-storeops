@@ -2,29 +2,36 @@
 // counted → verified, phase counting | final. Reads store.get('stocktake').
 
 import { $, ic, esc, vh, sub, prog, status, DEPT_COLOUR, DEPT_NAME, today, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, segmentId, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, moduleFor, segmentId, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
 import { openScanner } from '../scan.js';
 import { printSheet, tick, table, section, signoff } from '../print.js';
 import { csvLines } from '../../shared/records.js';
 
-function model(ctx) {
+// Counts per module. With the map mounted, a whole-run key from a session
+// opened before counts were per module counts once for each of its modules,
+// so the big number, the bar and the department chips agree.
+function countStates(shelves, map) {
+  const counts = { pending: 0, counted: 0, verified: 0 };
+  if (map) { const seen = new Set(); for (const g of map.segments()) { const id = segmentId(g); if (seen.has(id)) continue; seen.add(id); const r = shelves[id] || shelves[g.getAttribute('data-shelf')]; if (r) counts[r.state] = (counts[r.state] || 0) + 1; } }
+  else for (const r of Object.values(shelves)) counts[r.state] = (counts[r.state] || 0) + 1;
+  return counts;
+}
+function model(ctx, map) {
   const S = ctx.store.get('stocktake');
   const open = Object.entries(S.sessions).filter(([, s]) => !s.ended).sort((a, b) => (a[1].startedAt < b[1].startedAt ? 1 : -1))[0];
   const [id, sess] = open || [null, null];
   const shelves = sess ? sess.shelves : {};
-  const counts = { pending: 0, counted: 0, verified: 0 };
-  for (const r of Object.values(shelves)) counts[r.state] = (counts[r.state] || 0) + 1;
+  const counts = countStates(shelves, map);
   return { id, sess, shelves, counts, done: counts.counted + counts.verified };
 }
 // One session as the report and CSV read it, open or ended.
-function sessionModel(id, sess) {
-  const counts = { pending: 0, counted: 0, verified: 0 };
-  for (const r of Object.values(sess.shelves)) counts[r.state] = (counts[r.state] || 0) + 1;
+function sessionModel(id, sess, map) {
+  const counts = countStates(sess.shelves, map);
   return { id, sess, shelves: sess.shelves, counts, done: counts.counted + counts.verified };
 }
 // Ended sessions, newest first: ShelfSearcher kept each finished count so a
 // store can print its report or CSV again later.
-const pastSessions = ctx => Object.entries(ctx.store.get('stocktake').sessions).filter(([, s]) => s.ended).sort((a, b) => (a[1].ended < b[1].ended ? 1 : -1)).map(([id, s]) => sessionModel(id, s));
+const pastSessions = (ctx, map) => Object.entries(ctx.store.get('stocktake').sessions).filter(([, s]) => s.ended).sort((a, b) => (a[1].ended < b[1].ended ? 1 : -1)).map(([id, s]) => sessionModel(id, s, map));
 const MARK = { pending: 'counting', counted: 'counted', verified: 'verified' };
 // Counts are per module ("A11 S1"), as ShelfSearcher counted; a shelf with
 // no modules is its own one. A session opened before counts were per module
@@ -39,7 +46,8 @@ function byDept(map, m) {
 }
 async function tap(ctx, info, hold) {
   const m = model(ctx); if (!m.id) return toast('No stocktake session is open. Start one on the desktop.');
-  const key = info.full, cur = m.shelves[key];
+  // A run counted whole before counts were per module keeps its key.
+  const key = !m.shelves[info.full] && m.shelves[info.id] ? info.id : info.full, cur = m.shelves[key];
   try {
     if (hold) { const back = !cur ? null : cur.state === 'verified' ? 'counted' : cur.state === 'counted' ? 'pending' : 'cleared'; if (back === 'counted') await ctx.store.dispatch({ type: 'stocktake.verify', entity: { session: m.id, shelf: key }, payload: { verified: false } }); else if (back) await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: key }, payload: { state: back } }); return; }
     // First tap starts the count (yellow "counting"), the second marks it counted, as in ShelfSearcher.
@@ -68,8 +76,8 @@ export default {
     const map = mountMap($('#mapstage', root), { mono: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info, info.long); } });
     bindMapChrome(root, map);
     const paint = () => keepScanFocus(root, () => {
-      const m = model(ctx); map.setMarks(marksFor(m));
-      const side = $('#stside', root); if (side) side.innerHTML = sidebar(map, m) + missingCard(map, m) + historyCard(pastSessions(ctx));
+      const m = model(ctx, map); map.setMarks(marksFor(m));
+      const side = $('#stside', root); if (side) side.innerHTML = sidebar(map, m) + missingCard(map, m) + historyCard(pastSessions(ctx, map));
       const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(m, moduleTotal(map));
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = m.sess ? `<b>${m.done}</b> counted · ${m.counts.verified} ✓✓ · ${esc(m.id)}` : 'No session open';
     });
@@ -80,14 +88,14 @@ export default {
       const act = a.getAttribute('data-act'), m = model(ctx);
       try {
         // A scan-walk: each shelf label read is a tap on that shelf.
-        const past = a.dataset.session ? pastSessions(ctx).find(x => x.id === a.dataset.session) : null;
-        if (act === 'report') printReport(map, past || model(ctx));
-        if (act === 'csv') exportCsv(map, past || model(ctx));
-        if (act === 'locate') { const id = a.dataset.shelf, gs = map.segments().filter(g => segmentId(g) === id), shelf = gs[0]?.getAttribute('data-shelf') || id; map.zoomTo(shelf, 500); map.select(shelf); flash(gs.length ? gs : map.groups(id)); }
+        const past = a.dataset.session ? pastSessions(ctx, map).find(x => x.id === a.dataset.session) : null;
+        if (act === 'report') printReport(map, past || model(ctx, map));
+        if (act === 'csv') exportCsv(map, past || model(ctx, map));
+        if (act === 'locate') { const id = a.dataset.shelf, gs = map.groups(id); map.zoomTo(id, 500); map.select(id); flash(gs); }   // the module, not its run
         if (act === 'missing-dept') { missingDept = missingDept === a.dataset.dept ? null : a.dataset.dept; paint(); }
         if (act === 'scan-shelf') openScanner({ title: 'Scan shelf labels', hint: 'First read starts the count, the next marks it counted', continuous: true, onCode: code => {
-          const g = groupsFor(map.svg, code)[0];
-          if (!g) return toast(`${code} is not a shelf on this map`, 'bad');
+          const { g, error } = moduleFor(map.svg, code);
+          if (!g) return toast(error, 'bad');
           tap(ctx, map.shelfInfo(g), false);
         } });
         if (act === 'start') { const id = prompt('Session id', today()); if (id) await ctx.store.dispatch({ type: 'stocktake.start', entity: { session: id.trim() } }); }
