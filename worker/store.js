@@ -13,7 +13,8 @@
 //   GET  /tail?limit=              → raw log, newest first (owner)
 //   GET  /map                      → { version, at, by, floors:[{id,name,type,bytes}], versions:[…] } (404 until published)
 //   GET  /map/:version             → the published document; `latest` allowed; floors carry their svg
-//   POST /map  { version, name?, departments?, floors:[{ id, name, type, svg }] }  (owner) → applies map.publish
+//   GET  /map/:version/source      → the map editor's own document for that version (owner), so it reopens for editing
+//   POST /map  { version, name?, departments?, floors:[{ id, name, type, level?, svg, paths? }], source? }  (owner) → applies map.publish
 //
 // WebSocket protocol (JSON text frames):
 //   → { t:'hello', since }          ← { t:'snapshot', seq, state } or { t:'delta', seq, events }
@@ -38,12 +39,14 @@ import { SOH_KEEP } from '../shared/reducers/stockroom.js';
 import { rolloverDue } from '../shared/backfill.js';
 import { sanitizeSvg } from '../shared/svgsafe.js';
 import { cleanStoreInfo } from '../shared/maprender.js';
-import { storeDay, storeIso, msToStoreMidnight, DEFAULT_TZ } from '../shared/time.js';
+import { storeDay, storeIso, msToStoreMidnight, addDays, DEFAULT_TZ } from '../shared/time.js';
+import { retiring, rowKey } from '../shared/retain.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
 const SOH_MAX = 4_000_000, SOH_ROWS = 20_000;     // one SOH report: a whole store's stockroom
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
+const MAP_SOURCE_MAX = 1_900_000;  // the editor's document kept beside a version (no floor drawings in it)
 const DELTA_LIMIT = 5000;
 const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // Issue photos (R2 bucket PHOTOS): a JPEG the device already shrank, at most
@@ -51,7 +54,9 @@ const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // an issue is completed or removed (a photo can show people; it is kept no
 // longer than it helps).
 const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
+const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'store.retain']);
 const EVENT_MAX = 2_000_000;          // one event's payload (a manifest.attach carries its consols)
+const SNAPSHOT_MAX = 1_900_000;       // the state is saved as one row, and a Durable Object row holds 2 MB
 const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
 export class StoreObject extends DurableObject {
@@ -69,11 +74,13 @@ export class StoreObject extends DurableObject {
       CREATE INDEX IF NOT EXISTS events_type ON events(type, seq);
       CREATE TABLE IF NOT EXISTS snapshots (seq INTEGER PRIMARY KEY, state TEXT NOT NULL, at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS maps (version TEXT PRIMARY KEY, meta TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS map_sources (version TEXT PRIMARY KEY, doc TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, at TEXT NOT NULL, by TEXT NOT NULL, size INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS archive (kind TEXT NOT NULL, key TEXT NOT NULL, date TEXT NOT NULL, row TEXT NOT NULL, PRIMARY KEY (kind, key));
     `);
     this.state = null;
     this.storeNo = this.sql.exec("SELECT value FROM meta WHERE key = 'store'").toArray()[0]?.value || null;
@@ -98,11 +105,20 @@ export class StoreObject extends DurableObject {
     this.state.seq = last?.m || 0;
     this.sinceSnapshot = rows.length;
   }
+  // The state is saved as one row, which holds at most 2 MB. The events are
+  // already logged when this runs, so a snapshot that fails (or would be too
+  // big) is skipped and said loudly, never allowed to fail the write: the
+  // store rebuilds from the last good snapshot plus the log. Retention keeps
+  // it well under (shared/retain.js); the console flags a store over 1.2 MB.
   snapshotIfDue() {
     if (this.sinceSnapshot < SNAPSHOT_EVERY) return;
-    this.sql.exec('INSERT OR REPLACE INTO snapshots (seq, state, at) VALUES (?, ?, ?)', this.state.seq, JSON.stringify(this.state), new Date().toISOString());
-    this.sql.exec('DELETE FROM snapshots WHERE seq < ?', this.state.seq);
-    this.sinceSnapshot = 0;
+    const text = JSON.stringify(this.state);
+    if (text.length > SNAPSHOT_MAX) { console.error(`store ${this.storeNo}: state is ${text.length} bytes, over the snapshot limit; snapshot skipped`); return; }
+    try {
+      this.sql.exec('INSERT OR REPLACE INTO snapshots (seq, state, at) VALUES (?, ?, ?)', this.state.seq, text, new Date().toISOString());
+      this.sql.exec('DELETE FROM snapshots WHERE seq < ?', this.state.seq);
+      this.sinceSnapshot = 0;
+    } catch (e) { console.error(`store ${this.storeNo}: snapshot failed (${text.length} bytes)`, e?.message || e); }
   }
 
   // ── HTTP ──────────────────────────────────────────────────────────────
@@ -123,12 +139,14 @@ export class StoreObject extends DurableObject {
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
         case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readBounded(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true }); }
-        case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [] }));
+        case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await request.json(), claims) : json(this.mapInfo());
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
+          const ms = url.pathname.match(/^\/map\/([\w.-]+)\/source$/);
+          if (ms) return this.mapSource(ms[1], claims);
           if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1]));
@@ -146,7 +164,8 @@ export class StoreObject extends DurableObject {
           if (hist) {
             if (!HISTORY_KINDS.includes(hist[2])) return fail(400, 'invalid_request', `kind must be one of ${HISTORY_KINDS.join(', ')}`);
             const no = needArea(claims, HISTORY_AREA[hist[2]]); if (no) return no;
-            const rows = historyRows(this.state, hist[2]);
+            const live = historyRows(this.state, hist[2]), have = new Set(live.map(r => rowKey(hist[2], r)));
+            const rows = [...live, ...this.archived(hist[2]).filter(r => !have.has(rowKey(hist[2], r)))];   // the live state, then what retention archived
             if (hist[1] === 'export') return new Response(toCsv(rows), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${this.storeNo}-${hist[2]}.csv"`, ...CORS } });
             const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));
             return json({ kind: hist[2], total: rows.length, offset, limit, rows: rows.slice(offset, offset + limit) });
@@ -187,12 +206,17 @@ export class StoreObject extends DurableObject {
   }
 
   // ── apply ─────────────────────────────────────────────────────────────
-  submit(events, claims) {
+  submit(events, claims, { internal = false } = {}) {
     if (!Array.isArray(events)) throw new HttpError(400, 'invalid_request', 'events must be an array');
     if (events.length > 500) throw new HttpError(400, 'invalid_request', 'at most 500 events per batch');
     const results = [];
     const applied = [];
     for (const raw of events) {
+      // These are written by the worker itself, next to the documents they
+      // index (a map version, a manifest, an SOH snapshot) or on its own
+      // schedule (retention). A device sending one would point the store at
+      // documents that do not exist, or delete real ones.
+      if (!internal && WORKER_ONLY.has(raw?.type)) { results.push({ id: raw?.id, ok: false, code: 'worker_only', message: `${raw.type} is written by the worker, not sent by a device` }); continue; }
       const r = this.applyOne(raw, claims);
       results.push(r);
       if (r.ok && r.event) applied.push(r.event);
@@ -263,9 +287,12 @@ export class StoreObject extends DurableObject {
   // the ordinary write path with a system actor, then the next alarm is set
   // for the coming store midnight (plus a minute of slack).
   async alarm() {
-    try { this.rollover(); await this.sweepPhotos(); }
+    try { this.rollover(); if (this.atNight()) this.retainNow(); await this.sweepPhotos(); }
     finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
   }
+  // Retention runs on the midnight alarm only, not the catch-up one a new
+  // store object sets itself: a night it misses runs the next night.
+  atNight(now = Date.now()) { return storeDay(new Date(now - 3 * 3_600_000), this.tz()) !== storeDay(new Date(now), this.tz()); }
   // The store's own setting wins; STORE_TZ is the worker-wide fallback.
   tz() { return this.state?.settings?.tz || this.env.STORE_TZ || DEFAULT_TZ; }
   rollover(now = new Date()) {
@@ -275,6 +302,22 @@ export class StoreObject extends DurableObject {
     if (!events.length) return [];
     return this.submit(events, { store: this.storeNo, roles: ['manager'], caps: ['stockroom'], device: 'system', owner: false, actor: 'system' });
   }
+
+  // Nightly retention: the history rows about to leave the live state are
+  // copied into the archive table (History and exports read both), then
+  // store.retain is logged so every device trims the same way. Archived rows
+  // are kept two years. Once a day.
+  retainNow(now = new Date()) {
+    if (!this.storeNo) return null;
+    const day = storeDay(now, this.tz());
+    if (this.state.retention?.day === day) return null;
+    for (const a of retiring(this.state, day)) this.sql.exec('INSERT OR REPLACE INTO archive (kind, key, date, row) VALUES (?, ?, ?, ?)', a.kind, a.key, a.date, JSON.stringify(a.row));
+    this.sql.exec('DELETE FROM archive WHERE date < ?', addDays(day, -730));
+    const ev = { id: ulid(), store: this.storeNo, area: 'store', type: 'store.retain', entity: {}, payload: { day }, at: storeIso(now, this.tz()), v: 1 };
+    const [r] = this.submit([ev], { store: this.storeNo, roles: ['manager'], caps: [], device: 'system', owner: false }, { internal: true });
+    return r;
+  }
+  archived(kind) { return this.sql.exec('SELECT row FROM archive WHERE kind = ? ORDER BY date DESC, key', kind).toArray().map(r => JSON.parse(r.row)); }
 
   // ── issue photos ──────────────────────────────────────────────────────
   // The bytes live in R2 under <store>/<id>.jpg; the issue.photo event
@@ -341,7 +384,7 @@ export class StoreObject extends DurableObject {
     this.sql.exec('INSERT OR REPLACE INTO manifests (manNo, doc, at, by) VALUES (?, ?, ?, ?)', manNo, text, at, by);
     const totalCartons = doc.consols.reduce((n, c) => n + (Number(c.cartons) || 0), 0), keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size;
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.publish', entity: { manNo }, payload: { dcNo: doc.dcNo || '', despatch: doc.despatch || '', filename: String(doc.filename || '').slice(0, 80), consols: doc.consols.length, totalCartons, keycodes }, at, v: 1 };
-    const [r] = this.submit([ev], claims);
+    const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(400, r.code, r.message);
     return json({ ok: true, manNo, at, consols: doc.consols.length, totalCartons, keycodes, seq: r.seq }, 201);
   }
@@ -357,7 +400,7 @@ export class StoreObject extends DurableObject {
     if (!hasRole(claims, ['dock', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a manifest needs the dock code');
     if (!this.sql.exec('SELECT 1 FROM manifests WHERE manNo = ?', manNo).toArray().length) throw new HttpError(404, 'not_found', `manifest ${manNo} is not published`);
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.remove', entity: { manNo }, payload: {}, at: new Date().toISOString(), v: 1 };
-    const [r] = this.submit([ev], claims);
+    const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
     return json({ ok: true, manNo });
@@ -383,7 +426,7 @@ export class StoreObject extends DurableObject {
     }
     const at = new Date().toISOString(), by = claims.device || (claims.owner ? 'owner' : ''), week = isoWeek(date), locs = new Set(rows.map(r => r.loc)).size;
     const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.publish', entity: { date }, payload: { rows: rows.length, locs, week }, at, v: 1 };
-    const [r] = this.submit([ev], claims);
+    const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('INSERT OR REPLACE INTO soh (date, doc, at, by) VALUES (?, ?, ?, ?)', date, JSON.stringify({ date, week, rows }), at, by);
     const keep = Object.keys(this.state.soh?.snaps || {});
@@ -399,7 +442,7 @@ export class StoreObject extends DurableObject {
     if (!hasRole(claims, ['stockroom', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'removing a snapshot needs the stockroom code');
     if (!this.sql.exec('SELECT 1 FROM soh WHERE date = ?', date).toArray().length) throw new HttpError(404, 'not_found', `no SOH snapshot for ${date}`);
     const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.remove', entity: { date }, payload: {}, at: new Date().toISOString(), v: 1 };
-    const [r] = this.submit([ev], claims);
+    const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('DELETE FROM soh WHERE date = ?', date);
     return json({ ok: true, date });
@@ -415,7 +458,7 @@ export class StoreObject extends DurableObject {
     if (!rows.length) throw new HttpError(404, 'not_found', 'no map has been published for this store');
     const cur = rows.find(r => r.version === this.state.map.version) || rows[0];
     const meta = JSON.parse(cur.meta);
-    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at })) };
+    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at, source: this.hasSource(r.version) })), source: this.hasSource(cur.version) };
   }
   mapDoc(version, ifNoneMatch) {
     if (version === 'latest') version = this.state.map.version || this.sql.exec('SELECT version FROM maps ORDER BY at DESC LIMIT 1').toArray()[0]?.version;
@@ -427,6 +470,16 @@ export class StoreObject extends DurableObject {
     const svgs = Object.fromEntries(this.sql.exec('SELECT floor, svg FROM map_floors WHERE version = ?', row.version).toArray().map(r => [r.floor, r.svg]));
     const doc = { v: 1, kind: 'map', store: this.storeNo, version: row.version, at: row.at, by: JSON.parse(row.by), name: meta.name, departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, floors: meta.floors.map(f => ({ ...f, svg: svgs[f.id] || '' })) };
     return json(doc, 200, { ETag: etag, 'Cache-Control': 'private, max-age=31536000' });
+  }
+  hasSource(version) { return this.sql.exec('SELECT 1 FROM map_sources WHERE version = ?', version).toArray().length > 0; }
+  // The editor's document for a version, for the owner to reopen it in the
+  // map editor: what was drawn, not just the rendered floors.
+  mapSource(version, claims) {
+    if (!claims.owner) throw new HttpError(403, 'unauthorised', 'the map editor source needs the owner');
+    if (version === 'latest') version = this.state.map.version || this.sql.exec('SELECT version FROM maps ORDER BY at DESC LIMIT 1').toArray()[0]?.version;
+    const row = version && this.sql.exec('SELECT doc FROM map_sources WHERE version = ?', version).toArray()[0];
+    if (!row) throw new HttpError(404, 'not_found', version ? `map version ${version} has no editor source (published from a file)` : 'no map has been published for this store');
+    return new Response(row.doc, { headers: { 'Content-Type': 'application/json', ...CORS } });
   }
   publishMap(body, claims) {
     if (!claims.owner) throw new HttpError(403, 'unauthorised', 'publishing a map needs the owner');
@@ -451,18 +504,30 @@ export class StoreObject extends DurableObject {
       if (f.paths && typeof f.paths === 'object') {
         const nodes = Array.isArray(f.paths.nodes) ? f.paths.nodes : [], edges = Array.isArray(f.paths.edges) ? f.paths.edges : [];
         if (nodes.length > 5000 || edges.length > 10000) throw new HttpError(400, 'invalid_request', `floor ${id}: too many path nodes or edges`);
-        const ns = nodes.map(n => ({ id: String(n?.id ?? '').slice(0, 24), x: Number(n?.x), y: Number(n?.y), ...(n?.type ? { type: String(n.type).slice(0, 16) } : {}) }));
+        // Stairs and lifts name the node they reach on another floor (links).
+        const link = l => ({ floorId: String(l?.floorId ?? '').slice(0, 32), nodeId: String(l?.nodeId ?? '').slice(0, 24) });
+        const ns = nodes.map(n => { const ls = Array.isArray(n?.links) ? n.links.slice(0, 8).map(link).filter(l => l.floorId && l.nodeId) : []; return { id: String(n?.id ?? '').slice(0, 24), x: Number(n?.x), y: Number(n?.y), ...(n?.type ? { type: String(n.type).slice(0, 16) } : {}), ...(ls.length ? { links: ls } : {}) }; });
         if (ns.some(n => !n.id || !Number.isFinite(n.x) || !Number.isFinite(n.y))) throw new HttpError(400, 'invalid_request', `floor ${id}: every path node needs an id and numeric x, y`);
         const es = edges.map(e => ({ a: String(e?.a ?? '').slice(0, 24), b: String(e?.b ?? '').slice(0, 24) })).filter(e => e.a && e.b);
         if (ns.length >= 2 && es.length) paths = { nodes: ns, edges: es };
       }
-      metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), shelves: (svg.match(/class="shelf-group"/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}) });
+      const level = Number(f.level);
+      metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), ...(Number.isInteger(level) && Math.abs(level) <= 10 ? { level } : {}), shelves: (svg.match(/class="shelf-group"(?![^>]*data-inactive)/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}) });
     }
     const departments = Array.isArray(body.departments) ? body.departments.slice(0, 64).map(d => ({ id: String(d.id || '').slice(0, 16), name: String(d.name || '').slice(0, 64), color: String(d.color || '').slice(0, 16), parent: String(d.parent || '').slice(0, 16) })) : [];
     const info = cleanStoreInfo(body.storeInfo), mpu = Number(body.metresPerUnit);
     const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments, ...(info ? { storeInfo: info } : {}), ...(mpu > 0 && mpu < 100 ? { metresPerUnit: mpu } : {}) };
+    // The editor's own document rides along when the map editor publishes,
+    // so the owner can reopen exactly what was drawn. Never sent to devices.
+    let source = null;
+    if (body.source != null) {
+      if (typeof body.source !== 'object' || !Array.isArray(body.source.floors)) throw new HttpError(400, 'invalid_request', 'source must be the map editor document');
+      source = JSON.stringify(body.source);
+      if (source.length > MAP_SOURCE_MAX) throw new HttpError(413, 'payload_too_large', `the editor source is over ${MAP_SOURCE_MAX / 1_000_000} MB`);
+    }
     const at = new Date().toISOString(), by = { device: claims.device || null, owner: true };
     this.sql.exec('INSERT INTO maps (version, meta, at, by) VALUES (?, ?, ?, ?)', version, JSON.stringify(meta), at, JSON.stringify(by));
+    if (source) this.sql.exec('INSERT INTO map_sources (version, doc) VALUES (?, ?)', version, source);
     for (const f of clean) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, f.id, f.svg);
     // The publish is an ordinary store event, so every device learns the
     // new version through its projection and the log shows who published.
@@ -470,7 +535,7 @@ export class StoreObject extends DurableObject {
     const r = this.applyOne(ev, { ...claims, roles: ['manager'], caps: claims.caps || [] });
     if (!r.ok) throw new HttpError(500, 'internal', `map stored but map.publish was refused: ${r.message}`);
     this.snapshotIfDue(); this.broadcast([r.event]);
-    return json({ ok: true, version, at, seq: r.seq, stripped, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
+    return json({ ok: true, version, at, seq: r.seq, stripped, source: !!source, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────────

@@ -2,7 +2,8 @@
 // the shell mounts, the same either way.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMapFile, parseStoreMapsJs, renderMap, renderFloor, markerType, deptResolver } from '../../shared/maprender.js';
+import { parseMapFile, parseStoreMapsJs, renderMap, renderFloor, markerType, deptResolver, publishBody, shelfDims } from '../../shared/maprender.js';
+import { build as buildGraph, stairsNodes, linkedNode, nearestStairsByWalk } from '../../shared/route.js';
 
 const floorData = {
   shelves: [
@@ -51,15 +52,16 @@ test('parseMapFile tells the three file kinds apart', () => {
   assert.throws(() => parseMapFile('{bad', 'x.json'), /not valid JSON/);
 });
 
-test('a .js floor renders from its pre-rendered svg: wrapper, viewBox, markers regenerated, old markers stripped', () => {
+test('a .js floor renders from its arrays, not its baked drawing: wrapper, viewBox, markers regenerated, old markers stripped', () => {
   const doc = renderMap(parseStoreMapsJs(jsExport));
   assert.equal(doc.store, '1241'); assert.equal(doc.name, "Bus'selton"); assert.equal(doc.departments.length, 3);
   const f = doc.floors[0];
-  assert.equal(f.id, 'ground'); assert.equal(f.type, 'foh'); assert.equal(f.shelves, 2);
+  assert.equal(f.id, 'ground'); assert.equal(f.type, 'foh'); assert.equal(f.shelves, 3, 'shelves in use, from the arrays');
   assert.match(f.svg, /^<svg class="map real" viewBox="-720 -120 1340 660" xmlns="http:\/\/www.w3.org\/2000\/svg" preserveAspectRatio="xMidYMid meet"/);
   assert.match(f.svg, /<g id="floor-ground" class="map-floor zoom-out" data-floor="ground" data-floor-type="foh"/);
   assert.doesNotMatch(f.svg, /<style>/); assert.doesNotMatch(f.svg, /<circle r="1"\/>/, 'the baked marker group is gone');
-  assert.match(f.svg, /ENTRY `tick` \$5/);
+  assert.doesNotMatch(f.svg, /`tick`/, 'the baked drawing is not used when the file has arrays');
+  assert.equal(renderMap({ ...base, floors: [{ id: 'ground', svg: prerendered }] }).floors[0].svg.includes('ENTRY `tick` $5'), true, 'a file with only a drawing still uses it');
   assert.equal((f.svg.match(/<g class="emergency-marker"/g) || []).length, 2, 'the duplicate marker at the same spot is dropped');
   assert.match(f.svg, /data-equip-type="fire-ext" data-label="Ext 1"[^>]*data-ext-class="co2" data-location="A11 S1" data-loc-dept="h1" data-loc-dept-color="#FF8C00" data-loc-dept-name="H1 Kitchen" data-loc-dept-badge="H1" data-x="300" data-y="300" transform="translate\(300,300\)"/);
   assert.match(f.svg, /data-equip-type="first-aid" data-label="Kit"[^>]*data-loc-dept="c1"/);
@@ -71,10 +73,10 @@ test('a .js floor renders from its pre-rendered svg: wrapper, viewBox, markers r
 test('a .json export renders the same floor from its data', () => {
   const j = renderMap(parseMapFile(jsonExport, 'x.json').data).floors[0];
   assert.deepEqual(j.paths, { nodes: [{ id: 'pn1', x: 0, y: 0 }, { id: 'pn2', x: 100, y: 0, type: 'stairs' }], edges: [{ a: 'pn1', b: 'pn2' }] }, 'the walk-path network travels with the floor');
-  assert.equal(j.shelves, 4, 'inactive shelves stay, dimmed');
-  assert.match(j.svg, /<g class="shelf-group" data-shelf="A11" data-subname="S1" data-dept="h1" data-full="A11 S1"><rect class="shelf" x="-230" y="225" width="20" height="120" fill="#FF8C00" fill-opacity="0.75" stroke="#FF8C00"\/><\/g>/);
+  assert.equal(j.shelves, 3, 'an inactive shelf is drawn, dimmed, but not counted');
+  assert.match(j.svg, /<g class="shelf-group" data-shelf="A11" data-subname="S1" data-dept="h1" data-full="A11 S1" data-modules="3"><rect class="shelf" x="-230" y="225" width="20" height="120" fill="#FF8C00" fill-opacity="0.75" stroke="#FF8C00"\/><\/g>/);
   assert.match(j.svg, /<text class="shelf-label" font-size="8" x="-220" y="[\d.-]+">A11<\/text><text class="shelf-label" font-size="6" x="-220" y="[\d.-]+" fill="rgba\(255,255,255,0.7\)">S1<\/text>/);
-  assert.match(j.svg, /data-shelf="X9"[^>]*><rect[^>]*fill-opacity="0.25"/);
+  assert.match(j.svg, /data-shelf="X9"[^>]*data-inactive="1"[^>]*><rect[^>]*fill-opacity="0.25"/);
   assert.match(j.svg, /<g class="landmark-group" data-landmark="true" data-label="ENTRY" data-lm-x="-600"[^>]*data-icon="entry">/);
   assert.match(j.svg, /<g class="wall-group" data-wall="true"/); assert.match(j.svg, /<g class="wall-group window"/);
   assert.match(j.svg, /<g class="tory-line-path"/); assert.match(j.svg, /<g class="tory-dock"[^>]*><rect class="tory-dock-bg"/);
@@ -92,4 +94,43 @@ test('marker type aliases and the department resolver', () => {
 test('values are escaped into attributes', () => {
   const f = renderFloor({ id: 'g', shelves: [{ name: 'A<1>', subname: '"q"', dept: 'h1', x: 0, y: 0 }], emergencyMarkers: [{ type: 'exit', label: '<b>x</b>', x: 0, y: 0 }] }, base);
   assert.match(f.svg, /data-shelf="A&lt;1&gt;" data-subname="&quot;q&quot;"/); assert.match(f.svg, /data-label="&lt;b&gt;x&lt;\/b&gt;"/); assert.doesNotMatch(f.svg, /<b>x/);
+});
+
+// Map editor audit (docs/MAP-EDITOR-AUDIT-2026-10.md): what the editor makes
+// now reaches the published map.
+test('modules, inactive shelves, angled shelves from a .js file and marker ids reach the drawing', () => {
+  const data = { ...base, floors: [{ id: 'ground', shelves: [
+    { name: 'A22', subname: 'S1', dept: 'h1', x: 0, y: 0, modules: 7 },
+    { name: 'G6', subname: 'S1', dept: 'h1', x: 500, y: -920, angle: -45 },        // .js: angle, no orientation
+    { name: 'G7', subname: 'S1', dept: 'h1', x: 600, y: -920, orientation: 'H' },
+    { name: '7001', subname: '', dept: 'stockroom', x: 0, y: 200 },                   // .js leaves modules out at 3
+  ], emergencyMarkers: [{ id: 'em_12', type: 'fire_extinguisher', x: 10, y: 10 }], priceChecks: [{ id: 'pc_3', label: 'PC', x: 20, y: 20 }] }] };
+  const svg = renderMap(data).floors[0].svg;
+  assert.match(svg, /data-full="A22 S1" data-modules="7"/);
+  assert.match(svg, /data-full="G6 S1"[^>]*transform="rotate\(-45,/, 'an angle with no orientation is an angled shelf');
+  assert.doesNotMatch(svg, /data-full="G7 S1"[^>]*rotate/);
+  assert.equal(shelfDims({ dept: 'stockroom' }, base).w, 180, 'a stockroom bay with no count is 3 modules, as the .js export means');
+  assert.match(svg, /class="emergency-marker" data-id="em_12"/); assert.match(svg, /class="price-check-marker" data-id="pc_3"/);
+});
+
+test('publishBody: the request the editor, console and script send, with the source and floor levels', () => {
+  const data = { ...base, metresPerUnit: 0.05, floors: [
+    { id: 'ground', name: 'Ground', type: 'foh', level: 0, svg: '<svg/>', ...floorData },
+    { id: 'empty', name: 'Mezz', type: 'foh', level: 1, shelves: [] },
+    { id: 'boh', name: 'Stockroom', type: 'boh', level: -1, shelves: [{ name: '7001', dept: 'stockroom', x: 0, y: 0 }] },
+  ] };
+  const b = publishBody(data, { version: 'v9' });
+  assert.equal(b.version, 'v9'); assert.equal(b.name, "Bus'selton"); assert.equal(b.metresPerUnit, 0.05);
+  assert.deepEqual(b.floors.map(f => [f.id, f.level]), [['ground', 0], ['boh', -1]], 'an empty floor is left out; levels travel');
+  assert.ok(b.floors[0].paths); assert.equal(b.source.floors.length, 3); assert.equal(b.source.floors[0].svg, undefined, 'the source keeps no drawing');
+});
+
+test('stairs and lifts: a link to the next floor wins over the nearest by position', () => {
+  const g = buildGraph({ nodes: [{ id: 'a', x: 0, y: 0 }, { id: 's1', x: 10, y: 0, type: 'stairs' }, { id: 's2', x: 100, y: 0, type: 'stairs', links: [{ floorId: 'mezz', nodeId: 'm1' }] }, { id: 'l1', x: 50, y: 0, type: 'lift' }], edges: [{ a: 'a', b: 's1' }, { a: 's1', b: 'l1' }, { a: 'l1', b: 's2' }] });
+  assert.deepEqual(stairsNodes(g).map(n => n.id), ['s1', 's2', 'l1'], 'lifts count as a way between floors');
+  assert.deepEqual(stairsNodes(g, 'mezz').map(n => n.id), ['s2'], 'only the linked one when a link exists');
+  assert.equal(nearestStairsByWalk(g, { x: 0, y: 0 }, 'mezz').node.id, 's2');
+  assert.equal(nearestStairsByWalk(g, { x: 0, y: 0 }, 'boh').node.id, 's1', 'no link to that floor: the nearest');
+  const m = buildGraph({ nodes: [{ id: 'm0', x: 0, y: 0 }, { id: 'm1', x: 500, y: 500, type: 'stairs' }], edges: [{ a: 'm0', b: 'm1' }] });
+  assert.equal(linkedNode(m, g.nodes.s2, 'mezz').id, 'm1'); assert.equal(linkedNode(m, g.nodes.s1, 'mezz'), null);
 });

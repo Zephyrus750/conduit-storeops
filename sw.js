@@ -54,6 +54,10 @@ self.addEventListener('fetch', event => {
   // Cross-origin (the worker API, product images): straight through, uncached.
   if (url.origin !== self.location.origin) return;
 
+  // The map editor (owner only) is its own page, not part of the shell's
+  // release: always from the network, never answered with the shell.
+  if (url.pathname.includes('/editor/')) return;
+
   // Bundled maps: network-first with the surviving cache behind it.
   if (url.pathname.includes('/maps/')) {
     event.respondWith(

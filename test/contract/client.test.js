@@ -32,6 +32,7 @@ after(async () => { await mf?.dispose(); });
 const until = (fn, ms = 4000) => new Promise((resolve, reject) => {
   const t0 = Date.now(); const tick = () => { const v = fn(); if (v) return resolve(v); if (Date.now() - t0 > ms) return reject(new Error('timeout: ' + fn.toString().slice(0, 120))); setTimeout(tick, 20); }; tick();
 });
+const ulidLike = () => { const A = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; let t = Date.now(), o = ''; for (let i = 0; i < 10; i++) { o = A[t % 32] + o; t = Math.floor(t / 32); } for (let i = 0; i < 16; i++) o += A[Math.floor(Math.random() * 32)]; return o; };
 const device = (name) => createClient({ baseUrl, storage: memoryStorage({ suite_device: name }) });
 
 test('sign in persists, unlock adds a role, token refreshes', async () => {
@@ -215,4 +216,30 @@ test('unlocking an area after the socket is open reconnects, so the next submit 
   assert.equal(s.get('cages').BSN1240999.ring, 'overstock', 'applied on the server, not rolled back');
   await s.dispatch({ type: 'cage.close', entity: { cage: 'BSN1240999' } }); await until(() => s.pending.length === 0);
   s.close();
+});
+
+test('a send over HTTP never skips changes another device logged in between (polling fallback)', async () => {
+  const { createStore, POLL_MS } = await import('../../client/store.js');
+  let poll = null;
+  const timers = { setTimeout: (f, ms) => (ms === POLL_MS ? ((poll = f), 1) : setTimeout(f, ms)), clearTimeout: id => clearTimeout(id) };
+  const a = device('poll-a'), b = device('poll-b');
+  await a.session.load(); await a.session.signIn({ store: '1241', pin: '2468' });
+  await b.session.load(); await b.session.signIn({ store: '1241', pin: '2468' });
+  const sa = createStore({ storeNo: '1241', session: a.session, transport: a.transport, storage: memoryStorage(), WebSocketImpl: null, online: () => true, timers });
+  await sa.load(); await sa.connect();
+  await until(() => poll && sa.status.state === 'polling' && sa.status.seq > 0);   // the first poll is in
+  const week = '2026-W41', mk = (seg) => ({ id: ulidLike(), store: '1241', area: 'floor', type: 'refresh.mark', entity: { segment: seg, week }, payload: {}, at: new Date().toISOString(), v: 1 });
+  // b logs X; a, not having polled since, sends Y over HTTP and is acknowledged at a later seq.
+  const x = mk('Z90 S1');
+  const rx = await b.transport.request('/v1/store/1241/events', { method: 'POST', body: { events: [x] }, token: await b.session.token() });
+  assert.equal(rx.results[0].ok, true);
+  await sa.dispatch({ type: 'refresh.mark', entity: { segment: 'Z91 S1', week }, payload: {} });
+  await until(() => sa.status.queued === 0);
+  assert.ok(sa.get('refresh').weeks[week]['Z91 S1'], 'our own change is in');
+  assert.equal(sa.get('refresh').weeks[week]['Z90 S1'], undefined, 'not polled yet');
+  assert.ok(sa.status.seq < rx.results[0].seq, 'base.seq stays before the change it has not seen');
+  poll();
+  await until(() => sa.get('refresh').weeks[week]?.['Z90 S1']);
+  assert.ok(sa.status.seq >= rx.results[0].seq + 1, 'the next poll catches up past both');
+  sa.close();
 });

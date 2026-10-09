@@ -2,7 +2,7 @@
 // the selected shelf beneath it.
 
 import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtTime, cycleId, toast } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, shelfDetail } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, shelfDetail, canonCode, runText } from '../map.js';
 import { markerSymbol } from '../../shared/maprender.js';
 import { openShare } from '../share.js';
 
@@ -12,7 +12,9 @@ function shelfFacts(ctx, map, id) {
   const segs = map.groups(id).map(g => segmentId(g));
   const refreshed = segs.map(s => marks[s]).filter(Boolean).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
   const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen);
-  const micros = Object.entries(L.assign).filter(([, shelves]) => shelves.includes(id)).map(([m]) => m);
+  // Assignments are per shelf; older ones name the whole run (label integrity).
+  const keys = new Set([...segs, map.code(id)?.shelf].filter(Boolean));
+  const micros = Object.entries(L.assign).filter(([, shelves]) => shelves.some(s => keys.has(s))).map(([m]) => m);
   const checked = micros.filter(m => (L.checks[cyc] || {})[m]);
   const plan = segs.map(s => r.plan[s]).filter(Boolean);
   return { segs, refreshed, micros, checked, plan };
@@ -22,16 +24,16 @@ export function selCard(ctx, map, id) {
   const g = map.groups(id)[0]; if (!g) return '';
   const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id), cd = map.code(id), d = shelfDetail(map, id);
   const row = (k, v) => `<div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;color:var(--dim)">${k}<b style="color:var(--ink)">${v}</b></div>`;
-  return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>Selected shelf</h3><span class="go" data-act="clear">Clear</span></div>` +
-    `<div class="sid">${esc(cd.shelf)}${cd.sub ? `<small class="sub">${esc(cd.sub)}</small>` : ''}${dep(info.dept)}</div><div class="meta">${DEPT_NAME[info.dept] || info.dept} · ${cd.sub ? `module ${esc(cd.sub)} of ${info.segments}` : `${info.segments} module${info.segments === 1 ? '' : 's'}`} · aisle ${esc(cd.shelf.charAt(0))}, bay ${esc(cd.shelf.slice(1))}</div>` +
-    `<div class="rows" style="margin-top:12px;border-top:1px solid var(--line-soft)">${d.fixture ? row('Fixture', esc(d.fixture)) : ''}${d.range ? row(d.locations.length > 1 ? 'Locations' : 'Location', `<span title="${esc(d.locations.join(', '))}">${esc(d.range)}</span>`) : ''}${d.size ? row('Size', esc(d.size)) : ''}${d.shared.length ? row('Shares its name with', esc(d.shared.join(', '))) : ''}${row('Refreshed this week', f.refreshed ? fmtTime(f.refreshed.at) : 'not yet')}${row('Label micro-depts', f.micros.length ? `${f.checked.length}/${f.micros.length} checked` : 'none assigned')}${row('Planned', f.plan.length ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${f.plan[0]};vertical-align:-1px"></i> yes` : 'no')}</div>` +
+  return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>${cd.sub || info.segments === 1 ? 'Selected shelf' : 'Selected run'}</h3><span class="go" data-act="clear">Clear</span></div>` +
+    `<div class="sid">${esc(cd.shelf)}${cd.sub ? `<small class="sub">${esc(cd.sub)}</small>` : ''}${dep(info.dept)}</div><div class="meta">${DEPT_NAME[info.dept] || info.dept} · ${esc(runText(cd.shelf, cd.sub, info.segments))} · aisle ${esc(cd.shelf.charAt(0))}, bay ${esc(cd.shelf.slice(1))}</div>` +
+    `<div class="rows" style="margin-top:12px;border-top:1px solid var(--line-soft)">${d.fixture ? row('Fixture', esc(d.fixture)) : ''}${d.modules ? row('Length', `${d.modules} module${d.modules === 1 ? '' : 's'}`) : ''}${d.range ? row(d.locations.length > 1 ? 'Locations' : 'Location', `<span title="${esc(d.locations.join(', '))}">${esc(d.range)}</span>`) : ''}${d.size ? row('Size', esc(d.size)) : ''}${d.shared.length ? row('Shares its name with', esc(d.shared.join(', '))) : ''}${row('Refreshed this week', f.refreshed ? fmtTime(f.refreshed.at) : 'not yet')}${row('Label micro-depts', f.micros.length ? `${f.checked.length}/${f.micros.length} checked` : 'none assigned')}${row('Planned', f.plan.length ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${f.plan[0]};vertical-align:-1px"></i> yes` : 'no')}</div>` +
     `<div class="acts2"><button class="btn primary sm" data-act="pick-add" data-shelf="${esc(id)}">${ic('m-picklist')}Add to pick list</button><a class="btn sm" data-go="refresh" data-select="${esc(id)}">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint" data-select="${esc(id)}">${ic('m-labelint')}Label check</a><button class="btn sm" data-act="share" data-shelf="${esc(id)}">${ic('qr')}Share</button></div></div>`;
 }
 export function mvSel(ctx, map, id) {
   if (!id) return `<div class="what"><span>Tap a shelf to see what is there, or search above.</span></div>`;
   const g = map.groups(id)[0]; if (!g) return '';
-  const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id), d = shelfDetail(map, id);
-  return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b><span class="shid"><b>${esc(id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div><div class="what"><span>${esc(d.fixture || (info.sub.startsWith('E') ? 'End' : 'Side'))} · ${info.segments} module${info.segments === 1 ? '' : 's'}${d.range ? ' · ' + esc(d.range) : ''}${d.size ? ' · ' + esc(d.size) : ''}${d.shared.length ? ' · also ' + esc(d.shared.join(', ')) : ''} · aisle ${esc(id.charAt(0))}, bay ${esc(id.slice(1))}${f.refreshed ? ' · refreshed ' + fmtTime(f.refreshed.at) : ''}</span><button class="mv-share" data-act="pick-add" data-shelf="${esc(id)}" aria-label="Add ${esc(id)} to the pick list" title="Add to pick list">${ic('m-picklist')}</button><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div>`;
+  const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id), d = shelfDetail(map, id), cd = map.code(id);
+  return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b><span class="shid"><b>${esc(cd.shelf)}</b>${cd.sub ? `<small>${esc(cd.sub)}</small>` : ''}</span></div><div class="what"><span>${esc(d.fixture || (info.sub.startsWith('E') ? 'End' : 'Side'))} · ${esc(runText(cd.shelf, cd.sub, info.segments))}${d.modules ? ` · ${d.modules} module${d.modules === 1 ? '' : 's'}` : ''}${d.range ? ' · ' + esc(d.range) : ''}${d.size ? ' · ' + esc(d.size) : ''}${d.shared.length ? ' · also ' + esc(d.shared.join(', ')) : ''} · aisle ${esc(cd.shelf.charAt(0))}, bay ${esc(cd.shelf.slice(1))}${f.refreshed ? ' · refreshed ' + fmtTime(f.refreshed.at) : ''}</span><button class="mv-share" data-act="pick-add" data-shelf="${esc(id)}" aria-label="Add ${esc(id)} to the pick list" title="Add to pick list">${ic('m-picklist')}</button><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div>`;
 }
 
 // A price check or order screen, tapped on the map: what it is, where it
@@ -57,7 +59,7 @@ export default {
   mount(ctx, root) {
     if (ctx.arg?.select) selected = ctx.arg.select;
     pcSel = null;
-    const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { selected = info.id; pcSel = null; paint(); } else if (info.kind === 'pricecheck') { pcSel = info; map.select(''); paint(); } } });
+    const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { selected = info.code; pcSel = null; paint(); } else if (info.kind === 'pricecheck') { pcSel = info; map.select(''); paint(); } } });
     bindMapChrome(root, map);
     if (ctx.arg?.select) { map.select(selected); map.zoomTo(selected); }
     // From the phone's Departments picker: one department, or 'all' to clear.
@@ -72,7 +74,7 @@ export default {
     paint();
     root.addEventListener('click', e => {
       if (e.target.closest('[data-act="clear"]')) { selected = null; pcSel = null; map.select(''); paint(); }
-      if (e.target.closest('[data-act="pc-goto"]') && pcSel?.location) { const gs = map.groups(pcSel.location); if (gs.length) { selected = gs[0].getAttribute('data-shelf'); pcSel = null; map.select(selected); map.highlight(gs); map.zoomTo(selected); paint(); } else toast(`${pcSel.location} is not on this map`, 'bad'); }
+      if (e.target.closest('[data-act="pc-goto"]') && pcSel?.location) { const gs = map.groups(pcSel.location); if (gs.length) { selected = canonCode(pcSel.location); pcSel = null; map.select(selected); map.highlight(gs); map.zoomTo(selected); paint(); } else toast(`${pcSel.location} is not on this map`, 'bad'); }
       const pa = e.target.closest('[data-act="pick-add"]'); if (pa) addToPickList(ctx, pa.dataset.shelf);
       const sh = e.target.closest('[data-act="share"]'); if (sh) { const id = sh.dataset.shelf, g = map.groups(id)[0]; openShare({ storeNo: ctx.storeNo, storeName: ctx.storeName, shelf: id, dept: g ? map.shelfInfo(g).dept : '' }); }
     });

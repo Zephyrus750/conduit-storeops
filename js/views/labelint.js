@@ -2,7 +2,7 @@
 // shelf assignment and variance capture. Reads store.get('labels').
 
 import { $, $$, ic, esc, vh, sub, prog, dep, DEPT_COLOUR, cycleId, daysLeftInCycle, fmtDate, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
 import { SUBS, MICRO, microId, microCode, microName, microCount } from '../data/micros.js';
 import { printSheet, table, signoff } from '../print.js';
 
@@ -15,6 +15,12 @@ function model(ctx) {
   const total = microCount(), done = Object.keys(checks).length;
   return { L, cycle, checks, variances, total, done, daysLeft: daysLeftInCycle(L.cycleLen) };
 }
+// Assignments are per shelf ("A16 S2"). Older ones name a whole run
+// ("A16"): they still mark and count every shelf of it, and the first edit
+// that touches one splits it into its shelves.
+let mapRef = null;
+const shelvesOf = key => mapRef ? [...new Set(mapRef.groups(key).map(segmentId))] : [key];
+const expand = list => [...new Set(list.flatMap(k => k.includes(' ') ? [k] : shelvesOf(k)))];
 function marksFor(m) {
   const out = {};
   const wrong = new Set(m.variances.map(v => v.micro));
@@ -23,7 +29,7 @@ function marksFor(m) {
     for (const s of m.L.assign[selected] || []) out[s] = 'focus';
     // Unassigned shelves in the selected micro's sub-department are the
     // likely ones: dashed, as ShelfSearcher's assignment workshop.
-    const sub = selected.split('-')[0], taken = new Set(Object.values(m.L.assign).flat());
+    const sub = selected.split('-')[0], taken = new Set(expand(Object.values(m.L.assign).flat()));
     for (const id of shelvesOfDept(sub)) if (!taken.has(id) && !out[id]) out[id] = 'cand';
   }
   return out;
@@ -52,30 +58,31 @@ export default {
     if (ctx.arg?.micro && ALL.includes(ctx.arg.micro) && selected !== ctx.arg.micro) { selected = ctx.arg.micro; openSub = selected.split('-')[0]; setTimeout(() => ctx.rerender(), 0); }
     const map = mountMap($('#mapstage', root), { cls: 'li', onSelect: info => {
       if (info.kind !== 'shelf' || !selected) return;
-      const m = model(ctx); const cur = m.L.assign[selected] || [];
-      const next = cur.includes(info.id) ? cur.filter(x => x !== info.id) : [...cur, info.id];
+      const m = model(ctx), cur = expand(m.L.assign[selected] || []), id = info.full;
+      const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
       ctx.store.dispatch({ type: 'label.assign', entity: { micro: selected }, payload: { shelves: next } }).catch(e => toast(e.message, 'bad'));
     } });
     bindMapChrome(root, map);
-    deptShelves = {}; for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(), id = g.getAttribute('data-shelf'); const l = (deptShelves[d] ||= []); if (!l.includes(id)) l.push(id); }
+    mapRef = map;
+    deptShelves = {}; for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(), id = segmentId(g); const l = (deptShelves[d] ||= []); if (!l.includes(id)) l.push(id); }
     // Drag-paint (mouse): with a micro selected, press on a shelf and drag
     // across others. The first shelf decides add or remove for the stroke;
     // one label.assign saves it on release. Touch keeps panning; a tap
     // assigns one shelf through onSelect.
     const stage = $('#mapstage', root); let stroke = null;
-    const shelfAt = (x, y) => document.elementFromPoint(x, y)?.closest?.('.shelf-group[data-shelf]')?.getAttribute('data-shelf') || null;
+    const shelfAt = (x, y) => { const g = document.elementFromPoint(x, y)?.closest?.('.shelf-group[data-shelf]'); return g?.getAttribute('data-shelf') ? segmentId(g) : null; };
     stage?.addEventListener('pointerdown', e => {
       if (!selected || e.pointerType !== 'mouse' || e.button !== 0) return;
       const id = shelfAt(e.clientX, e.clientY); if (!id) return;
       e.stopPropagation(); e.preventDefault();
-      const list = new Set(model(ctx).L.assign[selected] || []);
+      const list = new Set(expand(model(ctx).L.assign[selected] || []));
       stroke = { list, op: list.has(id) ? 'remove' : 'add', touched: new Set() };
       paintShelf(id);
     }, true);
     const paintShelf = id => {
       if (!stroke || stroke.touched.has(id)) return; stroke.touched.add(id);
       if (stroke.op === 'add') stroke.list.add(id); else stroke.list.delete(id);
-      map.mark(id, stroke.op === 'add' ? 'focus' : null);
+      map.markSegment(id, stroke.op === 'add' ? 'focus' : null);
     };
     stage?.addEventListener('pointermove', e => { if (!stroke) return; e.stopPropagation(); const id = shelfAt(e.clientX, e.clientY); if (id) paintShelf(id); }, true);
     const endStroke = async e => {
@@ -94,7 +101,7 @@ export default {
     // Carried from a shelf selected on the map: zoom to it and, when it is
     // assigned to a micro-department, open that one so its checks show.
     if (ctx.arg?.select && map.groups(ctx.arg.select).length) {
-      const sel = ctx.arg.select, micro = Object.entries(model(ctx).L.assign).find(([, sh]) => sh.includes(sel))?.[0];
+      const sel = ctx.arg.select, mods = shelvesOf(sel), micro = Object.entries(model(ctx).L.assign).find(([, sh]) => expand(sh).some(k => mods.includes(k)))?.[0];
       if (micro) { selected = micro; openSub = micro.split('-')[0]; paint(); }
       map.select(sel); map.zoomTo(sel);
     }
@@ -133,7 +140,7 @@ function sidebar(m) {
   let sel = '';
   if (selected) {
     const [subId, code] = selected.split('-'); const entry = (MICRO[subId] || []).find(x => microCode(x) === code) || code;
-    const c = m.checks[selected], vs = m.variances.filter(v => v.micro === selected), shelves = m.L.assign[selected] || [];
+    const c = m.checks[selected], vs = m.variances.filter(v => v.micro === selected), shelves = expand(m.L.assign[selected] || []);
     const i = ALL.indexOf(selected), withShelves = SUBS.filter(sd => sd[0] === subId).flatMap(sd => MICRO[sd[0]] || []).filter(x => (m.L.assign[microId(subId, x)] || []).length).length;
     sel = `<div class="pcard lisel"><div class="li-ws"><button class="btn sm" data-act="step" data-d="-1"${i <= 0 ? ' disabled' : ''}>‹ Prev</button><span>${i + 1} / ${ALL.length}</span><button class="btn sm" data-act="step" data-d="1"${i >= ALL.length - 1 ? ' disabled' : ''}>Next ›</button></div><div class="pt3">Assigning · ${esc(microName(entry))}</div><p class="lbl">Click or drag-paint shelves on the map. Dashed shelves are unassigned ${esc(subId.toUpperCase())} candidates. <b>${shelves.length}</b> assigned · ${withShelves}/${(MICRO[subId] || []).length} micros in ${esc(subId.toUpperCase())} have shelving.</p><div class="lisel-h"><span class="lisel-code">${esc(code)}</span><div><b>${esc(microName(entry))}</b><small>${subId.toUpperCase()} · ${shelves.length} shelves assigned${shelves.length ? ' · ' + shelves.join(', ') : ''}</small></div></div>` +
       `<div class="lisel-facts"><span><b>This cycle</b>${c ? 'Checked ' + fmtDate(c.at) : 'Not checked yet'}</span><span><b>Wrong labels</b>${vs.length ? vs.map(v => esc(v.keycode) + (v.note ? ' · ' + esc(v.note) : '')).join('<br>') : 'none logged'}</span></div>` +

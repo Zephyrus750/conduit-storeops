@@ -46,7 +46,7 @@ function backfillCard(ctx, r) {
   if (!hasArea(ctx.session, 'stockroom')) return lockedCard('Stockroom', 'box', 'bfreview');
   const subs = Object.values(ctx.store.get('backfill').subs).filter(x => inRange(x.date, r));
   const pend = subs.filter(x => x.status === 'pending').length, ready = subs.filter(x => x.status === 'corrected').length, done = subs.filter(x => x.status === 'submitted').length;
-  const reviewed = subs.filter(x => x.status !== 'pending'), acc = reviewed.length ? Math.round(reviewed.reduce((n, x) => n + (x.metrics?.accuracy || 0), 0) / reviewed.length) : null;
+  const reviewed = subs.filter(x => x.status !== 'pending'), scored = reviewed.filter(x => Number.isFinite(x.metrics?.accuracy)), acc = scored.length ? Math.round(scored.reduce((n, x) => n + x.metrics.accuracy, 0) / scored.length) : null;   // bays with no report are not scored
   const codes = subs.reduce((n, x) => n + Object.values(x.codes || {}).filter(c => c.scanned).length, 0);
   const accRow = ['Average accuracy', acc == null ? '—' : acc + '%', acc == null ? '' : acc >= 90 ? 'c-green' : acc >= 75 ? '' : 'c-red'];
   if (period === 'today') return kpi('hot', 'm-bfreview', 'Backfill review', 'bfreview', pend, `/ ${subs.length}`, 'Locations pending on today’s board', [accRow, ['Keycodes scanned', codes.toLocaleString()], ['Ready · submitted', `${ready} · ${done}`]], subs.length ? (ready + done) / subs.length * 100 : 0);
@@ -204,7 +204,7 @@ function dashTop(ctx) {
     const tabs = `<div class="tabs" id="ptabs">${PERIODS.map(([k, l]) => `<button class="${period === k ? 'on' : ''}" data-period="${k}">${l}</button>`).join('')}</div>`;
     return vh(`<span class="greet">${greeting()}</span><span id="dashTitle">How we’re tracking</span>`, '', tabs, 'm-dashboard') +
       `<div class="dash"><div class="kpis">${backfillCard(ctx, r)}${refreshCard(ctx, r)}${labelsCard(ctx, r)}</div><div class="side2">${dockCard(ctx, r)}${maintCard(ctx, r)}</div>` +
-      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>Operations register</h3></div><div class="hl">${reg.count} modules · <b style="color:var(--ink);font-weight:600">${reg.need} need attention</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">Modules</div>${reg.html}</div></div>` +
+      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>Operations register</h3></div><div class="hl">${reg.count} tools · <b style="color:var(--ink);font-weight:600">${reg.need} need attention</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">Modules</div>${reg.html}</div></div>` +
       `<div class="dash2">${todayAt(ctx)}${logistics(ctx)}</div>`;
 }
 

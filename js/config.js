@@ -6,7 +6,7 @@ export const WORKER_DEFAULT = 'https://conduit-staging.zephyrus-np750.workers.de
 // The full map editor stays its own owner tool (it is not part of the store
 // app); the console's "Map editor" buttons open it in a new tab. Set this to
 // where the editor is hosted, e.g. 'https://<editor site>/editor/editor.html'.
-export const MAP_EDITOR_URL = '';
+export const MAP_EDITOR_URL = 'editor/editor.html';   // the map editor ships with the app; owner only (it needs the owner session)
 
 export const WORKER_ALLOWED = [
   'https://conduit-staging.zephyrus-np750.workers.dev',

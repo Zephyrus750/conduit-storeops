@@ -15,10 +15,15 @@ const SOON_DAYS = 30;
 let selected = null, filterType = '', evac = null;   // evac: null | 'armed' | { r, floor }
 
 function state(rec) { if (!rec?.due) return 'none'; const d = (new Date(rec.due) - Date.now()) / 86400000; return d < 0 ? 'overdue' : d <= SOON_DAYS ? 'soon' : 'ok'; }
+// The old key a marker's history may sit under (see the asset reducers).
+const fromKey = (map, id) => { const mk = map.markers().find(x => x.id === id); return mk && mk.legacyId !== mk.id ? { from: mk.legacyId } : {}; };
 function model(ctx, map) {
   const assets = ctx.store.get('assets');
   const markers = map ? map.markers() : [];
-  const rows = markers.map(mk => ({ ...mk, rec: assets[mk.id] || null, st: state(assets[mk.id]) }));
+  // A marker's record is under its editor id; one serviced before markers
+  // had ids is still under its old type-and-position key until next used.
+  const recOf = mk => assets[mk.id] || assets[mk.legacyId] || null;
+  const rows = markers.map(mk => ({ ...mk, rec: recOf(mk), st: state(recOf(mk)) }));
   const due = rows.filter(r => r.st === 'overdue' || r.st === 'soon').sort((a, b) => (a.rec.due < b.rec.due ? -1 : 1));
   const counts = {}; for (const r of rows) counts[r.type] = (counts[r.type] || 0) + 1;
   return { rows, due, counts, markers };
@@ -67,8 +72,8 @@ export default {
         if (act === 'select') { selected = a.getAttribute('data-id'); const r = map.markers().find(x => x.id === selected); if (r) map.setVb([r.x - 600, r.y - 400, 1200, 800]); paint(); }
         else if (act === 'close') { selected = null; paint(); }
         else if (act === 'filter') { filterType = a.getAttribute('data-type'); paint(); }
-        else if (act === 'service') { if (!selected) return toast('Tap a marker on the map first'); const note = prompt('Technician / docket #', '') ?? ''; await ctx.store.dispatch({ type: 'asset.service', entity: { asset: selected }, payload: { note } }); toast('Service logged'); }
-        else if (act === 'schedule') { const cur = ctx.store.get('assets')[selected]?.intMonths || 12; const v = prompt('Service interval in months', String(cur)); const n = Number(v); if (!v || !Number.isInteger(n)) return; await ctx.store.dispatch({ type: 'asset.schedule', entity: { asset: selected }, payload: { months: n } }); }
+        else if (act === 'service') { if (!selected) return toast('Tap a marker on the map first'); const note = prompt('Technician / docket #', ''); if (note == null) return; await ctx.store.dispatch({ type: 'asset.service', entity: { asset: selected }, payload: { note, ...fromKey(map, selected) } }); toast('Service logged'); }
+        else if (act === 'schedule') { const mk = map.markers().find(x => x.id === selected), cur = (ctx.store.get('assets')[selected] || ctx.store.get('assets')[mk?.legacyId])?.intMonths || 12; const v = prompt('Service interval in months', String(cur)); const n = Number(v); if (!v || !Number.isInteger(n)) return; await ctx.store.dispatch({ type: 'asset.schedule', entity: { asset: selected }, payload: { months: n, ...fromKey(map, selected) } }); }
       } catch (err) { toast(err.message, 'bad'); }
     });
     return [ctx.store.on('assets', paint)];

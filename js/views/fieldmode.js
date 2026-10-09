@@ -1,5 +1,5 @@
 // Field Mode (ShelfSearcher's field-mode, Floor P2): walk the floor with a
-// phone and record each shelf module's location code and a comment, to
+// phone and record each shelf's location code and a comment, to
 // bring back into the map editor. Tap a shelf (or Save & next), scan or type
 // its label, save. Captures stay on this device until exported as a file;
 // they are notes for the map editor, not store records, so no event is sent.
@@ -19,7 +19,7 @@ const panel = (ctx, map) => {
   const caps = read(ctx.storeNo), segs = map ? map.segments().filter(g => g.closest('.mfl')?.getAttribute('data-fid') === map.floorId()) : [];
   const ids = [...new Set(segs.map(segmentId))], done = ids.filter(id => caps[id]).length, all = Object.keys(caps).length;
   const pct = ids.length ? Math.round(done / ids.length * 100) : 0, c = sel ? caps[sel] : null;
-  const head = `<div class="fm-prog"><b>${done} of ${ids.length}</b> modules on this floor · ${all} captured in all<div class="track"><i style="width:${pct}%"></i></div></div>`;
+  const head = `<div class="fm-prog"><b>${done} of ${ids.length}</b> shelves on this floor · ${all} captured in all<div class="track"><i style="width:${pct}%"></i></div></div>`;
   const form = sel ? `<form class="fm-form" data-form="fm"><div class="fm-id">${ic('m-map')}<b>${esc(sel)}</b>${c ? `<span class="status good">Captured</span>` : ''}</div>` +
     `<label>Location code</label><div class="mv-field"><input data-field="fmcode" name="code" value="${esc(c?.code || '')}" autocomplete="off" autocapitalize="characters" placeholder="Scan or type the shelf label" enterkeyhint="next"><button type="button" class="mv-cam" data-camera="fmcode" aria-label="Scan with the camera">${ic('camera')}</button></div>` +
     `<label>Comment</label><textarea name="comment" rows="2" maxlength="300" placeholder="Anything the editor should know">${esc(c?.comment || '')}</textarea>` +
@@ -55,8 +55,8 @@ export default {
     const nextOpen = () => {
       const caps = read(ctx.storeNo), ids = [...new Set(map.segments().filter(g => g.closest('.mfl')?.getAttribute('data-fid') === map.floorId()).map(segmentId))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       const from = sel ? ids.indexOf(sel) : -1, next = [...ids.slice(from + 1), ...ids.slice(0, from + 1)].find(id => !caps[id]);
-      if (!next) { toast('Every module on this floor is captured', 'good'); sel = null; return paint(); }
-      sel = next; const g = map.segments().find(x => segmentId(x) === next); if (g) map.zoomTo(g.getAttribute('data-shelf'), 400);
+      if (!next) { toast('Every shelf on this floor is captured', 'good'); sel = null; return paint(); }
+      sel = next; const g = map.segments().find(x => segmentId(x) === next); if (g) map.zoomTo(next, 400);
       paint(true);
     };
     root.addEventListener('submit', e => {
@@ -64,7 +64,7 @@ export default {
       const fd = new FormData(f), code = String(fd.get('code') || '').trim().toUpperCase(), comment = String(fd.get('comment') || '').trim();
       if (!code && !comment) return toast('Scan or type the location code first', 'bad');
       const caps = read(ctx.storeNo), [shelf, ...rest] = sel.split(' ');
-      caps[sel] = { shelf, sub: rest.join(' '), code: code.slice(0, 40), comment: comment.slice(0, 300), at: new Date().toISOString(), ...(code && canonCode(code) !== canonCode(sel) ? { differs: true } : {}) };
+      caps[sel] = { shelf, sub: rest.join(' '), floor: map.floorId() || null, code: code.slice(0, 40), comment: comment.slice(0, 300), at: new Date().toISOString(), ...(code && canonCode(code) !== canonCode(sel) ? { differs: true } : {}) };
       if (!write(ctx.storeNo, caps)) return;
       haptic('success');
       if (e.submitter?.dataset.save === 'next') nextOpen(); else paint();

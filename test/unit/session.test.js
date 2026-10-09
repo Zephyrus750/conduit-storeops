@@ -35,3 +35,29 @@ test('session: a second store parks the first; switching swaps; codes drop when 
   // 1241's refresh token is the one its lock minted; both stores sign out.
   assert.deepEqual(transport.calls.filter(c => c[0] === '/v1/auth/signout').map(c => c[1].refresh).sort(), ['r2033', 'rl']);
 });
+
+test('session: a refresh that fails for a passing reason keeps the session; only a dead session signs out; another tab\'s refresh is adopted', async () => {
+  const { TransportError } = await import('../../client/transport.js');
+  let answer = null; const now = () => 1_000_000;
+  const transport = { async request(path, { body } = {}) {
+    if (path === '/v1/auth/signin') return { token: 't1', refresh: 'r1', expires: now() / 1000 + 60, store: body.store, name: 'S', roles: ['floor'], caps: [] };
+    if (path === '/v1/auth/refresh') { if (answer instanceof Error) throw answer; return answer; }
+    return {};
+  } };
+  const storage = memoryStorage(), s = createSession({ transport, storage, now });
+  await s.load(); await s.signIn({ store: '1241', pin: '111111' });
+  let out = 0; s.on('signin-required', () => { out += 1; });
+  // A 503 or a 429 from the registry: the device keeps its (still valid) token.
+  answer = new TransportError(503, 'unavailable', 'registry busy');
+  assert.equal(await s.token(), 't1'); assert.equal(out, 0); assert.ok(s.current);
+  answer = new TransportError(429, 'rate_limited', 'slow down');
+  assert.equal(await s.token(), 't1'); assert.equal(out, 0);
+  // Another tab refreshed first and saved its new session: a 401 for the spent token adopts it.
+  await storage.set('suite_session', { ...s.current, token: 't2', refresh: 'r2', expires: now() / 1000 + 3600 });
+  answer = new TransportError(401, 'unauthorised', 'refresh token is not valid');
+  assert.equal(await s.token(), 't2'); assert.equal(out, 0);
+  // A revoked session with nothing newer stored signs out.
+  await storage.set('suite_session', { ...s.current, expires: now() / 1000 + 60 });
+  await assert.rejects(s.refresh(), /not valid/);
+  assert.equal(s.current, null); assert.equal(out, 1);
+});

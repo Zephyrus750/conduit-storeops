@@ -5,13 +5,13 @@
 // set-up alerts: what is missing before the store can use what it is
 // entitled to. Pure: the store object serves it, tests build state by hand.
 //
-//   storeKpis(state, { today, caps, now }) → { backfill, dock, floor, devices, alerts: [{ level, text }] }
+//   storeKpis(state, { today, caps, now, bytes }) → { backfill, dock, floor, devices, alerts: [{ level, text }], bytes }
 
 import { addDays } from './time.js';
 import { settingsOf } from './reducers/store.js';
 
 const DAY = 86400000;
-export function storeKpis(state, { today, caps = [], now = Date.now() } = {}) {
+export function storeKpis(state, { today, caps = [], now = Date.now(), bytes = 0 } = {}) {
   const has = a => caps.includes(a), alerts = [], warn = (level, text) => alerts.push({ level, text });
   const yesterday = addDays(today, -1), weekFrom = addDays(today, -6);
   const subs = Object.values(state.backfill?.subs || {});
@@ -47,6 +47,8 @@ export function storeKpis(state, { today, caps = [], now = Date.now() } = {}) {
   else if (!recent.length) warn('warn', 'No device seen in the last 24 hours.');
   if (devices.errors.length) warn('warn', `${devices.errors.length} device${devices.errors.length === 1 ? '' : 's'} reporting an error.`);
   if (devices.outbox > 0) warn('warn', `${devices.outbox} change${devices.outbox === 1 ? '' : 's'} waiting in device outboxes.`);
+  // The live state is one 2 MB row; retention keeps it small. Over 1.2 MB, say so.
+  if (bytes > 1_200_000) warn(bytes > 1_700_000 ? 'bad' : 'warn', `The store's live data is ${(bytes / 1e6).toFixed(1)} MB of the 2 MB a store can hold.`);
   if (backfill?.autoClosed) warn('info', `${backfill.autoClosed} bay${backfill.autoClosed === 1 ? '' : 's'} auto-closed at yesterday's rollover.`);
-  return { backfill, dock, floor, devices, alerts };
+  return { backfill, dock, floor, devices, alerts, bytes };
 }

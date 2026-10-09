@@ -118,8 +118,9 @@ export function daysLeftInCycle(len = 'monthly', d = new Date()) {
 }
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-export function fmtTime(iso) { if (!iso) return ''; const d = new Date(iso); return `${DAYS[d.getDay()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
-export function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; }
+// A weekday names the last six days only; anything older carries its date.
+export function fmtTime(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; return Math.abs(Date.now() - d) < 6 * 86400000 ? `${DAYS[d.getDay()]} ${hm}` : `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''} ${hm}`; }
+export function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso); if (isNaN(d)) return ''; return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''}`; }
 export function fmtLong(d = new Date()) { return `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()]} ${d.getDate()} ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][d.getMonth()]} ${d.getFullYear()}`; }
 export function ago(iso) { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return 'just now'; if (m < 60) return `${m} min ago`; const h = Math.round(m / 60); if (h < 24) return `${h} h ago`; return `${Math.round(h / 24)}d ago`; }
 export function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning!' : h < 17 ? 'Good afternoon!' : 'Good evening!'; }

@@ -8,7 +8,7 @@
 // or any write clears the relevant cache.
 
 import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName, DEPTS_DEFAULT } from '../ui.js';
-import { parseMapFile, renderMap } from '../../shared/maprender.js';
+import { parseMapFile, renderMap, publishBody } from '../../shared/maprender.js';
 import { mountMap, bindMapChrome } from '../map.js';
 import { MAP_EDITOR_URL } from '../config.js';
 import { TOOLS } from '../../shared/tools.js';
@@ -188,7 +188,7 @@ const storeView = {
 };
 
 // Shelves per department in a published map, grouped as the store's
-// department list groups them. Counts are shelf groups (modules), the same
+// department list groups them. Counts are shelves (A16 S2, not runs), the same
 // number the floor rows show.
 function deptShelving(doc, info) {
   const depts = (info?.departments?.length ? info.departments : doc.departments) || [];
@@ -320,7 +320,7 @@ function editsCard(edits) {
 const editorBtn = (cls = '') => `<button class="btn${cls ? ' ' + cls : ''}" data-act="open-editor" title="Open the full map editor in a new tab">${ic('edit')}Map editor</button>`;
 function openEditor() {
   if (!MAP_EDITOR_URL) return toast('Set MAP_EDITOR_URL in js/config.js to where the map editor is hosted', 'bad');
-  window.open(MAP_EDITOR_URL, '_blank', 'noopener');
+  window.open(MAP_EDITOR_URL + (st.no ? `?store=${encodeURIComponent(st.no)}` : ''), '_blank', 'noopener');   // opens on this store
 }
 const bump = v => { const m = String(v).match(/^(.*?)(\d+)$/); return m ? m[1] + (Number(m[2]) + 1) : v + '.1'; };
 // A chosen map file: an editor export is parsed and rendered here in the
@@ -333,7 +333,7 @@ async function mapFileChosen(inp) {
     if (parsed.kind === 'svg') { if (lbl) lbl.textContent = `${f.name} · ${(f.size / 1024).toFixed(0)} KB · rendered SVG`; return; }
     const doc = renderMap(parsed.data); doc.floors = doc.floors.filter(fl => fl.shelves || fl.markers || /landmark-group/.test(fl.svg));
     if (!doc.floors.length) throw new Error('no floor in the file has any shelves');
-    if (inp.dataset.floor === 'ground') st.pubDoc = doc;
+    if (inp.dataset.floor === 'ground') { st.pubDoc = doc; st.pubData = parsed.data; }
     if (lbl) lbl.textContent = `${f.name} · ${doc.store ? doc.store + ' ' : ''}${doc.name} · editor v${doc.editorVersion} · ${doc.floors.map(fl => `${fl.name} ${fl.shelves} shelves`).join(', ')}`;
     const nameIn = inp.form?.querySelector('[name="name"]'); if (nameIn && !nameIn.value && doc.name) nameIn.value = doc.name;
   } catch (e) { if (lbl) lbl.textContent = `Cannot read ${f.name}: ${e.message}`; inp.value = ''; }
@@ -342,7 +342,8 @@ async function publishMap(ctx, form) {
   const err = $('#pubErr', form), btn = form.querySelector('[type="submit"]');
   const version = form.version.value.trim(), name = form.name.value.trim();
   let floors = [], departments;
-  if (st.pubDoc) { floors = st.pubDoc.floors.map(f => ({ id: f.id, name: f.name, type: f.type, svg: f.svg, ...(f.paths ? { paths: f.paths } : {}) })); departments = st.pubDoc.departments; }
+  let body = null;
+  if (st.pubDoc) { body = publishBody(st.pubData, { version, name }); floors = body.floors; }
   else for (const inp of form.querySelectorAll('input[type="file"][data-floor]')) {
     const f = inp.files?.[0]; if (!f) continue;
     const svg = await f.text();
@@ -352,10 +353,9 @@ async function publishMap(ctx, form) {
   if (!floors.length) { err.textContent = 'Choose the map file: the editor\'s .js or .json export, or the ground floor SVG.'; return; }
   st.pubVersion = version; btn.disabled = true; err.textContent = '';
   try {
-    const extra = st.pubDoc ? { ...(st.pubDoc.storeInfo ? { storeInfo: st.pubDoc.storeInfo } : {}), ...(st.pubDoc.metresPerUnit ? { metresPerUnit: st.pubDoc.metresPerUnit } : {}) } : {};
-    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: { version, name, floors, departments, ...extra } });
-    st.pubDoc = null;
-    toast(`Map ${r.version} published · ${r.floors.map(f => `${f.id} ${f.shelves} shelves`).join(', ')}`);
+    const r = await ctx.admin.api(`/v1/store/${st.no}/map`, { method: 'POST', body: body || { version, name, floors, departments } });
+    st.pubDoc = null; st.pubData = null;
+    toast(`Map ${r.version} published · ${r.floors.map(f => `${f.id} ${f.shelves} shelves`).join(', ')}${r.stripped ? ` · ${r.stripped} unsafe item${r.stripped === 1 ? '' : 's'} removed from the drawing` : ''}`);
     st.pubVersion = null; st.actions = null; invalidate(st.no); await ctx.admin.refreshStores(); ctx.rerender();
   } catch (e) { btn.disabled = false; err.textContent = e.code === 'exists' ? `Version ${version} is already published. Use a new version.` : e.message; }
 }

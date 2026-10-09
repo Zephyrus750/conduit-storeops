@@ -3,7 +3,7 @@
 
 import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
 import { focusDone } from '../../shared/reducers/floor.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
 import { openScanner } from '../scan.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
@@ -86,18 +86,21 @@ function applyPlan(map, plan, marks, planMode) {
     }
   }
 }
-// The mark keys that cover a tapped module: its own ("A8 S2"), the same
-// code written another way ("A8S2"), or the whole shelf ("A8") as a device
-// on an older map without modules would have marked it.
+// The mark keys that cover a tapped shelf: its own ("A8 S2"), the same
+// code written another way ("A8S2"), or the whole run ("A8") as a device
+// on an older map without shelf suffixes would have marked it.
 function markKeysFor(marks, info) {
   const full = canonCode(info.full), shelf = canonCode(info.id);
   return Object.keys(marks).filter(k => { const c = canonCode(k); return c === full || c === shelf; });
 }
-async function tap(ctx, info) {
+// A tap toggles; a scan only marks (a shelf already done says so), so a
+// second read of the same label, or a wedge double-read, never unmarks it.
+async function tap(ctx, info, { scanned = false } = {}) {
   const m = model(ctx);
   try {
     if (mode === 'plan') { const cur = m.plan[info.full]; await ctx.store.dispatch({ type: 'refresh.plan.paint', entity: { segment: info.full }, payload: { colour: planColour === 'erase' || cur === planColour ? 'erase' : planColour } }); return; }
     const covered = markKeysFor(m.marks, info);
+    if (covered.length && scanned) return toast(`${info.full} is already done this week`);
     if (covered.length) {
       for (const seg of covered) await ctx.store.dispatch({ type: 'refresh.unmark', entity: { segment: seg, week: m.week } });
       toast(`${info.full} unmarked`, '', { label: 'Undo', run: () => ctx.store.dispatch({ type: 'refresh.mark', entity: { segment: info.full, week: m.week }, payload: { dept: info.dept } }).catch(e => toast(e.message, 'bad')) });
@@ -144,19 +147,19 @@ export default {
     // Carried from a shelf selected on the map: zoom to it and ring it. No
     // mark: a tap here toggles the refresh, so arriving only brings it into view.
     if (ctx.arg?.select) { const code = canonCode(ctx.arg.select); if (map.groups(code).length) { map.select(code); map.zoomTo(code); } }
-    bindShelfScan(root, map, info => tap(ctx, info));
+    bindShelfScan(root, map, info => tap(ctx, info, { scanned: true }));
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act'), m = model(ctx);
       try {
         if (act === 'mode') { mode = a.getAttribute('data-mode'); paint(); }
         // Walk the aisle scanning shelf labels: each read marks that shelf
-        // module refreshed (or unmarks it, as a tap would). "A013S02" and
-        // "A13 S2" name one module (groupsFor).
+        // refreshed (one already done says so). "A013S02" and "A13 S2" name
+        // one shelf (groupsFor); a run's name asks for the shelf's label.
         else if (act === 'scan-shelf') openScanner({ title: 'Scan shelf labels', hint: 'Each label marks its shelf refreshed', continuous: true, onCode: code => {
-          const g = groupsFor(map.svg, code)[0];
-          if (!g) return toast(`${code} is not a shelf on this map`, 'bad');
-          tap(ctx, map.shelfInfo(g));
+          const { g, error } = oneShelf(map.svg, code);
+          if (!g) return toast(error, 'bad');
+          tap(ctx, map.shelfInfo(g), { scanned: true });
         } });
         else if (act === 'chart') { chartMode = a.dataset.v; try { localStorage.setItem(CHART_KEY, chartMode); } catch {} paint(); }
         else if (act === 'open-dept') { openDept = a.dataset.dept || null; paint(); }
@@ -182,7 +185,7 @@ function sidebar(map, m) {
   return `<div class="pcard"><div class="rfcount">${ic('asterisk')}<div class="n">${m.counted}<small> / ${TARGET}</small></div><div class="fx">Focus this week<div class="chips">${fc.map(f => `<span class="chip" data-act="zoom-dept" data-dept="${f.d}"><span class="sw" style="background:${DEPT_COLOUR[f.d]}"></span>${f.d.toUpperCase()} ${f.done}/${f.total}</span>`).join('')}<span class="chip" style="color:var(--accent-ink)" data-act="mode" data-mode="focus">Choose…</span></div></div></div>${prog(m.done / TARGET * 100)}${shelfScanField('Scan or type a shelf label to mark it')}` +
     (mode === 'focus' ? `<div class="chips" style="margin-top:10px">${FOCUS_DEPTS.map(d => `<span class="chip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}"><span class="sw" style="background:${DEPT_COLOUR[d]}"></span>${d.toUpperCase()}</span>`).join('')}<span class="chip" data-act="mode" data-mode="refresh">Done</span></div>` : '') + `</div>` +
     `<div class="pcard"><div class="pt3">This week’s scanning</div><div class="rfchart">${dayBars(m)}</div></div>` +
-    `<div class="pcard"><div class="pt3">Refreshed this week<span style="margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none">${m.done} segments</span></div>${groupsHtml(map, m)}</div>` +
+    `<div class="pcard"><div class="pt3">Refreshed this week<span style="margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none">${m.done} shel${m.done === 1 ? 'f' : 'ves'}</span></div>${groupsHtml(map, m)}</div>` +
     `<div class="pcard"><div class="plan"><span class="pt3" style="margin:0">Plan</span><span class="sw2${mode === 'plan' ? ' on' : ''}" data-act="mode" data-mode="${mode === 'plan' ? 'refresh' : 'plan'}"></span></div><div class="pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c && mode === 'plan' ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<span class="er${planColour === 'erase' && mode === 'plan' ? ' on' : ''}" data-act="colour" data-colour="erase">${ic('x')}</span></div><div class="lbl">${mode === 'plan' ? 'Plan mode: tap shelves to paint them for the team. Same colour again clears.' : 'Pick a colour, then tap shelves to mark them.'}</div></div>` +
     `<div class="pfoot"><button class="btn" data-act="reset-plan">${ic('refresh')}Reset planning</button></div>`;
 }
@@ -212,7 +215,7 @@ function groupsHtml(map, m) {
 // A located segment rings orange for three seconds, as ShelfSearcher's flash.
 function flashSeg(map, seg) {
   const gs = map.segments().filter(g => segmentId(g) === seg); if (!gs.length) return false;
-  const shelf = gs[0].getAttribute('data-shelf'); map.zoomTo(shelf, 500);
+  map.zoomTo(seg, 500);   // the shelf, not its run
   for (const g of gs) g.setAttribute('data-flash', '1');
   setTimeout(() => { for (const g of gs) g.removeAttribute('data-flash'); }, 3000);
   return true;

@@ -2,7 +2,7 @@
 // completed, reopen as recurring. Reads store.get('issues').
 
 import { $, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
 import { ISSUE_CATS } from '../../shared/reducers/floor.js';
 
 const SEV = [['Low', '#6B7280'], ['Medium', '#D97706'], ['High', '#DC2626'], ['Urgent', '#7F1D1D']];
@@ -98,7 +98,7 @@ export default {
           readDraft(root);
           const p = info.point || map.centreOf(info.id); draft.x = Math.round(p[0] * 10) / 10; draft.y = Math.round(p[1] * 10) / 10; draft.floor = map.floorId() || null;
           // A tap on bare floor still names the nearest shelf on this floor.
-          const near = info.kind === 'shelf' ? { id: info.id, dept: info.dept } : nearestShelf(map, p);
+          const near = info.kind === 'shelf' ? { id: info.full, dept: info.dept } : nearestShelf(map, p);
           if (near && (!draft.loc || /^near /.test(draft.loc))) { draft.loc = 'near ' + near.id; draft.dept = near.dept; }
           paint();
         }
@@ -218,7 +218,7 @@ function nearestShelf(map, p) {
     if (g.closest('.mfl')?.getAttribute('data-fid') !== map.floorId()) continue;
     const r = g.querySelector('.shelf'); if (!r) continue;
     const b = r.getBBox(), d = (b.x + b.width / 2 - p[0]) ** 2 + (b.y + b.height / 2 - p[1]) ** 2;
-    if (!best || d < best.d) best = { d, id: g.getAttribute('data-shelf'), dept: (g.getAttribute('data-dept') || '').toLowerCase() };
+    if (!best || d < best.d) best = { d, id: segmentId(g), dept: (g.getAttribute('data-dept') || '').toLowerCase() };   // the shelf, "A16 S2"
   }
   return best;
 }

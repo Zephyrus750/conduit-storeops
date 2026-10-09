@@ -7,6 +7,7 @@
 
 import { reject } from './util.js';
 import { DEFAULT_TZ } from '../time.js';
+import { retain } from '../retain.js';
 import { TOOL_IDS } from '../tools.js';
 
 // Store settings: null means "the default", so a store that never set one
@@ -71,6 +72,7 @@ export function storeState() {
     mapedits: {},                      // id → suggestion (see map.edit.suggest)
     feedback: [],                      // newest last, capped (see feedback.send)
     tools: { off: [], at: null },      // tools the owner switched off (see store.tools.set)
+    retention: null,                   // the last nightly store.retain: { day, at, done }
   };
 }
 
@@ -134,6 +136,15 @@ export const storeReducers = {
   // refused so the log only holds changes.
   // The tools the owner switched off for this store (shared/tools.js). Only
   // the owner: the worker logs it from the console's Access tab.
+  // Nightly retention (decision 29), logged by the worker at store midnight
+  // with the store day: every device trims the same way (shared/retain.js).
+  'store.retain'(s, e) {
+    const day = String(e.payload.day || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return reject('invalid_event', 'day must be YYYY-MM-DD');
+    const done = retain(s, day);
+    s.retention = { day, at: e.at, done };
+    return null;
+  },
   'store.tools.set'(s, e) {
     if (!e.actor?.owner) return reject('unauthorised', 'only the owner switches tools on and off');
     const off = Array.isArray(e.payload.off) ? [...new Set(e.payload.off.map(String))] : null;

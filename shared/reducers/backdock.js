@@ -31,6 +31,7 @@
 
 import { reject } from './util.js';
 import { settingsOf } from './store.js';
+import { storeDay, DEFAULT_TZ } from '../time.js';
 
 export const PTYPES = ['chep', 'loscam', 'bulk'];
 export const PALLET_STATUS = ['landed', 'assigned', 'active', 'paused', 'done'];
@@ -55,6 +56,19 @@ export function backdockState() {
     dock: { trucks: {}, history: [], manifests: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' }, rollover: null, roster: null, ledger: {} },
     plan: { days: {} },
   };
+}
+
+// A manifest number as the dock writes it (the last digits of the report's
+// number, or the file's): letters, digits and dashes.
+const MAN_NO = /^[\w-]{1,20}$/;
+// A planner slot's manifest: the same shape manifest.attach takes, checked
+// the same way, since a truck made from the slot carries it.
+function slotManifest(m) {
+  if (m === null) return null;
+  if (!m || typeof m !== 'object' || !MAN_NO.test(String(m.manNo ?? ''))) return reject('invalid_event', 'a slot manifest needs a manifest number (letters, digits and dashes)');
+  const consols = Array.isArray(m.consols) ? m.consols : [];
+  if (consols.length > 500) return reject('invalid_event', 'a manifest holds at most 500 consolidations');
+  return { ...m, manNo: String(m.manNo), consols };
 }
 
 export const backdockReducers = {
@@ -238,9 +252,11 @@ export const backdockReducers = {
       if (!c || typeof c !== 'object') return reject('invalid_event', 'consols must be objects');
       const cons = String(c.cons ?? c.id ?? '');
       if (!/^\d{9,22}$/.test(cons)) return reject('invalid_event', 'consolidation numbers must be 9 to 22 digits');
-      consols.push({ id: cons.slice(-9), cons, cartons: Number(c.cartons) || 0, dept: c.dept || '', mix: Array.isArray(c.mix) ? c.mix : [], desc: c.desc || '', items: Array.isArray(c.items) ? c.items.slice(0, 250) : [] });
+      consols.push({ id: cons.slice(-9), cons, cartons: Math.max(0, Math.min(9999, Number(c.cartons) || 0)), dept: String(c.dept || '').slice(0, 12), mix: Array.isArray(c.mix) ? c.mix.slice(0, 20) : [], desc: String(c.desc || '').slice(0, 60), items: Array.isArray(c.items) ? c.items.slice(0, 250) : [] });
     }
-    t.manifest = { manNo: String(p.manNo), dcNo: p.dcNo || '', despatch: p.despatch || '', consols, attachedAt: e.at, by: e.actor?.device || null };
+    if (!MAN_NO.test(String(p.manNo ?? ''))) return reject('invalid_event', 'the manifest number is letters, digits and dashes (up to 20)');
+    if (consols.length > 500) return reject('invalid_event', 'a manifest holds at most 500 consolidations');
+    t.manifest = { manNo: String(p.manNo), dcNo: String(p.dcNo || '').slice(0, 20), despatch: String(p.despatch || '').slice(0, 20), consols, attachedAt: e.at, by: e.actor?.device || null };
     rematchScans(t);
     // The ledger: each consol is manifested to this truck; one already seen
     // on an earlier truck is marked as landed earlier.
@@ -262,10 +278,11 @@ export const backdockReducers = {
     const links = e.payload.links; if (links.length > 80) return reject('invalid_event', 'at most 80 links at once');
     const ids = new Set(t.manifest.consols.map(c => c.id)), byId = new Map(t.manifest.consols.map(c => [c.id, c])), day = e.entity.truck.slice(0, 10);
     const taken = new Map(); for (const pal of Object.values(t.pallets)) for (const id of pal.consolIds) taken.set(id, pal.ref);
+    // Every link is checked before any is applied: a refused batch changes nothing.
+    if (links.some(l => !['scan', 'cartons', 'time', 'manual'].includes(l?.basis))) return reject('invalid_event', 'basis must be scan, cartons, time or manual');
     let linked = 0;
     for (const l of links) {
       const pal = t.pallets[String(l?.bay || '').toUpperCase()]; if (!pal || pal.carriedFrom) continue;
-      if (!['scan', 'cartons', 'time', 'manual'].includes(l.basis)) return reject('invalid_event', 'basis must be scan, cartons, time or manual');
       const want = uniq(l.consolIds).filter(id => ids.has(id) && (!taken.has(id) || taken.get(id) === pal.ref)).slice(0, 8); if (!want.length) continue;
       pal.consolIds = want; pal.linkBasis = l.basis; pal.linkedLateAt = e.at; pal.scanIds = pal.scanIds.filter(x => !want.includes(x));
       for (const id of want) { taken.set(id, pal.ref); ledgerAdd(s, id, { t: e.entity.truck, d: day, k: 'land', ref: pal.ref }, e.at); }
@@ -301,8 +318,9 @@ export const backdockReducers = {
   'pallet.update'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     const u = e.payload, rate = s.dock.trucks[e.entity.truck].minsPerCarton;
-    if (u.ptype !== undefined) { if (!PTYPES.includes(u.ptype)) return reject('invalid_event', 'bad ptype'); p.ptype = u.ptype; }
+    if (u.ptype !== undefined && !PTYPES.includes(u.ptype)) return reject('invalid_event', 'bad ptype');
     if (u.cartons !== undefined && badCartons(u.cartons)) return reject('invalid_event', `cartons must be 1 to ${MAX_CARTONS}`);
+    if (u.ptype !== undefined) p.ptype = u.ptype;
     if (u.cartons !== undefined) { p.cartons = Number.isFinite(u.cartons) ? Math.max(0, Math.round(u.cartons)) : null; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons, rate); }
     if (u.expectedMins !== undefined) { if (u.expectedMins === null) { p.expectedBasis = 'auto'; p.expectedMins = autoMins(p.cartons, rate); } else { p.expectedMins = Math.max(1, Math.round(u.expectedMins)); p.expectedBasis = 'manual'; } }
     if (u.note !== undefined) p.note = String(u.note || '').slice(0, 120);
@@ -325,8 +343,13 @@ export const backdockReducers = {
   },
   'pallet.start'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
-    if (p.status === 'done' || p.status === 'active') return null;
     const pid = dnumId(e.payload.pid); if (!pid) return reject('invalid_event', 'the worker is a D-number (D1, D2…)');
+    // Starting a pallet someone is already on is refused, not ignored (DV
+    // said "already running"): a silent no-op left the device showing the
+    // start and offering an Undo that would pop the other person's time.
+    // The same person starting twice (a double tap, a replay) is a no-op.
+    if (p.status === 'done') return reject('pallet_done', `${p.ref} is already done`);
+    if (p.status === 'active') { const on = openSegs(p).map(x => x.pid); return on.includes(pid) ? null : reject('pallet_running', `${p.ref} is already being decanted${on.length ? ' by ' + on.join(', ') : ''}: join instead`); }
     const who = canWork(s.dock.trucks[e.entity.truck], p, pid); if (who) return who;
     p.status = 'active'; p.assignedTo = pid; p.segments.push({ pid, start: e.at, end: null });
     return null;
@@ -474,9 +497,8 @@ export const backdockReducers = {
     const t = truck(s, e); if (t.code) return t;
     const pid = dnumId(e.payload.pid);
     if (!pid || !t.team.some(m => m.pid === pid)) return reject('not_on_team', `${e.payload.pid} is not on this truck's team`);
-    t.breaks ||= [];
-    if (t.breaks.some(b => b.pid === pid && !b.end)) return reject('invalid_event', `${pid} is already on a break`);
-    t.breaks.push({ pid, start: e.at, end: null });
+    if ((t.breaks || []).some(b => b.pid === pid && !b.end)) return reject('invalid_event', `${pid} is already on a break`);
+    (t.breaks ||= []).push({ pid, start: e.at, end: null });
     return null;
   },
   'break.end'(s, e) {
@@ -501,19 +523,24 @@ export const backdockReducers = {
     if (p.eta != null && !/^\d{2}:\d{2}$/.test(p.eta)) return reject('invalid_event', 'eta must be HH:MM');
     const team = p.team === undefined ? undefined : teamOf(Array.isArray(p.team) ? p.team : []);
     if (team === null) return reject('invalid_event', 'team members are D-numbers (D1, D2…); names are not kept');
-    const day = (s.plan.days[e.entity.date] ||= { slots: {} });
-    const cur = day.slots[slot] || { eta: null, note: '', team: [], manifest: null };
-    if (p.eta !== undefined) cur.eta = p.eta;
-    if (p.note !== undefined) cur.note = String(p.note || '').slice(0, 200);
-    if (team !== undefined) cur.team = team;
-    if (p.manifest !== undefined) cur.manifest = p.manifest;
-    // Booked minutes: a huddle at the decant start (it stops the clock and
-    // is reported apart from downtime) and the team break the plan allows.
+    // Validate everything before the day or slot is touched.
+    const booked = {};
     for (const k of ['huddleMins', 'breakMins']) if (p[k] !== undefined) {
       const v = p[k] == null ? 0 : Math.round(Number(p[k]));
       if (!(v >= 0 && v <= 120)) return reject('invalid_event', `${k} must be 0 to 120`);
-      cur[k] = v || null;
+      booked[k] = v || null;
     }
+    const manifest = p.manifest === undefined ? undefined : slotManifest(p.manifest);
+    if (manifest && manifest.code) return manifest;
+    const day = (s.plan.days[e.entity.date] ||= { slots: {} });
+    const cur = { ...(day.slots[slot] || { eta: null, note: '', team: [], manifest: null }) };
+    if (p.eta !== undefined) cur.eta = p.eta;
+    if (p.note !== undefined) cur.note = String(p.note || '').slice(0, 200);
+    if (team !== undefined) cur.team = team;
+    if (manifest !== undefined) cur.manifest = manifest;
+    // Booked minutes: a huddle at the decant start (it stops the clock and
+    // is reported apart from downtime) and the team break the plan allows.
+    Object.assign(cur, booked);
     day.slots[slot] = cur;
     return null;
   },
@@ -563,7 +590,7 @@ function lateTruck(s, e, what) {
   const t = s.dock.trucks[e.entity.truck];
   if (!t) return reject('not_found', `truck ${e.entity.truck} does not exist`);
   if (t.status !== 'closed') return t;
-  if (e.entity.truck.slice(0, 10) !== String(e.at).slice(0, 10)) return reject('truck_closed', `${what} is same-day only`);
+  if (e.entity.truck.slice(0, 10) !== storeDay(new Date(e.at), s.settings?.tz || DEFAULT_TZ)) return reject('truck_closed', `${what} is same-day only`);   // the store's day: a 7am Perth event is the previous day in UTC
   if (e.actor?.role !== 'manager' && !e.actor?.owner) return reject('forbidden', `${what} needs the manager code`);
   return t;
 }

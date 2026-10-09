@@ -4,7 +4,7 @@
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
 import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast } from './ui.js';
-import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords } from '../shared/route.js';
+import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords, linkedNode } from '../shared/route.js';
 import { markerGlyph, locationRange, markerSymbol, MARKER_NAMES, LANDMARK_NAMES, markerType } from '../shared/maprender.js';
 import { prefs, setPref } from './prefs.js';
 import { haptic } from './device.js';
@@ -38,33 +38,37 @@ export function parseFloors(doc) {
 }
 export function mapInfo() { return mapMeta; }
 export function hasMap() { return floors.length > 0; }
-// The shelf a typed location names, without mounting the map: a shelf name
-// or module (A16S1), or a stockroom bay number listed in a shelf's
+// The shelf a typed location names, without mounting the map: a run name
+// (A16), a shelf (A16S1), or a stockroom bay number listed in a shelf's
 // data-locations (7012, or 7042A by its digits, as K2B's storeMapFindLoc).
+// A bay answers with its shelf's code ("A16S2"), never the whole run.
 // Indexed once per published map.
 let locIndex = null;
 export function shelfForLocation(code) {
   if (!floors.length) return null;
   if (!locIndex || locIndex.v !== mapMeta?.version) {
     const idx = new Map(), doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => f.inner).join('')}</svg>`, 'image/svg+xml');
-    for (const g of doc.querySelectorAll('.shelf-group[data-shelf]')) {
+    for (const g of doc.querySelectorAll('.shelf-group[data-shelf]:not([data-inactive])')) {
       const shelf = g.getAttribute('data-shelf'); if (!shelf) continue;
+      const mod = canonCode(shelf + (g.getAttribute('data-subname') || ''));
       if (!idx.has(canonCode(shelf))) idx.set(canonCode(shelf), shelf);
-      for (const l of (g.getAttribute('data-locations') || '').split(/[\s,]+/)) if (l && !idx.has(l)) idx.set(l, shelf);
+      if (!idx.has(mod)) idx.set(mod, mod);
+      for (const l of (g.getAttribute('data-locations') || '').split(/[\s,]+/)) if (l && !idx.has(canonCode(l))) idx.set(canonCode(l), mod);
     }
     locIndex = { v: mapMeta?.version, idx };
   }
   const C = canonCode(code), digits = (/\d{3,}/.exec(C) || [])[0];
   return locIndex.idx.get(C) || (digits && locIndex.idx.get(digits)) || null;
 }
-// What the published map covers, per floor: named shelves and walk-path
-// nodes (the store details' map status). Counted once per map version.
+// What the published map covers, per floor: shelves (A16 S2), the runs they
+// make up (A16) and walk-path nodes (the store details' map status), and
+// shelves per department. Counted once per map version.
 let statsCache = null;
 export function mapStats() {
   if (!floors.length) return null;
   if (statsCache?.v !== mapMeta?.version) {
     const doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => `<g data-fid="${esc(f.id)}">${f.inner}</g>`).join('')}</svg>`, 'image/svg+xml');
-    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const names = new Set([...(g?.querySelectorAll('.shelf-group[data-shelf]') || [])].map(x => x.getAttribute('data-shelf')).filter(n => n && !n.startsWith('_u'))); return { id: f.id, name: f.name, type: f.type, shelves: names.size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }), depts: (() => { const by = {}; for (const g of doc.querySelectorAll('.shelf-group[data-shelf][data-dept]')) { const n = g.getAttribute('data-shelf'), d = g.getAttribute('data-dept').toLowerCase(); if (!n || n.startsWith('_u')) continue; (by[d] ||= new Set()).add(n); } return Object.fromEntries(Object.entries(by).map(([d, set]) => [d, set.size])); })() };
+    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const named = [...(g?.querySelectorAll('.shelf-group[data-shelf]:not([data-inactive])') || [])].filter(x => { const n = x.getAttribute('data-shelf'); return n && !n.startsWith('_u'); }); return { id: f.id, name: f.name, type: f.type, shelves: new Set(named.map(segmentId)).size, runs: new Set(named.map(x => x.getAttribute('data-shelf'))).size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }), depts: (() => { const by = {}; for (const g of doc.querySelectorAll('.shelf-group[data-shelf][data-dept]:not([data-inactive])')) { const n = g.getAttribute('data-shelf'), d = g.getAttribute('data-dept').toLowerCase(); if (!n || n.startsWith('_u')) continue; (by[d] ||= new Set()).add(segmentId(g)); } return Object.fromEntries(Object.entries(by).map(([d, set]) => [d, set.size])); })() };
   }
   return statsCache;
 }
@@ -81,21 +85,22 @@ const PLACEHOLDER = '<svg class="map real placeholder" viewBox="0 0 1200 700" xm
 // Shelf segment id as the refresh mode keys it: "A11 S1" (data-full), uppercased.
 export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttribute('data-shelf') + ' ' + (g.getAttribute('data-subname') || '')).trim()).toUpperCase(); }
 // A code as the store writes it: "A16S1", "a16 s1" and "A16-S1" are the
-// same module; "A16" is the whole shelf. Upper case, no spaces or dashes.
+// same shelf; "A16" is the whole run. Upper case, no spaces or dashes.
 // Printed shelf labels pad numbers ("A013S02" is A13 S2), so a leading zero
 // after a letter is dropped: the label and the map meet in one form.
 export function canonCode(code) { return String(code || '').toUpperCase().replace(/[\s\-_.]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1'); }
-// The groups a code points at: a shelf name first (a shelf can itself be
-// called "S1"), then a shelf plus a module suffix (S1, S2, E1, E2). Any
-// place that takes a typed or scanned location goes through here, so a
-// module is never quietly widened to its whole shelf.
-// Split a canonical code into its shelf name and module suffix (S1, S2, E1,
-// E2), or an empty suffix for a whole shelf. The one place that decides where
-// a module ends and a shelf begins, so search and find never diverge from it.
+// The groups a code points at: a run name first (a run can itself be
+// called "S1"), then a run plus a shelf suffix (S1, S2, E1, E2). Any place
+// that takes a typed or scanned location goes through here, so a shelf is
+// never quietly widened to its whole run.
+// Split a canonical code into its run name and shelf suffix (S1, S2, E1,
+// E2), or an empty suffix for a whole run. The one place that decides where
+// a run's name ends and a shelf's suffix begins, so search and find never
+// diverge from it.
 export function splitCanon(code) { const C = canonCode(code); const m = /^(.+?)([SE]\d+)$/.exec(C); return m ? { shelf: m[1], sub: m[2] } : { shelf: C, sub: '' }; }
 export function groupsFor(root, code) {
   const C = canonCode(code); if (!C) return [];
-  const all = $$('.shelf-group[data-shelf]', root).filter(g => g.getAttribute('data-shelf'));
+  const all = $$('.shelf-group[data-shelf]:not([data-inactive])', root).filter(g => g.getAttribute('data-shelf'));
   const byName = all.filter(g => canonCode(g.getAttribute('data-shelf')) === C);
   if (byName.length) return byName;
   const { shelf, sub } = splitCanon(C);
@@ -110,13 +115,28 @@ export function groupsFor(root, code) {
 export function shelfScanField(placeholder = 'Scan or type a shelf label') {
   return `<div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}">${camButton('shelfscan', true)}</div>`;
 }
+// Words for where a shelf sits, the same on the card, the phone panel, the
+// tip and search. A shelf is "A16 S2"; a run is the shelves that share the
+// name "A16". (The editor's "modules" are the units inside one shelf.)
+export function runText(name, sub, count) {
+  if (count > 1) return sub ? `in run ${name} · ${count} shelves` : `run of ${count} shelves`;
+  return 'single shelf';
+}
+// The one shelf a scanned or typed label names, or why not: a run's name
+// ("A16") covers several shelves, and a scan never quietly picks one of them.
+export function oneShelf(root, code) {
+  const gs = groupsFor(root, code); if (!gs.length) return { error: `${code} is not a shelf on this map` };
+  const ids = [...new Set(gs.map(segmentId))];
+  if (ids.length > 1) return { error: `${String(code).toUpperCase()} is a run of ${ids.length} shelves: scan the shelf's own label (${ids.slice(0, 3).join(', ')}${ids.length > 3 ? '…' : ''})` };
+  return { g: gs[0] };
+}
 export function bindShelfScan(root, map, onShelf) {
   root.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || !e.target.matches?.('[data-field="shelfscan"]')) return;
     e.preventDefault();
     const code = e.target.value.trim(); e.target.value = ''; if (!code) return;
-    const g = groupsFor(map.svg, code)[0];
-    if (!g) return toast(`${code} is not a shelf on this map`, 'bad');
+    const { g, error } = oneShelf(map.svg, code);
+    if (!g) return toast(error, 'bad');
     onShelf(map.shelfInfo(g));
   });
 }
@@ -131,7 +151,7 @@ export function keepScanFocus(root, paint) {
 export function splitCode(root, code) { const gs = groupsFor(root, code); if (!gs.length) return null; const C = canonCode(code), shelf = gs[0].getAttribute('data-shelf'); return { shelf, sub: canonCode(shelf) === C ? '' : canonCode(gs[0].getAttribute('data-subname')), groups: gs }; }
 
 // Hover tooltip on a shelf, as in the showcase: department chip, shelf id and
-// segment, name, Side/End, module count, run direction, then a status line
+// suffix, name, Side/End, its run, direction, then a status line
 // from the segment's mark. A view passes `tip(info, g)` to say what its mark
 // means ('Refreshed Tue 09:12'); without it the mark's generic label shows.
 const MARK_LINE = { done: ['g', 'check', 'Done'], checked: ['b', 'check', 'Checked'], wrong: ['r', 'alert', 'Wrong label found'], focus: ['o', 'asterisk', 'Focus department'], stop: ['o', 'route', 'On the route'], counting: ['y', 'clock', 'Counting'], counted: ['g', 'check', 'Counted'], verified: ['b', 'checks', 'Verified'], due: ['r', 'clock', 'Due'], plana: ['o', 'edit', 'Planned'], planb: ['o', 'edit', 'Planned'], planc: ['o', 'edit', 'Planned'] };
@@ -143,9 +163,9 @@ function tipHtml(api, g, tip) {
   const mark = g.getAttribute('data-mark') || '';
   let mx = tip ? tip({ ...info, mark }, g) : undefined;
   if (mx === undefined) { const m = MARK_LINE[mark]; mx = m ? tipLine(m[0], m[1], m[2]) : ''; }
-  const d = shelfDetail(api, info.id);
+  const d = shelfDetail(api, info.code);   // this shelf's own locations and size, not the whole run's
   return `<div class="md"><span class="dep" style="background:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
-    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${info.segments} module${info.segments === 1 ? '' : 's'}</span><span>${ic('orient')}${horiz ? 'Horizontal run' : 'Vertical run'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
+    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, info.segments))}${d.modules ? ` · ${d.modules} module${d.modules === 1 ? '' : 's'}` : ''}</span><span>${ic('orient')}${horiz ? 'Horizontal' : 'Vertical'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
 }
 // Tooltips for what is not a shelf: an emergency sign, a price check or
 // order screen, a landmark (ShelfSearcher's desktop hover tips).
@@ -165,7 +185,7 @@ function markerTip(el) {
 }
 const clip = t => t.length > 60 ? t.slice(0, 57) + '…' : t;
 
-// Fixture names (the editor's fixture field, else the module letter: S side,
+// Fixture names (the editor's fixture field, else the shelf's suffix: S side,
 // E or P end), and what a shelf is in the real world when the map is
 // calibrated (metresPerUnit, the editor's Set Scale).
 const FIXTURE = { side: 'Side', end: 'End', deck: 'Deck', bunk: 'Bunk', table: 'Table', sixway: 'Six-way' };
@@ -179,8 +199,10 @@ export function fixtureOf(g) {
 // different name within 40 units, as ShelfSearcher paired them), and its
 // size in metres.
 export function shelfDetail(api, id) {
-  const gs = api.groups(id), out = { fixture: '', range: '', locations: [], shared: [], size: '' };
+  const gs = api.groups(id), out = { fixture: '', range: '', locations: [], shared: [], size: '', modules: 0 };
   if (!gs.length) return out;
+  // The editor's modules: units along a shelf (a run adds its shelves').
+  out.modules = gs.reduce((n, g) => n + (Number(g.getAttribute('data-modules')) || 0), 0);
   const fx = [...new Set(gs.map(fixtureOf).filter(Boolean))]; out.fixture = fx.join(' / ');
   const locs = [...new Set(gs.flatMap(g => (g.getAttribute('data-locations') || '').split(',').filter(Boolean)))];
   if (locs.length) { out.locations = locs; out.range = locationRange(locs); }
@@ -223,8 +245,8 @@ export function symbolsHtml(list = mapSymbols()) {
   return ['Emergency', 'Store'].map(gp => { const rows = list.filter(x => x.group === gp); return rows.length ? `<div class="keygrp">${gp}</div><div class="symgrid">${rows.map(x => `<div class="symrow">${markerSymbol(x.kind, 22)}<span>${esc(x.name)}</span><small>${x.n}</small></div>`).join('')}</div>` : ''; }).join('');
 }
 
-// Badges: one per shelf name on a sales floor, drawn over the whole shelf
-// so the name reads when zoomed out; they fade into the per-module labels
+// Badges: one per run on a sales floor, drawn over the whole run so the
+// name reads when zoomed out; they fade into the per-shelf labels
 // as the map zooms in (the legacy viewer's shelf badges).
 const BADGE_START = 5.5, BADGE_END = 8;   // zoom factors, relative to the floor fitted
 function buildBadges(floorEl) {
@@ -355,7 +377,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const z = (Number(vb0.split(' ')[2]) || 1) / (Number(svg.getAttribute('viewBox').split(' ')[2]) || 1);
     const badge = z <= BADGE_START ? 1 : z >= BADGE_END ? 0 : 1 - (z - BADGE_START) / (BADGE_END - BADGE_START);
     svg.style.setProperty('--badge-opacity', badge.toFixed(2)); svg.style.setProperty('--label-opacity', (1 - badge).toFixed(2));
-    // Two thousand module labels that are invisible when zoomed out still
+    // Two thousand shelf labels that are invisible when zoomed out still
     // cost a layout and a paint each; take them out of the tree until the
     // badges start handing over (views without badges keep them).
     svg.style.setProperty('--label-display', badge >= 1 && !svg.classList.contains('nobadges') ? 'none' : 'inline');
@@ -447,7 +469,9 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     groups(id) { return groupsFor(svg, id); },
     code(id) { return splitCode(svg, id); },
     graph() { return graphFor(cur); },
-    segments() { return $$('.shelf-group[data-shelf]', svg).filter(g => g.getAttribute('data-shelf')); },
+    // Shelves in use: a shelf the editor marks "not in use" stays drawn
+    // (faint, untappable) but is in no list, count or route.
+    segments() { return $$('.shelf-group[data-shelf]:not([data-inactive])', svg).filter(g => g.getAttribute('data-shelf')); },
     mark(id, value) { for (const g of api.groups(id)) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
     markSegment(segId, value) { for (const g of api.segments()) if (segmentId(g) === segId) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
     setMarks(map) { for (const g of api.segments()) g.removeAttribute('data-mark'); for (const [id, v] of Object.entries(map || {})) { if (id.includes(' ')) api.markSegment(id, v); else api.mark(id, v); } },
@@ -540,15 +564,17 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // exit, stairwells pair across floors by position) and leaves (stairs
     // nearest the last stop by walk), for a list in walk order.
     stairsLegs(ids) {
-      const out = {}, plan = api.floorPlan(ids); let prev = null;
+      const out = {}, plan = api.floorPlan(ids); let prev = null, prevNode = null;
       plan.forEach((f, i) => {
         const graph = graphFor(fl.find(x => x.id === f.id)), legs = (out[f.id] = {});
-        if (i > 0 && graph && prev) legs.entry = nearestStairsByCoords(graph, prev);
+        // Arrive by the stairs or lift the last floor left by: its linked
+        // node here when the editor linked them, else the nearest by position.
+        if (i > 0 && graph && prev) legs.entry = linkedNode(graph, prevNode, f.id) || nearestStairsByCoords(graph, prev);
         if (i < plan.length - 1) {
           const c = api.centreOf(f.codes[f.codes.length - 1]), last = c ? { x: c[0], y: c[1] } : null;
-          const ex = graph && last ? nearestStairsByWalk(graph, last) : null;
+          const ex = graph && last ? nearestStairsByWalk(graph, last, plan[i + 1].id) : null;
           if (ex) legs.exit = ex.node;
-          prev = ex ? { x: ex.node.x, y: ex.node.y } : last;
+          prev = ex ? { x: ex.node.x, y: ex.node.y } : last; prevNode = ex ? ex.node : null;
         }
       });
       return out;
@@ -561,19 +587,19 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       for (const id of ids) { const g = api.groups(id)[0]; if (!g) { missing.push(id); continue; } const fid = g.closest('.mfl')?.getAttribute('data-fid'); if (!byFloor.has(fid)) byFloor.set(fid, []); byFloor.get(fid).push(id); }
       const first = byFloor.keys().next().value;
       const seq = [...byFloor.keys()].sort((a, b) => (a === first ? -1 : b === first ? 1 : 0) || fl.findIndex(f => f.id === a) - fl.findIndex(f => f.id === b));
-      const out = []; let prev = null;
+      const out = []; let prev = null, prevNode = null;
       seq.forEach((fid, fi) => {
         const codes = byFloor.get(fid), f = fl.find(x => x.id === fid), graph = graphFor(f);
         const pts = codes.map(id => { const c = api.centreOf(id); return { x: c[0], y: c[1] }; });
         // After the first floor, the walk starts at the stairs it arrives by.
-        const entry = fi > 0 && graph && prev ? nearestStairsByCoords(graph, prev) : null;
+        const entry = fi > 0 && graph && prev ? linkedNode(graph, prevNode, fid) || nearestStairsByCoords(graph, prev) : null;
         let ordered;
         if (entry) ordered = (graph ? orderStops(graph, [{ x: entry.x, y: entry.y }, ...pts]).order : nearestNeighbour([...Array(codes.length + 1).keys()], [{ x: entry.x, y: entry.y }, ...pts])).filter(i => i > 0).map(i => codes[i - 1]);
         else ordered = !graph || codes.length <= 2 ? nearestNeighbour(codes, pts) : orderStops(graph, pts).order.map(i => codes[i]);
         out.push(...ordered);
         const lc = api.centreOf(ordered[ordered.length - 1]), last = lc ? { x: lc[0], y: lc[1] } : null;
-        const ex = fi < seq.length - 1 && graph && last ? nearestStairsByWalk(graph, last) : null;
-        prev = ex ? { x: ex.node.x, y: ex.node.y } : last;
+        const ex = fi < seq.length - 1 && graph && last ? nearestStairsByWalk(graph, last, seq[fi + 1]) : null;
+        prev = ex ? { x: ex.node.x, y: ex.node.y } : last; prevNode = ex ? ex.node : null;
       });
       return [...out, ...missing];
     },
@@ -615,10 +641,10 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     },
     filterDept(dept) {
       let bb = null;
-      for (const g of $$('.shelf-group[data-dept]', svg)) {
+      for (const g of $$('.shelf-group[data-dept]', svg)) {   // getBBox: a six-way shelf is a circle
         const hit = !dept || (g.getAttribute('data-dept') || '').toLowerCase() === dept;
         g.style.opacity = hit ? '' : '.14';
-        if (dept && hit) { const r = g.querySelector('.shelf'); if (r) { const x = +r.getAttribute('x'), y = +r.getAttribute('y'), w = +r.getAttribute('width'), h = +r.getAttribute('height'); bb = bb ? [Math.min(bb[0], x), Math.min(bb[1], y), Math.max(bb[2], x + w), Math.max(bb[3], y + h)] : [x, y, x + w, y + h]; } }
+        if (dept && hit) { const r = g.querySelector('.shelf'); if (r) { const b = r.getBBox(), x = b.x, y = b.y, w = b.width, h = b.height; bb = bb ? [Math.min(bb[0], x), Math.min(bb[1], y), Math.max(bb[2], x + w), Math.max(bb[3], y + h)] : [x, y, x + w, y + h]; } }
       }
       if (!dept || !bb) { api.fit(); return; }
       const pad = 160; let W = bb[2] - bb[0] + pad * 2, H = bb[3] - bb[1] + pad * 2;
@@ -629,13 +655,16 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // Map coordinates of a client point (for placing pins).
     pointAt(clientX, clientY) { const v = api.vb(), r = svg.getBoundingClientRect(); return [v[0] + (clientX - r.left) / r.width * v[2], v[1] + (clientY - r.top) / r.height * v[3]]; },
     markers() {
-      return $$('.emergency-marker[data-equip-type]', svg).map(m => ({
-        id: `${m.getAttribute('data-equip-type')}_${Math.round(+m.getAttribute('data-x'))}_${Math.round(+m.getAttribute('data-y'))}`,
+      // A marker's id is the editor's (data-id), so its service history
+      // follows it when it is moved. Maps published before ids keyed it by
+      // type and position; that key stays as legacyId for the history.
+      return $$('.emergency-marker[data-equip-type]', svg).map(m => { const legacyId = `${m.getAttribute('data-equip-type')}_${Math.round(+m.getAttribute('data-x'))}_${Math.round(+m.getAttribute('data-y'))}`; return {
+        id: m.getAttribute('data-id') || legacyId, legacyId,
         type: m.getAttribute('data-equip-type'), label: m.getAttribute('data-label') || '', location: m.getAttribute('data-location') || '',
         dept: (m.getAttribute('data-loc-dept') || '').toLowerCase(), extClass: m.getAttribute('data-ext-class') || '', method: m.getAttribute('data-method') || '', operation: m.getAttribute('data-operation') || '',
         detail: m.getAttribute('data-detail') || '', floor: m.closest('.mfl')?.getAttribute('data-fid') || null,
         x: +m.getAttribute('data-x'), y: +m.getAttribute('data-y'), el: m,
-      }));
+      }; });
     },
     // Price checks: small, large (a constant on-screen size whatever the
     // zoom) or hidden, a per-device preference; tory lines show on a
@@ -706,7 +735,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const point = api.pointAt(e.clientX, e.clientY);
     if (touch && (pc || g)) haptic('tap');
     if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
-    else if (g && g.getAttribute('data-shelf')) { api.select(g.getAttribute('data-shelf')); onSelect?.({ kind: 'shelf', ...api.shelfInfo(g), el: g, point, long: Date.now() - t > 500 }); }
+    else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, el: g, point, long: Date.now() - t > 500 }); }   // the shelf tapped, never its whole run
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m), point });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
   });
@@ -725,7 +754,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       if (!g && !mk) return hide();
       if (!tipEl) { tipEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'div'); tipEl.className = 'mtip'; stage.appendChild(tipEl); }
       // The content is rebuilt only when the pointer moves to another
-      // module; moving within one just follows the pointer, so the icons
+      // shelf; moving within one just follows the pointer, so the icons
       // and words stay put instead of re-rendering on every event.
       const on = g || mk;
       if (on !== tipFor) { tipEl.innerHTML = g ? tipHtml(api, g, tip) : markerTip(mk); tipFor = on; }
@@ -846,7 +875,7 @@ export function bindMapChrome(root, map) {
 }
 
 // Find on the map, as Vector's search bar worked: suggestions as you type
-// (shelf names first, then modules and locations, then departments), the
+// (run names first, then shelves and locations, then departments), the
 // matches ringed on the map while typing, recent searches on focus, Enter
 // or a click to select and zoom, arrow keys to move through the list.
 function mapFind(root, input, map) {
@@ -878,7 +907,7 @@ function mapFind(root, input, map) {
   const recent = () => { try { return JSON.parse(localStorage.getItem(KEY()) || '[]'); } catch { return []; } };
   const remember = name => { try { localStorage.setItem(KEY(), JSON.stringify([name, ...recent().filter(x => x !== name)].slice(0, 6))); } catch {} };
   const row = (it, i) => it.kind === 'shelf'
-    ? `<div class="row" data-i="${i}"><i class="dot" style="background:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length ? ` · ${it.sections.length} module${it.sections.length === 1 ? '' : 's'}` : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
+    ? `<div class="row" data-i="${i}"><i class="dot" style="background:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length > 1 ? ` · run of ${it.sections.length} shelves` : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
     : `<div class="row" data-i="${i}"><i class="dot" style="background:${it.dept ? DEPT_COLOUR[it.dept] || '#64748B' : 'var(--ink)'}"></i><b class="code">${esc(it.kind === 'group' ? it.label : it.name)}</b><span class="dn">${it.kind === 'group' ? `${it.ids.length} departments` : esc(it.label)}</span><span class="kind">Department</span></div>`;
   const show = (list, header) => { items = list; focus = -1; if (!list.length) return hide(); ac.innerHTML = (header ? `<div class="hdr">${header}<span data-clear>Clear</span></div>` : '') + list.map(row).join(''); ac.classList.add('on'); };
   const hide = () => { ac.classList.remove('on'); ac.innerHTML = ''; items = []; focus = -1; };

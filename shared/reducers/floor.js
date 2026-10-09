@@ -15,6 +15,7 @@
 //             offsiteAt, offsiteSrc; loads id → { id, label, date, status, recvDate, src, pallets[{pid, items[{k,d,q,dept}]}], at, by }
 
 import { reject } from './util.js';
+import { storeDay, DEFAULT_TZ } from '../time.js';
 import { OFFSITE_CAP, LOAD_CAP, LOAD_PALLET_CAP, LOAD_LINE_CAP, LOAD_STATUS } from '../inventory.js';
 
 export const ISSUE_CATS = ['leak', 'light', 'elec', 'ac', 'plumb', 'struct', 'fixture', 'door', 'safety', 'pest', 'other'];
@@ -23,6 +24,9 @@ export const STOCKTAKE_PHASES = ['counting', 'final'];
 export const STOCKTAKE_STATES = ['pending', 'counted', 'verified', 'cleared'];
 export const CYCLE_LENGTHS = ['weekly', 'fortnightly', 'monthly'];
 const MAX_INT_MONTHS = 120;
+// Issue text is capped: every device downloads every issue.
+const TEXT_MAX = { title: 120, note: 1000, loc: 60, dept: 16, floor: 32 };
+const clipText = (v, n) => (v == null ? v : String(v).slice(0, n));
 
 export function floorState() {
   return {
@@ -170,21 +174,22 @@ export const floorReducers = {
     if (!ISSUE_CATS.includes(p.cat)) return reject('invalid_event', `cat must be one of ${ISSUE_CATS.join(', ')}`);
     const sev = Number.isInteger(p.sev) && p.sev >= 0 && p.sev <= 3 ? p.sev : 0;
     s.issues[id] = {
-      cat: p.cat, title: p.title, note: p.note || '', sev, status: 'open', recur: 0,
-      loc: p.loc || '', dept: p.dept || null, floor: p.floor || null, x: num(p.x), y: num(p.y),
+      cat: p.cat, title: clipText(p.title, TEXT_MAX.title), note: clipText(p.note || '', TEXT_MAX.note), sev, status: 'open', recur: 0,
+      loc: clipText(p.loc || '', TEXT_MAX.loc), dept: clipText(p.dept || null, TEXT_MAX.dept), floor: clipText(p.floor || null, TEXT_MAX.floor), x: num(p.x), y: num(p.y),
       by: e.actor?.device || null, created: e.at, updated: e.at,
-      log: [{ t: e.at, a: 'Logged', n: p.note || '' }],
+      log: [{ t: e.at, a: 'Logged', n: clipText(p.note || '', TEXT_MAX.note) }],
     };
     return null;
   },
   'issue.update'(s, e) {
     const i = issue(s, e); if (i.code) return i;
     const p = e.payload, changed = [];
+    // Validate the whole edit first: a refused edit must leave the issue as it was.
+    if (p.cat !== undefined && !ISSUE_CATS.includes(p.cat)) return reject('invalid_event', 'bad cat');
+    if (p.sev !== undefined && !(Number.isInteger(p.sev) && p.sev >= 0 && p.sev <= 3)) return reject('invalid_event', 'sev must be 0..3');
     for (const k of ['cat', 'title', 'note', 'sev', 'loc', 'dept', 'floor', 'x', 'y']) {
       if (p[k] === undefined) continue;
-      if (k === 'cat' && !ISSUE_CATS.includes(p.cat)) return reject('invalid_event', 'bad cat');
-      if (k === 'sev' && !(Number.isInteger(p.sev) && p.sev >= 0 && p.sev <= 3)) return reject('invalid_event', 'sev must be 0..3');
-      i[k] = (k === 'x' || k === 'y') ? num(p[k]) : p[k]; changed.push(k);
+      i[k] = (k === 'x' || k === 'y') ? num(p[k]) : TEXT_MAX[k] ? clipText(p[k], TEXT_MAX[k]) : p[k]; changed.push(k);
     }
     if (!changed.length) return null;
     i.updated = e.at; i.log.push({ t: e.at, a: 'Edited', n: changed.join(', ') });
@@ -227,27 +232,31 @@ export const floorReducers = {
     const i = issue(s, e); if (i.code) return i;
     const id = String(e.payload.photo);
     if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(id)) return reject('invalid_event', 'photo must be a photo id');
-    const list = (i.photos ||= []), has = list.some(p => p.id === id);
+    const list = i.photos || [], has = list.some(p => p.id === id);
     if (e.payload.remove) { if (!has) return reject('not_found', 'that photo is not on this issue'); i.photos = list.filter(p => p.id !== id); i.log.push({ t: e.at, a: 'Photo removed', n: '' }); }
-    else { if (has) return reject('exists', 'that photo is already on this issue'); if (list.length >= 4) return reject('invalid_event', 'an issue holds up to four photos'); list.push({ id, at: e.at, by: e.actor?.device || null }); i.log.push({ t: e.at, a: 'Photo added', n: '' }); }
+    else { if (has) return reject('exists', 'that photo is already on this issue'); if (list.length >= 4) return reject('invalid_event', 'an issue holds up to four photos'); i.photos = list; list.push({ id, at: e.at, by: e.actor?.device || null }); i.log.push({ t: e.at, a: 'Photo added', n: '' }); }
     i.updated = e.at;
     return null;
   },
 
   // ── Emergency assets ─────────────────────────────────────────────────
+  // payload.from: the marker's key on a map published before markers had
+  // ids (type_x_y). Its record moves to the id the first time it is used.
   'asset.service'(s, e) {
+    adoptAsset(s, e);
     const a = (s.assets[e.entity.asset] ||= { intMonths: 12, due: null, log: [], updated: null });
     a.log.push({ t: e.at, a: 'Serviced', n: e.payload.note || '' });
-    a.due = addMonths(e.at, a.intMonths); a.updated = e.at;
+    a.due = addMonths(storeDayOf(s, e.at), a.intMonths); a.updated = e.at;   // the store's day, not UTC's
     return null;
   },
   'asset.schedule'(s, e) {
     const m = e.payload.months;
     if (!(Number.isInteger(m) && m >= 1 && m <= MAX_INT_MONTHS)) return reject('invalid_event', `months must be 1..${MAX_INT_MONTHS}`);
+    adoptAsset(s, e);
     const a = (s.assets[e.entity.asset] ||= { intMonths: 12, due: null, log: [], updated: null });
     a.intMonths = m;
     const last = a.log.filter(l => l.a === 'Serviced').map(l => l.t).sort().pop() || e.at;
-    a.due = addMonths(last, m); a.updated = e.at;
+    a.due = addMonths(storeDayOf(s, last), m); a.updated = e.at;
     a.log.push({ t: e.at, a: 'Schedule set', n: `${m} months` });
     return null;
   },
@@ -338,6 +347,11 @@ function issue(s, e) {
 function num(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
 
 // Adds calendar months to an ISO timestamp and returns an ISO date (YYYY-MM-DD).
+function adoptAsset(s, e) {
+  const from = typeof e.payload?.from === 'string' ? e.payload.from : '', to = e.entity.asset;
+  if (from && from !== to && !s.assets[to] && s.assets[from]) { s.assets[to] = s.assets[from]; delete s.assets[from]; }
+}
+const storeDayOf = (s, at) => storeDay(new Date(at), s.settings?.tz || DEFAULT_TZ);
 export function addMonths(iso, months) {
   const d = new Date(iso);
   const day = d.getUTCDate();

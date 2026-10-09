@@ -110,7 +110,7 @@ form.li { margin: 0; }
 /* Map look: the rendered floor carries the editor's presentation
    attributes; these rules give shelves, labels and landmarks one clean
    style whatever version of the editor exported them. Labels are centred
-   on their module (the editor's stylesheet did that; it is stripped on
+   on their shelf (the editor's stylesheet did that; it is stripped on
    publish), name and segment both white. */
 
 .map.real .shelf-label { font-family: Inter, system-ui, sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; }
@@ -137,8 +137,8 @@ form.li { margin: 0; }
 .selshelf .acts2 .btn.primary { grid-column: 1 / -1; }
 .selshelf .acts2 .btn svg.i { width: 18px; height: 18px; }
 
-/* Shelf badges: one per shelf name over the whole run, shown zoomed out
-   and handing over to the per-module labels as the map zooms in. */
+/* Run badges: one per run name over the whole run, shown zoomed out
+   and handing over to the per-shelf labels as the map zooms in. */
 .map.real .shelf-badges { opacity: var(--badge-opacity, 1); pointer-events: none; transition: opacity .15s; }
 .map.real .shelf-badges .sb-bg { rx: 8; ry: 8; fill-opacity: .92; }
 .map.real .shelf-badges .sb { font-family: Inter, system-ui, sans-serif; font-size: 24px; font-weight: 800; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; }
@@ -330,7 +330,7 @@ button:disabled, .rrow.soon { cursor: default; }
 /* ── The map as ShelfSearcher drew it ─────────────────────────────────
    White floor, the editor's shelf colours with their colour-matched
    outline and rounded corners, department-coloured name badges when
-   zoomed out, white module labels when zoomed in. The chrome floats over
+   zoomed out, white shelf labels when zoomed in. The chrome floats over
    the map: tools down the left, department chips top centre, find top
    right, the crumb along the bottom. */
 .mapbox .mapstage { background: #fff; }
@@ -401,7 +401,10 @@ svg.map.real { background: #fff; }
    running the way of travel and chevrons at each bend, a numbered stop
    on each shelf, and every shelf not on the list greyed. */
 .map.real.has-route .shelf-group:not([data-onroute]) .shelf { fill: #d0d2d5 !important; stroke: #c0c2c5 !important; transition: none; }
-.map.real.has-route .shelf-group:not([data-onroute]) { pointer-events: none; }
+/* A shelf the map editor marks "not in use": drawn faint, never tapped. */
+.map.real .shelf-group[data-inactive] { pointer-events: none; }
+/* Off-route shelves don't take taps, except in the Pick list, where a tap adds the next stop. */
+.map.real.has-route:not(.pk) .shelf-group:not([data-onroute]) { pointer-events: none; }
 .map.real.has-route .shelf-badges .sb-bg:not([data-onroute]) { fill: rgba(120, 120, 130, .18) !important; }
 .map.real.has-route .shelf-badges .sb:not([data-onroute]) { fill: rgba(180, 180, 190, .35) !important; }
 .map.real.has-route .shelf-group[data-onroute] .shelf { stroke: #1e293b !important; stroke-width: 4.5 !important; fill-opacity: 1 !important; paint-order: stroke; }
@@ -717,6 +720,8 @@ button.bdr-chip:hover { border-color: var(--accent); }
 .rq-tag.req { background: #CCFBF1; color: #0F766E; }
 .rq-tag.pre { background: #E9F6EE; color: #1F8A4C; }
 .rq-tag.miss { background: transparent; color: #B91C1C; border: 1px dashed #F87171; margin-left: 0; }
+.rq-tag.scan { background: transparent; color: var(--amber-ink); border: 1px solid currentColor; }
+.rq-tag.late { background: #FEF3C7; color: #92400E; }
 .rq-cmp { margin-left: 6px; color: var(--accent); display: inline-flex; vertical-align: -2px; }
 .rq-cmp svg.i { width: 14px; height: 14px; }
 .rs-range { font-size: 12.5px; color: var(--dim); white-space: nowrap; }

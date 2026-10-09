@@ -136,6 +136,7 @@ r.post('/v1/admin/actas/:no', async (req, env, _c, p) => {
 // ── maps ──────────────────────────────────────────────────────────────────
 r.get('/v1/store/:no/map', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/map'));
 r.get('/v1/store/:no/map/:version', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/map/${p.version}`));
+r.get('/v1/store/:no/map/:version/source', (req, env, _c, p) => ownerStoreCall(req, env, p.no, `/map/${p.version}/source`));
 r.post('/v1/store/:no/map', async (req, env, _c, p) => {
   const res = await ownerStoreCall(req, env, p.no, '/map');
   if (res.ok) { const { version } = await res.clone().json(); await registry(env, 'PATCH', `/stores/${p.no}`, { map_version: version }); }

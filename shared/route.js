@@ -15,7 +15,7 @@
 export function build(paths) {
   if (!paths || !Array.isArray(paths.nodes) || paths.nodes.length < 2 || !Array.isArray(paths.edges) || !paths.edges.length) return null;
   const nodes = {}, ids = [];
-  for (const n of paths.nodes) { if (n && n.id != null && Number.isFinite(+n.x) && Number.isFinite(+n.y)) { nodes[n.id] = { id: String(n.id), x: +n.x, y: +n.y, type: n.type || 'path' }; ids.push(String(n.id)); } }
+  for (const n of paths.nodes) { if (n && n.id != null && Number.isFinite(+n.x) && Number.isFinite(+n.y)) { nodes[n.id] = { id: String(n.id), x: +n.x, y: +n.y, type: n.type || 'path', ...(Array.isArray(n.links) && n.links.length ? { links: n.links } : {}) }; ids.push(String(n.id)); } }
   const adj = {}; for (const id of ids) adj[id] = [];
   const edges = [];
   for (const e of paths.edges) {
@@ -86,10 +86,22 @@ export function orderStops(graph, stops) {
   }
   return { order, matrix: M };
 }
-export const stairsNodes = graph => graph ? graph.ids.map(id => graph.nodes[id]).filter(n => n.type === 'stairs') : [];
-export function nearestStairsByWalk(graph, from) {
+// Ways between floors: stairs and lifts. The editor links each one to the
+// node it reaches on another floor; a floor with no links pairs them by
+// position, which assumes the floors are drawn on one grid.
+export const stairsNodes = (graph, toFloor) => {
+  const all = graph ? graph.ids.map(id => graph.nodes[id]).filter(n => n.type === 'stairs' || n.type === 'lift') : [];
+  const linked = toFloor ? all.filter(n => (n.links || []).some(l => l.floorId === toFloor)) : [];
+  return linked.length ? linked : all;
+};
+// The node a stairs or lift node reaches on floor `floorId`, when linked.
+export function linkedNode(graph, from, floorId) {
+  const l = (from?.links || []).find(x => x.floorId === floorId);
+  return l && graph?.nodes[l.nodeId] || null;
+}
+export function nearestStairsByWalk(graph, from, toFloor) {
   let best = null;
-  for (const n of stairsNodes(graph)) { const r = routeBetween(graph, from, { x: n.x, y: n.y }); const d = r && isFinite(r.dist) ? r.dist : Math.hypot(from.x - n.x, from.y - n.y); if (!best || d < best.dist) best = { node: n, dist: d, route: r }; }
+  for (const n of stairsNodes(graph, toFloor)) { const r = routeBetween(graph, from, { x: n.x, y: n.y }); const d = r && isFinite(r.dist) ? r.dist : Math.hypot(from.x - n.x, from.y - n.y); if (!best || d < best.dist) best = { node: n, dist: d, route: r }; }
   return best;
 }
 export function nearestStairsByCoords(graph, pt) {
@@ -100,7 +112,7 @@ export function nearestStairsByCoords(graph, pt) {
 // The editor's per-floor arrays, as the published map carries them.
 export function pathsOf(floor) {
   const nodes = floor?.pathNodes || floor?.paths?.nodes, edges = floor?.pathEdges || floor?.paths?.edges;
-  return Array.isArray(nodes) && nodes.length >= 2 && Array.isArray(edges) && edges.length ? { nodes: nodes.map(n => ({ id: String(n.id), x: +n.x, y: +n.y, ...(n.type ? { type: String(n.type) } : {}) })), edges: edges.map(e => ({ a: String(e.a), b: String(e.b) })) } : null;
+  return Array.isArray(nodes) && nodes.length >= 2 && Array.isArray(edges) && edges.length ? { nodes: nodes.map(n => ({ id: String(n.id), x: +n.x, y: +n.y, ...(Array.isArray(n.links) && n.links.length ? { links: n.links.map(l => ({ floorId: String(l.floorId), nodeId: String(l.nodeId) })) } : {}), ...(n.type ? { type: String(n.type) } : {}) })), edges: edges.map(e => ({ a: String(e.a), b: String(e.b) })) } : null;
 }
 
 // Evacuation ("Nearest exit", ported from the legacy viewer): from where

@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Map Editor</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../icons/icon-192.png" type="image/png">
+<link rel="stylesheet" href="../vendor/tabler/icons-subset.css">
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-brand">Map <span>Editor</span></div>
+  <div class="topbar-divider"></div>
+  <div class="store-switcher" id="storeSwitcher">
+    <button class="store-switcher-btn" data-onclick="h1">
+      <span class="store-num" id="activeStoreNum">—</span>
+      <span class="store-nm" id="activeStoreName">No store selected</span>
+      <span class="chevron">▾</span>
+    </button>
+    <div class="store-dropdown" id="storeDropdown"></div>
+  </div>
+  <div class="topbar-divider"></div>
+  <div class="floor-selector" id="floorSelector">
+    <button class="floor-add-btn" data-onclick="h2" title="Add level">+ Level</button>
+    <button class="floor-add-btn active" id="ghostToggleBtn" data-onclick="h3" title="Cycle ghost preview" style="font-size:10px;padding:3px 6px;">Ghost</button>
+  </div>
+  <div class="topbar-divider"></div>
+  <div class="topbar-group">
+    <button class="topbar-btn" data-onclick="h4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a5 5 0 0 1 0 10H9"/><path d="m3 10 4-4m-4 4 4 4"/></svg></button>
+    <button class="topbar-btn" data-onclick="h5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10H11a5 5 0 0 0 0 10h4"/><path d="m21 10-4-4m4 4-4 4"/></svg></button>
+  </div>
+  <div class="topbar-divider"></div>
+  <div class="topbar-group">
+    <button class="topbar-btn" data-onclick="h6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg> Grid</button>
+    <button class="topbar-btn active" id="btnSnap" data-onclick="h7"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg> Snap</button>
+    <button class="topbar-btn" id="btnPathVis" data-onclick="h8" title="Walk-path nodes: full → ghost → hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="19" r="2"/><circle cx="12" cy="7" r="2"/><circle cx="19" cy="15" r="2"/><path d="M6.4 17.2 10.6 8.8M13.9 8.3l3.6 5.2" stroke-dasharray="3 2"/></svg> Nodes</button>
+    <button class="topbar-btn" id="btnSosVis" data-onclick="h9" title="Emergency markers: full → ghost → hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 20h20z"/><path d="M12 9v5M12 17v.5"/></svg> SOS</button>
+    <button class="topbar-btn" id="btnToryVis" data-onclick="h10" title="Tory lines: full → ghost → hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="4 2" stroke-linecap="round"><polyline points="3,18 8,10 14,14 21,4"/></svg> Tory</button>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="zoom-display" id="zoomDisplay">100%</div>
+  <div class="topbar-divider"></div>
+  <div class="topbar-group">
+    <button class="topbar-btn" data-onclick="h11" title="Store audit checklist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg> Audit</button>
+    <button class="topbar-btn" data-onclick="h12" title="Merge on-site field captures (name/code/comment) by shelf id"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Merge Field</button>
+    <input type="file" id="fieldMergeFile" accept="application/json,.json" style="display:none" data-onchange="h13">
+    <button class="topbar-btn" data-onclick="h14"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Import</button>
+    <button class="topbar-btn" data-onclick="h15" id="previewBtn" style="color:#4ade80;border-color:rgba(74,222,128,0.3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview</button>
+    <button class="topbar-btn" data-onclick="h16"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export</button>
+    <button class="topbar-btn" data-onclick="h17" title="Export as image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="14" width="12" height="8" rx="1"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3h12v6"/></svg></button>
+  </div>
+  <button class="topbar-btn cd-publish" id="cdPublish" data-onclick="publishToConduit" title="Publish this map to Conduit (owner)" disabled><i class="ti ti-cloud-upload"></i> Publish</button>
+  <button class="topbar-btn cd-owner" id="cdOwner" data-onclick="conduitAccount" title="Conduit owner sign-in">Owner…</button>
+  <div class="autosave-indicator" id="autosaveStatus"><span class="autosave-dot" id="autosaveDot"></span><span id="autosaveText">Saved</span></div>
+  <button class="topbar-btn" data-onclick="h18" title="Keyboard Shortcuts (?)" style="padding:4px 6px;font-size:11px">?</button>
+</div>
+
+<!-- MAIN -->
+<div class="main-layout">
+
+  <!-- LEFT TOOLBAR -->
+  <div class="toolbar">
+    <button class="tool-btn active" data-tool="select" data-tooltip="Select (V)" data-onclick="h19"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-6 1-3 6z"/></svg></button>
+    <button class="tool-btn" data-tool="shelf" data-tooltip="Add Shelf (S)" data-onclick="h20"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg></button>
+    <button class="tool-btn" data-tool="custom" data-tooltip="Custom Shelf (C)" data-onclick="h21"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 2"/><path d="M3 3l18 18" opacity="0.3"/></svg></button>
+    <button class="tool-btn" data-tool="sixway" data-tooltip="6-Way Display (W)" data-onclick="h22"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5"/><line x1="4.2" y1="16.5" x2="19.8" y2="7.5"/></svg></button>
+    <button class="tool-btn" data-tool="landmark" data-tooltip="Add Landmark (Z)" data-onclick="h23"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8"/></svg></button>
+    <button class="tool-btn" data-tool="wall" data-tooltip="Add Wall (X)" data-onclick="h24"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="8" width="20" height="8" rx="1" fill="currentColor" opacity="0.3"/><line x1="2" y1="8" x2="22" y2="8"/><line x1="2" y1="16" x2="22" y2="16"/></svg></button>
+    <button class="tool-btn" data-tool="toryline" data-tooltip="Tory Line (T) — click to chain points, Shift = straight H/V, Enter/Esc/dbl-click to finish" data-onclick="h25"><svg viewBox="0 0 24 24" fill="none" stroke="#ff69b4" stroke-width="2.5" stroke-dasharray="4 2" stroke-linecap="round"><polyline points="3,18 8,10 14,14 21,4"/></svg></button>
+    <button class="tool-btn" data-tool="paths" data-tooltip="Walk Paths (P) — aisle network for pick routing" data-onclick="h26"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="19" r="2.2"/><circle cx="12" cy="7" r="2.2"/><circle cx="19" cy="15" r="2.2"/><path d="M6.4 17.2 10.6 8.8M13.9 8.3l3.6 5.2" stroke-dasharray="3 2"/></svg></button>
+    <button class="tool-btn" data-tool="boundary" data-tooltip="Store Border (B)" data-onclick="h27"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="4,2 20,2 22,10 18,22 6,22 2,10"/></svg></button>
+    <button class="tool-btn" data-tool="zoombox" data-tooltip="Dept Zoom Box (J)" data-onclick="h28"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2" stroke-dasharray="4 2"/><circle cx="17" cy="17" r="4"/><path d="M20 20l2 2"/></svg></button>
+    <button class="tool-btn" data-tool="emergency" data-tooltip="Emergency Marker (E)" data-onclick="h29"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 20h20L12 2z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
+    <button class="tool-btn" data-tool="pricecheck" data-tooltip="Price Check (P)" data-onclick="h30"><svg viewBox="0 0 24 24" fill="none" stroke="#14b8a6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1 -1h2"/><path d="M4 17v2a1 1 0 0 0 1 1h2"/><path d="M16 4h2a1 1 0 0 1 1 1v2"/><path d="M16 20h2a1 1 0 0 0 1 -1v-2"/><path d="M5 12l14 0"/></svg></button>
+    <button class="tool-btn" data-tool="torydock" data-tooltip="Tory Bot Dock (K)" data-onclick="h31"><svg viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9a4.5 4.5 0 1 0 6 0"/><line x1="12" y1="7" x2="12" y2="12"/></svg></button>
+    <button class="tool-btn" data-tool="pan" data-tooltip="Pan (H)" data-onclick="h32"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-4 0v1M14 10V4a2 2 0 0 0-4 0v6m4-3a2 2 0 0 1 4 0v5M10 10V3a2 2 0 0 0-4 0v10l-2.8-2.4a1.7 1.7 0 0 0-2.4 2.4L6 20a6 6 0 0 0 6 0h3a4 4 0 0 0 4-4v-5"/></svg></button>
+    <button class="tool-btn" data-tool="ruler" data-tooltip="Ruler (U) — measure distance" data-onclick="h33"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3M7 10v4M12 10v4M17 10v4"/></svg></button>
+    <div class="tool-separator"></div>
+    <button class="tool-btn" data-tooltip="Zoom In (+)" data-onclick="h34"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+    <button class="tool-btn" data-tooltip="Zoom Out (-)" data-onclick="h35"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+    <button class="tool-btn" data-tooltip="Fit View (0)" data-onclick="h36"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg></button>
+    <div class="tool-separator"></div>
+    <button class="tool-btn" data-tooltip="Rotate 90° (R) / 15° (⇧R)" data-onclick="h37"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M21 13a9 9 0 1 1-3-7.7L21 8"/></svg></button>
+    <button class="tool-btn" data-tooltip="Duplicate (Ctrl+D)" data-onclick="h38"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2"/></svg></button>
+    <button class="tool-btn" data-tooltip="Delete (Del)" data-onclick="h39"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+    <div class="tool-separator"></div>
+    <button class="tool-btn" data-tooltip="Emergency Inventory" data-onclick="h40"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M3 12h18M3 19h18"/><circle cx="6" cy="5" r="1.2" fill="currentColor"/><circle cx="6" cy="12" r="1.2" fill="currentColor"/><circle cx="6" cy="19" r="1.2" fill="currentColor"/></svg></button>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-container tool-select" id="canvasContainer" tabindex="0">
+    <!-- Level Selector Panel -->
+    <div class="level-panel" id="levelPanel"></div>
+    <!-- v0.150: Emergency inventory floating panel -->
+    <div class="emergency-inventory" id="emergencyInventory" style="display:none;">
+      <div class="ei-header">
+        <span class="ei-title">Emergency Inventory</span>
+        <span class="ei-count" id="eiCount">0</span>
+        <button class="ei-close" data-onclick="h40" title="Close">×</button>
+      </div>
+      <div class="ei-summary" id="eiSummary"></div>
+      <div class="ei-list" id="eiList"></div>
+      <div class="ei-footer">
+        <button class="ei-action" data-onclick="h41" title="Refresh list">↻ Refresh</button>
+        <button class="ei-action" data-onclick="h42" title="Copy data to clipboard">⎘ Copy</button>
+      </div>
+    </div>
+    <!-- v0.151: Shared datalist for marker location autocomplete (shelf names from current floor) -->
+    <datalist id="markerLocationList"></datalist>
+    <svg id="editor-canvas" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="gridMinor" width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 20 0 L 0 0 0 20" fill="none" class="grid-minor"/>
+        </pattern>
+        <pattern id="gridMajor" width="100" height="100" patternUnits="userSpaceOnUse">
+          <rect width="100" height="100" fill="url(#gridMinor)"/>
+          <path d="M 100 0 L 0 0 0 100" fill="none" class="grid-major"/>
+        </pattern>
+      </defs>
+      <g id="canvasTransform">
+        <rect id="gridRect" width="10000" height="10000" x="-5000" y="-5000" fill="url(#gridMajor)"/>
+        <g id="underlayGroup"></g>
+        <g id="ghostGroup"></g>
+        <g id="boundaryGroup"></g>
+        <g id="zoomboxGroup"></g>
+        <g id="guidesGroup"></g>
+        <g id="landmarksGroup"></g>
+        <g id="wallsGroup"></g>
+        <g id="toryLinesGroup"></g>
+        <g id="pathsGroup" pointer-events="none"></g>
+        <g id="shelvesGroup"></g>
+        <g id="emergencyGroup"></g>
+        <g id="priceCheckGroup"></g>
+        <g id="toryDocksGroup"></g>
+        <g id="overlayGroup"></g>
+      </g>
+    </svg>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+
+    <!-- Tabs -->
+    <div class="panel-tabs">
+      <button class="panel-tab active" data-onclick="h43">Properties</button>
+      <button class="panel-tab" data-onclick="h44">List</button>
+      <button class="panel-tab" data-onclick="h45">Settings</button>
+    </div>
+
+    <!-- TAB 1: SHELVES -->
+    <div class="panel-tab-content active" id="tabShelves">
+
+    <!-- Walk Paths (routing network) -->
+    <div class="panel-section" id="pathPanel" style="display:none;">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="19" r="2"/><circle cx="12" cy="7" r="2"/><circle cx="19" cy="15" r="2"/><path d="M6.4 17.2 10.6 8.8M13.9 8.3l3.6 5.2" stroke-dasharray="3 2"/></svg>
+        Walk Paths
+      </div>
+      <div id="pathStats" style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-bottom:8px;">0 nodes · 0 links</div>
+      <div class="path-mode-toggle" style="display:flex;gap:4px;margin-bottom:8px;">
+        <button id="pathModeConnect" class="path-mode-btn active" data-onclick="h46" style="flex:1;padding:6px 4px;font-size:11px;border:1px solid var(--border,#333);border-radius:6px;background:var(--panel-2,#1a1d24);color:var(--text,#ddd);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="12" r="2.4"/><path d="M7.4 12h9.2" stroke-dasharray="2 2"/></svg>Connect
+        </button>
+        <button id="pathModeSelect" class="path-mode-btn" data-onclick="h47" style="flex:1;padding:6px 4px;font-size:11px;border:1px solid var(--border,#333);border-radius:6px;background:var(--panel-2,#1a1d24);color:var(--text,#ddd);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 7-6 2-2 6z"/></svg>Select / Edit
+        </button>
+      </div>
+      <div id="pathChainHint" style="font-size:11px;color:var(--text-secondary,#9aa3b2);line-height:1.45;margin-bottom:8px;">Click empty space to drop linked nodes along the aisles (Ctrl = grid snap, Shift = straight line from the last node). Click a node to start linking — a green line previews the next connection; click another node to join (a linked node unlinks). Esc stops the chain.</div>
+      <div class="panel-row" id="pathNodeTypeRow" style="display:none;">
+        <span class="panel-label">Node type</span>
+        <select class="panel-input" id="pathNodeType" data-onchange="h48">
+          <option value="path">Path</option>
+          <option value="entrance">Entrance</option>
+          <option value="stairs">Stairs</option>
+          <option value="lift">Lift</option>
+        </select>
+      </div>
+      <div id="pathPortalRow" style="display:none;margin:6px 0;padding:8px;border:1px solid rgba(168,85,247,0.35);border-radius:7px;background:rgba(168,85,247,0.06);">
+        <div style="font-size:11px;color:#c084fc;font-weight:700;margin-bottom:5px;">⇅ Floor connections</div>
+        <div id="pathPortalHint" style="font-size:10px;color:var(--text-dim);line-height:1.4;margin-bottom:6px;">Link this stairs/lift to its matching node on another floor so routes can travel between them.</div>
+        <div id="pathPortalLinks" style="margin-bottom:6px;"></div>
+        <select class="panel-input" id="pathPortalAdd" data-onchange="h49" style="width:100%;font-size:11px;">
+          <option value="">+ Link to a floor…</option>
+        </select>
+      </div>
+      <div class="panel-row" id="pathNodeBtnRow" style="display:none;">
+        <button class="btn-secondary" style="flex:1" data-onclick="h50">Delete node</button>
+      </div>
+      <div class="panel-row" id="pathEdgeBtnRow" style="display:none;">
+        <button class="btn-secondary" style="flex:1;border-color:rgba(251,191,36,0.5);color:#fbbf24" data-onclick="h51">Delete selected link</button>
+      </div>
+      <div id="pathGroupRow" style="display:none;">
+        <div id="pathGroupCount" style="font-size:11px;color:#fbbf24;margin-bottom:6px;">0 nodes selected</div>
+        <button class="btn-secondary" style="width:100%;border-color:rgba(239,106,106,0.4);color:#ef6a6a" data-onclick="h52">Delete selected nodes</button>
+      </div>
+      <button class="dept-add-btn" style="margin-top:6px;border-color:rgba(239,106,106,0.4);color:#ef6a6a" data-onclick="h53">Clear floor paths</button>
+    </div>
+
+    <!-- Shelf Properties -->
+    <div class="panel-section" id="selectionPanel" style="display:none">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+        Shelf Properties
+      </div>
+
+      <div class="panel-row" id="rowNameFull" style="display:none">
+        <span class="panel-label">Name</span>
+        <input type="text" class="panel-input" id="propNameFull" placeholder="7001" data-oninput="h54">
+      </div>
+      <div class="panel-row" id="rowNameSub">
+        <span class="panel-label">Name</span>
+        <input type="text" class="panel-input" style="width:70px" id="propName" placeholder="A14" data-oninput="h54">
+        <span class="panel-label" style="min-width:auto;color:var(--text-dim)">Sub</span>
+        <input type="text" class="panel-input" style="width:50px" id="propSub" placeholder="S1" data-oninput="h55">
+      </div>
+
+      <div class="panel-row" id="rowQuick">
+        <span class="panel-label">Quick</span>
+        <div class="subname-tags" id="propSubTags"></div>
+      </div>
+
+      <div class="panel-row" id="rowSharedName" style="display:none">
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--warning);cursor:pointer">
+          <input type="checkbox" id="propSharedName" data-onchange="h56">
+          Confirmed shared name (not a mistake)
+        </label>
+      </div>
+
+      <div class="panel-row">
+        <span class="panel-label">Dept</span>
+        <div class="dept-picker" id="propDeptPicker">
+          <button class="dept-picker-btn" data-onclick="h57">
+            <span class="dept-picker-swatch" id="propDeptSwatch"></span>
+            <span id="propDeptLabel">—</span>
+            <span class="dept-picker-arrow">▾</span>
+          </button>
+          <div class="dept-picker-dropdown" id="propDeptDropdown"></div>
+        </div>
+      </div>
+
+      <!-- v0.130: Fixture Type dropdown -->
+      <div class="panel-row" id="rowFixture">
+        <span class="panel-label">Fixture</span>
+        <select class="panel-input" id="propFixture" data-onchange="h58" style="flex:1;font-size:11px;padding:3px 6px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
+          <option value="">— Auto —</option>
+          <option value="side">Side</option>
+          <option value="end">End</option>
+          <option value="deck">Deck</option>
+          <option value="bunk">Bunk</option>
+          <option value="table">Table</option>
+          <option value="sixway">Six-Way</option>
+        </select>
+        <span id="propFixtureAuto" style="font-size:9px;color:var(--text-dim);margin-left:4px;display:none;">auto</span>
+      </div>
+
+      <div class="panel-row" id="rowOrient">
+        <span class="panel-label">Orient</span>
+        <div class="orient-toggle" id="propOrient">
+          <button class="orient-btn" data-orient="H" data-onclick="h59">H</button>
+          <button class="orient-btn" data-orient="V" data-onclick="h60">V</button>
+          <button class="orient-btn" data-orient="A" data-onclick="h61">∠</button>
+        </div>
+      </div>
+      <div id="rowAngle" style="display:none">
+        <div class="panel-row" style="margin-bottom:4px">
+          <span class="panel-label">Angle °</span>
+          <input type="number" class="panel-input" style="width:55px" id="propAngle" min="-90" max="90" step="1" data-oninput="h62">
+          <input type="range" id="propAngleSlider" min="-90" max="90" step="5" value="0" style="flex:1;margin:0 4px" data-oninput="h62">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:6px" id="angleQuickPicks"></div>
+      </div>
+      <div class="panel-row" id="rowMods">
+        <span class="panel-label">Mods</span>
+        <div class="module-counter">
+          <button class="module-counter-btn" data-onclick="h63">−</button>
+          <span class="module-counter-val" id="propModules">3</span>
+          <button class="module-counter-btn" data-onclick="h64">+</button>
+        </div>
+        <span class="panel-label" style="min-width:auto;color:var(--text-dim);margin-left:8px" title="Set this many modules without changing the shelf's size — the bay lines space out evenly">= </span>
+        <input type="number" class="panel-input" id="propModulesFit" min="1" max="60" style="width:44px" title="Set this many modules, keeping the shelf's current size (even lines)" data-onkeydown="h65">
+        <button class="btn-secondary" style="font-size:10px;padding:3px 8px" data-onclick="h66" title="Divide the current shelf into this many even modules (keeps size)">Fit</button>
+      </div>
+
+      <!-- Custom shelf size -->
+      <div id="rowCustomSize" style="display:none">
+        <div class="panel-row">
+          <span class="panel-label">W</span>
+          <input type="number" class="panel-input" style="width:55px" id="propCustomW" min="10" step="10" data-oninput="h67">
+          <span class="panel-label" style="min-width:auto">H</span>
+          <input type="number" class="panel-input" style="width:55px" id="propCustomH" min="10" step="10" data-oninput="h68">
+          <button class="orient-btn" style="padding:3px 8px;font-size:10px;border:1px solid var(--border);border-radius:3px;background:var(--bg-input);margin-left:4px" data-onclick="h69" title="Swap W↔H (R)">↻</button>
+        </div>
+        <div class="panel-row" style="margin-top:4px">
+          <span class="panel-label">Angle °</span>
+          <input type="number" class="panel-input" style="width:55px" id="propCustomAngle" min="-90" max="90" step="1" value="0" data-oninput="h70">
+          <input type="range" id="propCustomAngleSlider" min="-90" max="90" step="5" value="0" style="flex:1;margin:0 4px" data-oninput="h70">
+        </div>
+      </div>
+
+      <!-- Sixway radius -->
+      <div id="rowSixwaySize" style="display:none">
+        <div class="panel-row">
+          <span class="panel-label">Radius</span>
+          <input type="number" class="panel-input" style="width:60px" id="propSixwayRadius" min="10" step="5" data-oninput="h71">
+          <span style="font-size:10px;color:var(--text-dim);margin-left:6px">⬡ 6-Way</span>
+        </div>
+      </div>
+
+      <!-- Stockroom per-shelf size overrides -->
+      <div id="rowStockroomSize" style="display:none">
+        <div class="panel-row">
+          <span class="panel-label">Bay W</span>
+          <input type="number" class="panel-input" style="width:55px" id="propBayW" min="10" max="300" data-oninput="h72">
+          <span class="panel-label" style="min-width:auto">Depth</span>
+          <input type="number" class="panel-input" style="width:55px" id="propDepth" min="10" max="300" data-oninput="h73">
+        </div>
+      </div>
+
+      <!-- Multi-location (stockroom bays with multiple locations) -->
+      <div id="rowLocations" style="display:none">
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+          <span class="panel-label" style="min-width:auto;font-size:10px">Locations <span style="font-weight:400;color:var(--text-dim)">(multi-bay)</span></span>
+          <div id="locationsTags" style="display:flex;flex-wrap:wrap;gap:3px;min-height:24px;padding:4px;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;cursor:text" data-onclick="h74"></div>
+          <div style="display:flex;gap:4px">
+            <input type="text" class="panel-input" id="locationsInput" placeholder="7001-7005 or 7001 7002 7003" style="flex:1;font-size:11px" data-onkeydown="h75">
+            <button class="btn-secondary" style="font-size:10px;padding:3px 8px;flex-shrink:0" data-onclick="h76">+</button>
+            <button class="btn-secondary" style="font-size:10px;padding:3px 6px;flex-shrink:0" data-onclick="h77" title="Clear all locations">&times;</button>
+          </div>
+          <div id="locationsPreview" style="font-size:10px;color:var(--accent);font-family:var(--font-mono)"></div>
+        </div>
+      </div>
+
+      <div class="panel-row">
+        <span class="panel-label">X</span>
+        <input type="number" class="panel-input" style="width:60px" id="propX" data-oninput="h78">
+        <span class="panel-label" style="min-width:auto">Y</span>
+        <input type="number" class="panel-input" style="width:60px" id="propY" data-oninput="h79">
+      </div>
+
+      <div class="module-size-display" id="moduleSizeDisplay"></div>
+
+      <div id="rowSplit" class="panel-row" style="margin-top:6px;gap:6px;flex-wrap:wrap">
+        <span class="panel-label" style="min-width:auto;color:var(--text-dim)">Split</span>
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h80" title="Split into two shopping faces S1 / S2 (each half depth, same footprint)">Sides S1/S2</button>
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h81" title="Cut the run into two equal shelves">Halve</button>
+        <button class="btn-secondary" id="splitToolBtn" style="flex:1;font-size:11px;padding:5px" data-onclick="h82" title="Click a shelf to cut it there, or drag a line across one or more shelves to slice them">Cut / Slice…</button>
+      </div>
+      <div class="panel-row" style="margin-top:4px;gap:6px;flex-wrap:wrap">
+        <span class="panel-label" style="min-width:auto;color:var(--text-dim)">Into</span>
+        <input type="number" class="panel-input" id="splitNInput" min="2" max="20" value="2" style="width:48px" title="Number of equal pieces" data-onkeydown="h83">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h84" title="Split into this many SEPARATE shelves">Split evenly</button>
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h85" title="Show this many module lines WITHIN one shelf, keeping it whole and the same size">Modules only</button>
+        <button class="btn-secondary" id="combineBtn" style="flex:1;font-size:11px;padding:5px" data-onclick="h86" title="Merge two adjacent shelves into one (select one, click this, click the other)">Combine…</button>
+      </div>
+      <div style="font-size:9px;color:var(--text-dim);line-height:1.5;margin-top:2px">Drag a shelf’s end handle to resize freely (pixel-perfect) — hold <strong>Shift</strong> to snap to whole modules.</div>
+      <div style="font-size:9px;color:var(--text-dim);line-height:1.5;margin-top:2px"><strong>Cut / Slice</strong>: click a shelf to cut at a point, or drag a line across shelves to slice them (Shift = snap to modules).</div>
+
+      <div class="panel-row" style="margin-top:6px">
+        <span class="panel-label">Status</span>
+        <div class="orient-toggle" id="propStatusToggle">
+          <button class="orient-btn" id="propStatusActive" data-onclick="h87">In Use</button>
+          <button class="orient-btn" id="propStatusInactive" data-onclick="h88">Not Used</button>
+        </div>
+        <span class="info-tip" style="margin-left:4px">?<span class="info-tip-text"><strong>Not Used</strong> marks a shelf as temporarily out of service. It stays on the map (faded with an X) but Conduit leaves it out of counts, lists and routes.</span></span>
+      </div>
+
+      <div class="panel-row" style="margin-top:4px">
+        <span class="panel-label">Lock</span>
+        <div class="orient-toggle">
+          <button class="orient-btn" id="propLockOff" data-onclick="h89">🔓</button>
+          <button class="orient-btn" id="propLockOn" data-onclick="h90">🔒</button>
+        </div>
+        <span class="info-tip" style="margin-left:4px">?<span class="info-tip-text"><strong>Locked</strong> shelves cannot be moved or resized. Useful for finished sections while working on other areas.</span></span>
+      </div>
+
+      <div id="propDupeWarning" style="display:none;margin-top:6px;font-size:10px;color:var(--warning);background:rgba(245,158,11,0.1);padding:5px 8px;border-radius:4px;font-family:var(--font-mono)"></div>
+
+      <!-- Related shelves (same name) -->
+      <div id="relatedShelvesSection" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">Related Shelves</div>
+        <div id="relatedShelvesList"></div>
+      </div>
+    </div>
+
+    <!-- Multi-select Panel -->
+    <div class="panel-section" id="multiSelectPanel" style="display:none">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="M14 3h7v7m-7 4h7v7"/></svg>
+        Multi-Select
+      </div>
+      <div class="module-size-display" id="multiInfo" style="margin-bottom:8px"></div>
+      <div class="panel-row">
+        <span class="panel-label">Name</span>
+        <input type="text" class="panel-input" id="multiName" placeholder="Set all names..." style="flex:1" data-onkeydown="h91">
+        <button class="btn-secondary" style="font-size:11px;padding:4px 8px;flex-shrink:0" data-onclick="h92">Apply</button>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Dept</span>
+        <div class="dept-picker" id="multiDeptPicker">
+          <button class="dept-picker-btn" data-onclick="h93">
+            <span class="dept-picker-swatch" id="multiDeptSwatch" style="background:transparent"></span>
+            <span id="multiDeptLabel">— Set all —</span>
+            <span class="dept-picker-arrow">▾</span>
+          </button>
+          <div class="dept-picker-dropdown" id="multiDeptDropdown"></div>
+        </div>
+      </div>
+      <div class="panel-row" id="multiModulesRow" style="display:none">
+        <span class="panel-label">Modules</span>
+        <button class="btn-secondary" style="width:28px;padding:3px;font-size:13px;font-weight:700" data-onclick="h94">−</button>
+        <span id="multiModulesInfo" style="font-size:11px;color:var(--text-secondary);min-width:50px;text-align:center;font-family:var(--font-mono)">—</span>
+        <button class="btn-secondary" style="width:28px;padding:3px;font-size:13px;font-weight:700" data-onclick="h95">+</button>
+        <input type="number" class="panel-input" style="width:45px;margin-left:4px" id="multiModulesSet" min="1" max="50" placeholder="#" title="Set exact module count" data-onkeydown="h96">
+        <button class="btn-secondary" style="font-size:10px;padding:3px 6px;flex-shrink:0" data-onclick="h97">Set</button>
+      </div>
+      <div class="panel-row" style="gap:6px">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h98">Copy</button>
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h38">Duplicate</button>
+      </div>
+      <div class="panel-row" style="gap:6px;margin-top:4px">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h99">Toggle Use</button>
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h100">Toggle Lock</button>
+        <button class="btn-secondary danger" style="flex:1;font-size:11px;padding:5px;color:var(--danger);border-color:rgba(239,68,68,0.3)" data-onclick="h39">Delete</button>
+      </div>
+      <div class="panel-row" style="gap:6px;margin-top:4px;display:none" id="swapSubnamesRow">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" id="swapSBtn" data-onclick="h101">Swap S1 ↔ S2</button>
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" id="swapEBtn" data-onclick="h102">Swap E1 ↔ E2</button>
+      </div>
+      <div class="panel-row" style="gap:6px;margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
+        <span class="panel-label" style="font-size:9px;min-width:auto;color:var(--text-dim)">Template</span>
+        <select id="templateSelect" style="flex:1;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:3px 4px;font-size:10px;font-family:var(--font-mono)" data-onchange="h103">
+          <option value="">— select —</option>
+        </select>
+        <button class="btn-secondary" style="font-size:10px;padding:3px 6px;flex-shrink:0" data-onclick="h104" title="Save current shelf as template">Save</button>
+        <button class="btn-secondary" style="font-size:10px;padding:3px 6px;flex-shrink:0;color:var(--danger)" data-onclick="h105" title="Delete selected template">×</button>
+      </div>
+    </div>
+
+    <!-- Landmark Properties -->
+    <div class="panel-section" id="landmarkPanel" style="display:none">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8"/></svg>
+        Landmark Properties
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Label</span>
+        <input type="text" class="panel-input" id="landmarkPropLabel" placeholder="e.g. SERVICE DESK" data-oninput="h106">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Icon</span>
+        <select class="panel-input" id="landmarkPropIcon" style="flex:1" data-onchange="h107">
+          <option value="">None</option>
+          <option value="desk">Service Desk</option>
+          <option value="register">Registers</option>
+          <option value="fitting">Fitting Rooms</option>
+          <option value="entry">Entry</option>
+          <option value="exit">Exit</option>
+          <option value="tearoom">Tea Room</option>
+          <option value="stairs">Stairs</option>
+          <option value="toilet">Toilets</option>
+          <option value="lift">Lift/Elevator</option>
+          <option value="storage">Storage</option>
+          <option value="receival">Delivery Receival</option>
+          <option value="dock">Loading Dock</option>
+          <option value="compactor">Compactor / Bale Press</option>
+          <option value="kiosk">Photo Kiosk</option>
+          <option value="trolley">Trolley Bay</option>
+          <option value="orderscreen">Bulk Order Screen</option>
+        </select>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">X</span>
+        <input type="number" class="panel-input" style="width:60px" id="landmarkPropX" data-oninput="h108">
+        <span class="panel-label" style="min-width:auto">Y</span>
+        <input type="number" class="panel-input" style="width:60px" id="landmarkPropY" data-oninput="h109">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">W</span>
+        <input type="number" class="panel-input" style="width:60px" id="landmarkPropW" min="10" data-oninput="h110">
+        <span class="panel-label" style="min-width:auto">H</span>
+        <input type="number" class="panel-input" style="width:60px" id="landmarkPropH" min="10" data-oninput="h111">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Angle °</span>
+        <input type="number" class="panel-input" style="width:55px" id="landmarkPropAngle" min="-90" max="90" step="1" value="0" data-oninput="h112">
+        <input type="range" id="landmarkPropAngleSlider" min="-90" max="90" step="5" value="0" style="flex:1;margin:0 4px" data-oninput="h112">
+      </div>
+      <div class="panel-row">
+      </div>
+    </div>
+
+    <!-- Wall Properties -->
+    <div class="panel-section" id="wallPanel" style="display:none">
+      <div class="panel-row">
+        <span class="panel-label">Type</span>
+        <select class="panel-input" id="wallPropKind" style="flex:1" data-onchange="h113">
+          <option value="wall">Wall</option>
+          <option value="window">Window</option>
+        </select>
+      </div>
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="8" width="20" height="8" rx="1" fill="currentColor" opacity="0.3"/><line x1="2" y1="8" x2="22" y2="8"/><line x1="2" y1="16" x2="22" y2="16"/></svg>
+        Wall Properties
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">X</span>
+        <input type="number" class="panel-input" style="width:60px" id="wallPropX" data-oninput="h114">
+        <span class="panel-label" style="min-width:auto">Y</span>
+        <input type="number" class="panel-input" style="width:60px" id="wallPropY" data-oninput="h115">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">W</span>
+        <input type="number" class="panel-input" style="width:60px" id="wallPropW" min="4" data-oninput="h116">
+        <span class="panel-label" style="min-width:auto">H</span>
+        <input type="number" class="panel-input" style="width:60px" id="wallPropH" min="4" data-oninput="h117">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Angle</span>
+        <input type="number" class="panel-input" style="width:55px" id="wallPropAngle" min="-90" max="90" step="1" value="0" data-oninput="h118">
+        <input type="range" id="wallPropAngleSlider" min="-90" max="90" step="5" value="0" style="flex:1;margin:0 4px" data-oninput="h118">
+      </div>
+      <div class="panel-row">
+      </div>
+      <div class="panel-row" style="gap:6px">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h119">Duplicate</button>
+        <button class="btn-secondary danger" style="flex:1;font-size:11px;padding:5px;color:var(--danger);border-color:rgba(239,68,68,0.3)" data-onclick="h39">Delete</button>
+      </div>
+    </div>
+
+    <!-- Tory Line Properties -->
+    <div class="panel-section" id="toryLinePanel" style="display:none">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="#ff69b4" stroke-width="2.5" stroke-dasharray="4 2" stroke-linecap="round"><polyline points="3,18 8,10 14,14 21,4"/></svg>
+        Tory Line
+      </div>
+      <div class="panel-row">
+        <span class="panel-label" style="font-size:10px;color:var(--text-dim)" id="toryLineInfo">0 points</span>
+      </div>
+      <div class="panel-row" style="gap:6px">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h120">Duplicate</button>
+        <button class="btn-secondary danger" style="flex:1;font-size:11px;padding:5px;color:var(--danger);border-color:rgba(239,68,68,0.3)" data-onclick="h39">Delete</button>
+      </div>
+    </div>
+
+    <!-- Zoom Box Properties -->
+    <div class="panel-section" id="zoomboxPanel" style="display:none">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2" stroke-dasharray="4 2"/><circle cx="17" cy="17" r="4"/><path d="M20 20l2 2"/></svg>
+        Zoom Box
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Dept</span>
+        <div class="dept-picker" id="zoomboxDeptPicker">
+          <button class="dept-picker-btn" data-onclick="h121">
+            <span class="dept-picker-swatch" id="zoomboxDeptSwatch" style="background:transparent"></span>
+            <span class="dept-picker-text" id="zoomboxDeptText">Select dept...</span>
+          </button>
+          <div class="dept-picker-dropdown" id="zoomboxDeptPicker-dropdown"></div>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Label</span>
+        <input type="text" class="panel-input" id="zoomboxLabel" style="flex:1" placeholder="Optional label..." data-oninput="h122">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Pos</span>
+        <span class="panel-label" style="min-width:auto">X</span>
+        <input type="number" class="panel-input" style="width:55px" id="zoomboxPropX" data-oninput="h123">
+        <span class="panel-label" style="min-width:auto">Y</span>
+        <input type="number" class="panel-input" style="width:55px" id="zoomboxPropY" data-oninput="h124">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Size</span>
+        <span class="panel-label" style="min-width:auto">W</span>
+        <input type="number" class="panel-input" style="width:55px" id="zoomboxPropW" min="20" data-oninput="h125">
+        <span class="panel-label" style="min-width:auto">H</span>
+        <input type="number" class="panel-input" style="width:55px" id="zoomboxPropH" min="20" data-oninput="h126">
+      </div>
+      <div class="panel-row" style="gap:6px;margin-top:6px">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h127">Auto-fit to shelves</button>
+        <button class="btn-secondary danger" style="flex:1;font-size:11px;padding:5px;color:var(--danger);border-color:rgba(239,68,68,0.3)" data-onclick="h128">Delete</button>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--text-dim);line-height:1.5">
+        Defines the view Conduit zooms to when this department is selected. Draw one per department group.
+      </div>
+    </div>
+
+    <!-- Emergency Marker Properties -->
+    <div class="panel-section" id="emergencyPanel" style="display:none">
+      <div class="panel-header" style="color:#ef4444">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M12 2L4 7v6c0 5.5 3.4 10.7 8 12 4.6-1.3 8-6.5 8-12V7l-8-5z"/><line x1="12" y1="8" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Emergency Marker
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Type</span>
+        <select class="panel-input" id="emergencyType" style="flex:1" data-onchange="h129">
+          <option value="fire_extinguisher">Fire Extinguisher</option>
+          <option value="extinguisher_set">Extinguisher Set</option>
+          <option value="first_aid">First Aid Kit</option>
+          <option value="aed">AED / Defib</option>
+          <option value="emergency_exit">Emergency Exit</option>
+          <option value="spill_kit">Spill Kit</option>
+          <option value="assembly_point">Assembly Point</option>
+          <option value="hose_reel">Hose Reel</option>
+          <option value="hydrant">Fire Hydrant</option>
+          <option value="call_point">Emergency Call Point</option>
+          <option value="emergency_phone">Emergency Phone</option>
+        </select>
+      </div>
+      <!-- v0.159: Fire extinguisher class — only shown when the marker type is fire_extinguisher.
+           Six AS/NZS-aligned classes, each with its own colour code that maps to the badge
+           shown in the viewer. -->
+      <div class="panel-row" id="emergencyExtClassRow" style="display:none">
+        <span class="panel-label">Class</span>
+        <select class="panel-input" id="emergencyExtClass" style="flex:1" data-onchange="h130">
+          <option value="">— Not specified —</option>
+          <option value="co2">Carbon Dioxide (CO2)</option>
+          <option value="water">Water</option>
+          <option value="foam">Foam</option>
+          <option value="liquid">Vaporising Liquid</option>
+          <option value="powder">Dry Chemical Powder</option>
+          <option value="wet_chem">Wet Chemical</option>
+        </select>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Label</span>
+        <input type="text" class="panel-input" id="emergencyLabel" style="flex:1" placeholder="Optional custom label..." data-oninput="h131">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Location</span>
+        <input type="text" class="panel-input" id="emergencyLocation" style="flex:1" placeholder="Type or pick a shelf (e.g. B21)" list="markerLocationList" data-oninput="h132">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Pos</span>
+        <span class="panel-label" style="min-width:auto">X</span>
+        <input type="number" class="panel-input" style="width:60px" id="emergencyPropX" data-oninput="h133">
+        <span class="panel-label" style="min-width:auto">Y</span>
+        <input type="number" class="panel-input" style="width:60px" id="emergencyPropY" data-oninput="h134">
+      </div>
+      <!-- v0.159: Information section restructured with three dedicated fields.
+           Method and Operation render as styled cards in the viewer's bottom sheet,
+           while the freeform Notes field is for anything else (capacity, service date,
+           hazards, etc.). For back-compat with pre-v0.159 markers, the viewer also
+           parses "Method:" and "Operation:" prefixes out of the Notes field if the
+           dedicated fields are empty. -->
+      <hr class="panel-subdivider">
+      <div class="panel-subheader">
+        Information
+        <span class="panel-subheader-hint">— shown when staff tap the marker</span>
+      </div>
+      <div class="panel-row stacked">
+        <span class="panel-label">Method</span>
+        <textarea class="panel-input" id="emergencyMethod" rows="3" placeholder="How to use it. e.g.&#10;Use the PASS technique (Pull, Aim, Squeeze, Sweep) while standing 1–2 metres back." data-oninput="h135"></textarea>
+      </div>
+      <div class="panel-row stacked">
+        <span class="panel-label">Operation</span>
+        <textarea class="panel-input" id="emergencyOperation" rows="3" placeholder="How it works / what it does. e.g.&#10;The dry powder creates a shield against heat and melts over flames to seal them." data-oninput="h136"></textarea>
+      </div>
+      <div class="panel-row stacked">
+        <span class="panel-label">Notes</span>
+        <textarea class="panel-input" id="emergencyDetail" rows="3" placeholder="Anything else. e.g.&#10;Capacity: 5kg.&#10;Last serviced: Q3 2025.&#10;For electrical fires only — never use on cooking oils." data-oninput="h137"></textarea>
+      </div>
+      <div class="panel-row" style="gap:6px;margin-top:6px">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h138">Duplicate</button>
+        <button class="btn-secondary danger" style="flex:1;font-size:11px;padding:5px;color:var(--danger);border-color:rgba(239,68,68,0.3)" data-onclick="h139">Delete</button>
+      </div>
+    </div>
+
+    <!-- v0.136: Price Check properties panel -->
+    <div class="panel-section" id="priceCheckPanel" style="display:none">
+      <div class="panel-header" style="color:#14b8a6">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1 -1h2"/><path d="M4 17v2a1 1 0 0 0 1 1h2"/><path d="M16 4h2a1 1 0 0 1 1 1v2"/><path d="M16 20h2a1 1 0 0 0 1 -1v-2"/><path d="M5 12l14 0"/></svg>
+        Price Check
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Type</span>
+        <select class="panel-input" id="priceCheckVariant" style="flex:1" data-onchange="h140">
+          <option value="pc">Price Check</option>
+          <option value="order">Bulk Order Screen</option>
+        </select>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Label</span>
+        <input type="text" class="panel-input" id="priceCheckLabel" style="flex:1" placeholder="Optional label..." data-oninput="h141">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Location</span>
+        <input type="text" class="panel-input" id="priceCheckLocation" style="flex:1" placeholder="Type or pick a shelf (e.g. B21)" list="markerLocationList" data-oninput="h142">
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Pos</span>
+        <span class="panel-label" style="min-width:auto">X</span>
+        <input type="number" class="panel-input" style="width:60px" id="priceCheckPropX" data-oninput="h143">
+        <span class="panel-label" style="min-width:auto">Y</span>
+        <input type="number" class="panel-input" style="width:60px" id="priceCheckPropY" data-oninput="h144">
+      </div>
+      <!-- v0.158: Information section, matching emergency markers — multi-line notes
+           shown in the viewer's price check tooltip when staff tap the marker. -->
+      <hr class="panel-subdivider">
+      <div class="panel-subheader">
+        Information
+        <span class="panel-subheader-hint">— shown when staff tap the marker</span>
+      </div>
+      <div class="panel-row stacked">
+        <textarea class="panel-input" id="priceCheckDetail" rows="4" placeholder="e.g.&#10;Self-service price scanner.&#10;Scan barcode to display current price.&#10;Reports to register if item not found." data-oninput="h145"></textarea>
+      </div>
+      <div class="panel-row" style="gap:6px;margin-top:6px">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h146">Duplicate</button>
+        <button class="btn-secondary danger" style="flex:1;font-size:11px;padding:5px;color:var(--danger);border-color:rgba(239,68,68,0.3)" data-onclick="h147">Delete</button>
+      </div>
+    </div>
+
+    <!-- Duplicate Warning -->
+    <div class="panel-section" id="dupeBannerSection" style="display:none;padding:10px 14px">
+      <div class="dupe-banner" id="dupeBanner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div>
+          <div style="font-weight:600;margin-bottom:2px">Duplicate names detected</div>
+          <div style="font-size:10px;color:var(--text-secondary)">Each name+subname should be unique:</div>
+          <div class="dupe-banner-list" id="dupeList"></div>
+        </div>
+      </div>
+    </div>
+
+    </div><!-- end tabShelves -->
+
+    <!-- TAB 2: LIST -->
+    <div class="panel-tab-content" id="tabList">
+    <div class="panel-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+      <div class="panel-header">Shelves <span id="shelfCount" style="color:var(--accent)">(0)</span></div>
+      <input type="text" class="shelf-search" id="shelfSearch" placeholder="Search shelves..." data-oninput="h148">
+      <div class="dept-filter-row">
+        <select id="deptFilter" data-onchange="h149">
+          <option value="">All Departments</option>
+        </select>
+      </div>
+      <div class="shelf-list" id="shelfList">
+        <div class="empty-state">No shelves yet. Use the Shelf tool (S) to draw.</div>
+      </div>
+    </div>
+    </div><!-- end tabList -->
+
+    <!-- TAB 3: SETTINGS -->
+    <div class="panel-tab-content" id="tabSettings">
+
+    <!-- Store Info (viewer metadata) -->
+    <div class="panel-section">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 10v9h14v-9"/><path d="M3.5 10h17l-1.4-5H4.9z"/><path d="M10 19v-5h4v5"/></svg>
+        Store Info
+        <span class="info-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span class="info-tip-text">Details shown in the viewer's <strong>Store Details</strong> panel. Saved with the map export so the viewer can read them from the map file.</span></span>
+      </div>
+      <div class="si-grp-label">IDENTITY</div>
+      <div class="panel-row"><span class="panel-label">Zone</span><input type="text" class="panel-input" id="si-zone" placeholder="WA South" data-oninput="h150"></div>
+      <div class="panel-row"><span class="panel-label">Brand</span><input type="text" class="panel-input" id="si-brand" placeholder="Kmart" data-oninput="h151"></div>
+      <div class="panel-row"><span class="panel-label">Orientation</span>
+        <select class="panel-input" id="si-orientation" data-onchange="h152">
+          <option value="normal">Normal</option>
+          <option value="flipped">Flipped</option>
+        </select>
+      </div>
+      <div class="si-grp-label">FORMAT</div>
+      <div class="panel-row">
+        <span class="panel-label">Type</span><input type="text" class="panel-input" style="width:70px" id="si-storeType" placeholder="Store" data-oninput="h153">
+        <span class="panel-label" style="min-width:auto">Plan</span><input type="text" class="panel-input" style="width:46px" id="si-storeStyle" placeholder="C" data-oninput="h154">
+      </div>
+      <div class="panel-row"><span class="panel-label">Size m&sup2;</span><input type="number" class="panel-input" style="width:80px" id="si-storeSize" placeholder="5000" data-oninput="h155"></div>
+      <div class="si-grp-label">ADDRESS</div>
+      <div class="panel-row"><input type="text" class="panel-input" style="flex:1" id="si-addr-0" placeholder="Line 1 (e.g. Power Centre)" data-oninput="h156"></div>
+      <div class="panel-row"><input type="text" class="panel-input" style="flex:1" id="si-addr-1" placeholder="Line 2 (e.g. 86 West Street)" data-oninput="h157"></div>
+      <div class="panel-row"><input type="text" class="panel-input" style="flex:1" id="si-addr-2" placeholder="Line 3 (e.g. West Busselton WA 6280)" data-oninput="h158"></div>
+      <div class="si-grp-label">OPENING HOURS</div>
+      <div id="si-hours-rows"></div>
+      <div class="si-grp-label">PUBLIC HOLIDAYS</div>
+      <div id="si-holidays"></div>
+      <button class="dept-add-btn" data-onclick="h159">+ Add public holiday</button>
+      <div class="si-grp-label">STORE LOCATION</div>
+      <div class="panel-row">
+        <span class="panel-label">Lat</span><input type="text" class="panel-input" style="width:84px" id="si-lat" placeholder="-33.6445" data-oninput="h160">
+        <span class="panel-label" style="min-width:auto">Lng</span><input type="text" class="panel-input" style="width:84px" id="si-lng" placeholder="115.3489" data-oninput="h161">
+      </div>
+      <div class="panel-row"><span class="panel-label">Google</span><input type="text" class="panel-input" style="flex:1" id="si-dirGoogle" placeholder="maps.app.goo.gl/…" data-oninput="h162"></div>
+      <div class="panel-row"><span class="panel-label">Apple</span><input type="text" class="panel-input" style="flex:1" id="si-dirApple" placeholder="maps.apple/…" data-oninput="h163"></div>
+      <div class="si-grp-label">STAFF PARKING</div>
+      <div class="panel-row"><input type="text" class="panel-input" style="flex:1" id="si-parkingTip" placeholder="Parking note" data-oninput="h164"></div>
+      <div class="panel-row">
+        <span class="panel-label">Lat</span><input type="text" class="panel-input" style="width:84px" id="si-parkingLat" placeholder="-33.6442" data-oninput="h165">
+        <span class="panel-label" style="min-width:auto">Lng</span><input type="text" class="panel-input" style="width:84px" id="si-parkingLng" placeholder="115.3492" data-oninput="h166">
+      </div>
+      <div class="si-grp-label">ASSEMBLY POINT</div>
+      <div class="panel-row"><input type="text" class="panel-input" style="flex:1" id="si-assemblyNotes" placeholder="Assembly note" data-oninput="h167"></div>
+      <div class="panel-row">
+        <span class="panel-label">Lat</span><input type="text" class="panel-input" style="width:84px" id="si-assemblyLat" placeholder="-33.6448" data-oninput="h168">
+        <span class="panel-label" style="min-width:auto">Lng</span><input type="text" class="panel-input" style="width:84px" id="si-assemblyLng" placeholder="115.3485" data-oninput="h169">
+      </div>
+      <div class="si-grp-label">STATUS</div>
+      <div class="panel-row">
+        <span class="panel-label">Mapped %</span><input type="number" class="panel-input" style="width:60px" id="si-completion" min="0" max="100" placeholder="45" data-oninput="h170">
+        <span class="panel-label" style="min-width:auto">Updated</span><input type="date" class="panel-input" style="width:120px" id="si-lastUpdated" data-oninput="h171">
+      </div>
+    </div>
+
+    <!-- Module Standards -->
+    <div class="panel-section">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Module Standards
+        <span class="info-tip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          <span class="info-tip-text"><strong>1 module</strong> = 1 bay. Floor &amp; stockroom have separate sizing. Stockroom shelves can also override per-shelf.</span>
+        </span>
+      </div>
+      <div class="panel-row" style="margin-bottom:8px">
+        <span class="panel-label">Grid</span>
+        <input type="number" class="panel-input" style="width:55px" id="globalGridSize" value="20" min="5" max="100" step="5" data-onchange="h172">
+        <span class="panel-label" style="min-width:auto;font-size:9px;color:var(--text-dim)">px per cell</span>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:0.8px;color:var(--text-dim);margin-bottom:4px">SHOP FLOOR</div>
+      <div class="panel-row">
+        <span class="panel-label">Bay W</span>
+        <input type="number" class="panel-input" style="width:55px" id="globalModuleW" value="40" min="10" max="200" data-onchange="h173">
+        <span class="panel-label" style="min-width:auto">Depth</span>
+        <input type="number" class="panel-input" style="width:55px" id="globalShelfDepth" value="20" min="10" max="200" data-onchange="h173">
+      </div>
+      <div style="font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:0.8px;color:#800020;margin-bottom:4px;margin-top:8px">STOCKROOM</div>
+      <div class="panel-row">
+        <span class="panel-label">Bay W</span>
+        <input type="number" class="panel-input" style="width:55px" id="globalStockBayW" value="60" min="10" max="300" data-onchange="h173">
+        <span class="panel-label" style="min-width:auto">Depth</span>
+        <input type="number" class="panel-input" style="width:55px" id="globalStockDepth" value="30" min="10" max="300" data-onchange="h173">
+      </div>
+    </div>
+
+    <!-- Departments -->
+    <div class="panel-section">
+      <div class="panel-header">Departments</div>
+      <div id="deptList"></div>
+      <button class="dept-add-btn" data-onclick="h174">+ Add Sub-Department</button>
+    </div>
+
+    <!-- Store Border -->
+    <div class="panel-section">
+      <div class="panel-header">
+        <svg class="panel-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="4,2 20,2 22,10 18,22 6,22 2,10"/></svg>
+        Store Border
+        <span class="info-tip" style="margin-left:4px">?<span class="info-tip-text"><strong>Store Border</strong> draws the store outline. Click to place a point, click again to add segment. Click near an endpoint to extend. Drag points to adjust. Purely visual.</span></span>
+      </div>
+      <div class="module-size-display" id="borderStatus" style="margin-bottom:6px">No border drawn</div>
+      <div class="panel-row" style="gap:6px">
+        <button class="btn-secondary" style="flex:1;font-size:11px;padding:5px" data-onclick="h27">Draw Border (B)</button>
+        <button class="btn-secondary danger" id="btnClearBorder" style="flex:1;font-size:11px;padding:5px;color:var(--danger);border-color:rgba(239,68,68,0.3)" data-onclick="h175">Clear</button>
+      </div>
+    </div>
+
+    <!-- Underlay -->
+    <div class="panel-section">
+      <div class="panel-header">Floor Plan Underlay</div>
+      <div class="underlay-drop" id="underlayDrop" data-onclick="h176">
+        <div class="underlay-drop-text"><strong>Click to upload</strong> or drag &amp; drop<br><span style="font-size:9px;opacity:0.6">image or PDF</span></div>
+        <input type="file" id="underlayFile" accept="image/*,application/pdf,.pdf" style="display:none" data-onchange="h177">
+      </div>
+      <div id="underlayPdfNav" style="display:none;align-items:center;gap:6px;margin:8px 0;">
+        <button class="btn-secondary" style="padding:3px 12px;font-size:12px" data-onclick="h178" title="Previous page">◀</button>
+        <span style="font-size:11px;color:var(--text-dim);flex:1;text-align:center" id="underlayPdfPageLabel">Page 1 / 1</span>
+        <button class="btn-secondary" style="padding:3px 12px;font-size:12px" data-onclick="h179" title="Next page">▶</button>
+      </div>
+      <button class="btn-secondary" id="setScaleBtn" style="width:100%;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px" data-onclick="h180">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l4-4 14 14-4 4z"/><path d="M7 7l2 2M10 4l3 3M13 10l2 2M16 7l3 3"/></svg>
+        Set Scale
+      </button>
+      <div id="calScaleBox" style="display:none;margin-top:8px;padding:9px 10px;border:1px solid var(--accent);border-radius:7px;background:rgba(99,102,241,0.06);">
+        <div id="calScaleHint" style="font-size:11px;color:var(--text-secondary,#aaa);margin-bottom:7px;line-height:1.4;">Click two points a known distance apart on the plan.</div>
+        <div id="calScaleInputRow" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;">
+          <input type="number" id="calScaleDist" class="panel-input" style="width:64px" placeholder="12" step="any" min="0">
+          <select id="calScaleUnit" class="panel-input" style="width:84px">
+            <option value="m">metres</option>
+            <option value="module">bays</option>
+            <option value="grid">grid sq</option>
+          </select>
+          <button class="btn-secondary" style="padding:4px 12px;border-color:var(--accent);color:var(--accent)" data-onclick="h181">Apply</button>
+        </div>
+        <button class="btn-secondary" id="calScaleCancel" style="padding:3px 11px;margin-top:7px;font-size:11px" data-onclick="h182">Cancel</button>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Opacity</span>
+        <div class="slider-row" style="flex:1">
+          <input type="range" id="underlayOpacity" min="5" max="100" value="30" data-oninput="h183">
+          <span class="slider-value" id="opacityValue">30%</span>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Scale</span>
+        <div class="slider-row" style="flex:1">
+          <input type="range" id="underlayScale" min="5" max="800" value="187" data-oninput="h184">
+          <span class="slider-value" id="scaleValue">187%</span>
+        </div>
+      </div>
+      <div class="panel-row" style="gap:4px">
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h185">100%</button>
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px;border-color:var(--accent);color:var(--accent)" data-onclick="h186">187%</button>
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h187">200%</button>
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h188">300%</button>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Position</span>
+        <span class="panel-label" style="min-width:auto">X</span>
+        <input type="number" class="panel-input" style="width:55px" id="underlayPosX" value="0" data-oninput="h189">
+        <span class="panel-label" style="min-width:auto">Y</span>
+        <input type="number" class="panel-input" style="width:55px" id="underlayPosY" value="0" data-oninput="h190">
+      </div>
+      <div class="panel-row" style="gap:4px">
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h191" title="Move left">← </button>
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h192" title="Move up">↑</button>
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h193" title="Move down">↓</button>
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h194" title="Move right">→</button>
+        <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h195" title="Reset to origin">⟲</button>
+      </div>
+      <div class="panel-row" style="margin-top:6px">
+        <button class="btn-secondary" id="underlayAdjustBtn" style="flex:1;font-size:11px;padding:6px" data-onclick="h196">
+          🖱️ Mouse Adjust: OFF
+        </button>
+      </div>
+      <div id="underlayAdjustHint" style="display:none;font-size:10px;color:var(--accent);line-height:1.5;margin-top:4px;padding:6px 8px;background:rgba(74,158,255,0.08);border-radius:6px">
+        <strong>Drag</strong> image to move · <strong>Scroll</strong> over image to resize · Click button again to exit
+      </div>
+      <div class="panel-row" style="margin-top:4px"><button class="topbar-btn danger" data-onclick="h197" style="font-size:11px;padding:4px 8px">Remove</button></div>
+    </div>
+
+    <!-- Auto-Detect Shelves (v0.419) -->
+    <div class="panel-section" id="detectPanel">
+      <div class="panel-header">✨ Auto-Detect Shelves</div>
+      <div style="font-size:10px;color:var(--text-dim);line-height:1.5;margin-bottom:8px">
+        Scans the underlay for shelf-shaped outlines and filled blocks, then proposes shelves on top of them. Position &amp; scale the underlay first — detected shelves land exactly where the plan shows them.
+      </div>
+      <button class="btn-secondary" id="detectRunBtn" style="width:100%;font-size:12px;padding:7px;border-color:var(--accent);color:var(--accent)" data-onclick="h198">✨ Detect Shelves on Plan</button>
+      <div class="panel-row" style="margin-top:8px">
+        <span class="panel-label" title="Pixels darker than this count as shelf lines/fills">Ink cutoff</span>
+        <div class="slider-row" style="flex:1">
+          <input type="range" id="detectThreshold" min="60" max="245" value="190" data-oninput="h199" data-onchange="h200">
+          <span class="slider-value" id="detectThresholdVal">190</span>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label" title="Ignore shapes thinner than this (canvas px) — filters out text and thin wall lines">Min size</span>
+        <div class="slider-row" style="flex:1">
+          <input type="range" id="detectMinSide" min="4" max="60" value="10" data-oninput="h201" data-onchange="h200">
+          <span class="slider-value" id="detectMinSideVal">10</span>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label" title="Ignore shapes longer than this (canvas px) — filters out the store outline">Max size</span>
+        <div class="slider-row" style="flex:1">
+          <input type="range" id="detectMaxSide" min="200" max="4000" step="50" value="1600" data-oninput="h202" data-onchange="h200">
+          <span class="slider-value" id="detectMaxSideVal">1600</span>
+        </div>
+      </div>
+      <div class="panel-row">
+        <span class="panel-label">Create as</span>
+        <select id="detectCreateAs" class="panel-input" style="flex:1">
+          <option value="auto" selected>Auto (recommended)</option>
+          <option value="standard">Standard shelves</option>
+          <option value="custom">Custom (exact size)</option>
+        </select>
+      </div>
+      <label class="panel-row" style="gap:6px;cursor:pointer;font-size:11px;color:var(--text-dim)">
+        <input type="checkbox" id="detectMerge" checked data-onchange="h200"> Merge bay runs into single shelves
+      </label>
+      <div id="detectStatus" style="font-size:10px;color:var(--text-dim);line-height:1.5;margin-top:6px;min-height:14px"></div>
+      <div id="detectResults" style="display:none;margin-top:8px;padding:9px 10px;border:1px solid var(--accent);border-radius:7px;background:rgba(99,102,241,0.06)">
+        <div style="font-size:11px;margin-bottom:7px"><strong id="detectCount">0 found</strong><br><span style="font-size:10px;color:var(--text-dim)">Click boxes on the map to include / exclude them.</span></div>
+        <div class="panel-row" style="gap:4px;margin-bottom:6px">
+          <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h203">All on</button>
+          <button class="btn-secondary" style="flex:1;font-size:10px;padding:4px" data-onclick="h204">All off</button>
+        </div>
+        <div class="panel-row" style="gap:4px">
+          <button class="btn-secondary" id="detectApplyBtn" style="flex:2;font-size:11px;padding:6px;border-color:var(--success,#10b981);color:var(--success,#10b981)" data-onclick="h205">Add shelves</button>
+          <button class="btn-secondary" style="flex:1;font-size:11px;padding:6px" data-onclick="h206">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Load Demo -->
+    <div class="panel-section" style="border-top:1px solid var(--border);padding-top:12px">
+      <button class="btn-secondary" style="width:100%;font-size:11px;padding:6px" data-onclick="h207">Load Demo Map</button>
+    </div>
+
+    </div><!-- end tabSettings -->
+
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <div class="statusbar-item"><span class="statusbar-dot" style="background:var(--success)"></span><span id="statusTool">Select</span></div>
+  <div class="statusbar-item" id="statusCoords">X: 0 Y: 0</div>
+  <div class="statusbar-item" id="statusModuleInfo">Floor: 40×20 | Stock: 60×30</div>
+  <div class="statusbar-item" id="statusSnapInfo">Snap: ON</div>
+  <div class="statusbar-item" id="statusDupes" style="display:none;color:var(--warning)">⚠ 0 duplicates</div>
+  <div class="statusbar-item" id="statusUndo" style="color:var(--text-dim);opacity:0.6">↩ 0 | ↪ 0</div>
+  <div class="statusbar-item" id="statusInfo" style="color:#fbbf24;display:none"></div>
+  <div class="dept-badges" id="deptBadges"></div>
+</div>
+
+<!-- Context Menu -->
+<div class="context-menu" id="contextMenu">
+  <div class="context-item" data-onclick="h98">Copy <span class="kbd">Ctrl+C</span></div>
+  <div class="context-item" data-onclick="h208">Paste <span class="kbd">Ctrl+V</span></div>
+  <div class="context-item" data-onclick="h38">Duplicate <span class="kbd">Ctrl+D</span></div>
+  <div class="context-sep"></div>
+  <div class="context-item" data-onclick="h37">Rotate 90° <span class="kbd">R</span></div>
+  <div class="context-item" data-onclick="h209">Rotate +15° <span class="kbd">⇧R</span></div>
+  <div class="context-item" data-onclick="h210">Bring to Front</div>
+  <div class="context-item" data-onclick="h211">Send to Back</div>
+  <div class="context-sep"></div>
+  <div class="context-item" data-onclick="h212">Highlight Related</div>
+  <div class="context-sep"></div>
+  <div class="context-item danger" data-onclick="h39">Delete <span class="kbd">Del</span></div>
+</div>
+
+<div class="context-menu" id="boundaryContextMenu">
+  <div class="context-item" data-onclick="h213">Remove Point</div>
+  <div class="context-sep"></div>
+  <div class="context-item danger" data-onclick="h214">Clear Entire Border</div>
+</div>
+
+<!-- Dept Modal -->
+<div class="modal-overlay" id="deptModal">
+  <div class="modal">
+    <h3 id="deptModalTitle">Add Sub-Department</h3>
+    <div class="panel-row">
+      <span class="panel-label">Name</span>
+      <input type="text" class="panel-input" id="deptNameInput" placeholder="e.g. H5 Garden">
+    </div>
+    <div class="panel-row">
+      <span class="panel-label">Group</span>
+      <select class="panel-select" id="deptParentInput">
+        <option value="">(Standalone)</option>
+      </select>
+    </div>
+    <div class="panel-row">
+      <span class="panel-label">Color</span>
+      <input type="color" id="deptColorInput" value="#4a9eff" style="width:40px;height:30px;border:none;background:none;cursor:pointer">
+      <input type="text" class="panel-input" id="deptColorHex" value="#4a9eff" style="width:90px;font-family:var(--font-mono)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" data-onclick="h215">Cancel</button>
+      <button class="btn-primary" id="deptModalSave" data-onclick="h216">Add</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="importFile" accept=".json" style="display:none" data-onchange="h217">
+<input type="hidden" id="storeNumber" value="">
+<input type="hidden" id="storeName" value="">
+
+<!-- Shortcuts Modal -->
+<div class="shortcuts-modal" id="shortcutsModal" data-onclick="h218">
+  <div class="shortcuts-content">
+    <h3>Keyboard Shortcuts</h3>
+    <div class="shortcuts-section">
+      <h4>Tools</h4>
+      <div class="shortcut-row"><span>Select</span><span class="kbd">V</span></div>
+      <div class="shortcut-row"><span>Add Shelf</span><span class="kbd">S</span></div>
+      <div class="shortcut-row"><span>Custom Shelf</span><span class="kbd">C</span></div>
+      <div class="shortcut-row"><span>6-Way Display</span><span class="kbd">W</span></div>
+      <div class="shortcut-row"><span>Add Landmark</span><span class="kbd">Z</span></div>
+      <div class="shortcut-row"><span>Add Wall</span><span class="kbd">X</span></div>
+      <div class="shortcut-row"><span>Tory Line</span><span class="kbd">T</span></div>
+      <div class="shortcut-row"><span>Move to Floor</span><span class="kbd">M</span></div>
+      <div class="shortcut-row"><span>Store Border</span><span class="kbd">B</span></div>
+      <div class="shortcut-row"><span>Dept Zoom Box</span><span class="kbd">J</span></div>
+      <div class="shortcut-row"><span>Emergency Marker</span><span class="kbd">E</span></div>
+      <div class="shortcut-row"><span>Pan</span><span class="kbd">H</span></div>
+    </div>
+    <div class="shortcuts-section">
+      <h4>Editing</h4>
+      <div class="shortcut-row"><span>Rotate 90°</span><span class="kbd">R</span></div>
+      <div class="shortcut-row"><span>Rotate 15° increments</span><span class="kbd">⇧R</span></div>
+      <div class="shortcut-row"><span>Duplicate</span><span class="kbd">Ctrl D</span></div>
+      <div class="shortcut-row"><span>Copy / Paste</span><span class="kbd">Ctrl C</span> <span class="kbd">Ctrl V</span></div>
+      <div class="shortcut-row"><span>Delete</span><span class="kbd">Del</span></div>
+      <div class="shortcut-row"><span>Undo / Redo</span><span class="kbd">Ctrl Z</span> <span class="kbd">Ctrl Y</span></div>
+    </div>
+    <div class="shortcuts-section">
+      <h4>Navigation</h4>
+      <div class="shortcut-row"><span>Nudge shelf</span><span class="kbd">↑↓←→</span></div>
+      <div class="shortcut-row"><span>Nudge (large step)</span><span class="kbd">⇧ ↑↓←→</span></div>
+      <div class="shortcut-row"><span>Nudge (pixel-precise)</span><span class="kbd">Ctrl ↑↓←→</span></div>
+      <div class="shortcut-row"><span>Zoom In / Out</span><span class="kbd">+</span> <span class="kbd">-</span></div>
+      <div class="shortcut-row"><span>Fit View</span><span class="kbd">0</span></div>
+      <div class="shortcut-row"><span>Pan</span><span>Middle-click drag</span></div>
+    </div>
+    <div class="shortcuts-section">
+      <h4>Border Tool</h4>
+      <div class="shortcut-row"><span>Place point</span><span>Click</span></div>
+      <div class="shortcut-row"><span>Close border</span><span>Click first point / <span class="kbd">Enter</span></span></div>
+      <div class="shortcut-row"><span>Cancel</span><span class="kbd">Esc</span></div>
+    </div>
+    <div class="shortcuts-section">
+      <h4>Other</h4>
+      <div class="shortcut-row"><span>Deselect all</span><span class="kbd">Esc</span></div>
+      <div class="shortcut-row"><span>This dialog</span><span class="kbd">?</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Print/Image Export Modal -->
+<div class="print-modal" id="printModal" data-onclick="h218">
+  <div class="print-modal-content">
+    <h3>Export as Image</h3>
+    <div class="panel-row" style="margin-bottom:8px">
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="printShowGrid" checked> Show grid</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="printShowBorder" checked> Show border</label>
+    </div>
+    <div class="panel-row" style="margin-bottom:8px">
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="printShowLabels" checked> Show labels</label>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="printWhiteBg" checked> White background</label>
+    </div>
+    <div class="print-btn-row">
+      <button data-onclick="h219">Cancel</button>
+      <button data-onclick="h220">SVG</button>
+      <button class="primary" data-onclick="h221">PNG</button>
+    </div>
+  </div>
+</div>
+
+<!-- v0.153: Export Map modal — chooser between deployable .js and backup .json -->
+<div class="print-modal" id="exportModal" data-onclick="h218">
+  <div class="print-modal-content" style="max-width:480px">
+    <h3 style="margin:0 0 4px">Export Map</h3>
+    <p style="margin:0 0 14px;font-size:11px;color:var(--text-dim)">Choose the format that suits what you need to do.</p>
+    <div class="export-option" data-onclick="h222">
+      <div class="export-option-header">
+        <span class="export-option-badge js">.js</span>
+        <span class="export-option-title">Deployable map file</span>
+      </div>
+      <p class="export-option-desc">
+        The map with each floor's drawing baked in, for the older viewers. Conduit takes it too, but <strong>Publish to Conduit</strong> in the top bar is the normal way to update what staff see.
+      </p>
+    </div>
+    <div class="export-option" data-onclick="h223">
+      <div class="export-option-header">
+        <span class="export-option-badge json">.json</span>
+        <span class="export-option-title">Editor backup file</span>
+      </div>
+      <p class="export-option-desc">
+        Raw editor state including everything that doesn't make it into the deployed file (underlay images, undo history, internal IDs). Use for <strong>backups</strong> or to <strong>transfer your in-progress work</strong> to another machine — re-import it via the Import button.
+      </p>
+    </div>
+    <div class="print-btn-row" style="margin-top:14px;justify-content:flex-end">
+      <button data-onclick="h224">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Store Audit Checklist modal -->
+<div class="audit-modal" id="auditModal">
+  <div class="audit-head">
+    <div class="audit-head-left">
+      <div class="audit-title-row"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg><span>Store Audit</span> <span class="audit-store" id="auditStoreTitle"></span></div>
+      <div class="audit-progress"><div class="audit-progress-track"><div class="audit-progress-bar" id="auditProgressBar"></div></div><span id="auditProgressLabel">0 / 0 captured</span></div>
+    </div>
+    <button class="audit-close" data-onclick="h225" title="Close" aria-label="Close">&times;</button>
+  </div>
+  <div class="audit-body" id="auditBody"></div>
+  <div class="audit-pdfbar">
+    <div class="audit-pdf-left">
+      <canvas id="auditPdfThumb" style="display:none"></canvas>
+      <div>
+        <div class="audit-pdf-title">Floor plan reference</div>
+        <div class="audit-pdf-name" id="auditPdfName">No PDF attached</div>
+      </div>
+    </div>
+    <div class="audit-pdf-actions">
+      <button class="btn-secondary" data-onclick="h226">Attach PDF</button>
+      <button class="btn-secondary" id="auditPdfView" style="display:none" data-onclick="h227">View</button>
+      <input type="file" id="auditPdfFile" accept="application/pdf,.pdf" style="display:none" data-onchange="h228">
+    </div>
+  </div>
+  <div class="audit-foot">
+    <button class="btn-secondary" data-onclick="h229">Reset</button>
+    <span style="flex:1"></span>
+    <button class="btn-secondary" data-onclick="h230">Print audit checklist</button>
+    <button class="btn-secondary" data-onclick="h231" title="Printable list of mapped shelves to verify in-store">Print shelf checklist</button>
+    <button class="btn-secondary" style="border-color:var(--accent);color:var(--accent)" data-onclick="h225">Done</button>
+  </div>
+</div>
+
+<!-- No inline code: Conduit's CSP runs only this origin's script files.
+     handlers.js binds what used to be on*="…" attributes; conduit.js is the
+     owner-only connection to Conduit (sign in, open, publish, suggestions). -->
+<script src="lib/pdf.min.js"></script>
+<script src="boot.js"></script>
+<script src="editor.js"></script>
+<script src="handlers.js"></script>
+<script src="suggestions.js"></script>
+<script type="module" src="conduit.js"></script>
+</body>
+</html>

@@ -9,7 +9,7 @@ import { RINGS } from '../../../shared/reducers/stockroom.js';
 import { RING, ring, ageOf, ensureNames, nameHtml, nameOf, send } from './common.js';
 import { gs1Parse } from '../../../shared/gs1.js';
 import { ulid } from '../../../shared/ulid.js';
-import { hasMap, mountMap, bindMapChrome, mvMap } from '../../map.js';
+import { hasMap, mountMap, bindMapChrome, mvMap, segmentId } from '../../map.js';
 import { printSheet } from '../../print.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 
@@ -69,7 +69,7 @@ export default {
     if (stage && hasMap()) {
       const map = mountMap(stage, { onSelect: async info => {
         if (!st.placing || (info.kind !== 'floor' && info.kind !== 'shelf')) return;
-        const p = info.point || map.centreOf(info.id), near = info.kind === 'shelf' ? { id: info.id } : nearestShelf(map, p), id = st.placing; st.placing = null;
+        const p = info.point || map.centreOf(info.id), near = info.kind === 'shelf' ? { id: info.full } : nearestShelf(map, p), id = st.placing; st.placing = null;
         await send(ctx, 'cage.park', { cage: id }, { location: near ? `NEAR ${near.id}` : 'BOH', x: p[0], y: p[1], floor: map.floorId() || null });
         toast(`${id} placed${near ? ` near ${near.id}` : ''}`);
       } });
@@ -189,7 +189,7 @@ function nearestShelf(map, p) {
     if (g.closest('.mfl')?.getAttribute('data-fid') !== map.floorId()) continue;
     const r = g.querySelector('.shelf'); if (!r) continue;
     const b = r.getBBox(), d = (b.x + b.width / 2 - p[0]) ** 2 + (b.y + b.height / 2 - p[1]) ** 2;
-    if (!best || d < best.d) best = { d, id: g.getAttribute('data-shelf') };
+    if (!best || d < best.d) best = { d, id: segmentId(g) };   // the shelf, "A16 S2"
   }
   return best;
 }

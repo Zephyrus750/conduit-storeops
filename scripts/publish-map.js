@@ -9,7 +9,7 @@
 // The owner key comes from OWNER_KEY in the environment, or --owner-key.
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseMapFile, renderMap } from '../shared/maprender.js';
+import { parseMapFile, publishBody } from '../shared/maprender.js';
 
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : dflt; };
@@ -22,15 +22,16 @@ if (!store || !version || (!floors.length && !file) || !ownerKey) {
   console.error('usage: publish-map --store <no> --version <v> (--file <map.js|map.json> | --floor ground=<file.svg> [--floor stockroom=<file>]) [--name <name>] [--worker <url>]   (OWNER_KEY in env or --owner-key)');
   process.exit(1);
 }
-let departments, storeInfo, metresPerUnit;
+let departments, storeInfo, metresPerUnit, source;
 const rendered = [];
 if (file) {
   const parsed = parseMapFile(fs.readFileSync(file, 'utf8'), path.basename(file));
   if (parsed.kind === 'svg') rendered.push({ id: 'ground', name: 'Ground', type: 'foh', svg: parsed.svg });
   else {
-    const doc = renderMap(parsed.data);
-    for (const f of doc.floors) { if (!f.shelves && !f.markers) { console.error(`skipping empty floor ${f.name}`); continue; } rendered.push({ id: f.id, name: f.name, type: f.type, svg: f.svg, ...(f.paths ? { paths: f.paths } : {}) }); console.error(`rendered ${f.name} (${f.type}): ${f.shelves} shelves, ${f.markers} markers`); }
-    departments = doc.departments; storeInfo = doc.storeInfo; metresPerUnit = doc.metresPerUnit; if (!name) name = doc.name;
+    // The same request the map editor and the owner console send.
+    const b = publishBody(parsed.data, { version, name });
+    for (const f of b.floors) { rendered.push(f); console.error(`rendered ${f.name}: ${(f.svg.match(/class="shelf-group"(?![^>]*data-inactive)/g) || []).length} shelves`); }
+    ({ departments, storeInfo, metresPerUnit, source } = b); if (!name) name = b.name;
   }
 }
 const call = async (path, body, token) => {
@@ -40,6 +41,7 @@ const call = async (path, body, token) => {
   return j;
 };
 const { token } = await call('/v1/auth/signin', { ownerKey, device: 'publish-map' });
-const body = { version, name, departments, ...(storeInfo ? { storeInfo } : {}), ...(metresPerUnit ? { metresPerUnit } : {}), floors: [...rendered.filter(r => !floors.some(f => f.id === r.id)), ...floors.map(f => ({ id: f.id, name: f.id === 'ground' ? 'Ground' : f.id, type: f.id === 'stockroom' ? 'boh' : 'foh', svg: fs.readFileSync(f.file, 'utf8') }))] };
+const body = { version, name, departments, ...(storeInfo ? { storeInfo } : {}), ...(metresPerUnit ? { metresPerUnit } : {}), ...(source ? { source } : {}), floors: [...rendered.filter(r => !floors.some(f => f.id === r.id)), ...floors.map(f => ({ id: f.id, name: f.id === 'ground' ? 'Ground' : f.id, type: f.id === 'stockroom' ? 'boh' : 'foh', svg: fs.readFileSync(f.file, 'utf8') }))] };
 const r = await call(`/v1/store/${store}/map`, body, token);
+if (r.stripped) console.error(`the worker removed ${r.stripped} unsafe item(s) from the drawing`);
 console.log(`published ${store} map ${r.version} at ${r.at}: ` + r.floors.map(f => `${f.id} ${f.shelves} shelves ${(f.bytes / 1024).toFixed(0)} KB${f.paths ? ` · ${f.paths.nodes} path nodes` : ''}`).join(', '));

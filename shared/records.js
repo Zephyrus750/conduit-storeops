@@ -38,7 +38,7 @@ export function productLife(state, keycode) {
 
 export function historyRows(state, kind) {
   if (kind === 'backfill') return Object.values(state.backfill?.subs || {}).filter(s => s.status !== 'pending' && s.metrics)
-    .map(s => ({ date: s.date, bay: s.bay, status: s.status, readyAt: s.readyAt || '', submittedAt: s.submittedDoneAt || '', expected: s.metrics.expected, scanned: s.metrics.scanned, match: s.metrics.match, accuracy: s.metrics.accuracy, incorrect: s.metrics.incorrect, codes: Object.keys(s.codes || {}).length, auto: !!s.autoSubmitted }))
+    .map(s => ({ date: s.date, bay: s.bay, status: s.status, readyAt: s.readyAt || '', submittedAt: s.submittedDoneAt || '', expected: s.metrics.expected, scanned: s.metrics.scanned, match: s.metrics.match, accuracy: s.metrics.accuracy, incorrect: s.metrics.incorrect, codes: s.trimmed ? s.codeCount || 0 : Object.keys(s.codes || {}).length, auto: !!s.autoSubmitted }))
     .sort((a, b) => (b.submittedAt || b.readyAt || b.date).localeCompare(a.submittedAt || a.readyAt || a.date));
   if (kind === 'cages') return Object.entries(state.cages || {})
     .map(([cage, c]) => ({ cage, ring: c.ring, status: c.status, location: c.location || '', keycodes: Object.keys(c.items || {}).length, units: Object.values(c.items || {}).reduce((a, b) => a + b, 0), sweeps: (c.sweeps || []).length, created: c.created || '', seen: c.seen || '', closed: c.closed || '' }))
