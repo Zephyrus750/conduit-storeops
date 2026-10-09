@@ -117,10 +117,21 @@ export function shelfScanField(placeholder = 'Scan or type a shelf label') {
 }
 // Words for where a shelf sits, the same on the card, the phone panel, the
 // tip and search. A shelf is "A16 S2"; a run is the shelves that share the
-// name "A16". (The editor's "modules" are the units inside one shelf.)
-export function runText(name, sub, count) {
-  if (count > 1) return sub ? `in run ${name} · ${count} shelves` : `run of ${count} shelves`;
-  return 'single shelf';
+// name "A16". (The editor's "modules" are the units inside one shelf.) The
+// other shelves are named, not counted: "in run A16 with S1, E1, E2" for a
+// shelf, "shelves S1, S2, E1, E2" for a run. A run whose shelves carry no
+// S/E names falls back to its count.
+export function runText(name, sub, subs, count = subs.length) {
+  if (count <= 1) return 'single shelf';
+  const all = sortSubs(subs), own = canonCode(sub);
+  if (own) { const others = all.filter(x => x !== own); return others.length ? `in run ${name} with ${others.join(', ')}` : `in run ${name} · ${count} shelves`; }
+  return all.length > 1 ? `shelves ${all.join(', ')}` : `run of ${count} shelves`;
+}
+// The S/E names of a run's shelves, sides before ends, in number order.
+export function runSubs(api, name) { return sortSubs(api.groups(name).map(g => g.getAttribute('data-subname'))); }
+function sortSubs(subs) {
+  const rank = x => (x[0] === 'S' ? 0 : x[0] === 'E' ? 1 : 2);
+  return [...new Set(subs.map(canonCode).filter(Boolean))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
 }
 // The one shelf a scanned or typed label names, or why not: a run's name
 // ("A16") covers several shelves, and a scan never quietly picks one of them.
@@ -165,7 +176,7 @@ function tipHtml(api, g, tip) {
   if (mx === undefined) { const m = MARK_LINE[mark]; mx = m ? tipLine(m[0], m[1], m[2]) : ''; }
   const d = shelfDetail(api, info.code);   // this shelf's own locations and size, not the whole run's
   return `<div class="md"><span class="dep" style="background:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
-    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, info.segments))}${d.modules ? ` · ${d.modules} module${d.modules === 1 ? '' : 's'}` : ''}</span><span>${ic('orient')}${horiz ? 'Horizontal' : 'Vertical'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
+    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, runSubs(api, info.id), info.segments))}${d.modules ? ` · ${d.modules} module${d.modules === 1 ? '' : 's'}` : ''}</span><span>${ic('orient')}${horiz ? 'Horizontal' : 'Vertical'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
 }
 // Tooltips for what is not a shelf: an emergency sign, a price check or
 // order screen, a landmark (ShelfSearcher's desktop hover tips).
