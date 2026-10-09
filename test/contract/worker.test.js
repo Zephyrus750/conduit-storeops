@@ -752,3 +752,25 @@ test('retention: a bay older than 60 days leaves the live state at the nightly r
   const k = (await api('GET', '/v1/admin/stores/2066/kpis', undefined, ownerToken)).body;
   assert.ok(k.bytes > 0 && k.bytes < 1_200_000);
 });
+
+test('the map editor publishes with its source: the owner reopens it, devices never see it; levels and stairs links are kept', async () => {
+  assert.equal((await reg2('2077')).status, 201);
+  const dev = (await api('POST', '/v1/auth/signin', { store: '2077', pin: '135790', device: 'ph-77' })).body.token;
+  const svg = '<svg class="map real" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><g class="shelf-group" data-shelf="A1" data-full="A1"><rect class="shelf" x="0" y="0" width="1" height="1"/></g><g class="shelf-group" data-shelf="A2" data-full="A2" data-inactive="1"><rect class="shelf" x="2" y="0" width="1" height="1"/></g></svg>';
+  const source = { storeNumber: '2077', version: '4.3', floors: [{ id: 'ground', level: 0, shelves: [{ id: 'shelf_1', name: 'A1', x: 0, y: 0 }] }] };
+  const paths = { nodes: [{ id: 'p1', x: 0, y: 0 }, { id: 's1', x: 5, y: 0, type: 'stairs', links: [{ floorId: 'mezz', nodeId: 'm1' }, { floorId: '', nodeId: 'x' }] }], edges: [{ a: 'p1', b: 's1' }] };
+  assert.equal((await api('POST', '/v1/store/2077/map', { version: 'e1', floors: [{ id: 'ground', svg }], source: 'nope' }, ownerToken)).status, 400);
+  const pub = await api('POST', '/v1/store/2077/map', { version: 'e1', floors: [{ id: 'ground', level: 0, svg, paths }, { id: 'mezz', level: 1, svg }], source }, ownerToken);
+  assert.equal(pub.status, 201); assert.equal(pub.body.source, true); assert.equal(pub.body.floors[0].shelves, 1, 'the inactive shelf is not counted');
+  const back = await api('GET', '/v1/store/2077/map/latest/source', undefined, ownerToken);
+  assert.equal(back.status, 200); assert.deepEqual(back.body, source);
+  assert.equal((await api('GET', '/v1/store/2077/map/e1/source', undefined, dev)).status, 403, 'a store device cannot read the source');
+  const doc = (await api('GET', '/v1/store/2077/map/latest', undefined, dev)).body;
+  assert.equal(doc.source, undefined); assert.deepEqual(doc.floors.map(f => f.level), [0, 1]);
+  assert.deepEqual(doc.floors[0].paths.nodes[1].links, [{ floorId: 'mezz', nodeId: 'm1' }], 'links kept, the empty one dropped');
+  const info = (await api('GET', '/v1/store/2077/map', undefined, ownerToken)).body;
+  assert.equal(info.source, true); assert.equal(info.versions[0].source, true);
+  assert.equal((await api('POST', '/v1/store/2077/map', { version: 'e2', floors: [{ id: 'ground', svg }] }, ownerToken)).status, 201);
+  const none = await api('GET', '/v1/store/2077/map/latest/source', undefined, ownerToken);
+  assert.equal(none.status, 404, 'a version published from a file has no source'); assert.match(none.body.message, /no editor source/);
+});

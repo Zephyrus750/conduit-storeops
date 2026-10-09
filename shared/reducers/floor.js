@@ -240,7 +240,10 @@ export const floorReducers = {
   },
 
   // ── Emergency assets ─────────────────────────────────────────────────
+  // payload.from: the marker's key on a map published before markers had
+  // ids (type_x_y). Its record moves to the id the first time it is used.
   'asset.service'(s, e) {
+    adoptAsset(s, e);
     const a = (s.assets[e.entity.asset] ||= { intMonths: 12, due: null, log: [], updated: null });
     a.log.push({ t: e.at, a: 'Serviced', n: e.payload.note || '' });
     a.due = addMonths(storeDayOf(s, e.at), a.intMonths); a.updated = e.at;   // the store's day, not UTC's
@@ -249,6 +252,7 @@ export const floorReducers = {
   'asset.schedule'(s, e) {
     const m = e.payload.months;
     if (!(Number.isInteger(m) && m >= 1 && m <= MAX_INT_MONTHS)) return reject('invalid_event', `months must be 1..${MAX_INT_MONTHS}`);
+    adoptAsset(s, e);
     const a = (s.assets[e.entity.asset] ||= { intMonths: 12, due: null, log: [], updated: null });
     a.intMonths = m;
     const last = a.log.filter(l => l.a === 'Serviced').map(l => l.t).sort().pop() || e.at;
@@ -343,6 +347,10 @@ function issue(s, e) {
 function num(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
 
 // Adds calendar months to an ISO timestamp and returns an ISO date (YYYY-MM-DD).
+function adoptAsset(s, e) {
+  const from = typeof e.payload?.from === 'string' ? e.payload.from : '', to = e.entity.asset;
+  if (from && from !== to && !s.assets[to] && s.assets[from]) { s.assets[to] = s.assets[from]; delete s.assets[from]; }
+}
 const storeDayOf = (s, at) => storeDay(new Date(at), s.settings?.tz || DEFAULT_TZ);
 export function addMonths(iso, months) {
   const d = new Date(iso);

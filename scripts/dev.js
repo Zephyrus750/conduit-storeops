@@ -75,11 +75,16 @@ if (fs.existsSync(svgFile)) {
   console.log('map     ', pub.version ? `published dev map (${pub.floors[0].shelves} shelves)` : pub.code === 'exists' ? 'dev map already published' : JSON.stringify(pub));
 }
 
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+// The live site's security policy (netlify.toml), with the local worker
+// allowed, so local testing runs under the same rules as production: a page
+// that relies on inline code or another site breaks here first.
+const CSP = (/Content-Security-Policy = "([^"]+)"/.exec(fs.readFileSync(path.join(root, 'netlify.toml'), 'utf8')) || [])[1]
+  ?.replace('connect-src ', `connect-src http://127.0.0.1:${API} ws://127.0.0.1:${API} `);
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.wasm': 'application/wasm' };
 http.createServer((req, res) => {
   let p = decodeURIComponent(new URL(req.url, 'http://x').pathname); if (p.endsWith('/')) p += 'index.html';
   const f = path.join(root, p);
   if (!f.startsWith(root) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end('not found'); }
-  res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+  res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store', ...(CSP ? { 'Content-Security-Policy': CSP } : {}) });
   fs.createReadStream(f).pipe(res);
 }).listen(WEB, '127.0.0.1', () => console.log('shell   ', `http://127.0.0.1:${WEB}/`));

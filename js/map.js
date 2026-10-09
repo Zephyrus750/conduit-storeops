@@ -4,7 +4,7 @@
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
 import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast } from './ui.js';
-import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords } from '../shared/route.js';
+import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords, linkedNode } from '../shared/route.js';
 import { markerGlyph, locationRange, markerSymbol, MARKER_NAMES, LANDMARK_NAMES, markerType } from '../shared/maprender.js';
 import { prefs, setPref } from './prefs.js';
 import { haptic } from './device.js';
@@ -48,7 +48,7 @@ export function shelfForLocation(code) {
   if (!floors.length) return null;
   if (!locIndex || locIndex.v !== mapMeta?.version) {
     const idx = new Map(), doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => f.inner).join('')}</svg>`, 'image/svg+xml');
-    for (const g of doc.querySelectorAll('.shelf-group[data-shelf]')) {
+    for (const g of doc.querySelectorAll('.shelf-group[data-shelf]:not([data-inactive])')) {
       const shelf = g.getAttribute('data-shelf'); if (!shelf) continue;
       const mod = canonCode(shelf + (g.getAttribute('data-subname') || ''));
       if (!idx.has(canonCode(shelf))) idx.set(canonCode(shelf), shelf);
@@ -68,7 +68,7 @@ export function mapStats() {
   if (!floors.length) return null;
   if (statsCache?.v !== mapMeta?.version) {
     const doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => `<g data-fid="${esc(f.id)}">${f.inner}</g>`).join('')}</svg>`, 'image/svg+xml');
-    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const named = [...(g?.querySelectorAll('.shelf-group[data-shelf]') || [])].filter(x => { const n = x.getAttribute('data-shelf'); return n && !n.startsWith('_u'); }); return { id: f.id, name: f.name, type: f.type, shelves: new Set(named.map(segmentId)).size, runs: new Set(named.map(x => x.getAttribute('data-shelf'))).size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }), depts: (() => { const by = {}; for (const g of doc.querySelectorAll('.shelf-group[data-shelf][data-dept]')) { const n = g.getAttribute('data-shelf'), d = g.getAttribute('data-dept').toLowerCase(); if (!n || n.startsWith('_u')) continue; (by[d] ||= new Set()).add(segmentId(g)); } return Object.fromEntries(Object.entries(by).map(([d, set]) => [d, set.size])); })() };
+    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const named = [...(g?.querySelectorAll('.shelf-group[data-shelf]:not([data-inactive])') || [])].filter(x => { const n = x.getAttribute('data-shelf'); return n && !n.startsWith('_u'); }); return { id: f.id, name: f.name, type: f.type, shelves: new Set(named.map(segmentId)).size, runs: new Set(named.map(x => x.getAttribute('data-shelf'))).size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }), depts: (() => { const by = {}; for (const g of doc.querySelectorAll('.shelf-group[data-shelf][data-dept]:not([data-inactive])')) { const n = g.getAttribute('data-shelf'), d = g.getAttribute('data-dept').toLowerCase(); if (!n || n.startsWith('_u')) continue; (by[d] ||= new Set()).add(segmentId(g)); } return Object.fromEntries(Object.entries(by).map(([d, set]) => [d, set.size])); })() };
   }
   return statsCache;
 }
@@ -100,7 +100,7 @@ export function canonCode(code) { return String(code || '').toUpperCase().replac
 export function splitCanon(code) { const C = canonCode(code); const m = /^(.+?)([SE]\d+)$/.exec(C); return m ? { shelf: m[1], sub: m[2] } : { shelf: C, sub: '' }; }
 export function groupsFor(root, code) {
   const C = canonCode(code); if (!C) return [];
-  const all = $$('.shelf-group[data-shelf]', root).filter(g => g.getAttribute('data-shelf'));
+  const all = $$('.shelf-group[data-shelf]:not([data-inactive])', root).filter(g => g.getAttribute('data-shelf'));
   const byName = all.filter(g => canonCode(g.getAttribute('data-shelf')) === C);
   if (byName.length) return byName;
   const { shelf, sub } = splitCanon(C);
@@ -165,7 +165,7 @@ function tipHtml(api, g, tip) {
   if (mx === undefined) { const m = MARK_LINE[mark]; mx = m ? tipLine(m[0], m[1], m[2]) : ''; }
   const d = shelfDetail(api, info.code);   // this shelf's own locations and size, not the whole run's
   return `<div class="md"><span class="dep" style="background:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
-    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, info.segments))}</span><span>${ic('orient')}${horiz ? 'Horizontal' : 'Vertical'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
+    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, info.segments))}${d.modules ? ` · ${d.modules} module${d.modules === 1 ? '' : 's'}` : ''}</span><span>${ic('orient')}${horiz ? 'Horizontal' : 'Vertical'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
 }
 // Tooltips for what is not a shelf: an emergency sign, a price check or
 // order screen, a landmark (ShelfSearcher's desktop hover tips).
@@ -199,8 +199,10 @@ export function fixtureOf(g) {
 // different name within 40 units, as ShelfSearcher paired them), and its
 // size in metres.
 export function shelfDetail(api, id) {
-  const gs = api.groups(id), out = { fixture: '', range: '', locations: [], shared: [], size: '' };
+  const gs = api.groups(id), out = { fixture: '', range: '', locations: [], shared: [], size: '', modules: 0 };
   if (!gs.length) return out;
+  // The editor's modules: units along a shelf (a run adds its shelves').
+  out.modules = gs.reduce((n, g) => n + (Number(g.getAttribute('data-modules')) || 0), 0);
   const fx = [...new Set(gs.map(fixtureOf).filter(Boolean))]; out.fixture = fx.join(' / ');
   const locs = [...new Set(gs.flatMap(g => (g.getAttribute('data-locations') || '').split(',').filter(Boolean)))];
   if (locs.length) { out.locations = locs; out.range = locationRange(locs); }
@@ -467,7 +469,9 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     groups(id) { return groupsFor(svg, id); },
     code(id) { return splitCode(svg, id); },
     graph() { return graphFor(cur); },
-    segments() { return $$('.shelf-group[data-shelf]', svg).filter(g => g.getAttribute('data-shelf')); },
+    // Shelves in use: a shelf the editor marks "not in use" stays drawn
+    // (faint, untappable) but is in no list, count or route.
+    segments() { return $$('.shelf-group[data-shelf]:not([data-inactive])', svg).filter(g => g.getAttribute('data-shelf')); },
     mark(id, value) { for (const g of api.groups(id)) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
     markSegment(segId, value) { for (const g of api.segments()) if (segmentId(g) === segId) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
     setMarks(map) { for (const g of api.segments()) g.removeAttribute('data-mark'); for (const [id, v] of Object.entries(map || {})) { if (id.includes(' ')) api.markSegment(id, v); else api.mark(id, v); } },
@@ -560,15 +564,17 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // exit, stairwells pair across floors by position) and leaves (stairs
     // nearest the last stop by walk), for a list in walk order.
     stairsLegs(ids) {
-      const out = {}, plan = api.floorPlan(ids); let prev = null;
+      const out = {}, plan = api.floorPlan(ids); let prev = null, prevNode = null;
       plan.forEach((f, i) => {
         const graph = graphFor(fl.find(x => x.id === f.id)), legs = (out[f.id] = {});
-        if (i > 0 && graph && prev) legs.entry = nearestStairsByCoords(graph, prev);
+        // Arrive by the stairs or lift the last floor left by: its linked
+        // node here when the editor linked them, else the nearest by position.
+        if (i > 0 && graph && prev) legs.entry = linkedNode(graph, prevNode, f.id) || nearestStairsByCoords(graph, prev);
         if (i < plan.length - 1) {
           const c = api.centreOf(f.codes[f.codes.length - 1]), last = c ? { x: c[0], y: c[1] } : null;
-          const ex = graph && last ? nearestStairsByWalk(graph, last) : null;
+          const ex = graph && last ? nearestStairsByWalk(graph, last, plan[i + 1].id) : null;
           if (ex) legs.exit = ex.node;
-          prev = ex ? { x: ex.node.x, y: ex.node.y } : last;
+          prev = ex ? { x: ex.node.x, y: ex.node.y } : last; prevNode = ex ? ex.node : null;
         }
       });
       return out;
@@ -581,19 +587,19 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       for (const id of ids) { const g = api.groups(id)[0]; if (!g) { missing.push(id); continue; } const fid = g.closest('.mfl')?.getAttribute('data-fid'); if (!byFloor.has(fid)) byFloor.set(fid, []); byFloor.get(fid).push(id); }
       const first = byFloor.keys().next().value;
       const seq = [...byFloor.keys()].sort((a, b) => (a === first ? -1 : b === first ? 1 : 0) || fl.findIndex(f => f.id === a) - fl.findIndex(f => f.id === b));
-      const out = []; let prev = null;
+      const out = []; let prev = null, prevNode = null;
       seq.forEach((fid, fi) => {
         const codes = byFloor.get(fid), f = fl.find(x => x.id === fid), graph = graphFor(f);
         const pts = codes.map(id => { const c = api.centreOf(id); return { x: c[0], y: c[1] }; });
         // After the first floor, the walk starts at the stairs it arrives by.
-        const entry = fi > 0 && graph && prev ? nearestStairsByCoords(graph, prev) : null;
+        const entry = fi > 0 && graph && prev ? linkedNode(graph, prevNode, fid) || nearestStairsByCoords(graph, prev) : null;
         let ordered;
         if (entry) ordered = (graph ? orderStops(graph, [{ x: entry.x, y: entry.y }, ...pts]).order : nearestNeighbour([...Array(codes.length + 1).keys()], [{ x: entry.x, y: entry.y }, ...pts])).filter(i => i > 0).map(i => codes[i - 1]);
         else ordered = !graph || codes.length <= 2 ? nearestNeighbour(codes, pts) : orderStops(graph, pts).order.map(i => codes[i]);
         out.push(...ordered);
         const lc = api.centreOf(ordered[ordered.length - 1]), last = lc ? { x: lc[0], y: lc[1] } : null;
-        const ex = fi < seq.length - 1 && graph && last ? nearestStairsByWalk(graph, last) : null;
-        prev = ex ? { x: ex.node.x, y: ex.node.y } : last;
+        const ex = fi < seq.length - 1 && graph && last ? nearestStairsByWalk(graph, last, seq[fi + 1]) : null;
+        prev = ex ? { x: ex.node.x, y: ex.node.y } : last; prevNode = ex ? ex.node : null;
       });
       return [...out, ...missing];
     },
@@ -635,10 +641,10 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     },
     filterDept(dept) {
       let bb = null;
-      for (const g of $$('.shelf-group[data-dept]', svg)) {
+      for (const g of $$('.shelf-group[data-dept]', svg)) {   // getBBox: a six-way shelf is a circle
         const hit = !dept || (g.getAttribute('data-dept') || '').toLowerCase() === dept;
         g.style.opacity = hit ? '' : '.14';
-        if (dept && hit) { const r = g.querySelector('.shelf'); if (r) { const x = +r.getAttribute('x'), y = +r.getAttribute('y'), w = +r.getAttribute('width'), h = +r.getAttribute('height'); bb = bb ? [Math.min(bb[0], x), Math.min(bb[1], y), Math.max(bb[2], x + w), Math.max(bb[3], y + h)] : [x, y, x + w, y + h]; } }
+        if (dept && hit) { const r = g.querySelector('.shelf'); if (r) { const b = r.getBBox(), x = b.x, y = b.y, w = b.width, h = b.height; bb = bb ? [Math.min(bb[0], x), Math.min(bb[1], y), Math.max(bb[2], x + w), Math.max(bb[3], y + h)] : [x, y, x + w, y + h]; } }
       }
       if (!dept || !bb) { api.fit(); return; }
       const pad = 160; let W = bb[2] - bb[0] + pad * 2, H = bb[3] - bb[1] + pad * 2;
@@ -649,13 +655,16 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // Map coordinates of a client point (for placing pins).
     pointAt(clientX, clientY) { const v = api.vb(), r = svg.getBoundingClientRect(); return [v[0] + (clientX - r.left) / r.width * v[2], v[1] + (clientY - r.top) / r.height * v[3]]; },
     markers() {
-      return $$('.emergency-marker[data-equip-type]', svg).map(m => ({
-        id: `${m.getAttribute('data-equip-type')}_${Math.round(+m.getAttribute('data-x'))}_${Math.round(+m.getAttribute('data-y'))}`,
+      // A marker's id is the editor's (data-id), so its service history
+      // follows it when it is moved. Maps published before ids keyed it by
+      // type and position; that key stays as legacyId for the history.
+      return $$('.emergency-marker[data-equip-type]', svg).map(m => { const legacyId = `${m.getAttribute('data-equip-type')}_${Math.round(+m.getAttribute('data-x'))}_${Math.round(+m.getAttribute('data-y'))}`; return {
+        id: m.getAttribute('data-id') || legacyId, legacyId,
         type: m.getAttribute('data-equip-type'), label: m.getAttribute('data-label') || '', location: m.getAttribute('data-location') || '',
         dept: (m.getAttribute('data-loc-dept') || '').toLowerCase(), extClass: m.getAttribute('data-ext-class') || '', method: m.getAttribute('data-method') || '', operation: m.getAttribute('data-operation') || '',
         detail: m.getAttribute('data-detail') || '', floor: m.closest('.mfl')?.getAttribute('data-fid') || null,
         x: +m.getAttribute('data-x'), y: +m.getAttribute('data-y'), el: m,
-      }));
+      }; });
     },
     // Price checks: small, large (a constant on-screen size whatever the
     // zoom) or hidden, a per-device preference; tory lines show on a

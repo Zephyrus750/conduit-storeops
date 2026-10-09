@@ -56,6 +56,22 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
   layout starts at 1600px — then 1440×900, 960×1040 half-screen and
   420×860 phone. A shell change passes all four.
 
+## The map editor (editor/)
+
+- ShelfSearcher's Map Editor v4.3, brought in (decision 2): classic scripts
+  (`editor.js` and friends) plus one module, `editor/conduit.js`, the only
+  door to the worker. Owner only: every call carries the owner session.
+- No inline code: the site's CSP applies here too. Handlers go in
+  `editor/handlers.js` (`data-onclick="name"` with arguments in `data-*`),
+  never `on*="…"` attributes, `eval` or `new Function`.
+- Everything the editor saves, downloads, previews or publishes starts from
+  `buildMapDocument()`; publishing goes through `publishBody()` in
+  `shared/maprender.js`, the same request the console and `publish-map` send.
+- Storage keys are `mapeditor-*`. Icons come from the subset in
+  `vendor/tabler/` (rebuild it when the editor uses a new `ti-*` icon).
+- The service worker leaves `editor/` to the network; it is not in the
+  shell's release or `sw-precache.js`.
+
 ## Service worker
 
 - `sw.js` installs the whole shell as one release cache and serves it cache-first; updates apply only on the person's "Update now" (never `skipWaiting` on install).

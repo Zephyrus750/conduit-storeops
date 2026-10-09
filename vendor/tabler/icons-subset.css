@@ -1,0 +1,26 @@
+/* Tabler Icons 3.34.1 (MIT, LICENSE beside this file), subset to the glyphs the map
+   editor uses. Adding an icon to editor/: rebuild the subset (pyftsubset on the
+   package's tabler-icons.woff2 with the editor's ti-* names). */
+@font-face { font-family: 'tabler-icons'; font-style: normal; font-weight: 400; src: url('icons-subset.woff2') format('woff2'); }
+.ti {
+  font-family: "tabler-icons" !important;
+  speak: none;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  /* Better Font Rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.ti-alert-triangle:before { content: "\ea06"; }
+.ti-bucket:before { content: "\ea47"; }
+.ti-cloud-upload:before { content: "\ea75"; }
+.ti-door-exit:before { content: "\ef4d"; }
+.ti-fire-extinguisher:before { content: "\faf6"; }
+.ti-first-aid-kit:before { content: "\ef5f"; }
+.ti-flame:before { content: "\ec2c"; }
+.ti-heart-rate-monitor:before { content: "\ef61"; }
+.ti-route:before { content: "\eb17"; }
+.ti-scan:before { content: "\ebc8"; }

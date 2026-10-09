@@ -64,7 +64,7 @@ export default {
       const fd = new FormData(f), code = String(fd.get('code') || '').trim().toUpperCase(), comment = String(fd.get('comment') || '').trim();
       if (!code && !comment) return toast('Scan or type the location code first', 'bad');
       const caps = read(ctx.storeNo), [shelf, ...rest] = sel.split(' ');
-      caps[sel] = { shelf, sub: rest.join(' '), code: code.slice(0, 40), comment: comment.slice(0, 300), at: new Date().toISOString(), ...(code && canonCode(code) !== canonCode(sel) ? { differs: true } : {}) };
+      caps[sel] = { shelf, sub: rest.join(' '), floor: map.floorId() || null, code: code.slice(0, 40), comment: comment.slice(0, 300), at: new Date().toISOString(), ...(code && canonCode(code) !== canonCode(sel) ? { differs: true } : {}) };
       if (!write(ctx.storeNo, caps)) return;
       haptic('success');
       if (e.submitter?.dataset.save === 'next') nextOpen(); else paint();

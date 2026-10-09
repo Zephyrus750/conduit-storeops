@@ -401,6 +401,8 @@ svg.map.real { background: #fff; }
    running the way of travel and chevrons at each bend, a numbered stop
    on each shelf, and every shelf not on the list greyed. */
 .map.real.has-route .shelf-group:not([data-onroute]) .shelf { fill: #d0d2d5 !important; stroke: #c0c2c5 !important; transition: none; }
+/* A shelf the map editor marks "not in use": drawn faint, never tapped. */
+.map.real .shelf-group[data-inactive] { pointer-events: none; }
 /* Off-route shelves don't take taps, except in the Pick list, where a tap adds the next stop. */
 .map.real.has-route:not(.pk) .shelf-group:not([data-onroute]) { pointer-events: none; }
 .map.real.has-route .shelf-badges .sb-bg:not([data-onroute]) { fill: rgba(120, 120, 130, .18) !important; }

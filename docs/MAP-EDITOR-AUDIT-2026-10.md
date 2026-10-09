@@ -4,6 +4,37 @@ Run on 2026-10-09. Compares two sides:
 - **The editor:** ShelfSearcher's Map Editor v4.3 (`SHELFSEARCHER-CK-V2/shelfsearcher/editor/`). The copy in `vector-suite/editor/` is older and has nothing this one lacks.
 - **Conduit's viewer:** the publish pipeline (`shared/maprender.js`, `shared/svgsafe.js`, `worker/store.js` `publishMap`) and every view that reads the published map.
 
+## Status (2026-10-09)
+
+The editor now ships with Conduit (`editor/`, owner only; decision 2) and
+publishes straight to the worker. Fixed:
+- **§1**
+  - 1.1 inactive shelves: drawn, but out of every list, count and route.
+  - 1.2 modules on the card and tip.
+  - 1.3 stairs and lift links kept and routed through.
+  - 1.4 floor levels kept.
+  - 1.5 marker ids: service history follows the marker, and old history
+    moves over on its next service.
+  - 1.6 shared names.
+  - 1.8 notes.
+  - 1.9 zoom-box labels and boundary breaks in the backup.
+- **§2:** every file draws from its arrays. 2.2 angled shelves from `.js`
+  files, and the missing-module default of 3. 2.3 one document for every
+  output. 2.4 publish shows what the sanitiser removed, with one floor rule.
+  The renderer matches the editor's own drawing for all 4,616 shelves of the
+  five stores.
+- **§3:**
+  - 3.1 the editor merges Conduit's Field Mode files, which now carry the
+    floor.
+  - 3.2 the editor's Suggestions tab works through Conduit.
+  - 3.3 hosted.
+  - 3.4 Publish from the editor, with checks.
+- **§4:** the editor's dropdown and duplicate bugs, path-id collisions,
+  six-way zoom.
+
+Still open: the scale (1.7, decision 33); store details `orientation`
+(1.10); maintenance and cage pins tied to raw coordinates.
+
 ## How the audit was done
 
 - **Code reading:** both sides were read field by field.

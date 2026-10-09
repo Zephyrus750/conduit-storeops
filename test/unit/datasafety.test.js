@@ -95,3 +95,16 @@ test('a service due date follows the store day', () => {
   apply(s, { ...ev('asset.schedule', { asset: 'aed1' }, { months: 6 }, 'manager'), at: '2026-10-02T00:00:00.000Z' });
   assert.equal(s.assets.aed1.due, '2027-04-01');
 });
+
+test('a marker serviced before markers had ids keeps its history when the id arrives', () => {
+  const s = initialState(), legacy = 'fire-ext_300_300';
+  apply(s, ev('asset.service', { asset: legacy }, { note: 'docket 1' }, 'floor'));
+  apply(s, ev('asset.schedule', { asset: legacy }, { months: 6 }, 'floor'));
+  apply(s, ev('asset.service', { asset: 'em_12' }, { note: 'docket 2', from: legacy }, 'floor'));
+  assert.equal(s.assets[legacy], undefined, 'moved, not copied');
+  assert.deepEqual([s.assets.em_12.intMonths, s.assets.em_12.log.map(l => l.n).filter(Boolean)], [6, ['docket 1', '6 months', 'docket 2']]);
+  apply(s, ev('asset.service', { asset: 'em_12' }, { from: 'gone_1_1' }, 'floor'));
+  assert.equal(s.assets.em_12.log.length, 4, 'a from with nothing under it changes nothing else');
+  assert.equal(apply(s, ev('asset.schedule', { asset: 'em_99' }, { months: 0, from: 'em_12' }, 'floor')).code, 'invalid_event');
+  assert.ok(s.assets.em_12, 'a refused schedule moves nothing');
+});

@@ -108,6 +108,19 @@ export function renderMap(data) {
   };
 }
 
+// What POST /v1/store/:no/map takes, from an editor document: every
+// floor rendered (an empty floor with nothing on it is left out), its level
+// and walk paths, and the editor's own document as `source` (without the
+// baked floor drawings) so the owner can reopen exactly what was drawn.
+// The map editor, the owner console and scripts/publish-map.js all use it.
+export function publishBody(data, { version, name } = {}) {
+  const doc = renderMap(data);
+  const floors = doc.floors.filter(f => f.shelves || f.markers || /landmark-group/.test(f.svg))
+    .map(f => ({ id: f.id, name: f.name, type: f.type, level: f.level, svg: f.svg, ...(f.paths ? { paths: f.paths } : {}) }));
+  const source = { ...data, floors: (data.floors || []).map(({ svg, ...f }) => f) };
+  return { version, name: name || doc.name, departments: doc.departments, floors, ...(doc.storeInfo ? { storeInfo: doc.storeInfo } : {}), ...(doc.metresPerUnit ? { metresPerUnit: doc.metresPerUnit } : {}), source };
+}
+
 // The editor's store details (Store Info tab), allow-listed field by field:
 // every device shows them, so only short text, coordinates and https links
 // survive, and empty fields are dropped. The assembly point and directions
@@ -133,12 +146,16 @@ export function cleanStoreInfo(info) {
 
 export function renderFloor(floor, data) {
   const id = String(floor.id || 'ground');
-  const inner = (floor.svg ? stripOuter(floor.svg) : floorInner(floor, data)) + emergencyMarkers(floor.emergencyMarkers, data) + priceChecks(floor.priceChecks, data) + zoomBoxes(floor.deptZoomBoxes);
+  // Drawn from the structured arrays whenever the file has them, so a .js
+  // and a .json of the same map publish the same; the editor's baked svg is
+  // used only for a file that carries nothing else.
+  const structured = ['shelves', 'landmarks', 'walls'].some(k => Array.isArray(floor[k]));
+  const inner = (floor.svg && !structured ? stripOuter(floor.svg) : floorInner(floor, data)) + emergencyMarkers(floor.emergencyMarkers, data) + priceChecks(floor.priceChecks, data) + zoomBoxes(floor.deptZoomBoxes);
   const vb = floorViewBox(floor, data);
   const svg = `<svg class="map real" viewBox="${vb}" xmlns="${NS}" preserveAspectRatio="xMidYMid meet" style="--badge-opacity:1;--label-opacity:0;--label-bg-opacity:0">` +
     `<g id="floor-${esc(id)}" class="map-floor zoom-out" data-floor="${esc(id)}" data-floor-type="${esc(floor.type || 'foh')}" style="opacity:1;pointer-events:auto;visibility:visible">${inner}</g></svg>`;
   const paths = pathsOf(floor);
-  return { id, name: String(floor.name || id), type: String(floor.type || 'foh'), level: floor.level || 0, svg, shelves: (svg.match(/class="shelf-group"/g) || []).length, markers: (floor.emergencyMarkers || []).length, ...(paths ? { paths } : {}) };
+  return { id, name: String(floor.name || id), type: String(floor.type || 'foh'), level: floor.level || 0, svg, shelves: (svg.match(/class="shelf-group"(?![^>]*data-inactive)/g) || []).length, markers: (floor.emergencyMarkers || []).length, ...(paths ? { paths } : {}) };
 }
 
 // A floor's pre-rendered svg minus its outer <svg>, <style> and any marker
@@ -164,7 +181,9 @@ function stripGroup(s, cls) {
 export function shelfDims(s, data) {
   const mw = data?.moduleWidth || 40, sd = data?.shelfDepth || 20, sbw = data?.stockroomBayW || 60, sbd = data?.stockroomDepth || 30;
   const stock = s.dept === 'stockroom';
-  const bayW = s.bayW || (stock ? sbw : mw), depth = s.depth || (stock ? sbd : sd), modules = s.modules || (stock ? 1 : 3);
+  // The .js export leaves modules out when it is 3 (its default for every
+  // shelf), so a missing count is 3 here too, stockroom bays included.
+  const bayW = s.bayW || (stock ? sbw : mw), depth = s.depth || (stock ? sbd : sd), modules = s.modules || 3;
   if (s.type === 'sixway') { const d = (s.radius || 20) * 2; return { w: d, h: d }; }
   if (s.type === 'custom') return { w: s.customW || 40, h: s.customH || 40 };
   return s.orientation === 'V' ? { w: depth, h: modules * bayW } : { w: modules * bayW, h: depth };
@@ -256,19 +275,24 @@ export function locationRange(locations) {
   return suffix && prefix.length > 0 ? first + '-' + suffix : first + '-' + last;
 }
 
+// An angled shelf: orientation 'A' with its angle. The .js export writes the
+// angle but not the 'A' (it writes orientation only for 'V'); the editor
+// clears the angle when a shelf goes back to H or V, so an angle with no
+// orientation is an angled shelf too.
+const angleOf = s => s.orientation === 'V' || s.orientation === 'H' || s.angle == null ? 0 : Number(s.angle) || 0;
 function shelves(list, data) {
   const colour = {}; for (const d of data.departments || []) colour[d.id] = d.color;
   const badges = [], groups = [];
   list.forEach((s, idx) => {
     const color = colour[s.dept] || '#888', opacity = s.inactive ? 0.25 : 0.75, full = (s.name || '') + (s.subname ? ' ' + s.subname : '');
-    const attrs = ` data-shelf="${esc(s.name || '')}" data-subname="${esc(s.subname || '')}" data-dept="${esc(s.dept || '')}" data-full="${esc(full)}"${s.locations && s.locations.length >= 2 ? ` data-locations="${esc(s.locations.join(','))}"` : ''}${s.fixture && s.fixture !== autoFixture(s) ? ` data-fixture="${esc(s.fixture)}"` : ''}${s.sharedName ? ' data-shared="1"' : ''}`;
+    const attrs = ` data-shelf="${esc(s.name || '')}" data-subname="${esc(s.subname || '')}" data-dept="${esc(s.dept || '')}" data-full="${esc(full)}"${s.locations && s.locations.length >= 2 ? ` data-locations="${esc(s.locations.join(','))}"` : ''}${s.fixture && s.fixture !== autoFixture(s) ? ` data-fixture="${esc(s.fixture)}"` : ''}${s.sharedName ? ' data-shared="1"' : ''}${s.inactive ? ' data-inactive="1"' : ''}${s.type !== 'sixway' && s.type !== 'custom' ? ` data-modules="${Math.max(1, Math.round(Number(s.modules) || 3))}"` : ''}`;
     if (s.type === 'sixway') {
       const r = s.radius || 20; let g = `<g class="shelf-group"${attrs}><circle cx="${s.x}" cy="${s.y}" r="${r}" class="shelf" fill="${color}" fill-opacity="${opacity * 0.73}" stroke="${color}"/>`;
       for (let i = 0; i < 6; i++) { const a = (i * 60 - 90) * Math.PI / 180; g += `<line x1="${s.x + Math.cos(a) * r * 0.22}" y1="${s.y + Math.sin(a) * r * 0.22}" x2="${s.x + Math.cos(a) * r * 0.88}" y2="${s.y + Math.sin(a) * r * 0.88}" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" stroke-linecap="round"/>`; }
       if (s.name) { const fs = Math.max(7, Math.min(12, r * 0.4)); badges.push({ idx, cx: s.x, cy: s.y + r + fs + 2, fs, name: full, sub: null, angle: 0 }); }
       groups.push(g + '</g>');
     } else {
-      const dim = shelfDims(s, data), cx = s.x + dim.w / 2, cy = s.y + dim.h / 2, angle = (s.orientation === 'A' && s.angle != null) ? s.angle : 0, tr = angle ? ` transform="rotate(${angle},${cx},${cy})"` : '';
+      const dim = shelfDims(s, data), cx = s.x + dim.w / 2, cy = s.y + dim.h / 2, angle = angleOf(s), tr = angle ? ` transform="rotate(${angle},${cx},${cy})"` : '';
       groups.push(`<g class="shelf-group"${attrs}${tr}><rect class="shelf" x="${s.x}" y="${s.y}" width="${dim.w}" height="${dim.h}" fill="${color}" fill-opacity="${opacity}" stroke="${color}"/></g>`);
       if (s.name) { const fs = Math.max(8, Math.min(12, dim.w * 0.15, dim.h * 0.35)); badges.push({ idx, cx, cy, fs, name: s.locations && s.locations.length >= 2 ? locationRange(s.locations) : s.name, sub: s.subname || null, angle }); }
     }
@@ -362,7 +386,7 @@ function emergencyMarkers(list, data) {
     const type = markerType(m.type), key = Math.round(m.x) + '_' + Math.round(m.y) + '_' + m.type;
     if (seen.has(key)) continue; seen.add(key);
     const [color, bg] = MARKER[type] || MARKER.exit;
-    svg += `<g class="emergency-marker" data-equip-type="${esc(type)}" data-label="${esc(m.label)}" data-detail="${esc(m.detail)}" data-method="${esc(m.method)}" data-operation="${esc(m.operation)}" data-ext-class="${esc(m.extClass)}" data-location="${esc(m.location)}"${locAttrs(resolve(m.location))} data-x="${m.x}" data-y="${m.y}" transform="translate(${m.x},${m.y})" style="cursor:pointer">`;
+    svg += `<g class="emergency-marker"${m.id ? ` data-id="${esc(m.id)}"` : ''} data-equip-type="${esc(type)}" data-label="${esc(m.label)}" data-detail="${esc(m.detail)}" data-method="${esc(m.method)}" data-operation="${esc(m.operation)}" data-ext-class="${esc(m.extClass)}" data-location="${esc(m.location)}"${locAttrs(resolve(m.location))} data-x="${m.x}" data-y="${m.y}" transform="translate(${m.x},${m.y})" style="cursor:pointer">`;
     svg += `<circle class="em-halo" cx="0" cy="0" r="20" fill="${color}" opacity="0.14"/>`;
     const sign = signInner(type, m.extClass);
     if (sign) svg += `<g class="em-sign" pointer-events="none">${sign}</g>`;
@@ -378,7 +402,7 @@ function priceChecks(list, data) {
   let svg = '<g class="price-checks">';
   for (const pc of list) {
     const variant = pc.variant === 'order' ? 'order' : 'pc';
-    svg += `<g class="price-check-marker" data-variant="${variant}" data-label="${esc(pc.label)}" data-location="${esc(pc.location)}" data-detail="${esc(pc.detail)}"${locAttrs(resolve(pc.location))} data-x="${pc.x}" data-y="${pc.y}" transform="translate(${pc.x},${pc.y})" style="cursor:pointer">`;
+    svg += `<g class="price-check-marker"${pc.id ? ` data-id="${esc(pc.id)}"` : ''} data-variant="${variant}" data-label="${esc(pc.label)}" data-location="${esc(pc.location)}" data-detail="${esc(pc.detail)}"${locAttrs(resolve(pc.location))} data-x="${pc.x}" data-y="${pc.y}" transform="translate(${pc.x},${pc.y})" style="cursor:pointer">`;
     svg += `<circle class="pc-icon-bg" cx="0" cy="0" r="13" fill="${BG}" stroke="${COLOR}" stroke-width="2.5"/>`;
     if (variant === 'order') svg += `<g stroke="${COLOR}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" pointer-events="none"><rect x="-6" y="-6" width="12" height="8" rx="1"/><line x1="0" y1="2" x2="0" y2="4.6"/><line x1="-3.4" y1="5.4" x2="3.4" y2="5.4"/><path d="M -2 -3.2 h 4 l 0.6 3.6 h -5.2 z"/><path d="M -1 -3.2 q 1 -1.8 2 0"/></g>`;
     else svg += `<g transform="translate(-6.5,-6.5) scale(0.5417)" stroke="${COLOR}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" pointer-events="none"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M5 12h14"/></g>`;

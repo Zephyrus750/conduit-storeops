@@ -12,7 +12,7 @@ brackets below).
 
 **October audit (`docs/AUDIT-2026-10.md`):** its §1 fixes (data safety) and the wrong numbers are done (see its status note); the rest of its §8 order, from step 3, comes before the list below. Notably, the print composer, the evacuation map print and maintenance work orders are still to build (§2).
 
-**Map editor audit (`docs/MAP-EDITOR-AUDIT-2026-10.md`):** what the editor makes that Conduit never shows, and what Conduit sends back that the editor can't read. Its §5 order: Conduit-only fixes first, then small changes on both sides, then the Field Mode and suggestions round trip.
+**Map editor (`editor/`, `docs/MAP-EDITOR-AUDIT-2026-10.md`):** brought into Conduit and connected (decision 2 settled); the audit's status note lists what is fixed. Left: the scale (decision 33).
 
 ## Next to build, in the suggested order
 

@@ -13,7 +13,8 @@
 //   GET  /tail?limit=              → raw log, newest first (owner)
 //   GET  /map                      → { version, at, by, floors:[{id,name,type,bytes}], versions:[…] } (404 until published)
 //   GET  /map/:version             → the published document; `latest` allowed; floors carry their svg
-//   POST /map  { version, name?, departments?, floors:[{ id, name, type, svg }] }  (owner) → applies map.publish
+//   GET  /map/:version/source      → the map editor's own document for that version (owner), so it reopens for editing
+//   POST /map  { version, name?, departments?, floors:[{ id, name, type, level?, svg, paths? }], source? }  (owner) → applies map.publish
 //
 // WebSocket protocol (JSON text frames):
 //   → { t:'hello', since }          ← { t:'snapshot', seq, state } or { t:'delta', seq, events }
@@ -45,6 +46,7 @@ const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
 const SOH_MAX = 4_000_000, SOH_ROWS = 20_000;     // one SOH report: a whole store's stockroom
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
+const MAP_SOURCE_MAX = 1_900_000;  // the editor's document kept beside a version (no floor drawings in it)
 const DELTA_LIMIT = 5000;
 const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // Issue photos (R2 bucket PHOTOS): a JPEG the device already shrank, at most
@@ -72,6 +74,7 @@ export class StoreObject extends DurableObject {
       CREATE INDEX IF NOT EXISTS events_type ON events(type, seq);
       CREATE TABLE IF NOT EXISTS snapshots (seq INTEGER PRIMARY KEY, state TEXT NOT NULL, at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS maps (version TEXT PRIMARY KEY, meta TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS map_sources (version TEXT PRIMARY KEY, doc TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
@@ -142,6 +145,8 @@ export class StoreObject extends DurableObject {
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
+          const ms = url.pathname.match(/^\/map\/([\w.-]+)\/source$/);
+          if (ms) return this.mapSource(ms[1], claims);
           if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1]));
@@ -453,7 +458,7 @@ export class StoreObject extends DurableObject {
     if (!rows.length) throw new HttpError(404, 'not_found', 'no map has been published for this store');
     const cur = rows.find(r => r.version === this.state.map.version) || rows[0];
     const meta = JSON.parse(cur.meta);
-    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at })) };
+    return { version: cur.version, at: cur.at, by: JSON.parse(cur.by), name: meta.name, floors: meta.floors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })), departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, versions: rows.slice(0, 20).map(r => ({ version: r.version, at: r.at, source: this.hasSource(r.version) })), source: this.hasSource(cur.version) };
   }
   mapDoc(version, ifNoneMatch) {
     if (version === 'latest') version = this.state.map.version || this.sql.exec('SELECT version FROM maps ORDER BY at DESC LIMIT 1').toArray()[0]?.version;
@@ -465,6 +470,16 @@ export class StoreObject extends DurableObject {
     const svgs = Object.fromEntries(this.sql.exec('SELECT floor, svg FROM map_floors WHERE version = ?', row.version).toArray().map(r => [r.floor, r.svg]));
     const doc = { v: 1, kind: 'map', store: this.storeNo, version: row.version, at: row.at, by: JSON.parse(row.by), name: meta.name, departments: meta.departments, storeInfo: meta.storeInfo || null, metresPerUnit: meta.metresPerUnit || null, floors: meta.floors.map(f => ({ ...f, svg: svgs[f.id] || '' })) };
     return json(doc, 200, { ETag: etag, 'Cache-Control': 'private, max-age=31536000' });
+  }
+  hasSource(version) { return this.sql.exec('SELECT 1 FROM map_sources WHERE version = ?', version).toArray().length > 0; }
+  // The editor's document for a version, for the owner to reopen it in the
+  // map editor: what was drawn, not just the rendered floors.
+  mapSource(version, claims) {
+    if (!claims.owner) throw new HttpError(403, 'unauthorised', 'the map editor source needs the owner');
+    if (version === 'latest') version = this.state.map.version || this.sql.exec('SELECT version FROM maps ORDER BY at DESC LIMIT 1').toArray()[0]?.version;
+    const row = version && this.sql.exec('SELECT doc FROM map_sources WHERE version = ?', version).toArray()[0];
+    if (!row) throw new HttpError(404, 'not_found', version ? `map version ${version} has no editor source (published from a file)` : 'no map has been published for this store');
+    return new Response(row.doc, { headers: { 'Content-Type': 'application/json', ...CORS } });
   }
   publishMap(body, claims) {
     if (!claims.owner) throw new HttpError(403, 'unauthorised', 'publishing a map needs the owner');
@@ -489,18 +504,30 @@ export class StoreObject extends DurableObject {
       if (f.paths && typeof f.paths === 'object') {
         const nodes = Array.isArray(f.paths.nodes) ? f.paths.nodes : [], edges = Array.isArray(f.paths.edges) ? f.paths.edges : [];
         if (nodes.length > 5000 || edges.length > 10000) throw new HttpError(400, 'invalid_request', `floor ${id}: too many path nodes or edges`);
-        const ns = nodes.map(n => ({ id: String(n?.id ?? '').slice(0, 24), x: Number(n?.x), y: Number(n?.y), ...(n?.type ? { type: String(n.type).slice(0, 16) } : {}) }));
+        // Stairs and lifts name the node they reach on another floor (links).
+        const link = l => ({ floorId: String(l?.floorId ?? '').slice(0, 32), nodeId: String(l?.nodeId ?? '').slice(0, 24) });
+        const ns = nodes.map(n => { const ls = Array.isArray(n?.links) ? n.links.slice(0, 8).map(link).filter(l => l.floorId && l.nodeId) : []; return { id: String(n?.id ?? '').slice(0, 24), x: Number(n?.x), y: Number(n?.y), ...(n?.type ? { type: String(n.type).slice(0, 16) } : {}), ...(ls.length ? { links: ls } : {}) }; });
         if (ns.some(n => !n.id || !Number.isFinite(n.x) || !Number.isFinite(n.y))) throw new HttpError(400, 'invalid_request', `floor ${id}: every path node needs an id and numeric x, y`);
         const es = edges.map(e => ({ a: String(e?.a ?? '').slice(0, 24), b: String(e?.b ?? '').slice(0, 24) })).filter(e => e.a && e.b);
         if (ns.length >= 2 && es.length) paths = { nodes: ns, edges: es };
       }
-      metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), shelves: (svg.match(/class="shelf-group"/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}) });
+      const level = Number(f.level);
+      metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), ...(Number.isInteger(level) && Math.abs(level) <= 10 ? { level } : {}), shelves: (svg.match(/class="shelf-group"(?![^>]*data-inactive)/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}) });
     }
     const departments = Array.isArray(body.departments) ? body.departments.slice(0, 64).map(d => ({ id: String(d.id || '').slice(0, 16), name: String(d.name || '').slice(0, 64), color: String(d.color || '').slice(0, 16), parent: String(d.parent || '').slice(0, 16) })) : [];
     const info = cleanStoreInfo(body.storeInfo), mpu = Number(body.metresPerUnit);
     const meta = { name: String(body.name || '').slice(0, 64), floors: metaFloors, departments, ...(info ? { storeInfo: info } : {}), ...(mpu > 0 && mpu < 100 ? { metresPerUnit: mpu } : {}) };
+    // The editor's own document rides along when the map editor publishes,
+    // so the owner can reopen exactly what was drawn. Never sent to devices.
+    let source = null;
+    if (body.source != null) {
+      if (typeof body.source !== 'object' || !Array.isArray(body.source.floors)) throw new HttpError(400, 'invalid_request', 'source must be the map editor document');
+      source = JSON.stringify(body.source);
+      if (source.length > MAP_SOURCE_MAX) throw new HttpError(413, 'payload_too_large', `the editor source is over ${MAP_SOURCE_MAX / 1_000_000} MB`);
+    }
     const at = new Date().toISOString(), by = { device: claims.device || null, owner: true };
     this.sql.exec('INSERT INTO maps (version, meta, at, by) VALUES (?, ?, ?, ?)', version, JSON.stringify(meta), at, JSON.stringify(by));
+    if (source) this.sql.exec('INSERT INTO map_sources (version, doc) VALUES (?, ?)', version, source);
     for (const f of clean) this.sql.exec('INSERT INTO map_floors (version, floor, svg) VALUES (?, ?, ?)', version, f.id, f.svg);
     // The publish is an ordinary store event, so every device learns the
     // new version through its projection and the log shows who published.
@@ -508,7 +535,7 @@ export class StoreObject extends DurableObject {
     const r = this.applyOne(ev, { ...claims, roles: ['manager'], caps: claims.caps || [] });
     if (!r.ok) throw new HttpError(500, 'internal', `map stored but map.publish was refused: ${r.message}`);
     this.snapshotIfDue(); this.broadcast([r.event]);
-    return json({ ok: true, version, at, seq: r.seq, stripped, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
+    return json({ ok: true, version, at, seq: r.seq, stripped, source: !!source, floors: metaFloors.map(f => ({ ...f, ...(f.paths ? { paths: { nodes: f.paths.nodes.length, edges: f.paths.edges.length } } : {}) })) }, 201);
   }
 
   // ── WebSocket ─────────────────────────────────────────────────────────
