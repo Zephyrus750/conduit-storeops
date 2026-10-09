@@ -14,7 +14,7 @@
     # https hosts. No framing, no plugins.
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://conduit-staging.zephyrus-np750.workers.dev wss://conduit-staging.zephyrus-np750.workers.dev https://conduit.zephyrus-np750.workers.dev wss://conduit.zephyrus-np750.workers.dev; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     X-Frame-Options = "DENY"
-    Permissions-Policy = "camera=(self), microphone=(), geolocation=(), payment=(), usb=()"
+    Permissions-Policy = "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()"
 # The worker script and its precache list must never be served stale, or a
 # device would keep an old release; everything else revalidates (Netlify's
 # default) and the service worker holds the release cache.

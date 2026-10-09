@@ -626,10 +626,11 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       svg.classList.add('has-route'); svg.appendChild(layer);
       return r;
     },
-    drawPins(pins) {   // [{ x, y, colour, label }] in map coordinates
+    drawPins(pins) {   // [{ x, y, colour, label, id? }] in map coordinates; a pin with an id is tapped as { kind: 'pin', id }
       const NS = 'http://www.w3.org/2000/svg';
       for (const p of pins) {
         const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'pin'); g.setAttribute('transform', `translate(${p.x},${p.y})`);
+        if (p.id) g.setAttribute('data-pin', p.id);
         // A glyph (markup in a -8..8 box, stroked) replaces the label; a
         // badge (a count) sits on the pin's shoulder.
         const mid = p.glyph ? `<g transform="translate(0,-58) scale(2.1)" fill="none" style="color:${p.colour}" stroke="${p.colour}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p.glyph}</g>` : `<text x="0" y="-58" style="fill:${p.colour}">${esc(p.label)}</text>`;
@@ -731,10 +732,11 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     }
     const hit = document.elementFromPoint(e.clientX, e.clientY) || e.target;
     const g = hit.closest?.('.shelf-group[data-shelf]');
-    const m = hit.closest?.('.emergency-marker[data-equip-type]'), pc = hit.closest?.('.price-check-marker');
+    const m = hit.closest?.('.emergency-marker[data-equip-type]'), pc = hit.closest?.('.price-check-marker'), pin = hit.closest?.('.pin[data-pin]');
     const point = api.pointAt(e.clientX, e.clientY);
-    if (touch && (pc || g)) haptic('tap');
-    if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
+    if (touch && (pc || g || pin)) haptic('tap');
+    if (pin) onSelect?.({ kind: 'pin', id: pin.getAttribute('data-pin'), point });
+    else if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
     else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, el: g, point, long: Date.now() - t > 500 }); }   // the shelf tapped, never its whole run
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m), point });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });

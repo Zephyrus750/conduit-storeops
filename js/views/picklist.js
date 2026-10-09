@@ -3,6 +3,12 @@
 
 import { $, ic, esc, vh, sub, dep, DEPT_NAME, toast } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, canonCode } from '../map.js';
+import { voiceSupported, dictate } from '../voice.js';
+import { spokenCodes, STOP_WORDS } from '../../shared/voice.js';
+import { haptic } from '../device.js';
+
+// Voice add on the phone (ShelfSearcher's): say shelf codes, "done" to stop.
+let dictation = null;
 
 function model(ctx) { const p = ctx.store.get('picklists')[ctx.session.device]; return { items: p ? p.items : [] }; }
 async function save(ctx, items) { try { await ctx.store.dispatch({ type: 'picklist.set', entity: { device: ctx.session.device }, payload: { items } }); } catch (e) { toast(e.message, 'bad'); } }
@@ -37,7 +43,7 @@ export default {
       const act = a.getAttribute('data-act'), m = model(ctx), code = a.getAttribute('data-code');
       if (act === 'toggle') await save(ctx, m.items.map(i => i.code === code ? { ...i, completed: !i.completed } : i));
       else if (act === 'remove') await save(ctx, m.items.filter(i => i.code !== code));
-      else if (act === 'clear') await save(ctx, []);
+      else if (act === 'clear') { const n = m.items.length; if (n && confirm(`Clear all ${n} stop${n === 1 ? '' : 's'} from the pick list?`)) await save(ctx, []); }
       else if (act === 'pick-next') { const n = m.items.find(i => !i.completed); if (n) await save(ctx, m.items.map(i => i === n ? { ...i, completed: true } : i)); }
       else if (act === 'add') { const inp = $('[data-field="add"]', root); const codes = [...new Set(inp.value.toUpperCase().replace(/([A-Z]+\d+)\s*[- ]\s*([SE]\d+)/g, '$1$2').split(/[\s,;]+/).map(canonCode).filter(Boolean))]; const bad = codes.filter(c => !map.groups(c).length); if (bad.length) toast(`Not in this store: ${bad.join(', ')}`, 'bad'); const ok = codes.filter(c => map.groups(c).length && !m.items.some(i => i.code === c)); if (ok.length) await save(ctx, replan(map, [...m.items, ...ok.map(code => ({ code, completed: false }))], ok.length)); inp.value = ''; }
       else if (act === 'plan') { const order = map.planOrder(m.items.map(i => i.code)); const by = Object.fromEntries(m.items.map(i => [i.code, i])); await save(ctx, order.map(c => by[c])); toast('Stops ordered by the shortest walk'); }
@@ -60,7 +66,27 @@ export default {
     };
     root.addEventListener('pointerup', endDrag); root.addEventListener('pointercancel', endDrag);
     root.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-field="add"]')) root.querySelector('[data-act="add"]').click(); });
-    return [ctx.store.on('picklists', paint)];
+    root.addEventListener('click', e => {
+      if (!e.target.closest('[data-act="voice-add"]')) return;
+      if (dictation) { dictation.stop(); return; }
+      haptic('select');
+      dictation = dictate({
+        onUtterance: text => {
+          if (STOP_WORDS.test(text.toUpperCase())) return false;
+          const codes = spokenCodes(text);
+          if (!codes.length) { toast(`Didn’t catch a shelf: “${text.trim()}”`, 'bad'); return; }
+          const m = model(ctx), bad = codes.filter(c => !map.groups(c).length), fresh = codes.filter(c => map.groups(c).length && !m.items.some(i => canonCode(i.code) === c));
+          if (fresh.length) { haptic('navigate'); save(ctx, replan(map, [...m.items, ...fresh.map(code => ({ code, completed: false }))], 0)); }
+          const said = [fresh.length && `Added ${fresh.join(', ')}`, bad.length && `not in this store: ${bad.join(', ')}`, !fresh.length && !bad.length && `already in the list: ${codes.join(', ')}`].filter(Boolean).join(' · ');
+          toast(said.charAt(0).toUpperCase() + said.slice(1), fresh.length ? '' : 'bad');
+        },
+        onError: msg => toast(msg, 'bad'),
+        onEnd: reason => { dictation = null; paint(); if (reason === 'silence') toast('Voice stopped (no speech)'); else if (reason !== 'error') toast('Voice stopped'); },
+      });
+      paint();
+      if (dictation) toast('Listening: say shelf codes, “done” to stop');
+    });
+    return [ctx.store.on('picklists', paint), () => { dictation?.stop(); dictation = null; }];
   },
 };
 const deptOf = (map, code) => { const g = map.groups(code)[0]; return g ? (g.getAttribute('data-dept') || '').toLowerCase() : ''; };
@@ -85,7 +111,7 @@ function replan(map, items, added) {
 }
 function mobile(map, m) {
   const cur = m.items.find(i => !i.completed);
-  return `<div class="rt-top">${ic('m-picklist')}<b>Pick list</b><span class="cnt">${m.items.filter(i => i.completed).length} / ${m.items.length}</span><span class="tools"><button title="Zoom to next" data-act="zoom" data-code="${cur ? esc(cur.code) : ''}">${ic('pin')}</button><button title="Clear" data-act="clear">${ic('trash')}</button></span></div>` +
-    `<div class="rt-stops">${m.items.map((i, n) => `<span class="rt-stop ${i.completed ? 'done' : i === cur ? 'cur' : ''}" data-act="toggle" data-code="${esc(i.code)}"><i>${n + 1}</i>${esc(i.code)}${i.completed ? ic('check') : i === cur ? '<em>▶</em>' : ''}</span>`).join('') || '<span class="mv-hint" style="margin:0">Tap shelves on the map to build the list.</span>'}</div>` +
+  return `<div class="rt-top">${ic('m-picklist')}<b>Pick list</b><span class="cnt">${m.items.filter(i => i.completed).length} / ${m.items.length}</span><span class="tools">${voiceSupported() ? `<button class="${dictation ? 'listening' : ''}" title="${dictation ? 'Stop listening' : 'Add shelves by voice'}" aria-label="${dictation ? 'Stop listening' : 'Add shelves by voice'}" data-act="voice-add">${ic('mic')}</button>` : ''}<button title="Zoom to next" data-act="zoom" data-code="${cur ? esc(cur.code) : ''}">${ic('pin')}</button><button title="Clear" data-act="clear">${ic('trash')}</button></span></div>` +
+    `<div class="rt-stops">${m.items.map((i, n) => `<span class="rt-stop ${i.completed ? 'done' : i === cur ? 'cur' : ''}" data-act="toggle" data-code="${esc(i.code)}"><i>${n + 1}</i>${esc(i.code)}${i.completed ? ic('check') : i === cur ? '<em>▶</em>' : ''}</span>`).join('') || `<span class="mv-hint" style="margin:0">Tap shelves on the map${voiceSupported() ? ', or tap the microphone and say them,' : ''} to build the list.</span>`}</div>` +
     (cur ? `<div class="rt-h">${dep(deptOf(map, cur.code))}<b>${esc(cur.code)}</b><span class="nm">${DEPT_NAME[deptOf(map, cur.code)] || ''}</span><button class="rt-pick" data-act="pick-next" title="Picked · next stop">${ic('check')}Picked</button></div>` : '');
 }

@@ -853,6 +853,7 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .mt-dup svg.i { width: 15px; height: 15px; flex: none; margin-top: 1px; }
 .mt-od { color: #B91C1C; font-weight: 700; }
 .map.real .pin .pin-badge { fill: #fff; font-size: 16px; font-weight: 800; }
+.map.real .pin[data-pin] { cursor: pointer; }
 /* Share a shelf: QR sheet */
 .sharesheet { position: fixed; inset: 0; z-index: 90; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .sh-card { background: var(--card, #fff); color: var(--ink); border-radius: 18px; padding: 18px; width: min(380px, 100%); box-shadow: 0 20px 60px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 10px; }
@@ -1600,3 +1601,18 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 /* A settings row whose control is a segmented choice puts the choice on its
    own line on a phone, so the description keeps its width. */
 @container shell (max-width: 600px) { .stg-item:has(.stg-seg) { flex-wrap: wrap; } .stg-item:has(.stg-seg) .stg-ctl { flex: 1 1 100%; justify-content: flex-start; } }
+/* Maintenance on the phone: an opened issue */
+.mv-pad { padding: 0 14px; }
+.mt-meta.mv-pad { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; margin: 4px 0 8px; }
+/* Voice search: the microphone at the end of the phone's search bar and the palette's input */
+.voicebtn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--dim); display: grid; place-items: center; }
+.voicebtn[hidden] { display: none; }
+.search .voicebtn svg.i, .pal .in .voicebtn svg.i { position: static; transform: none; width: 19px; height: 19px; color: currentColor; }
+.voicebtn.listening { background: var(--red, #DC2626); color: #fff; animation: voicepulse 1.2s ease-in-out infinite; }
+@keyframes voicepulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, .45); } 50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); } }
+@media (prefers-reduced-motion: reduce) { .voicebtn.listening { animation: none; } }
+.search:has(.voicebtn:not([hidden])) input { padding-right: 44px; }
+.pal .in { position: relative; }
+.pal .in:has(.voicebtn:not([hidden])) .okind { margin-right: 40px; }
+.rt-top .tools button.listening { background: var(--red, #DC2626); border-color: var(--red, #DC2626); color: #fff; animation: voicepulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .rt-top .tools button.listening { animation: none; } }

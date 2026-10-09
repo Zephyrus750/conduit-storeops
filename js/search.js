@@ -29,7 +29,7 @@ const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
 export function initSearch({ client, frame, go, tools = () => [], life = () => null }) {
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
-  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like A16 S2, a department or a tool…" autocomplete="off" inputmode="search"><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
+  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like A16 S2, a department or a tool…" autocomplete="off" inputmode="search"><button class="voicebtn" type="button" data-voice hidden aria-label="Search by voice" title="Search by voice">${ic('mic')}</button><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
   frame.appendChild(el);
   const input = $('#oq', el), body = $('#obody', el), prev = $('#oprev', el), pal = $('.pal', el);
   let shelves = null, seq = 0, sel = 0;

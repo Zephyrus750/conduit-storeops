@@ -306,6 +306,20 @@ device library (`client/catalogue.js`) batches lookups and keeps hits for a
 week. The shell's search palette (Ctrl K, the header and phone search)
 understands a keycode, a shelf such as A16 S2, a department and a tool.
 
+**Voice search** (phones; decision 28). The microphone in the phone's
+search bar and in the palette listens for one shelf, run, bay or keycode,
+as ShelfSearcher's did: the browser's recogniser in US English, its top
+guess, spaces removed and number words made digits. Each guess is then
+checked against the published map (`shelfForLocation`): the top guess wins
+whenever it is a real shelf, so what worked in ShelfSearcher still does;
+otherwise the recogniser's other guesses and the usual mishearings ("be 22",
+"queue 15", "for" for 4) are tried, but only a real shelf is taken. A shelf
+opens on the map; anything else opens the palette with what was heard. The
+phone's pick list has voice add (say codes, "done" to stop). The reading is
+`shared/voice.js` (unit-tested), the listening `js/voice.js`. Voice needs a
+connection (the recogniser runs in the browser maker's service) and the
+microphone allowed for the site.
+
 ## Event envelope
 
 ```json

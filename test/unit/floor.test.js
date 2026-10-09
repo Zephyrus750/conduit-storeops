@@ -19,6 +19,10 @@ test('refresh: focus lowercases, plan paint erases, clearWeek empties', () => {
   assert.equal(apply(s, ev('refresh.plan.paint', { segment: 'A21 S1' }, { colour: 'purple' })).code, 'invalid_event');
   assert.equal(apply(s, ev('refresh.plan.paint', { segment: 'A21 S1' }, { colour: 'erase' })), null);
   assert.equal(s.refresh.plan['A21 S1'], undefined);
+  apply(s, ev('refresh.plan.paint', { segment: 'A21 S1' }, { colour: '#a855f7' })); apply(s, ev('refresh.plan.paint', { segment: 'A22 S2' }, { colour: '#22c55e' }));
+  assert.equal(apply(s, ev('refresh.plan.clear', {})), null, 'Reset planning clears every painted shelf in one event');
+  assert.deepEqual(s.refresh.plan, {});
+  assert.equal(apply(s, ev('refresh.plan.clear', {})).code, 'invalid_event', 'and is refused when nothing is planned');
   apply(s, ev('refresh.mark', { segment: 'A21 S1', week: '2026-W37' }));
   assert.equal(apply(s, ev('refresh.clearWeek', { week: '2026-W37' })), null);
   assert.deepEqual(s.refresh.weeks['2026-W37'], {});

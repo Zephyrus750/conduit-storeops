@@ -23,6 +23,7 @@ export const CATALOGUE = {
   'refresh.clearDept':   T('floor', F, ['week'], { dept: 'string' }),            // payload.segments: the dept's marked segments the device saw
   'refresh.focus.set':   T('floor', F, ['week'], { departments: 'array' }),
   'refresh.plan.paint':  T('floor', F, ['segment'], { colour: 'string' }),       // '#rrggbb' or 'erase'
+  'refresh.plan.clear':  T('floor', F, []),                                       // Reset planning: every painted shelf at once
   'label.cycle.set':     T('floor', F, [], { cycleLen: 'string' }),              // weekly | fortnightly | monthly
   'label.assign':        T('floor', F, ['micro'], { shelves: 'array' }),
   'label.check':         T('floor', F, ['micro', 'cycle']),

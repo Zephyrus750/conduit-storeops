@@ -14,8 +14,10 @@ import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard, setStoreTz, 
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
-import { loadMap, setMap, mapInfo, parkMap, mapStats } from './map.js';
+import { loadMap, setMap, mapInfo, parkMap, mapStats, shelfForLocation, splitCanon } from './map.js';
 import { initSearch } from './search.js';
+import { voiceSupported, listenOnce } from './voice.js';
+import { resolveSpoken } from '../shared/voice.js';
 import { takeDeepLink } from './share.js';
 import { installLog } from './diag.js';
 installLog();
@@ -28,7 +30,7 @@ import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
 import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
 import { polyBackground } from './lowpoly.js';
-import { applyOrientation } from './device.js';
+import { applyOrientation, haptic } from './device.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -435,6 +437,37 @@ updates.on(kind => {
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
 const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]) });
 $('#msearch input')?.addEventListener('focus', e => { if (!admin && store) { e.target.blur(); search.open(e.target.value); } });
+
+// Voice search on the phone (ShelfSearcher's, decision 28): the microphone in
+// the search bar and in the palette. A spoken shelf, run or bay on the map
+// opens it on the map, as ShelfSearcher did; anything else (a keycode, a
+// department, a mishearing) opens the palette with what was heard.
+let listening = null;
+const showVoice = () => { const on = voiceSupported() && isMobile(); for (const b of $$('[data-voice]')) b.hidden = !on; };
+showVoice(); window.addEventListener('resize', showVoice);
+document.addEventListener('click', e => {
+  const btn = e.target.closest?.('[data-voice]'); if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  if (listening) { listening.stop(); haptic('tap'); return; }
+  if (!store || admin) return toast('Voice search works once a store is signed in');
+  const input = btn.parentElement.querySelector('input'), was = input?.placeholder || '';
+  const fromBar = !!btn.closest('#msearch');
+  btn.classList.add('listening'); btn.setAttribute('aria-label', 'Stop listening'); if (input) { input.placeholder = 'Listening… say a shelf, like A16 S2'; if (fromBar) input.value = ''; }
+  haptic('select');
+  listening = listenOnce({
+    onHeard: t => { if (input) input.value = t; },
+    onGuesses: guesses => {
+      const r = resolveSpoken(guesses, c => shelfForLocation(c));
+      if (r.code) {
+        const { shelf, sub } = splitCanon(r.code);
+        haptic('success'); search.close(); show('map', { select: r.code });
+        toast(`Heard “${r.heard}” · ${shelf}${sub ? ' ' + sub : ''}${r.how === 'corrected' ? ' (matched to the map)' : ''}`);
+      } else { haptic('error'); search.open(r.query || r.heard); }
+    },
+    onError: msg => toast(msg, 'bad'),
+    onEnd: () => { listening = null; btn.classList.remove('listening'); btn.setAttribute('aria-label', 'Search by voice'); if (input) { input.placeholder = was; if (fromBar) input.value = ''; } },
+  });
+}, true);
 let lastMobile = isMobile();
 window.addEventListener('resize', () => { const m = isMobile(); if (m !== lastMobile) { lastMobile = m; if (current) show(current, currentArg); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#msheet')?.classList.remove('open'); });

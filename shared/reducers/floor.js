@@ -90,6 +90,12 @@ export const floorReducers = {
     else return reject('invalid_event', 'colour must be #rrggbb or erase');
     return null;
   },
+  // Reset planning, in one event (it was one erase per painted shelf).
+  'refresh.plan.clear'(s) {
+    if (!Object.keys(s.refresh.plan).length) return reject('invalid_event', 'nothing is planned');
+    s.refresh.plan = {};
+    return null;
+  },
 
   // ── Label integrity ──────────────────────────────────────────────────
   'label.cycle.set'(s, e) {
