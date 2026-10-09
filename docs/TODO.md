@@ -14,23 +14,40 @@ brackets below).
 
 **Map editor (`editor/`, `docs/MAP-EDITOR-AUDIT-2026-10.md`):** brought into Conduit and connected (decision 2 settled); the audit's status note lists what is fixed. Left: the scale (decision 33).
 
-## Next to build, in the suggested order
+## Built 2026-10-09 (the defaults taken)
 
-1. **Make switching an area off as live as switching a tool off.** Turning
-   the Stockroom or Back dock off for a store reaches devices when their
-   token renews (up to 12 hours); tools already apply at once. Same
-   mechanism: log it into the store. Needs: decision 19.
-2. **Team communication** (Shell P2): a team message and daily briefing per
-   store (published by a manager or the owner, sanitised), What's New with
-   short guides per release, and a first-run walkthrough. Needs: who may
-   publish a message (20).
-3. **Owner console, the rest:** a Boards tab (each store's wallboard and
-   Team Board read-only), a Service page (worker version, catalogue, R2,
-   cron runs, errors), and a map editor page that folds in the suggestions
-   queue (the editor now ships with Conduit, decision 2).
-4. **Floor leftovers:** the seven languages if they are wanted (16), and the
-   `P` suffix once its meaning is known (1).
-5. **Importer gaps** (only if the legacy data matters):
+- **Areas switch at once** (decision 19): the console logs `store.areas.set`
+  into the store (worker only). The store object narrows every token's
+  areas to the store's at once, for writes, reads, broadcasts and open
+  sockets. Devices renew on hearing it: the rail, the views and the data
+  follow in under a second.
+- **Team communication** (decision 20: managers and the owner publish):
+  - a team message (optionally until a date) and the day's briefing, in a
+    strip above every view;
+  - read in full from the strip; managers write them there;
+  - plain text, cleaned in the reducer; `**bold**` and "- " lists are
+    rendered after escaping.
+  - **What's New** opens once per device after an update, with "Show me";
+    it is also on Help.
+  - **First-run walkthrough:** the tour for the Floor, and four cards each
+    for the Stockroom and the Back dock, the first time a device enters
+    that area.
+- **Owner console:**
+  - a **Boards** tab per store (its Wallboard and Team Board, read-only,
+    every 30 seconds);
+  - a **Service** page: worker version, bindings and secrets as set or not,
+    the catalogue build, each store object's size, last event, nightly run
+    and next alarm, and the last 100 errors the worker recorded (now kept
+    in the registry);
+  - a **Maps** page: every store's map, Open editor, and the suggestions
+    from every store in one queue.
+
+## Next to build
+
+1. **Floor leftovers, both waiting on you:** the seven languages if they
+   are wanted (16; today English only), and the `P` suffix once its meaning
+   is known (1; today part of the code).
+2. **Importer gaps** (only if the legacy data matters):
    - K2B: the department map, the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH and its desk's SOH snapshots (not on the worker). History codes import right since October.
    - DV: anything still missing once a real store is imported.
 

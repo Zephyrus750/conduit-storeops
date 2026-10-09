@@ -29,6 +29,16 @@ export function preflight() {
   return new Response(null, { status: 204, headers: CORS });
 }
 
+// An error worth the owner's eye (the console's Service page). Best effort:
+// it never throws, and it never holds up the request that hit it.
+export function reportError(env, kind, store, detail, ctx) {
+  try {
+    if (!env?.REGISTRY) return;
+    const stub = env.REGISTRY.get(env.REGISTRY.idFromName('registry'));
+    const p = stub.fetch('https://registry/errors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, store, detail }) }).catch(() => {});
+    ctx?.waitUntil?.(p);
+  } catch {}
+}
 // A JSON body no bigger than max, checked before it is parsed
 // (Content-Length may be absent or wrong).
 export async function readJson(request, max = 1_000_000) {

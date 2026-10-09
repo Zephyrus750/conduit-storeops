@@ -56,7 +56,7 @@ export const STRIP = {
 export const HOME = { floor: 'map', stockroom: 'srhome', backdock: 'bdhome', admin: 'admin' };
 export const WORKSPACES = [['floor', 'Floor', 'm-map', 'Map, refresh, labels, stocktake, issues'], ['stockroom', 'Stockroom', 'box', 'Backfill scan, cages, adjustments, day list'], ['backdock', 'Back dock', 'truck', 'Land and decant pallets, run the truck']];
 // The owner console's rail: stores are added at runtime, these are the system rows.
-export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
+export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminmaps', 'm-map', 'Maps'], ['adminservice', 'm-settings', 'Service'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
 export const MORE = {
   floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['inventory', 'm-inventory', 'Inventory'], ['maintenance', 'm-maintenance', 'Report an issue'], ['mapedits', 'edit', 'Suggest map edits'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
   stockroom: [['daylist', 'm-daylist', 'Day list'], ['codelist', 'barcode', 'Quick Scan'], ['srhistory', 'm-srhistory', 'History'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],

@@ -28,7 +28,7 @@ import { initialState, apply, replay } from '../shared/reducers.js';
 import { validateEvent } from '../shared/validate.js';
 import { typeInfo, AREA_PROJECTIONS } from '../shared/catalogue.js';
 import { hasRole } from './auth.js';
-import { HttpError, json, fail, CORS, readJson } from './http.js';
+import { HttpError, json, fail, CORS, readJson, reportError } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
@@ -55,7 +55,7 @@ const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // an issue is completed or removed (a photo can show people; it is kept no
 // longer than it helps).
 const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
-const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'store.retain']);
+const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'store.retain', 'store.areas.set']);
 const SNAPSHOT_MAX = 1_900_000;       // the state is saved as one row, and a Durable Object row holds 2 MB
 const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
@@ -113,20 +113,21 @@ export class StoreObject extends DurableObject {
   snapshotIfDue(force = false) {
     if (!force && this.sinceSnapshot < SNAPSHOT_EVERY) return { saved: false };
     const text = JSON.stringify(this.state);
-    if (text.length > SNAPSHOT_MAX) { console.error(`store ${this.storeNo}: state is ${text.length} bytes, over the snapshot limit; snapshot skipped`); return { saved: false, bytes: text.length }; }
+    if (text.length > SNAPSHOT_MAX) { console.error(`store ${this.storeNo}: state is ${text.length} bytes, over the snapshot limit; snapshot skipped`); reportError(this.env, 'snapshot', this.storeNo, { bytes: text.length, message: 'over the row limit: snapshot skipped' }, this.ctx); return { saved: false, bytes: text.length }; }
     try {
       this.sql.exec('INSERT OR REPLACE INTO snapshots (seq, state, at) VALUES (?, ?, ?)', this.state.seq, text, new Date().toISOString());
       this.sql.exec('DELETE FROM snapshots WHERE seq < ?', this.state.seq);
       this.sinceSnapshot = 0;
       return { saved: true, bytes: text.length };
-    } catch (e) { console.error(`store ${this.storeNo}: snapshot failed (${text.length} bytes)`, e?.message || e); return { saved: false, bytes: text.length }; }
+    } catch (e) { console.error(`store ${this.storeNo}: snapshot failed (${text.length} bytes)`, e?.message || e); reportError(this.env, 'snapshot', this.storeNo, { bytes: text.length, message: String(e?.message || e).slice(0, 200) }, this.ctx); return { saved: false, bytes: text.length }; }
   }
 
   // ── HTTP ──────────────────────────────────────────────────────────────
   async fetch(request) {
     const url = new URL(request.url);
-    const claims = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
-    if (!claims) return fail(401, 'unauthorised', 'no claims');
+    const raw = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
+    if (!raw) return fail(401, 'unauthorised', 'no claims');
+    const claims = this.current(raw);
     // A device token from before the store's last rotation, suspension or
     // revoke is refused; the device refreshes (which fails) and signs in.
     if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) return fail(401, 'revoked', 'this device was signed out; sign in again');
@@ -136,6 +137,21 @@ export class StoreObject extends DurableObject {
       switch (url.pathname) {
         case '/snapshot': return json(this.snapshot(claims, url.searchParams.get('areas')));
         case '/changes': return json({ ...this.changes(Number(url.searchParams.get('since') || 0), claims), now: Date.now() });
+        // The owner's console switched an area: logged by the worker itself
+        // (store.areas.set is never taken from a device).
+        case '/areas': {
+          if (!raw.owner || request.method !== 'POST') return fail(403, 'unauthorised', 'owner only');
+          const body = await readJson(request, 4096);
+          const ev = { id: ulid(), store: this.storeNo, area: 'store', type: 'store.areas.set', entity: {}, payload: { on: body?.on }, at: new Date().toISOString(), v: 1 };
+          return json({ results: this.submit([ev], { ...raw, roles: ['manager'] }, { internal: true }) });
+        }
+        // The console's Service page: this store object at a glance.
+        case '/service': {
+          if (!raw.owner) return fail(403, 'unauthorised', 'owner only');
+          const last = this.sql.exec('SELECT at, type FROM events ORDER BY seq DESC LIMIT 1').toArray()[0] || null;
+          const snap = this.sql.exec('SELECT seq, at FROM snapshots ORDER BY seq DESC LIMIT 1').toArray()[0] || null;
+          return json({ seq: this.state.seq, bytes: JSON.stringify(this.state).length, sinceSnapshot: this.sinceSnapshot, snapshot: snap, lastEvent: last, retention: this.state.retention || null, alarm: await this.ctx.storage.getAlarm(), tz: this.tz(), sockets: this.ctx.getWebSockets().length, photos: this.sql.exec('SELECT COUNT(*) AS n FROM photos').toArray()[0].n });
+        }
         case '/events': { const body = await readJson(request, BATCH_MAX); return json({ results: this.submit(body.events, claims), now: Date.now() }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
@@ -257,7 +273,7 @@ export class StoreObject extends DurableObject {
     // from the snapshot and the log, which never held this event.
     let rej;
     try { rej = apply(this.state, event); }
-    catch (err) { console.error(`store ${this.storeNo}: ${event.type} threw`, err?.message || err); this.load(); return { id, ok: false, code: 'internal', message: `${event.type} could not be applied` }; }
+    catch (err) { console.error(`store ${this.storeNo}: ${event.type} threw`, err?.message || err); reportError(this.env, 'reducer', this.storeNo, { type: event.type, message: String(err?.message || err).slice(0, 200) }, this.ctx); this.load(); return { id, ok: false, code: 'internal', message: `${event.type} could not be applied` }; }
     if (rej) return { id, ok: false, ...rej };
 
     const received = new Date().toISOString();
@@ -292,6 +308,7 @@ export class StoreObject extends DurableObject {
   // for the coming store midnight (plus a minute of slack).
   async alarm() {
     try { this.rollover(); if (this.atNight()) this.retainNow(); await this.sweepPhotos(); }
+    catch (e) { reportError(this.env, 'nightly', this.storeNo, { message: String(e?.message || e).slice(0, 200) }, this.ctx); throw e; }
     finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
   }
   // Retention runs on the midnight alarm only, not the catch-up one a new
@@ -585,8 +602,9 @@ export class StoreObject extends DurableObject {
     if (size > BATCH_MAX) return ws.send(JSON.stringify({ t: 'error', code: 'payload_too_large', message: 'frame is too large' }));
     try { msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)); }
     catch { return ws.send(JSON.stringify({ t: 'error', code: 'invalid_json', message: 'frames must be JSON' })); }
-    const { claims } = ws.deserializeAttachment() || {};
-    if (!claims) return ws.close(1008, 'no claims');
+    const { claims: held } = ws.deserializeAttachment() || {};
+    if (!held) return ws.close(1008, 'no claims');
+    const claims = this.current(held);
     if (this.endStale(ws, claims)) return;
     switch (msg.t) {
       case 'hello': {
@@ -627,10 +645,19 @@ export class StoreObject extends DurableObject {
     try { ws.send(JSON.stringify({ t: 'error', code: why[0], message: why[1] })); ws.close(1008, why[0]); } catch {}
     return true;
   }
+  // A token's areas, narrowed to the ones the store has now: an area the
+  // owner switched off stops at once for every token and socket, however
+  // long the token has left (decision 19). Switching one on reaches a device
+  // when it renews, which it does as soon as it hears store.areas.set.
+  current(claims) {
+    const on = this.state?.areas?.on;
+    return on && claims ? { ...claims, caps: (claims.caps || []).filter(a => on.includes(a)) } : claims;
+  }
   broadcast(events) {
     for (const ws of this.ctx.getWebSockets()) {
-      const { claims } = ws.deserializeAttachment() || {};
-      if (!claims) { try { ws.close(1008, 'no claims'); } catch {} continue; }
+      const { claims: held } = ws.deserializeAttachment() || {};
+      if (!held) { try { ws.close(1008, 'no claims'); } catch {} continue; }
+      const claims = this.current(held);
       if (this.endStale(ws, claims)) continue;
       for (const e of events) {
         if (!claims || (!claims.owner && e.area !== 'store' && !readable(claims).includes(e.area))) continue;

@@ -13,6 +13,8 @@ import { mountMap, bindMapChrome } from '../map.js';
 import { MAP_EDITOR_URL } from '../config.js';
 import { TOOLS } from '../../shared/tools.js';
 import { csvLines } from '../../shared/records.js';
+import wallboard from './backdock/wallboard.js';
+import { teamboard } from './backdock/screens.js';
 
 const AREAS = ['floor', 'stockroom', 'backdock'];
 const AREA_NAME = { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock', store: 'Store', owner: 'Owner' };
@@ -161,20 +163,24 @@ const storeView = {
   id: 'adminstore', title: 'Store', icon: 'store',
   desktop(ctx) {
     if (ctx.arg?.no) { if (ctx.arg.no !== st.no) { st.tab = ctx.arg.tab || 'over'; st.rot = null; st.edit = false; st.filter = ''; st.area = 'all'; } st.no = ctx.arg.no; }
+    // A link to a tab (the Maps page's Review) opens it once; a rerender keeps the tab chosen since.
+    if (ctx.arg?.tab && st.tabArg !== ctx.arg) { st.tab = ctx.arg.tab; st.tabArg = ctx.arg; }
     if (!st.no) st.no = ctx.admin.stores?.[0]?.no || null;
     const c = forStore(st.no), rec = c.rec || (ctx.admin.stores || []).find(s => s.no === st.no);
     if (!rec) return vh('Store', '', `<a class="btn" data-view="admin">${ic('arrow')}All stores</a>`) + banner('No store selected. Pick one from the rail or the Stores list.');
-    const tabs = [['over', 'Overview'], ['events', 'Events'], ['devices', 'Devices'], ['access', 'Access'], ['map', 'Map'], ['migr', 'Migration']];
+    const tabs = [['over', 'Overview'], ['events', 'Events'], ['devices', 'Devices'], ['boards', 'Boards'], ['access', 'Access'], ['map', 'Map'], ['migr', 'Migration']];
     const head = vh(`${esc(rec.no)} <span class="pd-name">${esc(rec.name)}</span>`, sub(esc(rec.region || ''), tst(rec.status), `registered ${fmtTime(rec.created)}`), `<a class="btn" data-view="admin">${ic('arrow')}All stores</a><button class="btn" data-act="refresh">${ic('refresh')}Refresh</button><button class="btn primary" data-act="actas">${ic('users')}Act as store</button>`);
     const seg = `<div class="ad-tabs">${tabs.map(t => `<button class="${t[0] === st.tab ? 'on' : ''}" data-act="tab" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>`;
     const ro = ['access', 'map', 'migr'].includes(st.tab) ? '' : banner(`Read-only view of <b>${esc(rec.name)}</b>. Nothing you do here changes the store until you <b>Act as store</b>.`, true);
-    const body = st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : st.tab === 'migr' ? migrTab(rec, c) : overTab(rec, c);
+    const body = st.tab === 'boards' ? boardsTab(rec, c) : st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : st.tab === 'migr' ? migrTab(rec, c) : overTab(rec, c);
     return head + ro + seg + body;
   },
   mount(ctx, root) {
     if (!st.no) return [];
-    const keys = st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map', 'mapdoc', 'snap'] : ['rec', 'devices', 'snap'];
+    const keys = st.tab === 'boards' ? ['rec', 'snap'] : st.tab === 'events' ? ['rec', 'tail'] : st.tab === 'devices' ? ['rec', 'devices'] : st.tab === 'access' ? ['rec'] : st.tab === 'map' ? ['rec', 'map', 'mapdoc', 'snap'] : ['rec', 'devices', 'snap'];
     load(ctx, st.no, keys).then(did => { if (did) ctx.rerender(); }).catch(fail);
+    // The Boards tab reads the store again every 30 seconds, as its screens repaint.
+    const no = st.no, tick = st.tab === 'boards' ? setInterval(() => { const c = forStore(no); delete c.snap; load(ctx, no, ['snap']).then(() => { if (st.tab === 'boards' && st.no === no) ctx.rerender(); }).catch(() => {}); }, 30_000) : null;
     if (st.tab === 'over' && !st.kpis?.[st.no]) ctx.admin.api(`/v1/admin/stores/${st.no}/kpis`).then(k => { st.kpis = { ...(st.kpis || {}), [st.no]: k }; ctx.rerender(); }).catch(() => {});
     root.addEventListener('click', e => onStoreClick(e, ctx));
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
@@ -183,7 +189,7 @@ const storeView = {
     root.addEventListener('change', e => { if (e.target.matches('input[type="file"][data-floor]')) mapFileChosen(e.target); });
     const stage = $('#adMapStage', root), doc = forStore(st.no).mapdoc;
     if (stage && doc) { try { const m = mountMap(stage, { doc, badges: true }); bindMapChrome(stage.closest('.card'), m); } catch (e) { stage.innerHTML = `<p class="lbl" style="padding:14px">Could not draw the map: ${esc(e.message)}</p>`; } }
-    return [];
+    return tick ? [() => clearInterval(tick)] : [];
   },
 };
 
@@ -367,6 +373,7 @@ async function patchStore(ctx, body) {
 async function onStoreClick(e, ctx) {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act, no = st.no, c = forStore(no);
+  if (act === 'board') { st.board = a.dataset.b; return ctx.rerender(); }
   if (act === 'tab') { st.tab = a.dataset.tab; st.rot = null; st.rotDone = null; st.edit = false; ctx.rerender(); }
   else if (act === 'refresh') { invalidate(no); ctx.rerender(); }
   else if (act === 'open-editor') openEditor();
@@ -454,6 +461,75 @@ const register = {
   },
 };
 
+// ── Boards: a store's Wallboard and Team Board, read-only ───────────────
+// The same renderers the store's screens use, over the owner's snapshot of
+// the store; nothing on them can be pressed (inert).
+function boardsTab(rec, c) {
+  if (!rec.entitlements?.backdock) return `<div class="card"><p class="lbl">${esc(rec.name)} has no Back dock, so it has no boards.</p></div>`;
+  if (c.snap === undefined) return `<div class="card"><div class="ohint">Loading…</div></div>`;
+  const snap = c.snap || {}, empty = { dock: { trucks: {}, history: [], manifests: {}, ledger: {} }, plan: { days: {} } };
+  const view = { store: { get: k => (k ? snap[k] ?? empty[k] ?? {} : snap), on: () => () => {} }, isMobile: false, storeNo: rec.no, storeName: rec.name, rerender() {}, go() {}, session: { current: { caps: AREAS.filter(a => rec.entitlements?.[a]), roles: ['owner'], owner: true } } };
+  const which = st.board === 'team' ? 'team' : 'wall';
+  let html; try { html = which === 'team' ? teamboard.desktop(view) : wallboard.desktop(view); } catch (e) { html = `<p class="lbl">Could not draw the board: ${esc(e.message)}</p>`; }
+  return `<div class="ad-boardbar"><div class="seg2">${[['wall', 'Wallboard'], ['team', 'Team Board']].map(([k, l]) => `<button class="${which === k ? 'on' : ''}" data-act="board" data-b="${k}">${l}</button>`).join('')}</div><span class="cs-dim">As the store’s screens show it, read-only, refreshed every 30 seconds.</span></div><div class="ad-board" inert>${html}</div>`;
+}
+
+// ── Service: the worker, its bindings, each store object, errors ───────
+const service = {
+  id: 'adminservice', title: 'Service', icon: 'm-settings',
+  desktop(ctx) {
+    const s = st.service, yes = v => v ? `<b class="c-green">${ic('check')}set</b>` : `<b class="cs-dim">not set</b>`;
+    const head = vh('Service', sub('the worker and every store object', s ? `read ${fmtTime(s.now)}` : 'reading…'), `<a class="btn" data-view="admin">${ic('arrow')}All stores</a><button class="btn" data-act="svc-refresh">${ic('refresh')}Refresh</button>`, 'm-settings');
+    if (!s) return head + `<div class="card"><div class="ohint">Loading…</div></div>`;
+    if (s.error) return head + banner(esc(s.error));
+    const B = s.bindings || {}, S = s.secrets || {};
+    const worker = `<div class="card"><div class="ch"><h3>Worker</h3></div><div class="ad-kv"><span>Version</span><b class="mono">${esc(s.version)} · ${esc(s.env)}</b><span>Endpoint</span><b class="mono">${esc(ctx.admin.base)}</b>` +
+      `<span>Photos (R2)</span>${yes(B.photos)}<span>Photos staging</span>${yes(B.photosStaging)}<span>Catalogue object</span>${yes(B.catalogue)}<span>Product details</span>${yes(B.details)}<span>Legacy worker</span>${yes(B.legacy)}` +
+      `<span>TOKEN_SECRET</span>${yes(S.TOKEN_SECRET)}<span>OWNER_KEY_HASH</span>${yes(S.OWNER_KEY_HASH)}<span>BROWSER_TOKEN</span>${yes(S.BROWSER_TOKEN)}</div><p class="lbl">Secrets show as set or not; their values never leave the worker.</p></div>`;
+    const mb = n => n == null ? '—' : `${(n / 1e6).toFixed(2)} MB`;
+    const rows = (s.stores || []).map(x => `<tr><td class="mono"><a class="go" data-view="adminstore" data-no="${esc(x.no)}">${esc(x.no)}</a></td><td>${esc(x.name || '')}</td>` + (x.error ? `<td colspan="6" class="c-red">${esc(x.error)}</td>` :
+      `<td class="mono">${x.seq ?? '—'}</td><td class="mono${x.bytes > 1.7e6 ? ' c-red' : x.bytes > 1.2e6 ? ' c-amber' : ''}">${mb(x.bytes)}</td><td>${x.lastEvent ? `${esc(x.lastEvent.type)} · ${ago(x.lastEvent.at)}` : '—'}</td><td>${x.retention ? `${esc(x.retention.day || '')} · ${ago(x.retention.at)}` : 'not yet'}</td><td>${x.alarm ? fmtTime(new Date(x.alarm).toISOString()) : '—'}</td><td class="mono">${x.sockets ?? 0} · ${x.photos ?? 0}</td>`) + '</tr>');
+    const stores = `<div class="card"><div class="ch"><h3>Store objects</h3><span class="cs-dim">live data warns from 1.2 MB of the 2 MB a store holds</span></div>${table(['Store', 'Name', 'Events', 'Live data', 'Last event', 'Nightly run', 'Next alarm', 'Sockets · photos'], rows)}</div>`;
+    const errs = (s.errors || []).map(e => `<tr><td class="mono">${fmtTime(e.at)}</td><td class="mono">${esc(e.kind)}</td><td class="mono">${e.store ? esc(e.store) : '—'}</td><td>${esc(short(e.detail?.message || e.detail))}${e.detail?.route ? ` <span class="cs-dim mono">${esc(e.detail.route)}</span>` : ''}</td></tr>`);
+    const errors = `<div class="card"><div class="ch"><h3>Errors</h3><span class="cs-dim">the last 100 the worker recorded</span></div>${table(['When', 'Kind', 'Store', 'What'], errs)}</div>`;
+    return head + `<div class="grid2 ad-two">${worker}${catalogueCard(s.catalogue)}</div>` + stores + errors;
+  },
+  mount(ctx, root) {
+    if (!st.service) ctx.admin.api('/v1/admin/service').then(r => { st.service = r; ctx.rerender(); }).catch(e => { st.service = { error: e.message }; ctx.rerender(); });
+    root.addEventListener('click', e => { if (e.target.closest('[data-act="svc-refresh"]')) { st.service = null; ctx.rerender(); } });
+    return [];
+  },
+};
+
+// ── Maps: every store's map and the suggestions waiting on it ──────────
+// The map editor's console page: open the editor on a store, and the
+// suggested edits from every store in one queue, oldest first.
+const maps = {
+  id: 'adminmaps', title: 'Maps', icon: 'm-map',
+  desktop(ctx) {
+    const stores = ctx.admin.stores || [];
+    const rows = stores.map(r => { const c = forStore(r.no), m = c.map, open = Object.values(c.snap?.mapedits || {}).filter(x => x.status === 'open').length;
+      return `<tr><td class="mono"><a class="go" data-view="adminstore" data-no="${esc(r.no)}" data-tab="map">${esc(r.no)}</a></td><td>${esc(r.name)}</td><td class="mono">${m === undefined ? '…' : m && m.version ? esc(m.version) : '<span class="cs-dim">none</span>'}</td><td>${m?.at ? ago(m.at) : '—'}</td><td>${m?.floors ? m.floors.length : '—'}</td><td>${c.snap === undefined ? '…' : open ? `<b class="c-amber">${open}</b>` : '0'}</td><td><button class="btn sm" data-act="maps-editor" data-no="${esc(r.no)}">${ic('edit')}Open editor</button></td></tr>`; });
+    const queue = stores.flatMap(r => Object.entries(forStore(r.no).snap?.mapedits || {}).filter(([, x]) => x.status === 'open').map(([id, x]) => ({ id, no: r.no, name: r.name, ...x }))).sort((a, b) => (a.at < b.at ? -1 : 1));
+    const what = x => x.kind === 'rename' ? `Rename <b class="mono">${esc(x.shelf)}</b> to <b class="mono">${esc(x.to)}</b>` : `Flag <b class="mono">${esc(x.shelf)}</b>`;
+    const q = queue.map(x => `<div class="li"><span class="loc mono">${esc(x.no)}</span><span class="nm">${what(x)}${x.note ? ` · ${esc(x.note)}` : ''} <span class="cs-dim">· ${ago(x.at)}</span></span><a class="btn sm" data-view="adminstore" data-no="${esc(x.no)}" data-tab="map">Review</a></div>`).join('');
+    return vh('Maps', sub('every store’s published map', 'suggested edits from the floor'), `${editorBtn()}<button class="btn" data-act="maps-refresh">${ic('refresh')}Refresh</button>`, 'm-map') +
+      `<div class="card"><div class="ch"><h3>Published maps</h3><span class="cs-dim">open the editor on a store, publish, then accept its suggestions</span></div>${table(['Store', 'Name', 'Version', 'Published', 'Floors', 'Open suggestions', ''], rows)}</div>` +
+      `<div class="card"><div class="ch"><h3>Suggestions waiting</h3><span class="cs-dim">${queue.length} open, oldest first</span></div>${q ? `<div class="list">${q}</div>` : '<p class="lbl">Nothing waiting. Floor staff suggest renames and flags from a shelf card.</p>'}</div>`;
+  },
+  mount(ctx, root) {
+    const stores = ctx.admin.stores || [];
+    Promise.all(stores.map(r => load(ctx, r.no, ['map', 'snap']))).then(did => { if (did.some(Boolean)) ctx.rerender(); }).catch(fail);
+    root.addEventListener('click', e => {
+      const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'maps-editor') { st.no = a.dataset.no; openEditor(); }
+      else if (a.dataset.act === 'maps-refresh') { for (const r of stores) { const c = forStore(r.no); delete c.map; delete c.snap; } ctx.rerender(); }
+      else if (a.dataset.act === 'open-editor') openEditor();
+    });
+    return [];
+  },
+};
+
 const actions = {
   id: 'adminactions', title: 'Owner actions', icon: 'history',
   desktop(ctx) {
@@ -481,6 +557,6 @@ function actionText(a) {
   }
 }
 
-export const ADMIN_VIEWS = [overview, storeView, register, actions];
+export const ADMIN_VIEWS = [overview, storeView, register, actions, service, maps];
 export function adminSelected() { return st.no; }
 export function resetAdmin() { st.no = null; st.tab = 'over'; st.reg = null; st.regDone = null; st.actions = null; st.health = null; invalidate(); }

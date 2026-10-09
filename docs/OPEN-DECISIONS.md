@@ -46,8 +46,8 @@ differs from the default.
 | # | Decision | What Conduit does today | Where | How to test |
 |---|---|---|---|---|
 | 18 | How fine the tool switches are | 20 tools. Receiving, Team Board and Dock screen are one tool; Wallboard and Analytics are one; Backfill review and its History are one. The store map, Settings, Store details and the workspace homes cannot be switched off | `shared/tools.js` | Console › a store › Access: switch one off, watch a signed-in store device lose it within seconds |
-| 19 | Switching a whole area off |  **Decided 2026-10-09 (default):** make it apply at once, like tools, by logging it into the store. Still to build (TODO 1); today it takes effect when each device's token renews (up to 12 hours)  | `worker/registry.js`, `worker/index.js` | Turn an area off and see how long a signed-in device keeps it |
-| 20 | Who may publish a team message |  **Decided 2026-10-09 (default):** managers and the owner. Still to build with Team communication (TODO 2)  | — | — |
+| 19 | Switching a whole area off |  **Decided 2026-10-09 (default), built:** it applies at once, like tools: the console logs `store.areas.set` into the store and devices follow in under a second  | `worker/registry.js`, `worker/index.js` | Turn an area off and see how long a signed-in device keeps it |
+| 20 | Who may publish a team message |  **Decided 2026-10-09 (default), built:** managers and the owner (`team.message.set`, `team.briefing.set`)  | — | — |
 | 21 | What the console flags as set-up | No map; no stockroom bay ranges; no manifest yet; two trucks open; no device ever or none in 24 hours; device errors; changes stuck in outboxes; bays auto-closed yesterday (shown as information) | `shared/kpis.js` | Console Overview's Set-up column and a store's Overview |
 | 22 | Fleet's "newest" app version | The highest version string any device reported in the last day; others show as behind | `js/views/admin.js` `fleetCard` | Open the console with two devices on different releases |
 

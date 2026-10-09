@@ -126,6 +126,9 @@ export const CATALOGUE = {
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
   'store.settings.set':  T('store', M, []),
+  'team.message.set':  T('store', M, [], { text: 'string' }),                   // the store's team message; '' clears it; payload.until YYYY-MM-DD
+  'team.briefing.set': T('store', M, ['date'], { text: 'string' }),             // the day's briefing; '' clears it
+  'store.areas.set':   T('store', M, [], { on: 'array' }),                     // worker only: the areas the store is entitled to, as the owner set them
   'store.tools.set':     T('store', M, [], { off: 'array' }),
   'store.retain':        T('store', M, [], { day: 'string' }),                   // worker only, nightly: trims finished records (shared/retain.js)                    // owner only: the tools switched off (shared/tools.js)
   'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
@@ -142,7 +145,7 @@ export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'inventory'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan'],
-  store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'retention'],
+  store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'areas', 'comms', 'retention'],
 };
 
 // The largest payload (as JSON) each type may carry. Most events are a few

@@ -28,6 +28,9 @@ import { ensureArea, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
+import { mountTeam } from './team.js';
+import { firstRun } from './tour.js';
+import { whatsNewOnce } from './whatsnew.js';
 import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
 import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
@@ -49,6 +52,7 @@ const WORKER_NOTE = new URLSearchParams(location.search).get('worker') && !worke
 const workerLine = () => WORKER === WORKER_DEFAULT ? '' : `<div class="si-worker">${ic('lock')}Signing in to <b>${esc(new URL(WORKER).host)}</b></div>`;
 
 const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
+let team = null;      // the team message strip (js/team.js)
 let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor';
 const frame = $('.frame');
 installKeyboard();
@@ -63,6 +67,19 @@ applyPrefs(frame);
 const paintFootDate = () => { $('#footDate').textContent = `${fmtLong()} · ${retailPeriod(new Date())}`; };
 paintFootDate(); setInterval(paintFootDate, 60_000);
 $('#footVer').textContent = 'Conduit ' + VERSION;
+// The token's areas changed (the owner switched one, and the device renewed):
+// the rail follows, and a view in an area that went away goes home.
+let capsSig = null;
+client.session.on('change', snap => {
+  const sig = (snap?.caps || []).join(',');
+  if (capsSig === null || !store || admin) { capsSig = sig; return; }
+  if (sig === capsSig) return;
+  const gone = capsSig.split(',').filter(a => a && !sig.split(',').includes(a)); capsSig = sig;
+  buildRail(); paintBadges();
+  const view = current && VIEWS[current];
+  if (view && view.area && view.area !== 'store' && !(snap?.caps || []).includes(view.area)) { setWs('floor'); show(HOME.floor); }
+  if (gone.length) toast(`${gone.map(a => a === 'backdock' ? 'The Back dock' : a === 'stockroom' ? 'The Stockroom' : 'The Floor').join(' and ')} ${gone.length === 1 ? 'was' : 'were'} switched off for this store`);
+});
 client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: 'Owner session expired. Sign in again.' } : {}); });
 // A shared shelf link (?store=…&shelf=…): open the map on that shelf once
 // signed in to that store. A store parked on this device is switched to; a
@@ -94,13 +111,20 @@ async function enter() {
     if (s.actas) { await client.session.endActAs(); await enterAdmin(); toast(`Cannot open ${s.store}: ${e.message}`, 'bad'); return; }
     hideCover(); showSignin({ error: e.message }); return;
   }
-  admin = null; frame.classList.remove('adm');
+  admin = null; frame.classList.remove('adm'); capsSig = (client.session.current?.caps || []).join(',');
+  // After an update, What's New once (a device on its first run gets the walkthrough instead).
+  { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }
+  team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current) });
   store.on('status', paintStatus); store.on('reject', r => toast(`${r.code}: ${r.message}`, 'bad'));
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
   store.on('backfill', paintBadges); store.on('cages', paintBadges);
   // The owner switched a tool on or off: the rail follows, and a view that
   // has just been switched off closes.
+  // The owner switched an area on or off: renew the token now (its areas
+  // come from the registry), and the rail, the views and the data follow.
+  let areasSig = JSON.stringify(store.get('areas')?.on || null);
+  store.on('areas', a => { const sig = JSON.stringify(a?.on || null); if (sig === areasSig) return; areasSig = sig; client.session.refresh().catch(() => {}); });
   store.on('tools', () => { if (offList().join() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = 'Store ' + s.store;
@@ -158,7 +182,7 @@ async function idleCheck() {
   } catch { /* offline: tried again on the next check */ }
   finally { locking = false; }
 }
-function closeStore() { setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
+function closeStore() { team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); actasBar(null); resetAdmin(); }
 async function signOut() {
   try { await store?.flush(); } catch {}
@@ -296,7 +320,9 @@ let toolsSig = null;
 function buildRail() {
   toolsSig = offList().join();
   const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}<span class="rl">${v.rail || v.title}</span>${BADGED.includes(v.id) ? `<span class="badge" data-badge="${v.id}" hidden></span>` : ''}</button>`;
-  $('#railscroll').innerHTML = RAIL.map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? (offView(r) ? '' : rows(VIEWS[r])) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">Soon</span></button>`).join('')).join('');
+  // An area the store does not have (or the owner just switched off) is not on the rail at all.
+  const caps = client.session.current?.caps || [], outside = v => v?.area && v.area !== 'floor' && v.area !== 'store' && !caps.includes(v.area);
+  $('#railscroll').innerHTML = RAIL.filter(sec => !sec.rows.length || sec.rows.some(r => typeof r !== 'string' || !outside(VIEWS[r]))).map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? (offView(r) || outside(VIEWS[r]) ? '' : rows(VIEWS[r])) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">Soon</span></button>`).join('')).join('');
 }
 // Rail badges (the showcase's): Backfill review carries today's locations
 // waiting for review; Cages, in red, the open cages not seen for a week.
@@ -313,6 +339,10 @@ function setWs(w) {
   ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
   const md = $('.mdepts'); if (md) { const l = w === 'floor' ? 'Departments' : 'Switch area'; md.title = l; md.setAttribute('aria-label', l); }
   $('#mstrip').innerHTML = STRIP[w].filter(m => !offView(m[0])).map(m => `<button data-view="${m[0]}">${ic(m[1])}${m[2]}</button>`).join('');
+  // A person's first time in an area on this device: its walkthrough (not
+  // for the owner, who is looking in rather than working there).
+  const cur = client.session.current;
+  if (store && !admin && !cur?.owner && !cur?.actas && w !== 'admin') setTimeout(() => { if (ws === w && store) firstRun(w); }, 700);
 }
 function paintStatus(s) {
   const el = $('#footSync'); if (!el) return;
@@ -365,6 +395,7 @@ function show(id, arg) {
   const hs = $('#hdrslot'); hs.innerHTML = ''; if (!useMobile && frame.classList.contains('hdr-title')) { const vh0 = content.querySelector('.vh'); if (vh0) hs.appendChild(vh0); }
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   content.scrollTop = 0;
+  team?.repaint();
   markRail();
   // A sheet closes when the view changes; a repaint of the same view (a
   // store update) leaves it open, so the launcher survives sign-in.
@@ -415,7 +446,7 @@ document.addEventListener('click', e => {
   // The search palette routes its own rows (they carry select, dept or q);
   // elsewhere a data-view element opens the view, with a store number for
   // the console's store rows.
-  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no } : undefined); return; }
+  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no, ...(v.dataset.tab ? { tab: v.dataset.tab } : {}) } : undefined); return; }
   const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
   if (e.target.closest('.mdepts')) { if (store) (ws === 'floor' ? openDepts : openLauncher)(); return; }
   const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }

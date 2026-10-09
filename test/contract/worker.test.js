@@ -875,3 +875,49 @@ test('wrong owner keys from elsewhere cannot lock the owner out of a device they
   for (let i = 0; i < 3; i++) assert.equal((await api('POST', '/v1/auth/signin', { ownerKey: 'nope', device: 'own-laptop', trust: first.body.trust })).status, 403);
   assert.equal((await api('POST', '/v1/auth/signin', { ownerKey: OWNER_KEY, device: 'own-laptop', trust: first.body.trust })).status, 429);
 });
+
+test('switching an area off applies at once: a token that still lists it is refused and reads nothing from it; on again after a renew', async () => {
+  assert.equal((await reg2('2111', { codes: { stockroom: 'SR-2111', dock: 'DK-2111', manager: 'MG-2111' } })).status, 201);
+  const p = (await api('POST', '/v1/auth/signin', { store: '2111', pin: '135790', device: 'ar-1' })).body;
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-2111' }, p.token)).body;
+  const cage = n => ({ id: ulid(), store: '2111', area: 'stockroom', type: 'cage.create', entity: { cage: `BSN21110${n}` }, payload: { ring: 'overstock' }, at: at(), v: 1 });
+  assert.equal((await api('POST', '/v1/store/2111/events', { events: [cage(1)] }, sr.token)).body.results[0].ok, true);
+  assert.ok((await api('GET', '/v1/store/2111/snapshot', undefined, sr.token)).body.state.cages);
+
+  const off = await api('PATCH', '/v1/admin/stores/2111', { entitlements: { stockroom: false } }, ownerToken);
+  assert.equal(off.status, 200);
+  // The same token, not renewed: refused and blind to the Stockroom straight away.
+  assert.equal((await api('POST', '/v1/store/2111/events', { events: [cage(2)] }, sr.token)).body.results[0].code, 'not_entitled');
+  const snap = (await api('GET', '/v1/store/2111/snapshot', undefined, sr.token)).body.state;
+  assert.equal(snap.cages, undefined); assert.deepEqual(snap.areas.on, ['backdock', 'floor']);
+  assert.equal((await api('GET', '/v1/store/2111/soh', undefined, sr.token)).status, 403);
+  // The device renews (it does on hearing store.areas.set) and its token says so.
+  const ren = (await api('POST', '/v1/auth/refresh', { refresh: sr.refresh })).body;
+  assert.deepEqual(ren.caps.sort(), ['backdock', 'floor']);
+  // Saving the same areas again logs nothing new.
+  const before = (await api('GET', '/v1/store/2111/snapshot', undefined, ren.token)).body;
+  assert.equal((await api('PATCH', '/v1/admin/stores/2111', { entitlements: { stockroom: false } }, ownerToken)).status, 200);
+  const after = (await api('GET', '/v1/store/2111/snapshot', undefined, ren.token)).body;
+  assert.equal(after.seq, before.seq); assert.equal(after.state.areas.at, before.state.areas.at);
+  // On again: a renewed token reads it.
+  assert.equal((await api('PATCH', '/v1/admin/stores/2111', { entitlements: { stockroom: true } }, ownerToken)).status, 200);
+  const back = (await api('POST', '/v1/auth/refresh', { refresh: ren.refresh })).body;
+  assert.ok(back.caps.includes('stockroom'));
+  assert.ok((await api('GET', '/v1/store/2111/snapshot', undefined, back.token)).body.state.cages.BSN211101);
+  // A device cannot send store.areas.set itself.
+  const forged = { id: ulid(), store: '2111', area: 'store', type: 'store.areas.set', entity: {}, payload: { on: ['floor'] }, at: at(), v: 1 };
+  const mg = (await api('POST', '/v1/auth/unlock', { code: 'MG-2111' }, back.token)).body.token;
+  assert.equal((await api('POST', '/v1/store/2111/events', { events: [forged] }, mg)).body.results[0].code, 'worker_only');
+});
+
+test('the Service page: version, bindings and secrets as set or not, each store object, and the errors recorded', async () => {
+  const r = await api('GET', '/v1/admin/service', undefined, ownerToken);
+  assert.equal(r.status, 200);
+  assert.match(r.body.version, /\d+\.\d+/); assert.equal(r.body.secrets.TOKEN_SECRET, true); assert.equal(typeof r.body.bindings.photos, 'boolean');
+  assert.ok(!JSON.stringify(r.body).includes('test-token-secret'), 'no secret value is ever shown');
+  const s = r.body.stores.find(x => x.no === '1241');
+  assert.ok(s.seq > 0 && s.bytes > 0); assert.ok('alarm' in s && 'retention' in s);
+  assert.ok(r.body.errors.some(e => e.kind === 'snapshot' && e.store === '2099'), 'the skipped snapshot was recorded');
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'svc-1' })).body.token;
+  assert.equal((await api('GET', '/v1/admin/service', undefined, dev)).status, 403);
+});

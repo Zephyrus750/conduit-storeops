@@ -270,9 +270,11 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // need their codes), so when the roles change the next hello asks for a
   // whole snapshot: a delta would miss the newly opened area's past, and a
   // lost role must take its area off the device.
-  let lastToken = null, lastRoles = session.current ? (session.current.roles || []).join(',') : null, fullNext = false;
+  let lastToken = null, lastRoles = session.current ? [(session.current.roles || []).join(','), (session.current.caps || []).join(',')].join('|') : null, fullNext = false;
   const offSession = session.on('change', snap => {
-    const roles = snap ? (snap.roles || []).join(',') : null;
+    // The areas a device reads follow its roles and the store's areas
+    // (decision 19): a change in either asks for a whole snapshot.
+    const roles = snap ? [(snap.roles || []).join(','), (snap.caps || []).join(',')].join('|') : null;
     const t = snap ? session.current?.expires + ':' + roles : null;
     if (t === lastToken) return;
     lastToken = t;

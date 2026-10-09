@@ -55,6 +55,7 @@ export class RegistryObject extends DurableObject {
         issued TEXT NOT NULL, expires INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS lockout (key TEXT PRIMARY KEY, fails INTEGER NOT NULL, until INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS errors (seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, kind TEXT NOT NULL, store TEXT, detail TEXT);
       CREATE TABLE IF NOT EXISTS owner_trust (hash TEXT PRIMARY KEY, device TEXT, fp TEXT NOT NULL, at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS actions (
         seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, type TEXT NOT NULL, store TEXT, detail TEXT
@@ -95,6 +96,14 @@ export class RegistryObject extends DurableObject {
         if (p[1] === 'check') { for (const k of body.keys || [body.key]) this.checkLocked(k); return { ok: true }; }
         return this.clear(body.key);
       case 'POST /trust/*': return p[1] === 'issue' ? this.trustIssue(body.device) : this.trustCheck(body.trust);
+      // Worker and store-object errors for the console's Service page; the
+      // newest 500 are kept.
+      case 'POST /errors': {
+        this.sql.exec('INSERT INTO errors (at, kind, store, detail) VALUES (?, ?, ?, ?)', new Date().toISOString(), String(body.kind || 'error').slice(0, 40), body.store ? String(body.store).slice(0, 8) : null, JSON.stringify(body.detail || {}).slice(0, 2000));
+        this.sql.exec('DELETE FROM errors WHERE seq NOT IN (SELECT seq FROM errors ORDER BY seq DESC LIMIT 500)');
+        return { ok: true };
+      }
+      case 'GET /errors': return { errors: this.sql.exec('SELECT seq, at, kind, store, detail FROM errors ORDER BY seq DESC LIMIT 100').toArray().map(r => ({ ...r, detail: JSON.parse(r.detail || '{}') })) };
       case 'GET /actions': return this.actions();
       case 'POST /log': this.log(String(body.type || 'note'), body.store || null, body.detail || {}); return { ok: true };
       default: throw new HttpError(404, 'not_found', `registry has no ${key}`);
