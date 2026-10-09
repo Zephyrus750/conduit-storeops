@@ -16,6 +16,14 @@ const ATTRS = new Set([
 // Values that can reach script or another origin.
 const BAD_VALUE = /javascript:|vbscript:|data:(?!image\/(png|jpe?g|gif|webp);)|expression\s*\(|@import|behavior\s*:|-moz-binding/i;
 const OFF_PAGE_URL = /url\(\s*['"]?\s*(?!#)/i;
+// What the browser will read: character references decoded (an inline SVG's
+// attributes and style text decode them), CSS escapes decoded and CSS
+// comments dropped, so "u&#114;l(" or "u\\72 l(" is checked as "url(".
+const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", colon: ':', lpar: '(', rpar: ')', sol: '/', bsol: '\\', num: '#', semi: ';', tab: '\t', newline: '\n' };
+const cp = n => (n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '');
+const decodeRefs = v => String(v).replace(/&(?:#x([0-9a-f]+)|#(\d+)|([a-z]+));?/gi, (m, h, d, n) => (h ? cp(parseInt(h, 16)) : d ? cp(parseInt(d, 10)) : NAMED[n.toLowerCase()] ?? m));
+const decodeCss = v => String(v).replace(/\/\*[\s\S]*?(\*\/|$)/g, '').replace(/\\([0-9a-f]{1,6})\s?/gi, (m, h) => cp(parseInt(h, 16))).replace(/\\(.)/g, '$1');
+const asRead = v => decodeCss(decodeRefs(v));
 
 // Returns { svg, stripped } where stripped counts removed elements and attributes.
 export function sanitizeSvg(input) {
@@ -45,8 +53,7 @@ export function sanitizeSvg(input) {
       if (v[0] === '"' || v[0] === "'") v = v.slice(1, -1);
       const ok = (ATTRS.has(key) || /^data-[\w-]+$/.test(key) || /^aria-[\w-]+$/.test(key)) && !/^on/.test(key)
         && !((key === 'href' || key === 'xlink:href') && !v.trim().startsWith('#'))
-        && !(key === 'style' && (OFF_PAGE_URL.test(v) || BAD_VALUE.test(v)))
-        && !(!key.startsWith('data-') && BAD_VALUE.test(v));
+        && !(!key.startsWith('data-') && (OFF_PAGE_URL.test(asRead(v)) || BAD_VALUE.test(asRead(v)) || BAD_VALUE.test(v)));
       if (!ok) { stripped += 1; continue; }
       attrs.push(` ${an}="${v.replace(/"/g, '&quot;').replace(/</g, '&lt;')}"`);
     }
@@ -59,5 +66,7 @@ export function sanitizeSvg(input) {
 // Inside <style>: no imports, no off-page urls, no script-y values, and no
 // markup that could end the element early.
 function cleanStyle(css) {
-  return String(css).replace(/<\/?[a-zA-Z!][^>]*>?/g, '').replace(/@import[^;]*;?/gi, '').replace(/url\(\s*['"]?\s*(?!#)[^)]*\)/gi, 'none').replace(/expression\s*\(|javascript:|behavior\s*:|-moz-binding/gi, '');
+  const raw = String(css).replace(/^<!\[CDATA\[|\]\]>$/g, '');
+  return asRead(raw).replace(/<\/?[a-zA-Z!][^>]*>?/g, '').replace(/@import[^;]*;?/gi, '').replace(/url\(\s*['"]?\s*(?!#)[^)]*\)/gi, 'none').replace(/expression\s*\(|javascript:|behavior\s*:|-moz-binding/gi, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }

@@ -23,6 +23,7 @@ export const CATALOGUE = {
   'refresh.clearDept':   T('floor', F, ['week'], { dept: 'string' }),            // payload.segments: the dept's marked segments the device saw
   'refresh.focus.set':   T('floor', F, ['week'], { departments: 'array' }),
   'refresh.plan.paint':  T('floor', F, ['segment'], { colour: 'string' }),       // '#rrggbb' or 'erase'
+  'refresh.plan.clear':  T('floor', F, []),                                       // Reset planning: every painted shelf at once
   'label.cycle.set':     T('floor', F, [], { cycleLen: 'string' }),              // weekly | fortnightly | monthly
   'label.assign':        T('floor', F, ['micro'], { shelves: 'array' }),
   'label.check':         T('floor', F, ['micro', 'cycle']),
@@ -41,6 +42,7 @@ export const CATALOGUE = {
   'issue.reopen':        T('floor', F, ['issue']),
   'issue.remove':        T('floor', F, ['issue']),                                // tombstone; payload.note
   'issue.photo':         T('floor', F, ['issue'], { photo: 'string' }),           // payload.remove: true detaches it
+  'issue.visit':         T('floor', F, ['issue'], { who: 'string' }),             // a contractor's visit; payload.note
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),
@@ -69,7 +71,7 @@ export const CATALOGUE = {
   'submission.rename':   T('stockroom', S, ['bay', 'date'], { newBay: 'string' }),
   'submission.delete':   T('stockroom', S, ['bay', 'date']),
   'submission.request':  T('stockroom', S, ['bay', 'date']),                    // requested list; payload.remove
-  'submission.claim':    T('stockroom', S, ['bay', 'date']),                    // payload.release
+  'submission.claim':    T('stockroom', S, ['bay', 'date']),                    // payload.release | payload.takeover; lapses after CLAIM_TTL_MS
   'submission.readd':    T('stockroom', S, ['bay', 'date'], { code: 'string' }), // payload.done: scanned back in
   'adjustment.set':      T('stockroom', S, ['keycode', 'date'], { qty: 'number' }),
   'adjustment.remove':   T('stockroom', S, ['keycode', 'date']),
@@ -101,6 +103,7 @@ export const CATALOGUE = {
   'pallet.reopen':       T('backdock', D, ['truck', 'bay']),
   'pallet.remove':       T('backdock', D, ['truck', 'bay']),
   'pallet.scan':         T('backdock', D, ['truck', 'bay'], { code: 'string' }),
+  'pallet.unscan':       T('backdock', D, ['truck', 'bay'], { id: 'string' }),     // a wrong scan comes off the pallet
   'pallet.move':         T('backdock', D, ['truck', 'bay'], { to: 'string' }),
   'pallet.join':         T('backdock', D, ['truck', 'bay'], { pid: 'string' }),
   'pallet.handover':     T('backdock', D, ['truck', 'bay'], { toPid: 'string' }),
@@ -123,6 +126,9 @@ export const CATALOGUE = {
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
   'store.settings.set':  T('store', M, []),
+  'team.message.set':  T('store', M, [], { text: 'string' }),                   // the store's team message; '' clears it; payload.until YYYY-MM-DD
+  'team.briefing.set': T('store', M, ['date'], { text: 'string' }),             // the day's briefing; '' clears it
+  'store.areas.set':   T('store', M, [], { on: 'array' }),                     // worker only: the areas the store is entitled to, as the owner set them
   'store.tools.set':     T('store', M, [], { off: 'array' }),
   'store.retain':        T('store', M, [], { day: 'string' }),                   // worker only, nightly: trims finished records (shared/retain.js)                    // owner only: the tools switched off (shared/tools.js)
   'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
@@ -139,5 +145,28 @@ export const AREA_PROJECTIONS = {
   floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'inventory'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan'],
-  store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'retention'],
+  store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'areas', 'comms', 'retention'],
 };
+
+// The largest payload (as JSON) each type may carry. Most events are a few
+// hundred bytes; the default keeps one event from growing the log and the
+// live state (a Durable Object row is capped at 2 MB). The types that carry
+// whole lists say so here.
+export const PAYLOAD_MAX = {
+  default: 32_000,
+  'manifest.attach': 2_000_000,      // up to 500 consolidations with their lines
+  'truck.import': 2_000_000,         // a legacy truck, whole
+  'inventory.offsite.set': 1_000_000,
+  'inventory.load.add': 1_000_000,   // a load's pallets and their lines
+  'manifest.publish': 500_000,       // the manifest's keycodes (worker)
+  'soh.publish': 250_000,            // the snapshot's locations (worker)
+  'manifest.linkLate': 250_000,
+  'inventory.offsite.add': 128_000,
+  'store.settings.set': 128_000,
+  'plan.queues': 128_000,
+  'picklist.set': 128_000,
+  'pallet.editTimes': 64_000,
+  'refresh.clearDept': 64_000,
+  'submission.ready': 64_000,        // the report's list for the bay
+};
+export const payloadMax = type => PAYLOAD_MAX[type] || PAYLOAD_MAX.default;

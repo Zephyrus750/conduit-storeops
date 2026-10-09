@@ -59,6 +59,7 @@ function nextFree(plan, dock) {
 }
 export default {
   id: 'planner', title: 'Planner', icon: 'm-planner', area: 'backdock',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     const plan = ctx.store.get('plan'), dock = ctx.store.get('dock'), days = weekDays(st.week), today = dkey(new Date());
     const count = days.reduce((n, d) => n + numbersOf(plan, dock, dkey(d)).length, 0), todayN = numbersOf(plan, dock, today).length;
@@ -67,7 +68,6 @@ export default {
     return vh('Planner', sub(st.week === 0 ? 'This week' : st.week === 1 ? 'Next week' : st.week === -1 ? 'Last week' : `${st.week > 0 ? '+' : ''}${st.week} weeks`, range, `${count} truck${count === 1 ? '' : 's'}${st.week === 0 ? ` · ${todayN} today` : ''}`), `<span class="pills"><button data-act="wk" data-d="-1">‹</button><button class="${st.week === 0 ? 'on' : ''}" data-act="wk" data-d="0">This week</button><button data-act="wk" data-d="1">›</button></span>`, 'm-planner') +
       `<div class="grid2 pgrid">${week}<div class="sidecol">${editor(ctx, plan, dock)}${summary(plan, dock, days)}${roster(dock)}${waiting(ctx, plan, dock)}</div></div>`;
   },
-  mobile() { return mhead('Planner', 'Desktop only') + `<div class="mv-result">${ic('lock')}<b style="font-size:22px">Managed on the desktop</b><span>The week is planned on the desktop. The dock phone sees each truck when it lands.</span></div>`; },
   mount(ctx, root) {
     const field = n => root.querySelector(`[data-field="${n}"]`)?.value ?? '';
     const set = (date, slot, payload) => ctx.store.dispatch({ type: 'plan.set', entity: { date, slot }, payload });

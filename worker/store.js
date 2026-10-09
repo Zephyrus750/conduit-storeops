@@ -28,7 +28,7 @@ import { initialState, apply, replay } from '../shared/reducers.js';
 import { validateEvent } from '../shared/validate.js';
 import { typeInfo, AREA_PROJECTIONS } from '../shared/catalogue.js';
 import { hasRole } from './auth.js';
-import { HttpError, json, fail, CORS } from './http.js';
+import { HttpError, json, fail, CORS, readJson, reportError } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
@@ -46,7 +46,8 @@ const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
 const SOH_MAX = 4_000_000, SOH_ROWS = 20_000;     // one SOH report: a whole store's stockroom
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
-const MAP_SOURCE_MAX = 1_900_000;  // the editor's document kept beside a version (no floor drawings in it)
+const MAP_SOURCE_MAX = 1_900_000;
+const MAP_BODY_MAX = 16_000_000;   // a publish: every floor plus the source, checked before parsing  // the editor's document kept beside a version (no floor drawings in it)
 const DELTA_LIMIT = 5000;
 const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // Issue photos (R2 bucket PHOTOS): a JPEG the device already shrank, at most
@@ -54,8 +55,7 @@ const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // an issue is completed or removed (a photo can show people; it is kept no
 // longer than it helps).
 const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
-const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'store.retain']);
-const EVENT_MAX = 2_000_000;          // one event's payload (a manifest.attach carries its consols)
+const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'store.retain', 'store.areas.set']);
 const SNAPSHOT_MAX = 1_900_000;       // the state is saved as one row, and a Durable Object row holds 2 MB
 const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
@@ -110,38 +110,55 @@ export class StoreObject extends DurableObject {
   // big) is skipped and said loudly, never allowed to fail the write: the
   // store rebuilds from the last good snapshot plus the log. Retention keeps
   // it well under (shared/retain.js); the console flags a store over 1.2 MB.
-  snapshotIfDue() {
-    if (this.sinceSnapshot < SNAPSHOT_EVERY) return;
+  snapshotIfDue(force = false) {
+    if (!force && this.sinceSnapshot < SNAPSHOT_EVERY) return { saved: false };
     const text = JSON.stringify(this.state);
-    if (text.length > SNAPSHOT_MAX) { console.error(`store ${this.storeNo}: state is ${text.length} bytes, over the snapshot limit; snapshot skipped`); return; }
+    if (text.length > SNAPSHOT_MAX) { console.error(`store ${this.storeNo}: state is ${text.length} bytes, over the snapshot limit; snapshot skipped`); reportError(this.env, 'snapshot', this.storeNo, { bytes: text.length, message: 'over the row limit: snapshot skipped' }, this.ctx); return { saved: false, bytes: text.length }; }
     try {
       this.sql.exec('INSERT OR REPLACE INTO snapshots (seq, state, at) VALUES (?, ?, ?)', this.state.seq, text, new Date().toISOString());
       this.sql.exec('DELETE FROM snapshots WHERE seq < ?', this.state.seq);
       this.sinceSnapshot = 0;
-    } catch (e) { console.error(`store ${this.storeNo}: snapshot failed (${text.length} bytes)`, e?.message || e); }
+      return { saved: true, bytes: text.length };
+    } catch (e) { console.error(`store ${this.storeNo}: snapshot failed (${text.length} bytes)`, e?.message || e); reportError(this.env, 'snapshot', this.storeNo, { bytes: text.length, message: String(e?.message || e).slice(0, 200) }, this.ctx); return { saved: false, bytes: text.length }; }
   }
 
   // ── HTTP ──────────────────────────────────────────────────────────────
   async fetch(request) {
     const url = new URL(request.url);
-    const claims = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
-    if (!claims) return fail(401, 'unauthorised', 'no claims');
+    const raw = JSON.parse(request.headers.get('X-Conduit-Claims') || 'null');
+    if (!raw) return fail(401, 'unauthorised', 'no claims');
+    const claims = this.current(raw);
     // A device token from before the store's last rotation, suspension or
     // revoke is refused; the device refreshes (which fails) and signs in.
     if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) return fail(401, 'revoked', 'this device was signed out; sign in again');
-    if (url.pathname === '/epoch') return this.setEpoch(await request.json(), claims);
+    if (url.pathname === '/epoch') return this.setEpoch(await readJson(request, 4096), claims);
     if (claims.store && claims.store !== this.storeNo) { this.storeNo = claims.store; this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('store', ?)", String(claims.store)); }
     try {
       switch (url.pathname) {
         case '/snapshot': return json(this.snapshot(claims, url.searchParams.get('areas')));
-        case '/changes': return json(this.changes(Number(url.searchParams.get('since') || 0), claims));
-        case '/events': { const body = await readBounded(request, BATCH_MAX); return json({ results: this.submit(body.events, claims) }); }
+        case '/changes': return json({ ...this.changes(Number(url.searchParams.get('since') || 0), claims), now: Date.now() });
+        // The owner's console switched an area: logged by the worker itself
+        // (store.areas.set is never taken from a device).
+        case '/areas': {
+          if (!raw.owner || request.method !== 'POST') return fail(403, 'unauthorised', 'owner only');
+          const body = await readJson(request, 4096);
+          const ev = { id: ulid(), store: this.storeNo, area: 'store', type: 'store.areas.set', entity: {}, payload: { on: body?.on }, at: new Date().toISOString(), v: 1 };
+          return json({ results: this.submit([ev], { ...raw, roles: ['manager'] }, { internal: true }) });
+        }
+        // The console's Service page: this store object at a glance.
+        case '/service': {
+          if (!raw.owner) return fail(403, 'unauthorised', 'owner only');
+          const last = this.sql.exec('SELECT at, type FROM events ORDER BY seq DESC LIMIT 1').toArray()[0] || null;
+          const snap = this.sql.exec('SELECT seq, at FROM snapshots ORDER BY seq DESC LIMIT 1').toArray()[0] || null;
+          return json({ seq: this.state.seq, bytes: JSON.stringify(this.state).length, sinceSnapshot: this.sinceSnapshot, snapshot: snap, lastEvent: last, retention: this.state.retention || null, alarm: await this.ctx.storage.getAlarm(), tz: this.tz(), sockets: this.ctx.getWebSockets().length, photos: this.sql.exec('SELECT COUNT(*) AS n FROM photos').toArray()[0].n });
+        }
+        case '/events': { const body = await readJson(request, BATCH_MAX); return json({ results: this.submit(body.events, claims), now: Date.now() }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
-        case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readBounded(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true }); }
+        case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readJson(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true, now: Date.now() }); }
         case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
-        case '/map': return request.method === 'POST' ? this.publishMap(await request.json(), claims) : json(this.mapInfo());
+        case '/map': return request.method === 'POST' ? this.publishMap(await readJson(request, MAP_BODY_MAX), claims) : json(this.mapInfo());
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
@@ -149,11 +166,11 @@ export class StoreObject extends DurableObject {
           if (ms) return this.mapSource(ms[1], claims);
           if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
-          if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1]));
-          if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readBounded(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12)); }
+          if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1], claims));
+          if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readJson(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12)); }
           const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
           if (sohDay) { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
-          if (url.pathname === '/manifest' && request.method === 'POST') return this.needTool('manifests') || this.publishManifest(await request.json(), claims);
+          if (url.pathname === '/manifest' && request.method === 'POST') return this.needTool('manifests') || this.publishManifest(await readJson(request, MANIFEST_MAX), claims);
           if (url.pathname === '/profiles') { const dk = needArea(claims, 'backdock'), sr = needArea(claims, 'stockroom'); if (dk && sr) return dk;   // carton depths serve the dock and the stockroom (K2B read them)
            const docs = this.sql.exec('SELECT doc, at FROM manifests').toArray().map(r => ({ ...JSON.parse(r.doc), at: r.at })); return json(buildProfiles(docs, { store: this.storeNo })); }
           const man = url.pathname.match(/^\/manifest\/([\w-]{1,20})$/);
@@ -232,7 +249,6 @@ export class StoreObject extends DurableObject {
     const id = raw?.id;
     const bad = validateEvent(raw);
     if (bad) return { id, ok: false, ...bad };
-    if (JSON.stringify(raw.payload ?? {}).length > EVENT_MAX) return { id, ok: false, code: 'invalid_event', message: `payload is over ${EVENT_MAX / 1_000_000} MB` };
     // A device's clock decides "first at wins", so its `at` must be near the
     // worker's: at most 10 minutes ahead, at most 30 days behind (an outbox
     // that sat offline). The owner's imports carry legacy times and are exempt.
@@ -253,7 +269,11 @@ export class StoreObject extends DurableObject {
       actor: { role: primaryRole(claims, info.roles), device: claims.device, owner: !!claims.owner },
       at: raw.at, v: info.v,
     };
-    const rej = apply(this.state, event);
+    // A reducer that throws part-way may have changed the state: rebuild it
+    // from the snapshot and the log, which never held this event.
+    let rej;
+    try { rej = apply(this.state, event); }
+    catch (err) { console.error(`store ${this.storeNo}: ${event.type} threw`, err?.message || err); reportError(this.env, 'reducer', this.storeNo, { type: event.type, message: String(err?.message || err).slice(0, 200) }, this.ctx); this.load(); return { id, ok: false, code: 'internal', message: `${event.type} could not be applied` }; }
     if (rej) return { id, ok: false, ...rej };
 
     const received = new Date().toISOString();
@@ -288,6 +308,7 @@ export class StoreObject extends DurableObject {
   // for the coming store midnight (plus a minute of slack).
   async alarm() {
     try { this.rollover(); if (this.atNight()) this.retainNow(); await this.sweepPhotos(); }
+    catch (e) { reportError(this.env, 'nightly', this.storeNo, { message: String(e?.message || e).slice(0, 200) }, this.ctx); throw e; }
     finally { await this.ctx.storage.setAlarm(Date.now() + msToStoreMidnight(new Date(), this.tz()) + 60_000); }
   }
   // Retention runs on the midnight alarm only, not the catch-up one a new
@@ -339,17 +360,42 @@ export class StoreObject extends DurableObject {
     this.sql.exec('INSERT INTO photos (id, at, by, size) VALUES (?, ?, ?, ?)', id, at, by, buf.length);
     return json({ id, size: buf.length, at }, 201);
   }
-  async getPhoto(id) {
-    if (!this.sql.exec('SELECT id FROM photos WHERE id = ?', id).toArray().length) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
+  // Where a photo is: { row } from the photos table (null once its bytes are
+  // gone) and { issue } the issue that lists it, live or removed.
+  photoAt(id) {
+    const row = this.sql.exec('SELECT id, at, by FROM photos WHERE id = ?', id).toArray()[0] || null;
+    const hit = Object.entries(this.state.issues || {}).find(([, i]) => (i.photos || []).some(p => p.id === id));
+    return { row, issueId: hit?.[0] || null, issue: hit?.[1] || null };
+  }
+  // A photo is served while an issue lists it. One no issue lists (taken
+  // off, or still a draft being reported) is served only to the device
+  // that took it, so a removed photo is not reachable by its id.
+  async getPhoto(id, claims) {
+    const { row, issue } = this.photoAt(id);
+    if (!row || (!issue && !claims.owner && row.by !== String(claims.device || 'unknown').slice(0, 64))) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
     const obj = await this.photos().get(this.photoKey(id));
     if (!obj) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
     return new Response(obj.body, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400', ...CORS } });
   }
+  // Deleting drops the bytes only. Taking a photo off an issue is the
+  // issue.photo event (logged, on every device); a photo a live issue still
+  // lists is refused here. The bytes of one taken off, or on a removed
+  // issue, go at once; a draft's (on no issue yet) only by the device that
+  // took it, a manager or the owner.
   async deletePhoto(id, claims) {
     if (!claims.owner && claims.store !== this.storeNo) throw new HttpError(403, 'unauthorised', 'not this store');
+    const { row, issueId, issue } = this.photoAt(id);
+    if (!row) return json({ id, deleted: false });
+    if (issue && !issue.removed) throw new HttpError(409, 'conflict', `the photo is on issue ${issueId}: take it off the issue first`);
+    const mine = row.by === String(claims.device || 'unknown').slice(0, 64);
+    if (!issue && !this.detached(id) && !mine && !claims.owner && !(claims.roles || []).includes('manager')) throw new HttpError(403, 'unauthorised', 'a photo not yet on an issue is deleted by the device that took it');
     await this.photos().delete(this.photoKey(id));
     this.sql.exec('DELETE FROM photos WHERE id = ?', id);
     return json({ id, deleted: true });
+  }
+  // Was this photo on an issue once (an issue.photo event took it off)?
+  detached(id) {
+    return this.sql.exec("SELECT 1 FROM events WHERE type = 'issue.photo' AND payload LIKE ? LIMIT 1", `%"${id}"%`).toArray().length > 0;
   }
   // Nightly: drop the bytes of photos on issues completed or removed more
   // than PHOTO_KEEP_DAYS ago, and of uploads never attached to an issue.
@@ -556,10 +602,10 @@ export class StoreObject extends DurableObject {
     if (size > BATCH_MAX) return ws.send(JSON.stringify({ t: 'error', code: 'payload_too_large', message: 'frame is too large' }));
     try { msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message)); }
     catch { return ws.send(JSON.stringify({ t: 'error', code: 'invalid_json', message: 'frames must be JSON' })); }
-    const { claims } = ws.deserializeAttachment() || {};
-    if (!claims) return ws.close(1008, 'no claims');
-    if (claims.exp * 1000 < Date.now()) { ws.send(JSON.stringify({ t: 'error', code: 'unauthorised', message: 'token expired' })); return ws.close(1008, 'expired'); }
-    if (!claims.owner && (Number(claims.epoch) || 0) < this.epoch) { ws.send(JSON.stringify({ t: 'error', code: 'revoked', message: 'signed out' })); return ws.close(1008, 'revoked'); }
+    const { claims: held } = ws.deserializeAttachment() || {};
+    if (!held) return ws.close(1008, 'no claims');
+    const claims = this.current(held);
+    if (this.endStale(ws, claims)) return;
     switch (msg.t) {
       case 'hello': {
         const since = Number(msg.since || 0);
@@ -567,8 +613,9 @@ export class StoreObject extends DurableObject {
         else ws.send(JSON.stringify({ t: 'snapshot', ...this.snapshot(claims, null) }));
         return;
       }
-      case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
-      case 'hb': return this.recordHb(claims, msg);
+      case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims), now: Date.now() }));
+      // The worker's clock, so each device can stamp its events on it (decision 31).
+      case 'hb': this.recordHb(claims, msg); return ws.send(JSON.stringify({ t: 'clock', now: Date.now() }));
       case 'ping': return ws.send(JSON.stringify({ t: 'pong', seq: this.state.seq }));
       default: return ws.send(JSON.stringify({ t: 'error', code: 'invalid_request', message: `unknown frame ${msg.t}` }));
     }
@@ -588,9 +635,30 @@ export class StoreObject extends DurableObject {
   webSocketClose(ws) { try { ws.close(); } catch {} }
   webSocketError(ws) { try { ws.close(); } catch {} }
 
+  // A socket carries the claims it opened with, so it ends with them: once
+  // the token expires (the device refreshes and reconnects on 'expired') or
+  // the store's sessions are revoked, it gets nothing more, not even a
+  // broadcast of an area its role no longer opens.
+  endStale(ws, claims, now = Date.now()) {
+    const why = claims.exp * 1000 < now ? ['expired', 'token expired'] : !claims.owner && (Number(claims.epoch) || 0) < this.epoch ? ['revoked', 'signed out'] : null;
+    if (!why) return false;
+    try { ws.send(JSON.stringify({ t: 'error', code: why[0], message: why[1] })); ws.close(1008, why[0]); } catch {}
+    return true;
+  }
+  // A token's areas, narrowed to the ones the store has now: an area the
+  // owner switched off stops at once for every token and socket, however
+  // long the token has left (decision 19). Switching one on reaches a device
+  // when it renews, which it does as soon as it hears store.areas.set.
+  current(claims) {
+    const on = this.state?.areas?.on;
+    return on && claims ? { ...claims, caps: (claims.caps || []).filter(a => on.includes(a)) } : claims;
+  }
   broadcast(events) {
     for (const ws of this.ctx.getWebSockets()) {
-      const { claims } = ws.deserializeAttachment() || {};
+      const { claims: held } = ws.deserializeAttachment() || {};
+      if (!held) { try { ws.close(1008, 'no claims'); } catch {} continue; }
+      const claims = this.current(held);
+      if (this.endStale(ws, claims)) continue;
       for (const e of events) {
         if (!claims || (!claims.owner && e.area !== 'store' && !readable(claims).includes(e.area))) continue;
         try { ws.send(JSON.stringify({ t: 'event', event: e })); } catch {}
@@ -599,12 +667,6 @@ export class StoreObject extends DurableObject {
   }
 }
 
-// A JSON body no bigger than max (Content-Length may be absent or wrong).
-async function readBounded(request, max) {
-  const text = await request.text();
-  if (text.length > max) throw new HttpError(413, 'payload_too_large', `body is over ${max / 1_000_000} MB`);
-  try { return JSON.parse(text); } catch { throw new HttpError(400, 'invalid_json', 'body must be JSON'); }
-}
 function rowToEvent(r) {
   return { id: r.id, seq: r.seq, type: r.type, area: r.area, entity: JSON.parse(r.entity), payload: JSON.parse(r.payload), actor: JSON.parse(r.actor), at: r.at, v: r.v };
 }

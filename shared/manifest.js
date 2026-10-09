@@ -107,14 +107,17 @@ function parseGeneric(sheets) {
       const ci = hdr.findIndex(c => /consol/.test(c)), qi = hdr.findIndex(c => /carton|ctn\b|ctns|qty|quantity|units?/.test(c));
       if (ci < 0 || qi < 0 || ci === qi) continue;
       const di = hdr.findIndex(c => /dept|department|area/.test(c)), xi = hdr.findIndex(c => /desc|item|product/.test(c));
-      const agg = {};
+      // A consolidation is 9 to 22 digits once spaces and dashes go (what a
+      // truck can attach); any other value in the column is skipped and counted.
+      const agg = {}; let skipped = 0;
       for (let r = i + 1; r < rows.length; r++) {
-        const row = rows[r] || [], id = cs(row[ci]), q = Number(row[qi]);
-        if (!id || !isFinite(q) || q <= 0) continue;
+        const row = rows[r] || [], raw = cs(row[ci]), id = raw.replace(/[\s-]/g, ''), q = Number(row[qi]);
+        if (!raw || !isFinite(q) || q <= 0) continue;
+        if (!/^\d{9,22}$/.test(id)) { skipped += 1; continue; }
         agg[id] ||= { id: id.slice(-9), cons: id, cartons: 0, dept: di >= 0 ? cs(row[di]) || null : null, mix: [], desc: xi >= 0 ? cs(row[xi]).slice(0, 60) || null : null, items: [] };
         agg[id].cartons += q;
       }
-      if (Object.keys(agg).length) return { sheet: name, kind: 'generic', manNo: '', storeNo: '', despatch: '', dcNo: '', consols: Object.values(agg) };
+      if (Object.keys(agg).length) return { sheet: name, kind: 'generic', manNo: '', storeNo: '', despatch: '', dcNo: '', consols: Object.values(agg), skipped };
     }
   }
   return { sheet: null, consols: [] };
@@ -171,6 +174,7 @@ export function manifestCheck(parsed, { storeNo = '', index = {}, today = '', mp
   const ids = {}; for (const c of cons) ids[c.id] = (ids[c.id] || 0) + 1; const twin = Object.keys(ids).filter(k => ids[k] > 1);
   if (twin.length) add('warn', `${twin.length} pallet label id${twin.length === 1 ? ' is' : 's are'} shared by two consolidations (${twin.slice(0, 3).join(', ')}): a scan of ${twin.length === 1 ? 'it' : 'them'} matches the first.`);
   const noDept = items.filter(i => !i.dept).length; if (noDept) add('warn', `${noDept} line${noDept === 1 ? '' : 's'} without a department.`);
+  if (parsed.kind === 'generic' && parsed.skipped) add('warn', `${parsed.skipped} row${parsed.skipped === 1 ? ' was' : 's were'} skipped: the consolidation is not a 9 to 22 digit number.`);
   if (parsed.kind === 'generic') add('warn', 'Read as a plain sheet of consolidations and cartons: there are no keycodes, so the explorer’s products and the carton profiles stay empty.');
   const no = String(parsed.manNo || '').trim();
   if (!/^[\w-]{1,20}$/.test(no)) add('warn', 'The report has no manifest number: enter one below.');

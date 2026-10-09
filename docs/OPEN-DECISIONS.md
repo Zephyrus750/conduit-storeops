@@ -1,6 +1,8 @@
-# Open decisions and the test pass (kept 2026-10-05, updated 2026-10-08)
+# Open decisions and the test pass (kept 2026-10-05, updated 2026-10-09)
 
-Every call below is still open. What is left to build, and which of these
+Every call below is still open unless its row says **Decided**. On
+2026-10-09 the suggested defaults were taken for 19, 20, 30, 31 and 32, and
+28 was answered "port it". What is left to build, and which of these
 each piece waits on, is in `docs/TODO.md`. Each one says what Conduit does today (the
 default it ships with), where that lives, and what to look at when testing
 on a real PC. Decide each one, then move it to the audit's §7
@@ -44,8 +46,8 @@ differs from the default.
 | # | Decision | What Conduit does today | Where | How to test |
 |---|---|---|---|---|
 | 18 | How fine the tool switches are | 20 tools. Receiving, Team Board and Dock screen are one tool; Wallboard and Analytics are one; Backfill review and its History are one. The store map, Settings, Store details and the workspace homes cannot be switched off | `shared/tools.js` | Console › a store › Access: switch one off, watch a signed-in store device lose it within seconds |
-| 19 | Switching a whole area off | Takes effect when each device's token renews (up to 12 hours), unlike tools, which apply at once | `worker/registry.js`, `worker/index.js` | Turn an area off and see how long a signed-in device keeps it |
-| 20 | Who may publish a team message | Not built (Shell P2) | — | — |
+| 19 | Switching a whole area off |  **Decided 2026-10-09 (default), built:** it applies at once, like tools: the console logs `store.areas.set` into the store and devices follow in under a second  | `worker/registry.js`, `worker/index.js` | Turn an area off and see how long a signed-in device keeps it |
+| 20 | Who may publish a team message |  **Decided 2026-10-09 (default), built:** managers and the owner (`team.message.set`, `team.briefing.set`)  | — | — |
 | 21 | What the console flags as set-up | No map; no stockroom bay ranges; no manifest yet; two trucks open; no device ever or none in 24 hours; device errors; changes stuck in outboxes; bays auto-closed yesterday (shown as information) | `shared/kpis.js` | Console Overview's Set-up column and a store's Overview |
 | 22 | Fleet's "newest" app version | The highest version string any device reported in the last day; others show as behind | `js/views/admin.js` `fleetCard` | Open the console with two devices on different releases |
 
@@ -63,11 +65,11 @@ differs from the default.
 
 | # | Decision | What Conduit does today | Suggested | Where |
 |---|---|---|---|---|
-| 28 | Voice search and pick-list dictation (ShelfSearcher had both) | Removed; no decision was recorded | Drop for now; the floor scans | `js/search.js`, `js/views/picklist.js` |
+| 28 | Voice search and pick-list dictation (ShelfSearcher had both) |  **Decided 2026-10-09: ported.** Voice search on the phone (the microphone in the search bar and the palette) and voice add in the phone's pick list, ShelfSearcher's recipe checked against the map (`shared/voice.js`). Needs a connection and the microphone allowed (`Permissions-Policy` now `microphone=(self)`)  | Drop for now; the floor scans | `js/search.js`, `js/views/picklist.js` |
 | 29 | How long closed trucks, backfill bays and inventory loads stay in the live state | The suggestion, applied as the default (nightly `store.retain`); History reads the worker's archive for older rows | Full detail 14 days, summary rows 60 days, older on the worker only | `shared/retain.js` (`KEEP_DETAIL_DAYS`, `KEEP_DAYS`) |
-| 30 | Finalise with pallets left | Always held for the next truck | Offer hold or clear the dock, as DV did | `js/views/backdock/receiving.js` |
-| 31 | Whose clock times dock work | Each device's (up to 10 minutes ahead accepted) | Stamp on the worker | `worker/store.js`, `shared/reducers/backdock.js` |
-| 32 | Label integrity on the phone | A selected micro-department makes map taps assign shelves store-wide | Phone checks only; assigning stays on the desk | `js/views/labelint.js` |
+| 30 | Finalise with pallets left |  **Decided 2026-10-09 (default), built:** Complete decant offers "Keep as rollover & close" or "Clear the dock & close", as DV did  | Offer hold or clear the dock, as DV did | `js/views/backdock/receiving.js` |
+| 31 | Whose clock times dock work |  **Decided 2026-10-09 (default), built:** every event is stamped on the worker's clock: the worker sends its time, each device corrects by the measured offset (kept for offline use), and Receiving warns when a device's clock is a minute or more out  | Stamp on the worker | `worker/store.js`, `shared/reducers/backdock.js` |
+| 32 | Label integrity on the phone |  **Decided 2026-10-09 (default), built:** a tap on the phone opens the micro-department the shelf is on and never assigns. On a desk, assigning is its own mode (Assign shelves, or Settings › Departments); a selected micro-department is otherwise checked  | Phone checks only; assigning stays on the desk | `js/views/labelint.js` |
 | 33 | The map's scale in metres (`metresPerUnit`) | No store has one, so shelf sizes, route metres and evacuation distances never show in metres. Each map is drawn over the store's official layout imported at 100%, shelves auto-detected then finished by hand; shelving comes in about three module sizes, so a module count is not a ruler (map editor audit 1.7) | Use the official layout as the ruler: on one store, measure a known distance on the layout at 100% (a dimensioned wall or the plan's scale bar) once; every layout imported the same way shares that scale | `shared/maprender.js`, the editor's Set Scale |
 
 ## The test pass on a real PC (1920×1080 first)

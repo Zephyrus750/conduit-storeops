@@ -19,6 +19,10 @@ test('refresh: focus lowercases, plan paint erases, clearWeek empties', () => {
   assert.equal(apply(s, ev('refresh.plan.paint', { segment: 'A21 S1' }, { colour: 'purple' })).code, 'invalid_event');
   assert.equal(apply(s, ev('refresh.plan.paint', { segment: 'A21 S1' }, { colour: 'erase' })), null);
   assert.equal(s.refresh.plan['A21 S1'], undefined);
+  apply(s, ev('refresh.plan.paint', { segment: 'A21 S1' }, { colour: '#a855f7' })); apply(s, ev('refresh.plan.paint', { segment: 'A22 S2' }, { colour: '#22c55e' }));
+  assert.equal(apply(s, ev('refresh.plan.clear', {})), null, 'Reset planning clears every painted shelf in one event');
+  assert.deepEqual(s.refresh.plan, {});
+  assert.equal(apply(s, ev('refresh.plan.clear', {})).code, 'invalid_event', 'and is refused when nothing is planned');
   apply(s, ev('refresh.mark', { segment: 'A21 S1', week: '2026-W37' }));
   assert.equal(apply(s, ev('refresh.clearWeek', { week: '2026-W37' })), null);
   assert.deepEqual(s.refresh.weeks['2026-W37'], {});
@@ -113,4 +117,13 @@ test('refresh X/100 counts focus departments only when a focus is set; a mark ke
   assert.equal(focusDone(marks, []), 3, 'no focus: every mark');
   assert.equal(focusDone(marks, ['h1']), 2, 'focus h1: the h1 mark and the one with no department');
   assert.equal(focusDone(marks, ['h1'], (seg, m) => m.dept || { 'C3 S1': 'c1' }[seg]), 1);
+});
+
+test('issues: a contractor visit from the work order is logged and keeps the status', () => {
+  const s = initialState(), k = { issue: 'w1' };
+  apply(s, ev('issue.log', k, { cat: 'elec', title: 'Lights out over K2', sev: 2 }));
+  assert.equal(apply(s, ev('issue.visit', k, { who: '  ' })).code, 'invalid_event', 'who visited is needed');
+  assert.equal(apply(s, ev('issue.visit', k, { who: 'Sparky & Co', note: 'replaced two tubes' })), null);
+  assert.deepEqual([s.issues.w1.status, s.issues.w1.visits, s.issues.w1.log.at(-1).a, s.issues.w1.log.at(-1).n], ['open', 1, 'Contractor visited', 'Sparky & Co · replaced two tubes']);
+  assert.equal(apply(s, ev('issue.visit', { issue: 'nope' }, { who: 'x' })).code, 'not_found');
 });

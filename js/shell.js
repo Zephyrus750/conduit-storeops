@@ -14,8 +14,10 @@ import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard, setStoreTz, 
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
-import { loadMap, setMap, mapInfo, parkMap, mapStats } from './map.js';
+import { loadMap, setMap, mapInfo, parkMap, mapStats, shelfForLocation, splitCanon } from './map.js';
 import { initSearch } from './search.js';
+import { voiceSupported, listenOnce } from './voice.js';
+import { resolveSpoken } from '../shared/voice.js';
 import { takeDeepLink } from './share.js';
 import { installLog } from './diag.js';
 installLog();
@@ -26,9 +28,12 @@ import { ensureArea, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
+import { mountTeam } from './team.js';
+import { firstRun } from './tour.js';
+import { whatsNewOnce } from './whatsnew.js';
 import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
 import { polyBackground } from './lowpoly.js';
-import { applyOrientation } from './device.js';
+import { applyOrientation, haptic } from './device.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -47,6 +52,7 @@ const WORKER_NOTE = new URLSearchParams(location.search).get('worker') && !worke
 const workerLine = () => WORKER === WORKER_DEFAULT ? '' : `<div class="si-worker">${ic('lock')}Signing in to <b>${esc(new URL(WORKER).host)}</b></div>`;
 
 const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
+let team = null;      // the team message strip (js/team.js)
 let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor';
 const frame = $('.frame');
 installKeyboard();
@@ -61,6 +67,19 @@ applyPrefs(frame);
 const paintFootDate = () => { $('#footDate').textContent = `${fmtLong()} · ${retailPeriod(new Date())}`; };
 paintFootDate(); setInterval(paintFootDate, 60_000);
 $('#footVer').textContent = 'Conduit ' + VERSION;
+// The token's areas changed (the owner switched one, and the device renewed):
+// the rail follows, and a view in an area that went away goes home.
+let capsSig = null;
+client.session.on('change', snap => {
+  const sig = (snap?.caps || []).join(',');
+  if (capsSig === null || !store || admin) { capsSig = sig; return; }
+  if (sig === capsSig) return;
+  const gone = capsSig.split(',').filter(a => a && !sig.split(',').includes(a)); capsSig = sig;
+  buildRail(); paintBadges();
+  const view = current && VIEWS[current];
+  if (view && view.area && view.area !== 'store' && !(snap?.caps || []).includes(view.area)) { setWs('floor'); show(HOME.floor); }
+  if (gone.length) toast(`${gone.map(a => a === 'backdock' ? 'The Back dock' : a === 'stockroom' ? 'The Stockroom' : 'The Floor').join(' and ')} ${gone.length === 1 ? 'was' : 'were'} switched off for this store`);
+});
 client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: 'Owner session expired. Sign in again.' } : {}); });
 // A shared shelf link (?store=…&shelf=…): open the map on that shelf once
 // signed in to that store. A store parked on this device is switched to; a
@@ -75,7 +94,8 @@ let pendingLink = takeDeepLink();
 })();
 function openPendingLink(s) {
   const l = pendingLink; pendingLink = null; if (!l) return false;
-  if (l.store !== s.store) { toast(`That shelf link is for store ${l.store}. Add that store from Store details to open it.`); return false; }
+  if (l.store !== s.store) { toast(`That ${l.issue ? 'work order' : 'shelf link'} is for store ${l.store}. Add that store from Store details to open it.`); return false; }
+  if (l.issue) { show('maintenance', { issue: l.issue }); return true; }
   show('map', { select: l.shelf }); return true;
 }
 
@@ -91,13 +111,20 @@ async function enter() {
     if (s.actas) { await client.session.endActAs(); await enterAdmin(); toast(`Cannot open ${s.store}: ${e.message}`, 'bad'); return; }
     hideCover(); showSignin({ error: e.message }); return;
   }
-  admin = null; frame.classList.remove('adm');
+  admin = null; frame.classList.remove('adm'); capsSig = (client.session.current?.caps || []).join(',');
+  // After an update, What's New once (a device on its first run gets the walkthrough instead).
+  { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }
+  team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current) });
   store.on('status', paintStatus); store.on('reject', r => toast(`${r.code}: ${r.message}`, 'bad'));
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
   store.on('backfill', paintBadges); store.on('cages', paintBadges);
   // The owner switched a tool on or off: the rail follows, and a view that
   // has just been switched off closes.
+  // The owner switched an area on or off: renew the token now (its areas
+  // come from the registry), and the rail, the views and the data follow.
+  let areasSig = JSON.stringify(store.get('areas')?.on || null);
+  store.on('areas', a => { const sig = JSON.stringify(a?.on || null); if (sig === areasSig) return; areasSig = sig; client.session.refresh().catch(() => {}); });
   store.on('tools', () => { if (offList().join() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = 'Store ' + s.store;
@@ -155,7 +182,7 @@ async function idleCheck() {
   } catch { /* offline: tried again on the next check */ }
   finally { locking = false; }
 }
-function closeStore() { setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
+function closeStore() { team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); actasBar(null); resetAdmin(); }
 async function signOut() {
   try { await store?.flush(); } catch {}
@@ -217,7 +244,7 @@ async function showSignin({ error, owner } = {}) {
     `<div class="si-foot"><span>${ic('check')}Offline ready</span><span class="si-count">${stores.length} store${stores.length === 1 ? '' : 's'}</span><a class="si-owner-link" data-shell-act="owner-signin">Owner sign-in</a><span class="ver">Conduit ${VERSION}</span></div></form>`;
   const hero = `<div class="si-hero"><div class="si-brand">${mark()}<b>Conduit</b></div><div class="si-greet">${greeting()}</div><h1>Run the <span>whole store</span>.</h1><p>Live maps, back-dock receiving and stockroom backfill. One team, one sign-in, on and off the wifi.</p><div class="si-off">${ic('check')}Works offline once it is on this device</div></div>`;
   const el = cover(polyBackground() + (mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${hero}${form}</div>`));
-  if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || `Sign in to open shelf ${pendingLink.shelf}.`; }
+  if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? "Sign in to open the work order." : `Sign in to open shelf ${pendingLink.shelf}.`); }
   $('#siForm', el).addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target); const btn = e.target.querySelector('.si-cta'); btn.disabled = true;
@@ -254,6 +281,7 @@ const RDESC = {
   emergency: 'Exits, extinguishers, first aid, assembly point and service dates on the map.',
   maintenance: 'Log store issues on the map, track severity, contractors and completion.',
   stocktake: 'Run a count session: shelves counted, verified and the department tallies.',
+  printmap: 'Compose a printable map: floors, an area, layers, a legend; or a booklet, one page per department.',
   receiving: 'The dock board: pallets landed, decanting live, progress to the clear-by goal.',
   manifests: 'Published DC manifests and which pallet carries any keycode.',
   bfreview: 'Today’s backfill board: compare scans to the report, mark locations ready.',
@@ -292,7 +320,9 @@ let toolsSig = null;
 function buildRail() {
   toolsSig = offList().join();
   const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}<span class="rl">${v.rail || v.title}</span>${BADGED.includes(v.id) ? `<span class="badge" data-badge="${v.id}" hidden></span>` : ''}</button>`;
-  $('#railscroll').innerHTML = RAIL.map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? (offView(r) ? '' : rows(VIEWS[r])) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">Soon</span></button>`).join('')).join('');
+  // An area the store does not have (or the owner just switched off) is not on the rail at all.
+  const caps = client.session.current?.caps || [], outside = v => v?.area && v.area !== 'floor' && v.area !== 'store' && !caps.includes(v.area);
+  $('#railscroll').innerHTML = RAIL.filter(sec => !sec.rows.length || sec.rows.some(r => typeof r !== 'string' || !outside(VIEWS[r]))).map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? (offView(r) || outside(VIEWS[r]) ? '' : rows(VIEWS[r])) : `<button class="rrow soon" disabled title="Arrives with the ${sec.sec} port">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">Soon</span></button>`).join('')).join('');
 }
 // Rail badges (the showcase's): Backfill review carries today's locations
 // waiting for review; Cages, in red, the open cages not seen for a week.
@@ -309,6 +339,10 @@ function setWs(w) {
   ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
   const md = $('.mdepts'); if (md) { const l = w === 'floor' ? 'Departments' : 'Switch area'; md.title = l; md.setAttribute('aria-label', l); }
   $('#mstrip').innerHTML = STRIP[w].filter(m => !offView(m[0])).map(m => `<button data-view="${m[0]}">${ic(m[1])}${m[2]}</button>`).join('');
+  // A person's first time in an area on this device: its walkthrough (not
+  // for the owner, who is looking in rather than working there).
+  const cur = client.session.current;
+  if (store && !admin && !cur?.owner && !cur?.actas && w !== 'admin') setTimeout(() => { if (ws === w && store) firstRun(w); }, 700);
 }
 function paintStatus(s) {
   const el = $('#footSync'); if (!el) return;
@@ -332,6 +366,8 @@ function show(id, arg) {
   if (id === 'more') return openMore();
   if (id === 'launcher') return openLauncher();
   let view = VIEWS[id] || VIEWS[admin ? 'admin' : 'dashboard'];
+  // A desk-only view (deskOnly) is not part of the phone: a link to one goes home.
+  if (mobile && view.deskOnly) { id = HOME[ws] || 'map'; view = VIEWS[id]; arg = undefined; }
   // Admin views need the owner session; store views need a store.
   if (view.id.startsWith('admin') && !admin) view = VIEWS.dashboard;
   if (!view.id.startsWith('admin') && view.id !== 'settings' && !store) view = VIEWS.admin;
@@ -361,6 +397,7 @@ function show(id, arg) {
   const hs = $('#hdrslot'); hs.innerHTML = ''; if (!useMobile && frame.classList.contains('hdr-title')) { const vh0 = content.querySelector('.vh'); if (vh0) hs.appendChild(vh0); }
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   content.scrollTop = 0;
+  team?.repaint();
   markRail();
   // A sheet closes when the view changes; a repaint of the same view (a
   // store update) leaves it open, so the launcher survives sign-in.
@@ -411,7 +448,7 @@ document.addEventListener('click', e => {
   // The search palette routes its own rows (they carry select, dept or q);
   // elsewhere a data-view element opens the view, with a store number for
   // the console's store rows.
-  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no } : undefined); return; }
+  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no, ...(v.dataset.tab ? { tab: v.dataset.tab } : {}) } : undefined); return; }
   const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
   if (e.target.closest('.mdepts')) { if (store) (ws === 'floor' ? openDepts : openLauncher)(); return; }
   const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }
@@ -433,8 +470,39 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>Updating…</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]) });
+const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]).filter(v => !(isMobile() && v.deskOnly)), phone: () => isMobile() });
 $('#msearch input')?.addEventListener('focus', e => { if (!admin && store) { e.target.blur(); search.open(e.target.value); } });
+
+// Voice search on the phone (ShelfSearcher's, decision 28): the microphone in
+// the search bar and in the palette. A spoken shelf, run or bay on the map
+// opens it on the map, as ShelfSearcher did; anything else (a keycode, a
+// department, a mishearing) opens the palette with what was heard.
+let listening = null;
+const showVoice = () => { const on = voiceSupported() && isMobile(); for (const b of $$('[data-voice]')) b.hidden = !on; };
+showVoice(); window.addEventListener('resize', showVoice);
+document.addEventListener('click', e => {
+  const btn = e.target.closest?.('[data-voice]'); if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  if (listening) { listening.stop(); haptic('tap'); return; }
+  if (!store || admin) return toast('Voice search works once a store is signed in');
+  const input = btn.parentElement.querySelector('input'), was = input?.placeholder || '';
+  const fromBar = !!btn.closest('#msearch');
+  btn.classList.add('listening'); btn.setAttribute('aria-label', 'Stop listening'); if (input) { input.placeholder = 'Listening… say a shelf, like A16 S2'; if (fromBar) input.value = ''; }
+  haptic('select');
+  listening = listenOnce({
+    onHeard: t => { if (input) input.value = t; },
+    onGuesses: guesses => {
+      const r = resolveSpoken(guesses, c => shelfForLocation(c));
+      if (r.code) {
+        const { shelf, sub } = splitCanon(r.code);
+        haptic('success'); search.close(); show('map', { select: r.code });
+        toast(`Heard “${r.heard}” · ${shelf}${sub ? ' ' + sub : ''}${r.how === 'corrected' ? ' (matched to the map)' : ''}`);
+      } else { haptic('error'); search.open(r.query || r.heard); }
+    },
+    onError: msg => toast(msg, 'bad'),
+    onEnd: () => { listening = null; btn.classList.remove('listening'); btn.setAttribute('aria-label', 'Search by voice'); if (input) { input.placeholder = was; if (fromBar) input.value = ''; } },
+  });
+}, true);
 let lastMobile = isMobile();
 window.addEventListener('resize', () => { const m = isMobile(); if (m !== lastMobile) { lastMobile = m; if (current) show(current, currentArg); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#msheet')?.classList.remove('open'); });

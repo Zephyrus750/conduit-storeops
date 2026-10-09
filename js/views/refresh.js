@@ -171,7 +171,7 @@ export default {
         }
         else if (act === 'colour') { planColour = a.getAttribute('data-colour'); mode = 'plan'; paint(); }
         else if (act === 'reset-week') { if (confirm('Reset all refreshed shelves for this week?\n\nThis clears every shelf marked as refreshed — for everyone on the team — and cannot be undone.')) await ctx.store.dispatch({ type: 'refresh.clearWeek', entity: { week: m.week } }); }
-        else if (act === 'reset-plan') { for (const seg of Object.keys(m.plan)) await ctx.store.dispatch({ type: 'refresh.plan.paint', entity: { segment: seg }, payload: { colour: 'erase' } }); }
+        else if (act === 'reset-plan') { const n = Object.keys(m.plan).length; if (!n) return toast('Nothing is planned'); if (confirm(`Reset planning?\n\nThis clears the colours on all ${n} planned shelves, for everyone on the team.`)) { await ctx.store.dispatch({ type: 'refresh.plan.clear', entity: {} }); toast('Planning reset'); } }
         else if (act === 'focus') { const d = a.getAttribute('data-dept'); const next = m.focus.includes(d) ? m.focus.filter(x => x !== d) : [...m.focus, d]; await ctx.store.dispatch({ type: 'refresh.focus.set', entity: { week: m.week }, payload: { departments: next } }); }
         else if (act === 'zoom-dept') { map.filterDept(a.getAttribute('data-dept')); }
       } catch (err) { toast(err.message, 'bad'); }

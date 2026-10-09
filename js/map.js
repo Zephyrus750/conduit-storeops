@@ -427,7 +427,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // Zoom to the shelves of one or more departments: switches to the floor
     // holding most of them, dims the rest, and says what it found.
     zoomDept(codes) { return api.zoomDeptOn(codes, null); },
-    zoomDeptOn(codes, floorId) {
+    zoomDeptOn(codes, floorId, ms = 400) {   // ms 0 frames at once (paper)
       const want = (codes || []).map(c => String(c).toLowerCase());
       if (!want.length) { for (const g of $$('.shelf-group[data-dept]', svg)) { g.style.opacity = ''; g.removeAttribute('data-dim'); } svg.removeAttribute('data-deptzoom'); api.fit(); return null; }
       const perFloor = new Map();
@@ -454,7 +454,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
         const pad = zb ? 0 : Math.max(bb[2] - bb[0], bb[3] - bb[1]) * 0.12; let W = bb[2] - bb[0] + pad * 2, H = bb[3] - bb[1] + pad * 2, x0 = bb[0] - pad, y0 = bb[1] - pad;
         const r0 = svg.getBoundingClientRect(), ar = r0.width / r0.height || 1;
         if (W / H < ar) { const nw = H * ar; x0 -= (nw - W) / 2; W = nw; } else { const nh = W / ar; y0 -= (nh - H) / 2; H = nh; }
-        animateTo([x0, y0, W, H], 400); svg.classList.add('zoomed');
+        animateTo([x0, y0, W, H], ms); svg.classList.add('zoomed');
       }
       return { shelves: best[1], floor: cur?.name, floorType: cur?.type, depts: [...depts], total: [...perFloor.values()].reduce((a, b) => a + b, 0), floors: [...perFloor.entries()].map(([id, n]) => ({ id, name: fl.find(x => x.id === id)?.name || id, shelves: n })) };
     },
@@ -626,10 +626,11 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       svg.classList.add('has-route'); svg.appendChild(layer);
       return r;
     },
-    drawPins(pins) {   // [{ x, y, colour, label }] in map coordinates
+    drawPins(pins) {   // [{ x, y, colour, label, id? }] in map coordinates; a pin with an id is tapped as { kind: 'pin', id }
       const NS = 'http://www.w3.org/2000/svg';
       for (const p of pins) {
         const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'pin'); g.setAttribute('transform', `translate(${p.x},${p.y})`);
+        if (p.id) g.setAttribute('data-pin', p.id);
         // A glyph (markup in a -8..8 box, stroked) replaces the label; a
         // badge (a count) sits on the pin's shoulder.
         const mid = p.glyph ? `<g transform="translate(0,-58) scale(2.1)" fill="none" style="color:${p.colour}" stroke="${p.colour}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p.glyph}</g>` : `<text x="0" y="-58" style="fill:${p.colour}">${esc(p.label)}</text>`;
@@ -731,10 +732,11 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     }
     const hit = document.elementFromPoint(e.clientX, e.clientY) || e.target;
     const g = hit.closest?.('.shelf-group[data-shelf]');
-    const m = hit.closest?.('.emergency-marker[data-equip-type]'), pc = hit.closest?.('.price-check-marker');
+    const m = hit.closest?.('.emergency-marker[data-equip-type]'), pc = hit.closest?.('.price-check-marker'), pin = hit.closest?.('.pin[data-pin]');
     const point = api.pointAt(e.clientX, e.clientY);
-    if (touch && (pc || g)) haptic('tap');
-    if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
+    if (touch && (pc || g || pin)) haptic('tap');
+    if (pin) onSelect?.({ kind: 'pin', id: pin.getAttribute('data-pin'), point });
+    else if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
     else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, el: g, point, long: Date.now() - t > 500 }); }   // the shelf tapped, never its whole run
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m), point });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });

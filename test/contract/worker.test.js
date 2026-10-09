@@ -5,7 +5,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Miniflare } from 'miniflare';
-import { hashSecret } from '../../worker/auth.js';
+import { hashSecret, signToken } from '../../worker/auth.js';
 import { dvAnswer, DV_TRUCK } from '../fixtures/dv.js';
 import { ulid } from '../../shared/ulid.js';
 
@@ -107,13 +107,20 @@ test('health answers, every build-order route is built and wants a token, an unk
 
 test('catalogue: links and details from the upstreams, cached per keycode, misses answered', async () => {
   assert.equal((await api('GET', '/v1/catalogue?kc=12')).status, 400);
-  const r = await api('GET', '/v1/catalogue?kc=42977636,99999999');
+  // Anonymous: the link, but no product-page fetch for price and image.
+  const before = upstreamCalls.details;
+  const anon = await api('GET', '/v1/catalogue?kc=42977636,99999999&fields=all');
+  assert.equal(anon.status, 200); assert.match(anon.body.items['42977636'].url, /42977636/); assert.equal(anon.body.items['42977636'].price, null);
+  assert.equal(upstreamCalls.details, before, 'no detail fetch for an anonymous caller');
+  const now = Math.floor(Date.now() / 1000);
+  const device = await signToken({ store: '1241', roles: ['floor'], caps: ['floor'], device: 'cat-1', owner: false, actor: null, epoch: 0, iat: now, exp: now + 600, jti: 'x' }, 'test-token-secret');
+  const r = await api('GET', '/v1/catalogue?kc=42977636,99999999', undefined, device);
   assert.equal(r.status, 200);
   const it = r.body.items['42977636'];
   assert.equal(it.name, '12 pk diecast vehicles'); assert.match(it.url, /42977636/); assert.equal(it.price, 12); assert.equal(it.was, 15); assert.equal(it.clr, true); assert.ok(it.at > 0);
   assert.equal(r.body.items['99999999'], null);
   const calls = { ...upstreamCalls };
-  const again = await api('GET', '/v1/catalogue?kc=42977636,99999999');
+  const again = await api('GET', '/v1/catalogue?kc=42977636,99999999', undefined, device);
   assert.equal(again.body.items['42977636'].name, '12 pk diecast vehicles');
   assert.deepEqual(upstreamCalls, calls, 'second lookup is served from the edge cache');
 });
@@ -331,7 +338,7 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
   assert.equal(h.status, 'submitted'); assert.deepEqual(h.metrics, { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 }); assert.deepEqual(Object.keys(h.codes).sort(), ['43166022', '43199310']);
   assert.deepEqual(s.backfill.requested['2026-09-17'], ['7020']); assert.deepEqual(s.backfill.requested['2026-09-18'], ['7037']);
   const t = s.backfill.subs['7014:2026-09-18'];
-  assert.equal(t.status, 'pending'); assert.equal(t.codes['42345501'].scanned, true); assert.equal(t.codes['43006311'].scanned, false); assert.deepEqual(t.incorrect, ['43006311']);
+  assert.equal(t.status, 'pending'); assert.equal(t.codes['42345501'].scanned, true); assert.equal(t.codes['43006311'].scanned, true, 'every K2B code was scanned by a phone; its own flag meant keyed into the PDT'); assert.deepEqual(t.incorrect, ['43006311']);
   assert.equal(s.backfill.subs['7016:2026-09-18'].status, 'submitted'); assert.equal(s.backfill.subs['7016:2026-09-18'].metrics.accuracy, 100);
   assert.deepEqual(s.adjustments['2026-09-18']['43302210'], { qty: -6, name: 'Paper plates 20 pk', location: '7014', confirmed: true, addedAt: new Date(T + 240000).toISOString().replace(/\.\d{3}Z$/, '+00:00') });
 
@@ -369,7 +376,7 @@ test('a keycode’s life, the history lists and the CSV export read the stockroo
   // now so it cannot land between the two page reads.
   await (await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('1241')))).rollover();
   const h = await api('GET', '/v1/store/1241/history/backfill?limit=1', undefined, reader);
-  assert.equal(h.status, 200); assert.equal(h.body.kind, 'backfill'); assert.ok(h.body.total >= 2); assert.equal(h.body.rows.length, 1); assert.ok(h.body.rows[0].bay); assert.equal(typeof h.body.rows[0].accuracy, 'number');
+  assert.equal(h.status, 200); assert.equal(h.body.kind, 'backfill'); assert.ok(h.body.total >= 2); assert.equal(h.body.rows.length, 1); assert.ok(h.body.rows[0].bay); assert.ok(h.body.rows[0].accuracy === null || typeof h.body.rows[0].accuracy === 'number', 'scored, or unscored with no report');
   const page2 = await api('GET', '/v1/store/1241/history/backfill?limit=1&offset=1', undefined, reader);
   assert.notEqual(page2.body.rows[0].bay + page2.body.rows[0].date, h.body.rows[0].bay + h.body.rows[0].date);
   assert.equal((await api('GET', '/v1/store/1241/history/adjustments', undefined, reader)).body.rows[0].keycode, '43302210');
@@ -458,7 +465,7 @@ test('manifests: publish the report, list it through the projection, read it, at
   // Profiles come from the published documents; finalising the truck
   // writes the receiving record the history and export routes read.
   const prof = await api('GET', '/v1/store/1241/profiles', undefined, unlocked);
-  assert.equal(prof.status, 200); assert.equal(prof.body.schema, 'dv-profiles/1'); assert.equal(prof.body.trucks_sampled, 1);
+  assert.equal(prof.status, 200); assert.equal(prof.body.schema, 'carton-profiles/1'); assert.equal(prof.body.trucks_sampled, 1);
   assert.deepEqual(prof.body.gates, { min_trucks: 3, min_consistency: 0.7, min_units_per_ctn: 3 });
   assert.deepEqual(prof.body.profiles, {}, 'one manifest is under the three-truck gate');
   assert.equal((await api('POST', '/v1/store/1241/events', { events: [ev('truck.finalise', { truck }, {})] }, dev)).body.results[0].code, 'unauthorised', 'finalising a truck takes the dock code');
@@ -487,7 +494,7 @@ test('Decant Visualiser importer: dry run reads the site, the import lands the a
   assert.equal(notdv.status, 404); assert.equal(notdv.body.code, 'dv_site');
   const dry = await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'https://dv.test', dry: true }, ownerToken);
   assert.equal(dry.status, 200, JSON.stringify(dry.body)); assert.equal(dry.body.dry, true); assert.equal(dry.body.source, 'dv'); assert.equal(dry.body.legacy.name, 'Busselton back dock');
-  assert.deepEqual(dry.body.counts, { history: 1, trucks: 1, pallets: 3, planner: 2, events: 19 });
+  assert.deepEqual(dry.body.counts, { history: 1, trucks: 1, pallets: 3, planner: 2, events: 18 }, 'the planned huddle is one booking, not a start and an end');
   assert.ok(dry.body.warnings.some(w => /held over/.test(w)), dry.body.warnings.join('|'));
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'dock-imp' })).body.token;
   const reader = (await api('POST', '/v1/auth/unlock', { code: 'DK-CODE' }, dev)).body.token;
@@ -608,8 +615,8 @@ test('events: a device clock far from the worker is refused; an oversized payloa
   const future = new Date(Date.now() + 3600_000).toISOString(), past = new Date(Date.now() - 40 * 86_400_000).toISOString();
   const r = await api('POST', '/v1/store/2005/events', { events: [mk(future), mk(past), mk(new Date().toISOString())] }, floor);
   assert.deepEqual(r.body.results.map(x => x.code || 'ok'), ['clock_skew', 'clock_skew', 'ok']);
-  const big = await api('POST', '/v1/store/2005/events', { events: [mk(new Date().toISOString(), { dept: 'h1', note: 'x'.repeat(2_100_000) })] }, floor);
-  assert.equal(big.body.results[0].code, 'invalid_event');
+  const big = await api('POST', '/v1/store/2005/events', { events: [mk(new Date().toISOString(), { dept: 'h1', note: 'x'.repeat(40_000) })] }, floor);
+  assert.equal(big.body.results[0].code, 'payload_too_large'); assert.match(big.body.results[0].message, /refresh.mark carries at most 32 KB/);
 });
 
 test('catalogue: the owner builds it from the sitemaps; lookups and near-misses then come from Conduit, not the legacy worker', async () => {
@@ -703,7 +710,7 @@ test('carton profiles: the stockroom code reads them too (a stockroom-only store
   assert.equal((await api('GET', '/v1/store/2033/profiles', undefined, dev.token)).status, 403, 'the store PIN alone does not');
   const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-2033' }, dev.token)).body;
   const r = await api('GET', '/v1/store/2033/profiles', undefined, sr.token);
-  assert.equal(r.status, 200); assert.equal(r.body.schema, 'dv-profiles/1'); assert.deepEqual(r.body.profiles, {});
+  assert.equal(r.status, 200); assert.equal(r.body.schema, 'carton-profiles/1'); assert.deepEqual(r.body.profiles, {});
 });
 
 test('issue photos: a store device adds a JPEG, the store and owner read it, others cannot, delete drops it', async () => {
@@ -725,8 +732,41 @@ test('issue photos: a store device adds a JPEG, the store and owner read it, oth
   const att = { id: ulid(), store: '2044', area: 'floor', type: 'issue.photo', entity: { issue: 'mp1' }, payload: { photo: id }, at: at(), v: 1 };
   const r = await api('POST', '/v1/store/2044/events', { events: [log, att] }, dev.token);
   assert.deepEqual(r.body.results.map(x => x.ok), [true, true]);
-  assert.equal((await raw('DELETE', `/v1/store/2044/photo/${id}`, dev.token)).status, 200);
+  // Deleting is not how a photo leaves an issue: that is the logged event.
+  const dev2 = (await api('POST', '/v1/auth/signin', { store: '2044', pin: '135790', device: 'ph-44b' })).body;
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${id}`, dev2.token)).status, 200, 'on an issue: every device of the store');
+  const held = await raw('DELETE', `/v1/store/2044/photo/${id}`, dev.token);
+  assert.equal(held.status, 409); assert.match((await held.json()).message, /on issue mp1/);
+  // A draft (on no issue yet) is the taker's own: others can neither read nor delete it.
+  const { id: draft } = await (await raw('POST', '/v1/store/2044/photo', dev.token, jpeg)).json();
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${draft}`, dev2.token)).status, 404);
+  assert.equal((await raw('DELETE', `/v1/store/2044/photo/${draft}`, dev2.token)).status, 403);
+  assert.equal((await raw('DELETE', `/v1/store/2044/photo/${draft}`, dev.token)).status, 200);
+  // Taken off by another device: logged, then the bytes go, and the id no longer opens it.
+  const off = { id: ulid(), store: '2044', area: 'floor', type: 'issue.photo', entity: { issue: 'mp1' }, payload: { photo: id, remove: true }, at: at(), v: 1 };
+  assert.equal((await api('POST', '/v1/store/2044/events', { events: [off] }, dev2.token)).body.results[0].ok, true);
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${id}`, dev2.token)).status, 404, 'off the issue: not served to others');
+  assert.equal((await raw('DELETE', `/v1/store/2044/photo/${id}`, dev2.token)).status, 200);
   assert.equal((await raw('GET', `/v1/store/2044/photo/${id}`, dev.token)).status, 404);
+  const snap = (await api('GET', '/v1/store/2044/snapshot', undefined, dev.token)).body.state;
+  assert.deepEqual(snap.issues.mp1.photos, []); assert.equal(snap.issues.mp1.log.at(-1).a, 'Photo removed');
+
+  // The nightly sweep: a removed issue's photos go 90 days on; a live issue's stay; an unattached upload goes after a day.
+  const up2 = async () => (await (await raw('POST', '/v1/store/2044/photo', dev.token, jpeg)).json()).id;
+  const [pLive, pGone, pLoose] = [await up2(), await up2(), await up2()];
+  const ev2 = (type, issue, payload) => ({ id: ulid(), store: '2044', area: 'floor', type, entity: { issue }, payload, at: at(), v: 1 });
+  const rr = await api('POST', '/v1/store/2044/events', { events: [
+    ev2('issue.log', 'mp2', { cat: 'leak', title: 'Live', sev: 1 }), ev2('issue.photo', 'mp2', { photo: pLive }),
+    ev2('issue.log', 'mp3', { cat: 'leak', title: 'Gone', sev: 1 }), ev2('issue.photo', 'mp3', { photo: pGone }), ev2('issue.remove', 'mp3', {}),
+  ] }, dev.token);
+  assert.ok(rr.body.results.every(x => x.ok));
+  const stub = await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('2044')));
+  assert.equal(await stub.sweepPhotos(Date.now()), 0, 'nothing is a day old yet');
+  assert.equal(await stub.sweepPhotos(Date.now() + 2 * 86400e3), 1, 'the loose upload');
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${pLoose}`, dev.token)).status, 404);
+  assert.equal(await stub.sweepPhotos(Date.now() + 91 * 86400e3), 1, 'the removed issue\'s photo');
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${pGone}`, ownerToken)).status, 404);
+  assert.equal((await raw('GET', `/v1/store/2044/photo/${pLive}`, dev2.token)).status, 200, 'a live issue keeps its photo');
 });
 
 test('retention: a bay older than 60 days leaves the live state at the nightly run and stays in History from the archive', async () => {
@@ -773,4 +813,111 @@ test('the map editor publishes with its source: the owner reopens it, devices ne
   assert.equal((await api('POST', '/v1/store/2077/map', { version: 'e2', floors: [{ id: 'ground', svg }] }, ownerToken)).status, 201);
   const none = await api('GET', '/v1/store/2077/map/latest/source', undefined, ownerToken);
   assert.equal(none.status, 404, 'a version published from a file has no source'); assert.match(none.body.message, /no editor source/);
+});
+
+test('sockets end with their token: an expired socket gets no more events and is told to renew', async () => {
+  const p = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-exp' })).body;
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, p.token)).body;
+  // The same claims with two seconds to live (signed with the throwaway test secret).
+  const claims = JSON.parse(Buffer.from(sr.token.split('.')[0], 'base64url').toString());
+  const short = await signToken({ ...claims, exp: Math.floor(Date.now() / 1000) + 2 }, 'test-token-secret');
+  const res = await mf.dispatchFetch('http://conduit.test/v1/store/1241/ws', { headers: { Upgrade: 'websocket', 'Sec-WebSocket-Protocol': `conduit, ${short}` } });
+  assert.equal(res.status, 101);
+  const ws = res.webSocket; ws.accept();
+  const inbox = [];
+  ws.addEventListener('message', m => inbox.push(JSON.parse(m.data)));
+  const cage = n => event('cage.create', { cage: `BSN12409${n}` }, { ring: 'overstock' }, 'stockroom');
+  assert.equal((await api('POST', '/v1/store/1241/events', { events: [cage(81)] }, sr.token)).body.results[0].ok, true);
+  for (let i = 0; i < 50 && !inbox.some(f => f.t === 'event'); i++) await new Promise(r => setTimeout(r, 20));
+  assert.ok(inbox.some(f => f.t === 'event' && f.event.entity.cage === 'BSN1240981'), 'a live token hears the stockroom');
+
+  await new Promise(r => setTimeout(r, 2600));
+  inbox.length = 0;
+  assert.equal((await api('POST', '/v1/store/1241/events', { events: [cage(82)] }, sr.token)).body.results[0].ok, true);
+  for (let i = 0; i < 50 && !inbox.length; i++) await new Promise(r => setTimeout(r, 20));
+  assert.equal(inbox.some(f => f.t === 'event'), false, 'nothing is broadcast to an expired socket');
+  assert.deepEqual(inbox.find(f => f.t === 'error'), { t: 'error', code: 'expired', message: 'token expired' });
+  // (Miniflare does not hand the worker's close to this end of the pair.)
+});
+
+test('a state over the row limit is never saved as a snapshot, writes go on, and the store rebuilds from the log', async () => {
+  assert.equal((await reg2('2099')).status, 201);
+  const dev = (await api('POST', '/v1/auth/signin', { store: '2099', pin: '135790', device: 'ph-99' })).body.token;
+  const stub = await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('2099')));
+  const load = n => ({ id: ulid(), store: '2099', area: 'floor', type: 'inventory.load.add', entity: { load: `L${n}` }, at: at(), v: 1,
+    payload: { label: `Load ${n}`, pallets: Array.from({ length: 30 }, (_, p) => ({ pid: `P${n}-${p}`, items: Array.from({ length: 100 }, (_, i) => ({ k: String(10000000 + i), d: 'd'.repeat(60), q: 1, dept: '021' })) })) } });
+  for (let n = 1; n <= 3; n++) assert.equal((await api('POST', '/v1/store/2099/events', { events: [load(n)] }, dev)).body.results[0].ok, true);
+  const small = await stub.snapshotIfDue(true);
+  assert.equal(small.saved, true);
+  for (let n = 4; n <= 7; n++) assert.equal((await api('POST', '/v1/store/2099/events', { events: [load(n)] }, dev)).body.results[0].ok, true);
+  const big = await stub.snapshotIfDue(true);
+  assert.equal(big.saved, false, 'over the limit: skipped'); assert.ok(big.bytes > 1_900_000);
+  const k = (await api('GET', '/v1/admin/stores/2099/kpis', undefined, ownerToken)).body;
+  assert.ok(k.bytes > 1_900_000 && k.alerts.some(a => a.level === 'bad'), 'the console sees the size');
+  // Writes still land, and a fresh start rebuilds everything from the last snapshot plus the log.
+  const r = await api('POST', '/v1/store/2099/events', { events: [{ id: ulid(), store: '2099', area: 'floor', type: 'refresh.mark', entity: { segment: 'A1 S1', week: '2026-W41' }, payload: {}, at: at(), v: 1 }] }, dev);
+  assert.equal(r.body.results[0].ok, true);
+  await stub.load();
+  const st = (await api('GET', '/v1/store/2099/snapshot', undefined, dev)).body;
+  assert.equal(st.seq, r.body.results[0].seq); assert.equal(Object.keys(st.state.inventory.loads).length, 7);
+});
+
+test('wrong owner keys from elsewhere cannot lock the owner out of a device they signed in on before', async () => {
+  const first = await api('POST', '/v1/auth/signin', { ownerKey: OWNER_KEY, device: 'own-laptop' });
+  assert.equal(first.status, 200); assert.match(first.body.trust, /^[\w-]{20,}$/);
+  // Someone sprays wrong keys from many device ids until the owner-wide key locks (8 in tests).
+  for (let i = 0; i < 8; i++) await api('POST', '/v1/auth/signin', { ownerKey: 'guess-' + i, device: `spray-${i}` });
+  assert.equal((await api('POST', '/v1/auth/signin', { ownerKey: OWNER_KEY, device: 'new-tablet' })).status, 429, 'a new device waits');
+  assert.equal((await api('POST', '/v1/auth/signin', { ownerKey: OWNER_KEY, device: 'own-laptop', trust: 'not-a-real-trust-token' })).status, 429, 'a made-up trust is no trust');
+  const back = await api('POST', '/v1/auth/signin', { ownerKey: OWNER_KEY, device: 'own-laptop', trust: first.body.trust });
+  assert.equal(back.status, 200, 'the trusted device signs in'); assert.equal(back.body.trust, first.body.trust);
+  // A trusted device that guesses wrong is limited on its own key (3 in tests).
+  for (let i = 0; i < 3; i++) assert.equal((await api('POST', '/v1/auth/signin', { ownerKey: 'nope', device: 'own-laptop', trust: first.body.trust })).status, 403);
+  assert.equal((await api('POST', '/v1/auth/signin', { ownerKey: OWNER_KEY, device: 'own-laptop', trust: first.body.trust })).status, 429);
+});
+
+test('switching an area off applies at once: a token that still lists it is refused and reads nothing from it; on again after a renew', async () => {
+  assert.equal((await reg2('2111', { codes: { stockroom: 'SR-2111', dock: 'DK-2111', manager: 'MG-2111' } })).status, 201);
+  const p = (await api('POST', '/v1/auth/signin', { store: '2111', pin: '135790', device: 'ar-1' })).body;
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-2111' }, p.token)).body;
+  const cage = n => ({ id: ulid(), store: '2111', area: 'stockroom', type: 'cage.create', entity: { cage: `BSN21110${n}` }, payload: { ring: 'overstock' }, at: at(), v: 1 });
+  assert.equal((await api('POST', '/v1/store/2111/events', { events: [cage(1)] }, sr.token)).body.results[0].ok, true);
+  assert.ok((await api('GET', '/v1/store/2111/snapshot', undefined, sr.token)).body.state.cages);
+
+  const off = await api('PATCH', '/v1/admin/stores/2111', { entitlements: { stockroom: false } }, ownerToken);
+  assert.equal(off.status, 200);
+  // The same token, not renewed: refused and blind to the Stockroom straight away.
+  assert.equal((await api('POST', '/v1/store/2111/events', { events: [cage(2)] }, sr.token)).body.results[0].code, 'not_entitled');
+  const snap = (await api('GET', '/v1/store/2111/snapshot', undefined, sr.token)).body.state;
+  assert.equal(snap.cages, undefined); assert.deepEqual(snap.areas.on, ['backdock', 'floor']);
+  assert.equal((await api('GET', '/v1/store/2111/soh', undefined, sr.token)).status, 403);
+  // The device renews (it does on hearing store.areas.set) and its token says so.
+  const ren = (await api('POST', '/v1/auth/refresh', { refresh: sr.refresh })).body;
+  assert.deepEqual(ren.caps.sort(), ['backdock', 'floor']);
+  // Saving the same areas again logs nothing new.
+  const before = (await api('GET', '/v1/store/2111/snapshot', undefined, ren.token)).body;
+  assert.equal((await api('PATCH', '/v1/admin/stores/2111', { entitlements: { stockroom: false } }, ownerToken)).status, 200);
+  const after = (await api('GET', '/v1/store/2111/snapshot', undefined, ren.token)).body;
+  assert.equal(after.seq, before.seq); assert.equal(after.state.areas.at, before.state.areas.at);
+  // On again: a renewed token reads it.
+  assert.equal((await api('PATCH', '/v1/admin/stores/2111', { entitlements: { stockroom: true } }, ownerToken)).status, 200);
+  const back = (await api('POST', '/v1/auth/refresh', { refresh: ren.refresh })).body;
+  assert.ok(back.caps.includes('stockroom'));
+  assert.ok((await api('GET', '/v1/store/2111/snapshot', undefined, back.token)).body.state.cages.BSN211101);
+  // A device cannot send store.areas.set itself.
+  const forged = { id: ulid(), store: '2111', area: 'store', type: 'store.areas.set', entity: {}, payload: { on: ['floor'] }, at: at(), v: 1 };
+  const mg = (await api('POST', '/v1/auth/unlock', { code: 'MG-2111' }, back.token)).body.token;
+  assert.equal((await api('POST', '/v1/store/2111/events', { events: [forged] }, mg)).body.results[0].code, 'worker_only');
+});
+
+test('the Service page: version, bindings and secrets as set or not, each store object, and the errors recorded', async () => {
+  const r = await api('GET', '/v1/admin/service', undefined, ownerToken);
+  assert.equal(r.status, 200);
+  assert.match(r.body.version, /\d+\.\d+/); assert.equal(r.body.secrets.TOKEN_SECRET, true); assert.equal(typeof r.body.bindings.photos, 'boolean');
+  assert.ok(!JSON.stringify(r.body).includes('test-token-secret'), 'no secret value is ever shown');
+  const s = r.body.stores.find(x => x.no === '1241');
+  assert.ok(s.seq > 0 && s.bytes > 0); assert.ok('alarm' in s && 'retention' in s);
+  assert.ok(r.body.errors.some(e => e.kind === 'snapshot' && e.store === '2099'), 'the skipped snapshot was recorded');
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'svc-1' })).body.token;
+  assert.equal((await api('GET', '/v1/admin/service', undefined, dev)).status, 403);
 });

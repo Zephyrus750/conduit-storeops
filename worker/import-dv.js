@@ -63,10 +63,11 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
     push(`hist:${id}`, cleared, 'truck.import', { truck: id }, {
       source: 'dv', landedAt: r.landedAt || null, clearedAt: r.clearedAt || null,
       cartons: r.cartons, pallets: r.pallets, palletsLanded: r.palletsLanded, clearMins: r.clearMins, haltMins: r.haltMins, haltCount: r.haltCount,
-      downtime: (r.downtime || []).map(d => ({ reason: d.reason, mins: d.mins, count: d.count })), teamRate: Math.round(num(r.teamRate)),
+      downtime: (r.downtime || []).map(d => ({ ...(d.kind ? { kind: d.kind } : {}), reason: d.reason, mins: d.mins, count: d.count })), teamRate: Math.round(num(r.teamRate)),
       audit: r.audit || null, carriedIn: r.carriedIn ? { pallets: r.carriedIn.pallets, cartons: r.carriedIn.cartons } : null,
-      perPerson: (r.perPerson || []).map(x => ({ pid: who(x.pid), cartons: x.cartons, pallets: Math.round(num(x.pallets)), bays: [], mins: x.workedMins, rate: Math.round(num(x.rate)) })),
-      byDept: (r.perDept || []).map(d => ({ dept: d.dept, cartons: d.cartons, pallets: Math.round(num(d.pallets)) })),
+      perPerson: (r.perPerson || []).map(x => ({ pid: who(x.pid), cartons: x.cartons, pallets: Math.round(num(x.pallets) * 10) / 10, bays: [], mins: x.workedMins, workedMins: x.workedMins, rate: Math.round(num(x.rate)), ...(x.deltaPct != null ? { deltaPct: x.deltaPct } : {}), ...(x.start || x.rosteredStart ? { start: x.start || x.rosteredStart } : {}), ...(x.finish || x.rosteredFinish ? { finish: x.finish || x.rosteredFinish } : {}) })),
+      byDept: (r.perDept || []).map(d => ({ dept: d.dept, cartons: d.cartons, pallets: Math.round(num(d.pallets) * 10) / 10 })),
+      perDept: (r.perDept || []).map(d => ({ dept: d.dept, cartons: d.cartons, pallets: d.pallets, workedMins: d.workedMins })),
       manifest: r.manifest?.manNo ? { manNo: r.manifest.manNo, despatch: r.manifest.despatch || '', dcNo: r.manifest.dcNo || '' } : null,
       pauses: { huddle: r.huddleMins || 0, transition: r.transitionMins || 0, break: r.teamBreakMins || 0 },
     });
@@ -90,8 +91,9 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
     // The team is the truck's team plus anyone who worked a pallet on it, so
     // every imported segment passes the reducer's team check.
     const crew = [...new Set([...(d.team || []).map(m => String(m.pid)), ...Object.values(d.pallets || {}).flatMap(p => (p.segments || []).map(s => String(s.pid)))].filter(x => x && x !== 'undefined'))];
-    const roleOf = new Map((d.team || []).map(m => [String(m.pid), m.role]));
-    if (crew.length) push(`${id}:team`, base + 3000, 'truck.team.set', T, { team: crew.map(pid => ({ ...member(pid), ...(TEAM_ROLES.includes(roleOf.get(pid)) ? { role: roleOf.get(pid) } : {}) })) });
+    const byPid = new Map((d.team || []).map(m => [String(m.pid), m]));
+    // Each person keeps their role and their rostered start and finish (the finish guard reads them).
+    if (crew.length) push(`${id}:team`, base + 3000, 'truck.team.set', T, { team: crew.map(pid => { const m = byPid.get(pid) || {}, st = m.start || m.rosteredStart, fin = m.finish || m.rosteredFinish; return { ...member(pid), ...(TEAM_ROLES.includes(m.role) ? { role: m.role } : {}), ...(st ? { start: String(st) } : {}), ...(fin ? { finish: String(fin) } : {}) }; }) });
     if (d.receivingConfirmed && ms(d.receivedAt)) push(`${id}:received`, ms(d.receivedAt), 'receiving.confirm', T, { confirmed: true });
     if (d.goalAt) push(`${id}:goal`, base + 4000, 'truck.setGoal', T, { goal: d.goalAt });
     const pallets = Object.values(d.pallets || {}).sort((a, b) => num(a.n) - num(b.n));
@@ -105,7 +107,7 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
       const first = segs[0] ? ms(segs[0].start) - 1000 : null;
       landAt = first && first < landAt ? first : landAt;
       const scanIds = [...new Set([...(Array.isArray(p.scanIds) ? p.scanIds : []), p.scanId].filter(Boolean).map(s => String(s).replace(/\D/g, '').slice(-9)))];
-      push(`${id}:land:${ref}`, landAt, 'pallet.land', B, { ptype: PTYPES.includes(p.ptype) ? p.ptype : 'chep', cartons: p.cartons == null || !(num(p.cartons) >= 1) ? null : Math.min(500, num(p.cartons)), ...(p.expectedBasis === 'manual' && p.expectedMins != null ? { expectedMins: num(p.expectedMins) } : {}), consolIds: (p.consolIds?.length ? p.consolIds : p.consolId ? [p.consolId] : []).map(String), scanIds, note: p.note || '', carryover: !!p.carriedFrom, excluded: !!p.excluded });
+      push(`${id}:land:${ref}`, landAt, 'pallet.land', B, { ptype: PTYPES.includes(p.ptype) ? p.ptype : 'chep', cartons: p.cartons == null || !(num(p.cartons) >= 1) ? null : Math.min(500, num(p.cartons)), ...(p.expectedBasis === 'manual' && p.expectedMins != null ? { expectedMins: num(p.expectedMins) } : {}), consolIds: (p.consolIds?.length ? p.consolIds : p.consolId ? [p.consolId] : []).map(String), scanIds, note: p.note || '', carryover: !!p.carriedFrom, excluded: !!p.excluded, ...(p.lateFrom ? { lateFrom: p.lateFrom } : {}), ...(p.seenBefore ? { seenBefore: p.seenBefore } : {}) });
       landAt += 1000; counts.pallets += 1;
       // The pallet's work in time order: a start while someone is already on
       // it is a join; an end while others stay on is a leave; the last one
@@ -123,6 +125,8 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
     // Hold-ups keep their kind (halt, huddle, transition, team break) and note.
     (d.halts || []).forEach((h, i) => {
       const start = ms(h.start); if (!start) return;
+      // The booked opening huddle stays booked (DV marked it planned).
+      if (h.kind === 'huddle' && h.planned && ms(h.end)) { push(`${id}:huddle:${i}`, start, 'huddle.plan', T, { mins: Math.max(1, Math.min(120, Math.round((ms(h.end) - start) / 60000))) }); return; }
       const kind = HALT_KINDS.includes(h.kind) ? h.kind : 'halt';
       const reason = kind === 'halt' ? (HALT_REASONS.includes(h.reason) ? h.reason : 'other') : kind === 'transition' ? (TRANS_REASONS.includes(h.reason) ? h.reason : 'changeover') : kind;
       push(`${id}:halt:${i}:start`, start, 'halt.start', T, { kind, reason, ...(h.note ? { note: String(h.note).slice(0, 120) } : {}) });
@@ -148,6 +152,11 @@ export function mapDV({ active, config, history, trucks = {}, planner, rollover 
     }
   }
 
+  // The week's roster and the dock's carton rate.
+  const roster = (config?.roster?.pids || []).map(pid => who(pid)).filter(x => dnumId(x));
+  if (roster.length) push('roster', ms(config.roster.updatedAt) || Date.now(), 'dock.roster', {}, { pids: roster });
+  const mpc = Number(config?.settings?.stdMinsPerCarton);
+  if (Number.isFinite(mpc) && mpc > 0 && mpc !== 0.5) { events.push({ seed: 'settings:mpc', ms: Date.now(), type: 'store.settings.set', area: 'store', entity: {}, payload: { minsPerCarton: mpc } }); counts.settings = 1; }
   if (rollover && (rollover.pallets || []).length) warnings.push(`${rollover.pallets.length} pallet${rollover.pallets.length === 1 ? '' : 's'} held over from ${rollover.fromId || 'the last truck'} ${rollover.pallets.length === 1 ? 'was' : 'were'} not imported: land ${rollover.pallets.length === 1 ? 'it' : 'them'} on the next truck as a carry-over`);
   const g = config?.grid; if (g && (num(g.rows) !== 4 || num(g.cols) !== 7)) warnings.push(`DV used a ${g.rows} × ${g.cols} dock grid; set the same grid in Settings › Store before the first truck`);
   counts.events = events.length;

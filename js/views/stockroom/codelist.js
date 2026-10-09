@@ -12,10 +12,17 @@ import { extractCodes } from '../../../shared/screenscan.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { openScreenScan } from '../../screenscan.js';
 
-const KEY = 'codelist';
+// Per store (a device signed in to two stores keeps two lists); a list kept
+// under the old shared key moves to the first store that opens it.
+let storeNo = '';
+const KEY = () => `codelist:${storeNo}`;
+function useStore(no) {
+  storeNo = String(no || '');
+  try { const old = localStorage.getItem('codelist'); if (old != null) { if (localStorage.getItem(KEY()) == null) localStorage.setItem(KEY(), old); localStorage.removeItem('codelist'); } } catch {}
+}
 const st = { view: 'grid', at: 0, paste: false, text: '' };
-function load() { try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); return Array.isArray(v?.codes) ? v.codes.filter(x => x && /^\d{6,13}$/.test(x.c)) : []; } catch { return []; } }
-function save(list) { try { localStorage.setItem(KEY, JSON.stringify({ codes: list, at: new Date().toISOString() })); } catch { toast('This device would not keep the list (storage is blocked)', 'bad'); } }
+function load() { try { const v = JSON.parse(localStorage.getItem(KEY()) || 'null'); return Array.isArray(v?.codes) ? v.codes.filter(x => x && /^\d{6,13}$/.test(x.c)) : []; } catch { return []; } }
+function save(list) { try { localStorage.setItem(KEY(), JSON.stringify({ codes: list, at: new Date().toISOString() })); } catch { toast('This device would not keep the list (storage is blocked)', 'bad'); } }
 function add(codes, replace = false) {
   const list = replace ? [] : load(), have = new Set(list.map(x => x.c)); let n = 0;
   for (const c of codes) if (/^\d{6,13}$/.test(c) && !have.has(c)) { list.push({ c, done: false }); have.add(c); n++; }
@@ -37,6 +44,7 @@ const empty = `<div class="card" style="padding:24px"><b>No codes yet</b><p clas
 export default {
   id: 'codelist', title: 'Barcode list', icon: 'barcode', area: 'stockroom',
   desktop(ctx) {
+    useStore(ctx.storeNo);
     const list = load(), done = list.filter(x => x.done).length;
     ensureNames(ctx, list.map(x => x.c), () => ctx.rerender());
     const head = vh('Barcode list', sub('Scratch list on this device', `${list.length} code${list.length === 1 ? '' : 's'}`, done ? `${done} done` : ''),
@@ -45,7 +53,7 @@ export default {
     const paste = st.paste ? (() => { const r = extractCodes(st.text); return `<div class="card"><div class="ch"><h3>Paste any report</h3><span class="go" data-act="cl-paste">Close</span></div><textarea class="sri-ta" data-field="cl-text" placeholder="Paste the report text: keycodes are picked out, prices, quantities and APNs are left out">${esc(st.text)}</textarea><div class="sri-acts"><b>${r.codes.length}</b> code${r.codes.length === 1 ? '' : 's'} detected${r.dups ? ` · ${r.dups} duplicate${r.dups === 1 ? '' : 's'} removed` : ''}<button class="btn primary sm" data-act="cl-make"${r.codes.length ? '' : ' disabled'}>Make the list</button>${list.length ? `<button class="btn sm" data-act="cl-append"${r.codes.length ? '' : ' disabled'}>Add to the list</button>` : ''}</div></div>`; })() : '';
     return head + paste + typeRow + (list.length ? (st.view === 'one' ? focusCard(list) : grid(list)) : empty);
   },
-  mobile(ctx) { return `<div id="clmob">${mobile(ctx)}</div>`; },
+  mobile(ctx) { useStore(ctx.storeNo); return `<div id="clmob">${mobile(ctx)}</div>`; },
   mount(ctx, root) {
     const repaint = () => { if (ctx.isMobile) { const h = $('#clmob', root); if (h) h.innerHTML = mobile(ctx); } else ctx.rerender(); };
     const addTyped = () => { const i = root.querySelector('[data-field="cl-code"]'), v = (i?.value || '').replace(/\D/g, ''); if (!/^\d{6,13}$/.test(v)) { toast('A keycode is 6 to 8 digits (an APN 13)', 'bad'); return; } const n = add([v]); toast(n ? `${v} added` : `${v} is already on the list`); repaint(); setTimeout(() => document.querySelector('#content [data-field="cl-code"]')?.focus(), 0); };

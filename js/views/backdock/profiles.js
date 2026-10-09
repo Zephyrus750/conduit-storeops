@@ -27,6 +27,7 @@ function load(ctx, force) {
 
 export default {
   id: 'profiles', title: 'Carton profiles', icon: 'm-profiles', area: 'backdock',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     const { all, list } = rows(), doc = st.doc;
     const counts = { deep: 0, recent: 0, change: 0 }; for (const r of all) if (r.cls) counts[r.cls]++;
@@ -38,7 +39,6 @@ export default {
     const table = `<div class="card cpf"><div class="cpf-hd"><span>Keycode</span><span>Carton depth</span><span>Class</span><span>Built from</span><span>Last arrival</span></div>${body || `<div class="ohint">${doc ? (all.length ? 'Nothing matches.' : 'No profiles yet. Publish a DC manifest and every keycode on it gets a carton depth.') : st.loading ? 'Loading…' : ''}</div>`}<div class="cs-dim" style="padding:10px 2px 2px">Showing ${Math.min(100, list.length)} of ${list.length} · DEEP = several cartons landed recently · RECENT = arrived in the last 3 weeks · PACK CHANGE = the last manifests disagree with the older ones on units per carton.</div></div>`;
     return head + meta + strip + table;
   },
-  mobile() { return mhead('Carton profiles', 'Desktop only') + `<div class="mv-result">${ic('lock')}<b style="font-size:22px">On the desktop</b><span>Carton depths show on the stockroom scan report on the phone.</span></div>`; },
   mount(ctx, root) {
     load(ctx, false);
     const { list } = rows(); if (list.length) ensureNames(ctx, list.slice(0, 100).map(r => r.kc), () => ctx.rerender());

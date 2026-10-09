@@ -4,7 +4,7 @@
 // Returns null when the event is valid, otherwise { code, message }.
 
 import { isUlid } from './ulid.js';
-import { CATALOGUE } from './catalogue.js';
+import { CATALOGUE, payloadMax } from './catalogue.js';
 
 const STORE_RE = /^\d{3,5}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
@@ -36,6 +36,8 @@ export function validateEvent(ev) {
 
   const payload = ev.payload ?? {};
   if (typeof payload !== 'object' || Array.isArray(payload)) return bad('payload must be an object');
+  const size = JSON.stringify(payload).length, max = payloadMax(ev.type);
+  if (size > max) return { code: 'payload_too_large', message: `${ev.type} carries at most ${Math.round(max / 1000)} KB (this one is ${Math.ceil(size / 1000)} KB)` };
   const where = reservedIn(payload, 'payload');
   if (where) return bad(`${where} is not allowed`);
   for (const [k, t] of Object.entries(info.payload)) {

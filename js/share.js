@@ -7,6 +7,8 @@ import { ic, esc, toast, dep, DEPT_NAME } from './ui.js';
 import { qrSvg } from '../shared/qr.js';
 
 export const shelfLink = (storeNo, shelf) => `${location.origin}${location.pathname}?store=${encodeURIComponent(storeNo)}&shelf=${encodeURIComponent(shelf)}`;
+// A maintenance issue (the work order's QR code): ?store=1241&issue=m… opens it in Maintenance.
+export const issueLink = (storeNo, issue) => `${location.origin}${location.pathname}?store=${encodeURIComponent(storeNo)}&issue=${encodeURIComponent(issue)}`;
 
 export function openShare({ storeNo, storeName, shelf, dept }) {
   document.getElementById('sharesheet')?.remove();
@@ -31,12 +33,12 @@ export function openShare({ storeNo, storeName, shelf, dept }) {
   el.querySelector('[data-sh="copy"]')?.focus();
 }
 
-// The link a device was opened with: { store, shelf } once, then the query
-// is cleared so a reload does not repeat it.
+// The link a device was opened with: { store, shelf } or { store, issue }
+// once, then the query is cleared so a reload does not repeat it.
 export function takeDeepLink() {
-  const q = new URLSearchParams(location.search), store = q.get('store'), shelf = q.get('shelf');
-  if (!store || !shelf) return null;
-  q.delete('store'); q.delete('shelf'); q.delete('cachebust');
+  const q = new URLSearchParams(location.search), store = q.get('store'), shelf = q.get('shelf'), issue = q.get('issue');
+  if (!store || (!shelf && !issue)) return null;
+  q.delete('store'); q.delete('shelf'); q.delete('issue'); q.delete('cachebust');
   history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
-  return { store: String(store).slice(0, 12), shelf: String(shelf).toUpperCase().slice(0, 24) };
+  return issue ? { store: String(store).slice(0, 12), issue: String(issue).replace(/[^\w-]/g, '').slice(0, 40) } : { store: String(store).slice(0, 12), shelf: String(shelf).toUpperCase().slice(0, 24) };
 }

@@ -1220,7 +1220,7 @@ function getDuplicates() {
   const counts = {};
   state.shelves.forEach(s => {
     const fn = fullName(s);
-    if (!fn) return; // unnamed shelves don't count
+    if (!fn || !String(s.name || '').trim()) return; // unnamed shelves don't count (a detected run's S1/S2 before it is named)
     if (!counts[fn]) counts[fn] = [];
     counts[fn].push(s);
   });
@@ -1240,7 +1240,7 @@ function getDuplicateNames() {
   const counts = {};
   state.shelves.forEach(s => {
     const fn = fullName(s);
-    if (!fn) return;
+    if (!fn || !String(s.name || '').trim()) return;
     counts[fn] = (counts[fn] || 0) + 1;
   });
   return Object.entries(counts).filter(([, c]) => c > 1).map(([fn]) => fn);
@@ -4047,7 +4047,12 @@ underlayDrop.addEventListener('drop', e => {
 // while reviewing keeps the preview glued to the plan.
 // ═══════════════════════════════════════════════════════════
 
-let _detect = null; // { cands: [{ix,iy,iw,ih,included}], imgW, imgH }
+// Conduit: what a found run becomes is shared/detect.js (window.DetectCore,
+// loaded by detect-boot.js): bays snapped to the store's module sizes,
+// learned from the bay dividers the plan draws; two-deep runs split into
+// S1/S2; end caps become E1/E2; and shapes already under drawn shelves are
+// set aside, so a second pass over a part-drawn floor shows what is missing.
+let _detect = null; // { cands: [{ix,iy,iw,ih,included,covered,parts}], imgW, imgH, learned, covered, nextIdx }
 const DETECT_MAX_SIDE = 1800;   // analysis resolution cap (px)
 const DETECT_FILL_RATIO = 0.62; // how "rectangular" a region must be
 
@@ -4068,6 +4073,8 @@ function detectParams() {
     maxSide: +(document.getElementById('detectMaxSide')?.value || 1600),
     merge: !!document.getElementById('detectMerge')?.checked,
     createAs: document.getElementById('detectCreateAs')?.value || 'auto',
+    split: document.getElementById('detectSplit')?.checked !== false,
+    sizes: window.DetectCore ? window.DetectCore.parseSizes(document.getElementById('detectSizes')?.value) : [],
   };
 }
 
@@ -4168,7 +4175,8 @@ function detectShelvesFromImage(img) {
     if (wC * hC > imgAreaC * 0.4) return;                       // whole salesfloor / page frame
     if (b.count / (b.w * b.h) < DETECT_FILL_RATIO) return;      // not rectangular enough
     // Back to natural-image px so the box survives underlay re-transforms
-    cands.push({ ix: b.x / f, iy: b.y / f, iw: b.w / f, ih: b.h / f, included: true, src });
+    const box = { ix: b.x / f, iy: b.y / f, iw: b.w / f, ih: b.h / f };
+    cands.push({ ...box, included: true, src, parts: [box] });
   }
   enclosed.forEach(b => consider(b, 'A'));
   solid.forEach(b => consider(b, 'B'));
@@ -4194,12 +4202,55 @@ function detectShelvesFromImage(img) {
   // back into runs so module counts come out right.
   if (p.merge) cands = detectMergeRuns(cands, 8 / state.underlayScale); // ~8 canvas px gap, in natural px
 
-  _detect = { cands, imgW: natW, imgH: natH };
+  const D = window.DetectCore;
+  let learned = [], covered = 0;
+  if (D) {
+    // The store's bay sizes, from the runs the plan draws with dividers.
+    const lens = [];
+    cands.forEach(c => {
+      if (c.parts.length < 2) return;
+      D.runBays(detectBoxToCanvas(c), c.parts.map(detectBoxToCanvas), { shelfDepth: state.shelfDepth }).bays.forEach(b => lens.push(b.len));
+    });
+    learned = D.learnModuleSizes(lens);
+    const sizesEl = document.getElementById('detectSizes');
+    if (sizesEl && learned.length && (!sizesEl.value.trim() || sizesEl.dataset.learned === sizesEl.value)) {
+      sizesEl.value = learned.join(', ');
+      sizesEl.dataset.learned = sizesEl.value;
+    }
+    // Shapes already under drawn shelves: set aside, not proposed again.
+    const drawn = state.shelves.map(getRotatedBounds);
+    cands.forEach(c => {
+      c.covered = drawn.length > 0 && D.coveredBy(detectBoxToCanvas(c), drawn) >= 0.5;
+      if (c.covered) { c.included = false; covered++; }
+    });
+  }
+
+  _detect = { cands, imgW: natW, imgH: natH, learned, covered, nextIdx: -1 };
   renderDetectPreview();
   updateDetectResultUI();
-  detectSetStatus(cands.length
-    ? cands.length + ' shape' + (cands.length === 1 ? '' : 's') + ' found — click boxes on the map to include/exclude, then Apply.'
-    : 'No shelf-like shapes found. Try raising the ink threshold or lowering the min size.');
+  const fresh = cands.length - covered;
+  detectSetStatus(!cands.length
+    ? 'No shelf-like shapes found. Try raising the ink threshold or lowering the min size.'
+    : !fresh
+      ? 'Every shape found is already drawn.'
+      : fresh + ' shape' + (fresh === 1 ? '' : 's') + ' not yet drawn' + (covered ? ' (' + covered + ' already drawn, greyed)' : '') + ' — click boxes on the map to include/exclude, then Add.');
+}
+
+// Steps the view through the found shapes no drawn shelf covers yet.
+function detectNextMissed() {
+  if (!_detect) return;
+  const open = _detect.cands.map((c, i) => i).filter(i => !_detect.cands[i].covered);
+  if (!open.length) { detectSetStatus('Every shape found is already drawn.'); return; }
+  const k = (open.indexOf(_detect.nextIdx) + 1) % open.length;
+  _detect.nextIdx = open[k];
+  const b = detectBoxToCanvas(_detect.cands[_detect.nextIdx]);
+  const c = canvasContainer.getBoundingClientRect();
+  state.zoom = Math.min(3, Math.max(0.6, Math.min(c.width, c.height) / (Math.max(b.w, b.h) * 4)));
+  state.panX = c.width / 2 - (b.x + b.w / 2) * state.zoom;
+  state.panY = c.height / 2 - (b.y + b.h / 2) * state.zoom;
+  updateTransform();
+  renderDetectPreview();
+  detectSetStatus('Missed shape ' + (k + 1) + ' of ' + open.length + (_detect.cands[_detect.nextIdx].included ? '' : ' (excluded)') + '.');
 }
 
 function detectMergeRuns(cands, gapNat) {
@@ -4219,10 +4270,13 @@ function detectMergeRuns(cands, gapNat) {
         const wRatio = Math.max(a.iw, b.iw) / Math.max(1, Math.min(a.iw, b.iw));
         const canH = gapX <= gapNat && ovY >= 0.7 * Math.min(a.ih, b.ih) && hRatio <= 1.35;
         const canV = gapY <= gapNat && ovX >= 0.7 * Math.min(a.iw, b.iw) && wRatio <= 1.35;
-        if (canH || canV) {
+        // A bay left over inside a run that already merged around it (one
+        // face of a gondola merging before the other).
+        const inside = (s, l) => s.ix >= l.ix - gapNat && s.iy >= l.iy - gapNat && s.ix + s.iw <= l.ix + l.iw + gapNat && s.iy + s.ih <= l.iy + l.ih + gapNat;
+        if (canH || canV || inside(a, b) || inside(b, a)) {
           const nx = Math.min(a.ix, b.ix), ny = Math.min(a.iy, b.iy);
           const nx2 = Math.max(a.ix + a.iw, b.ix + b.iw), ny2 = Math.max(a.iy + a.ih, b.iy + b.ih);
-          boxes[i] = { ix: nx, iy: ny, iw: nx2 - nx, ih: ny2 - ny, included: a.included && b.included, src: a.src };
+          boxes[i] = { ix: nx, iy: ny, iw: nx2 - nx, ih: ny2 - ny, included: a.included && b.included, src: a.src, parts: (a.parts || []).concat(b.parts || []) };
           boxes.splice(j, 1);
           merged = true;
           break outer;
@@ -4254,6 +4308,8 @@ function renderDetectPreview() {
     r.setAttribute('vector-effect', 'non-scaling-stroke');
     r.classList.add('detect-cand');
     if (!c.included) r.classList.add('excluded');
+    if (c.covered) r.classList.add('covered');
+    if (idx === _detect.nextIdx) r.classList.add('current');
     // Only clickable in Select mode — so Draw/Custom/Split tools can work over
     // the overlay without candidate boxes stealing the click.
     const interactive = state.tool === 'select';
@@ -4277,14 +4333,20 @@ function updateDetectResultUI() {
   const total = _detect.cands.length;
   const inc = _detect.cands.filter(c => c.included).length;
   const lbl = document.getElementById('detectCount');
-  if (lbl) lbl.textContent = total + ' found · ' + inc + ' selected';
+  if (lbl) lbl.textContent = total + ' found · ' + (_detect.covered ? _detect.covered + ' already drawn · ' : '') + inc + ' selected';
+  const learnedEl = document.getElementById('detectLearned');
+  if (learnedEl) learnedEl.textContent = _detect.learned && _detect.learned.length
+    ? 'Bay sizes on this plan: ' + _detect.learned.join(', ') + '.'
+    : 'No repeating bay sizes on this plan; using ' + (detectParams().sizes.join(', ') || state.moduleWidth) + '.';
+  const nextBtn = document.getElementById('detectNextBtn');
+  if (nextBtn) nextBtn.disabled = total - (_detect.covered || 0) === 0;
   const applyBtn = document.getElementById('detectApplyBtn');
   if (applyBtn) { applyBtn.disabled = inc === 0; applyBtn.textContent = 'Add ' + inc + ' shel' + (inc === 1 ? 'f' : 'ves'); }
 }
 
 function detectSetAll(included) {
   if (!_detect) return;
-  _detect.cands.forEach(c => { c.included = included; });
+  _detect.cands.forEach(c => { c.included = included && !c.covered; });
   renderDetectPreview();
   updateDetectResultUI();
 }
@@ -4307,6 +4369,31 @@ function applyDetectedShelves() {
     const shelfLike = short >= state.shelfDepth * 0.45 && short <= state.shelfDepth * 2.2 && len >= state.moduleWidth * 0.8;
     const asStandard = p.createAs === 'standard' || (p.createAs === 'auto' && shelfLike);
     let shelf;
+    const D = window.DetectCore;
+    if (asStandard && D) {
+      // Bays at the store's sizes, faces S1/S2, end caps E1/E2. A size or
+      // depth within a hair of the editor's global stays null (follows it).
+      const specs = D.planRun(b, (c.parts || [c]).map(detectBoxToCanvas), {
+        shelfDepth: state.shelfDepth, sizes: p.sizes.length ? p.sizes : [state.moduleWidth], sides: p.split, ends: p.split,
+      });
+      specs.forEach(sp => {
+        const s = {
+          id: 'shelf_' + state.nextId++,
+          name: '', subname: sp.subname,
+          x: sp.x, y: sp.y,
+          dept: defaultDept,
+          orientation: sp.orientation,
+          modules: sp.modules,
+          angle: null,
+          bayW: Math.abs(sp.bayW - state.moduleWidth) <= state.moduleWidth * 0.03 ? null : sp.bayW,
+          depth: Math.abs(sp.depth - state.shelfDepth) <= state.shelfDepth * 0.1 ? null : sp.depth,
+          inactive: false,
+        };
+        state.shelves.push(s);
+        newIds.push(s.id);
+      });
+      return;
+    }
     if (asStandard) {
       const modules = Math.max(1, Math.round(len / state.moduleWidth));
       shelf = {

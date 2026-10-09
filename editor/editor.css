@@ -1190,6 +1190,16 @@ input[type="range"]#propAngleSlider::-moz-range-thumb, input[type="range"]#propC
   stroke-dasharray: 5 4;
 }
 .detect-cand.excluded:hover { fill-opacity: 0.18; }
+/* Already under a drawn shelf: set aside, not proposed again */
+.detect-cand.covered.excluded {
+  fill: var(--text-dim);
+  fill-opacity: 0.05;
+  stroke: var(--text-dim);
+  stroke-opacity: 0.5;
+  stroke-dasharray: 2 3;
+}
+/* The shape "Next missed" is showing */
+.detect-cand.current { stroke: var(--accent); stroke-width: 4px; fill-opacity: 0.4; }
 
 /* Drag-resize handles on a selected shelf (v0.425) */
 .shelf-resize-handle {

@@ -19,7 +19,8 @@ function model(ctx, repaint) {
   const data = sohData(ctx, repaint), checks = data?.checks || {}, snap = data?.latest || null;
   const why = {};
   for (const s of Object.values(bf.subs)) if (s.date === date && s.status === 'pending') why[locKey(s.bay)] = { bay: s.bay, kind: 'Backfill', sub: `${Object.values(s.codes).filter(c => c.scanned).length} codes scanned`, hot: false };
-  for (const b of bf.requested[date] || []) if (!why[locKey(b)]) why[locKey(b)] = { bay: b, kind: 'Requested', sub: 'not scanned yet', hot: true };
+  // A requested bay already reviewed or submitted today says so (it is not waiting).
+  for (const b of bf.requested[date] || []) if (!why[locKey(b)]) { const s = bf.subs[`${String(b).toUpperCase()}:${date}`] || bf.subs[`${b}:${date}`]; why[locKey(b)] = { bay: b, kind: 'Requested', sub: !s ? 'not scanned yet' : s.status === 'submitted' ? 'submitted ✓' : 'reviewed, to submit', hot: !s }; }
   const source = dl.source === 'snapshot' && snap ? 'snapshot' : Object.keys(why).length || !snap ? 'requested' : 'snapshot';
   if (source === 'snapshot') for (const r of snap.rows) if (!why[r.loc]) why[r.loc] = { bay: r.loc, kind: 'Snapshot', sub: '', hot: false };
   const all = Object.keys(why).sort(byLoc).map(l => ({ ...why[l], loc: l, checks: checks[l] || [] }));
@@ -69,7 +70,7 @@ function mobile(ctx) {
   ensureNames(ctx, m.active.flatMap(x => x.checks.map(c => c.kc)), repaint);
   return mhead('Day list', `${m.active.length} locations · ${m.nChecks} checks${m.snap ? ` · ${m.nDone} verified` : ''}`) +
     (m.active.length ? m.walkers.map((w, i) => `<div class="mv-sec">Walker ${letter(i)} · ${w.length ? `${esc(w[0].loc)} – ${esc(w[w.length - 1].loc)}` : ''}</div>${w.map(x => `<div class="sri-stop m"><div class="sri-stop-h"><b class="mono">${esc(x.loc)}</b>${status(x, m.done)}<span class="btn sm" data-go="bfreview" data-bay="${esc(x.bay)}">Start</span></div>${x.checks.map(c => taskRow(c, m.done)).join('')}</div>`).join('')}`).join('') : `<div class="mv-note">${ic('layers')}Nothing posted yet. Scanning a bay that is not here still works.</div>`) +
-    `<div class="mv-note">${ic('layers')}Ordered by the desk’s day list. Tick a count once it is done.</div>`;
+    `<div class="mv-note">${ic('layers')}In today’s day list order. Tick a count once it is done.</div>`;
 }
 
 // The triage sheets: one page per walker, each stop with its counts (bay,

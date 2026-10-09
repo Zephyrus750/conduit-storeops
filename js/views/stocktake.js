@@ -45,7 +45,7 @@ function byDept(map, m) {
   return Object.keys(tot).filter(d => DEPT_NAME[d] && !['checkouts', 'stockroom'].includes(d)).map(d => ({ d, done: done[d]?.size || 0, total: tot[d].size }));
 }
 async function tap(ctx, info, hold) {
-  const m = model(ctx); if (!m.id) return toast('No stocktake session is open. Start one on the desktop.');
+  const m = model(ctx); if (!m.id) return toast('No stocktake session is open yet.');
   // A run counted whole before counts were per shelf keeps its key.
   const key = !m.shelves[info.full] && m.shelves[info.id] ? info.id : info.full, cur = m.shelves[key];
   try {
@@ -117,7 +117,7 @@ function sidebar(map, m) {
 }
 const pct = (n, total) => total ? Math.min(100, Math.round(n / total * 100)) : 0;
 function mobileBar(m, total) {
-  if (!m.sess) return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b></div><div class="mv-hint">No session is open. Sessions start on the desktop.</div>`;
+  if (!m.sess) return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b></div><div class="mv-hint">No stocktake session is open yet. Counting starts here when one opens.</div>`;
   return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b><span class="phase">${m.sess.phase === 'final' ? 'Final' : 'Counting'}</span></div><div class="st-prog"><i><u class="v" style="width:${pct(m.counts.verified, total)}%"></u><u class="c" style="width:${pct(m.done, total)}%"></u></i><span><b>${m.done}</b> counted · ${m.counts.verified} ✓✓</span></div>${shelfScanField()}<div class="mv-hint">Tap or scan a shelf to start counting, again when counted, hold to step back. Session <b>${esc(m.id)}</b> is controlled from the desktop.</div>`;
 }
 

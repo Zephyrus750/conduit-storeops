@@ -3,7 +3,7 @@
 // 501 not_implemented with the route named, never a silent 404.
 
 import { Router } from './router.js';
-import { json, fail, preflight, readJson, HttpError } from './http.js';
+import { json, fail, preflight, readJson, HttpError, reportError } from './http.js';
 import { signToken, verifyToken, verifySecret, makeClaims, hasRole } from './auth.js';
 export { StoreObject } from './store.js';
 export { RegistryObject } from './registry.js';
@@ -30,7 +30,11 @@ r.post('/v1/auth/signin', async (req, env) => {
     if (!env.OWNER_KEY_HASH) throw new HttpError(503, 'not_configured', 'OWNER_KEY_HASH is not set');
     // Per device (cleared on success), per network and one owner-wide key
     // that a success never clears: a new device id buys no fresh attempts.
-    const ip = clientIp(req), keys = [`owner:dev:${device || 'nodevice'}`, `owner:store:all`, ...(ip ? [`owner:ip:${ip}`] : [])];
+    // A device the owner signed in on before (its trust secret) counts on
+    // its own key only, so the owner-wide one cannot be used to lock the
+    // owner out (registry trustIssue).
+    const ip = clientIp(req), trusted = b.trust ? await registry(env, 'POST', '/trust/check', { trust: String(b.trust) }) : { ok: false };
+    const keys = trusted.ok ? [`owner:dev:trust-${trusted.id}`] : [`owner:dev:${device || 'nodevice'}`, `owner:store:all`, ...(ip ? [`owner:ip:${ip}`] : [])];
     await registry(env, 'POST', '/lockout/check', { keys });
     if (!(await verifySecret(String(b.ownerKey).trim(), env.OWNER_KEY_HASH))) {
       await registry(env, 'POST', '/lockout/fail', { keys });
@@ -39,7 +43,8 @@ r.post('/v1/auth/signin', async (req, env) => {
     await registry(env, 'POST', '/lockout/clear', { key: keys[0] });
     const claims = makeClaims({ store: null, roles: ['owner'], caps: [], device, owner: true, ttl: ttl(env) });
     const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: null, device, roles: ['owner'], owner: true });
-    return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, owner: true });
+    const { trust } = trusted.ok ? { trust: String(b.trust) } : await registry(env, 'POST', '/trust/issue', { device });
+    return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, owner: true, trust });
   }
   const res = await registry(env, 'POST', '/signin', { store: String(b.store || ''), pin: b.pin, device, ip: clientIp(req) });
   const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device, epoch: res.epoch, ttl: ttl(env) });
@@ -110,15 +115,37 @@ r.patch('/v1/admin/stores/:no', async (req, env, _c, p) => {
   // the sockets of devices that were signed out).
   const res = await forward(new Request('https://store/epoch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ epoch: rec.epoch || 0 }) }), env, rec.no, '/epoch', '', { ...c, store: rec.no, caps: [], roles: ['manager'] });
   if (!res.ok) console.error('epoch push failed', rec.no, res.status);
-  // Switched tools go into the store's log, so its devices see them at once
-  // and the store object refuses the tools that are off.
-  if (body.tools) {
-    const ev = { id: ulid(), store: String(rec.no), area: 'store', type: 'store.tools.set', entity: {}, payload: { off: rec.toolsOff || [] }, at: new Date().toISOString(), v: 1 };
-    const tr = await ownerStoreCall(new Request(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization') || '' }, body: JSON.stringify({ events: [ev] }) }), env, rec.no, '/events');
+  // Switched areas and tools go into the store's log, so its devices see
+  // them at once and the store object refuses what is off (decision 19).
+  const log = async (path, payload, what) => {
+    const tr = await ownerStoreCall(new Request(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization') || '' }, body: JSON.stringify(payload) }), env, rec.no, path);
     const r0 = (await tr.json()).results?.[0];
-    if (!tr.ok || !r0?.ok) throw new HttpError(502, 'tools_not_applied', `the registry saved the tools but the store did not take them: ${r0?.message || tr.status}`);
-  }
+    if (!tr.ok || !(r0?.ok || r0?.code === 'unchanged')) throw new HttpError(502, `${what}_not_applied`, `the registry saved the ${what} but the store did not take them: ${r0?.message || tr.status}`);
+  };
+  if (body.entitlements) await log('/areas', { on: Object.entries(rec.entitlements || {}).filter(([, v]) => v).map(([k]) => k) }, 'areas');
+  if (body.tools) await log('/events', { events: [{ id: ulid(), store: String(rec.no), area: 'store', type: 'store.tools.set', entity: {}, payload: { off: rec.toolsOff || [] }, at: new Date().toISOString(), v: 1 }] }, 'tools');
   return json(rec);
+});
+// The Service page: what this worker is, what it is bound to, the catalogue
+// build, each store's object (size, last nightly run, next alarm) and the
+// errors recorded lately. Secrets are reported as set or not, never shown.
+r.get('/v1/admin/service', async (req, env) => {
+  const c = await requireOwner(req, env);
+  const stores = (await registry(env, 'GET', '/stores/_all')).stores || [];
+  const per = await Promise.all(stores.map(async s => {
+    const caps = Object.entries(s.entitlements || {}).filter(([, on]) => on).map(([a]) => a);
+    try { const res = await forward(new Request('https://store/service'), env, s.no, '/service', '', { ...c, store: s.no, caps, roles: ['manager'] }); return { no: s.no, name: s.name, status: s.status, ...(await res.json()) }; }
+    catch (e) { return { no: s.no, name: s.name, status: s.status, error: String(e?.message || e).slice(0, 200) }; }
+  }));
+  const stub = catalogueStub(env);
+  const catalogue = stub ? await stub.fetch('https://catalogue/status').then(r => r.json()).catch(e => ({ error: String(e?.message || e) })) : null;
+  const set = k => !!env[k];
+  return json({
+    version: VERSION, env: env.ENVIRONMENT || 'dev', now: new Date().toISOString(),
+    bindings: { photos: set('PHOTOS'), photosStaging: set('PHOTOS_STAGING'), catalogue: !!stub, legacy: set('LEGACY') || set('LEGACY_URL'), lookup: set('LOOKUP_URL'), details: set('DETAILS_URL') || (set('CF_ACCOUNT_ID') && set('BROWSER_TOKEN')), browser: set('CF_ACCOUNT_ID') && set('BROWSER_TOKEN') },
+    secrets: { TOKEN_SECRET: set('TOKEN_SECRET'), OWNER_KEY_HASH: set('OWNER_KEY_HASH'), BROWSER_TOKEN: set('BROWSER_TOKEN') },
+    catalogue, stores: per, errors: (await registry(env, 'GET', '/errors')).errors,
+  });
 });
 r.get('/v1/admin/actions', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/actions')); });
 r.get('/v1/admin/stores/:no/devices', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/devices'));
@@ -147,7 +174,11 @@ r.post('/v1/store/:no/map', async (req, env, _c, p) => {
 r.get('/v1/catalogue', async (req, env, ctx) => {
   const url = new URL(req.url);
   const codes = parseCodes(url.searchParams.get('kc'));
-  const items = await lookup(env, ctx, codes, { details: url.searchParams.get('fields') !== 'link' });
+  // Anyone may look a code up, but only a signed-in device or the owner
+  // starts the product-page fetches behind price and image (they cost).
+  const auth = req.headers.get('Authorization') || '';
+  const signed = auth.startsWith('Bearer ') && !!(await verifyToken(auth.slice(7), env.TOKEN_SECRET));
+  const items = await lookup(env, ctx, codes, { details: url.searchParams.get('fields') !== 'link', upstream: signed });
   return json({ items }, 200, { 'Cache-Control': 'public, max-age=300' });
 });
 
@@ -254,6 +285,7 @@ export default {
     } catch (e) {
       if (e instanceof HttpError) return e.toResponse();
       console.error('unhandled', e);
+      reportError(env, 'worker', null, { route: `${request.method} ${url.pathname}`.slice(0, 120), message: String(e?.message || e).slice(0, 300) }, ctx);
       return fail(500, 'internal', 'unexpected error');
     }
   },

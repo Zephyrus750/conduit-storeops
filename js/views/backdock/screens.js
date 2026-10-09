@@ -1,8 +1,12 @@
 // Shared dock screens (Decant Visualiser's dock tablet and Team Board):
-// read-only boards for a wall or a tablet on the dock, D-numbers only.
+// boards for a wall or a tablet on the dock, D-numbers only.
 //
 //   Dock screen  the big pallet grid with one-second clocks on every square
 //                being decanted, a wall clock, the hold-up banner, the crew.
+//                The crew runs the decant from it, as on DV's dock tablet:
+//                tap a pallet, then Start (pick who), Pause, Done, Join or
+//                Hand over. It cannot land, remove, edit or finalise; that
+//                stays with Receiving.
 //   Team Board   the goal, the forecast finish, progress with a goal-pace
 //                marker, who is decanting what right now and who is next.
 //
@@ -10,9 +14,12 @@
 // back) and can go fullscreen. They tick every second without re-rendering;
 // a change on the dock re-renders them.
 
-import { ic, esc } from '../../ui.js';
+import { ic, esc, toast } from '../../ui.js';
 import { PT_LETTER, PT_NAME, truckNo, fmtHM, openTrucks, pallets, progress, openHalt, running, onBreak, openSegs, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, holdName, grid, ROLE_NAME } from './common.js';
-import { ratesFor } from './plan.js';
+import { ratesFor, guard } from './plan.js';
+
+// The open pallet sheet on the dock tablet: { ref, pick: null | start | resume | join | handover }.
+let sheet = null;
 
 function current(ctx) {
   const dock = ctx.store.get('dock'), open = openTrucks(dock);
@@ -38,21 +45,84 @@ function dockScreen(ctx) {
     const p = byRef[ref];
     if (!p) return `<div class="scr-sq vac"><span class="r">${ref}</span></div>`;
     const s = p.status, pc = pace(t, p), crew = openSegs(p).map(x => x.pid).join(' + ');
-    return `<div class="scr-sq t-${PT_LETTER[p.ptype] || 'c'} st-${s}${pc ? ' pc-' + pc : ''}${p.carryover ? ' co' : ''}"><span class="r">${ref}</span><b class="c">${p.cartons ?? '–'}</b>${s === 'active' || s === 'paused' ? `<span class="tm" data-tick="${ref}"></span>` : s === 'done' ? `<span class="tm">✓ ${fmtHM(p.doneAt)}</span>` : ''}${crew ? `<span class="w">${esc(crew)}</span>` : s === 'paused' ? '<span class="w">paused</span>' : ''}</div>`;
+    return `<div role="button" tabindex="0" data-act="scr-pal" data-ref="${esc(ref)}" aria-label="Pallet ${esc(ref)}, ${esc(s)}" class="scr-sq tap t-${PT_LETTER[p.ptype] || 'c'} st-${s}${pc ? ' pc-' + pc : ''}${p.carryover ? ' co' : ''}"><span class="r">${ref}</span><b class="c">${p.cartons ?? '–'}</b>${s === 'active' || s === 'paused' ? `<span class="tm" data-tick="${ref}"></span>` : s === 'done' ? `<span class="tm">✓ ${fmtHM(p.doneAt)}</span>` : ''}${crew ? `<span class="w">${esc(crew)}</span>` : s === 'paused' ? '<span class="w">paused</span>' : ''}</div>`;
   }).join('');
   const run = running(t);
   const crew = (t.team || []).map(m => { const br = onBreak(t, m.pid); return `<span class="scr-crew${run[m.pid] ? ' on' : ''}${br ? ' brk' : ''}"><b>${esc(m.pid)}</b>${br ? 'break' : run[m.pid] ? esc(run[m.pid]) : 'free'}</span>`; }).join('');
-  return `<div class="scr">${head}${holdBanner(openHalt(t))}${progressBar(t, progress(t))}<div class="scr-grid" style="grid-template-columns:repeat(${g.cols},1fr)">${cells}</div><div class="scr-crews">${crew || '<span class="cs-dim">No crew on this truck yet</span>'}</div></div>`;
+  return `<div class="scr">${head}${holdBanner(openHalt(t))}${progressBar(t, progress(t))}<div class="scr-grid" style="grid-template-columns:repeat(${g.cols},1fr)">${cells}</div><div class="scr-crews">${crew || '<span class="cs-dim">No crew on this truck yet</span>'}</div>${palletSheet(t)}</div>`;
+}
+
+// The pallet sheet (DV's palletSheet and personPicker): what the crew can
+// do with this pallet now, and who does it.
+const PICK_TITLE = { start: 'Who’s decanting', resume: 'Who’s resuming', join: 'Who’s joining', handover: 'Hand over to' };
+function palletSheet(t) {
+  if (!sheet) return '';
+  const p = t.pallets[sheet.ref]; if (!p || p.excluded) { sheet = null; return ''; }
+  const s = p.status, on = openSegs(p).map(x => x.pid), w = workedMin(t, p);
+  const head = `<div class="scr-sh-h"><div><b>Pallet ${esc(p.ref)}</b><span>${esc(PT_NAME[p.ptype] || p.ptype)} · ${p.cartons ?? '–'} ctn · ${esc(s === 'active' ? 'decanting' : s === 'done' ? 'done' : s === 'paused' ? 'paused' : 'waiting')}${p.segments.length ? ` · ${fmtMins(w)} worked` : ''}${p.expectedMins ? ` · est ${p.expectedMins}m` : ''}</span></div><button class="ibtn" data-act="scr-close" aria-label="Close">${ic('x')}</button></div>`;
+  let body;
+  if (t.status !== 'live') body = '<p class="lbl">The truck isn’t live yet. Receiving starts it.</p>';
+  else if (sheet.pick) {
+    const run = running(t), team = t.team || [];
+    const card = m => {
+      const br = onBreak(t, m.pid), cutter = (m.role || 'cutter') === 'cutter', busy = run[m.pid] && !(sheet.pick === 'resume' && run[m.pid] === p.ref);
+      const why = busy ? `busy · ${run[m.pid]}` : br ? 'on break' : !cutter ? (ROLE_NAME[m.role] || m.role).toLowerCase() : m.start || m.finish ? `on ${esc(m.start || '?')}–${esc(m.finish || '?')}` : 'free';
+      const ok = !busy && !br && cutter && !on.includes(m.pid);
+      return `<button class="scr-pp${ok ? '' : ' off'}"${ok ? ` data-act="scr-pick" data-pid="${esc(m.pid)}"` : ' disabled'}><b>${esc(m.pid)}</b><span>${why}</span></button>`;
+    };
+    body = `<div class="scr-sh-t">${PICK_TITLE[sheet.pick]} · ${esc(p.ref)}</div>` + (team.length ? `<div class="scr-pps">${team.map(card).join('')}</div><p class="lbl">Tap a person.</p>` : '<p class="lbl">No team set: Receiving adds people under Team.</p>') + `<button class="btn" data-act="scr-back">Back</button>`;
+  } else if (s === 'active') body = `<p class="scr-sh-on">Decanting: <b>${esc(on.join(' + '))}</b></p><div class="scr-sh-acts"><button class="btn primary big" data-act="scr-do" data-do="done">${ic('check')}Done</button><button class="btn big" data-act="scr-do" data-do="pause">⏸ Pause</button><button class="btn" data-act="scr-pickfor" data-kind="join">＋ Join</button><button class="btn" data-act="scr-pickfor" data-kind="handover">⇄ Hand over</button></div>`;
+  else if (s === 'paused') body = `<div class="scr-sh-acts"><button class="btn primary big" data-act="scr-pickfor" data-kind="resume">▶ Resume</button><button class="btn big" data-act="scr-do" data-do="done">${ic('check')}Done</button></div>`;
+  else if (s === 'done') { const pc = pace(t, p); body = `<p class="scr-sh-on">Clear at ${fmtHM(p.doneAt)}${p.expectedMins ? ` · ${Math.round(w - p.expectedMins) >= 0 ? '+' : ''}${Math.round(w - p.expectedMins)} min vs expected` : ''}${pc === 'over' ? ' · over its estimate' : ''}</p><p class="lbl">Done by mistake? Receiving can reopen it.</p>`; }
+  else body = `<div class="scr-sh-acts"><button class="btn primary big" data-act="scr-pickfor" data-kind="start">▶ Start decanting</button></div>`;
+  return `<div class="scr-sheet" data-act="scr-close-bg"><div class="scr-sh" role="dialog" aria-label="Pallet ${esc(p.ref)}">${head}${body}<button class="btn scr-sh-close" data-act="scr-close">Close</button></div></div>`;
+}
+async function onScreenAct(ctx, a) {
+  const act = a.dataset.act, { t } = current(ctx); if (!t) return;
+  const at = sheet?.ref, dispatch = (type, payload = {}) => ctx.store.dispatch({ type, entity: { truck: t.id, bay: at }, payload });
+  try {
+    if (act === 'scr-pal') { sheet = { ref: a.dataset.ref, pick: null }; return ctx.rerender(); }
+    if (act === 'scr-close' || act === 'scr-close-bg') { sheet = null; return ctx.rerender(); }
+    if (!sheet) return;
+    if (act === 'scr-back') { sheet.pick = null; return ctx.rerender(); }
+    if (act === 'scr-pickfor') { sheet.pick = a.dataset.kind; return ctx.rerender(); }
+    const ref = sheet.ref;
+    // Undo, one step deep as DV's: each action offers its opposite.
+    const undo = (type, payload = {}) => ({ label: 'Undo', run: () => ctx.store.dispatch({ type, entity: { truck: t.id, bay: ref }, payload }).catch(e => toast(e.message, 'bad')) });
+    const onNow = openSegs(t.pallets[ref]).map(x => x.pid);
+    if (act === 'scr-do') {
+      const kind = a.dataset.do; sheet = null;
+      await dispatch(kind === 'done' ? 'pallet.done' : 'pallet.pause');
+      const q = ctx.store.get('dock').trucks[t.id]?.pallets[ref];
+      if (kind === 'done') toast(q?.suspect ? `${ref} done very fast: Receiving will check its times` : `${ref} done`, q?.suspect ? 'bad' : '', { label: 'Undo', run: () => ctx.store.dispatch({ type: 'pallet.reopen', entity: { truck: t.id, bay: ref }, payload: {} }).catch(e => toast(e.message, 'bad')) });
+      else toast(`${ref} paused`, '', onNow.length ? undo('pallet.resume', { pid: onNow[0] }) : null);
+      return;
+    }
+    if (act === 'scr-pick') {
+      const pid = a.dataset.pid, kind = sheet.pick;
+      if (kind !== 'join' && !guard(t, pid, ref, ratesFor(ctx.store.get('dock')), true)) return;
+      sheet = null;
+      if (kind === 'handover') await dispatch('pallet.handover', { toPid: pid }); else await dispatch(kind === 'start' ? 'pallet.start' : kind === 'resume' ? 'pallet.resume' : 'pallet.join', { pid });
+      toast(kind === 'join' ? `${pid} joined ${ref}` : kind === 'handover' ? `${ref} handed to ${pid}` : `${pid} on ${ref}`, '', kind === 'handover' ? (onNow.length === 1 ? undo('pallet.handover', { toPid: onNow[0] }) : null) : kind === 'resume' ? undo('pallet.pause') : undo('pallet.unstart'));
+    }
+  } catch (e) { sheet = null; ctx.rerender(); toast(e.message, 'bad'); }
 }
 
 // ── Team Board ─────────────────────────────────────────────────────────
 // Up next: each free person (not on a break, not on a pallet) against the
-// next pallet waiting: a paused one first, then tubs, then by landing.
+// first waiting pallet on their own queue in the decant plan; anyone with
+// no queued pallet left takes the next unqueued one: a paused one first,
+// then tubs, then by landing.
 function upNext(t) {
   const run = running(t), free = (t.team || []).filter(m => !run[m.pid] && !onBreak(t, m.pid) && (m.role || 'cutter') === 'cutter');
-  const waiting = pallets(t).filter(p => p.status === 'landed' || p.status === 'assigned' || p.status === 'paused')
+  const waiting = pallets(t).filter(p => (p.status === 'landed' || p.status === 'assigned' || p.status === 'paused') && !p.excluded)
     .sort((a, b) => (a.status === 'paused' ? 0 : 1) - (b.status === 'paused' ? 0 : 1) || (a.ptype === 'chep' ? 0 : 1) - (b.ptype === 'chep' ? 0 : 1) || String(a.landedAt).localeCompare(String(b.landedAt)));
-  return { pairs: free.map((m, i) => ({ pid: m.pid, p: waiting[i] || null })), waiting };
+  const queues = t.plan?.queues || {}, byRef = new Map(waiting.map(p => [p.ref, p])), taken = new Set();
+  const queued = new Set(Object.values(queues).flat());
+  const pairs = free.map(m => { const p = (queues[m.pid] || []).map(r => byRef.get(r)).find(p => p && !taken.has(p.ref)); if (p) taken.add(p.ref); return { pid: m.pid, p: p || null, planned: !!p }; });
+  const loose = waiting.filter(p => !queued.has(p.ref));
+  for (const x of pairs) if (!x.p) { const p = loose.find(p => !taken.has(p.ref)); if (p) { taken.add(p.ref); x.p = p; } }
+  return { pairs, waiting };
 }
 function teamBoard(ctx) {
   const { dock, t } = current(ctx);
@@ -87,9 +157,15 @@ function mountScreen(ctx, root) {
   const onVis = () => { if (document.visibilityState === 'visible') wake(); };
   wake(); document.addEventListener('visibilitychange', onVis);
   root.addEventListener('click', e => {
+    const s = e.target.closest('[data-act^="scr-"]:not([data-act="scr-full"])');
+    if (s && !(s.dataset.act === 'scr-close-bg' && e.target !== s)) { onScreenAct(ctx, s); return; }
     const a = e.target.closest('[data-act="scr-full"]'); if (!a) return;
     const el = root.querySelector('.scr') || document.documentElement;
     if (document.fullscreenElement) document.exitFullscreen?.(); else el.requestFullscreen?.().catch(() => {});
+  });
+  root.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && sheet) { sheet = null; ctx.rerender(); return; }
+    const sq = e.target.closest?.('[data-act="scr-pal"]'); if (sq && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onScreenAct(ctx, sq); }
   });
   return [ctx.store.on('dock', () => ctx.rerender()), () => clearInterval(timer), () => clearInterval(slow), () => { document.removeEventListener('visibilitychange', onVis); lock?.release?.().catch(() => {}); lock = null; }];
 }

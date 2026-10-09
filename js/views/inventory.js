@@ -9,7 +9,7 @@
 // The register and loads are store events (inventory.*), so every desk sees
 // them; prices are this device's cache, as ShelfSearcher kept them.
 
-import { $, $$, ic, esc, vh, sub, mhead, toast, fmtDate, today, dep, DEPT_COLOUR } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, toast, fmtDate, today, dep, DEPT_COLOUR } from '../ui.js';
 import { mountMap, bindMapChrome, hasMap } from '../map.js';
 import { MICRO, SUBS } from '../data/micros.js';
 import { loadXLSX } from './backdock/common.js';
@@ -26,6 +26,7 @@ const codeName = c => CODE.get(c)?.name || (c === '???' ? 'No department' : 'Dep
 const STATUS = { incoming: ['Incoming', '#B45309'], received: ['Received', '#15803D'], offsite: ['Off-site', '#C2410C'] };
 const TABS = [['register', 'Off-site register'], ['loads', 'Loads'], ['trends', 'Trends'], ['clearance', 'Clearance']];
 const PERIODS = [[4, '4 weeks'], [12, '12 weeks'], [26, '26 weeks'], ['all', 'All']];
+let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { tab: 'register', sel: null, paint: null, filter: 'live', period: 12, stage: null, adding: false, ephemeral: null };
 
 const dockReadable = ctx => (ctx.session.current?.caps || []).includes('backdock') && hasArea(ctx.session, 'backdock');
@@ -41,7 +42,7 @@ const loadsOf = ctx => Object.values(inv(ctx).loads || {}).sort((a, b) => (b.rec
 // ── Register ────────────────────────────────────────────────────────────
 function regRow(r, t) {
   const late = r.cb && !r.rec && r.cb < t, soon = r.cb && !r.rec && r.cb >= t && r.cb <= addDays(t, 7);
-  return `<div class="inv-row${r.rec ? ' rec' : ''}"><span class="pid">${esc(r.pid)}</span>` +
+  return `<div class="inv-row${r.rec ? ' rec' : ''}${st.hl === r.pid ? ' hl' : ''}"><span class="pid">${esc(r.pid)}</span>` +
     `<span class="what"><b>${esc(r.title || r.desc || 'Pallet ' + r.pid)}</b>${r.products.length ? `<span class="prods">${r.products.slice(0, 6).map(p => `<i>${esc(p.kc)}${p.q ? ` ×${p.q}` : ''}</i>`).join('')}${r.products.length > 6 ? `<i>+${r.products.length - 6}</i>` : ''}</span>` : ''}${r.note ? `<small>${esc(r.note)}</small>` : ''}</span>` +
     `<span class="tags">${isFixture(r) ? pill('fx', 'Fixtures') : r.req ? pill('', esc(r.req)) : ''}${r.sent ? `<small>Sent ${esc(fmtDate(r.sent))}</small>` : ''}</span>` +
     `<span class="cb${late ? ' late' : soon ? ' soon' : ''}">${r.rec ? `<small>Back ${r.rec === 'yes' ? '' : esc(fmtDate(r.rec))}</small>` : `<label>Callback<input type="date" value="${esc(r.cb)}" data-act="cb" data-pid="${esc(r.pid)}"></label>`}${late ? '<small>overdue</small>' : ''}</span>` +
@@ -209,16 +210,9 @@ function paintMap(ctx, map) {
   svg.classList.add('inv-paint');
 }
 
-// ── Phone ───────────────────────────────────────────────────────────────
-function phone(ctx) {
-  const t = today(), sum = registerSummary(inv(ctx).offsite, t), rows = [...sum.overdue, ...sum.dueSoon];
-  return mhead('Inventory', `${sum.live} off-site · next callback ${sum.nextCallback ? esc(fmtDate(sum.nextCallback)) : '—'}`) +
-    `<div class="mv-sub">Returns due</div>${rows.length ? `<div class="mv-rows">${rows.map(r => `<div class="mv-row${r.cb < t ? ' bad' : ''}"><span class="a">${esc(r.pid)}</span><span class="b">${esc(r.title || r.desc || 'Pallet')}<br><small>callback ${esc(fmtDate(r.cb))}${r.cb < t ? ' · overdue' : ''}</small></span><span class="c"><button class="btn sm" data-act="rec" data-pid="${esc(r.pid)}">Received</button></span></div>`).join('')}</div>` : `<div class="mv-note">${ic('check')}No returns due in the next fortnight.</div>`}` +
-    `<div class="mv-note">${ic('lock')}Imports, loads, heat and the clearance watch are on the desktop.</div>`;
-}
-
 export default {
   id: 'inventory', title: 'Inventory', icon: 'm-inventory',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     const I = inv(ctx), sum = registerSummary(I.offsite, today());
     const head = vh('Inventory', sub(`${sum.live} pallet${sum.live === 1 ? '' : 's'} off-site`, `${Object.keys(I.loads).length} load${Object.keys(I.loads).length === 1 ? '' : 's'}`, sum.overdue.length ? `<b class="c-red">${sum.overdue.length} overdue</b>` : ''), `<label class="btn primary">${ic('file')}Import<input type="file" accept=".xlsx,.xls,.csv" data-act="file" hidden></label>`, 'm-inventory');
@@ -226,8 +220,14 @@ export default {
     const body = st.tab === 'loads' ? loads(ctx) : st.tab === 'trends' ? trends(ctx) : st.tab === 'clearance' ? clearance(ctx) : register(ctx);
     return head + stagePanel(ctx) + tabs + `<div class="inv-body">${body}</div>`;
   },
-  mobile(ctx) { return phone(ctx); },
   mount(ctx, root) {
+    // From search: a load, or an off-site pallet (highlighted in the register), once.
+    if (ctx.arg && ctx.arg !== usedArg && (ctx.arg.load || ctx.arg.pid)) {
+      usedArg = ctx.arg; const I = inv(ctx);
+      if (ctx.arg.load && I.loads[ctx.arg.load]) { st.tab = 'loads'; st.sel = ctx.arg.load; st.ephemeral = null; st.paint = null; }
+      else if (ctx.arg.pid && I.offsite[ctx.arg.pid]) { st.tab = 'register'; st.filter = I.offsite[ctx.arg.pid].rec ? 'rec' : 'live'; st.hl = ctx.arg.pid; }
+      setTimeout(() => { ctx.rerender(); setTimeout(() => document.querySelector('.inv-row.hl')?.scrollIntoView({ block: 'center' }), 50); }, 0);
+    }
     let map = null;
     if (st.tab === 'loads' && $('#mapstage', root)) { map = mountMap($('#mapstage', root), { badges: true }); bindMapChrome(root, map); paintMap(ctx, map); }
     if (st.tab === 'clearance') checkPrices(ctx).then(changed => { if (changed && st.tab === 'clearance') ctx.rerender(); }).catch(() => {});

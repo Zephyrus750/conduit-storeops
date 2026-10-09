@@ -63,6 +63,12 @@ export function deptForBay(ranges, bay) {
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+export const MESSAGE_MAX = 600, BRIEFING_MAX = 1500, BRIEFINGS_KEPT = 14;
+// Plain text only: control characters out (line breaks kept), at most two
+// blank lines in a row, trimmed and capped.
+export function cleanComms(v, max) {
+  return String(v ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f\u200b-\u200f\u202a-\u202e]/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, max);
+}
 export function storeState() {
   return {
     devices: {},                       // device → { app, last, role }
@@ -72,6 +78,8 @@ export function storeState() {
     mapedits: {},                      // id → suggestion (see map.edit.suggest)
     feedback: [],                      // newest last, capped (see feedback.send)
     tools: { off: [], at: null },      // tools the owner switched off (see store.tools.set)
+    areas: { on: null, at: null },
+    comms: { message: null, briefings: {} },   // team message and daily briefings (team.message.set, team.briefing.set)     // the areas the store is entitled to, once the owner changes them (store.areas.set)
     retention: null,                   // the last nightly store.retain: { day, at, done }
   };
 }
@@ -145,12 +153,43 @@ export const storeReducers = {
     s.retention = { day, at: e.at, done };
     return null;
   },
+  // The owner switched an area on or off in the console. The worker logs it
+  // here so the store object and every device apply it at once, not when
+  // each device's token next renews (decision 19).
+  'store.areas.set'(s, e) {
+    const on = Array.isArray(e.payload.on) ? [...new Set(e.payload.on.map(String))].sort() : null;
+    if (!on || on.some(a => !['floor', 'stockroom', 'backdock'].includes(a))) return reject('invalid_event', 'on must list floor, stockroom or backdock');
+    if (s.areas?.on && JSON.stringify(s.areas.on) === JSON.stringify(on)) return reject('unchanged', 'those areas are already the ones on');
+    s.areas = { on, at: e.at };
+    return null;
+  },
+  // Team communication (decision 20: managers and the owner publish). Plain
+  // text, cleaned here so every device holds the same; the shell renders
+  // **bold** and "- " lists after escaping. An empty text clears it.
+  'team.message.set'(s, e) {
+    const text = cleanComms(e.payload.text, MESSAGE_MAX), until = e.payload.until ?? null;
+    if (until !== null && !/^\d{4}-\d{2}-\d{2}$/.test(String(until))) return reject('invalid_event', 'until is a date, YYYY-MM-DD');
+    const c = (s.comms ||= { message: null, briefings: {} });
+    if (!text && !c.message) return reject('unchanged', 'there is no team message to clear');
+    c.message = text ? { text, until, at: e.at, by: e.actor?.device || null, owner: !!e.actor?.owner } : null;
+    return null;
+  },
+  'team.briefing.set'(s, e) {
+    const d = String(e.entity.date); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return reject('invalid_event', 'date is YYYY-MM-DD');
+    const text = cleanComms(e.payload.text, BRIEFING_MAX), c = (s.comms ||= { message: null, briefings: {} });
+    if (!text && !c.briefings[d]) return reject('unchanged', `there is no briefing for ${d} to clear`);
+    if (text) c.briefings[d] = { text, at: e.at, by: e.actor?.device || null, owner: !!e.actor?.owner }; else delete c.briefings[d];
+    const keep = Object.keys(c.briefings).sort().slice(-BRIEFINGS_KEPT); for (const k of Object.keys(c.briefings)) if (!keep.includes(k)) delete c.briefings[k];
+    return null;
+  },
   'store.tools.set'(s, e) {
     if (!e.actor?.owner) return reject('unauthorised', 'only the owner switches tools on and off');
     const off = Array.isArray(e.payload.off) ? [...new Set(e.payload.off.map(String))] : null;
     if (!off) return reject('invalid_event', 'off must be a list of tool ids');
     const bad = off.find(id => !TOOL_IDS.includes(id)); if (bad) return reject('invalid_event', `unknown tool ${bad}`);
-    s.tools = { off: off.sort(), at: e.at };
+    // Nothing silent, nothing empty: the same list again is not logged.
+    if (JSON.stringify(off.sort()) === JSON.stringify(s.tools?.off || [])) return reject('unchanged', 'those tools are already the ones off');
+    s.tools = { off, at: e.at };
     return null;
   },
   'store.settings.set'(s, e) {

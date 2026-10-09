@@ -50,7 +50,7 @@ export function searchSheet(ctx, t) {
   const dock = ctx.store.get('dock'), cons = consolsOf(t), at = where(t), q = ss.q.trim().toLowerCase();
   const tabs = `<div class="bdk-vt">${[['scan', 'Scan'], ['consols', 'Consols'], ['products', 'Products']].map(([k, l]) => `<button class="${ss.tab === k ? 'on' : ''}" data-act="ps-tab" data-tab="${k}">${l}</button>`).join('')}</div>`;
   let body = '';
-  if (!t.manifest && ss.tab !== 'scan') body = `<div class="mv-note">${ic('packages')}No manifest on Truck ${esc(truckNo(t.id))} yet. Attach one on the desktop to browse it.</div>`;
+  if (!t.manifest && ss.tab !== 'scan') body = `<div class="mv-note">${ic('packages')}No manifest on Truck ${esc(truckNo(t.id))} yet.</div>`;
   else if (ss.tab === 'scan') {
     const c = ss.hit ? findConsol(cons, ss.hit) : null;
     body = `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="ps-code" inputmode="numeric" enterkeyhint="search" placeholder="Scan a consol label" autocomplete="off" value="${esc(ss.hit || '')}">${camButton('ps-code')}<button class="btn sm" data-act="ps-find">${ic('search')}Find</button></div>` +

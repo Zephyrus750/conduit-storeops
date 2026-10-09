@@ -82,7 +82,7 @@ D1, R2 and KV bindings are added when the features that need them land
 
 | Route | Who | Status |
 | --- | --- | --- |
-| `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` |
+| `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` (answers a `trust` secret the device sends back next time, so the owner-wide lockout cannot shut it out) |
 | `POST /v1/auth/unlock` | signed-in device | live: area or manager code adds a role |
 | `POST /v1/auth/refresh` | signed-in device | live: rotates the refresh token |
 | `POST /v1/auth/lock` | signed-in store device | live: idle re-lock, drops area and manager codes back to the floor session |
@@ -93,7 +93,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/store/:no/events` | store token | live: batch submit, per-event ack or rejection |
 | `GET /v1/store/:no/ws` | store token | live: hello, submit, hb, ping; event fan-out |
 | `POST /v1/store/:no/hb` | store token | live: record this device's presence, the HTTP twin of the socket `hb` frame, for a device on the polling fallback |
-| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate; a new PIN or code, `status: suspended` or `revoke: true` signs every device out (the store's credential epoch moves on); `tools: { id: bool }` switches tools inside an area (`shared/tools.js`), logged into the store as `store.tools.set` so devices hide them at once and the worker refuses them |
+| `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate; a new PIN or code, `status: suspended` or `revoke: true` signs every device out (the store's credential epoch moves on); `tools: { id: bool }` switches tools inside an area (`shared/tools.js`), logged into the store as `store.tools.set` so devices hide them at once and the worker refuses them; `entitlements` likewise as `store.areas.set` (worker only): an area switched off stops at once for every token and socket, and devices renew and follow (decision 19) |
 | `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `/kpis`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections; `/kpis` is the console's numbers for one store (backfill, dock, issues, devices, set-up alerts) |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
 | `POST /v1/admin/stores/:no/mapedits/:id` | owner | live: accept or decline a suggested map edit (`{ status, note }`), logged as an owner action |
@@ -101,8 +101,9 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/store/:no/map` | owner | live: publish a version (floors with their level and walk paths, stairs and lift links included; `source`, the map editor's own document, optional); logs `map.publish`, sets the registry's map version |
 | `GET /v1/store/:no/map/:version/source` (`latest` allowed) | owner | live: the map editor's document for that version, so the editor reopens what was drawn; 404 for a version published from a file without one |
 | `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B (`source: k2b`) and Decant Visualiser (`source: dv`) importers with dry run; area state flip |
-| `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
+| `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge. Only a caller with a token starts the product-page fetches for price and image; anyone else gets what is cached |
 | `GET /v1/catalogue/nearmiss?kc=` | anyone | live: catalogue keycodes one digit away (a mistyped or misread code) |
+| `GET /v1/admin/service` | owner | live: the console's Service page: worker version, bindings and secrets as set or not (never their values), the catalogue build, each store object (events, live data size, last event, nightly run, next alarm, sockets, photos) and the last 100 errors recorded |
 | `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
@@ -110,15 +111,17 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
 | `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }] }`, ≤ 20,000 rows; a re-save that day replaces it); logs `soh.publish`; the newest 26 are kept |
 | `GET /v1/store/:no/soh?n=12`, `DELETE /v1/store/:no/soh/:date` | stockroom code, manager or owner | live: the newest n snapshots, oldest first, for the stock classes; remove logs `soh.remove` |
-| `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
+| `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`carton-profiles/1`, the shape of Decant Visualiser’s `dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
 | `POST /v1/store/:no/photo` | store token for that store | live: an issue photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
-| `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo, until 90 days after its issue is completed or removed |
-| `DELETE /v1/store/:no/photo/:id` | store token or owner | live: deletes the photo's bytes (the `issue.photo` remove event detaches it from the issue) |
+| `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo while an issue lists it (until 90 days after the issue is completed or removed); one on no issue only to the device that took it |
+| `DELETE /v1/store/:no/photo/:id` | store token or owner | live: deletes the photo's bytes once no live issue lists it (`409` while one does: the `issue.photo` remove event takes it off first); a draft not on an issue yet only by the device that took it, a manager or the owner |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `revoked` (signed out by a rotation, suspension
-or revoke), `suspended`, `invalid_event`, `duplicate` (a success),
-`not_implemented`, plus reducer codes such as `bay_occupied` and `cage_exists`.
+or revoke), `suspended`, `invalid_event`, `payload_too_large` (an event over
+its type's cap, `PAYLOAD_MAX` in the catalogue), `duplicate` (a success),
+`not_implemented`, plus reducer codes such as `bay_occupied`, `cage_exists` and
+`unchanged`. A socket whose token runs out is told `expired` and closed.
 
 Sign-in and unlock lock out per device (5 wrong), per store (30 in an hour)
 and per network address (200 in an hour; stores may share one), each for
@@ -281,7 +284,13 @@ no emergency markers or walk paths, floor ids) and sends it with the same
 request the console and `publish-map` build (`publishBody` in
 `shared/maprender.js`), and the **Suggestions** tab lists the store's
 suggested edits and accepts or declines them. Field Mode files from Conduit
-merge by shelf and floor. The page runs under the site's CSP like the rest:
+merge by shelf and floor. **Auto-detect** (Settings tab), run on the
+official layout at 100%: it learns the store's bay sizes (up to three)
+from the bay dividers the layout draws and fits every shelf to whole
+modules of one of them; a run two shelves deep becomes S1 and S2, and the
+short boxes at its ends become E1 and E2, as the maps draw them; shapes
+already under a drawn shelf are greyed, and **Next missed** steps through
+the ones still undrawn. The geometry is `shared/detect.js`, unit-tested. The page runs under the site's CSP like the rest:
 no inline code (`editor/handlers.js` binds what were inline handlers), the
 icon font is a self-hosted subset (`vendor/tabler/`), and the service
 worker leaves `editor/` to the network. Inside the store app there is only
@@ -298,7 +307,24 @@ for price, was, image and clearance) and caches per keycode in the edge
 Cache API: links for a week, details for a day, misses for an hour. The
 device library (`client/catalogue.js`) batches lookups and keeps hits for a
 week. The shell's search palette (Ctrl K, the header and phone search)
-understands a keycode, a shelf such as A16 S2, a department and a tool.
+understands a keycode, a shelf such as A16 S2, a department and a tool, and
+the store's records (`shared/finder.js`): manifests, consolidation labels
+(the truck and bay a consol is on), cages, inventory loads and off-site
+pallets, each opening its view on the item.
+
+**Voice search** (phones; decision 28). The microphone in the phone's
+search bar and in the palette listens for one shelf, run, bay or keycode,
+as ShelfSearcher's did: the browser's recogniser in US English, its top
+guess, spaces removed and number words made digits. Each guess is then
+checked against the published map (`shelfForLocation`): the top guess wins
+whenever it is a real shelf, so what worked in ShelfSearcher still does;
+otherwise the recogniser's other guesses and the usual mishearings ("be 22",
+"queue 15", "for" for 4) are tried, but only a real shelf is taken. A shelf
+opens on the map; anything else opens the palette with what was heard. The
+phone's pick list has voice add (say codes, "done" to stop). The reading is
+`shared/voice.js` (unit-tested), the listening `js/voice.js`. Voice needs a
+connection (the recogniser runs in the browser maker's service) and the
+microphone allowed for the site.
 
 ## Event envelope
 
@@ -374,3 +400,25 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 
 A catalogued type without a reducer would be rejected `not_implemented`; the
 unit suite asserts there are none.
+
+**Event times.** Every event is stamped on the worker's clock (decision 31):
+the worker sends its time with heartbeats (the socket's `clock` frame, `POST
+/hb`) and with submits and `/changes`, and each device corrects new events by
+the measured offset, kept so an offline device still stamps on the store's
+clock. Receiving warns when a device's own clock is a minute or more out.
+
+**Paper.** Sheets are real A4 layouts (`js/print.js`), not a print of the
+screen. Maps print from a copy of the published map (`js/printmap.js`): the
+**Print map** composer (ShelfSearcher's, with floors, area, layers, mode
+details, A4/A3 and orientation) and its department booklet; the
+**evacuation map** from Emergency (each floor, a key of its signs, 000, the
+assembly point, "You are here" when a route is shown, and the equipment
+walk sheet); and the Maintenance **work order**, whose QR code opens the
+issue (`?store=1241&issue=…`) and whose visit comes back as `issue.visit`.
+
+**The dock tablet.** The Dock screen is the crew's: tap a pallet for Start
+or Resume (pick who from the team), Pause, Done, Join or Hand over, with the
+finish guard, as Decant Visualiser's dock tablet. Landing, removing, editing
+and finalising stay in Receiving, which on the phone also has Team & plan
+(roles, breaks, the huddle, the plan) and Complete decant (keep the
+unfinished pallets as rollover, or clear the dock).

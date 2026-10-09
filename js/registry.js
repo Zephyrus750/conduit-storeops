@@ -12,6 +12,7 @@ import maintenance from './views/maintenance.js';
 import mapedits from './views/mapedits.js';
 import stocktake from './views/stocktake.js';
 import inventory from './views/inventory.js';
+import printmap from './views/printmap.js';
 import help from './views/help.js';
 import fieldmode from './views/fieldmode.js';
 import settings from './views/settings.js';
@@ -36,12 +37,12 @@ import { dockscreen, teamboard } from './views/backdock/screens.js';
 import wallboard from './views/backdock/wallboard.js';
 import danalytics from './views/backdock/danalytics.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, inventory, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, inventory, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
 // Rail sections and the phone tab strip per workspace. Rows without a view
 // yet are inert and say so.
 export const RAIL = [
-  { sec: 'Store', rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake', 'inventory', 'mapedits'] },
+  { sec: 'Store', rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake', 'inventory', 'printmap', 'mapedits'] },
   { sec: 'Back dock', rows: ['receiving', 'teamboard', 'dockscreen', 'wallboard', 'rhistory', 'danalytics', 'manifests', 'profiles'] },
   { sec: 'Stockroom', rows: ['bfreview', 'cages', 'adjust', 'daylist', 'srintel', 'srtrends', 'codelist', 'srhistory'] },
 ];
@@ -55,9 +56,9 @@ export const STRIP = {
 export const HOME = { floor: 'map', stockroom: 'srhome', backdock: 'bdhome', admin: 'admin' };
 export const WORKSPACES = [['floor', 'Floor', 'm-map', 'Map, refresh, labels, stocktake, issues'], ['stockroom', 'Stockroom', 'box', 'Backfill scan, cages, adjustments, day list'], ['backdock', 'Back dock', 'truck', 'Land and decant pallets, run the truck']];
 // The owner console's rail: stores are added at runtime, these are the system rows.
-export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
+export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminmaps', 'm-map', 'Maps'], ['adminservice', 'm-settings', 'Service'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
 export const MORE = {
-  floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['inventory', 'm-inventory', 'Inventory'], ['maintenance', 'm-maintenance', 'Report an issue'], ['mapedits', 'edit', 'Suggest map edits'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['maintenance', 'm-maintenance', 'Report an issue'], ['mapedits', 'edit', 'Suggest map edits'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
   stockroom: [['daylist', 'm-daylist', 'Day list'], ['codelist', 'barcode', 'Quick Scan'], ['srhistory', 'm-srhistory', 'History'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
-  backdock: [['manifests', 'file', 'Manifests'], ['profiles', 'box', 'Carton profiles'], ['planner', 'm-planner', 'Planner'], ['rhistory', 'm-rhistory', 'History'], ['dockscreen', 'grid', 'Dock screen'], ['wallboard', 'chart', 'Wallboard'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  backdock: [['rhistory', 'm-rhistory', 'History'], ['dockscreen', 'grid', 'Dock screen'], ['wallboard', 'chart', 'Wallboard'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
 };

@@ -21,6 +21,7 @@ body { font-family: var(--body); color: var(--ink); }
 .toast { background: var(--ink); color: var(--panel); padding: 10px 14px; border-radius: 10px; font-size: 13.5px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); transition: .25s; max-width: 90vw; }
 .toast.show { opacity: 1; transform: none; }
 .toast.bad { background: var(--red); color: #fff; }
+.toast.warn { background: var(--amber); color: #1a1300; }
 .toast.has-act { pointer-events: auto; display: flex; align-items: center; gap: 12px; }
 .toast-act { background: none; border: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; padding: 6px 2px; min-height: 36px; cursor: pointer; }
 .foot .dot.off { background: var(--faint); }
@@ -372,9 +373,8 @@ svg.map.real { background: #fff; }
 .map.real.rf[data-focus] .shelf-group:not([data-mark="focus"]):not([data-mark="done"]):not([data-plan]) .shelf { fill-opacity: .09 !important; }
 .map.real.rf[data-focus] .shelf-group:not([data-mark="focus"]):not([data-mark="done"]):not([data-plan]) .shelf-label { opacity: 0 !important; }
 .map.real.rf .shelf-group[data-plan] .shelf { fill-opacity: 1 !important; }
-.map.real.rf .shelf-group[data-mark="done"] .shelf { fill: #16a34a !important; fill-opacity: 1 !important; stroke: #fff !important; stroke-width: 2.5 !important; animation: rf-done-pulse 2s ease-in-out infinite; }
-@keyframes rf-done-pulse { 0%, 100% { stroke: #4ade80; stroke-width: 2.2; } 50% { stroke: #fff; stroke-width: 4; } }
-@media (prefers-reduced-motion: reduce) { .map.real.rf .shelf-group[data-mark="done"] .shelf { animation: none; } }
+/* Static on purpose: an animation here re-rasters the map every frame on hundreds of shelves. */
+.map.real.rf .shelf-group[data-mark="done"] .shelf { fill: #16a34a !important; fill-opacity: 1 !important; stroke: #4ade80 !important; stroke-width: 3 !important; }
 .map.real.rf .shelf-group .shelf-label { fill: #fff !important; }
 .map.real.rf .shelf-badges, .map.real.nobadges .shelf-badges { display: none; }
 .map.real.rf .shelf-group[data-sel] .shelf { stroke: #111827 !important; stroke-width: 3 !important; }
@@ -853,6 +853,7 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .mt-dup svg.i { width: 15px; height: 15px; flex: none; margin-top: 1px; }
 .mt-od { color: #B91C1C; font-weight: 700; }
 .map.real .pin .pin-badge { fill: #fff; font-size: 16px; font-weight: 800; }
+.map.real .pin[data-pin] { cursor: pointer; }
 /* Share a shelf: QR sheet */
 .sharesheet { position: fixed; inset: 0; z-index: 90; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .sh-card { background: var(--card, #fff); color: var(--ink); border-radius: 18px; padding: 18px; width: min(380px, 100%); box-shadow: 0 20px 60px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 10px; }
@@ -1090,6 +1091,13 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .wb-seg.live { box-shadow: inset 0 0 0 2px rgba(255,255,255,.7); }
 .wb-halt { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, rgba(220,38,38,.25) 0 3px, transparent 3px 6px); z-index: 1; pointer-events: auto; }
 .wb-halt.planned { background: repeating-linear-gradient(45deg, rgba(100,116,139,.25) 0 3px, transparent 3px 6px); }
+/* Timeline, as DV's: planned pallets (estimated from the queues), personal breaks, now. */
+.wb-seg.plan { background: transparent; color: var(--dim); border: 1.5px dashed var(--line-strong, #94A3B8); font-weight: 600; }
+.wb-brk { position: absolute; top: 1px; bottom: 1px; background: repeating-linear-gradient(-45deg, rgba(245,158,11,.35) 0 3px, transparent 3px 6px); border-radius: 3px; z-index: 1; }
+.wb-brk.live { box-shadow: inset 0 0 0 1.5px var(--amber); }
+.wb-now { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px solid var(--accent, #2563EB); z-index: 2; }
+.wb-legend .l.brkl { background: repeating-linear-gradient(-45deg, rgba(245,158,11,.5) 0 3px, transparent 3px 6px); height: 10px; }
+.wb-legend .l.planl { background: transparent; border: 1.5px dashed #94A3B8; height: 8px; }
 .wb-pp { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 2px 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
 .wb-pp:last-child { border-bottom: 0; }
 .wb-pp > small { grid-column: 2 / 4; font-size: 12px; }
@@ -1600,3 +1608,190 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 /* A settings row whose control is a segmented choice puts the choice on its
    own line on a phone, so the description keeps its width. */
 @container shell (max-width: 600px) { .stg-item:has(.stg-seg) { flex-wrap: wrap; } .stg-item:has(.stg-seg) .stg-ctl { flex: 1 1 100%; justify-content: flex-start; } }
+/* Maintenance on the phone: an opened issue */
+.mv-pad { padding: 0 14px; }
+.mt-meta.mv-pad { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; margin: 4px 0 8px; }
+/* Voice search: the microphone at the end of the phone's search bar and the palette's input */
+.voicebtn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--dim); display: grid; place-items: center; }
+.voicebtn[hidden] { display: none; }
+.search .voicebtn svg.i, .pal .in .voicebtn svg.i { position: static; transform: none; width: 19px; height: 19px; color: currentColor; }
+.voicebtn.listening { background: var(--red, #DC2626); color: #fff; animation: voicepulse 1.2s ease-in-out infinite; }
+@keyframes voicepulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, .45); } 50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); } }
+@media (prefers-reduced-motion: reduce) { .voicebtn.listening { animation: none; } }
+.search:has(.voicebtn:not([hidden])) input { padding-right: 44px; }
+.pal .in { position: relative; }
+.pal .in:has(.voicebtn:not([hidden])) .okind { margin-right: 40px; }
+.rt-top .tools button.listening { background: var(--red, #DC2626); border-color: var(--red, #DC2626); color: #fff; animation: voicepulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .rt-top .tools button.listening { animation: none; } }
+/* Dock tablet: the crew runs the decant from the dock screen (DV's pallet sheet and person picker) */
+.scr-sq.tap { cursor: pointer; }
+.scr-sq.tap:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.scr-sheet { position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 42, .45); display: grid; place-items: center; padding: 16px; }
+.scr-sh { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--panel); color: var(--ink); border-radius: 18px; padding: 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); display: flex; flex-direction: column; gap: 12px; }
+.scr-sh-h { display: flex; align-items: flex-start; gap: 12px; }
+.scr-sh-h > div { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.scr-sh-h b { font-size: 22px; }
+.scr-sh-h span { color: var(--dim); font-size: 14px; }
+.scr-sh-t { font-weight: 700; font-size: 16px; }
+.scr-sh-on { margin: 0; font-size: 16px; }
+.scr-sh-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.scr-sh-acts .btn { justify-content: center; min-height: 48px; font-size: 15px; }
+.scr-sh-acts .btn.big { min-height: 64px; font-size: 18px; }
+.scr-sh-acts .btn:only-child { grid-column: 1 / -1; }
+.scr-pps { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.scr-pp { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px; min-height: 64px; border-radius: 12px; border: 1px solid var(--line); background: var(--ground); color: var(--ink); text-align: left; }
+.scr-pp b { font-size: 20px; }
+.scr-pp span { font-size: 12.5px; color: var(--dim); }
+.scr-pp:not(.off) { border-color: var(--accent); }
+.scr-pp.off { opacity: .45; cursor: not-allowed; }
+.scr-sh-close { align-self: stretch; justify-content: center; }
+/* Receiving: Not in this session, a scan's remove button, Complete decant, the device-clock note, the phone's Team & plan */
+.bdk-sq.out { background: repeating-linear-gradient(45deg, var(--ground), var(--ground) 6px, var(--panel) 6px, var(--panel) 12px); border: 1px dashed var(--line); color: var(--dim); }
+.bdk-sq.marked.out .bdk-ct { font-size: 12px; font-weight: 800; letter-spacing: .08em; color: var(--ink2); background: var(--panel); padding: 2px 6px; border-radius: 6px; }
+.bdk-sq.marked.out .bdk-ref { color: var(--dim); }
+.bdk-vrow { position: relative; }
+.bdk-vx { margin-left: auto; width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--dim); display: grid; place-items: center; flex: none; }
+.bdk-vx svg.i { width: 14px; height: 14px; }
+.bdk-vx:hover { color: var(--red, #DC2626); border-color: currentColor; }
+.bdr-fin { border-color: var(--accent); }
+.bdr-fin p { margin: 0 0 10px; }
+.bdr-fin-warn { display: flex; gap: 8px; align-items: flex-start; color: #B45309; }
+.bdr-fin-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.bdr-fin-acts .btn { flex-direction: column; align-items: flex-start; gap: 2px; white-space: normal; text-align: left; }
+.bdr-fin-acts .btn small { font-weight: 500; font-size: 11.5px; opacity: .85; }
+.bdr-clock { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #FEF3C7; color: #78350F; font-size: 13px; }
+.bdk-more { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
+.bdk-more .card { margin: 0; }
+/* ── Print map: the composer (ShelfSearcher's dtop2-print) ───────────── */
+.pm-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@container shell (max-width: 1100px) { .pm-wrap { grid-template-columns: 1fr; } }
+.pm-room { background: #26292E; border-radius: 14px; padding: 18px; display: grid; place-items: center; min-height: 420px; }
+.pm-paper { width: 100%; max-height: calc(100vh - 220px); background: #fff; color: #111; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); display: flex; flex-direction: column; padding: 1.2%; min-width: 0; }
+.pm-stage { position: relative; min-height: 0; border: 1px solid #ddd; overflow: hidden; }
+.pm-stage svg.map.real { width: 100%; height: 100%; background: #fff; }
+.pm-side { gap: 10px; }
+.pm-card { padding: 12px 14px; }
+.pm-card .ch { margin-bottom: 6px; }
+.pm-seg { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.pm-seg button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 12.5px; font-weight: 600; }
+.pm-seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pm-seg button svg.i { width: 14px; height: 14px; }
+.pm-sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.pm-sublab { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin-top: 6px; }
+.pm-chk { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }
+.pm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 4px 0; font-size: 13px; }
+.pm-row > span:first-child { color: var(--dim); min-width: 74px; }
+.pm-zoom { display: inline-flex; gap: 4px; }
+.pm-book { margin-top: 10px; }
+.pm-card .btn { width: 100%; justify-content: center; margin-top: 6px; }
+.pm-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12px; color: #333; border-bottom: 1.5px solid #15232A; padding: 2px 2px 4px; margin-bottom: 4px; }
+.pm-title b { font-size: 13px; color: #111; } .pm-title b span { font-weight: 800; }
+.pm-legend { display: flex; flex-wrap: wrap; gap: 3px 12px; align-items: center; font-size: 10.5px; color: #222; border: 1px solid #ccc; padding: 4px 8px; margin-top: 4px; }
+.pm-legend b { letter-spacing: .08em; text-transform: uppercase; font-size: 10px; }
+.pm-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.pm-legend em { width: 1px; height: 12px; background: #bbb; }
+/* What the composer's layers do to the map (screen and paper alike) */
+.map.real.pp-outline .shelf-group .shelf { fill: #fff !important; stroke: #555 !important; stroke-width: 2 !important; }
+.map.real.pp-outline .shelf-label { fill: #333 !important; }
+.map.real.pp-labels .shelf-label { display: inline !important; opacity: 1 !important; }
+.map.real.pp-nolabels .shelf-label { display: none !important; }
+.map.real.pp-badges .shelf-badges { opacity: 1 !important; }
+.map.real.pp-nobadges .shelf-badges { display: none !important; }
+.map.real.pp-tory .tory-line-path { display: inline !important; }
+.map.real.pp-nolm .landmark-group { display: none !important; }
+.map.real.pp-hide .shelf-group[data-dim], .map.real.pp-hide .shelf-badges [data-dim] { display: none !important; }
+.map.real .shelf-badges [data-dim] { opacity: .14; }
+/* Paper: one page per sheet, the map filling what the strips leave; colours
+   print without the browser's "Background graphics" box ticked. */
+@media print {
+  #printroot { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #printroot .pm-page { display: flex; flex-direction: column; break-after: page; overflow: hidden; }
+  #printroot .pm-page:last-child { break-after: auto; }
+  #printroot .pm-pmap { min-height: 0; }
+  #printroot .pm-pmap svg.map.real { width: 100%; height: 100%; background: #fff; }
+  #printroot .pm-title { font-size: 9.5pt; } #printroot .pm-legend { font-size: 8.5pt; }
+}
+/* The evacuation map on paper */
+@media print {
+  #printroot .ev-page { display: flex; flex-direction: column; }
+  #printroot .ev-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #16A34A; padding-bottom: 4px; margin-bottom: 4px; }
+  #printroot .ev-head h1 { font-size: 22pt; margin: 0; color: #15803D; }
+  #printroot .ev-head span { font-size: 10pt; color: #333; }
+  #printroot .ev-call { text-align: right; font-size: 9pt; text-transform: uppercase; letter-spacing: .08em; color: #B91C1C; }
+  #printroot .ev-call b { display: block; font-size: 26pt; letter-spacing: 0; }
+  #printroot .ev-foot { display: grid; grid-template-columns: 1.6fr 1fr; gap: 10px; margin-top: 4px; font-size: 9pt; }
+  #printroot .ev-key { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+  #printroot .ev-key span { display: inline-flex; align-items: center; gap: 4px; }
+  #printroot .ev-asm { border: 2px solid #16A34A; border-radius: 6px; padding: 5px 8px; }
+  #printroot .ev-you { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #2563EB; border: 2px solid #fff; box-shadow: 0 0 0 1px #2563EB; }
+  #printroot .ev-route { display: inline-block; width: 22px; height: 5px; background: #16A34A; border-radius: 3px; }
+  #printroot .ps-tbl .w12 { width: 12%; }
+}
+/* The maintenance work order: the map round the pin beside its QR code, on one A4 sheet */
+@media print {
+  #printroot .ps-wo { display: grid; grid-template-columns: 1fr 40mm; gap: 6mm; align-items: center; margin: 6px 0 2px; }
+  #printroot .ps-wo-map { height: 70mm; border: 1px solid #999; overflow: hidden; }
+  #printroot .ps-wo-map svg.map.real { width: 100%; height: 100%; background: #fff; }
+  #printroot .ps-wo-qr { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; font-size: 8.5pt; }
+  #printroot .ps-wo-qr svg { width: 34mm; height: 34mm; }
+  #printroot .ps-kv th { width: 30%; background: #f4f4f4; font-weight: 600; text-align: left; font-size: 10pt; }
+  #printroot .ps-kv td, #printroot .ps-kv th { height: 8.5mm; }
+}
+.ext-band { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid #0003; margin-right: 4px; vertical-align: -1px; }
+.inv-row.hl { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; background: var(--accent-soft); }
+
+/* Backfill phone: every scanned code removable; a pair one digit apart flagged (K2B's disputes). */
+.mv-x { display: inline-grid; place-items: center; width: 40px; height: 40px; margin: -8px -6px -8px 0; border: 0; border-radius: 10px; background: none; color: var(--dim); cursor: pointer; }
+.mv-x:hover, .mv-x:focus-visible { background: var(--hover, rgba(127,127,127,.12)); color: var(--red); }
+.mv-dsp { display: inline-flex; align-items: flex-start; gap: 4px; color: var(--amber-ink); font-weight: 600; }
+.mv-dsp svg.i { flex: none; margin-top: 2px; }
+.mv-note.warn { color: var(--amber-ink); font-weight: 600; }
+
+/* Backfill review: the bay is open on another device (its claim is live). */
+.bp-claim { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent); color: var(--ink); font-size: 13px; }
+.bp-claim > svg.i { color: var(--amber-ink); flex: none; }
+.bp-claim > span { flex: 1; }
+.mv-row .c .btn + .btn { margin-left: 6px; }
+
+/* Team message and today's briefing (js/team.js): one strip above every view. */
+.teambar { display: flex; align-items: stretch; gap: 0; margin: 8px 16px 0; border-radius: 12px; background: color-mix(in srgb, var(--accent, #2563EB) 10%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent, #2563EB) 30%, transparent); }
+.teambar[hidden] { display: none; }
+.teambar.quiet { background: none; border-style: dashed; }
+.teambar .tb-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: none; border: 0; color: var(--ink); font: inherit; font-size: 13px; text-align: left; cursor: pointer; min-height: 40px; }
+.teambar.quiet .tb-open { color: var(--dim); }
+.teambar .tb-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.teambar .tb-txt b { margin-right: 6px; }
+.teambar .tb-sep { display: inline-block; width: 1px; height: 12px; margin: 0 10px; background: var(--line); vertical-align: middle; }
+.teambar .tb-more { color: var(--accent, #2563EB); font-weight: 700; }
+.teambar .tb-x { width: 40px; border: 0; background: none; color: var(--dim); cursor: pointer; border-radius: 0 12px 12px 0; }
+.teambar .tb-x:hover, .teambar .tb-x:focus-visible { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.tm-back { position: fixed; inset: 0; z-index: 60; background: rgba(17,24,39,.45); display: grid; place-items: center; padding: 16px; }
+.tm-sheet { position: relative; width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--panel); color: var(--ink); border-radius: 16px; padding: 20px 20px 16px; box-shadow: var(--shadow); }
+.tm-sec + .tm-sec { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.tm-h { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding-right: 40px; }
+.tm-sec + .tm-sec .tm-h { padding-right: 0; }
+.tm-h h3 { margin: 0; font-size: 16px; }
+.tm-body { margin-top: 8px; font-size: 14.5px; line-height: 1.5; }
+.tm-body p { margin: 0 0 6px; } .tm-body ul { margin: 0 0 6px; padding-left: 20px; }
+.tm-meta, .tm-hint, .tm-empty { color: var(--dim); font-size: 12.5px; margin: 6px 0 0; }
+.tm-in { width: 100%; margin-top: 8px; font: inherit; font-size: 14px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg, var(--panel)); color: var(--ink); resize: vertical; box-sizing: border-box; }
+.tm-until { display: block; margin-top: 8px; font-size: 13px; }
+.tm-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+@media (max-width: 600px) { .teambar { margin: 6px 10px 0; } .tm-back { place-items: end stretch; padding: 0; } .tm-sheet { width: 100%; border-radius: 18px 18px 0 0; max-height: 88vh; } }
+/* What's New (js/whatsnew.js), in the team sheet's frame. */
+.wn-h { display: flex; align-items: center; gap: 8px; margin: 0 40px 6px 0; font-size: 18px; }
+.wn-h svg.i { color: #F59E0B; }
+.wn-v { color: var(--dim); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 4px; }
+.wn-it { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.wn-ic { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent, #2563EB) 12%, transparent); color: var(--accent, #2563EB); }
+.wn-it b { font-size: 14px; } .wn-it p { margin: 2px 0 6px; color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+
+/* Owner console › a store › Boards: the store's screens, read-only. */
+.ad-boardbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 10px; }
+.ad-board { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--bg, var(--panel)); overflow: auto; max-height: 78vh; }
+.ad-board .scr { min-height: 0; }
+/* The strip is a row of its own between the header and the content, only
+   while it shows (the shell's grid has three rows otherwise). */
+.main:has(> .teambar:not([hidden])) { grid-template-rows: 60px auto minmax(0,1fr) 44px; }
+@container shell (min-width:1600px) { .main:has(> .teambar:not([hidden])) { grid-template-rows: 68px auto minmax(0,1fr) 50px; } }
+.frame.hdr-title .main:has(> .teambar:not([hidden])) { grid-template-rows: 84px auto minmax(0,1fr) 50px; }

@@ -13,7 +13,7 @@ import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast } from './backdock/common.js';
 import { ratesFor } from './backdock/plan.js';
-import { mountMap, bindMapChrome, hasMap, mapSymbols } from '../map.js';
+import { mountMap, bindMapChrome, hasMap, mapSymbols, mapFloors } from '../map.js';
 import { issuePin } from './maintenance.js';
 import { registerSummary, isFixture, consolidate } from '../../shared/inventory.js';
 import { prefs } from '../prefs.js';
@@ -195,7 +195,9 @@ const mapOpen = () => { try { return localStorage.getItem(MKEY) !== '0'; } catch
 function mapCard() {
   if (!hasMap()) return '';
   const on = layers(), hasPc = mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order');
-  return `<div class="card dmap${mapOpen() ? '' : ' closed'}" id="dmap"><div class="ch"><h3>${ic('m-map')}Store map</h3><div class="dlayers">${LAYERS.filter(l => l[0] !== 'pc' || hasPc).map(([k, label, col, icon]) => `<button class="dlay${on[k] ? ' on' : ''}" data-layer="${k}" style="--lc:${col}" aria-pressed="${!!on[k]}">${ic(icon)}${label}</button>`).join('')}</div><button class="btn sm" data-act="dmap-toggle">${mapOpen() ? 'Hide map' : 'Show map'}</button></div>` +
+  // Every floor, so back-of-house pins and checks can be reached.
+  const fls = mapFloors(), floorSeg = fls.length > 1 && mapOpen() ? `<div class="seg2 floorseg" data-floorseg>${fls.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}" title="${f.type === 'boh' ? 'Back of house' : 'Sales floor'}">${esc(f.name)}</button>`).join('')}</div>` : '';
+  return `<div class="card dmap${mapOpen() ? '' : ' closed'}" id="dmap"><div class="ch"><h3>${ic('m-map')}Store map</h3><div class="dlayers">${LAYERS.filter(l => l[0] !== 'pc' || hasPc).map(([k, label, col, icon]) => `<button class="dlay${on[k] ? ' on' : ''}" data-layer="${k}" style="--lc:${col}" aria-pressed="${!!on[k]}">${ic(icon)}${label}</button>`).join('')}</div>${floorSeg}<button class="btn sm" data-act="dmap-toggle">${mapOpen() ? 'Hide map' : 'Show map'}</button></div>` +
     `<div class="dmap-body"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="dmap-tools"><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span></div></div><div class="dmap-leg" id="dmapLeg"></div></div></div>`;
 }
 
@@ -217,7 +219,8 @@ export default {
     const re = () => { const top = root.querySelector('#dashTop'); if (top) top.innerHTML = dashTop(ctx); paintLayers(); };
     // The combined map: mounted once, its layers repainted when they change.
     const stage = root.querySelector('#dmap #mapstage');
-    const map = stage && mapOpen() ? mountMap(stage, { badges: true }) : null;
+    // A tapped issue pin opens it in Maintenance.
+    const map = stage && mapOpen() ? mountMap(stage, { badges: true, onSelect: info => { if (info.kind === 'pin') ctx.go('maintenance', { issue: info.id }); } }) : null;
     if (map) bindMapChrome(root.querySelector('#dmap'), map);
     const paintLayers = () => {
       if (!map) return;
@@ -226,8 +229,8 @@ export default {
       map.priceChecks(on.pc ? (prefs().priceChecks === 'off' ? 'small' : prefs().priceChecks || 'small') : 'off');
       map.clearOverlays();
       const fids = map.floors().map(f => f.id), here = i => !i.floor || !fids.includes(i.floor) || i.floor === map.floorId();
-      const open = on.mt ? Object.values(ctx.store.get('issues')).filter(i => !i.removed && i.status !== 'completed' && i.x != null && here(i)) : [];
-      if (open.length) map.drawPins(open.map(issuePin));
+      const open = on.mt ? Object.entries(ctx.store.get('issues')).map(([id, i]) => ({ id, ...i })).filter(i => !i.removed && i.status !== 'completed' && i.x != null && here(i)) : [];
+      if (open.length) map.drawPins(open.map(i => ({ ...issuePin(i), id: i.id })));
       // Label checks: shelves of the micro-departments checked this cycle in
       // blue, assigned but not yet checked in amber.
       const marks = {};

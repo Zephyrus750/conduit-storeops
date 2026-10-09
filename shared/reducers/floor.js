@@ -14,7 +14,7 @@
 //   inventory offsite pid → { pid, sent, time, desc, title, products[{kc,q}], req, cb, rec, note, at },
 //             offsiteAt, offsiteSrc; loads id → { id, label, date, status, recvDate, src, pallets[{pid, items[{k,d,q,dept}]}], at, by }
 
-import { reject } from './util.js';
+import { reject, badList, earlier } from './util.js';
 import { storeDay, DEFAULT_TZ } from '../time.js';
 import { OFFSITE_CAP, LOAD_CAP, LOAD_PALLET_CAP, LOAD_LINE_CAP, LOAD_STATUS } from '../inventory.js';
 
@@ -27,6 +27,7 @@ const MAX_INT_MONTHS = 120;
 // Issue text is capped: every device downloads every issue.
 const TEXT_MAX = { title: 120, note: 1000, loc: 60, dept: 16, floor: 32 };
 const clipText = (v, n) => (v == null ? v : String(v).slice(0, n));
+const LABEL_SHELVES_MAX = 400, VARIANCES_MAX = 2000;
 
 export function floorState() {
   return {
@@ -48,14 +49,14 @@ export const floorReducers = {
     const week = (s.refresh.weeks[e.entity.week] ||= {});
     const seg = e.entity.segment;
     const gone = s.refresh.unmarked?.[e.entity.week]?.[seg];
-    if (gone && e.at <= gone) return null;
+    if (gone && !earlier(gone, e.at)) return null;
     const dev = e.actor?.device || 'unknown';
     const cur = week[seg];
     const dept = typeof e.payload?.dept === 'string' && e.payload.dept ? e.payload.dept.toLowerCase().slice(0, 16) : null;
     if (!cur) { week[seg] = { at: e.at, devices: [dev], ...(dept ? { dept } : {}) }; return null; }
     if (dept && !cur.dept) cur.dept = dept;
     if (!cur.devices.includes(dev)) cur.devices.push(dev);
-    if (e.at < cur.at) cur.at = e.at;                       // first mark wins the time
+    if (earlier(e.at, cur.at)) cur.at = e.at;                       // first mark wins the time
     return null;
   },
   'refresh.unmark'(s, e) {
@@ -90,6 +91,12 @@ export const floorReducers = {
     else return reject('invalid_event', 'colour must be #rrggbb or erase');
     return null;
   },
+  // Reset planning, in one event (it was one erase per painted shelf).
+  'refresh.plan.clear'(s) {
+    if (!Object.keys(s.refresh.plan).length) return reject('invalid_event', 'nothing is planned');
+    s.refresh.plan = {};
+    return null;
+  },
 
   // ── Label integrity ──────────────────────────────────────────────────
   'label.cycle.set'(s, e) {
@@ -98,6 +105,7 @@ export const floorReducers = {
     return null;
   },
   'label.assign'(s, e) {
+    const no = badList(e.payload.shelves, 'shelves', LABEL_SHELVES_MAX, 24); if (no) return reject('invalid_event', no);
     const shelves = e.payload.shelves.map(String);
     if (shelves.length) s.labels.assign[e.entity.micro] = shelves; else delete s.labels.assign[e.entity.micro];
     return null;
@@ -113,8 +121,11 @@ export const floorReducers = {
     return null;
   },
   'label.variance'(s, e) {
-    const list = (s.labels.variances[e.entity.cycle] ||= []);
-    list.push({ micro: e.entity.micro, keycode: e.payload.keycode, note: e.payload.note || '', at: e.at, device: e.actor?.device || null });
+    if (!/^\d{6,13}$/.test(e.payload.keycode)) return reject('invalid_event', 'keycode must be 6 to 13 digits');
+    const list = s.labels.variances[e.entity.cycle] || [];
+    if (list.length >= VARIANCES_MAX) return reject('invalid_event', `a cycle holds at most ${VARIANCES_MAX} variances`);
+    s.labels.variances[e.entity.cycle] = list;
+    list.push({ micro: e.entity.micro, keycode: e.payload.keycode, note: clipText(e.payload.note || '', 200), at: e.at, device: e.actor?.device || null });
     return null;
   },
 
@@ -226,6 +237,17 @@ export const floorReducers = {
     return null;
   },
 
+  // A contractor's visit, from the work order (who came, what they did): a
+  // log line, and the issue keeps its status until someone moves it.
+  'issue.visit'(s, e) {
+    const i = issue(s, e); if (i.code) return i;
+    const who = String(e.payload.who || '').trim().slice(0, 80), note = String(e.payload.note || '').trim().slice(0, 500);
+    if (!who) return reject('invalid_event', 'say who visited: a name or a company');
+    i.updated = e.at; i.visits = (i.visits || 0) + 1;
+    i.log.push({ t: e.at, a: 'Contractor visited', n: who + (note ? ' · ' + note : '') });
+    return null;
+  },
+
   // A photo (an id the worker issued for the uploaded JPEG) on an issue, up
   // to four; remove detaches it. The log records both.
   'issue.photo'(s, e) {
@@ -302,17 +324,17 @@ export const floorReducers = {
     let lines = 0; for (const x of pallets) lines += x.items.length;
     if (lines > LOAD_LINE_CAP) return reject('too_large', `a load keeps at most ${LOAD_LINE_CAP} lines`);
     const status = LOAD_STATUS.includes(p.status) ? p.status : 'incoming';
-    inv(s).loads[id] = { id, label: String(p.label).slice(0, 60), date: DAY.test(p.date || '') ? p.date : e.at.slice(0, 10), status, recvDate: status === 'received' ? (DAY.test(p.recvDate || '') ? p.recvDate : e.at.slice(0, 10)) : '', src: String(p.src || '').slice(0, 80),
+    inv(s).loads[id] = { id, label: String(p.label).slice(0, 60), date: DAY.test(p.date || '') ? p.date : storeDayOf(s, e.at), status, recvDate: status === 'received' ? (DAY.test(p.recvDate || '') ? p.recvDate : storeDayOf(s, e.at)) : '', src: String(p.src || '').slice(0, 80),
       pallets: pallets.map(x => ({ pid: String(x.pid).slice(0, 20), items: x.items.filter(i => i && i.k).map(i => ({ k: String(i.k).slice(0, 20), d: String(i.d || '').slice(0, 60), q: Number(i.q) || 0, dept: /^\d{3}$/.test(i.dept || '') ? i.dept : '' })) })), at: e.at, by: e.actor?.device || null };
     const ids = Object.keys(inv(s).loads);
-    if (ids.length > LOAD_CAP) for (const k of ids.sort((a, b) => (inv(s).loads[a].at < inv(s).loads[b].at ? -1 : 1)).slice(0, ids.length - LOAD_CAP)) delete inv(s).loads[k];
+    if (ids.length > LOAD_CAP) for (const k of ids.sort((a, b) => (earlier(inv(s).loads[a].at, inv(s).loads[b].at) ? -1 : 1)).slice(0, ids.length - LOAD_CAP)) delete inv(s).loads[k];
     return null;
   },
   'inventory.load.status'(s, e) {
     const l = inv(s).loads[String(e.entity.load)]; if (!l) return reject('not_found', 'no such load');
     if (!LOAD_STATUS.includes(e.payload.status)) return reject('invalid_payload', `status is one of ${LOAD_STATUS.join(', ')}`);
     const rd = e.payload.recvDate; if (rd && !DAY.test(rd)) return reject('invalid_payload', 'recvDate must be YYYY-MM-DD');
-    l.status = e.payload.status; l.recvDate = l.status === 'received' ? (rd || l.recvDate || e.at.slice(0, 10)) : '';
+    l.status = e.payload.status; l.recvDate = l.status === 'received' ? (rd || l.recvDate || storeDayOf(s, e.at)) : '';
     return null;
   },
   'inventory.load.remove'(s, e) {

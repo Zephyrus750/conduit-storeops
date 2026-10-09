@@ -19,3 +19,12 @@ test('retailPeriod: Vector’s cycle, P1W1 from Mon 29 Jun 2026, four weeks a pe
   assert.equal(retailPeriod('2026-06-15'), 'P12W3');           // Vector's anchor
   assert.equal(retailPeriod('2027-05-31'), 'P1W1');            // 48 weeks on
 });
+
+test('a device writes its own wall-clock time with its zone, never UTC labelled local', async () => {
+  const { localIso } = await import('../../client/store.js');
+  for (const ms of [Date.UTC(2026, 9, 9, 0, 0), Date.UTC(2026, 9, 9, 15, 59), Date.UTC(2026, 0, 1, 12, 30)]) {
+    const s = localIso(new Date(ms));
+    assert.equal(Date.parse(s), ms, `${s} names the same instant`);
+    assert.match(s, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
+  }
+});

@@ -3,7 +3,8 @@
 // (dv-profiles/1) from its manifest history and K2B read it to band
 // stockroom stock by carton depth ("system says 0, but 40 units at 12 a
 // carton just landed: it is all out the back"). Here the worker builds
-// it from the manifest documents it holds, so it is never stale.
+// it from the manifest documents it holds, so it is never stale. Same
+// shape, brand-neutral schema id: carton-profiles/1.
 //
 //   profiles[kc] = { ctn, trucks, consistency, last_arrival: { date, units, cartons, manNo },
 //                    arrivals: [{ date, units, cartons, ctn, manNo }], pack_change?: { prev_ctn, since_trucks, changed } }
@@ -53,7 +54,7 @@ export function buildProfiles(docs, { store = '', now = new Date() } = {}) {
     p.arrivals = all.filter(x => x.date >= since(ARRIVAL_WINDOW_WEEKS));
     profiles[kc] = p;
   }
-  return { schema: 'dv-profiles/1', store: String(store), generated: now.toISOString(), profile_window_weeks: ARRIVAL_WINDOW_WEEKS, trucks_sampled: arrivalsOf.length, gates: { min_trucks: PROFILE_GATES.minTrucks, min_consistency: PROFILE_GATES.minConsistency, min_units_per_ctn: PROFILE_GATES.minUnitsPerCtn }, keycodes: Object.keys(profiles).length, profiles };
+  return { schema: 'carton-profiles/1', store: String(store), generated: now.toISOString(), profile_window_weeks: ARRIVAL_WINDOW_WEEKS, trucks_sampled: arrivalsOf.length, gates: { min_trucks: PROFILE_GATES.minTrucks, min_consistency: PROFILE_GATES.minConsistency, min_units_per_ctn: PROFILE_GATES.minUnitsPerCtn }, keycodes: Object.keys(profiles).length, profiles };
 }
 
 // Depth chip text and class for a keycode, as K2B read it.

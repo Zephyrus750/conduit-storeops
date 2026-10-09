@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseKeycodes, parseReportByLocation, reviewRows, compareCounts, readyPayload } from '../../shared/backfill.js';
+import { parseKeycodes, parseReportByLocation, reviewRows, compareCounts, readyPayload, phoneCode, disputes } from '../../shared/backfill.js';
 
 test('report paste splits by location and skips APNs and headers', () => {
   const text = `STORE 1241 STOCKROOM REPORT
@@ -25,4 +25,16 @@ test('compare: add, delete, match, incorrect and the ready payload', () => {
   assert.deepEqual(readyPayload(sub, system), { codes: { 42345501: false }, incorrect: ['43006311'] });
   assert.equal(compareCounts(sub, null).pct, null, 'no report, no accuracy');
   assert.deepEqual(reviewRows(sub, null).map(r => r.status), ['scanned', 'scanned', 'scanned']);
+});
+
+test('phone codes as K2B checked them: 7–8 digit keycodes, 13-digit barcodes with a good check digit; disputes one digit apart', () => {
+  assert.deepEqual(phoneCode('4297763'), { code: '4297763' });
+  assert.deepEqual(phoneCode(' 42977636 '), { code: '42977636' });
+  assert.deepEqual(phoneCode('9341107137079'), { code: '9341107137079' });
+  assert.match(phoneCode('9341107137078').why, /check digit/);
+  assert.match(phoneCode('123456').why, /6 digits/);
+  assert.match(phoneCode('1234567890').why, /10 digits/);
+  assert.match(phoneCode('').why, /not a keycode/);
+  assert.deepEqual(disputes(['42977636', '42977686', '12345678', '1234567', '42977636']), { 42977636: ['42977686'], 42977686: ['42977636'] });
+  assert.deepEqual(disputes(['1234567', '1234568']), {}, 'only 8-digit keycodes, as K2B');
 });

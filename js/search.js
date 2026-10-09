@@ -1,20 +1,25 @@
 // The search palette (the showcase's omni): one input that understands a
-// keycode, a shelf, a department or a tool name. Keycodes go to the
-// catalogue (client.catalogue.lookup); shelves come from the mounted map;
-// tools from the view registry. Opens from the header search, the rail
-// search, Ctrl K, and the phone's search bar.
+// keycode, a shelf, a department or a tool name, and the store's own
+// records: manifests, consolidations, cages, inventory loads and off-site
+// pallets (shared/finder.js). Keycodes go to the catalogue
+// (client.catalogue.lookup); shelves come from the mounted map; tools from
+// the view registry. Opens from the header search, the rail search, Ctrl K,
+// and the phone's search bar.
 
 import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
 import { VIEWS, RAIL } from './registry.js';
+import { findRecords } from '../shared/finder.js';
+import { RING } from './views/stockroom/common.js';
 
-const KIND = { prod: 'Product code', shelf: 'Shelf', loc: 'Shelf or bay', name: 'Name', none: 'Type to search' };
-const KICON = { prod: 'm-product', shelf: 'pin', loc: 'pin', name: 'search', none: 'search' };
-const KENTER = { prod: 'open the product', shelf: 'show on the map', loc: 'show on the map', name: 'open the top match', none: 'open' };
+const KIND = { prod: 'Product code', cons: 'Consolidation', shelf: 'Shelf', loc: 'Shelf or bay', name: 'Name', none: 'Type to search' };
+const KICON = { prod: 'm-product', cons: 'packages', shelf: 'pin', loc: 'pin', name: 'search', none: 'search' };
+const KENTER = { prod: 'open the product', cons: 'open the top match', shelf: 'show on the map', loc: 'show on the map', name: 'open the top match', none: 'open' };
 export function classify(q) {
   q = (q || '').trim();
   if (!q) return 'none';
   if (/^\d{6,13}$/.test(q)) return 'prod';
+  if (/^\d{14,22}$/.test(q)) return 'cons';
   if (/^[A-Za-z]\d+[-\s]?[SsEe]?\d+$/.test(q)) return 'shelf';
   if (/^[A-Za-z]?\d{1,4}$/.test(q)) return 'loc';
   return 'name';
@@ -27,9 +32,26 @@ const orow = (cls, icon, title, sub, act, attrs) => `<div class="orow" ${attrs}>
 const grp = (t, n) => `<div class="ogrp">${t}${n != null ? `<span>${n}</span>` : ''}</div>`;
 const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
-export function initSearch({ client, frame, go, tools = () => [], life = () => null }) {
+const tNo = id => String(id || '').replace(/^\d{4}-\d{2}-\d{2}-T/, '');
+// The store's records that match, as palette groups.
+function recordsHtml(r, Q) {
+  let out = '';
+  if (r.consols.length) out += grp('Consolidations', r.consols.length) + r.consols.map(c => c.seen
+    ? orow('d', 'packages', `Consolidation <span class="mono">${esc(c.id)}</span>`, `${c.seen.k === 'man' ? 'Manifested' : 'Scanned'} on Truck ${esc(tNo(c.seen.t))} · ${esc(c.seen.d)}`, 'History', `data-view="rhistory"`)
+    : orow('d', 'packages', `Consolidation <span class="mono">${esc(c.id)}</span>${c.cartons ? ` · ${c.cartons} ctn` : ''}`, `${c.manNo ? 'Manifest ' + esc(c.manNo) + ' · ' : ''}Truck ${esc(tNo(c.truck))}${c.closed ? ' (finalised)' : ''} · ${c.bay ? `on <b>${esc(c.bay)}</b>, ${esc(c.status)}` : esc(c.status)}${c.dept ? ' · dept ' + esc(c.dept) : ''}`, 'Open', c.closed ? `data-view="rhistory"` : `data-view="receiving" data-truck="${esc(c.truck)}"${c.bay ? ` data-bay="${esc(c.bay)}"` : ''}`)).join('');
+  if (r.manifests.length) out += grp('Manifests', r.manifests.length) + r.manifests.map(m => orow('d', 'file', `Manifest ${hi(m.manNo, Q)}`, `${m.consols} consols · ${m.cartons} cartons${m.despatch ? ' · despatch ' + esc(m.despatch) : ''}${m.truck ? ' · on Truck ' + esc(tNo(m.truck)) : ''}`, 'Open', `data-view="manifests" data-man="${esc(m.manNo)}"`)).join('');
+  if (r.cages.length) out += grp('Cages', r.cages.length) + r.cages.map(c => orow('s', 'm-cages', `Cage ${hi(c.id, Q)}`, `${esc(RING[c.ring]?.[0] || c.ring)} · ${c.location ? 'at ' + esc(c.location) : 'not parked'} · ${c.lines} line${c.lines === 1 ? '' : 's'}${c.has ? ` · <b>${c.has} of this keycode</b>` : ''}`, 'Open', `data-view="cages" data-cage="${esc(c.id)}"`)).join('');
+  if (r.loads.length) out += grp('Inventory loads', r.loads.length) + r.loads.map(l => orow('', 'box', `Load ${hi(l.label, Q)}`, `${esc(l.status)} · ${l.pallets} pallet${l.pallets === 1 ? '' : 's'}${l.has.length ? ' · on pallet ' + esc(l.has.slice(0, 3).join(', ')) : ''}`, 'Open', `data-view="inventory" data-load="${esc(l.id)}"`)).join('');
+  if (r.offsite.length) out += grp('Off-site pallets', r.offsite.length) + r.offsite.map(o => orow('', 'truck', `Off-site pallet ${hi(String(o.pid), Q)}`, `${esc(o.title || 'no description')}${o.has ? ` · <b>${o.has} of this keycode</b>` : ''}${o.rec ? ' · back' : o.cb ? ' · callback ' + esc(o.cb) : ''}`, 'Open', `data-view="inventory" data-pid="${esc(o.pid)}"`)).join('');
+  return out;
+}
+const ARG_KEYS = ['select', 'dept', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay'];
+
+export function initSearch({ client, frame, go, tools = () => [], life = () => null, data = () => null, phone = () => false }) {
+  // On a phone, the records that open desk-only views (manifests, inventory) are left out.
+  const found = Q => { const r = findRecords(data(), Q); if (phone()) { r.manifests = []; r.loads = []; r.offsite = []; } return r; };
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
-  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like A16 S2, a department or a tool…" autocomplete="off" inputmode="search"><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
+  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like A16 S2, a manifest, a consolidation, a cage, a load or a tool…" autocomplete="off" inputmode="search"><button class="voicebtn" type="button" data-voice hidden aria-label="Search by voice" title="Search by voice">${ic('mic')}</button><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
   frame.appendChild(el);
   const input = $('#oq', el), body = $('#obody', el), prev = $('#oprev', el), pal = $('.pal', el);
   let shelves = null, seq = 0, sel = 0;
@@ -60,7 +82,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const r = recent();
       if (r.length) out += grp('Recent') + r.map(x => orow(x[1] === 'prod' ? 'p' : x[1] === 'name' ? '' : 's', 'history', esc(x[0]), KIND[x[1]] || '', 'Search again', `data-q="${esc(x[0])}"`)).join('');
       out += grp('Jump to') + tools().slice(0, 6).map(t => orow('', t.icon, esc(t.title), 'Open the view', 'Open', `data-view="${t.id}"`)).join('');
-      out += `<div class="ohint"><b>It understands</b><span>keycode 42977636</span><span>shelf A16 S2</span><span>bay A12</span><span>a department like Toys</span><span>a tool like Refresh</span></div>`;
+      out += `<div class="ohint"><b>It understands</b><span>keycode 42977636</span><span>shelf A16 S2</span><span>bay A12</span><span>a manifest number</span><span>a consolidation label</span><span>a cage tag</span><span>an inventory load</span><span>a department like Toys</span><span>a tool like Refresh</span></div>`;
     } else if (k === 'prod') {
       out += grp('Products') + `<div class="ohint">Looking up ${esc(Q)}…</div>`;
       body.innerHTML = out; prev.hidden = true; pal.classList.remove('wide');
@@ -82,6 +104,11 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
         out += grp('In the stockroom') + orow('s', 'm-srhistory', `Backfilled at ${L.bays.length} bay${L.bays.length === 1 ? '' : 's'}${L.adjustments.length ? ` · ${L.adjustments.length} SOH adjustment${L.adjustments.length === 1 ? '' : 's'}` : ''}${L.cages.length ? ` · in ${L.cages.length} cage${L.cages.length === 1 ? '' : 's'}` : ''}`, `Last seen ${esc(L.last || '')}`, 'History', `data-view="srhistory" data-q="${esc(Q)}"`);
         preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || 'Not in the catalogue')}</div></div>`) + lifeHtml(L);
       } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}Where it’s been</div><div class="ohint">No backfill, adjustment or cage record for this code yet.</div></div>`;
+      // A consolidation label first when it is one; cages, loads and off-site pallets holding a keycode after the product.
+      const rr = recordsHtml(found(Q), Q); out = Q.length >= 9 ? rr + out : out + rr;
+    } else if (k === 'cons') {
+      const r = found(Q);
+      out += recordsHtml(r, Q) || `<div class="ohint">No consolidation ending ${esc(Q.slice(-9))} on a manifest or truck this device holds. The Back dock code opens its records.</div>`;
     } else if (k === 'shelf' || k === 'loc') {
       // "A16S1", "A16 S1" and "A16-S1" name one shelf of the run A16: the
       // row and the map keep that shelf rather than widening to the run.
@@ -94,6 +121,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const sel = s => esc(s.id + modOf(s));
       if (bay && hits.length) out += `<div class="ohint">Bay ${esc(U)} is on ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}.</div>`;
       out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `${modOf(s) || s.segments === 1 ? 'Shelf' : 'Run'} ${hi(s.id, id)}${modOf(s) ? ` ${esc(modOf(s))}` : suffix ? ` <small class="warn">no shelf ${esc(s.id)} ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${esc(runText(s.id, modOf(s), s.segments))}${!modOf(s) && s.subs.length > 1 ? ': ' + esc(s.subs.join(' ')) : ''}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
+      out += recordsHtml(found(Q), Q);
       if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>${modOf(hits[0]) || hits[0].segments === 1 ? 'Shelf' : 'Run'} ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}Show on the store map</a>`;
     } else {
       const ql = Q.toLowerCase();
@@ -101,7 +129,8 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const ts = tools().filter(t => t.title.toLowerCase().includes(ql));
       if (depts.length) out += grp('Departments', depts.length) + depts.map(([d, n]) => orow('s', 'map', `${hi(n, Q)} ${dep(d)}`, 'Show the department on the map', 'Show', `data-view="map" data-dept="${d}"`)).join('');
       if (ts.length) out += grp('Tools', ts.length) + ts.map(t => orow('', t.icon, hi(t.title, Q), 'Open the view', 'Open', `data-view="${t.id}"`)).join('');
-      if (!depts.length && !ts.length) out += `<div class="ohint">Nothing matches “${esc(Q)}”. Try a keycode, a shelf like A16 S2, a department or a tool.</div>`;
+      const recs = recordsHtml(found(Q), Q); out += recs;
+      if (!depts.length && !ts.length && !recs) out += `<div class="ohint">Nothing matches “${esc(Q)}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.</div>`;
     }
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();
@@ -125,7 +154,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   function act(row) {
     if (!row) return;
     const q = input.value.trim(); if (q) remember(q, classify(q));
-    if (row.dataset.view) { close(); go(row.dataset.view, row.dataset.select ? { select: row.dataset.select } : row.dataset.dept ? { dept: row.dataset.dept } : row.dataset.q != null ? { q: row.dataset.q } : undefined); return; }
+    if (row.dataset.view) { const arg = {}; for (const k of ARG_KEYS) if (row.dataset[k] != null) arg[k] = row.dataset[k]; close(); go(row.dataset.view, Object.keys(arg).length ? arg : undefined); return; }
     if (row.dataset.q != null) { open(row.dataset.q); return; }        // a recent search: run it again
     if (row.dataset.url) { try { window.open(row.dataset.url, '_blank', 'noopener'); } catch {} close(); return; }
   }
