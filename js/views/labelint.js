@@ -15,12 +15,12 @@ function model(ctx) {
   const total = microCount(), done = Object.keys(checks).length;
   return { L, cycle, checks, variances, total, done, daysLeft: daysLeftInCycle(L.cycleLen) };
 }
-// Assignments are per module ("A16 S2"), each its own shelf. Older ones
-// name a whole run ("A16"): they still mark and count every module of it,
-// and the first edit that touches one splits it into its modules.
+// Assignments are per shelf ("A16 S2"). Older ones name a whole run
+// ("A16"): they still mark and count every shelf of it, and the first edit
+// that touches one splits it into its shelves.
 let mapRef = null;
-const modulesOf = key => mapRef ? [...new Set(mapRef.groups(key).map(segmentId))] : [key];
-const expand = list => [...new Set(list.flatMap(k => k.includes(' ') ? [k] : modulesOf(k)))];
+const shelvesOf = key => mapRef ? [...new Set(mapRef.groups(key).map(segmentId))] : [key];
+const expand = list => [...new Set(list.flatMap(k => k.includes(' ') ? [k] : shelvesOf(k)))];
 function marksFor(m) {
   const out = {};
   const wrong = new Set(m.variances.map(v => v.micro));
@@ -101,7 +101,7 @@ export default {
     // Carried from a shelf selected on the map: zoom to it and, when it is
     // assigned to a micro-department, open that one so its checks show.
     if (ctx.arg?.select && map.groups(ctx.arg.select).length) {
-      const sel = ctx.arg.select, mods = modulesOf(sel), micro = Object.entries(model(ctx).L.assign).find(([, sh]) => expand(sh).some(k => mods.includes(k)))?.[0];
+      const sel = ctx.arg.select, mods = shelvesOf(sel), micro = Object.entries(model(ctx).L.assign).find(([, sh]) => expand(sh).some(k => mods.includes(k)))?.[0];
       if (micro) { selected = micro; openSub = micro.split('-')[0]; paint(); }
       map.select(sel); map.zoomTo(sel);
     }

@@ -189,7 +189,7 @@ function nearestShelf(map, p) {
     if (g.closest('.mfl')?.getAttribute('data-fid') !== map.floorId()) continue;
     const r = g.querySelector('.shelf'); if (!r) continue;
     const b = r.getBBox(), d = (b.x + b.width / 2 - p[0]) ** 2 + (b.y + b.height / 2 - p[1]) ** 2;
-    if (!best || d < best.d) best = { d, id: segmentId(g) };   // the module, "A16 S2"
+    if (!best || d < best.d) best = { d, id: segmentId(g) };   // the shelf, "A16 S2"
   }
   return best;
 }

@@ -2,13 +2,13 @@
 // counted → verified, phase counting | final. Reads store.get('stocktake').
 
 import { $, ic, esc, vh, sub, prog, status, DEPT_COLOUR, DEPT_NAME, today, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, moduleFor, segmentId, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, oneShelf, segmentId, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
 import { openScanner } from '../scan.js';
 import { printSheet, tick, table, section, signoff } from '../print.js';
 import { csvLines } from '../../shared/records.js';
 
-// Counts per module. With the map mounted, a whole-run key from a session
-// opened before counts were per module counts once for each of its modules,
+// Counts per shelf. With the map mounted, a whole-run key from a session
+// opened before counts were per shelf counts once for each of its shelves,
 // so the big number, the bar and the department chips agree.
 function countStates(shelves, map) {
   const counts = { pending: 0, counted: 0, verified: 0 };
@@ -33,11 +33,11 @@ function sessionModel(id, sess, map) {
 // store can print its report or CSV again later.
 const pastSessions = (ctx, map) => Object.entries(ctx.store.get('stocktake').sessions).filter(([, s]) => s.ended).sort((a, b) => (a[1].ended < b[1].ended ? 1 : -1)).map(([id, s]) => sessionModel(id, s, map));
 const MARK = { pending: 'counting', counted: 'counted', verified: 'verified' };
-// Counts are per module ("A11 S1"), as ShelfSearcher counted; a shelf with
-// no modules is its own one. A session opened before counts were per module
-// holds whole-shelf keys, which still count for every module of the shelf.
+// Counts are per shelf ("A11 S1"), as ShelfSearcher counted; a run with no
+// suffixes is a single shelf. A session opened before counts were per shelf
+// holds whole-run keys, which still count for every shelf of the run.
 const stOf = (m, mod, shelf) => m.shelves[mod] || m.shelves[shelf];
-const moduleTotal = map => new Set(map.segments().map(segmentId)).size;
+const shelfTotal = map => new Set(map.segments().map(segmentId)).size;
 function marksFor(m) { const out = {}; for (const [id, r] of Object.entries(m.shelves)) out[id] = MARK[r.state]; return out; }
 function byDept(map, m) {
   const tot = {}, done = {};
@@ -46,7 +46,7 @@ function byDept(map, m) {
 }
 async function tap(ctx, info, hold) {
   const m = model(ctx); if (!m.id) return toast('No stocktake session is open. Start one on the desktop.');
-  // A run counted whole before counts were per module keeps its key.
+  // A run counted whole before counts were per shelf keeps its key.
   const key = !m.shelves[info.full] && m.shelves[info.id] ? info.id : info.full, cur = m.shelves[key];
   try {
     if (hold) { const back = !cur ? null : cur.state === 'verified' ? 'counted' : cur.state === 'counted' ? 'pending' : 'cleared'; if (back === 'counted') await ctx.store.dispatch({ type: 'stocktake.verify', entity: { session: m.id, shelf: key }, payload: { verified: false } }); else if (back) await ctx.store.dispatch({ type: 'stocktake.scan', entity: { session: m.id, shelf: key }, payload: { state: back } }); return; }
@@ -78,7 +78,7 @@ export default {
     const paint = () => keepScanFocus(root, () => {
       const m = model(ctx, map); map.setMarks(marksFor(m));
       const side = $('#stside', root); if (side) side.innerHTML = sidebar(map, m) + missingCard(map, m) + historyCard(pastSessions(ctx, map));
-      const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(m, moduleTotal(map));
+      const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(m, shelfTotal(map));
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = m.sess ? `<b>${m.done}</b> counted · ${m.counts.verified} ✓✓ · ${esc(m.id)}` : 'No session open';
     });
     paint();
@@ -91,10 +91,10 @@ export default {
         const past = a.dataset.session ? pastSessions(ctx, map).find(x => x.id === a.dataset.session) : null;
         if (act === 'report') printReport(map, past || model(ctx, map));
         if (act === 'csv') exportCsv(map, past || model(ctx, map));
-        if (act === 'locate') { const id = a.dataset.shelf, gs = map.groups(id); map.zoomTo(id, 500); map.select(id); flash(gs); }   // the module, not its run
+        if (act === 'locate') { const id = a.dataset.shelf, gs = map.groups(id); map.zoomTo(id, 500); map.select(id); flash(gs); }   // the shelf, not its run
         if (act === 'missing-dept') { missingDept = missingDept === a.dataset.dept ? null : a.dataset.dept; paint(); }
         if (act === 'scan-shelf') openScanner({ title: 'Scan shelf labels', hint: 'First read starts the count, the next marks it counted', continuous: true, onCode: code => {
-          const { g, error } = moduleFor(map.svg, code);
+          const { g, error } = oneShelf(map.svg, code);
           if (!g) return toast(error, 'bad');
           tap(ctx, map.shelfInfo(g), false);
         } });
@@ -110,7 +110,7 @@ export default {
 };
 function sidebar(map, m) {
   if (!m.sess) return `<div class="card"><div class="ch"><h3>Session</h3>${status('info', 'Closed')}</div><p class="lbl">Start a session to begin counting. Phones count once it is open; verification stays on the desktop.</p><div class="pfoot" style="margin-top:14px"><button class="btn primary" data-act="start">${ic('plus')}Start a session</button></div></div>`;
-  const total = moduleTotal(map);
+  const total = shelfTotal(map);
   return `<div class="card"><div class="ch"><h3>Session ${esc(m.id)}</h3>${status(m.sess.phase === 'final' ? 'info' : 'warn', m.sess.phase === 'final' ? 'Final check' : 'Counting')}</div>${shelfScanField('Scan or type a shelf label to count it')}<div class="big">${m.done}<span class="of">/</span>${total}</div><div class="lbl">Shelves counted · ${m.counts.verified} verified · ${m.counts.pending} counting</div>${prog(m.done / Math.max(1, total) * 100)}` +
     `<div class="pfoot" style="flex-direction:column;gap:8px;margin-top:14px"><button class="btn" data-act="phase">${ic('refresh')}${m.sess.phase === 'final' ? 'Back to counting' : 'Flip to Final Check'}</button><button class="btn" data-act="report">${ic('print')}Report and missing list</button><button class="btn" data-act="csv">${ic('file')}Export CSV</button><button class="btn" data-act="verify-all">${ic('checks')}Bulk verify all counted</button><button class="btn" style="color:var(--red)" data-act="end">End session</button></div></div>` +
     `<div class="card"><div class="ch"><h3>By department</h3></div><div class="chips">${byDept(map, m).map(d => `<span class="chip" data-act="zoom-dept" data-dept="${d.d}"><span class="sw" style="background:${DEPT_COLOUR[d.d]}"></span>${d.d.toUpperCase()} ${d.done}/${d.total}</span>`).join('')}</div><p class="lbl" style="margin-top:14px">Tap a shelf to start counting it (yellow), again when it is counted (green); tap a counted shelf to verify it (blue).</p></div>`;

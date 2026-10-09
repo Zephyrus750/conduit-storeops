@@ -5,7 +5,7 @@
 // search, Ctrl K, and the phone's search bar.
 
 import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast } from './ui.js';
-import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation } from './map.js';
+import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
 import { VIEWS, RAIL } from './registry.js';
 
 const KIND = { prod: 'Product code', shelf: 'Shelf', loc: 'Shelf or bay', name: 'Name', none: 'Type to search' };
@@ -83,18 +83,18 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
         preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || 'Not in the catalogue')}</div></div>`) + lifeHtml(L);
       } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}Where it’s been</div><div class="ohint">No backfill, adjustment or cage record for this code yet.</div></div>`;
     } else if (k === 'shelf' || k === 'loc') {
-      // "A16S1", "A16 S1" and "A16-S1" name one module of A16: the row and
-      // the map keep that module rather than widening to the whole shelf.
-      // A stockroom bay number (7002) is found through the module that lists
-      // it, and shows that module, not the run.
+      // "A16S1", "A16 S1" and "A16-S1" name one shelf of the run A16: the
+      // row and the map keep that shelf rather than widening to the run.
+      // A stockroom bay number (7002) is found through the shelf that lists
+      // it, and shows that shelf, not the run.
       const bay = hasMap() && /^\d{3,6}[A-Z]?$/.test(canonCode(U)) ? shelfForLocation(canonCode(U)) : null;
       const C = bay || canonCode(U), { shelf: id, sub: suffix } = splitCanon(C);
       const hits = hasMap() ? shelfIndex().filter(s => s.c === C || s.c === id || (!suffix && !bay && s.c.startsWith(id))).slice(0, 8) : [];
       const modOf = s => suffix && s.c !== C && s.subs.includes(suffix) ? suffix : '';
       const sel = s => esc(s.id + modOf(s));
       if (bay && hits.length) out += `<div class="ohint">Bay ${esc(U)} is on ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}.</div>`;
-      out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `Shelf ${hi(s.id, id)}${modOf(s) ? ` <small>module ${esc(modOf(s))}</small>` : suffix ? ` <small class="warn">no module ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${s.segments} module${s.segments === 1 ? '' : 's'}${s.subs.length ? ' · ' + esc(s.subs.join(' ')) : ''}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
-      if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>Shelf ${esc(hits[0].id)}${modOf(hits[0]) ? ' · ' + esc(modOf(hits[0])) : ''}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}Show on the store map</a>`;
+      out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `${modOf(s) || s.segments === 1 ? 'Shelf' : 'Run'} ${hi(s.id, id)}${modOf(s) ? ` ${esc(modOf(s))}` : suffix ? ` <small class="warn">no shelf ${esc(s.id)} ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${esc(runText(s.id, modOf(s), s.segments))}${!modOf(s) && s.subs.length > 1 ? ': ' + esc(s.subs.join(' ')) : ''}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
+      if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>${modOf(hits[0]) || hits[0].segments === 1 ? 'Shelf' : 'Run'} ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}Show on the store map</a>`;
     } else {
       const ql = Q.toLowerCase();
       const depts = Object.entries(DEPT_NAME).filter(([, n]) => n.toLowerCase().includes(ql));

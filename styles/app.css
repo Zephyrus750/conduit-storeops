@@ -110,7 +110,7 @@ form.li { margin: 0; }
 /* Map look: the rendered floor carries the editor's presentation
    attributes; these rules give shelves, labels and landmarks one clean
    style whatever version of the editor exported them. Labels are centred
-   on their module (the editor's stylesheet did that; it is stripped on
+   on their shelf (the editor's stylesheet did that; it is stripped on
    publish), name and segment both white. */
 
 .map.real .shelf-label { font-family: Inter, system-ui, sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; }
@@ -137,8 +137,8 @@ form.li { margin: 0; }
 .selshelf .acts2 .btn.primary { grid-column: 1 / -1; }
 .selshelf .acts2 .btn svg.i { width: 18px; height: 18px; }
 
-/* Shelf badges: one per shelf name over the whole run, shown zoomed out
-   and handing over to the per-module labels as the map zooms in. */
+/* Run badges: one per run name over the whole run, shown zoomed out
+   and handing over to the per-shelf labels as the map zooms in. */
 .map.real .shelf-badges { opacity: var(--badge-opacity, 1); pointer-events: none; transition: opacity .15s; }
 .map.real .shelf-badges .sb-bg { rx: 8; ry: 8; fill-opacity: .92; }
 .map.real .shelf-badges .sb { font-family: Inter, system-ui, sans-serif; font-size: 24px; font-weight: 800; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; }
@@ -330,7 +330,7 @@ button:disabled, .rrow.soon { cursor: default; }
 /* ── The map as ShelfSearcher drew it ─────────────────────────────────
    White floor, the editor's shelf colours with their colour-matched
    outline and rounded corners, department-coloured name badges when
-   zoomed out, white module labels when zoomed in. The chrome floats over
+   zoomed out, white shelf labels when zoomed in. The chrome floats over
    the map: tools down the left, department chips top centre, find top
    right, the crumb along the bottom. */
 .mapbox .mapstage { background: #fff; }

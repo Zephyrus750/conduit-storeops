@@ -188,7 +188,7 @@ const storeView = {
 };
 
 // Shelves per department in a published map, grouped as the store's
-// department list groups them. Counts are shelf groups (modules), the same
+// department list groups them. Counts are shelves (A16 S2, not runs), the same
 // number the floor rows show.
 function deptShelving(doc, info) {
   const depts = (info?.departments?.length ? info.departments : doc.departments) || [];

@@ -94,5 +94,5 @@ reports and real devices can show:
 9. **Manifest upload preview:** a real DC `.xls`, including a report saved for the wrong store.
 10. **Inventory:** the real off-site master list (.xlsx), a real manifest as a load, heat on the map, and the clearance watch once product details are switched on.
 11. **Map chrome:** double-tap, pinch and flick on the TC52x; Ctrl + / − / 0 on the PC; the symbols key; the price-check size cycle; tory lines on the BOH floor.
-12. **Field Mode** on a phone with the manager code: capture a few modules, export the file.
+12. **Field Mode** on a phone with the manager code: capture a few shelves, export the file.
 13. **The TC52x** with the browser's address bar showing (360×584): the map, Refresh, Labels, Emergency, Backfill scan and Land a pallet.

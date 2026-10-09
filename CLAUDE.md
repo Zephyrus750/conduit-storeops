@@ -72,8 +72,11 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
 - No `transition` or `filter` on `.shelf`. A state that lands on hundreds
   of shelves at once (refresh marks, a route) re-rasters the whole map
   for every frame of a transition. Stroke and fill changes alone are cheap.
-- Module labels are `display:none` while the badges show; two thousand
+- Shelf labels are `display:none` while the run badges show; two thousand
   invisible `<text>` elements still cost layout and paint.
-- Sub-shelf codes: `groupsFor()` in `js/map.js` is the one resolver for a
-  typed or scanned location. "A16S1", "A16 S1" and "A16-S1" name one
-  module; never widen a module to its shelf.
+- Shelves and runs: "A16 S1" is a shelf, "A16" is its run (the shelves
+  sharing that name). Every shelf is its own: tapped, scanned, counted,
+  marked and assigned on its own. `groupsFor()` in `js/map.js` is the one
+  resolver for a typed or scanned location; "A16S1", "A16 S1" and "A16-S1"
+  name one shelf. Never widen a shelf to its run. "Modules" means only the
+  editor's count of units inside one shelf.

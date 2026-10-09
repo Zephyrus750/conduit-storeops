@@ -38,10 +38,10 @@ export function parseFloors(doc) {
 }
 export function mapInfo() { return mapMeta; }
 export function hasMap() { return floors.length > 0; }
-// The shelf a typed location names, without mounting the map: a shelf name
-// or module (A16S1), or a stockroom bay number listed in a module's
+// The shelf a typed location names, without mounting the map: a run name
+// (A16), a shelf (A16S1), or a stockroom bay number listed in a shelf's
 // data-locations (7012, or 7042A by its digits, as K2B's storeMapFindLoc).
-// A bay answers with its module's code ("A16S2"), never the whole run.
+// A bay answers with its shelf's code ("A16S2"), never the whole run.
 // Indexed once per published map.
 let locIndex = null;
 export function shelfForLocation(code) {
@@ -60,14 +60,15 @@ export function shelfForLocation(code) {
   const C = canonCode(code), digits = (/\d{3,}/.exec(C) || [])[0];
   return locIndex.idx.get(C) || (digits && locIndex.idx.get(digits)) || null;
 }
-// What the published map covers, per floor: named shelves and walk-path
-// nodes (the store details' map status). Counted once per map version.
+// What the published map covers, per floor: shelves (A16 S2), the runs they
+// make up (A16) and walk-path nodes (the store details' map status), and
+// shelves per department. Counted once per map version.
 let statsCache = null;
 export function mapStats() {
   if (!floors.length) return null;
   if (statsCache?.v !== mapMeta?.version) {
     const doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${floors.map(f => `<g data-fid="${esc(f.id)}">${f.inner}</g>`).join('')}</svg>`, 'image/svg+xml');
-    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const names = new Set([...(g?.querySelectorAll('.shelf-group[data-shelf]') || [])].map(x => x.getAttribute('data-shelf')).filter(n => n && !n.startsWith('_u'))); return { id: f.id, name: f.name, type: f.type, shelves: names.size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }), depts: (() => { const by = {}; for (const g of doc.querySelectorAll('.shelf-group[data-shelf][data-dept]')) { const n = g.getAttribute('data-shelf'), d = g.getAttribute('data-dept').toLowerCase(); if (!n || n.startsWith('_u')) continue; (by[d] ||= new Set()).add(n); } return Object.fromEntries(Object.entries(by).map(([d, set]) => [d, set.size])); })() };
+    statsCache = { v: mapMeta?.version, floors: floors.map(f => { const g = [...doc.documentElement.children].find(x => x.getAttribute('data-fid') === f.id); const named = [...(g?.querySelectorAll('.shelf-group[data-shelf]') || [])].filter(x => { const n = x.getAttribute('data-shelf'); return n && !n.startsWith('_u'); }); return { id: f.id, name: f.name, type: f.type, shelves: new Set(named.map(segmentId)).size, runs: new Set(named.map(x => x.getAttribute('data-shelf'))).size, paths: f.paths?.nodes?.length || 0, emergency: g?.querySelectorAll('.emergency-marker').length || 0 }; }), depts: (() => { const by = {}; for (const g of doc.querySelectorAll('.shelf-group[data-shelf][data-dept]')) { const n = g.getAttribute('data-shelf'), d = g.getAttribute('data-dept').toLowerCase(); if (!n || n.startsWith('_u')) continue; (by[d] ||= new Set()).add(segmentId(g)); } return Object.fromEntries(Object.entries(by).map(([d, set]) => [d, set.size])); })() };
   }
   return statsCache;
 }
@@ -84,17 +85,18 @@ const PLACEHOLDER = '<svg class="map real placeholder" viewBox="0 0 1200 700" xm
 // Shelf segment id as the refresh mode keys it: "A11 S1" (data-full), uppercased.
 export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttribute('data-shelf') + ' ' + (g.getAttribute('data-subname') || '')).trim()).toUpperCase(); }
 // A code as the store writes it: "A16S1", "a16 s1" and "A16-S1" are the
-// same module; "A16" is the whole shelf. Upper case, no spaces or dashes.
+// same shelf; "A16" is the whole run. Upper case, no spaces or dashes.
 // Printed shelf labels pad numbers ("A013S02" is A13 S2), so a leading zero
 // after a letter is dropped: the label and the map meet in one form.
 export function canonCode(code) { return String(code || '').toUpperCase().replace(/[\s\-_.]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1'); }
-// The groups a code points at: a shelf name first (a shelf can itself be
-// called "S1"), then a shelf plus a module suffix (S1, S2, E1, E2). Any
-// place that takes a typed or scanned location goes through here, so a
-// module is never quietly widened to its whole shelf.
-// Split a canonical code into its shelf name and module suffix (S1, S2, E1,
-// E2), or an empty suffix for a whole shelf. The one place that decides where
-// a module ends and a shelf begins, so search and find never diverge from it.
+// The groups a code points at: a run name first (a run can itself be
+// called "S1"), then a run plus a shelf suffix (S1, S2, E1, E2). Any place
+// that takes a typed or scanned location goes through here, so a shelf is
+// never quietly widened to its whole run.
+// Split a canonical code into its run name and shelf suffix (S1, S2, E1,
+// E2), or an empty suffix for a whole run. The one place that decides where
+// a run's name ends and a shelf's suffix begins, so search and find never
+// diverge from it.
 export function splitCanon(code) { const C = canonCode(code); const m = /^(.+?)([SE]\d+)$/.exec(C); return m ? { shelf: m[1], sub: m[2] } : { shelf: C, sub: '' }; }
 export function groupsFor(root, code) {
   const C = canonCode(code); if (!C) return [];
@@ -113,12 +115,19 @@ export function groupsFor(root, code) {
 export function shelfScanField(placeholder = 'Scan or type a shelf label') {
   return `<div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}">${camButton('shelfscan', true)}</div>`;
 }
-// The one module a scanned or typed label names, or why not: a run's name
-// ("A16") covers several modules, and a scan never quietly picks one of them.
-export function moduleFor(root, code) {
+// Words for where a shelf sits, the same on the card, the phone panel, the
+// tip and search. A shelf is "A16 S2"; a run is the shelves that share the
+// name "A16". (The editor's "modules" are the units inside one shelf.)
+export function runText(name, sub, count) {
+  if (count > 1) return sub ? `in run ${name} · ${count} shelves` : `run of ${count} shelves`;
+  return 'single shelf';
+}
+// The one shelf a scanned or typed label names, or why not: a run's name
+// ("A16") covers several shelves, and a scan never quietly picks one of them.
+export function oneShelf(root, code) {
   const gs = groupsFor(root, code); if (!gs.length) return { error: `${code} is not a shelf on this map` };
-  const mods = [...new Set(gs.map(segmentId))];
-  if (mods.length > 1) return { error: `${String(code).toUpperCase()} has ${mods.length} modules: scan the module's own label (${mods.slice(0, 3).join(', ')}${mods.length > 3 ? '…' : ''})` };
+  const ids = [...new Set(gs.map(segmentId))];
+  if (ids.length > 1) return { error: `${String(code).toUpperCase()} is a run of ${ids.length} shelves: scan the shelf's own label (${ids.slice(0, 3).join(', ')}${ids.length > 3 ? '…' : ''})` };
   return { g: gs[0] };
 }
 export function bindShelfScan(root, map, onShelf) {
@@ -126,7 +135,7 @@ export function bindShelfScan(root, map, onShelf) {
     if (e.key !== 'Enter' || !e.target.matches?.('[data-field="shelfscan"]')) return;
     e.preventDefault();
     const code = e.target.value.trim(); e.target.value = ''; if (!code) return;
-    const { g, error } = moduleFor(map.svg, code);
+    const { g, error } = oneShelf(map.svg, code);
     if (!g) return toast(error, 'bad');
     onShelf(map.shelfInfo(g));
   });
@@ -142,7 +151,7 @@ export function keepScanFocus(root, paint) {
 export function splitCode(root, code) { const gs = groupsFor(root, code); if (!gs.length) return null; const C = canonCode(code), shelf = gs[0].getAttribute('data-shelf'); return { shelf, sub: canonCode(shelf) === C ? '' : canonCode(gs[0].getAttribute('data-subname')), groups: gs }; }
 
 // Hover tooltip on a shelf, as in the showcase: department chip, shelf id and
-// segment, name, Side/End, module count, run direction, then a status line
+// suffix, name, Side/End, its run, direction, then a status line
 // from the segment's mark. A view passes `tip(info, g)` to say what its mark
 // means ('Refreshed Tue 09:12'); without it the mark's generic label shows.
 const MARK_LINE = { done: ['g', 'check', 'Done'], checked: ['b', 'check', 'Checked'], wrong: ['r', 'alert', 'Wrong label found'], focus: ['o', 'asterisk', 'Focus department'], stop: ['o', 'route', 'On the route'], counting: ['y', 'clock', 'Counting'], counted: ['g', 'check', 'Counted'], verified: ['b', 'checks', 'Verified'], due: ['r', 'clock', 'Due'], plana: ['o', 'edit', 'Planned'], planb: ['o', 'edit', 'Planned'], planc: ['o', 'edit', 'Planned'] };
@@ -154,9 +163,9 @@ function tipHtml(api, g, tip) {
   const mark = g.getAttribute('data-mark') || '';
   let mx = tip ? tip({ ...info, mark }, g) : undefined;
   if (mx === undefined) { const m = MARK_LINE[mark]; mx = m ? tipLine(m[0], m[1], m[2]) : ''; }
-  const d = shelfDetail(api, info.code);   // this module's own locations and size, not the whole run's
+  const d = shelfDetail(api, info.code);   // this shelf's own locations and size, not the whole run's
   return `<div class="md"><span class="dep" style="background:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
-    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${info.sub && info.segments > 1 ? `module ${esc(info.sub)} of ${info.segments}` : `${info.segments} module${info.segments === 1 ? '' : 's'}`}</span><span>${ic('orient')}${horiz ? 'Horizontal run' : 'Vertical run'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
+    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, info.segments))}</span><span>${ic('orient')}${horiz ? 'Horizontal' : 'Vertical'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
 }
 // Tooltips for what is not a shelf: an emergency sign, a price check or
 // order screen, a landmark (ShelfSearcher's desktop hover tips).
@@ -176,7 +185,7 @@ function markerTip(el) {
 }
 const clip = t => t.length > 60 ? t.slice(0, 57) + '…' : t;
 
-// Fixture names (the editor's fixture field, else the module letter: S side,
+// Fixture names (the editor's fixture field, else the shelf's suffix: S side,
 // E or P end), and what a shelf is in the real world when the map is
 // calibrated (metresPerUnit, the editor's Set Scale).
 const FIXTURE = { side: 'Side', end: 'End', deck: 'Deck', bunk: 'Bunk', table: 'Table', sixway: 'Six-way' };
@@ -234,8 +243,8 @@ export function symbolsHtml(list = mapSymbols()) {
   return ['Emergency', 'Store'].map(gp => { const rows = list.filter(x => x.group === gp); return rows.length ? `<div class="keygrp">${gp}</div><div class="symgrid">${rows.map(x => `<div class="symrow">${markerSymbol(x.kind, 22)}<span>${esc(x.name)}</span><small>${x.n}</small></div>`).join('')}</div>` : ''; }).join('');
 }
 
-// Badges: one per shelf name on a sales floor, drawn over the whole shelf
-// so the name reads when zoomed out; they fade into the per-module labels
+// Badges: one per run on a sales floor, drawn over the whole run so the
+// name reads when zoomed out; they fade into the per-shelf labels
 // as the map zooms in (the legacy viewer's shelf badges).
 const BADGE_START = 5.5, BADGE_END = 8;   // zoom factors, relative to the floor fitted
 function buildBadges(floorEl) {
@@ -366,7 +375,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const z = (Number(vb0.split(' ')[2]) || 1) / (Number(svg.getAttribute('viewBox').split(' ')[2]) || 1);
     const badge = z <= BADGE_START ? 1 : z >= BADGE_END ? 0 : 1 - (z - BADGE_START) / (BADGE_END - BADGE_START);
     svg.style.setProperty('--badge-opacity', badge.toFixed(2)); svg.style.setProperty('--label-opacity', (1 - badge).toFixed(2));
-    // Two thousand module labels that are invisible when zoomed out still
+    // Two thousand shelf labels that are invisible when zoomed out still
     // cost a layout and a paint each; take them out of the tree until the
     // badges start handing over (views without badges keep them).
     svg.style.setProperty('--label-display', badge >= 1 && !svg.classList.contains('nobadges') ? 'none' : 'inline');
@@ -717,7 +726,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const point = api.pointAt(e.clientX, e.clientY);
     if (touch && (pc || g)) haptic('tap');
     if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
-    else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, el: g, point, long: Date.now() - t > 500 }); }   // the module tapped, never its whole run
+    else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, el: g, point, long: Date.now() - t > 500 }); }   // the shelf tapped, never its whole run
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m), point });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
   });
@@ -736,7 +745,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       if (!g && !mk) return hide();
       if (!tipEl) { tipEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'div'); tipEl.className = 'mtip'; stage.appendChild(tipEl); }
       // The content is rebuilt only when the pointer moves to another
-      // module; moving within one just follows the pointer, so the icons
+      // shelf; moving within one just follows the pointer, so the icons
       // and words stay put instead of re-rendering on every event.
       const on = g || mk;
       if (on !== tipFor) { tipEl.innerHTML = g ? tipHtml(api, g, tip) : markerTip(mk); tipFor = on; }
@@ -857,7 +866,7 @@ export function bindMapChrome(root, map) {
 }
 
 // Find on the map, as Vector's search bar worked: suggestions as you type
-// (shelf names first, then modules and locations, then departments), the
+// (run names first, then shelves and locations, then departments), the
 // matches ringed on the map while typing, recent searches on focus, Enter
 // or a click to select and zoom, arrow keys to move through the list.
 function mapFind(root, input, map) {
@@ -889,7 +898,7 @@ function mapFind(root, input, map) {
   const recent = () => { try { return JSON.parse(localStorage.getItem(KEY()) || '[]'); } catch { return []; } };
   const remember = name => { try { localStorage.setItem(KEY(), JSON.stringify([name, ...recent().filter(x => x !== name)].slice(0, 6))); } catch {} };
   const row = (it, i) => it.kind === 'shelf'
-    ? `<div class="row" data-i="${i}"><i class="dot" style="background:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length ? ` · ${it.sections.length} module${it.sections.length === 1 ? '' : 's'}` : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
+    ? `<div class="row" data-i="${i}"><i class="dot" style="background:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length > 1 ? ` · run of ${it.sections.length} shelves` : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
     : `<div class="row" data-i="${i}"><i class="dot" style="background:${it.dept ? DEPT_COLOUR[it.dept] || '#64748B' : 'var(--ink)'}"></i><b class="code">${esc(it.kind === 'group' ? it.label : it.name)}</b><span class="dn">${it.kind === 'group' ? `${it.ids.length} departments` : esc(it.label)}</span><span class="kind">Department</span></div>`;
   const show = (list, header) => { items = list; focus = -1; if (!list.length) return hide(); ac.innerHTML = (header ? `<div class="hdr">${header}<span data-clear>Clear</span></div>` : '') + list.map(row).join(''); ac.classList.add('on'); };
   const hide = () => { ac.classList.remove('on'); ac.innerHTML = ''; items = []; focus = -1; };

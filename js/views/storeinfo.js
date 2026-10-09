@@ -46,7 +46,7 @@ function mapStatus() {
   const area = (on, label) => `<span class="si-area${on ? ' on' : ''}">${ic(on ? 'check' : 'minus')}${label}</span>`;
   return `<div class="card"><div class="ch"><h3>Map</h3>${status(foh >= 20 ? 'good' : 'warn', foh >= 20 ? 'Ready' : 'In development')}</div>` +
     `<div class="si-areas">${area(foh >= 20, `Front of house · ${foh} shelves`)}${area(boh >= 10, `Back of house · ${boh} shelves`)}${area(em > 0, `Emergency · ${em} markers`)}</div>` +
-    `<div class="list">${st.floors.map(f => `<div class="li"><span class="loc">${esc(f.name)}</span><span class="nm">${f.type === 'boh' ? 'Back of house' : 'Front of house'} · ${f.shelves} shelves · ${f.paths ? `${f.paths} walk-path points` : 'no walk paths'}</span></div>`).join('')}</div>` +
+    `<div class="list">${st.floors.map(f => `<div class="li"><span class="loc">${esc(f.name)}</span><span class="nm">${f.type === 'boh' ? 'Back of house' : 'Front of house'} · ${f.shelves} shelves in ${f.runs} runs · ${f.paths ? `${f.paths} walk-path points` : 'no walk paths'}</span></div>`).join('')}</div>` +
     `<p class="lbl" style="margin-top:10px">Version ${esc(String(info.version))}${info.at ? ` · published ${esc(fmtTime(info.at))}` : ''}${info.storeInfo?.lastUpdated ? ` · details updated ${esc(info.storeInfo.lastUpdated)}` : ''} · ${info.metresPerUnit ? `scale set (1 unit = ${+(info.metresPerUnit * 100).toFixed(1)} cm)` : 'scale not set: distances and shelf sizes need the editor’s Set Scale'}</p></div>`;
 }
 // The symbols drawn on this store's map, with how many of each.

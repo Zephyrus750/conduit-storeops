@@ -204,7 +204,7 @@ function dashTop(ctx) {
     const tabs = `<div class="tabs" id="ptabs">${PERIODS.map(([k, l]) => `<button class="${period === k ? 'on' : ''}" data-period="${k}">${l}</button>`).join('')}</div>`;
     return vh(`<span class="greet">${greeting()}</span><span id="dashTitle">How we’re tracking</span>`, '', tabs, 'm-dashboard') +
       `<div class="dash"><div class="kpis">${backfillCard(ctx, r)}${refreshCard(ctx, r)}${labelsCard(ctx, r)}</div><div class="side2">${dockCard(ctx, r)}${maintCard(ctx, r)}</div>` +
-      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>Operations register</h3></div><div class="hl">${reg.count} modules · <b style="color:var(--ink);font-weight:600">${reg.need} need attention</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">Modules</div>${reg.html}</div></div>` +
+      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>Operations register</h3></div><div class="hl">${reg.count} tools · <b style="color:var(--ink);font-weight:600">${reg.need} need attention</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">Modules</div>${reg.html}</div></div>` +
       `<div class="dash2">${todayAt(ctx)}${logistics(ctx)}</div>`;
 }
 
