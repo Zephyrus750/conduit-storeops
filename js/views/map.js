@@ -31,14 +31,16 @@ export function selCard(ctx, map, id) {
     `<div class="acts2"><button class="btn primary sm" data-act="pick-add" data-shelf="${esc(id)}">${ic('m-picklist')}Add to pick list</button><a class="btn sm" data-go="refresh" data-select="${esc(id)}">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint" data-select="${esc(id)}">${ic('m-labelint')}Label check</a><button class="btn sm" data-act="share" data-shelf="${esc(id)}">${ic('qr')}Share</button></div></div>`;
 }
 // The phone Home's shelf card, the size of the mode panels (Refresh,
-// Emergency): the shelf and its micro-departments, what it is, two actions.
+// Emergency): the shelf beside a separator, then its micro-departments,
+// what it is and two actions.
 export function mvSel(ctx, map, id) {
   if (!id) return `<div class="what"><span>Tap a shelf to see what is there, or search above.</span></div>`;
   const g = map.groups(id)[0]; if (!g) return '';
   const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id), d = shelfDetail(map, id), cd = map.code(id);
-  const facts = [DEPT_NAME[info.dept] || info.dept, d.fixture || (info.sub.startsWith('E') ? 'End' : 'Side'), runText(cd.shelf, cd.sub, info.segments), d.modules ? `${d.modules} module${d.modules === 1 ? '' : 's'}` : '', d.range, d.size, d.shared.length ? 'also ' + d.shared.join(', ') : '', f.refreshed ? 'refreshed ' + fmtTime(f.refreshed.at) : ''].filter(Boolean);
-  return `<div class="mvs-h">${dep(info.dept)}${shelfName(cd)}${f.micros.length ? `<span class="mics">${microChips(f.micros)}</span>` : ''}</div><div class="mvs-d">${facts.map(esc).join(' · ')}</div>` +
-    `<div class="acts"><button data-act="pick-add" data-shelf="${esc(id)}" aria-label="Add ${esc(id)} to the pick list">${ic('m-picklist')}Add to pick list</button><button data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}">${ic('qr')}Share</button></div>`;
+  const facts = [d.fixture || (info.sub.startsWith('E') ? 'End' : 'Side'), runText(cd.shelf, cd.sub, info.segments), d.modules ? `${d.modules} module${d.modules === 1 ? '' : 's'}` : '', d.range, d.size, d.shared.length ? 'also ' + d.shared.join(', ') : '', f.refreshed ? 'refreshed ' + fmtTime(f.refreshed.at) : ''].filter(Boolean);
+  return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b>${shelfName(cd)}</div>` +
+    `<div class="what">${f.micros.length ? `<div class="mics">${microChips(f.micros)}</div>` : ''}<div class="mvs-d">${facts.map(esc).join(' · ')}</div>` +
+    `<div class="mvs-btns"><button class="mv-share" data-act="pick-add" data-shelf="${esc(id)}" aria-label="Add ${esc(id)} to the pick list" title="Add to pick list">${ic('m-picklist')}</button><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div></div>`;
 }
 // "A16 S1": the run name bold, the shelf's S1/S2 the same size, regular.
 function shelfName(cd) { return `<span class="shname"><b>${esc(cd.shelf)}</b>${cd.sub ? `<span>${esc(cd.sub)}</span>` : ''}</span>`; }
@@ -78,7 +80,7 @@ export default {
     else if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
     const paint = () => {
       const host = $('#selhost', root); if (host) host.innerHTML = pcSel ? pcCard(pcSel) : selCard(ctx, map, selected);
-      const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-h')); }
+      const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-d')); }
       const c = $('#mapcrumb', root); if (c) c.textContent = selected || '—';
       const mc = $('#mvcrumb', root); if (mc && selected) { const d = map.shelfInfo(map.groups(selected)[0]).dept; mc.innerHTML = `Floor › <i class="cb" style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${DEPT_NAME[d] || d}</b> › ${esc(selected)}`; }
     };
