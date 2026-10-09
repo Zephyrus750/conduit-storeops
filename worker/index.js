@@ -30,7 +30,11 @@ r.post('/v1/auth/signin', async (req, env) => {
     if (!env.OWNER_KEY_HASH) throw new HttpError(503, 'not_configured', 'OWNER_KEY_HASH is not set');
     // Per device (cleared on success), per network and one owner-wide key
     // that a success never clears: a new device id buys no fresh attempts.
-    const ip = clientIp(req), keys = [`owner:dev:${device || 'nodevice'}`, `owner:store:all`, ...(ip ? [`owner:ip:${ip}`] : [])];
+    // A device the owner signed in on before (its trust secret) counts on
+    // its own key only, so the owner-wide one cannot be used to lock the
+    // owner out (registry trustIssue).
+    const ip = clientIp(req), trusted = b.trust ? await registry(env, 'POST', '/trust/check', { trust: String(b.trust) }) : { ok: false };
+    const keys = trusted.ok ? [`owner:dev:trust-${trusted.id}`] : [`owner:dev:${device || 'nodevice'}`, `owner:store:all`, ...(ip ? [`owner:ip:${ip}`] : [])];
     await registry(env, 'POST', '/lockout/check', { keys });
     if (!(await verifySecret(String(b.ownerKey).trim(), env.OWNER_KEY_HASH))) {
       await registry(env, 'POST', '/lockout/fail', { keys });
@@ -39,7 +43,8 @@ r.post('/v1/auth/signin', async (req, env) => {
     await registry(env, 'POST', '/lockout/clear', { key: keys[0] });
     const claims = makeClaims({ store: null, roles: ['owner'], caps: [], device, owner: true, ttl: ttl(env) });
     const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: null, device, roles: ['owner'], owner: true });
-    return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, owner: true });
+    const { trust } = trusted.ok ? { trust: String(b.trust) } : await registry(env, 'POST', '/trust/issue', { device });
+    return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, owner: true, trust });
   }
   const res = await registry(env, 'POST', '/signin', { store: String(b.store || ''), pin: b.pin, device, ip: clientIp(req) });
   const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device, epoch: res.epoch, ttl: ttl(env) });
@@ -116,7 +121,7 @@ r.patch('/v1/admin/stores/:no', async (req, env, _c, p) => {
     const ev = { id: ulid(), store: String(rec.no), area: 'store', type: 'store.tools.set', entity: {}, payload: { off: rec.toolsOff || [] }, at: new Date().toISOString(), v: 1 };
     const tr = await ownerStoreCall(new Request(req.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization') || '' }, body: JSON.stringify({ events: [ev] }) }), env, rec.no, '/events');
     const r0 = (await tr.json()).results?.[0];
-    if (!tr.ok || !r0?.ok) throw new HttpError(502, 'tools_not_applied', `the registry saved the tools but the store did not take them: ${r0?.message || tr.status}`);
+    if (!tr.ok || !(r0?.ok || r0?.code === 'unchanged')) throw new HttpError(502, 'tools_not_applied', `the registry saved the tools but the store did not take them: ${r0?.message || tr.status}`);
   }
   return json(rec);
 });
@@ -147,7 +152,11 @@ r.post('/v1/store/:no/map', async (req, env, _c, p) => {
 r.get('/v1/catalogue', async (req, env, ctx) => {
   const url = new URL(req.url);
   const codes = parseCodes(url.searchParams.get('kc'));
-  const items = await lookup(env, ctx, codes, { details: url.searchParams.get('fields') !== 'link' });
+  // Anyone may look a code up, but only a signed-in device or the owner
+  // starts the product-page fetches behind price and image (they cost).
+  const auth = req.headers.get('Authorization') || '';
+  const signed = auth.startsWith('Bearer ') && !!(await verifyToken(auth.slice(7), env.TOKEN_SECRET));
+  const items = await lookup(env, ctx, codes, { details: url.searchParams.get('fields') !== 'link', upstream: signed });
   return json({ items }, 200, { 'Cache-Control': 'public, max-age=300' });
 });
 

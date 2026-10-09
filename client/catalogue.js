@@ -7,7 +7,7 @@
 const TTL_MS = 7 * 86_400_000;
 const BATCH_MS = 40;
 
-export function createCatalogue({ transport, storage, timers = globalThis }) {
+export function createCatalogue({ transport, storage, timers = globalThis, token = async () => null }) {
   const mem = new Map();
   let queue = new Map();     // keycode → [resolvers]
   let timer = null;
@@ -32,7 +32,8 @@ export function createCatalogue({ transport, storage, timers = globalThis }) {
     const q = queue; queue = new Map();
     const kcs = [...q.keys()];
     let items = {};
-    try { items = (await transport.request(`/v1/catalogue?kc=${kcs.join(',')}`)).items || {}; }
+    // Signed in, the worker also fetches prices and images it has not cached.
+    try { const t = await token().catch(() => null); items = (await transport.request(`/v1/catalogue?kc=${kcs.join(',')}`, t ? { token: t } : {})).items || {}; }
     catch { items = {}; }
     for (const kc of kcs) {
       const item = items[kc] ?? null;

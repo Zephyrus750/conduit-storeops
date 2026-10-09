@@ -21,6 +21,7 @@ import { TransportError, Breaker, backoffMs } from './transport.js';
 
 export const HEARTBEAT_MS = 180_000;
 export const POLL_MS = 15_000;
+export const PERSIST_MS = 2_000;
 const APPLIED_KEEP = 2000;
 
 export function createStore({ storeNo, session, transport, storage, WebSocketImpl = globalThis.WebSocket, timers = globalThis, online = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false) }) {
@@ -62,11 +63,13 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
 
   // ── state ─────────────────────────────────────────────────────────────
   function get(key) { return key ? state[key] : state; }
+  // Each part of the state is turned to text once per rebuild and compared
+  // with the text it had last time (not the old and new both, every time).
+  const lastJson = {};
   function rebuild() {
-    const before = state;
     state = structuredClone(base);
     replay(state, pending);
-    changed(Object.keys(state).filter(k => before[k] !== state[k] && JSON.stringify(before[k]) !== JSON.stringify(state[k])));
+    changed(Object.keys(state).filter(k => { const j = JSON.stringify(state[k]); if (j === lastJson[k]) return false; lastJson[k] = j; return true; }));
   }
   function remember(id) { applied.add(id); appliedOrder.push(id); if (appliedOrder.length > APPLIED_KEEP) applied.delete(appliedOrder.shift()); }
   // base.seq means "every event this device may read, up to here, is in
@@ -87,7 +90,15 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     }
     return n;
   }
-  async function persistSnapshot() { await storage.set(`snap:${no}`, { seq: base.seq, state: base }); }
+  // The saved copy is written at most every PERSIST_MS, not per event: it is
+  // only a head start (the worker has everything after its seq) and the
+  // outbox is saved on its own, so a write skipped by a closed tab loses nothing.
+  let persistTimer = null;
+  function persistSnapshot() {
+    if (!persistTimer) persistTimer = timers.setTimeout(persistNow, PERSIST_MS);
+    return Promise.resolve();
+  }
+  async function persistNow() { timers.clearTimeout(persistTimer); persistTimer = null; try { await storage.set(`snap:${no}`, { seq: base.seq, state: base }); } catch {} }
   function replaceBase(seq, projections) {
     base = { ...initialState(), ...projections, seq };
     applied.clear(); appliedOrder.length = 0;
@@ -206,7 +217,12 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
       case 'event': if (foldIntoBase([f.event])) { rebuild(); await persistSnapshot(); setStatus({}); } return;
       case 'ack': for (const w of [...socketWaiters]) if (w(f.results, f.now)) break; return;
       case 'clock': noteClock(f.now, hbSent); return;
-      case 'error': if (f.code === 'unauthorised') session.unauthorised(); else setStatus({ lastError: f.message }); return;
+      // An expired token is renewed (the session change reconnects); a
+      // revoked or refused one is the end of the session.
+      case 'error':
+        if (f.code === 'expired') { session.refresh().catch(() => {}); return; }
+        if (f.code === 'unauthorised' || f.code === 'revoked') session.unauthorised(); else setStatus({ lastError: f.message });
+        return;
       default: return;
     }
   }
@@ -232,7 +248,9 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   function heartbeat() {
     timers.clearTimeout(hbTimer);
     const hb = { app: session.app, online: online(), outbox: pending.length, lastError: status.lastError, area: session.current?.roles?.join(',') || null };
-    if (ws && ws.readyState === 1) { hbSent = Date.now(); ws.send(JSON.stringify({ t: 'hb', ...hb })); }
+    // A device that only listens never asks for its token, so the
+    // heartbeat does: it renews ahead of expiry and the socket follows.
+    if (ws && ws.readyState === 1) { hbSent = Date.now(); ws.send(JSON.stringify({ t: 'hb', ...hb })); session.token().catch(() => {}); }
     else if (online() && !closed) sendHbHttp(hb);          // polling fallback still reports presence
     hbTimer = timers.setTimeout(heartbeat, HEARTBEAT_MS);
   }
@@ -270,6 +288,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
 
   function close() {
     closed = true; offSession(); timers.clearTimeout(wsTimer); timers.clearTimeout(hbTimer); timers.clearTimeout(hbSoon); stopPolling();
+    timers.clearTimeout(persistTimer); persistTimer = null;   // never written after close: sign-out has just deleted it
     if (ws) { const s = ws; ws = null; try { s.close(); } catch {} }
     setStatus({ state: 'offline' });
   }

@@ -82,7 +82,7 @@ D1, R2 and KV bindings are added when the features that need them land
 
 | Route | Who | Status |
 | --- | --- | --- |
-| `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` |
+| `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` (answers a `trust` secret the device sends back next time, so the owner-wide lockout cannot shut it out) |
 | `POST /v1/auth/unlock` | signed-in device | live: area or manager code adds a role |
 | `POST /v1/auth/refresh` | signed-in device | live: rotates the refresh token |
 | `POST /v1/auth/lock` | signed-in store device | live: idle re-lock, drops area and manager codes back to the floor session |
@@ -101,7 +101,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/store/:no/map` | owner | live: publish a version (floors with their level and walk paths, stairs and lift links included; `source`, the map editor's own document, optional); logs `map.publish`, sets the registry's map version |
 | `GET /v1/store/:no/map/:version/source` (`latest` allowed) | owner | live: the map editor's document for that version, so the editor reopens what was drawn; 404 for a version published from a file without one |
 | `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B (`source: k2b`) and Decant Visualiser (`source: dv`) importers with dry run; area state flip |
-| `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge |
+| `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge. Only a caller with a token starts the product-page fetches for price and image; anyone else gets what is cached |
 | `GET /v1/catalogue/nearmiss?kc=` | anyone | live: catalogue keycodes one digit away (a mistyped or misread code) |
 | `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
@@ -110,15 +110,17 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
 | `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }] }`, ≤ 20,000 rows; a re-save that day replaces it); logs `soh.publish`; the newest 26 are kept |
 | `GET /v1/store/:no/soh?n=12`, `DELETE /v1/store/:no/soh/:date` | stockroom code, manager or owner | live: the newest n snapshots, oldest first, for the stock classes; remove logs `soh.remove` |
-| `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
+| `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`carton-profiles/1`, the shape of Decant Visualiser’s `dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes |
 | `POST /v1/store/:no/photo` | store token for that store | live: an issue photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
-| `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo, until 90 days after its issue is completed or removed |
-| `DELETE /v1/store/:no/photo/:id` | store token or owner | live: deletes the photo's bytes (the `issue.photo` remove event detaches it from the issue) |
+| `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo while an issue lists it (until 90 days after the issue is completed or removed); one on no issue only to the device that took it |
+| `DELETE /v1/store/:no/photo/:id` | store token or owner | live: deletes the photo's bytes once no live issue lists it (`409` while one does: the `issue.photo` remove event takes it off first); a draft not on an issue yet only by the device that took it, a manager or the owner |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `revoked` (signed out by a rotation, suspension
-or revoke), `suspended`, `invalid_event`, `duplicate` (a success),
-`not_implemented`, plus reducer codes such as `bay_occupied` and `cage_exists`.
+or revoke), `suspended`, `invalid_event`, `payload_too_large` (an event over
+its type's cap, `PAYLOAD_MAX` in the catalogue), `duplicate` (a success),
+`not_implemented`, plus reducer codes such as `bay_occupied`, `cage_exists` and
+`unchanged`. A socket whose token runs out is told `expired` and closed.
 
 Sign-in and unlock lock out per device (5 wrong), per store (30 in an hour)
 and per network address (200 in an hour; stores may share one), each for

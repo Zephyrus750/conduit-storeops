@@ -108,3 +108,59 @@ test('a marker serviced before markers had ids keeps its history when the id arr
   assert.equal(apply(s, ev('asset.schedule', { asset: 'em_99' }, { months: 0, from: 'em_12' }, 'floor')).code, 'invalid_event');
   assert.ok(s.assets.em_12, 'a refused schedule moves nothing');
 });
+
+test('payloads are capped: per type, and the lists a device sends', async () => {
+  const { validateEvent } = await import('../../shared/validate.js');
+  const big = n => 'x'.repeat(n);
+  const v = (type, entity, payload) => validateEvent({ ...ev(type, entity, payload), actor: undefined });
+  assert.equal(v('issue.log', { issue: 'i9' }, { cat: 'leak', title: 'Drip', sev: 1, note: big(40_000) })?.code, 'payload_too_large');
+  assert.equal(v('issue.log', { issue: 'i9' }, { cat: 'leak', title: 'Drip', sev: 1, note: big(900) }), null);
+  assert.equal(v('manifest.attach', { truck: T1 }, { manNo: 'M1', consols: Array.from({ length: 300 }, (_, i) => ({ ...cons(i, 5), items: [big(200)] })) }), null, 'a manifest carries its consolidations');
+
+  const s = dock();
+  apply(s, ev('cage.create', { cage: 'BSN1240417' }, { ring: 'overstock' }, 'stockroom'));
+  same(s, () => apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: 'abc', qty: 1 }, 'stockroom')));
+  same(s, () => apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: '12345678', qty: 1e6 }, 'stockroom')));
+  same(s, () => apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: '12345678', qty: 1.5 }, 'stockroom')));
+  assert.equal(apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: '9300000000001', qty: 2 }, 'stockroom')), null, 'an item barcode is a code too');
+  same(s, () => apply(s, ev('label.assign', { micro: 'H1-01' }, { shelves: Array(401).fill('A1') }, 'floor')));
+  same(s, () => apply(s, ev('label.assign', { micro: 'H1-01' }, { shelves: [big(30)] }, 'floor')));
+  same(s, () => apply(s, ev('label.variance', { micro: 'H1-01', cycle: 'c1' }, { keycode: 'oops' }, 'floor')));
+  apply(s, ev('label.variance', { micro: 'H1-01', cycle: 'c1' }, { keycode: '12345678', note: big(900) }, 'floor'));
+  assert.equal(s.labels.variances.c1[0].note.length, 200);
+  apply(s, ev('submission.update', { bay: 'A1', date: '2026-09-07' }, { codes: { 12345678: true } }, 'stockroom'));
+  same(s, () => apply(s, ev('submission.update', { bay: 'A1', date: '2026-09-07' }, { codes: Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [String(10000000 + i), true])) }, 'stockroom')));
+  same(s, () => apply(s, ev('submission.update', { bay: 'A1', date: '2026-09-07' }, { codes: { [big(30)]: true } }, 'stockroom')));
+  same(s, () => apply(s, ev('submission.update', { bay: 'A1', date: '2026-09-07' }, { remove: [{}] }, 'stockroom')));
+  same(s, () => apply(s, ev('daylist.set', { date: '2026-09-07' }, { walkers: 2, excluded: Array(501).fill('A1') }, 'stockroom')));
+});
+
+test('the decant board escapes what devices wrote, and a slot manifest without consolidations still draws', async () => {
+  const { decantBoard } = await import('../../js/views/backdock/plan.js');
+  const day = '2026-09-07', evil = '<img src=x onerror=alert(1)>';
+  const dock = { trucks: { [`${day}-T1`]: { id: `${day}-T1`, status: 'live', pallets: {}, team: [], halts: [], manifest: { manNo: evil, consols: [] } } }, history: [] };
+  const plan = { days: { [day]: { slots: { 2: { eta: '"><script>x()</script>', manifest: { manNo: evil } } } } } };
+  const html = decantBoard(dock, plan, day);
+  assert.doesNotMatch(html, /<img|<script/);
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(html, /Truck 2/);
+});
+
+test('event times from different zones compare as instants: first mark wins, a stale submit stays stale, a load dates on the store day', () => {
+  const s = initialState();
+  const at = (type, entity, payload, when, role = 'floor') => ({ ...ev(type, entity, payload, role), at: when });
+  // 09:00 Perth is 01:00Z: as text "2026-09-07T01:30:00Z" sorts after "2026-09-07T09:00:00+08:00", as instants it is later.
+  apply(s, at('refresh.mark', { segment: 'A1 S1', week: 'w' }, {}, '2026-09-07T09:00:00+08:00'));
+  apply(s, at('refresh.mark', { segment: 'A1 S1', week: 'w' }, {}, '2026-09-07T01:30:00Z'));
+  assert.equal(s.refresh.weeks.w['A1 S1'].at, '2026-09-07T09:00:00+08:00', 'the earlier instant keeps the mark');
+  apply(s, at('refresh.mark', { segment: 'A1 S1', week: 'w' }, {}, '2026-09-07T00:30:00Z'));
+  assert.equal(s.refresh.weeks.w['A1 S1'].at, '2026-09-07T00:30:00Z');
+
+  apply(s, at('submission.update', { bay: 'B1', date: '2026-09-07' }, { codes: { 12345678: true } }, '2026-09-07T08:00:00+08:00', 'stockroom'));
+  apply(s, at('submission.reopen', { bay: 'B1', date: '2026-09-07' }, {}, '2026-09-07T10:00:00+08:00', 'stockroom'));
+  apply(s, at('submission.submit', { bay: 'B1', date: '2026-09-07' }, {}, '2026-09-07T01:30:00Z', 'stockroom'));   // 09:30 Perth: before the reopen
+  assert.notEqual(s.backfill.subs['B1:2026-09-07'].status, 'submitted');
+
+  apply(s, at('inventory.load.add', { load: 'L1' }, { label: 'L', pallets: [{ pid: 'P1', items: [{ k: '12345678', q: 1 }] }] }, '2026-09-06T23:30:00Z'));
+  assert.equal(s.inventory.loads.L1.date, '2026-09-07', '07:30 in Perth is the 7th');
+});

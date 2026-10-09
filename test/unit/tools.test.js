@@ -28,6 +28,7 @@ test('store.tools.set: the owner only, known ids, and toolOff reads the list', (
   assert.equal(apply(s, ev(['nope']))?.code, 'invalid_event');
   assert.equal(apply(s, ev(['trends', 'cages', 'trends'])), null);
   assert.deepEqual(s.tools.off, ['cages', 'trends']);
+  assert.equal(apply(s, ev(['trends', 'cages']))?.code, 'unchanged', 'the same list again is not logged');
   assert.equal(toolOff(s.tools.off, 'trends'), true); assert.equal(toolOff(s.tools.off, toolForView('cages')), true); assert.equal(toolOff(s.tools.off, 'daylist'), false);
   assert.equal(toolForView('map'), null, 'the store map is not a tool');
   assert.equal(apply(s, ev([])), null); assert.deepEqual(s.tools.off, []);

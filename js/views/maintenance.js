@@ -163,8 +163,8 @@ export default {
         else if (act === 'remove') {
           const i = ctx.store.get('issues')[selected]; if (!i) return;
           if (!confirm(`Remove "${i.title || CAT_NAME[i.cat]}"?\n\nIt leaves every list on every device. Its log stays in the store's record.`)) return;
-          await ctx.store.dispatch({ type: 'issue.remove', entity: { issue: selected }, payload: {} }); selected = null; toast('Issue removed');
-          for (const p of i.photos || []) ctx.api(`/v1/store/${ctx.storeNo}/photo/${p.id}`, { method: 'DELETE' }).catch(() => {});   // the nightly sweep catches any missed
+          const ev = await ctx.store.dispatch({ type: 'issue.remove', entity: { issue: selected }, payload: {} }); selected = null; toast('Issue removed');
+          for (const p of i.photos || []) dropPhotoWhenSent(ctx, ev, p.id);
         }
         else if (act === 'work-order') { const i = m0(ctx); if (i) printWorkOrder(ctx, i); }
         else if (act === 'visit') {
@@ -176,8 +176,8 @@ export default {
         else if (act === 'photo-open') { openPhoto(thumbs.get(a.dataset.photo)); }
         else if (act === 'photo-remove') {
           if (!confirm('Remove this photo? It is deleted from the store’s records.')) return;
-          await ctx.store.dispatch({ type: 'issue.photo', entity: { issue: selected }, payload: { photo: a.dataset.photo, remove: true } });
-          ctx.api(`/v1/store/${ctx.storeNo}/photo/${a.dataset.photo}`, { method: 'DELETE' }).catch(() => {});
+          const ev = await ctx.store.dispatch({ type: 'issue.photo', entity: { issue: selected }, payload: { photo: a.dataset.photo, remove: true } });
+          dropPhotoWhenSent(ctx, ev, a.dataset.photo);
         }
         else if (act === 'draft-photo-x') { draft.files.splice(Number(a.dataset.i), 1); readDraft(root); paint(); }
         else if (act === 'show') { const i = ctx.store.get('issues')[selected]; if (map && i?.x != null) { if (i.floor && i.floor !== map.floorId() && map.floors().some(f => f.id === i.floor)) map.floor(i.floor); map.setVb([i.x - 700, i.y - 450, 1400, 900]); if (ctx.isMobile) stage?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }
@@ -293,4 +293,16 @@ function printWorkOrder(ctx, i) {
     `<h2>Log so far</h2>` + table(['When', 'What', 'Note'], i.log.slice(-5).map(l => [esc(fmtTime(l.t)), esc(l.a), esc(l.n || '')]), ['w20', 'w20', '']) +
     `<h2>Contractor</h2><table class="ps-tbl ps-kv"><tbody>${[['Company / name', ''], ['Arrived', ''], ['Left', ''], ['Work done', ''], ['', ''], ['Parts used', ''], ['Fixed?', '☐ Yes &nbsp;&nbsp; ☐ No, follow-up needed']].map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</tbody></table>` + signoff('Contractor') + signoff('Checked by (store)');
   printSheet({ title: 'Maintenance work order', subtitle: `${esc(ctx.storeName || '')} · store ${esc(ctx.storeNo)}`, body });
+}
+
+// The worker deletes a photo's bytes only once no live issue lists it, so
+// the delete follows the event that took it off (or removed the issue) to
+// the worker. Offline, or if the event is refused, the nightly sweep drops
+// the bytes instead.
+function dropPhotoWhenSent(ctx, ev, photo) {
+  const go = () => ctx.api(`/v1/store/${ctx.storeNo}/photo/${photo}`, { method: 'DELETE' }).catch(() => {});
+  const sent = () => !ctx.store.pending.some(p => p.id === ev.id);
+  if (sent()) return go();
+  const off = ctx.store.on('status', () => { if (sent()) { off(); clearTimeout(t); go(); } });
+  const t = setTimeout(off, 120_000);
 }

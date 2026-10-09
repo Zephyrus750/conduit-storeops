@@ -13,7 +13,7 @@ test('buildProfiles: units per carton by keycode, the mode wins, gates drop thin
     man('7031482', '05/09/2026', [['43307685', 24, 1], ['42977636', 6, 1]]),
   ];
   const doc = buildProfiles(docs, { store: '1241', now: new Date('2026-09-06T00:00:00Z') });
-  assert.equal(doc.schema, 'dv-profiles/1'); assert.equal(doc.store, '1241'); assert.equal(doc.trucks_sampled, 3);
+  assert.equal(doc.schema, 'carton-profiles/1'); assert.equal(doc.store, '1241'); assert.equal(doc.trucks_sampled, 3);
   assert.deepEqual(doc.gates, { min_trucks: 3, min_consistency: 0.7, min_units_per_ctn: 3 });
   const p = doc.profiles['43307685'];
   assert.equal(p.ctn, 24); assert.equal(p.trucks, 3); assert.equal(p.consistency, 1);

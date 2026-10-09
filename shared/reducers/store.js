@@ -150,7 +150,9 @@ export const storeReducers = {
     const off = Array.isArray(e.payload.off) ? [...new Set(e.payload.off.map(String))] : null;
     if (!off) return reject('invalid_event', 'off must be a list of tool ids');
     const bad = off.find(id => !TOOL_IDS.includes(id)); if (bad) return reject('invalid_event', `unknown tool ${bad}`);
-    s.tools = { off: off.sort(), at: e.at };
+    // Nothing silent, nothing empty: the same list again is not logged.
+    if (JSON.stringify(off.sort()) === JSON.stringify(s.tools?.off || [])) return reject('unchanged', 'those tools are already the ones off');
+    s.tools = { off, at: e.at };
     return null;
   },
   'store.settings.set'(s, e) {

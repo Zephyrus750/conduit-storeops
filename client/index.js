@@ -27,7 +27,7 @@ export { createMaps } from './maps.js';
 export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, WebSocketImpl, app = 'conduit', timers } = {}) {
   const transport = createTransport({ baseUrl, fetchImpl });
   const session = createSession({ transport, storage, app });
-  const catalogue = createCatalogue({ transport, storage, timers });
+  const catalogue = createCatalogue({ transport, storage, timers, token: () => session.token() });
   const maps = createMaps({ transport, session, storage });
   const stores = new Map();
   async function open(storeNo = session.current?.store) {

@@ -29,7 +29,10 @@ export function preflight() {
   return new Response(null, { status: 204, headers: CORS });
 }
 
-export async function readJson(request) {
-  try { return await request.json(); }
-  catch { throw new HttpError(400, 'invalid_json', 'body must be JSON'); }
+// A JSON body no bigger than max, checked before it is parsed
+// (Content-Length may be absent or wrong).
+export async function readJson(request, max = 1_000_000) {
+  const text = await request.text();
+  if (text.length > max) throw new HttpError(413, 'payload_too_large', `body is over ${max >= 1e6 ? `${max / 1e6} MB` : `${max / 1e3} KB`}`);
+  try { return JSON.parse(text); } catch { throw new HttpError(400, 'invalid_json', 'body must be JSON'); }
 }

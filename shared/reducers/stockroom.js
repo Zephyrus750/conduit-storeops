@@ -22,7 +22,7 @@
 // Status enum is exactly pending | corrected | submitted ("Needs review",
 // "Ready", "Submitted"). Requested locations are a separate list, not a status.
 
-import { reject } from './util.js';
+import { reject, badList, earlier } from './util.js';
 import { backfillMetrics, scannedCodes } from '../backfill.js';
 import { gs1Parse } from '../gs1.js';
 
@@ -32,6 +32,7 @@ export const DAYLIST_SOURCES = ['requested', 'snapshot', ''];
 export const CAGE_LOG = 40;                     // activity entries kept per cage
 export const SOH_KEEP = 26;                     // snapshots kept (about six months of weekly pastes)
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SUB_CODES_MAX = 1000, CODE_LEN = 20, CAGE_LINES_MAX = 500;   // per update and per bay; code length; lines in one cage
 
 export function stockroomState() {
   return {
@@ -63,6 +64,9 @@ export const stockroomReducers = {
   'cage.scan'(s, e) {
     const c = openCage(s, e); if (c.code) return c;
     const kc = e.payload.keycode;
+    if (!/^\d{6,13}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 13 digits');
+    if (!Number.isInteger(e.payload.qty) || !e.payload.qty || Math.abs(e.payload.qty) > 9999) return reject('invalid_event', 'qty must be a whole number from -9999 to 9999, not 0');
+    if (!c.items[kc] && Object.keys(c.items).length >= CAGE_LINES_MAX) return reject('invalid_event', `a cage holds at most ${CAGE_LINES_MAX} lines`);
     c.items[kc] = (c.items[kc] || 0) + e.payload.qty;
     if (c.items[kc] <= 0) delete c.items[kc];
     c.seen = e.at; cageLog(c, e, e.payload.qty < 0 ? 'out' : 'in', `${kc} ×${Math.abs(e.payload.qty)}${e.payload.apn ? ` (item barcode ${String(e.payload.apn).slice(0, 14)})` : ''}`);
@@ -161,6 +165,11 @@ export const stockroomReducers = {
     const p = e.payload;
     const tomb = cur?.removed || {};
     const incoming = p.codes && typeof p.codes === 'object' ? Object.entries(p.codes) : [];
+    // Sizes first, so a refused update leaves the bay as it was.
+    if (incoming.length > SUB_CODES_MAX) return reject('invalid_event', `one update carries at most ${SUB_CODES_MAX} codes`);
+    if (incoming.some(([code]) => !code || code.length > CODE_LEN)) return reject('invalid_event', `a code is 1 to ${CODE_LEN} characters`);
+    for (const k of ['remove', 'incorrect']) if (p[k] !== undefined) { const no = badList(p[k], k, SUB_CODES_MAX, CODE_LEN); if (no) return reject('invalid_event', no); }
+    if (cur && Object.keys(cur.codes).length + incoming.filter(([code]) => !cur.codes[code]).length > SUB_CODES_MAX) return reject('invalid_event', `a bay holds at most ${SUB_CODES_MAX} codes`);
     const stale = incoming.filter(([code]) => !cur?.codes[code] && tomb[code] && Date.parse(e.at) <= Date.parse(tomb[code])).map(([code]) => code);
     if (stale.length && stale.length === incoming.length && !(Array.isArray(p.remove) && p.remove.length) && !Array.isArray(p.incorrect)) {
       return reject('removed_by_reviewer', `${stale.join(', ')} ${stale.length === 1 ? 'was' : 'were'} removed by the reviewer`);
@@ -189,7 +198,7 @@ export const stockroomReducers = {
   // payload.system, the pasted report's list for the bay.
   'submission.ready'(s, e) {
     const sub = sub_(s, e); if (sub.code) return sub;
-    if (e.at < sub.statusAt) return null;
+    if (earlier(e.at, sub.statusAt)) return null;
     sub.status = 'corrected'; sub.statusAt = e.at; sub.readyAt = sub.readyAt || e.at;
     if (Array.isArray(e.payload?.system)) sub.system = [...new Set(e.payload.system.map(String))];
     const m = e.payload?.metrics;
@@ -198,7 +207,7 @@ export const stockroomReducers = {
   },
   'submission.submit'(s, e) {
     const sub = sub_(s, e); if (sub.code) return sub;
-    if (sub.reopenedAt && e.at < sub.reopenedAt) return null;    // stale submit after a reopen: ignored
+    if (sub.reopenedAt && earlier(e.at, sub.reopenedAt)) return null;    // stale submit after a reopen: ignored
     if (sub.status === 'submitted') return null;
     sub.status = 'submitted'; sub.statusAt = e.at; sub.submittedDoneAt = e.at;
     sub.autoSubmitted = !!e.payload.auto; sub.metrics = sub.metrics || metrics(sub);   // submit never rewrites what ready recorded
@@ -311,7 +320,9 @@ export const stockroomReducers = {
     const d = String(e.entity.date), kc = String(e.entity.keycode), soh = (s.soh ||= { snaps: {}, verify: {} });
     if (!soh.snaps[d]) return reject('not_found', `no SOH snapshot for ${d}`);
     if (!/^\d{6,8}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 8 digits');
-    const key = `${kc}|${String(e.payload.loc)}`, v = (soh.verify[d] ||= {});
+    const loc = String(e.payload.loc);
+    if (!loc || loc.length > 40) return reject('invalid_event', 'loc is 1 to 40 characters');
+    const key = `${kc}|${loc}`, v = (soh.verify[d] ||= {});
     if (e.payload.done === false) delete v[key]; else v[key] = e.at;
     return null;
   },
@@ -320,6 +331,7 @@ export const stockroomReducers = {
     if (!(Number.isInteger(w) && w >= 1 && w <= 4)) return reject('invalid_event', 'walkers must be 1..4');
     const src = e.payload.source ?? '';
     if (!DAYLIST_SOURCES.includes(src)) return reject('invalid_event', 'source must be requested, snapshot or empty');
+    if (e.payload.excluded !== undefined) { const no = badList(e.payload.excluded, 'excluded', 500, 24); if (no) return reject('invalid_event', no); }
     s.daylist[e.entity.date] = { walkers: w, excluded: Array.isArray(e.payload.excluded) ? e.payload.excluded.map(x => String(x).toUpperCase()) : [], source: src, at: e.at };
     return null;
   },

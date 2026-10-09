@@ -144,3 +144,26 @@ export const AREA_PROJECTIONS = {
   backdock: ['dock', 'plan'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'retention'],
 };
+
+// The largest payload (as JSON) each type may carry. Most events are a few
+// hundred bytes; the default keeps one event from growing the log and the
+// live state (a Durable Object row is capped at 2 MB). The types that carry
+// whole lists say so here.
+export const PAYLOAD_MAX = {
+  default: 32_000,
+  'manifest.attach': 2_000_000,      // up to 500 consolidations with their lines
+  'truck.import': 2_000_000,         // a legacy truck, whole
+  'inventory.offsite.set': 1_000_000,
+  'inventory.load.add': 1_000_000,   // a load's pallets and their lines
+  'manifest.publish': 500_000,       // the manifest's keycodes (worker)
+  'soh.publish': 250_000,            // the snapshot's locations (worker)
+  'manifest.linkLate': 250_000,
+  'inventory.offsite.add': 128_000,
+  'store.settings.set': 128_000,
+  'plan.queues': 128_000,
+  'picklist.set': 128_000,
+  'pallet.editTimes': 64_000,
+  'refresh.clearDept': 64_000,
+  'submission.ready': 64_000,        // the report's list for the bay
+};
+export const payloadMax = type => PAYLOAD_MAX[type] || PAYLOAD_MAX.default;

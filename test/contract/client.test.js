@@ -243,3 +243,32 @@ test('a send over HTTP never skips changes another device logged in between (pol
   assert.ok(sa.status.seq >= rx.results[0].seq + 1, 'the next poll catches up past both');
   sa.close();
 });
+
+test('a poll that comes back after a whole snapshot does not apply its events twice', async () => {
+  const { createStore, POLL_MS } = await import('../../client/store.js');
+  let poll = null;
+  const timers = { setTimeout: (f, ms) => (ms === POLL_MS ? ((poll = f), 1) : setTimeout(f, ms)), clearTimeout: id => clearTimeout(id) };
+  const a = device('dbl-a'), b = device('dbl-b');
+  await a.session.load(); await a.session.signIn({ store: '1241', pin: '2468' }); await a.session.unlock('SR-CODE');
+  await b.session.load(); await b.session.signIn({ store: '1241', pin: '2468' }); await b.session.unlock('SR-CODE');
+  // a's /changes can be held mid-flight.
+  let hold = null;
+  const transport = { ...a.transport, request: async (path, opts) => { if (hold && path.includes('/changes')) await hold.promise; return a.transport.request(path, opts); } };
+  const sa = createStore({ storeNo: '1241', session: a.session, transport, storage: memoryStorage(), WebSocketImpl: null, online: () => true, timers });
+  await sa.load(); await sa.connect();
+  try {
+  await until(() => poll && sa.status.state === 'polling' && sa.status.seq > 0);
+  const send = async (type, entity, payload) => (await b.transport.request('/v1/store/1241/events', { method: 'POST', body: { events: [{ id: ulidLike(), store: '1241', area: 'stockroom', type, entity, payload, at: new Date().toISOString(), v: 1 }] }, token: await b.session.token() })).results[0];
+  assert.equal((await send('cage.create', { cage: 'BSN1240990' }, { ring: 'overstock' })).ok, true);
+  assert.equal((await send('cage.scan', { cage: 'BSN1240990' }, { keycode: '12345678', qty: 2 })).ok, true);
+  // The poll leaves with the old seq and is held; meanwhile a role change brings a whole snapshot.
+  let release; hold = { promise: new Promise(r => { release = r; }) };
+  poll();
+  await new Promise(r => setTimeout(r, 50));
+  await a.session.unlock('DK-CODE');
+  await until(() => sa.get('cages')?.BSN1240990?.items?.['12345678'] === 2);
+  hold = null; release();
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal(sa.get('cages').BSN1240990.items['12345678'], 2, 'the late poll is not applied on top of the snapshot');
+  } finally { sa.close(); }
+});

@@ -372,9 +372,8 @@ svg.map.real { background: #fff; }
 .map.real.rf[data-focus] .shelf-group:not([data-mark="focus"]):not([data-mark="done"]):not([data-plan]) .shelf { fill-opacity: .09 !important; }
 .map.real.rf[data-focus] .shelf-group:not([data-mark="focus"]):not([data-mark="done"]):not([data-plan]) .shelf-label { opacity: 0 !important; }
 .map.real.rf .shelf-group[data-plan] .shelf { fill-opacity: 1 !important; }
-.map.real.rf .shelf-group[data-mark="done"] .shelf { fill: #16a34a !important; fill-opacity: 1 !important; stroke: #fff !important; stroke-width: 2.5 !important; animation: rf-done-pulse 2s ease-in-out infinite; }
-@keyframes rf-done-pulse { 0%, 100% { stroke: #4ade80; stroke-width: 2.2; } 50% { stroke: #fff; stroke-width: 4; } }
-@media (prefers-reduced-motion: reduce) { .map.real.rf .shelf-group[data-mark="done"] .shelf { animation: none; } }
+/* Static on purpose: an animation here re-rasters the map every frame on hundreds of shelves. */
+.map.real.rf .shelf-group[data-mark="done"] .shelf { fill: #16a34a !important; fill-opacity: 1 !important; stroke: #4ade80 !important; stroke-width: 3 !important; }
 .map.real.rf .shelf-group .shelf-label { fill: #fff !important; }
 .map.real.rf .shelf-badges, .map.real.nobadges .shelf-badges { display: none; }
 .map.real.rf .shelf-group[data-sel] .shelf { stroke: #111827 !important; stroke-width: 3 !important; }

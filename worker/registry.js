@@ -55,6 +55,7 @@ export class RegistryObject extends DurableObject {
         issued TEXT NOT NULL, expires INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS lockout (key TEXT PRIMARY KEY, fails INTEGER NOT NULL, until INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS owner_trust (hash TEXT PRIMARY KEY, device TEXT, fp TEXT NOT NULL, at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS actions (
         seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, type TEXT NOT NULL, store TEXT, detail TEXT
       );
@@ -93,6 +94,7 @@ export class RegistryObject extends DurableObject {
         if (p[1] === 'fail') { this.failAll(body.keys || [body.key]); return { ok: true }; }
         if (p[1] === 'check') { for (const k of body.keys || [body.key]) this.checkLocked(k); return { ok: true }; }
         return this.clear(body.key);
+      case 'POST /trust/*': return p[1] === 'issue' ? this.trustIssue(body.device) : this.trustCheck(body.trust);
       case 'GET /actions': return this.actions();
       case 'POST /log': this.log(String(body.type || 'note'), body.store || null, body.detail || {}); return { ok: true };
       default: throw new HttpError(404, 'not_found', `registry has no ${key}`);
@@ -159,6 +161,22 @@ export class RegistryObject extends DurableObject {
     return { fails, until };
   }
   failAll(keys) { for (const k of keys) this.fail(k); }
+  // Owner devices: a successful owner sign-in hands the device a secret that
+  // marks it as one the owner has used. Its sign-ins are counted on their
+  // own key, not the owner-wide one, so wrong keys sprayed from elsewhere
+  // cannot lock the owner out of their own devices. A new owner key (its
+  // fingerprint) ends every trust; the 20 most recent devices are kept.
+  async trustIssue(device) {
+    const trust = randomToken(24), fp = await this.ownerFp();
+    this.sql.exec('INSERT INTO owner_trust (hash, device, fp, at) VALUES (?, ?, ?, ?)', await sha256(trust), device ? String(device).slice(0, 64) : null, fp, Date.now());
+    this.sql.exec('DELETE FROM owner_trust WHERE hash NOT IN (SELECT hash FROM owner_trust ORDER BY at DESC LIMIT 20)');
+    return { trust };
+  }
+  async trustCheck(trust) {
+    if (typeof trust !== 'string' || trust.length < 16 || trust.length > 128) return { ok: false };
+    const hash = await sha256(trust), row = this.sql.exec('SELECT fp FROM owner_trust WHERE hash = ?', hash).toArray()[0];
+    return row && row.fp === await this.ownerFp() ? { ok: true, id: hash.slice(0, 16) } : { ok: false };
+  }
   clear(key) { this.sql.exec('DELETE FROM lockout WHERE key = ?', key); return { ok: true }; }
 
   // ── refresh tokens ────────────────────────────────────────────────────

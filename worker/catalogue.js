@@ -35,7 +35,9 @@ export function parseCodes(raw) {
   return codes;
 }
 
-export async function lookup(env, ctx, codes, { details = true, fetchImpl = fetch, cache = globalThis.caches?.default, now = Date.now } = {}) {
+// upstream: false serves details from the cache only and never starts a
+// product-page fetch (an anonymous caller; GET /v1/catalogue).
+export async function lookup(env, ctx, codes, { details = true, upstream: fetchUp = true, fetchImpl = fetch, cache = globalThis.caches?.default, now = Date.now } = {}) {
   const items = {}, needLink = [], needDetail = [];
   // 1. edge cache
   for (const kc of codes) {
@@ -54,7 +56,7 @@ export async function lookup(env, ctx, codes, { details = true, fetchImpl = fetc
     }
   }
   // 3. price, was, image, clearance for the ones that have a product page
-  if (details && needDetail.length) {
+  if (details && fetchUp && needDetail.length) {
     const det = await fetchDetails(env, needDetail.map(kc => ({ kc, u: items[kc].url })), fetchImpl);
     for (const kc of needDetail) {
       const d = det[kc];

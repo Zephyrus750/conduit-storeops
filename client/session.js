@@ -34,7 +34,11 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     await save(); return snapshot();
   }
   async function signInOwner({ ownerKey }) {
-    const r = await transport.request('/v1/auth/signin', { method: 'POST', body: { ownerKey, device } });
+    // owner_trust: this device has signed in as the owner before, so its
+    // attempts are not held up by wrong keys tried elsewhere.
+    const trust = await storage.get('owner_trust');
+    const r = await transport.request('/v1/auth/signin', { method: 'POST', body: { ownerKey, device, ...(trust ? { trust } : {}) } });
+    if (r.trust) await storage.set('owner_trust', r.trust);
     cur = { token: r.token, refresh: r.refresh, expires: r.expires, store: null, name: null, roles: ['owner'], caps: [], owner: true };
     await save(); return snapshot();
   }

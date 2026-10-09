@@ -19,3 +19,11 @@ test('map svg: the published Busselton map passes through unchanged', () => {
   const r = sanitizeSvg(map);
   assert.equal(r.stripped, 0); assert.equal(r.svg, map);
 });
+
+test('escapes do not hide an off-page url: references, CSS escapes, comments, and presentation attributes', () => {
+  const { svg } = sanitizeSvg('<svg><style>.a{fill:u\\72 l(http://e/1)}.b{fill:u&#114;l(http://e/2)}.c{fill:u/**/rl(http://e/3)}.d{fill:url(#ok)}</style>'
+    + '<rect fill="url(http://e/4)"/><rect style="fill:u&#x72;l(http://e/5)"/><rect mask="u\\72 l(http://e/6)"/><rect fill="url(#grad)" stroke="#fff"/><rect style="fill:\\6a avascript:1"/></svg>');
+  assert.doesNotMatch(svg, /e\/[1-6]/);
+  assert.match(svg, /url\(#ok\)/); assert.match(svg, /fill="url\(#grad\)"/);
+  assert.doesNotMatch(svg, /avascript/);
+});
