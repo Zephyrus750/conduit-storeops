@@ -129,7 +129,7 @@ function board(ctx) {
 export default {
   id: 'wallboard', title: 'Wallboard', icon: 'chart', area: 'backdock',
   desktop(ctx) { return board(ctx); },
-  mobile(ctx) { const { t } = current(ctx), pr = t ? progress(t) : null; return mhead('Wallboard', t ? `Truck ${esc(truckNo(t.id))}` : 'No truck') + (t ? `<div class="wb-kpis">${tile('Decanted', `${pr.done}/${pr.total}`, `${pr.pct}%`)}${tile('Pallets', `${pr.doneCount}/${pr.count}`, '')}</div>` : '') + `<div class="mv-note">${ic('chart')}The full wallboard is for a desktop or a wall screen.</div>`; },
+  mobile(ctx) { const { t } = current(ctx), pr = t ? progress(t) : null; return mhead('Wallboard', t ? `Truck ${esc(truckNo(t.id))}` : 'No truck') + (t ? `<div class="wb-kpis">${tile('Decanted', `${pr.done}/${pr.total}`, `${pr.pct}%`)}${tile('Pallets', `${pr.doneCount}/${pr.count}`, '')}</div>` : ''); },
   mount(ctx, root) {
     root.addEventListener('click', e => {
       const a = e.target.closest('[data-act]'); if (!a) return;

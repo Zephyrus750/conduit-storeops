@@ -320,7 +320,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-home') { st.mView = null; st.mStep = 1; repaint(); }
   else if (act === 'm-check') { st.mView = 'check'; repaint(); }
   else if (act === 'm-remind-close') { st.mRemind = false; repaint(); }
-  else if (act === 'm-dismiss') { if (!confirm(`Clear ${a.dataset.bay} from your list? It was removed from the board at the desk.`)) return; mineSave(mineLocal().filter(x => !(x.bay === a.dataset.bay && x.date === a.dataset.date))); repaint(); }
+  else if (act === 'm-dismiss') { if (!confirm(`Clear ${a.dataset.bay} from your list? It was removed from today’s board.`)) return; mineSave(mineLocal().filter(x => !(x.bay === a.dataset.bay && x.date === a.dataset.date))); repaint(); }
   else if (act === 'm-done') {
     const bay = a.dataset.bay, d = a.dataset.date; if (!confirm(`Mark "${bay}" as submitted on the PDT?`)) return;
     const r = await send(ctx, 'submission.submit', { bay, date: d }); if (!r) return;
@@ -415,7 +415,7 @@ function mineView(ctx) {
   // items wait (WAITING) and come up to scan back once it is submitted.
   const readdBtn = r => `<span class="btn sm" data-act="m-readd" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">Re-add</span>`;
   const chip = r => r.state === 'ready' ? `<span class="btn sm primary" data-act="m-done" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">Submit</span>` : r.state === 'gone' ? `<span class="btn sm" data-act="m-dismiss" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">Removed · clear</span>` : '<span class="status warn">Review</span>';
-  const line = r => [esc(r.bay) + (r.date !== todayKey() ? ` <small class="cs-dim">${esc(r.date.slice(5))}</small>` : ''), r.state === 'ready' ? 'Reviewed: finalise it on the PDT, then tap Submit' : r.state === 'gone' ? 'Removed from the board at the desk' : r.state === 'done' ? `Submitted ✓${readdOpen(r.sub).length ? ` · ${readdOpen(r.sub).length} to scan back` : ''}` : 'With the desk for review', r.state === 'gone' ? chip(r) : (r.state === 'done' ? '' : chip(r)) + readdBtn(r), r.state === 'ready' ? 'hot' : r.state === 'gone' ? 'warn' : ''];
+  const line = r => [esc(r.bay) + (r.date !== todayKey() ? ` <small class="cs-dim">${esc(r.date.slice(5))}</small>` : ''), r.state === 'ready' ? 'Reviewed: finalise it on the PDT, then tap Submit' : r.state === 'gone' ? 'Removed from today’s board' : r.state === 'done' ? `Submitted ✓${readdOpen(r.sub).length ? ` · ${readdOpen(r.sub).length} to scan back` : ''}` : 'In review', r.state === 'gone' ? chip(r) : (r.state === 'done' ? '' : chip(r)) + readdBtn(r), r.state === 'ready' ? 'hot' : r.state === 'gone' ? 'warn' : ''];
   const items = rows.reduce((n, r) => n + readdOpen(r.sub).length, 0);
   return mhead('My locations', `${rows.length} bay${rows.length === 1 ? '' : 's'} from this phone · last 2 days`) +
     (open.length ? mrows(open.map(line)) : `<div class="mv-note">${ic('layers')}No locations submitted yet. Scan a location's codes and send it to review.</div>`) +
@@ -470,8 +470,8 @@ function mobile(ctx) {
     const s = m.subs.find(x => x.bay === st.mBay), n = s ? Object.values(s.codes).filter(c => c.scanned).length : 0;
     const next = m.requested.slice(0, 3);
     return mhead('Sent', `${esc(st.mBay)} · ${n} codes · ${fmtTime(new Date().toISOString())}`) + msteps(3, ['Bay', 'Scan', 'Send']) +
-      `<div class="mv-done"><span class="ck">${ic('check')}</span><b>${esc(st.mBay)} is with review</b><span>${n} codes. The desk compares it against the report; the sheet is free for the floor.</span></div>` +
-      (next.length ? `<div class="mv-sub">Next</div>` + mrows(next.map(b => [esc(b), 'Requested by the desk', `<span class="btn sm" data-act="m-resume" data-bay="${esc(b)}">Start</span>`, ''])) : '') +
+      `<div class="mv-done"><span class="ck">${ic('check')}</span><b>${esc(st.mBay)} is with review</b><span>${n} codes. Review compares it against the report; the sheet is free for the floor.</span></div>` +
+      (next.length ? `<div class="mv-sub">Next</div>` + mrows(next.map(b => [esc(b), 'Requested', `<span class="btn sm" data-act="m-resume" data-bay="${esc(b)}">Start</span>`, ''])) : '') +
       mfoot(mbig('Scan the next bay', '', 'barcode', ' data-act="m-next"') + mghost('Back to home', ' data-go="mhome"'));
   }
   // Every bay on today's board, as Vector's phone: resume or mark ready the

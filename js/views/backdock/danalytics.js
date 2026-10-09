@@ -64,8 +64,8 @@ function page(ctx) {
 
 export default {
   id: 'danalytics', title: 'Analytics', icon: 'bars', area: 'backdock',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) { return page(ctx); },
-  mobile() { return mhead('Analytics', 'Desktop only') + `<div class="mv-note">${ic('bars')}Receiving analytics are for the desktop.</div>`; },
   mount(ctx, root) {
     const t = truckInHand(ctx.store.get('dock')); if (t) ensureNames(ctx, topProducts(t).map(r => r.k), () => ctx.rerender());
     root.addEventListener('click', e => {

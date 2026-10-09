@@ -366,6 +366,8 @@ function show(id, arg) {
   if (id === 'more') return openMore();
   if (id === 'launcher') return openLauncher();
   let view = VIEWS[id] || VIEWS[admin ? 'admin' : 'dashboard'];
+  // A desk-only view (deskOnly) is not part of the phone: a link to one goes home.
+  if (mobile && view.deskOnly) { id = HOME[ws] || 'map'; view = VIEWS[id]; arg = undefined; }
   // Admin views need the owner session; store views need a store.
   if (view.id.startsWith('admin') && !admin) view = VIEWS.dashboard;
   if (!view.id.startsWith('admin') && view.id !== 'settings' && !store) view = VIEWS.admin;
@@ -468,7 +470,7 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>Updating…</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]) });
+const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]).filter(v => !(isMobile() && v.deskOnly)), phone: () => isMobile() });
 $('#msearch input')?.addEventListener('focus', e => { if (!admin && store) { e.target.blur(); search.open(e.target.value); } });
 
 // Voice search on the phone (ShelfSearcher's, decision 28): the microphone in

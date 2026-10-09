@@ -58,7 +58,7 @@ export const WORKSPACES = [['floor', 'Floor', 'm-map', 'Map, refresh, labels, st
 // The owner console's rail: stores are added at runtime, these are the system rows.
 export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminmaps', 'm-map', 'Maps'], ['adminservice', 'm-settings', 'Service'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
 export const MORE = {
-  floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['inventory', 'm-inventory', 'Inventory'], ['maintenance', 'm-maintenance', 'Report an issue'], ['mapedits', 'edit', 'Suggest map edits'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['maintenance', 'm-maintenance', 'Report an issue'], ['mapedits', 'edit', 'Suggest map edits'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
   stockroom: [['daylist', 'm-daylist', 'Day list'], ['codelist', 'barcode', 'Quick Scan'], ['srhistory', 'm-srhistory', 'History'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
-  backdock: [['manifests', 'file', 'Manifests'], ['profiles', 'box', 'Carton profiles'], ['planner', 'm-planner', 'Planner'], ['rhistory', 'm-rhistory', 'History'], ['dockscreen', 'grid', 'Dock screen'], ['wallboard', 'chart', 'Wallboard'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  backdock: [['rhistory', 'm-rhistory', 'History'], ['dockscreen', 'grid', 'Dock screen'], ['wallboard', 'chart', 'Wallboard'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
 };

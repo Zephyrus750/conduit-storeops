@@ -9,7 +9,7 @@
 // The register and loads are store events (inventory.*), so every desk sees
 // them; prices are this device's cache, as ShelfSearcher kept them.
 
-import { $, $$, ic, esc, vh, sub, mhead, toast, fmtDate, today, dep, DEPT_COLOUR } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, toast, fmtDate, today, dep, DEPT_COLOUR } from '../ui.js';
 import { mountMap, bindMapChrome, hasMap } from '../map.js';
 import { MICRO, SUBS } from '../data/micros.js';
 import { loadXLSX } from './backdock/common.js';
@@ -210,16 +210,9 @@ function paintMap(ctx, map) {
   svg.classList.add('inv-paint');
 }
 
-// ── Phone ───────────────────────────────────────────────────────────────
-function phone(ctx) {
-  const t = today(), sum = registerSummary(inv(ctx).offsite, t), rows = [...sum.overdue, ...sum.dueSoon];
-  return mhead('Inventory', `${sum.live} off-site · next callback ${sum.nextCallback ? esc(fmtDate(sum.nextCallback)) : '—'}`) +
-    `<div class="mv-sub">Returns due</div>${rows.length ? `<div class="mv-rows">${rows.map(r => `<div class="mv-row${r.cb < t ? ' bad' : ''}"><span class="a">${esc(r.pid)}</span><span class="b">${esc(r.title || r.desc || 'Pallet')}<br><small>callback ${esc(fmtDate(r.cb))}${r.cb < t ? ' · overdue' : ''}</small></span><span class="c"><button class="btn sm" data-act="rec" data-pid="${esc(r.pid)}">Received</button></span></div>`).join('')}</div>` : `<div class="mv-note">${ic('check')}No returns due in the next fortnight.</div>`}` +
-    `<div class="mv-note">${ic('lock')}Imports, loads, heat and the clearance watch are on the desktop.</div>`;
-}
-
 export default {
   id: 'inventory', title: 'Inventory', icon: 'm-inventory',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     const I = inv(ctx), sum = registerSummary(I.offsite, today());
     const head = vh('Inventory', sub(`${sum.live} pallet${sum.live === 1 ? '' : 's'} off-site`, `${Object.keys(I.loads).length} load${Object.keys(I.loads).length === 1 ? '' : 's'}`, sum.overdue.length ? `<b class="c-red">${sum.overdue.length} overdue</b>` : ''), `<label class="btn primary">${ic('file')}Import<input type="file" accept=".xlsx,.xls,.csv" data-act="file" hidden></label>`, 'm-inventory');
@@ -227,7 +220,6 @@ export default {
     const body = st.tab === 'loads' ? loads(ctx) : st.tab === 'trends' ? trends(ctx) : st.tab === 'clearance' ? clearance(ctx) : register(ctx);
     return head + stagePanel(ctx) + tabs + `<div class="inv-body">${body}</div>`;
   },
-  mobile(ctx) { return phone(ctx); },
   mount(ctx, root) {
     // From search: a load, or an off-site pallet (highlighted in the register), once.
     if (ctx.arg && ctx.arg !== usedArg && (ctx.arg.load || ctx.arg.pid)) {

@@ -70,7 +70,7 @@ function mobile(ctx) {
   ensureNames(ctx, m.active.flatMap(x => x.checks.map(c => c.kc)), repaint);
   return mhead('Day list', `${m.active.length} locations · ${m.nChecks} checks${m.snap ? ` · ${m.nDone} verified` : ''}`) +
     (m.active.length ? m.walkers.map((w, i) => `<div class="mv-sec">Walker ${letter(i)} · ${w.length ? `${esc(w[0].loc)} – ${esc(w[w.length - 1].loc)}` : ''}</div>${w.map(x => `<div class="sri-stop m"><div class="sri-stop-h"><b class="mono">${esc(x.loc)}</b>${status(x, m.done)}<span class="btn sm" data-go="bfreview" data-bay="${esc(x.bay)}">Start</span></div>${x.checks.map(c => taskRow(c, m.done)).join('')}</div>`).join('')}`).join('') : `<div class="mv-note">${ic('layers')}Nothing posted yet. Scanning a bay that is not here still works.</div>`) +
-    `<div class="mv-note">${ic('layers')}Ordered by the desk’s day list. Tick a count once it is done.</div>`;
+    `<div class="mv-note">${ic('layers')}In today’s day list order. Tick a count once it is done.</div>`;
 }
 
 // The triage sheets: one page per walker, each stop with its counts (bay,

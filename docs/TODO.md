@@ -42,6 +42,12 @@ brackets below).
   - a **Maps** page: every store's map, Open editor, and the suggestions
     from every store in one queue.
 
+- **The phone never talks about the desk** (2026-10-09): Inventory,
+  Manifests, Carton profiles, Planner, Analytics, Print map, Trends and
+  Stock intelligence are desk-only views (`deskOnly`): they are off the
+  phone's menus and search, and a link to one on a phone goes home. Phone
+  notes, hints, Help, the tour and What's New no longer mention the desk.
+
 ## Next to build
 
 1. **Floor leftovers, both waiting on you:** the seven languages if they

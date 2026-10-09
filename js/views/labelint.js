@@ -68,7 +68,7 @@ export default {
       if (!assigning || !selected) {
         const micro = microOf(info.full);
         if (micro) { selected = micro; openSub = micro.split('-')[0]; varianceFor = null; paint(); }
-        else toast(`${info.full} is not on a micro-department yet` + (ctx.isMobile ? '; shelves are assigned on a desk' : '; choose one and Assign shelves'));
+        else toast(`${info.full} is not on a micro-department yet` + (ctx.isMobile ? '' : '; choose one and Assign shelves'));
         return;
       }
       const m = model(ctx), cur = expand(m.L.assign[selected] || []), id = info.full;

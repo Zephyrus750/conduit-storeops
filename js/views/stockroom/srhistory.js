@@ -67,7 +67,7 @@ export default {
   mobile(ctx) {
     if (ctx.arg?.q != null && st.arg !== ctx.arg) { st.q = ctx.arg.q; st.arg = ctx.arg; st.open = null; }
     const m = model(ctx), today = m.subs.filter(s => s.date === todayKey());
-    return mhead('History', `Today · ${today.length} bays sent`) + (today.length ? mrows(today.map(s => [esc(s.bay), `${s.metrics.accuracy == null ? `${s.metrics.scanned} scanned · no report` : `${s.metrics.expected} codes · ${s.metrics.accuracy}%`}${s.status === 'submitted' ? ' · submitted' : ''}`, fmtTime(s.readyAt), s.metrics.accuracy != null && s.metrics.accuracy < 90 ? 'warn' : 'ok'])) : `<div class="mv-note">${ic('layers')}Nothing sent yet today.</div>`) + `<div class="mv-note">${ic('lock')}Metrics and the full record are on the desktop History.</div>`;
+    return mhead('History', `Today · ${today.length} bays sent`) + (today.length ? mrows(today.map(s => [esc(s.bay), `${s.metrics.accuracy == null ? `${s.metrics.scanned} scanned · no report` : `${s.metrics.expected} codes · ${s.metrics.accuracy}%`}${s.status === 'submitted' ? ' · submitted' : ''}`, fmtTime(s.readyAt), s.metrics.accuracy != null && s.metrics.accuracy < 90 ? 'warn' : 'ok'])) : `<div class="mv-note">${ic('layers')}Nothing sent yet today.</div>`);
   },
   mount(ctx, root) {
     const repaint = () => ctx.rerender();

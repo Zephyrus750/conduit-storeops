@@ -124,6 +124,7 @@ function detail(ctx, list) {
 
 export default {
   id: 'manifests', title: 'Manifests', icon: 'm-manifests', area: 'backdock',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     const list = entries(ctx);
     if (st.open && !list.some(x => x.manNo === st.open)) st.open = null;
@@ -138,7 +139,6 @@ export default {
     const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.</div>`}</div>`;
     return head + `<div class="mgrid">${side}${detail(ctx, list)}</div>`;
   },
-  mobile() { return mhead('Manifests', 'Desktop only') + `<div class="mv-result">${ic('lock')}<b style="font-size:22px">Managed on the desktop</b><span>Manifests arrive by email and are published on the desktop. On the dock phone, Search on the truck finds a consol or an item.</span></div>`; },
   mount(ctx, root) {
     // From search: open that manifest (and filter to a consolidation).
     if (ctx.arg?.man && ctx.arg !== usedArg && ctx.store.get('dock').manifests?.[ctx.arg.man]) { usedArg = ctx.arg; st.open = ctx.arg.man; if (ctx.arg.q) st.q = ctx.arg.q; setTimeout(() => ctx.rerender(), 0); }

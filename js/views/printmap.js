@@ -101,13 +101,13 @@ function page(ctx, map, scope, ar) {
 
 export default {
   id: 'printmap', title: 'Print map', icon: 'print',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     if (!hasMap()) return vh('Print map', sub('No map published yet'), '', 'print') + `<div class="card"><p class="lbl">The owner publishes the store's map from the console. Then the composer prints it.</p></div>`;
     const ar = area();
     return vh('Print map', sub(`${o.paper} ${o.orient}`, mapInfo()?.version ? `map ${esc(mapInfo().version)}` : ''), `<button class="btn primary" data-act="pm-print">${ic('print')}Print · Save as PDF</button>`, 'print') +
       `<div class="pm-wrap"><div class="pm-room"><div class="pm-paper" style="aspect-ratio:${ar.w} / ${ar.h}"><div id="pmtitle"></div><div class="pm-stage" id="pmstage" style="flex:${ar.mapH} 1 0"></div><div id="pmlegend"></div></div></div><div class="sidecol pm-side" id="pmside">${panel()}</div></div>`;
   },
-  mobile() { return `<div class="mv-note">${ic('print')}The print composer is on a desk: open Print map on a store PC.</div>`; },
   mount(ctx, root) {
     const stage = $('#pmstage', root); if (!stage) return [];
     const map = mountMap(stage, { clone: true, badges: true, tips: false });

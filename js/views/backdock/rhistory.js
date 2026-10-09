@@ -71,7 +71,7 @@ export default {
   },
   mobile(ctx) {
     const m = model(ctx), recent = m.all.slice(0, 8);
-    return mhead('Receiving history', `${m.win.length} trucks · ${WINDOW_DAYS} days`) + (recent.length ? mrows(recent.map(r => [`${esc(fmtDate(r.date))} T${esc(truckNo(r.id))}`, `${r.cartons} ctn · ${r.pallets} pallets · ${r.teamRate} ctn/hr`, hm(r.clearMins), r.audit && (r.audit.missing || r.audit.extra) ? 'warn' : 'ok'])) : `<div class="mv-note">${ic('truck')}No truck finalised yet.</div>`) + `<div class="mv-note">${ic('lock')}Where the time went, the reconciliation and the crew credit live on the desktop.</div>`;
+    return mhead('Receiving history', `${m.win.length} trucks · ${WINDOW_DAYS} days`) + (recent.length ? mrows(recent.map(r => [`${esc(fmtDate(r.date))} T${esc(truckNo(r.id))}`, `${r.cartons} ctn · ${r.pallets} pallets · ${r.teamRate} ctn/hr`, hm(r.clearMins), r.audit && (r.audit.missing || r.audit.extra) ? 'warn' : 'ok'])) : `<div class="mv-note">${ic('truck')}No truck finalised yet.</div>`);
   },
   mount(ctx, root) {
     root.addEventListener('click', async e => {

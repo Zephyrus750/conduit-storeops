@@ -47,7 +47,9 @@ function recordsHtml(r, Q) {
 }
 const ARG_KEYS = ['select', 'dept', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay'];
 
-export function initSearch({ client, frame, go, tools = () => [], life = () => null, data = () => null }) {
+export function initSearch({ client, frame, go, tools = () => [], life = () => null, data = () => null, phone = () => false }) {
+  // On a phone, the records that open desk-only views (manifests, inventory) are left out.
+  const found = Q => { const r = findRecords(data(), Q); if (phone()) { r.manifests = []; r.loads = []; r.offsite = []; } return r; };
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
   el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like A16 S2, a manifest, a consolidation, a cage, a load or a tool…" autocomplete="off" inputmode="search"><button class="voicebtn" type="button" data-voice hidden aria-label="Search by voice" title="Search by voice">${ic('mic')}</button><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
   frame.appendChild(el);
@@ -103,9 +105,9 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
         preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || 'Not in the catalogue')}</div></div>`) + lifeHtml(L);
       } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}Where it’s been</div><div class="ohint">No backfill, adjustment or cage record for this code yet.</div></div>`;
       // A consolidation label first when it is one; cages, loads and off-site pallets holding a keycode after the product.
-      const rr = recordsHtml(findRecords(data(), Q), Q); out = Q.length >= 9 ? rr + out : out + rr;
+      const rr = recordsHtml(found(Q), Q); out = Q.length >= 9 ? rr + out : out + rr;
     } else if (k === 'cons') {
-      const r = findRecords(data(), Q);
+      const r = found(Q);
       out += recordsHtml(r, Q) || `<div class="ohint">No consolidation ending ${esc(Q.slice(-9))} on a manifest or truck this device holds. The Back dock code opens its records.</div>`;
     } else if (k === 'shelf' || k === 'loc') {
       // "A16S1", "A16 S1" and "A16-S1" name one shelf of the run A16: the
@@ -119,7 +121,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const sel = s => esc(s.id + modOf(s));
       if (bay && hits.length) out += `<div class="ohint">Bay ${esc(U)} is on ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}.</div>`;
       out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `${modOf(s) || s.segments === 1 ? 'Shelf' : 'Run'} ${hi(s.id, id)}${modOf(s) ? ` ${esc(modOf(s))}` : suffix ? ` <small class="warn">no shelf ${esc(s.id)} ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${esc(runText(s.id, modOf(s), s.segments))}${!modOf(s) && s.subs.length > 1 ? ': ' + esc(s.subs.join(' ')) : ''}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
-      out += recordsHtml(findRecords(data(), Q), Q);
+      out += recordsHtml(found(Q), Q);
       if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>${modOf(hits[0]) || hits[0].segments === 1 ? 'Shelf' : 'Run'} ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}Show on the store map</a>`;
     } else {
       const ql = Q.toLowerCase();
@@ -127,7 +129,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const ts = tools().filter(t => t.title.toLowerCase().includes(ql));
       if (depts.length) out += grp('Departments', depts.length) + depts.map(([d, n]) => orow('s', 'map', `${hi(n, Q)} ${dep(d)}`, 'Show the department on the map', 'Show', `data-view="map" data-dept="${d}"`)).join('');
       if (ts.length) out += grp('Tools', ts.length) + ts.map(t => orow('', t.icon, hi(t.title, Q), 'Open the view', 'Open', `data-view="${t.id}"`)).join('');
-      const recs = recordsHtml(findRecords(data(), Q), Q); out += recs;
+      const recs = recordsHtml(found(Q), Q); out += recs;
       if (!depts.length && !ts.length && !recs) out += `<div class="ohint">Nothing matches “${esc(Q)}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.</div>`;
     }
     if (my !== seq) return;

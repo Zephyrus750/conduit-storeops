@@ -54,8 +54,8 @@ function page(ctx) {
 
 export default {
   id: 'srtrends', title: 'Trends', icon: 'chart', area: 'stockroom',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) { return page(ctx); },
-  mobile() { return mhead('Trends', 'Desktop') + `<div class="mv-note">${ic('chart')}Trends are for the desk.</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', e => { const a = e.target.closest('[data-act="tr-win"]'); if (!a) return; st.days = Number(a.dataset.d); try { localStorage.setItem(KEY, String(st.days)); } catch {} ctx.rerender(); });
     return [ctx.store.on('backfill', () => ctx.rerender()), ctx.store.on('settings', () => ctx.rerender())];

@@ -74,6 +74,7 @@ function snapsCard(data) {
 
 export default {
   id: 'srintel', title: 'Stock intelligence', icon: 'chart', area: 'stockroom',
+  deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     const data = sohData(ctx, () => ctx.rerender()), idx = ctx.store.get('soh')?.snaps || {}, n = Object.keys(idx).length;
     if (st.parsed) ensureNames(ctx, Object.keys(st.parsed.items), () => ctx.rerender());
@@ -81,7 +82,6 @@ export default {
     const head = vh('Stock intelligence', sub(`${n} snapshot${n === 1 ? '' : 's'}`, n ? `latest ${esc(Object.keys(idx).sort().at(-1))}` : 'none yet', 'STUCK · GHOST · FROZEN · DEEP'), `<button class="btn" data-view="daylist">${ic('m-daylist')}Day list</button>`, 'chart');
     return head + `<div class="sri-grid"><div>${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${snapsCard(data)}<div class="card"><div class="ch"><h3>How the classes work</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} SOH has not moved for three snapshots although stock arrived: count it.</li><li>${clsBadge('ghost')} The system says zero but stock arrived: count it.</li><li>${clsBadge('frozen', 3)} Flat for three or more snapshots with nothing arriving: count it.</li><li>${clsBadge('deep')} Flat, but two cartons or more on hand: a spot-check.</li><li>${clsBadge('new')} Under three snapshots: not enough history yet.</li><li><span class="sri-badge recount">RECOUNT</span> Re-cartoned within the last four trucks: count, do not spot-check.</li></ul></div></div></div>`;
   },
-  mobile() { return mhead('Stock intelligence', 'Desktop') + `<div class="mv-note">${ic('chart')}The SOH report is pasted at the desk. The day list on this phone carries today's counts.</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;

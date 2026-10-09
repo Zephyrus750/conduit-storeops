@@ -10,8 +10,8 @@ import { haptic } from './device.js';
 const CARDS = [
   ['m-store', '#16A34A', 'Your store', ['The store chip shows which store this device is in, its address, hours and assembly point.', 'A second store can sign in on the same device; switch between them from the chip.', 'Once a store is on the device it keeps working offline.']],
   ['home', '#2563EB', 'Getting around', ['On a desk the rail lists every view: Store, Back dock and Stockroom.', 'On a phone the strip at the bottom holds the area’s main jobs; More holds the rest and Switch area.', 'Stockroom and Back dock ask for their crew code once per device.']],
-  ['search', '#D97706', 'Search', ['Search finds a shelf, a bay, a keycode, a manifest or a tool.', 'On a desk press Ctrl K from anywhere.', 'On a phone the barcode button scans a label straight into search.']],
-  ['m-map', '#0FA3A3', 'The map', ['Tap a shelf for its card: department, its run, size, what was done this week.', 'Double-tap or pinch to zoom; flick to pan. On a desk, Ctrl + and Ctrl − zoom, Ctrl 0 fits.', 'The grid button opens one department; the key lists the departments and every map symbol.']],
+  ['search', '#D97706', 'Search', ['Search finds a shelf, a bay, a keycode or a tool.', 'On a desk press Ctrl K from anywhere.', 'On a phone the barcode button scans a label straight into search.']],
+  ['m-map', '#0FA3A3', 'The map', ['Tap a shelf for its card: department, its run, size, what was done this week.', 'Double-tap or pinch to zoom; flick to pan.', 'On a desk, Ctrl + and Ctrl − zoom, Ctrl 0 fits.', 'The grid button opens one department; the key lists the departments and every map symbol.']],
   ['m-emergency', '#DC2626', 'Emergency', ['Emergency shows every exit, extinguisher, first aid kit and AED.', 'Nearest exit: tap where you are and the map draws the way out and on to the assembly point.', 'Tap a sign for its notes and service dates.']],
   ['m-refresh', '#7C3AED', 'Refresh and labels', ['Location refresh: scan or tap each shelf as it is refreshed; the week counts toward 100 in the focus departments.', 'Label integrity: pick a micro-department, check its labels and log any wrong ones.', 'Both show on the map as you go, on every device.']],
   ['m-settings', '#4B5563', 'Settings', ['Theme, accent colour and display size are per device.', 'Price checks can show normal, large or hidden on the map.', 'Vibration and the portrait lock are under Scanner and feedback.']],
@@ -23,7 +23,7 @@ const CARDS = [
 const AREA_CARDS = {
   stockroom: [
     ['barcode', '#0FA3A3', 'Backfill scan', ['Scan the bay label to start a bay, then scan every product on the shelf.', 'A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.', 'Send it to review when the bay is done. Any code can be removed, with Undo.']],
-    ['listcheck', '#16A34A', 'Review and submit', ['The desk compares each bay with the pasted SIM report: what to add, what to delete.', 'Mark it ready when the PDT matches, then Submit once it is finalised on the PDT.', 'My locations on the phone shows your bays and which are ready to submit.']],
+    ['listcheck', '#16A34A', 'Review and submit', ['Review compares each bay with the pasted SIM report: what to add, what to delete.', 'Mark it ready when the PDT matches, then Submit once it is finalised on the PDT.', 'My locations on the phone shows your bays and which are ready to submit.']],
     ['m-cages', '#7C3AED', 'Cages and adjustments', ['Cages: scan a cage tag, then what goes in it; park it on the map so anyone can find it.', 'Adjust: stock is here but the system says none. Scan it, enter the PDT’s SOH and count the shelf.']],
     ['m-daylist', '#D97706', 'The day list', ['The bays to walk today, split between walkers, from the requests or the SOH snapshot.', 'Tick a location when it is checked. History shows every bay’s accuracy over time.']],
   ],
@@ -45,7 +45,9 @@ export function firstRun(area) {
 
 export function openTour({ start = 0, cards = CARDS, label = 'How the app works' } = {}) {
   if (!cards?.length) return;
-  const CARDS = cards;
+  // On a phone the lines about the desk (the rail, keyboard shortcuts) are left out.
+  const phone = (document.querySelector('.frame')?.clientWidth || innerWidth) <= 600;
+  const CARDS = phone ? cards.map(([icon, col, title, lines]) => [icon, col, title, lines.filter(l => !/^On a desk\b/.test(l))]) : cards;
   document.getElementById('tour')?.remove();
   let i = Math.max(0, Math.min(CARDS.length - 1, start));
   const el = document.createElement('div'); el.id = 'tour'; el.className = 'tour'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', label);

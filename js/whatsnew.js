@@ -13,11 +13,12 @@ export const RELEASES = [
   { v: 'v0.3.0', date: '2026-10-09', items: [
     ['users', 'Team message and today’s briefing', 'Managers publish a message and the day’s briefing for every device in the store. It shows in the strip at the top until you have read it.', null],
     ['barcode', 'Stricter backfill scanning', 'Keycodes are 7 or 8 digits and item barcodes must read cleanly, as K2B checked them. Two codes one digit apart are flagged; any code can be removed, with Undo.', 'bfreview'],
-    ['lock', 'Bays open on another desk', 'A bay being reviewed elsewhere shows a banner with Take over. A desk that walks away lets go after 20 minutes.', 'bfreview'],
+    ['lock', 'Bays open on another desk', 'A bay being reviewed elsewhere shows a banner with Take over. A desk that walks away lets go after 20 minutes.', 'bfreview', 'desk'],
     ['users', 'The decant plan on the Team Board', 'Up next follows each person’s queue, and the Wallboard timeline shows planned pallets and breaks.', 'teamboard'],
-    ['print', 'Print the map', 'The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.', 'printmap'],
-    ['search', 'Search the store’s records', 'Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.', null],
-    ['mic', 'Voice search on the phone', 'Tap the microphone in the search bar and say a shelf, like “A16 S2”.', null],
+    ['print', 'Print the map', 'The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.', 'printmap', 'desk'],
+    ['search', 'Search the store’s records', 'Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.', null, 'desk'],
+    ['search', 'Search the store’s records', 'Search finds consolidations and cages as well as shelves.', null, 'phone'],
+    ['mic', 'Voice search', 'Tap the microphone in the search bar and say a shelf, like “A16 S2”.', null, 'phone'],
   ] },
 ];
 const SEEN = 'whatsnew_seen';
@@ -31,7 +32,10 @@ export function whatsNewOnce(go, { firstRun = false } = {}) {
 }
 export const openWhatsNew = go => open(RELEASES, go);
 
+// An item marked 'desk' shows only on a desk, 'phone' only on a phone.
+const forDevice = list => { const phone = (document.querySelector('.frame')?.clientWidth || innerWidth) <= 600; return list.map(r => ({ ...r, items: r.items.filter(it => !it[4] || it[4] === (phone ? 'phone' : 'desk')) })).filter(r => r.items.length); };
 function open(list, go) {
+  list = forDevice(list);
   document.getElementById('whatsnew')?.remove();
   const el = document.createElement('div'); el.id = 'whatsnew'; el.className = 'tm-back'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'What’s new');
   el.innerHTML = `<div class="tm-sheet wn"><button class="tour-x" data-wn="close" aria-label="Close">${ic('x')}</button><h3 class="wn-h">${ic('star')}What’s new</h3>` +
