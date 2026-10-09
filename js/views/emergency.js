@@ -8,10 +8,19 @@
 
 import { haptic } from '../device.js';
 import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo, mapFloors } from '../map.js';
+import { paperMap } from '../printmap.js';
+import { printSheet, table, tick, signoff } from '../print.js';
+import { markerSymbol, MARKER_NAMES } from '../../shared/maprender.js';
 
 const TYPES = { 'fire-ext': ['Fire extinguisher', '#DC2626', 'ext'], 'ext-set': ['Extinguisher set', '#DC2626', 'ext'], exit: ['Fire exit', '#16A34A', 'arrow'], 'fire-exit': ['Fire exit', '#16A34A', 'arrow'], 'first-aid': ['First aid kit', '#2563EB', 'plus'], aed: ['AED defibrillator', '#F59E0B', 'bolt'], 'spill-kit': ['Spill kit', '#7C3AED', 'alert'], hose: ['Fire hose', '#DC2626', 'flame'], assembly: ['Assembly point', '#16A34A', 'pin'], hazard: ['Hazard', '#F59E0B', 'alert'], hydrant: ['Hydrant', '#DC2626', 'flame'], 'call-point': ['Call point', '#DC2626', 'bolt'], 'emergency-phone': ['Emergency phone', '#2563EB', 'bolt'] };
 const SOON_DAYS = 30;
+// Extinguisher classes as the sign says them, with the band colour (the
+// editor stores the key: wet_chem, co2…).
+const EXT_NAME = { water: 'Water', foam: 'Foam', powder: 'Dry powder', co2: 'CO₂', wet_chem: 'Wet chemical', liquid: 'Vaporising liquid' };
+const EXT_BAND = { water: '#DC2626', foam: '#0057B8', powder: '#FFFFFF', co2: '#111111', wet_chem: '#E8B98A', liquid: '#FFD500' };
+const extName = k => EXT_NAME[String(k || '').toLowerCase()] || String(k || '');
+const extBand = k => { const c = EXT_BAND[String(k || '').toLowerCase()]; return c ? `<i class="ext-band" style="background:${c}"></i>` : ''; };
 let selected = null, filterType = '', evac = null;   // evac: null | 'armed' | { r, floor }
 
 function state(rec) { if (!rec?.due) return 'none'; const d = (new Date(rec.due) - Date.now()) / 86400000; return d < 0 ? 'overdue' : d <= SOON_DAYS ? 'soon' : 'ok'; }
@@ -31,7 +40,7 @@ function model(ctx, map) {
 export default {
   id: 'emergency', title: 'Emergency', icon: 'm-emergency',
   desktop(ctx) {
-    return vh('Emergency', sub('<span id="emsub">…</span>'), `<button class="btn evac" data-act="evac" id="evacBtn">${ic('pin')}Nearest exit</button><button class="btn primary" data-act="service">${ic('alert')}Log a service</button>`, 'm-emergency') +
+    return vh('Emergency', sub('<span id="emsub">…</span>'), `<button class="btn" data-act="evacprint" title="An evacuation map for the staff room, one page per floor, and the equipment walk sheet">${ic('print')}Print evacuation map</button><button class="btn evac" data-act="evac" id="evacBtn">${ic('pin')}Nearest exit</button><button class="btn primary" data-act="service">${ic('alert')}Log a service</button>`, 'm-emergency') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx('Emergency', ctx.storeNo)}<span><i style="background:#DC2626"></i>Fire exits and extinguishers</span><span><i style="background:#2563EB"></i>First aid</span><span><i style="background:#F59E0B"></i>AED</span><span><i style="background:#16A34A"></i>Assembly point</span><span style="color:var(--faint)">Tap a marker for its details and servicing</span></div></div>` +
       `<div class="sidecol" id="emside"></div></div>`;
@@ -44,7 +53,7 @@ export default {
         const p = info.point || (info.kind === 'marker' ? [info.x, info.y] : info.id ? map.centreOf(info.id) : null); if (!p) return;
         const r = map.evacuate(p);
         if (!r) { evac = null; toast('No exit is marked on this floor of the map. Follow the green exit signs.', 'bad'); }
-        else { evac = { r, floor: map.floors?.().find(f => f.id === map.floorId())?.name || '' }; haptic('warning'); }
+        else { evac = { r, floor: map.floors?.().find(f => f.id === map.floorId())?.name || '', fid: map.floorId(), origin: p }; haptic('warning'); }
         paint(); return;
       }
       if (info.kind === 'marker') { selected = info.id; paint(); }
@@ -69,6 +78,7 @@ export default {
           else { selected = null; evac = 'armed'; toast('Tap where you are on the map'); }
           paint(); return;
         }
+        if (act === 'evacprint') { printEvacuation(ctx, model(ctx, map), evac && evac !== 'armed' ? evac : null); return; }
         if (act === 'select') { selected = a.getAttribute('data-id'); const r = map.markers().find(x => x.id === selected); if (r) map.setVb([r.x - 600, r.y - 400, 1200, 800]); paint(); }
         else if (act === 'close') { selected = null; paint(); }
         else if (act === 'filter') { filterType = a.getAttribute('data-type'); paint(); }
@@ -82,7 +92,7 @@ export default {
 function detail(r) {
   const t = TYPES[r.type] || [r.type, '#64748B', 'alert'];
   const rec = r.rec;
-  return `<div class="card"><div class="ch"><h3 style="color:${t[1]}">${t[0]}${r.extClass ? ` · ${esc(r.extClass)}` : ''}</h3><span class="ibtn" data-act="close">${ic('x')}</span></div>` +
+  return `<div class="card"><div class="ch"><h3 style="color:${t[1]}">${t[0]}${r.extClass ? ` · ${extBand(r.extClass)}${esc(extName(r.extClass))}` : ''}</h3><span class="ibtn" data-act="close">${ic('x')}</span></div>` +
     `<div class="mt-meta"><span>${esc(r.location || r.label || 'On the map')}</span>${r.dept ? `<span>${esc(r.dept.toUpperCase())}</span>` : ''}${rec ? `<span>${rec.due ? 'Due ' + fmtDate(rec.due) : 'No schedule'}</span><span>Every ${rec.intMonths} months</span>` : '<span class="cs-dim">Not serviced yet</span>'}</div>` +
     (r.detail ? `<div class="msh-sec"><b>${ic('file')}Notes</b><p>${esc(r.detail)}</p></div>` : '') +
     (r.method ? `<div class="msh-sec"><b>${ic('listcheck')}Method</b><p>${esc(r.method)}</p></div>` : '') + (r.operation ? `<div class="msh-sec"><b>${ic('tool')}Operation</b><p>${esc(r.operation)}</p></div>` : '') +
@@ -127,4 +137,29 @@ function assemblyCard() {
   const q = has ? `${si.assemblyLat},${si.assemblyLng}` : '';
   const links = has ? `<div class="em-asm-links"><a class="btn sm" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${ic('pin')}Google Maps</a><a class="btn sm" href="https://maps.apple.com/?ll=${encodeURIComponent(q)}&q=${encodeURIComponent('Assembly point')}" target="_blank" rel="noopener noreferrer">${ic('pin')}Apple Maps</a></div>` : '';
   return `<div class="em-asm" role="note">${ic('users')}<div><b>Assembly point</b><span>${esc(si.assemblyNotes || 'Directions to the assembly point')}</span>${links}</div></div>`;
+}
+
+// ── the evacuation map on paper ─────────────────────────────────────────
+// For the staff room: each floor with its exits, extinguishers, first aid,
+// AEDs and the assembly point standing out over grey shelves, a key of the
+// signs on it, where to assemble and who to call. With a Nearest exit route
+// on the screen, that floor prints it from "You are here". Then the monthly
+// equipment walk: every marker with its service due date and a tick box.
+function printEvacuation(ctx, m, route) {
+  const fls = mapFloors(); if (!fls.length) return toast('No map is published for this store yet', 'bad');
+  const si = mapInfo()?.storeInfo || {}, store = `${ctx.storeName || ''} · store ${ctx.storeNo}`;
+  const asm = si.assemblyNotes ? esc(si.assemblyNotes) : 'the assembly point marked on the map';
+  const pages = fls.map(f => {
+    const here = route && route.fid === f.id;
+    const pm = paperMap({ floor: f.id, mono: true, layers: { emergency: true, priceChecks: false, labels: false, badges: true }, evacFrom: here ? route.origin : null, aspect: 277 / 150 });
+    const types = {}; for (const mk of pm?.markers || []) types[mk.type] = (types[mk.type] || 0) + 1;
+    const key = Object.entries(types).map(([t, n]) => `<span>${markerSymbol(t, 22)}${esc(MARKER_NAMES[t] || (TYPES[t] || [t])[0])}${n > 1 ? ` ×${n}` : ''}</span>`).join('') + (here ? '<span><i class="ev-you"></i>You are here</span><span><i class="ev-route"></i>Way out</span>' : '');
+    return `<div class="pm-page ev-page" style="height:190mm"><div class="ev-head"><div><h1>Evacuation map</h1><span>${esc(store)} · ${esc(f.type === 'boh' ? 'Back of house' : 'Sales floor')}, ${esc(f.name)}</span></div><div class="ev-call">In an emergency<b>000</b></div></div>` +
+      `<div class="pm-pmap" style="height:150mm">${pm ? pm.svg : ''}</div>` +
+      `<div class="ev-foot"><div class="ev-key">${key || '<span>No emergency equipment is marked on this floor.</span>'}</div><div class="ev-asm"><b>Leave by the nearest exit.</b> Do not use lifts. Go to ${asm} and wait to be checked off.</div></div></div>`;
+  });
+  const order = mk => fls.findIndex(f => f.id === mk.floor);
+  const rows = m.rows.slice().sort((a, b) => order(a) - order(b) || String(a.type).localeCompare(b.type)).map(r => [tick, esc(MARKER_NAMES[r.type] || (TYPES[r.type] || [r.type])[0]) + (r.extClass ? ` · ${esc(extName(r.extClass))}` : ''), esc(r.location || r.label || ''), esc(fls.find(f => f.id === r.floor)?.name || ''), r.rec?.due ? esc(fmtDate(r.rec.due)) + (r.st === 'overdue' ? ' · <b>overdue</b>' : '') : 'not scheduled', '']);
+  const walk = `<div class="ps-page"><header class="ps-head"><div><h1>Emergency equipment walk</h1><div class="ps-sub">${esc(store)} · check each one is present, unobstructed and in date</div></div></header>` + table(['✓', 'Equipment', 'Where', 'Floor', 'Service due', 'Note'], rows, ['tk', 'w20', '', 'w12', 'w20', 'w20']) + signoff('Walked by') + '</div>';
+  printSheet({ title: 'Evacuation map', body: pages.join('') + walk, page: 'A4 landscape', bare: true });
 }

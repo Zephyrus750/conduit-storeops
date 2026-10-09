@@ -4,6 +4,11 @@
 import { $, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
 import { ISSUE_CATS } from '../../shared/reducers/floor.js';
+import { printSheet, table, signoff } from '../print.js';
+import { paperMap } from '../printmap.js';
+import { issueLink } from '../share.js';
+import { qrSvg } from '../../shared/qr.js';
+import { mapFloors } from '../map.js';
 
 const SEV = [['Low', '#6B7280'], ['Medium', '#D97706'], ['High', '#DC2626'], ['Urgent', '#7F1D1D']];
 const CAT_NAME = { leak: 'Leak', light: 'Lighting', elec: 'Electrical', ac: 'Air-con', plumb: 'Plumbing', struct: 'Structural', fixture: 'Fixture', door: 'Door', safety: 'Safety', pest: 'Pest', other: 'Other' };
@@ -161,6 +166,13 @@ export default {
           await ctx.store.dispatch({ type: 'issue.remove', entity: { issue: selected }, payload: {} }); selected = null; toast('Issue removed');
           for (const p of i.photos || []) ctx.api(`/v1/store/${ctx.storeNo}/photo/${p.id}`, { method: 'DELETE' }).catch(() => {});   // the nightly sweep catches any missed
         }
+        else if (act === 'work-order') { const i = m0(ctx); if (i) printWorkOrder(ctx, i); }
+        else if (act === 'visit') {
+          const who = prompt('Contractor visited: who came (name or company)?', ''); if (who === null) return;
+          if (!who.trim()) return toast('Say who visited', 'bad');
+          const note = prompt('What did they do? (optional)', ''); if (note === null) return;
+          await ctx.store.dispatch({ type: 'issue.visit', entity: { issue: selected }, payload: { who: who.trim().slice(0, 80), ...(note.trim() ? { note: note.trim().slice(0, 500) } : {}) } }); toast('Visit logged');
+        }
         else if (act === 'photo-open') { openPhoto(thumbs.get(a.dataset.photo)); }
         else if (act === 'photo-remove') {
           if (!confirm('Remove this photo? It is deleted from the store’s records.')) return;
@@ -208,7 +220,7 @@ function sidebar(m) {
     `<div class="mt-meta"><span><i class="sevdot" style="background:${SEV[i.sev][1]}"></i>${SEV[i.sev][0]} severity</span><span>${esc(i.loc || CAT_NAME[i.cat])}</span><span>Logged ${fmtTime(i.created)}</span>${i.recur ? `<span class="recur">↻ Recurring · reopened ${i.recur}×</span>` : ''}${i.status !== 'completed' ? `<span class="${overdue(i) ? 'mt-od' : 'cs-dim'}">Target ${SLA_DAYS[i.sev ?? 1]} day${SLA_DAYS[i.sev ?? 1] === 1 ? '' : 's'}${overdue(i) ? ' · overdue' : ''}</span>` : ''}<span class="cs-dim">${CAT_NAME[i.cat]} · by ${esc(i.by || 'unknown device')}</span></div>` +
     photoStrip(i, i.status !== 'completed') +
     `<div class="list">${i.log.map(l => `<div class="li"><span class="rt" style="margin:0">${fmtTime(l.t)}</span><span class="nm">${esc(l.a)}${l.n ? ' · ' + esc(l.n) : ''}</span></div>`).join('')}</div>` +
-    `<div class="acts2" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${i.x != null ? `<span class="btn sm" data-act="show">${ic('pin')}Show on map</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" data-act="edit">${ic('edit')}Edit</span>` : ''}${i.status === 'open' ? `<span class="btn sm" style="color:#B45309" data-act="progress">${ic('tool')}Maintenance done</span>` : ''}${i.status === 'progress' ? `<span class="btn sm" data-act="reopen">${ic('refresh')}Not fixed</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" style="color:var(--green-ink)" data-act="close">${ic('check')}Complete</span>` : `<span class="btn sm" data-act="reopen">${ic('refresh')}Reopen</span>`}<span class="btn sm" style="color:var(--red)" data-act="remove">${ic('trash')}Remove</span></div></div>`;
+    `<div class="acts2" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${i.x != null ? `<span class="btn sm" data-act="show">${ic('pin')}Show on map</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" data-act="edit">${ic('edit')}Edit</span>` : ''}${i.status === 'open' ? `<span class="btn sm" style="color:#B45309" data-act="progress">${ic('tool')}Maintenance done</span>` : ''}${i.status === 'progress' ? `<span class="btn sm" data-act="reopen">${ic('refresh')}Not fixed</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" style="color:var(--green-ink)" data-act="close">${ic('check')}Complete</span>` : `<span class="btn sm" data-act="reopen">${ic('refresh')}Reopen</span>`}<span class="btn sm" data-act="work-order" title="A printed sheet for the contractor, with a QR code back to this issue">${ic('print')}Work order</span>${i.status !== 'completed' ? `<span class="btn sm" data-act="visit">${ic('users')}Contractor visited</span>` : ''}<span class="btn sm" style="color:var(--red)" data-act="remove">${ic('trash')}Remove</span></div></div>`;
   return list + det;
 }
 const stName = i => i.status === 'open' ? 'Open' : i.status === 'progress' ? 'Done, to check' : 'Completed';
@@ -228,7 +240,7 @@ function mobile(m) {
       `<div class="mt-meta mv-pad"><span>Logged ${fmtTime(i.created)}</span>${i.recur ? `<span class="recur">↻ Reopened ${i.recur}×</span>` : ''}${i.status !== 'completed' ? `<span class="${overdue(i) ? 'mt-od' : 'cs-dim'}">Target ${SLA_DAYS[i.sev ?? 1]} day${SLA_DAYS[i.sev ?? 1] === 1 ? '' : 's'}${overdue(i) ? ' · overdue' : ''}</span>` : ''}<span class="cs-dim">${CAT_NAME[i.cat]} · by ${esc(i.by || 'unknown device')}</span></div>` +
       `<div class="mv-pad">${photoStrip(i, i.status !== 'completed')}</div>` +
       `<div class="mv-sub">Log</div><div class="mv-rows">${i.log.map(l => `<div class="mv-row"><span class="b">${esc(l.a)}${l.n ? '<br><small>' + esc(l.n) + '</small>' : ''}</span><span class="c">${fmtTime(l.t)}</span></div>`).join('')}</div>` +
-      mfoot(`<div class="mv-two">${acts.join('')}</div>` + `<div class="mv-two">${i.x != null ? mghost('Show on map', ' data-act="show"') : ''}${i.status !== 'completed' ? mghost('Edit', ' data-act="edit"') : ''}${mghost('Back to the list', ' data-act="back"')}</div>`);
+      mfoot(`<div class="mv-two">${acts.join('')}</div>` + `<div class="mv-two">${i.x != null ? mghost('Show on map', ' data-act="show"') : ''}${i.status !== 'completed' ? mghost('Edit', ' data-act="edit"') : ''}${mghost('Back to the list', ' data-act="back"')}</div><div class="mv-two">${mghost('Work order', ' data-act="work-order"')}${i.status !== 'completed' ? mghost('Contractor visited', ' data-act="visit"') : ''}</div>`);
   }
   const row = i => `<div class="mv-row" data-act="select" data-id="${esc(i.id)}"><span class="a" style="color:${SEV[i.sev][1]}">${SEV[i.sev][0]}</span><span class="b">${esc(i.title)}<br><small>${esc(i.loc || CAT_NAME[i.cat])}${i.status === 'progress' ? ' · done, to check' : ''}${overdue(i) ? ' · <b class="mt-od">overdue</b>' : ''}</small></span><span class="c">${ago(i.created)}</span></div>`;
   return mhead('Report an issue', `${m.open.length} open at the store · tap a pin or a row to open it`) + `<div class="mv-tiles"><button class="mv-tile hot" data-act="new"><span class="ti">${ic('plus')}</span><span class="tx"><b>New report</b><span>Where, what, how urgent</span></span><span></span>${ic('chev')}</button></div>` +
@@ -263,3 +275,22 @@ function openPhoto(url) {
 // An issue as a map pin, for other views that show the maintenance layer
 // (the dashboard's map).
 export const issuePin = i => ({ x: i.x, y: i.y, colour: colour(i), glyph: GLYPH[i.cat] || GLYPH.other, badge: i.recur ? (i.recur > 9 ? '9+' : String(i.recur)) : '', title: `${i.title} · ${CAT_NAME[i.cat] || 'Other'}` });
+
+const m0 = ctx => { const i = ctx.store.get('issues')[selected]; return i && !i.removed ? { id: selected, ...i } : null; };
+// The work order (October audit §6): what is wrong and where, with the map
+// around the pin, a QR code that opens the issue on a store device, the
+// log so far, and lines for the contractor to fill in; "Contractor visited"
+// logs it back.
+function printWorkOrder(ctx, i) {
+  const fl = mapFloors().find(f => f.id === i.floor), due = new Date(Date.parse(i.created) + SLA_DAYS[i.sev ?? 1] * 86400000);
+  const pm = i.x != null ? paperMap({ floor: i.floor, frame: { around: [i.x, i.y], span: 1600 }, pins: [{ x: i.x, y: i.y, colour: '#DC2626', glyph: GLYPH[i.cat] || GLYPH.other }], layers: { emergency: false, priceChecks: false }, aspect: 2 }) : null;
+  const url = issueLink(ctx.storeNo, i.id), qr = qrSvg(url, { cell: 3 });
+  const fact = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+  const body = `<div class="ps-facts">${fact('Issue', esc(i.title))}${fact('Type', esc(CAT_NAME[i.cat] || 'Other'))}${fact('Severity', esc(SEV[i.sev ?? 1][0]))}${fact('Status', esc(stName(i)))}` +
+    `${fact('Where', esc(i.loc || '—') + (fl ? ` · ${esc(fl.name)}` : ''))}${fact('Logged', esc(fmtTime(i.created)))}${fact('Target', esc(due.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })) + (overdue(i) ? ' · overdue' : ''))}${fact('Reference', `<span class="mono">${esc(i.id)}</span>`)}</div>` +
+    (i.note ? `<p class="ps-note"><b>Details:</b> ${esc(i.note)}</p>` : '') +
+    `<div class="ps-wo">${pm ? `<div class="ps-wo-map">${pm.svg}</div>` : '<div class="ps-wo-map ps-none">Not pinned on the map</div>'}<div class="ps-wo-qr">${qr || ''}<span>Scan on a store device to open this issue in Conduit</span></div></div>` +
+    `<h2>Log so far</h2>` + table(['When', 'What', 'Note'], i.log.slice(-5).map(l => [esc(fmtTime(l.t)), esc(l.a), esc(l.n || '')]), ['w20', 'w20', '']) +
+    `<h2>Contractor</h2><table class="ps-tbl ps-kv"><tbody>${[['Company / name', ''], ['Arrived', ''], ['Left', ''], ['Work done', ''], ['', ''], ['Parts used', ''], ['Fixed?', '☐ Yes &nbsp;&nbsp; ☐ No, follow-up needed']].map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</tbody></table>` + signoff('Contractor') + signoff('Checked by (store)');
+  printSheet({ title: 'Maintenance work order', subtitle: `${esc(ctx.storeName || '')} · store ${esc(ctx.storeNo)}`, body });
+}

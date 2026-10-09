@@ -42,6 +42,7 @@ export const CATALOGUE = {
   'issue.reopen':        T('floor', F, ['issue']),
   'issue.remove':        T('floor', F, ['issue']),                                // tombstone; payload.note
   'issue.photo':         T('floor', F, ['issue'], { photo: 'string' }),           // payload.remove: true detaches it
+  'issue.visit':         T('floor', F, ['issue'], { who: 'string' }),             // a contractor's visit; payload.note
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),

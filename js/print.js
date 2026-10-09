@@ -10,13 +10,18 @@
 import { esc } from './ui.js';
 import { barcodeSvg } from '../shared/barcode.js';
 
-export function printSheet({ title, subtitle = '', body, landscape = false }) {
-  document.getElementById('printroot')?.remove();
+//   page   the paper, as CSS @page size ('A4 landscape', 'A3 portrait'); a
+//          landscape sheet defaults to 'A4 landscape'
+//   bare   no header: the body brings its own (the map composer's title strip)
+export function printSheet({ title, subtitle = '', body, landscape = false, page = null, bare = false }) {
+  document.getElementById('printroot')?.remove(); document.getElementById('printpage')?.remove();
   const root = document.createElement('div'); root.id = 'printroot'; if (landscape) root.className = 'landscape';
+  const size = page || (landscape ? 'A4 landscape' : null);
+  if (size) { const st = document.createElement('style'); st.id = 'printpage'; st.textContent = `@media print { @page { size: ${size}; margin: 10mm; } }`; document.head.appendChild(st); }
   const now = new Date();
-  root.innerHTML = `<header class="ps-head"><div><h1>${esc(title)}</h1>${subtitle ? `<div class="ps-sub">${subtitle}</div>` : ''}</div><div class="ps-when">Printed ${esc(now.toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' }))}</div></header>${body}`;
+  root.innerHTML = (bare ? '' : `<header class="ps-head"><div><h1>${esc(title)}</h1>${subtitle ? `<div class="ps-sub">${subtitle}</div>` : ''}</div><div class="ps-when">Printed ${esc(now.toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' }))}</div></header>`) + body;
   document.body.appendChild(root); document.body.classList.add('printing');
-  const done = () => { root.remove(); document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
+  const done = () => { root.remove(); document.getElementById('printpage')?.remove(); document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
   window.addEventListener('afterprint', done);
   setTimeout(() => { window.print(); setTimeout(() => { if (root.isConnected && !matchMedia('print').matches) done(); }, 1500); }, 60);
 }

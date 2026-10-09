@@ -118,3 +118,12 @@ test('refresh X/100 counts focus departments only when a focus is set; a mark ke
   assert.equal(focusDone(marks, ['h1']), 2, 'focus h1: the h1 mark and the one with no department');
   assert.equal(focusDone(marks, ['h1'], (seg, m) => m.dept || { 'C3 S1': 'c1' }[seg]), 1);
 });
+
+test('issues: a contractor visit from the work order is logged and keeps the status', () => {
+  const s = initialState(), k = { issue: 'w1' };
+  apply(s, ev('issue.log', k, { cat: 'elec', title: 'Lights out over K2', sev: 2 }));
+  assert.equal(apply(s, ev('issue.visit', k, { who: '  ' })).code, 'invalid_event', 'who visited is needed');
+  assert.equal(apply(s, ev('issue.visit', k, { who: 'Sparky & Co', note: 'replaced two tubes' })), null);
+  assert.deepEqual([s.issues.w1.status, s.issues.w1.visits, s.issues.w1.log.at(-1).a, s.issues.w1.log.at(-1).n], ['open', 1, 'Contractor visited', 'Sparky & Co · replaced two tubes']);
+  assert.equal(apply(s, ev('issue.visit', { issue: 'nope' }, { who: 'x' })).code, 'not_found');
+});

@@ -427,7 +427,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // Zoom to the shelves of one or more departments: switches to the floor
     // holding most of them, dims the rest, and says what it found.
     zoomDept(codes) { return api.zoomDeptOn(codes, null); },
-    zoomDeptOn(codes, floorId) {
+    zoomDeptOn(codes, floorId, ms = 400) {   // ms 0 frames at once (paper)
       const want = (codes || []).map(c => String(c).toLowerCase());
       if (!want.length) { for (const g of $$('.shelf-group[data-dept]', svg)) { g.style.opacity = ''; g.removeAttribute('data-dim'); } svg.removeAttribute('data-deptzoom'); api.fit(); return null; }
       const perFloor = new Map();
@@ -454,7 +454,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
         const pad = zb ? 0 : Math.max(bb[2] - bb[0], bb[3] - bb[1]) * 0.12; let W = bb[2] - bb[0] + pad * 2, H = bb[3] - bb[1] + pad * 2, x0 = bb[0] - pad, y0 = bb[1] - pad;
         const r0 = svg.getBoundingClientRect(), ar = r0.width / r0.height || 1;
         if (W / H < ar) { const nw = H * ar; x0 -= (nw - W) / 2; W = nw; } else { const nh = W / ar; y0 -= (nh - H) / 2; H = nh; }
-        animateTo([x0, y0, W, H], 400); svg.classList.add('zoomed');
+        animateTo([x0, y0, W, H], ms); svg.classList.add('zoomed');
       }
       return { shelves: best[1], floor: cur?.name, floorType: cur?.type, depts: [...depts], total: [...perFloor.values()].reduce((a, b) => a + b, 0), floors: [...perFloor.entries()].map(([id, n]) => ({ id, name: fl.find(x => x.id === id)?.name || id, shelves: n })) };
     },

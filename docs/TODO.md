@@ -10,7 +10,7 @@ background. The audit
 The decisions these wait on are in `docs/OPEN-DECISIONS.md` (numbers in
 brackets below).
 
-**October audit (`docs/AUDIT-2026-10.md`):** its §1 fixes (data safety), the wrong numbers, step 3 (the Floor workflow) and step 4 (the dock floor) are done (see its status note); the rest of its §8 order, from step 5 (printing), comes before the list below. Notably, the print composer, the evacuation map print and maintenance work orders are still to build (§2).
+**October audit (`docs/AUDIT-2026-10.md`):** its §1 fixes (data safety), the wrong numbers, step 3 (the Floor workflow), step 4 (the dock floor) and step 5 (printing: the composer, the booklet, the evacuation map, work orders) are done (see its status note); the rest of its §8 order, from step 6 (search), comes before the list below.
 
 **Map editor (`editor/`, `docs/MAP-EDITOR-AUDIT-2026-10.md`):** brought into Conduit and connected (decision 2 settled); the audit's status note lists what is fixed. Left: the scale (decision 33).
 

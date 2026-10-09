@@ -12,6 +12,7 @@ import maintenance from './views/maintenance.js';
 import mapedits from './views/mapedits.js';
 import stocktake from './views/stocktake.js';
 import inventory from './views/inventory.js';
+import printmap from './views/printmap.js';
 import help from './views/help.js';
 import fieldmode from './views/fieldmode.js';
 import settings from './views/settings.js';
@@ -36,12 +37,12 @@ import { dockscreen, teamboard } from './views/backdock/screens.js';
 import wallboard from './views/backdock/wallboard.js';
 import danalytics from './views/backdock/danalytics.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, inventory, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, inventory, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
 // Rail sections and the phone tab strip per workspace. Rows without a view
 // yet are inert and say so.
 export const RAIL = [
-  { sec: 'Store', rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake', 'inventory', 'mapedits'] },
+  { sec: 'Store', rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake', 'inventory', 'printmap', 'mapedits'] },
   { sec: 'Back dock', rows: ['receiving', 'teamboard', 'dockscreen', 'wallboard', 'rhistory', 'danalytics', 'manifests', 'profiles'] },
   { sec: 'Stockroom', rows: ['bfreview', 'cages', 'adjust', 'daylist', 'srintel', 'srtrends', 'codelist', 'srhistory'] },
 ];

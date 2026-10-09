@@ -77,7 +77,8 @@ let pendingLink = takeDeepLink();
 })();
 function openPendingLink(s) {
   const l = pendingLink; pendingLink = null; if (!l) return false;
-  if (l.store !== s.store) { toast(`That shelf link is for store ${l.store}. Add that store from Store details to open it.`); return false; }
+  if (l.store !== s.store) { toast(`That ${l.issue ? 'work order' : 'shelf link'} is for store ${l.store}. Add that store from Store details to open it.`); return false; }
+  if (l.issue) { show('maintenance', { issue: l.issue }); return true; }
   show('map', { select: l.shelf }); return true;
 }
 
@@ -219,7 +220,7 @@ async function showSignin({ error, owner } = {}) {
     `<div class="si-foot"><span>${ic('check')}Offline ready</span><span class="si-count">${stores.length} store${stores.length === 1 ? '' : 's'}</span><a class="si-owner-link" data-shell-act="owner-signin">Owner sign-in</a><span class="ver">Conduit ${VERSION}</span></div></form>`;
   const hero = `<div class="si-hero"><div class="si-brand">${mark()}<b>Conduit</b></div><div class="si-greet">${greeting()}</div><h1>Run the <span>whole store</span>.</h1><p>Live maps, back-dock receiving and stockroom backfill. One team, one sign-in, on and off the wifi.</p><div class="si-off">${ic('check')}Works offline once it is on this device</div></div>`;
   const el = cover(polyBackground() + (mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${hero}${form}</div>`));
-  if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || `Sign in to open shelf ${pendingLink.shelf}.`; }
+  if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? "Sign in to open the work order." : `Sign in to open shelf ${pendingLink.shelf}.`); }
   $('#siForm', el).addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target); const btn = e.target.querySelector('.si-cta'); btn.disabled = true;
@@ -256,6 +257,7 @@ const RDESC = {
   emergency: 'Exits, extinguishers, first aid, assembly point and service dates on the map.',
   maintenance: 'Log store issues on the map, track severity, contractors and completion.',
   stocktake: 'Run a count session: shelves counted, verified and the department tallies.',
+  printmap: 'Compose a printable map: floors, an area, layers, a legend; or a booklet, one page per department.',
   receiving: 'The dock board: pallets landed, decanting live, progress to the clear-by goal.',
   manifests: 'Published DC manifests and which pallet carries any keycode.',
   bfreview: 'Today’s backfill board: compare scans to the report, mark locations ready.',

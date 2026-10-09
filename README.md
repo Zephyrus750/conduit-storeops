@@ -401,6 +401,15 @@ the worker sends its time with heartbeats (the socket's `clock` frame, `POST
 the measured offset, kept so an offline device still stamps on the store's
 clock. Receiving warns when a device's own clock is a minute or more out.
 
+**Paper.** Sheets are real A4 layouts (`js/print.js`), not a print of the
+screen. Maps print from a copy of the published map (`js/printmap.js`): the
+**Print map** composer (ShelfSearcher's, with floors, area, layers, mode
+details, A4/A3 and orientation) and its department booklet; the
+**evacuation map** from Emergency (each floor, a key of its signs, 000, the
+assembly point, "You are here" when a route is shown, and the equipment
+walk sheet); and the Maintenance **work order**, whose QR code opens the
+issue (`?store=1241&issue=…`) and whose visit comes back as `issue.visit`.
+
 **The dock tablet.** The Dock screen is the crew's: tap a pallet for Start
 or Resume (pick who from the team), Pause, Done, Join or Hand over, with the
 finish guard, as Decant Visualiser's dock tablet. Landing, removing, editing

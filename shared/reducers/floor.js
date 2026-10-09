@@ -232,6 +232,17 @@ export const floorReducers = {
     return null;
   },
 
+  // A contractor's visit, from the work order (who came, what they did): a
+  // log line, and the issue keeps its status until someone moves it.
+  'issue.visit'(s, e) {
+    const i = issue(s, e); if (i.code) return i;
+    const who = String(e.payload.who || '').trim().slice(0, 80), note = String(e.payload.note || '').trim().slice(0, 500);
+    if (!who) return reject('invalid_event', 'say who visited: a name or a company');
+    i.updated = e.at; i.visits = (i.visits || 0) + 1;
+    i.log.push({ t: e.at, a: 'Contractor visited', n: who + (note ? ' · ' + note : '') });
+    return null;
+  },
+
   // A photo (an id the worker issued for the uploaded JPEG) on an issue, up
   // to four; remove detaches it. The log records both.
   'issue.photo'(s, e) {
