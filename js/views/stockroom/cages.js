@@ -13,6 +13,7 @@ import { hasMap, mountMap, bindMapChrome, mvMap, segmentId } from '../../map.js'
 import { printSheet } from '../../print.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 
+let usedArg = null;
 const st = { sel: null, find: '', filter: 'all', sort: 'age', mode: 'scan', target: null, qty: 1, last: null, newRing: 'new-lines', placing: null, feed: 'all', tags: false, zone: '', pairing: null };
 const LOG_NAME = { open: 'Opened', in: 'Stock on', out: 'Stock off', park: 'Parked', move: 'Moved', seen: 'Seen', found: 'Found again', missing: 'Missing', lost: 'Lost', retag: 'Re-tagged', close: 'Closed' };
 const flag = c => c.lost ? '<span class="status bad">LOST</span>' : c.missing ? `<span class="status warn">MISSING · ${c.missing.n} sweep${c.missing.n === 1 ? '' : 's'}</span>` : '';
@@ -49,6 +50,7 @@ export default {
   },
   mobile(ctx) { return `<div id="cgmob">${mobile(ctx)}</div>`; },
   mount(ctx, root) {
+    if (ctx.arg?.cage && ctx.arg !== usedArg && ctx.store.get('cages')[ctx.arg.cage]) { usedArg = ctx.arg; st.sel = ctx.arg.cage; if (ctx.isMobile) st.target = ctx.arg.cage; setTimeout(() => ctx.rerender(), 0); }   // from search, once
     const repaint = () => { if (ctx.isMobile) { const h = $('#cgmob', root); if (h) h.innerHTML = mobile(ctx); } else ctx.rerender(); };
     const codes = () => Object.values(ctx.store.get('cages')).flatMap(c => Object.keys(c.items));
     ensureNames(ctx, codes(), repaint);

@@ -13,6 +13,7 @@ import { previewManifest } from './mpreview.js';
 import { manifestIndex, microDept, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
 import { retailPeriod } from '../../../shared/time.js';
 
+let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {} };
 const chip = d => { const dd = microDept(d); return dd ? dep(dd) : `<span class="dep" style="background:#64748B">${esc(d || '???')}</span>`; };
 const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'Kids', '#F59E0B'], ['flex', 'Flex', '#64748B']];
@@ -139,6 +140,8 @@ export default {
   },
   mobile() { return mhead('Manifests', 'Desktop only') + `<div class="mv-result">${ic('lock')}<b style="font-size:22px">Managed on the desktop</b><span>Manifests arrive by email and are published on the desktop. On the dock phone, Search on the truck finds a consol or an item.</span></div>`; },
   mount(ctx, root) {
+    // From search: open that manifest (and filter to a consolidation).
+    if (ctx.arg?.man && ctx.arg !== usedArg && ctx.store.get('dock').manifests?.[ctx.arg.man]) { usedArg = ctx.arg; st.open = ctx.arg.man; if (ctx.arg.q) st.q = ctx.arg.q; setTimeout(() => ctx.rerender(), 0); }
     const load = () => {
       if (!st.open || st.docFor === st.open) return;
       st.docFor = st.open; st.doc = null; st.error = null; st.q = ''; st.expanded = {}; st.group = null;

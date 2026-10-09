@@ -61,6 +61,10 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
   const warnings = [], events = [];
   const push = async (seed, ms, type, area, entity, payload = {}) => { events.push({ id: await importId(seed, ms), store: String(no), area, type, entity, payload, at: iso(ms), v: 1 }); };
 
+  // Today in K2B's terms, from its board: history before it is finished.
+  const list = await call('sub=list');
+  const today = String(list.today || '').slice(0, 10);
+
   // 1. history: every bay ever marked ready, oldest first so the log reads in order
   const history = [];
   for (let offset = 0, more = true; more && offset < 100000; offset += PAGE) {
@@ -68,7 +72,7 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
     history.push(...(page.items || [])); more = !!page.hasMore && (page.items || []).length > 0;
   }
   history.sort((a, b) => String(a.date).localeCompare(String(b.date)) || (a.readyAt || 0) - (b.readyAt || 0));
-  const seen = new Set();
+  const seen = new Set(); let noSubmitTime = 0;
   for (const h of history) {
     const bay = String(h.location || '').toUpperCase(), date = String(h.date || '').slice(0, 10);
     if (!bay || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { warnings.push(`history record skipped: bad location or date (${h.location} ${h.date})`); continue; }
@@ -82,14 +86,17 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
     await push(`open:${key}`, t0, 'submission.open', 'stockroom', k);
     if (codes.length) await push(`codes:${key}`, t0 + 1, 'submission.update', 'stockroom', k, { codes: Object.fromEntries(codes.map(c => [c, true])) });
     await push(`ready:${key}`, h.readyAt || t0 + 2, 'submission.ready', 'stockroom', k, h.metrics ? { metrics: h.metrics } : {});
-    if (h.submittedDoneAt || h.autoSubmitted) await push(`submit:${key}`, h.submittedDoneAt || h.readyAt + 1 || t0 + 3, 'submission.submit', 'stockroom', k, { auto: !!h.autoSubmitted });
+    // A record from an earlier day was finished in K2B, even when it carries no
+    // submit time (older records do not): it imports submitted, at its ready
+    // time, rather than as Ready for Conduit's rollover to auto-submit.
+    const earlier = today && date < today;
+    if (h.submittedDoneAt || h.autoSubmitted || earlier) await push(`submit:${key}`, h.submittedDoneAt || (h.readyAt ? h.readyAt + 1 : t0 + 3), 'submission.submit', 'stockroom', k, { auto: !!h.autoSubmitted });
+    if (earlier && !h.submittedDoneAt && !h.autoSubmitted) noSubmitTime += 1;
   }
 
   // 2. today's board with per-code detail, and the requested list
-  const list = await call('sub=list');
-  const today = String(list.today || '').slice(0, 10);
   const dayMs = Date.parse(today + 'T00:00:00+08:00') || now();
-  let todayN = 0;
+  let todayN = 0, keyedFlags = 0;
   // Per-bay detail, eight at a time: a busy board has 30 bays and each is a read.
   const board = (list.items || []).map(it => ({ bay: String(it.location || '').toUpperCase(), date: String(it.date || today).slice(0, 10) }));
   const details = new Map();
@@ -98,7 +105,11 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
     const key = `${bay}:${date}`;
     const s = details.get(key); if (!s) { warnings.push(`${key}: on the board but its record could not be read`); continue; }
     const k = { bay, date }, t0 = s.submittedAt || dayMs;
-    const codes = {}; for (const c of s.codes || []) { const kc = String(c.code || c); if (/^\d{6,13}$/.test(kc)) codes[kc] = typeof c === 'object' ? !!c.scanned : true; }
+    // Every code on a K2B bay was scanned by a phone. K2B's own "scanned"
+    // flag means keyed into the PDT, not "seen by a phone"; reading it as
+    // Conduit's scanned flag turned unkeyed codes into system-only ones.
+    const codes = {}; let keyed = 0; for (const c of s.codes || []) { const kc = String(c.code || c); if (/^\d{6,13}$/.test(kc)) { codes[kc] = true; if (typeof c === 'object' && c.scanned) keyed += 1; } }
+    if (keyed) keyedFlags += keyed;
     await push(`open:${key}`, t0, 'submission.open', 'stockroom', k);
     if (Object.keys(codes).length || (s.incorrectCodes || []).length) await push(`today:${key}:${s.updatedAt || t0}`, (s.updatedAt || t0) + 1, 'submission.update', 'stockroom', k, { codes, incorrect: cleanCodes(s.incorrectCodes) });
     if (s.status === 'corrected' || s.status === 'submitted') await push(`ready:${key}`, s.updatedAt || t0 + 2, 'submission.ready', 'stockroom', k, s.metrics ? { metrics: s.metrics } : {});
@@ -114,6 +125,9 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
     await push(`neg:${kc}:${neg.date || today}`, it.addedAt || dayMs, 'adjustment.set', 'stockroom', { keycode: kc, date: String(neg.date || today).slice(0, 10) }, { qty: Math.abs(Number(it.qty) || 0), name: String(it.name || '').slice(0, 120), location: it.location || '', confirmed: !!it.confirmed });
   }
 
+  if (noSubmitTime) warnings.push(`${noSubmitTime} earlier bay${noSubmitTime === 1 ? ' had' : 's had'} no submit time in K2B and imported as submitted at ${noSubmitTime === 1 ? 'its' : 'their'} ready time`);
+  if (keyedFlags) warnings.push(`${keyedFlags} code${keyedFlags === 1 ? ' was' : 's were'} ticked "keyed into the PDT" in K2B; Conduit has no per-code PDT tick, so the ticks were not carried over`);
+  warnings.push('SOH snapshots live on the K2B desk (its browser storage), not on the worker: paste the latest SOH report into Stock intelligence to start the classes');
   const summary = { source: 'k2b', code: storeCode, legacy: { name: info.name || null, storeNumber: info.storeNumber || null }, counts: { history: history.length, today: todayN, requested: (list.requested || []).length, negsoh: (neg.items || []).length, events: events.length }, warnings, dry, applied: 0, duplicates: 0, rejected: [] };
   if (dry || !apply) return summary;
   for (let i = 0; i < events.length; i += 400) {

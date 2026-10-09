@@ -331,7 +331,7 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
   assert.equal(h.status, 'submitted'); assert.deepEqual(h.metrics, { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 }); assert.deepEqual(Object.keys(h.codes).sort(), ['43166022', '43199310']);
   assert.deepEqual(s.backfill.requested['2026-09-17'], ['7020']); assert.deepEqual(s.backfill.requested['2026-09-18'], ['7037']);
   const t = s.backfill.subs['7014:2026-09-18'];
-  assert.equal(t.status, 'pending'); assert.equal(t.codes['42345501'].scanned, true); assert.equal(t.codes['43006311'].scanned, false); assert.deepEqual(t.incorrect, ['43006311']);
+  assert.equal(t.status, 'pending'); assert.equal(t.codes['42345501'].scanned, true); assert.equal(t.codes['43006311'].scanned, true, 'every K2B code was scanned by a phone; its own flag meant keyed into the PDT'); assert.deepEqual(t.incorrect, ['43006311']);
   assert.equal(s.backfill.subs['7016:2026-09-18'].status, 'submitted'); assert.equal(s.backfill.subs['7016:2026-09-18'].metrics.accuracy, 100);
   assert.deepEqual(s.adjustments['2026-09-18']['43302210'], { qty: -6, name: 'Paper plates 20 pk', location: '7014', confirmed: true, addedAt: new Date(T + 240000).toISOString().replace(/\.\d{3}Z$/, '+00:00') });
 
@@ -369,7 +369,7 @@ test('a keycode’s life, the history lists and the CSV export read the stockroo
   // now so it cannot land between the two page reads.
   await (await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('1241')))).rollover();
   const h = await api('GET', '/v1/store/1241/history/backfill?limit=1', undefined, reader);
-  assert.equal(h.status, 200); assert.equal(h.body.kind, 'backfill'); assert.ok(h.body.total >= 2); assert.equal(h.body.rows.length, 1); assert.ok(h.body.rows[0].bay); assert.equal(typeof h.body.rows[0].accuracy, 'number');
+  assert.equal(h.status, 200); assert.equal(h.body.kind, 'backfill'); assert.ok(h.body.total >= 2); assert.equal(h.body.rows.length, 1); assert.ok(h.body.rows[0].bay); assert.ok(h.body.rows[0].accuracy === null || typeof h.body.rows[0].accuracy === 'number', 'scored, or unscored with no report');
   const page2 = await api('GET', '/v1/store/1241/history/backfill?limit=1&offset=1', undefined, reader);
   assert.notEqual(page2.body.rows[0].bay + page2.body.rows[0].date, h.body.rows[0].bay + h.body.rows[0].date);
   assert.equal((await api('GET', '/v1/store/1241/history/adjustments', undefined, reader)).body.rows[0].keycode, '43302210');
@@ -487,7 +487,7 @@ test('Decant Visualiser importer: dry run reads the site, the import lands the a
   assert.equal(notdv.status, 404); assert.equal(notdv.body.code, 'dv_site');
   const dry = await api('POST', '/v1/admin/stores/1241/import', { source: 'dv', url: 'https://dv.test', dry: true }, ownerToken);
   assert.equal(dry.status, 200, JSON.stringify(dry.body)); assert.equal(dry.body.dry, true); assert.equal(dry.body.source, 'dv'); assert.equal(dry.body.legacy.name, 'Busselton back dock');
-  assert.deepEqual(dry.body.counts, { history: 1, trucks: 1, pallets: 3, planner: 2, events: 19 });
+  assert.deepEqual(dry.body.counts, { history: 1, trucks: 1, pallets: 3, planner: 2, events: 18 }, 'the planned huddle is one booking, not a start and an end');
   assert.ok(dry.body.warnings.some(w => /held over/.test(w)), dry.body.warnings.join('|'));
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'dock-imp' })).body.token;
   const reader = (await api('POST', '/v1/auth/unlock', { code: 'DK-CODE' }, dev)).body.token;

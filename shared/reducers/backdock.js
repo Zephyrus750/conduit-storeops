@@ -77,6 +77,8 @@ export const backdockReducers = {
     const id = e.entity.truck;
     if (!TRUCK_RE.test(id)) return reject('invalid_event', 'truck id must be YYYY-MM-DD-Tn');
     if (s.dock.trucks[id]) return reject('truck_exists', `${id} already exists`);
+    // An imported record holds the id too (the switch-over morning's DV T1).
+    if (s.dock.history.some(r => r.id === id)) return reject('truck_exists', `${id} is already in the history`);
     const open = Object.keys(s.dock.trucks).filter(k => s.dock.trucks[k].status !== 'closed');
     const from = e.payload.carryFrom ? String(e.payload.carryFrom) : null;
     let carry = null;
@@ -213,18 +215,20 @@ export const backdockReducers = {
   'truck.import'(s, e) {
     const id = e.entity.truck;
     if (!TRUCK_RE.test(id)) return reject('invalid_event', 'truck id must be YYYY-MM-DD-Tn');
-    const p = e.payload || {}, n = v => Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0, arr = v => Array.isArray(v) ? v : [];
+    const p = e.payload || {}, n = v => Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0, n1 = v => Number.isFinite(Number(v)) ? Math.round(Number(v) * 10) / 10 : 0, arr = v => Array.isArray(v) ? v : [];
     const str = (v, max = 40) => v == null ? '' : String(v).slice(0, max);
     const row = {
       id, date: id.slice(0, 10), landedAt: p.landedAt ? str(p.landedAt) : null, clearedAt: p.clearedAt ? str(p.clearedAt) : null,
       cartons: n(p.cartons), pallets: n(p.pallets), palletsLanded: n(p.palletsLanded ?? p.pallets),
       clearMins: n(p.clearMins), haltMins: n(p.haltMins), haltCount: n(p.haltCount),
-      downtime: arr(p.downtime).filter(d => d && typeof d === 'object').map(d => ({ reason: str(d.reason) || 'other', mins: n(d.mins), count: n(d.count) })),
+      downtime: arr(p.downtime).filter(d => d && typeof d === 'object').map(d => ({ ...(['halt', 'transition'].includes(d.kind) ? { kind: d.kind } : {}), reason: str(d.reason) || 'other', mins: n(d.mins), count: n(d.count) })),
       teamRate: n(p.teamRate),
       audit: p.audit && typeof p.audit === 'object' ? { matched: n(p.audit.matched), missing: n(p.audit.missing), total: n(p.audit.total), extra: n(p.audit.extra), missingIds: [], extraIds: [] } : null,
       carriedIn: p.carriedIn && typeof p.carriedIn === 'object' ? { pallets: n(p.carriedIn.pallets), cartons: n(p.carriedIn.cartons) } : null,
-      perPerson: arr(p.perPerson).filter(x => x && x.pid).map(x => ({ pid: str(x.pid), cartons: n(x.cartons), pallets: n(x.pallets), bays: arr(x.bays).map(b => str(b, 4)).slice(0, 40), mins: n(x.mins), rate: n(x.rate) })),
-      byDept: arr(p.byDept).filter(x => x && typeof x === 'object').map(x => ({ dept: str(x.dept), cartons: n(x.cartons), pallets: n(x.pallets) })),
+      // Pallets shared between two people are fractions (DV keeps one decimal).
+      perPerson: arr(p.perPerson).filter(x => x && x.pid).map(x => ({ pid: str(x.pid), cartons: n(x.cartons), pallets: n1(x.pallets), bays: arr(x.bays).map(b => str(b, 4)).slice(0, 40), mins: n(x.mins), ...(x.workedMins != null ? { workedMins: n1(x.workedMins) } : {}), rate: n(x.rate), ...(x.deltaPct != null && Number.isFinite(Number(x.deltaPct)) ? { deltaPct: n(x.deltaPct) } : {}), ...(x.start ? { start: str(x.start) } : {}), ...(x.finish ? { finish: str(x.finish) } : {}) })),
+      byDept: arr(p.byDept).filter(x => x && typeof x === 'object').map(x => ({ dept: str(x.dept), cartons: n(x.cartons), pallets: n1(x.pallets) })),
+      perDept: arr(p.perDept).filter(x => x && typeof x === 'object').map(x => ({ dept: str(x.dept), cartons: n(x.cartons), pallets: n1(x.pallets), workedMins: n1(x.workedMins) })),
       manifest: p.manifest && p.manifest.manNo ? { manNo: str(p.manifest.manNo, 20), despatch: str(p.manifest.despatch, 20), dcNo: str(p.manifest.dcNo, 20) } : null,
       imported: { source: str(p.source) || 'legacy', at: e.at, ...(p.pauses && typeof p.pauses === 'object' ? { pauses: { huddle: n(p.pauses.huddle), transition: n(p.pauses.transition), break: n(p.pauses.break) } } : {}) },
     };
@@ -315,6 +319,10 @@ export const backdockReducers = {
       status: 'landed', assignedTo: null, segments: [], consolIds: uniq(p.consolIds), scanIds: uniq(p.scanIds),
       excluded: !!p.excluded, carryover: !!p.carryover, landedAt: e.at, doneAt: null,
     };
+    // A pallet imported from DV keeps what its ledger said (late, seen before).
+    const sight = v => v && typeof v === 'object' && TRUCK_RE.test(String(v.t)) && /^\d{4}-\d{2}-\d{2}$/.test(String(v.d)) ? { t: String(v.t), d: String(v.d), ...(v.ref && BAY_RE.test(String(v.ref)) ? { ref: String(v.ref) } : {}) } : null;
+    if (sight(p.lateFrom)) pal.lateFrom = sight(p.lateFrom);
+    if (sight(p.seenBefore)) pal.seenBefore = sight(p.seenBefore);
     if (Number.isFinite(p.expectedMins)) { pal.expectedMins = Math.max(1, Math.round(p.expectedMins)); pal.expectedBasis = 'manual'; }
     else pal.expectedMins = autoMins(cartons, t.minsPerCarton);
     t.pallets[ref] = pal;

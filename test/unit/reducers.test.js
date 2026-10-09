@@ -97,7 +97,7 @@ test('truck.import keeps a legacy record as-is, replaces itself on a re-run and 
   assert.deepEqual(s.dock.history.map(r => r.id), ['2026-09-02-T1', t], 'sorted by when it cleared');
   const r = s.dock.history[0];
   assert.equal(r.cartons, 470); assert.equal(r.palletsLanded, 14); assert.equal(r.teamRate, 173); assert.deepEqual(r.downtime, [{ reason: 'hcage', mins: 9, count: 1 }]);
-  assert.deepEqual(r.perPerson, [{ pid: 'D1', cartons: 251, pallets: 8, bays: [], mins: 96, rate: 157 }]); assert.deepEqual(r.audit.missingIds, []);
+  assert.deepEqual(r.perPerson, [{ pid: 'D1', cartons: 251, pallets: 7.5, bays: [], mins: 96, rate: 157 }]); assert.deepEqual(r.audit.missingIds, []);
   assert.deepEqual(r.manifest, { manNo: '7031486', despatch: '', dcNo: '' }); assert.deepEqual(r.imported, { source: 'dv', at: '2026-09-20T00:00:00Z', pauses: { huddle: 5, transition: 0, break: 0 } });
   assert.equal(apply(s, ev('truck.import', { truck: '2026-09-02-T1' }, { ...row, cartons: 480 })), null);
   assert.equal(s.dock.history.length, 2); assert.equal(s.dock.history[0].cartons, 480, 'a re-run replaces the row');

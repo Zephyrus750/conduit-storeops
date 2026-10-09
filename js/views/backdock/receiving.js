@@ -13,6 +13,7 @@ import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
 import { planCard, take5Card, needsTake5, queuePicker, onPlanAct, onPlanChange, ratesFor, guard, decantBoard } from './plan.js';
 
 const st = { truck: null, land: { ref: '', ptype: 'chep', cartons: '' }, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, pending: [], manPick: false, linking: false, finalising: false, more: false };
+let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const dispatch = (ctx, type, entity, payload) => ctx.store.dispatch({ type, entity, payload });
 
 function model(ctx) {
@@ -338,6 +339,8 @@ export default {
   desktop(ctx) { return desktop(ctx); },
   mobile(ctx) { return mobile(ctx); },
   mount(ctx, root) {
+    // From search: the truck and the pallet a consolidation is on.
+    if (ctx.arg?.truck && ctx.arg !== usedArg && ctx.store.get('dock').trucks?.[ctx.arg.truck]) { usedArg = ctx.arg; st.truck = ctx.arg.truck; st.sel = ctx.arg.bay && ctx.store.get('dock').trucks[ctx.arg.truck].pallets?.[ctx.arg.bay] ? ctx.arg.bay : null; setTimeout(() => ctx.rerender(), 0); }
     root.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (a) onAct(ctx, a, root); });
     root.addEventListener('input', e => onSearchInput(ctx, e, root));
     root.addEventListener('change', e => { if (e.target.dataset.ll != null) linkPick(e.target.dataset.ll, e.target.value); });

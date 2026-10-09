@@ -26,6 +26,7 @@ const codeName = c => CODE.get(c)?.name || (c === '???' ? 'No department' : 'Dep
 const STATUS = { incoming: ['Incoming', '#B45309'], received: ['Received', '#15803D'], offsite: ['Off-site', '#C2410C'] };
 const TABS = [['register', 'Off-site register'], ['loads', 'Loads'], ['trends', 'Trends'], ['clearance', 'Clearance']];
 const PERIODS = [[4, '4 weeks'], [12, '12 weeks'], [26, '26 weeks'], ['all', 'All']];
+let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { tab: 'register', sel: null, paint: null, filter: 'live', period: 12, stage: null, adding: false, ephemeral: null };
 
 const dockReadable = ctx => (ctx.session.current?.caps || []).includes('backdock') && hasArea(ctx.session, 'backdock');
@@ -41,7 +42,7 @@ const loadsOf = ctx => Object.values(inv(ctx).loads || {}).sort((a, b) => (b.rec
 // ── Register ────────────────────────────────────────────────────────────
 function regRow(r, t) {
   const late = r.cb && !r.rec && r.cb < t, soon = r.cb && !r.rec && r.cb >= t && r.cb <= addDays(t, 7);
-  return `<div class="inv-row${r.rec ? ' rec' : ''}"><span class="pid">${esc(r.pid)}</span>` +
+  return `<div class="inv-row${r.rec ? ' rec' : ''}${st.hl === r.pid ? ' hl' : ''}"><span class="pid">${esc(r.pid)}</span>` +
     `<span class="what"><b>${esc(r.title || r.desc || 'Pallet ' + r.pid)}</b>${r.products.length ? `<span class="prods">${r.products.slice(0, 6).map(p => `<i>${esc(p.kc)}${p.q ? ` ×${p.q}` : ''}</i>`).join('')}${r.products.length > 6 ? `<i>+${r.products.length - 6}</i>` : ''}</span>` : ''}${r.note ? `<small>${esc(r.note)}</small>` : ''}</span>` +
     `<span class="tags">${isFixture(r) ? pill('fx', 'Fixtures') : r.req ? pill('', esc(r.req)) : ''}${r.sent ? `<small>Sent ${esc(fmtDate(r.sent))}</small>` : ''}</span>` +
     `<span class="cb${late ? ' late' : soon ? ' soon' : ''}">${r.rec ? `<small>Back ${r.rec === 'yes' ? '' : esc(fmtDate(r.rec))}</small>` : `<label>Callback<input type="date" value="${esc(r.cb)}" data-act="cb" data-pid="${esc(r.pid)}"></label>`}${late ? '<small>overdue</small>' : ''}</span>` +
@@ -228,6 +229,13 @@ export default {
   },
   mobile(ctx) { return phone(ctx); },
   mount(ctx, root) {
+    // From search: a load, or an off-site pallet (highlighted in the register), once.
+    if (ctx.arg && ctx.arg !== usedArg && (ctx.arg.load || ctx.arg.pid)) {
+      usedArg = ctx.arg; const I = inv(ctx);
+      if (ctx.arg.load && I.loads[ctx.arg.load]) { st.tab = 'loads'; st.sel = ctx.arg.load; st.ephemeral = null; st.paint = null; }
+      else if (ctx.arg.pid && I.offsite[ctx.arg.pid]) { st.tab = 'register'; st.filter = I.offsite[ctx.arg.pid].rec ? 'rec' : 'live'; st.hl = ctx.arg.pid; }
+      setTimeout(() => { ctx.rerender(); setTimeout(() => document.querySelector('.inv-row.hl')?.scrollIntoView({ block: 'center' }), 50); }, 0);
+    }
     let map = null;
     if (st.tab === 'loads' && $('#mapstage', root)) { map = mountMap($('#mapstage', root), { badges: true }); bindMapChrome(root, map); paintMap(ctx, map); }
     if (st.tab === 'clearance') checkPrices(ctx).then(changed => { if (changed && st.tab === 'clearance') ctx.rerender(); }).catch(() => {});

@@ -1731,3 +1731,4 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
   #printroot .ps-kv td, #printroot .ps-kv th { height: 8.5mm; }
 }
 .ext-band { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid #0003; margin-right: 4px; vertical-align: -1px; }
+.inv-row.hl { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; background: var(--accent-soft); }

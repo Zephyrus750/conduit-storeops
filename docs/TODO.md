@@ -10,7 +10,7 @@ background. The audit
 The decisions these wait on are in `docs/OPEN-DECISIONS.md` (numbers in
 brackets below).
 
-**October audit (`docs/AUDIT-2026-10.md`):** its §1 fixes (data safety), the wrong numbers, step 3 (the Floor workflow), step 4 (the dock floor) and step 5 (printing: the composer, the booklet, the evacuation map, work orders) are done (see its status note); the rest of its §8 order, from step 6 (search), comes before the list below.
+**October audit (`docs/AUDIT-2026-10.md`):** its §1 fixes (data safety), the wrong numbers, step 3 (the Floor workflow), step 4 (the dock floor), step 5 (printing) and step 6 (search, the importers) are done: its §8 order is complete (see its status note). Its remaining medium items (§3 Stockroom, §4 Back dock, §5 code health) are listed there.
 
 **Map editor (`editor/`, `docs/MAP-EDITOR-AUDIT-2026-10.md`):** brought into Conduit and connected (decision 2 settled); the audit's status note lists what is fixed. Left: the scale (decision 33).
 
@@ -31,7 +31,7 @@ brackets below).
 4. **Floor leftovers:** the seven languages if they are wanted (16), and the
    `P` suffix once its meaning is known (1).
 5. **Importer gaps** (only if the legacy data matters):
-   - K2B: the department map, the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH, and history scanned flags.
+   - K2B: the department map, the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH and its desk's SOH snapshots (not on the worker). History codes import right since October.
    - DV: anything still missing once a real store is imported.
 
 ## Things only you can do (deploy and set-up)
