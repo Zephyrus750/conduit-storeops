@@ -21,6 +21,7 @@ body { font-family: var(--body); color: var(--ink); }
 .toast { background: var(--ink); color: var(--panel); padding: 10px 14px; border-radius: 10px; font-size: 13.5px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); transition: .25s; max-width: 90vw; }
 .toast.show { opacity: 1; transform: none; }
 .toast.bad { background: var(--red); color: #fff; }
+.toast.warn { background: var(--amber); color: #1a1300; }
 .toast.has-act { pointer-events: auto; display: flex; align-items: center; gap: 12px; }
 .toast-act { background: none; border: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; padding: 6px 2px; min-height: 36px; cursor: pointer; }
 .foot .dot.off { background: var(--faint); }
@@ -1090,6 +1091,13 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .wb-seg.live { box-shadow: inset 0 0 0 2px rgba(255,255,255,.7); }
 .wb-halt { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, rgba(220,38,38,.25) 0 3px, transparent 3px 6px); z-index: 1; pointer-events: auto; }
 .wb-halt.planned { background: repeating-linear-gradient(45deg, rgba(100,116,139,.25) 0 3px, transparent 3px 6px); }
+/* Timeline, as DV's: planned pallets (estimated from the queues), personal breaks, now. */
+.wb-seg.plan { background: transparent; color: var(--dim); border: 1.5px dashed var(--line-strong, #94A3B8); font-weight: 600; }
+.wb-brk { position: absolute; top: 1px; bottom: 1px; background: repeating-linear-gradient(-45deg, rgba(245,158,11,.35) 0 3px, transparent 3px 6px); border-radius: 3px; z-index: 1; }
+.wb-brk.live { box-shadow: inset 0 0 0 1.5px var(--amber); }
+.wb-now { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px solid var(--accent, #2563EB); z-index: 2; }
+.wb-legend .l.brkl { background: repeating-linear-gradient(-45deg, rgba(245,158,11,.5) 0 3px, transparent 3px 6px); height: 10px; }
+.wb-legend .l.planl { background: transparent; border: 1.5px dashed #94A3B8; height: 8px; }
 .wb-pp { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 2px 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
 .wb-pp:last-child { border-bottom: 0; }
 .wb-pp > small { grid-column: 2 / 4; font-size: 12px; }
@@ -1731,3 +1739,16 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 }
 .ext-band { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid #0003; margin-right: 4px; vertical-align: -1px; }
 .inv-row.hl { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; background: var(--accent-soft); }
+
+/* Backfill phone: every scanned code removable; a pair one digit apart flagged (K2B's disputes). */
+.mv-x { display: inline-grid; place-items: center; width: 40px; height: 40px; margin: -8px -6px -8px 0; border: 0; border-radius: 10px; background: none; color: var(--dim); cursor: pointer; }
+.mv-x:hover, .mv-x:focus-visible { background: var(--hover, rgba(127,127,127,.12)); color: var(--red); }
+.mv-dsp { display: inline-flex; align-items: flex-start; gap: 4px; color: var(--amber-ink); font-weight: 600; }
+.mv-dsp svg.i { flex: none; margin-top: 2px; }
+.mv-note.warn { color: var(--amber-ink); font-weight: 600; }
+
+/* Backfill review: the bay is open on another device (its claim is live). */
+.bp-claim { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent); color: var(--ink); font-size: 13px; }
+.bp-claim > svg.i { color: var(--amber-ink); flex: none; }
+.bp-claim > span { flex: 1; }
+.mv-row .c .btn + .btn { margin-left: 6px; }

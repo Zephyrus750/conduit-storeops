@@ -87,12 +87,15 @@ async function onScreenAct(ctx, a) {
     if (act === 'scr-back') { sheet.pick = null; return ctx.rerender(); }
     if (act === 'scr-pickfor') { sheet.pick = a.dataset.kind; return ctx.rerender(); }
     const ref = sheet.ref;
+    // Undo, one step deep as DV's: each action offers its opposite.
+    const undo = (type, payload = {}) => ({ label: 'Undo', run: () => ctx.store.dispatch({ type, entity: { truck: t.id, bay: ref }, payload }).catch(e => toast(e.message, 'bad')) });
+    const onNow = openSegs(t.pallets[ref]).map(x => x.pid);
     if (act === 'scr-do') {
       const kind = a.dataset.do; sheet = null;
       await dispatch(kind === 'done' ? 'pallet.done' : 'pallet.pause');
       const q = ctx.store.get('dock').trucks[t.id]?.pallets[ref];
       if (kind === 'done') toast(q?.suspect ? `${ref} done very fast: Receiving will check its times` : `${ref} done`, q?.suspect ? 'bad' : '', { label: 'Undo', run: () => ctx.store.dispatch({ type: 'pallet.reopen', entity: { truck: t.id, bay: ref }, payload: {} }).catch(e => toast(e.message, 'bad')) });
-      else toast(`${ref} paused`);
+      else toast(`${ref} paused`, '', onNow.length ? undo('pallet.resume', { pid: onNow[0] }) : null);
       return;
     }
     if (act === 'scr-pick') {
@@ -100,19 +103,26 @@ async function onScreenAct(ctx, a) {
       if (kind !== 'join' && !guard(t, pid, ref, ratesFor(ctx.store.get('dock')), true)) return;
       sheet = null;
       if (kind === 'handover') await dispatch('pallet.handover', { toPid: pid }); else await dispatch(kind === 'start' ? 'pallet.start' : kind === 'resume' ? 'pallet.resume' : 'pallet.join', { pid });
-      toast(kind === 'join' ? `${pid} joined ${ref}` : kind === 'handover' ? `${ref} handed to ${pid}` : `${pid} on ${ref}`, '', kind === 'handover' ? null : { label: 'Undo', run: () => ctx.store.dispatch({ type: 'pallet.unstart', entity: { truck: t.id, bay: ref }, payload: {} }).catch(e => toast(e.message, 'bad')) });
+      toast(kind === 'join' ? `${pid} joined ${ref}` : kind === 'handover' ? `${ref} handed to ${pid}` : `${pid} on ${ref}`, '', kind === 'handover' ? (onNow.length === 1 ? undo('pallet.handover', { toPid: onNow[0] }) : null) : kind === 'resume' ? undo('pallet.pause') : undo('pallet.unstart'));
     }
   } catch (e) { sheet = null; ctx.rerender(); toast(e.message, 'bad'); }
 }
 
 // ── Team Board ─────────────────────────────────────────────────────────
 // Up next: each free person (not on a break, not on a pallet) against the
-// next pallet waiting: a paused one first, then tubs, then by landing.
+// first waiting pallet on their own queue in the decant plan; anyone with
+// no queued pallet left takes the next unqueued one: a paused one first,
+// then tubs, then by landing.
 function upNext(t) {
   const run = running(t), free = (t.team || []).filter(m => !run[m.pid] && !onBreak(t, m.pid) && (m.role || 'cutter') === 'cutter');
-  const waiting = pallets(t).filter(p => p.status === 'landed' || p.status === 'assigned' || p.status === 'paused')
+  const waiting = pallets(t).filter(p => (p.status === 'landed' || p.status === 'assigned' || p.status === 'paused') && !p.excluded)
     .sort((a, b) => (a.status === 'paused' ? 0 : 1) - (b.status === 'paused' ? 0 : 1) || (a.ptype === 'chep' ? 0 : 1) - (b.ptype === 'chep' ? 0 : 1) || String(a.landedAt).localeCompare(String(b.landedAt)));
-  return { pairs: free.map((m, i) => ({ pid: m.pid, p: waiting[i] || null })), waiting };
+  const queues = t.plan?.queues || {}, byRef = new Map(waiting.map(p => [p.ref, p])), taken = new Set();
+  const queued = new Set(Object.values(queues).flat());
+  const pairs = free.map(m => { const p = (queues[m.pid] || []).map(r => byRef.get(r)).find(p => p && !taken.has(p.ref)); if (p) taken.add(p.ref); return { pid: m.pid, p: p || null, planned: !!p }; });
+  const loose = waiting.filter(p => !queued.has(p.ref));
+  for (const x of pairs) if (!x.p) { const p = loose.find(p => !taken.has(p.ref)); if (p) { taken.add(p.ref); x.p = p; } }
+  return { pairs, waiting };
 }
 function teamBoard(ctx) {
   const { dock, t } = current(ctx);

@@ -12,6 +12,31 @@ export function parseKeycodes(text) {
   return out;
 }
 
+// A code scanned or typed on the backfill phone, as K2B checked it: a
+// keycode is 7 or 8 digits; 13 digits is an item barcode (APN), which must
+// pass its EAN check digit (a misread digit is refused outright). Anything
+// else is neither. → { code } or { why }
+export function phoneCode(raw) {
+  const code = String(raw ?? '').replace(/\D/g, '');
+  if (!code) return { why: 'That is not a keycode' };
+  if (code.length === 7 || code.length === 8) return { code };
+  if (code.length === 13) return ean13Ok(code) ? { code } : { why: `${code} fails its check digit: scan it again` };
+  return { why: `${code} is ${code.length} digits: a keycode is 7 or 8, an item barcode 13` };
+}
+const ean13Ok = c => { let sum = 0; for (let i = 0; i < 12; i++) sum += Number(c[i]) * (i % 2 ? 3 : 1); return (10 - (sum % 10)) % 10 === Number(c[12]); };
+
+// K2B's disputes: two 8-digit keycodes on one bay that differ in a single
+// digit are probably one product misread or mistyped. → { code: [partners] }
+export function disputes(codes) {
+  const out = {}, eight = [...new Set(codes)].filter(c => /^\d{8}$/.test(c));
+  for (let i = 0; i < eight.length; i++) for (let j = i + 1; j < eight.length; j++) {
+    const a = eight[i], b = eight[j]; let d = 0;
+    for (let k = 0; k < 8 && d < 2; k++) if (a[k] !== b[k]) d++;
+    if (d === 1) { (out[a] ||= []).push(b); (out[b] ||= []).push(a); }
+  }
+  return out;
+}
+
 // Whole-report paste: split into per-location lists. Field order is
 // LOCATION · KEYCODE · APN · …: the first 6–8-digit token is the keycode
 // (12–13-digit APNs are skipped) and the location is a leading 2–5-digit

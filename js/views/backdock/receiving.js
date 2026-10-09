@@ -46,15 +46,18 @@ function dockGrid(t, desk) {
 const legend = () => `<span class="bdr-legend">${PTYPES.map(p => `<span><i style="background:${p[2]}"></i>${p[1]}</span>`).join('')}<span><i style="background:#C9F0D8;border:1px solid #86D9A8"></i>Done</span><span><i style="background:#fff;border:2px solid var(--accent)"></i>Decanting</span><span><i style="background:#fff;border:2px solid #7C3AED"></i>Carryover</span><span><i style="background:#fff;border:2px solid #DC2626"></i>Over its estimate</span></span>`;
 // Hold-ups: pick a kind, then a reason (halts and transitions) with an
 // optional note. A huddle and a team break start straight away.
-function holdPicker() {
-  const kinds = Object.entries(KIND_NAME).map(([k, v]) => `<button class="chip${st.holdKind === k ? ' on' : ''}" data-act="holdkind" data-kind="${k}">${v}</button>`).join('');
+function holdPicker(t) {
+  // The team break the planner booked shows its length (DV's booked break).
+  const booked = t?.plannedBreakMins;
+  const kinds = Object.entries(KIND_NAME).map(([k, v]) => `<button class="chip${st.holdKind === k ? ' on' : ''}" data-act="holdkind" data-kind="${k}">${v}${k === 'break' && booked ? ` · ${booked} min booked` : ''}</button>`).join('');
   const reasons = st.holdKind === 'halt' ? HALT_NAME : st.holdKind === 'transition' ? TRANS_NAME : null;
   return `<div class="bdr-reasons">${kinds}</div>` + (st.holdKind ? `<div class="bdr-reasons">${reasons ? Object.entries(reasons).map(([k, v]) => `<button class="chip" data-act="haltgo" data-kind="${st.holdKind}" data-reason="${k}">${v}</button>`).join('') : `<button class="btn sm primary" data-act="haltgo" data-kind="${st.holdKind}" data-reason="${st.holdKind}">Start ${KIND_NAME[st.holdKind].toLowerCase()}</button>`}<input class="bdr-in" data-field="haltnote" maxlength="120" placeholder="Note (optional)"></div>` : '');
 }
 function holdRow(t, h, live) {
-  if (h) return `<div class="bdr-haltrow${h.kind && h.kind !== 'halt' ? ' planned' : ''}">${ic('alert')}<b>${esc(holdName(h))}</b>${h.note ? ` · ${esc(h.note)}` : ''} since ${fmtHM(h.start)} · decant clock stopped<button class="btn sm" data-act="haltend">End ${esc(KIND_NAME[h.kind || 'halt'].toLowerCase())}</button></div>`;
+  const back = h?.kind === 'break' && t?.plannedBreakMins ? ` · ${t.plannedBreakMins} min booked, back at ${fmtHM(new Date(Date.parse(h.start) + t.plannedBreakMins * 60000).toISOString())}` : '';
+  if (h) return `<div class="bdr-haltrow${h.kind && h.kind !== 'halt' ? ' planned' : ''}">${ic('alert')}<b>${esc(holdName(h))}</b>${h.note ? ` · ${esc(h.note)}` : ''} since ${fmtHM(h.start)}${back} · decant clock stopped<button class="btn sm" data-act="haltend">End ${esc(KIND_NAME[h.kind || 'halt'].toLowerCase())}</button></div>`;
   if (!live) return '';
-  return `<div class="bdr-haltrow dim">${ic('clock')}Decant running<button class="btn sm" data-act="halt">${ic('alert')}Hold-up</button><button class="btn sm" data-act="huddleplan">${ic('users')}Book huddle</button></div>${st.halting ? holdPicker() : ''}`;
+  return `<div class="bdr-haltrow dim">${ic('clock')}Decant running<button class="btn sm" data-act="halt">${ic('alert')}Hold-up</button><button class="btn sm" data-act="huddleplan">${ic('users')}Book huddle</button></div>${st.halting ? holdPicker(t) : ''}`;
 }
 function landForm() {
   return `<div class="bdr-land"><span class="lbl">Land a pallet</span><input class="bdr-in mono" data-field="ref" placeholder="Bay" maxlength="3" title="Grid ref, e.g. A1, or click an empty cell" value="${esc(st.land.ref)}"><span class="bdr-pts">${PTYPES.map(p => `<button class="bdr-pt${st.land.ptype === p[0] ? ' on' : ''}" data-act="ptype" data-pt="${p[0]}"><i style="background:${p[2]}"></i>${p[1]}</button>`).join('')}</span><input class="bdr-in mono" data-field="cartons" inputmode="numeric" placeholder="Cartons" maxlength="3" value="${esc(st.land.cartons)}"><button class="btn primary sm" data-act="land">${ic('plus')}Land</button></div>`;
@@ -291,19 +294,21 @@ async function onAct(ctx, a, root) {
     if (act === 'pal-remove') { if (!confirm(`Remove pallet ${st.sel}?`)) return; await dispatch(ctx, 'pallet.remove', { truck: id, bay: st.sel }, {}); st.sel = null; toast('Pallet removed'); return; }
     if (act === 'dec') {
       const kind = a.dataset.dec, p = t.pallets[st.sel];
-      const B = { truck: id, bay: st.sel }, ref = st.sel, undoStart = { label: 'Undo', run: () => dispatch(ctx, 'pallet.unstart', B, {}).catch(e => toast(e.message, 'bad')) };
-      if (kind === 'start' || kind === 'resume') { const pid = field('pid') || p.assignedTo; if (!pid) return toast('Pick who is decanting first', 'bad'); if (kind === 'start' && !guard(t, pid, ref, rates, true)) return; await dispatch(ctx, kind === 'start' ? 'pallet.start' : 'pallet.resume', B, { pid }); toast(`${pid} on ${ref}`, '', undoStart); return; }
+      // Undo, one step deep as DV's: each action offers its opposite.
+      const B = { truck: id, bay: st.sel }, ref = st.sel, undo = (type, payload = {}) => ({ label: 'Undo', run: () => dispatch(ctx, type, B, payload).catch(e => toast(e.message, 'bad')) }), undoStart = undo('pallet.unstart');
+      const onNow = openSegs(p).map(x => x.pid);
+      if (kind === 'start' || kind === 'resume') { const pid = field('pid') || p.assignedTo; if (!pid) return toast('Pick who is decanting first', 'bad'); if (kind === 'start' && !guard(t, pid, ref, rates, true)) return; await dispatch(ctx, kind === 'start' ? 'pallet.start' : 'pallet.resume', B, { pid }); toast(`${pid} on ${ref}`, '', kind === 'start' ? undoStart : undo('pallet.pause')); return; }
       if (kind === 'join') { const pid = field('pid'); if (!pid) return toast('Pick who joins', 'bad'); await dispatch(ctx, 'pallet.join', B, { pid }); toast(`${pid} joined ${ref}`, '', undoStart); return; }
-      if (kind === 'handover') { const pid = field('pid'); if (!pid) return toast('Pick who takes it', 'bad'); await dispatch(ctx, 'pallet.handover', B, { toPid: pid }); toast(`${ref} handed to ${pid}`); return; }
+      if (kind === 'handover') { const pid = field('pid'); if (!pid) return toast('Pick who takes it', 'bad'); await dispatch(ctx, 'pallet.handover', B, { toPid: pid }); toast(`${ref} handed to ${pid}`, '', onNow.length === 1 ? undo('pallet.handover', { toPid: onNow[0] }) : null); return; }
       if (kind === 'leave') { await dispatch(ctx, 'pallet.leave', B, { pid: a.dataset.pid }); toast(`${a.dataset.pid} stepped off ${ref}`); return; }
       if (kind === 'unstart') { await dispatch(ctx, 'pallet.unstart', B, {}); toast('Last start undone'); return; }
-      if (kind === 'pause') return dispatch(ctx, 'pallet.pause', B, {});
+      if (kind === 'pause') { await dispatch(ctx, 'pallet.pause', B, {}); toast(`${ref} paused`, '', onNow.length ? undo('pallet.resume', { pid: onNow[0] }) : null); return; }
       if (kind === 'done') {
         await dispatch(ctx, 'pallet.done', B, {}); if (ctx.isMobile) st.sel = null;
         const q = model(ctx).t?.pallets[ref];
         toast(q?.suspect ? `${ref} done very fast: check its times` : `${ref} decanted`, q?.suspect ? 'bad' : '', { label: 'Undo', run: () => dispatch(ctx, 'pallet.reopen', B, {}).catch(e => toast(e.message, 'bad')) }); return;
       }
-      if (kind === 'reopen') return dispatch(ctx, 'pallet.reopen', B, {});
+      if (kind === 'reopen') { await dispatch(ctx, 'pallet.reopen', B, {}); toast(`${ref} reopened`, '', undo('pallet.done')); return; }
       if (kind === 'quick') { await dispatch(ctx, 'pallet.update', B, { suspectOk: true }); toast(`${ref} confirmed: its time counts`); return; }
       if (kind === 'move') { const to = (prompt(`Move pallet ${ref} to which empty square?`, '') || '').trim().toUpperCase(); if (!to) return; await dispatch(ctx, 'pallet.move', B, { to }); st.sel = to; toast(`${ref} moved to ${to}`); return; }
       if (kind === 'fix') { st.fix = ref; return ctx.rerender(); }

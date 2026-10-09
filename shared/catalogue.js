@@ -71,7 +71,7 @@ export const CATALOGUE = {
   'submission.rename':   T('stockroom', S, ['bay', 'date'], { newBay: 'string' }),
   'submission.delete':   T('stockroom', S, ['bay', 'date']),
   'submission.request':  T('stockroom', S, ['bay', 'date']),                    // requested list; payload.remove
-  'submission.claim':    T('stockroom', S, ['bay', 'date']),                    // payload.release
+  'submission.claim':    T('stockroom', S, ['bay', 'date']),                    // payload.release | payload.takeover; lapses after CLAIM_TTL_MS
   'submission.readd':    T('stockroom', S, ['bay', 'date'], { code: 'string' }), // payload.done: scanned back in
   'adjustment.set':      T('stockroom', S, ['keycode', 'date'], { qty: 'number' }),
   'adjustment.remove':   T('stockroom', S, ['keycode', 'date']),

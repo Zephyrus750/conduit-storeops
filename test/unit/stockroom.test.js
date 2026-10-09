@@ -45,8 +45,17 @@ test('reopen rule: a stale submit after a reopen does not close the bay', () => 
   apply(s, ev('submission.reopen', k, {}, { at: '2026-09-07T10:00:00+08:00' }));
   assert.equal(apply(s, ev('submission.submit', k, {}, { at: '2026-09-07T09:30:00+08:00' })), null);
   assert.equal(s.backfill.subs['7023:2026-09-07'].status, 'pending');
+  assert.equal(apply(s, ev('submission.submit', k, {}, { at: '2026-09-07T10:20:00+08:00' })).code, 'not_reviewed', 'a bay is reviewed before it is submitted (K2B)');
+  assert.equal(apply(s, ev('submission.ready', k, {}, { at: '2026-09-07T10:25:00+08:00' })), null);
   assert.equal(apply(s, ev('submission.submit', k, {}, { at: '2026-09-07T10:30:00+08:00' })), null);
   assert.equal(s.backfill.subs['7023:2026-09-07'].status, 'submitted');
+});
+
+test('the rollover may auto-submit a bay still in review; nobody else may', () => {
+  const s = initialState();
+  apply(s, ev('submission.open', k));
+  assert.equal(apply(s, ev('submission.submit', k, { auto: true })), null);
+  assert.equal(s.backfill.subs['7023:2026-09-07'].autoSubmitted, true);
 });
 
 test('rename refuses a taken bay; requested is a list; claims are a soft lock', () => {
@@ -132,4 +141,45 @@ test('phone adjustment keeps the system SOH as qty and the shelf count as eviden
   const s = initialState();
   apply(s, ev('adjustment.set', { keycode: '42977636', date: '2026-09-07' }, { qty: -4, counted: 3 }));
   assert.equal(s.adjustments['2026-09-07']['42977636'].qty, -4); assert.equal(s.adjustments['2026-09-07']['42977636'].counted, 3);
+});
+
+test('unfinalise: a reopened bay is no longer submitted, and readied again unchanged it keeps an imported score', () => {
+  const s = initialState(), at = t => ({ at: `2026-09-07T${t}:00+08:00` });
+  apply(s, ev('submission.open', k, {}, at('08:00')));
+  apply(s, ev('submission.update', k, { codes: { 42977636: true, 12345678: true } }, at('08:05')));
+  apply(s, ev('submission.ready', k, { metrics: { expected: 3, scanned: 2, match: 2, accuracy: 67, incorrect: 0 } }, at('08:10')));
+  apply(s, ev('submission.submit', k, { auto: true }, at('08:20')));
+  const sub = s.backfill.subs['7023:2026-09-07'];
+  apply(s, ev('submission.reopen', k, {}, at('09:00')));
+  assert.equal(sub.status, 'pending'); assert.equal(sub.submittedDoneAt, null); assert.equal(sub.autoSubmitted, false); assert.equal(sub.metrics, null);
+  apply(s, ev('submission.ready', k, {}, at('09:05')));
+  assert.equal(sub.metrics.accuracy, 67, 'nothing new and no report: the score stays (was recomputed to "no report")');
+  // A new scan after a reopen means the score is worked out again.
+  apply(s, ev('submission.reopen', k, {}, at('09:10')));
+  apply(s, ev('submission.update', k, { codes: { 11112222: true } }, at('09:12')));
+  apply(s, ev('submission.ready', k, {}, at('09:15')));
+  assert.equal(sub.metrics.accuracy, null); assert.equal(sub.metrics.scanned, 3);
+});
+
+test('claims lapse after 20 minutes; a live one holds unless taken over; the owner device renews it', () => {
+  const s = initialState(), other = { actor: { role: 'stockroom', device: 'P2', owner: false } };
+  const at = t => ({ at: `2026-09-07T${t}:00+08:00` });
+  apply(s, ev('submission.open', k, {}, at('08:00')));
+  assert.equal(apply(s, ev('submission.claim', k, {}, at('08:00'))), null);
+  assert.equal(apply(s, ev('submission.claim', k, {}, { ...at('08:10'), ...other })).code, 'claimed');
+  assert.equal(apply(s, ev('submission.claim', k, {}, at('08:15'))), null, 'P1 renews');
+  assert.equal(apply(s, ev('submission.claim', k, {}, { ...at('08:30'), ...other })).code, 'claimed', 'renewed: still live');
+  assert.equal(apply(s, ev('submission.claim', k, {}, { ...at('08:36'), ...other })), null, 'lapsed: P2 takes it');
+  assert.equal(s.backfill.claims['7023'].by, 'P2'); assert.equal(s.backfill.claims['7023'].took, undefined);
+  assert.equal(apply(s, ev('submission.claim', k, { takeover: true }, at('08:40'))), null, 'P1 takes it back on purpose');
+  assert.deepEqual(s.backfill.claims['7023'], { by: 'P1', at: '2026-09-07T08:40:00+08:00', took: 'P2' });
+});
+
+test('a removal wins a same-second scan from another device; the device that removed it can put it back (Undo)', () => {
+  const s = initialState(), P2 = { actor: { role: 'stockroom', device: 'P2', owner: false } }, at = { at: '2026-09-07T08:30:00+08:00' };
+  apply(s, ev('submission.update', k, { codes: { 42977636: true } }, { at: '2026-09-07T08:00:00+08:00' }));
+  apply(s, ev('submission.update', k, { remove: ['42977636'] }, at));
+  assert.equal(apply(s, ev('submission.update', k, { codes: { 42977636: true } }, { ...at, ...P2 })).code, 'removed_by_reviewer');
+  assert.equal(apply(s, ev('submission.update', k, { codes: { 42977636: true } }, at)), null, 'P1 undoes its own removal');
+  assert.equal(s.backfill.subs['7023:2026-09-07'].codes['42977636'].scanned, true);
 });

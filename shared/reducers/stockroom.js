@@ -29,6 +29,7 @@ import { gs1Parse } from '../gs1.js';
 export const RINGS = ['new-lines', 'overstock', 'cant-work', 'online-picks'];
 export const SUBMISSION_STATUS = ['pending', 'corrected', 'submitted'];
 export const DAYLIST_SOURCES = ['requested', 'snapshot', ''];
+export const CLAIM_TTL_MS = 20 * 60_000;         // a desk's hold on a bay lapses after 20 minutes without a renewal
 export const CAGE_LOG = 40;                     // activity entries kept per cage
 export const SOH_KEEP = 26;                     // snapshots kept (about six months of weekly pastes)
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -170,7 +171,10 @@ export const stockroomReducers = {
     if (incoming.some(([code]) => !code || code.length > CODE_LEN)) return reject('invalid_event', `a code is 1 to ${CODE_LEN} characters`);
     for (const k of ['remove', 'incorrect']) if (p[k] !== undefined) { const no = badList(p[k], k, SUB_CODES_MAX, CODE_LEN); if (no) return reject('invalid_event', no); }
     if (cur && Object.keys(cur.codes).length + incoming.filter(([code]) => !cur.codes[code]).length > SUB_CODES_MAX) return reject('invalid_event', `a bay holds at most ${SUB_CODES_MAX} codes`);
-    const stale = incoming.filter(([code]) => !cur?.codes[code] && tomb[code] && Date.parse(e.at) <= Date.parse(tomb[code])).map(([code]) => code);
+    // A tie (event times are to the second) goes to the removal, unless the
+    // device that removed the code is putting it back (the phone's Undo).
+    const by = cur?.removedBy || {}, dev0 = e.actor?.device || null;
+    const stale = incoming.filter(([code]) => !cur?.codes[code] && tomb[code] && (earlier(e.at, tomb[code]) || (e.at === tomb[code] || Date.parse(e.at) === Date.parse(tomb[code])) && !(dev0 && by[code] === dev0))).map(([code]) => code);
     if (stale.length && stale.length === incoming.length && !(Array.isArray(p.remove) && p.remove.length) && !Array.isArray(p.incorrect)) {
       return reject('removed_by_reviewer', `${stale.join(', ')} ${stale.length === 1 ? 'was' : 'were'} removed by the reviewer`);
     }
@@ -179,7 +183,7 @@ export const stockroomReducers = {
     const sub = cur || (s.backfill.subs[subKey(e)] = newSub(bay(e), e.entity.date));
     const dev = e.actor?.device;
     const fresh = incoming.filter(([code, v]) => v && !stale.includes(code) && !sub.codes[code]?.scanned);
-    if (fresh.length && sub.status !== 'pending') { sub.status = 'pending'; sub.statusAt = e.at; sub.reopenedAt = e.at; sub.autoSubmitted = false; sub.metrics = null; sub.lateScans = (sub.lateScans || 0) + fresh.length; }
+    if (fresh.length && sub.status !== 'pending') { backToReview(sub, e.at); sub.prevMetrics = null; sub.lateScans = (sub.lateScans || 0) + fresh.length; }
     if (fresh.length) sub.sentAt = null;
     if (e.payload.sent === true) sub.sentAt = e.at;
     if (dev && incoming.some(([, v]) => v)) { sub.devices ||= []; if (!sub.devices.includes(dev)) sub.devices.push(dev); }
@@ -187,8 +191,9 @@ export const stockroomReducers = {
       if (stale.includes(code)) continue;
       sub.codes[code] = { scanned: !!scanned };
       if (sub.removed) delete sub.removed[code];
+      if (sub.removedBy) delete sub.removedBy[code];
     }
-    if (Array.isArray(p.remove)) for (const code of p.remove) { const c = String(code); delete sub.codes[c]; (sub.removed ||= {})[c] = e.at; }
+    if (Array.isArray(p.remove)) for (const code of p.remove) { const c = String(code); delete sub.codes[c]; (sub.removed ||= {})[c] = e.at; if (dev) (sub.removedBy ||= {})[c] = dev; }
     if (Array.isArray(p.incorrect)) sub.incorrect = [...new Set(p.incorrect.map(String))];
     sub.updatedAt = e.at;
     return null;
@@ -202,13 +207,22 @@ export const stockroomReducers = {
     sub.status = 'corrected'; sub.statusAt = e.at; sub.readyAt = sub.readyAt || e.at;
     if (Array.isArray(e.payload?.system)) sub.system = [...new Set(e.payload.system.map(String))];
     const m = e.payload?.metrics;
-    sub.metrics = m && typeof m === 'object' ? { expected: numOrNull(m.expected), scanned: Number(m.scanned) || 0, match: numOrNull(m.match), accuracy: numOrNull(m.accuracy), incorrect: Number(m.incorrect) || 0 } : metrics(sub);
+    // A bay reopened and readied again with nothing new scanned and no report
+    // to compare against keeps the metrics it had (an imported K2B score
+    // cannot be worked out again from the codes alone).
+    const kept = !m && !sub.system && sub.prevMetrics && sub.prevCodes === codeSig(sub) ? sub.prevMetrics : null;
+    sub.metrics = m && typeof m === 'object' ? { expected: numOrNull(m.expected), scanned: Number(m.scanned) || 0, match: numOrNull(m.match), accuracy: numOrNull(m.accuracy), incorrect: Number(m.incorrect) || 0 } : kept || metrics(sub);
+    delete sub.prevMetrics; delete sub.prevCodes;
     return null;
   },
   'submission.submit'(s, e) {
     const sub = sub_(s, e); if (sub.code) return sub;
     if (sub.reopenedAt && earlier(e.at, sub.reopenedAt)) return null;    // stale submit after a reopen: ignored
     if (sub.status === 'submitted') return null;
+    // As K2B: a bay is submitted once it has been reviewed (Ready). The
+    // midnight rollover's auto-submit and the owner's imports are the
+    // exceptions: they carry what the legacy day already decided.
+    if (sub.status === 'pending' && !e.payload.auto && !e.actor?.owner) return reject('not_reviewed', `${sub.bay} has not been reviewed yet: mark it ready first`);
     sub.status = 'submitted'; sub.statusAt = e.at; sub.submittedDoneAt = e.at;
     sub.autoSubmitted = !!e.payload.auto; sub.metrics = sub.metrics || metrics(sub);   // submit never rewrites what ready recorded
     delete s.backfill.claims[sub.bay];
@@ -217,7 +231,8 @@ export const stockroomReducers = {
   'submission.reopen'(s, e) {
     const sub = sub_(s, e); if (sub.code) return sub;
     if (sub.trimmed) return reject('record_trimmed', `${sub.bay} on ${sub.date} is older than two weeks: its code list was trimmed, so it can't go back into review`);
-    sub.status = 'pending'; sub.statusAt = e.at; sub.reopenedAt = e.at; sub.autoSubmitted = false;
+    if (sub.metrics) { sub.prevMetrics = sub.metrics; sub.prevCodes = codeSig(sub); }
+    backToReview(sub, e.at);
     return null;
   },
   'submission.rename'(s, e) {
@@ -262,9 +277,11 @@ export const stockroomReducers = {
   'submission.claim'(s, e) {
     const b = bay(e), by = e.actor?.device || 'unknown';
     if (e.payload.release) { if (s.backfill.claims[b]?.by === by) delete s.backfill.claims[b]; return null; }
-    const cur = s.backfill.claims[b];
-    if (cur && cur.by !== by) return reject('claimed', `bay ${b} is being reviewed by another device`);
-    s.backfill.claims[b] = { by, at: e.at };
+    // Another device's claim holds while it is fresh (its desk renews it);
+    // a lapsed one is simply taken, and payload.takeover takes a live one.
+    const cur = s.backfill.claims[b], live = cur && cur.by !== by && Date.parse(e.at) - Date.parse(cur.at) < CLAIM_TTL_MS;
+    if (live && !e.payload.takeover) return reject('claimed', `bay ${b} is being reviewed by another device`);
+    s.backfill.claims[b] = { by, at: e.at, ...(live ? { took: cur.by } : {}) };
     return null;
   },
 
@@ -359,6 +376,14 @@ function sub_(s, e) {
 // (scoring it against its own scans read as 100%, or 0% when empty). Older
 // events that merged the report's codes as system-only, with no list on the
 // ready, still score against every code on the submission.
+// Back into review (a reopen, or a late scan on a readied bay): it is no
+// longer submitted, by hand or by the rollover, and its metrics come again
+// when it is readied.
+function backToReview(sub, at) {
+  sub.status = 'pending'; sub.statusAt = at; sub.reopenedAt = at;
+  sub.autoSubmitted = false; sub.submittedDoneAt = null; sub.metrics = null;
+}
+const codeSig = sub => scannedCodes(sub).sort().join(',');
 export function metrics(sub) {
   const scanned = scannedCodes(sub);
   if (!sub.system && !Object.values(sub.codes || {}).some(c => !c.scanned)) return { expected: null, scanned: scanned.length, match: null, accuracy: null, incorrect: (sub.incorrect || []).length };

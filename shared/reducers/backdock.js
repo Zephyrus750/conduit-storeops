@@ -63,6 +63,34 @@ export function backdockState() {
 const MAN_NO = /^[\w-]{1,20}$/;
 // A planner slot's manifest: the same shape manifest.attach takes, checked
 // the same way, since a truck made from the slot carries it.
+// A manifest's consolidations, checked and trimmed (attach and a truck made
+// from a planner slot share it). → [consol] or a rejection.
+function manifestConsols(p) {
+  if (!MAN_NO.test(String(p?.manNo ?? ''))) return reject('invalid_event', 'the manifest number is letters, digits and dashes (up to 20)');
+  const consols = [];
+  for (const c of p.consols || []) {
+    if (!c || typeof c !== 'object') return reject('invalid_event', 'consols must be objects');
+    const cons = String(c.cons ?? c.id ?? '');
+    if (!/^\d{9,22}$/.test(cons)) return reject('invalid_event', 'consolidation numbers must be 9 to 22 digits');
+    consols.push({ id: cons.slice(-9), cons, cartons: Math.max(0, Math.min(9999, Number(c.cartons) || 0)), dept: String(c.dept || '').slice(0, 12), mix: Array.isArray(c.mix) ? c.mix.slice(0, 20) : [], desc: String(c.desc || '').slice(0, 60), items: Array.isArray(c.items) ? c.items.slice(0, 250) : [] });
+  }
+  if (consols.length > 500) return reject('invalid_event', 'a manifest holds at most 500 consolidations');
+  return consols;
+}
+// The manifest goes on the truck: scans re-matched, the ledger told (each
+// consol manifested to this truck; one seen on an earlier truck is marked
+// as landed earlier), and the library entry points at the truck, so the
+// planner no longer offers it.
+function fileManifest(s, truckId, t, p, consols, e) {
+  t.manifest = { manNo: String(p.manNo), dcNo: String(p.dcNo || '').slice(0, 20), despatch: String(p.despatch || '').slice(0, 20), consols, attachedAt: e.at, by: e.actor?.device || null };
+  rematchScans(t);
+  const day = truckId.slice(0, 10);
+  for (const c of consols) { const seen = ledgerFind(s, c.id, ['off', 'land'], truckId).find(x => x.d < day); if (seen) c.landedEarlier = seen; ledgerAdd(s, c.id, { t: truckId, d: day, k: 'man' }, e.at); }
+  for (const pal of Object.values(t.pallets)) for (const id of pal.consolIds) ledgerAdd(s, id, { t: truckId, d: day, k: 'land', ref: pal.ref }, e.at);
+  const cur = s.dock.manifests[String(p.manNo)] || {};
+  s.dock.manifests[String(p.manNo)] = { ...cur, manNo: String(p.manNo), dcNo: p.dcNo || cur.dcNo || '', despatch: p.despatch || cur.despatch || '', truck: truckId, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), consols: consols.length, keycodes: cur.keycodes || new Set(consols.flatMap(c => c.items.map(i => i.k))).size, publishedAt: cur.publishedAt || e.at, attachedAt: e.at };
+  capManifests(s);
+}
 function slotManifest(m) {
   if (m === null) return null;
   if (!m || typeof m !== 'object' || !MAN_NO.test(String(m.manNo ?? ''))) return reject('invalid_event', 'a slot manifest needs a manifest number (letters, digits and dashes)');
@@ -92,13 +120,15 @@ export const backdockReducers = {
     }
     const startAt = e.payload.decantStartAt ?? null;
     if (startAt !== null && !isIso(startAt)) return reject('invalid_event', 'decantStartAt must be an ISO time');
+    const date = id.slice(0, 10), slot = e.payload.slot ?? Number(id.slice(id.lastIndexOf('T') + 1));
+    const slotMan = s.plan.days[date]?.slots[slot]?.manifest || null;
+    const slotConsols = slotMan ? manifestConsols(slotMan) : null; if (slotConsols?.code) return slotConsols;
     const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, decantStartAt: startAt, goalAt: null, ...truckSetup(s), team: [], halts: [], breaks: [], manifest: null, pallets: {}, carriedConsols: [], receivingConfirmed: false, receivedAt: null };
     if (carry) t.grid = widerGrid(t.grid, carry.grid);
     // Creating from a planner slot consumes the slot's team and manifest.
-    const date = id.slice(0, 10), slot = e.payload.slot ?? Number(id.slice(id.lastIndexOf('T') + 1));
     const day = s.plan.days[date];
     if (day && day.slots[slot]) {
-      const sl = day.slots[slot]; t.team = teamOf(sl.team) || []; t.manifest = sl.manifest || null;
+      const sl = day.slots[slot]; t.team = teamOf(sl.team) || [];
       // A member's start follows the slot's ETA unless planned otherwise.
       if (sl.eta) for (const m of t.team) if (!m.start) m.start = sl.eta;
       if (sl.huddleMins) { const from = startAt || e.at; t.halts.push({ kind: 'huddle', reason: 'huddle', start: from, end: new Date(Date.parse(from) + sl.huddleMins * 60000).toISOString(), planned: true }); }
@@ -124,6 +154,8 @@ export const backdockReducers = {
       closeTruck(s, from, carry, e.at, { pallets: Object.keys(moved.pallets).length, cartons: moved.cartons, to: id });
     }
     s.dock.trucks[id] = t;
+    // The slot's manifest is filed as an attach would: ledger and library.
+    if (slotMan) fileManifest(s, id, t, slotMan, slotConsols, e);
     return null;
   },
   'truck.setLive'(s, e) {
@@ -256,26 +288,9 @@ export const backdockReducers = {
   'manifest.attach'(s, e) {
     const t = lateTruck(s, e, 'attaching a manifest to a finalised truck'); if (t.code) return t;
     const p = e.payload;
-    const consols = [];
-    for (const c of p.consols) {
-      if (!c || typeof c !== 'object') return reject('invalid_event', 'consols must be objects');
-      const cons = String(c.cons ?? c.id ?? '');
-      if (!/^\d{9,22}$/.test(cons)) return reject('invalid_event', 'consolidation numbers must be 9 to 22 digits');
-      consols.push({ id: cons.slice(-9), cons, cartons: Math.max(0, Math.min(9999, Number(c.cartons) || 0)), dept: String(c.dept || '').slice(0, 12), mix: Array.isArray(c.mix) ? c.mix.slice(0, 20) : [], desc: String(c.desc || '').slice(0, 60), items: Array.isArray(c.items) ? c.items.slice(0, 250) : [] });
-    }
-    if (!MAN_NO.test(String(p.manNo ?? ''))) return reject('invalid_event', 'the manifest number is letters, digits and dashes (up to 20)');
-    if (consols.length > 500) return reject('invalid_event', 'a manifest holds at most 500 consolidations');
-    t.manifest = { manNo: String(p.manNo), dcNo: String(p.dcNo || '').slice(0, 20), despatch: String(p.despatch || '').slice(0, 20), consols, attachedAt: e.at, by: e.actor?.device || null };
-    rematchScans(t);
-    // The ledger: each consol is manifested to this truck; one already seen
-    // on an earlier truck is marked as landed earlier.
-    const day = e.entity.truck.slice(0, 10);
-    for (const c of consols) { const seen = ledgerFind(s, c.id, ['off', 'land'], e.entity.truck).find(x => x.d < day); if (seen) c.landedEarlier = seen; ledgerAdd(s, c.id, { t: e.entity.truck, d: day, k: 'man' }, e.at); }
-    for (const pal of Object.values(t.pallets)) for (const id of pal.consolIds) ledgerAdd(s, id, { t: e.entity.truck, d: day, k: 'land', ref: pal.ref }, e.at);
+    const consols = manifestConsols(p); if (consols.code) return consols;
+    fileManifest(s, e.entity.truck, t, p, consols, e);
     if (t.status === 'closed') rebuildHistory(s, e.entity.truck, t);
-    const cur = s.dock.manifests[String(p.manNo)] || {};
-    s.dock.manifests[String(p.manNo)] = { ...cur, manNo: String(p.manNo), dcNo: p.dcNo || cur.dcNo || '', despatch: p.despatch || cur.despatch || '', truck: e.entity.truck, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), consols: consols.length, keycodes: cur.keycodes || new Set(consols.flatMap(c => c.items.map(i => i.k))).size, publishedAt: cur.publishedAt || e.at, attachedAt: e.at };
-    capManifests(s);
     return null;
   },
 
@@ -351,7 +366,10 @@ export const backdockReducers = {
     if (!BAY_RE.test(to) || !onGrid(t.grid, to)) return reject('invalid_event', `bay ${to} is not on the ${t.grid.rows} × ${t.grid.cols} dock grid`);
     if (to === p.ref) return reject('invalid_event', `the pallet is already on ${to}`);
     if (t.pallets[to]) return reject('bay_occupied', `bay ${to} already holds a pallet`);
-    delete t.pallets[p.ref]; p.ref = to; t.pallets[to] = p;
+    const from = p.ref;
+    delete t.pallets[from]; p.ref = to; t.pallets[to] = p;
+    // The decant plan is keyed by bay: the pallet keeps its place in its queue.
+    for (const refs of Object.values(t.plan?.queues || {})) { const i = refs.indexOf(from); if (i >= 0) refs[i] = to; }
     return null;
   },
   'pallet.start'(s, e) {

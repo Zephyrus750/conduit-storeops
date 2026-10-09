@@ -162,3 +162,28 @@ test('a wrong consolidation scan comes off the pallet, so the right pallet can t
   ok(s, 'pallet.unscan', B('A2'), { id: '555555555' });
   assert.deepEqual(T(s).pallets.A2.scanIds, []);
 });
+
+test('moving a pallet keeps its place in the decant plan', () => {
+  const s = dock();
+  ok(s, 'plan.queues', { truck: T1 }, { queues: { D1: ['A2', 'A1'] } }, '06:10');
+  ok(s, 'pallet.move', B('A2'), { to: 'B3' }, '06:12');
+  assert.deepEqual(T(s).plan.queues.D1, ['B3', 'A1']);
+  assert.equal(T(s).pallets.B3.ref, 'B3');
+});
+
+test('a truck made from a planner slot files its manifest: the ledger knows it and the planner no longer offers it', () => {
+  const s = initialState();
+  const cons = n => ({ cons: String(400000000 + n), cartons: 12, dept: '021' });
+  ok(s, 'plan.set', { date: '2026-09-08', slot: '1' }, { eta: '05:30', manifest: { manNo: 'M-88', consols: [cons(1), cons(2)] } }, '06:00');
+  ok(s, 'truck.create', { truck: '2026-09-08-T1' }, {}, '06:00');
+  const t = s.dock.trucks['2026-09-08-T1'];
+  assert.equal(t.manifest.manNo, 'M-88'); assert.equal(t.manifest.consols[0].id, '400000001');
+  assert.deepEqual(s.dock.ledger['400000002'].map(x => [x.t, x.k]), [['2026-09-08-T1', 'man']]);
+  assert.equal(s.dock.manifests['M-88'].truck, '2026-09-08-T1');
+  assert.equal(s.plan.days['2026-09-08'].slots[1], undefined, 'the slot is used up');
+  // A slot whose manifest is not valid refuses the truck and changes nothing.
+  ok(s, 'plan.set', { date: '2026-09-09', slot: '1' }, { manifest: { manNo: 'M-89', consols: [{ cons: '12' }] } }, '06:00');
+  const before = JSON.stringify(s);
+  assert.equal(code(s, 'truck.create', { truck: '2026-09-09-T1' }, { carryFrom: '2026-09-08-T1' }, '06:00'), 'invalid_event');
+  assert.equal(JSON.stringify(s), before);
+});

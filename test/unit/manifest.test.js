@@ -74,3 +74,14 @@ test('the upload preview: what was read, what was left out, and what blocks a pu
   const m = manifestCheck(mixed, {}).checks.map(c => c.text).join(' | ');
   assert.match(m, /stored as a number/); assert.match(m, /matched no layout/); assert.match(m, /no manifest number/);
 });
+
+test('a plain sheet attaches: consolidation numbers lose spaces and dashes, anything else is skipped and said', async () => {
+  const { initialState, apply } = await import('../../shared/reducers.js');
+  const r = parseManifestSheets([{ name: 'Sheet1', rows: [['Consol No', 'Cartons'], ['6018 0439 0', 12], ['601-804-391', 5], ['ABC123', 3], [601804392, 7]] }]);
+  assert.deepEqual(r.consols.map(c => [c.id, c.cartons]), [['601804390', 12], ['601804391', 5], ['601804392', 7]]);
+  assert.equal(r.skipped, 1);
+  assert.ok(manifestCheck(r, {}).checks.some(c => /1 row was skipped/.test(c.text)));
+  const s = initialState(), ev = (type, entity, payload) => ({ id: '01J' + String(Math.random()).slice(2, 25).padEnd(23, '0').toUpperCase().replace(/[ILOU]/g, '0'), store: '1241', area: 'backdock', type, entity, payload, actor: { role: 'dock', device: 'x', owner: false }, at: '2026-09-07T08:00:00+08:00', v: 1 });
+  assert.equal(apply(s, ev('truck.create', { truck: '2026-09-07-T1' }, {})), null);
+  assert.equal(apply(s, ev('manifest.attach', { truck: '2026-09-07-T1' }, { manNo: 'G-1', consols: attachConsols(manifestDoc(r, { manNo: 'G-1' })) })), null);
+});

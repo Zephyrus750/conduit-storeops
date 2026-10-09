@@ -24,7 +24,7 @@ export function nameHtml(kc, missing = 'Unverified · not in the catalogue') {
   if (isItemBarcode(kc)) return '<span class="nm-apn" title="That is an item barcode (APN), not a keycode">Item barcode · not a keycode</span>';
   const n = names.get(kc);
   if (n === undefined) return '<span class="cs-dim">…</span>';
-  if (n === null) { const dm = near.get(kc); return `<span class="warn nm-unv" title="Not found in the catalogue: double-check this code">⚠ ${esc(missing)}</span>${dm?.length ? ` <span class="nm-near">Did you mean ${dm.slice(0, 2).map(x => `<b class="mono" data-act="copy" data-code="${esc(x.keycode)}" title="${esc(x.name || '')}">${esc(x.keycode)}</b>`).join(' or ')}?</span>` : ''}`; }
+  if (n === null) { const dm = near.get(kc); return `<span class="warn nm-unv" title="Not found in the catalogue: double-check this code">⚠ ${esc(missing)}</span>${dm?.length ? ` <span class="nm-near">Did you mean ${dm.slice(0, 2).map(x => `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? `${x.name}: tap to copy` : 'Tap to copy')}">${esc(x.keycode)}</b>`).join(' or ')}?</span>` : ''}`; }
   return n.url ? `<a class="nm-ok" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer" title="View on Kmart">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`;
 }
 export function ensureNames(ctx, codes, repaint) {
@@ -74,3 +74,9 @@ export async function send(ctx, type, entity, payload = {}) {
   catch (e) { const { toast } = await import('../../ui.js'); toast(e.message, 'bad'); return null; }
 }
 export const allProfiles = () => profiles || {};
+
+// "Did you mean" chips work wherever a product name is shown (review,
+// cages, adjustments, history, Quick Scan): a tap copies the likely code.
+if (typeof document !== 'undefined') document.addEventListener('click', e => {
+  const b = e.target.closest?.('[data-act="near"][data-code]'); if (b) copyText(b.dataset.code, b.dataset.code);
+});

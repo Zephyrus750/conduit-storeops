@@ -11,6 +11,7 @@ import { ratesFor } from './plan.js';
 import { consolsOf, segWorkedMs } from '../../../shared/reducers/backdock.js';
 import { pacePoints, personNow, insights, downtimeBy } from '../../../shared/dockstats.js';
 import { planOpts } from './common.js';
+import { schedule } from '../../../shared/dockplan.js';
 
 const st = { zoom: 'fit', pan: 0 };
 const ZOOMS = [['fit', 'Fit'], [300, '5h'], [180, '3h'], [120, '2h'], [60, '60m'], [30, '30m']];
@@ -48,21 +49,32 @@ function gauge(pct) {
 
 // Who decanted what over the clock: one lane per person, segments in the
 // pallet type's colour, hold-ups shaded across every lane.
-function timeline(t, now) {
-  const from = Date.parse(startOf(t)) || now, fit = Math.max(30 * MIN, now - from);
-  const span = st.zoom === 'fit' ? fit : st.zoom * MIN, maxPan = Math.max(0, fit - span);
-  const right = now - Math.min(maxPan, st.pan * MIN), left = st.zoom === 'fit' ? from : right - span;
+// As DV's: what was decanted, each person's personal breaks, and what the
+// decant plan has them on next (estimated starts from the queues, faint),
+// so Fit runs from the start to the plan's last finish.
+function timeline(t, now, rates) {
+  const sched = schedule(t, now, planOpts(t, rates)), ahead = {};
+  for (const [pid, sc] of Object.entries(sched)) ahead[pid] = (sc.items || []).filter(x => x.tag === 'queued' && x.end > now);
+  const planEnd = Math.max(now, ...Object.values(ahead).flat().map(x => x.end));
+  const from = Date.parse(startOf(t)) || now, fit = Math.max(30 * MIN, planEnd - from);
+  const span = st.zoom === 'fit' ? fit : st.zoom * MIN, maxPan = Math.max(0, now - from - span);
+  const right = st.zoom === 'fit' ? from + fit : now - Math.min(maxPan, st.pan * MIN), left = st.zoom === 'fit' ? from : right - span;
   const pct = ms => ((Math.max(left, Math.min(right, ms)) - left) / (right - left) * 100).toFixed(2);
   const people = (t.team || []).map(m => m.pid), segs = {};
   for (const p of pallets(t)) for (const s of p.segments || []) (segs[s.pid] ||= []).push({ p, s });
   for (const pid of Object.keys(segs)) if (!people.includes(pid)) people.push(pid);
   const halts = (t.halts || []).map(h => ({ h, a: Date.parse(h.start), b: Date.parse(h.end) || now })).filter(x => x.b > left && x.a < right);
   const shade = halts.map(x => `<i class="wb-halt${x.h.kind && x.h.kind !== 'halt' ? ' planned' : ''}" style="left:${pct(x.a)}%;width:${(pct(x.b) - pct(x.a)).toFixed(2)}%" title="${esc(holdName(x.h))} ${fmtHM(x.h.start)}–${x.h.end ? fmtHM(x.h.end) : 'now'}"></i>`).join('');
-  const lanes = people.map(pid => `<div class="wb-lane"><b>${esc(pid)}</b><div class="wb-track">${shade}${(segs[pid] || []).filter(({ s }) => (Date.parse(s.end) || now) > left && Date.parse(s.start) < right).map(({ p, s }) => { const a = Date.parse(s.start), b = Date.parse(s.end) || now; return `<span class="wb-seg${s.end ? '' : ' live'}" style="left:${pct(a)}%;width:${Math.max(0.4, pct(b) - pct(a)).toFixed(2)}%;background:${PT_COLOUR[p.ptype] || '#98A2B3'}" title="${esc(p.ref)} · ${fmtHM(s.start)}–${s.end ? fmtHM(s.end) : 'now'} · ${fmtMins(segWorkedMs(t, s, now) / MIN)} worked">${esc(p.ref)}</span>`; }).join('')}</div></div>`).join('');
+  const inWin = (a, b) => b > left && a < right;
+  const brk = pid => (t.breaks || []).filter(b => b.pid === pid).map(b => [Date.parse(b.start), Date.parse(b.end) || now, b]).filter(([a, b]) => inWin(a, b))
+    .map(([a, b, x]) => `<i class="wb-brk${x.end ? '' : ' live'}" style="left:${pct(a)}%;width:${Math.max(0.6, pct(b) - pct(a)).toFixed(2)}%" title="Break ${fmtHM(x.start)}–${x.end ? fmtHM(x.end) : 'now'}"></i>`).join('');
+  const plan = pid => (ahead[pid] || []).filter(x => inWin(x.start, x.end)).map(x => `<span class="wb-seg plan" style="left:${pct(x.start)}%;width:${Math.max(0.4, pct(x.end) - pct(x.start)).toFixed(2)}%" title="${esc(x.ref)} · planned, about ${fmtHM(new Date(x.start).toISOString())}–${fmtHM(new Date(x.end).toISOString())}">${esc(x.ref)}</span>`).join('');
+  const nowLine = planEnd > now && now > left && now < right ? `<i class="wb-now" style="left:${pct(now)}%"></i>` : '';
+  const lanes = people.map(pid => `<div class="wb-lane"><b>${esc(pid)}</b><div class="wb-track">${shade}${brk(pid)}${nowLine}${plan(pid)}${(segs[pid] || []).filter(({ s }) => (Date.parse(s.end) || now) > left && Date.parse(s.start) < right).map(({ p, s }) => { const a = Date.parse(s.start), b = Date.parse(s.end) || now; return `<span class="wb-seg${s.end ? '' : ' live'}" style="left:${pct(a)}%;width:${Math.max(0.4, pct(b) - pct(a)).toFixed(2)}%;background:${PT_COLOUR[p.ptype] || '#98A2B3'}" title="${esc(p.ref)} · ${fmtHM(s.start)}–${s.end ? fmtHM(s.end) : 'now'} · ${fmtMins(segWorkedMs(t, s, now) / MIN)} worked">${esc(p.ref)}</span>`; }).join('')}</div></div>`).join('');
   const marks = []; const step = span > 180 * MIN ? 60 * MIN : span > 60 * MIN ? 30 * MIN : 10 * MIN;
   for (let m = Math.ceil(left / step) * step; m <= right; m += step) marks.push(`<span style="left:${pct(m)}%">${fmtHM(new Date(m).toISOString())}</span>`);
   const tools = `<div class="seg wb-zoom">${ZOOMS.map(([k, l]) => `<button class="${String(st.zoom) === String(k) ? 'on' : ''}" data-act="wb-zoom" data-z="${k}">${l}</button>`).join('')}</div>${st.zoom !== 'fit' && maxPan > 0 ? `<button class="btn sm" data-act="wb-pan" data-d="1" title="Earlier">‹</button><button class="btn sm" data-act="wb-pan" data-d="-1" title="Later"${st.pan <= 0 ? ' disabled' : ''}>›</button>` : ''}`;
-  return `<div class="card wb-time"><div class="ch"><h3>Timeline</h3><div class="wb-tools">${tools}</div></div>${people.length ? `<div class="wb-axis">${marks.join('')}</div>${lanes}` : '<p class="lbl">No crew yet.</p>'}<div class="wb-legend">${PTYPES.map(x => `<span><i class="l" style="background:${x[2]}"></i>${x[1]}</span>`).join('')}<span><i class="l haltl"></i>hold-up</span></div></div>`;
+  return `<div class="card wb-time"><div class="ch"><h3>Timeline</h3><div class="wb-tools">${tools}</div></div>${people.length ? `<div class="wb-axis">${marks.join('')}</div>${lanes}` : '<p class="lbl">No crew yet.</p>'}<div class="wb-legend">${PTYPES.map(x => `<span><i class="l" style="background:${x[2]}"></i>${x[1]}</span>`).join('')}<span><i class="l haltl"></i>hold-up</span><span><i class="l brkl"></i>personal break</span>${planEnd > now ? '<span><i class="l planl"></i>planned (estimate)</span>' : ''}</div></div>`;
 }
 
 function mix(t) {
@@ -111,7 +123,7 @@ function board(ctx) {
   const holds = `<div class="card"><div class="ch"><h3>Hold-ups</h3><span class="cs-dim">this truck</span></div>${(t.halts || []).length ? `<table class="wb-t"><thead><tr><th>Hold-up</th><th>From</th><th>Mins</th></tr></thead><tbody>${t.halts.slice().reverse().map(h => `<tr><td>${esc(holdName(h))}${h.note ? ` <small class="cs-dim">${esc(h.note)}</small>` : ''}</td><td>${fmtHM(h.start)}${h.end ? '' : ' <b class="bad">now</b>'}</td><td class="n">${Math.round(((Date.parse(h.end) || now) - Date.parse(h.start)) / MIN)}</td></tr>`).join('')}</tbody></table>` : '<p class="lbl">None on this truck.</p>'}<div class="wb-foot">30 days: ${fmtMins(d30.total)} downtime${d30.rows[0] ? `, most from ${esc(d30.rows[0].kind === 'halt' ? holdName({ kind: 'halt', reason: d30.rows[0].reason }) : holdName({ kind: d30.rows[0].kind, reason: d30.rows[0].reason }))} (${d30.rows[0].share}%)` : ''}</div></div>`;
   const ins = insights(t, now, planOpts(t, rates));
   const side = `<div class="card wb-gc"><div class="ch"><h3>Completion</h3></div>${gauge(pr.pct)}<small class="cs-dim">${pr.done} of ${pr.total} cartons</small></div><div class="card"><div class="ch"><h3>Insights</h3></div><ul class="wb-ins">${ins.map(x => `<li class="${x.tone}">${esc(x.text)}</li>`).join('')}</ul></div>`;
-  return head + kpis + flow + `<div class="wb-cols"><div class="wb-main"><div class="card"><div class="ch"><h3>Pace</h3><span class="cs-dim">cartons decanted since ${fmtHM(startOf(t))}</span></div>${paceChart(t, now, pr, fc.at)}</div>${timeline(t, now)}<div class="wb-two">${people}${holds}</div></div><div class="wb-side">${side}${layout(t)}${mix(t)}</div></div>`;
+  return head + kpis + flow + `<div class="wb-cols"><div class="wb-main"><div class="card"><div class="ch"><h3>Pace</h3><span class="cs-dim">cartons decanted since ${fmtHM(startOf(t))}</span></div>${paceChart(t, now, pr, fc.at)}</div>${timeline(t, now, rates)}<div class="wb-two">${people}${holds}</div></div><div class="wb-side">${side}${layout(t)}${mix(t)}</div></div>`;
 }
 
 export default {

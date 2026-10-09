@@ -7,6 +7,7 @@ import { openScreenScan } from '../../screenscan.js';
 import { parseKeycodes } from '../../../shared/backfill.js';
 import { csvLines } from '../../../shared/records.js';
 import { printSheet, code, tick, table, section } from '../../print.js';
+import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { todayKey, ensureNames, nameHtml, nameOf, send, loadProfiles, depthChip, ghostChip } from './common.js';
 
 const st = { filter: 'all', mSoh: 0, mQty: 1, mKc: '' };
@@ -52,7 +53,7 @@ async function onClick(e, ctx, root, repaint) {
     for (const kc of codes) { if (have.has(kc)) { dup++; continue; } if (await send(ctx, 'adjustment.set', { keycode: kc, date: m.date }, { qty: 0, location: locs[kc] || '', confirmed: false, name: nameOf(kc) || '' })) ok++; }
     toast(`${ok} added to today's adjustments${dup ? ` · ${dup} already listed` : ''}`);
   } });
-  else if (act === 'print') printAdjustments(m);
+  else if (act === 'print') printAdjustments(ctx, m);
   else if (act === 'export') { const text = csvLines(['keycode', 'name', 'soh', 'location', 'confirmed', 'added'], m.items.map(i => [i.kc, i.name || nameOf(i.kc) || '', i.qty, i.location, i.confirmed ? 'yes' : '', i.addedAt])); try { await navigator.clipboard.writeText(text); toast(`${m.items.length} rows copied as CSV`); } catch { toast('Copy failed', 'bad'); } }
   else if (act === 'm-qty') { st.mQty = Math.max(0, st.mQty + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-soh') { st.mSoh = Math.min(0, st.mSoh + Number(a.dataset.d)); repaint(); }
@@ -68,14 +69,22 @@ function mobile(ctx) {
 }
 
 // The SOH list for the office (K2B's printNegsoh): most negative first, each
-// keycode as a barcode, the SOH, where it was confirmed, and a tick. Grouped
-// by where it was found until the stockroom's department ranges land.
-function printAdjustments(m) {
+// keycode as a barcode, the SOH, where it was confirmed, and a tick. One
+// section per department (the stockroom's bay ranges, Settings › Store),
+// so each department's lead takes their own; then any bay outside the
+// ranges, then items with no location.
+function printAdjustments(ctx, m) {
   const row = (it, i) => [String(i + 1), code(it.kc), esc(it.name || nameOf(it.kc) || ''), `<b>${it.qty}</b>`, esc(it.location || '—') + (it.confirmed ? ' ✓' : ''), tick];
-  const placed = m.items.filter(i => i.location), unplaced = m.items.filter(i => !i.location);
+  const tbl = list => table(['#', 'Keycode', 'Product', 'SOH', 'Where', 'Done'], list.map(row), ['n', 'bc', '', 'n', '', 't']);
+  const ranges = settingsOf(ctx.store.get()).deptRanges || [], groups = new Map();
+  for (const it of m.items) {
+    const g = !it.location ? '\u0000none' : (ranges.length && deptForBay(ranges, it.location)) || '\u0000other';
+    if (!groups.has(g)) groups.set(g, []); groups.get(g).push(it);
+  }
+  const order = [...groups.keys()].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+  const title = g => g === '\u0000none' ? 'No location' : g === '\u0000other' ? (ranges.length ? 'Bays outside the department ranges' : 'Confirmed at a bay') : `Department ${g}`;
   printSheet({
-    title: `SOH adjustments · ${m.date}`, subtitle: `${m.items.length} item${m.items.length === 1 ? '' : 's'} below zero · ✓ confirmed at the bay`,
-    body: section(`Confirmed at a bay (${placed.length})`, table(['#', 'Keycode', 'Product', 'SOH', 'Where', 'Done'], placed.map(row), ['n', 'bc', '', 'n', '', 't']))
-      + section(`No location (${unplaced.length})`, table(['#', 'Keycode', 'Product', 'SOH', 'Where', 'Done'], unplaced.map(row), ['n', 'bc', '', 'n', '', 't'])),
+    title: `SOH adjustments · ${m.date}`, subtitle: `${m.items.length} item${m.items.length === 1 ? '' : 's'} below zero · ✓ confirmed at the bay${ranges.length ? ' · by department' : ''}`,
+    body: order.map(g => section(`${esc(title(g))} (${groups.get(g).length})`, tbl(groups.get(g)))).join('') || section('Nothing below zero', ''),
   });
 }
