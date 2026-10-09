@@ -157,6 +157,11 @@ export const backdockReducers = {
     const t = truck(s, e); if (t.code) return t;
     const team = teamOf(e.payload.team);
     if (!team) return reject('invalid_event', 'team members are D-numbers (D1, D2…); names are not kept');
+    // Someone taken off the truck, or moved from cutting to another role,
+    // steps off the pallet they are on first, as DV did: their time is kept
+    // and the pallet pauses if nobody else is on it.
+    const cutting = new Set(team.filter(m => (m.role || 'cutter') === 'cutter').map(m => m.pid));
+    for (const pid of Object.keys(runningOn(t))) if (!cutting.has(pid)) stepOff(t, pid, e.at);
     t.team = team;
     return null;
   },
@@ -468,6 +473,24 @@ export const backdockReducers = {
     return null;
   },
 
+  // A wrong scan comes off the pallet (a tub's old label, the wrong
+  // pallet's sheet): the consol and the cartons it brought go, so the right
+  // pallet can take it. A label saved off the manifest is dropped the same way.
+  'pallet.unscan'(s, e) {
+    const p = pallet(s, e); if (p.code) return p;
+    const t = s.dock.trucks[e.entity.truck], id = String(e.payload.id).replace(/\D/g, '').slice(-9);
+    const drop = k => { const L = s.dock.ledger?.[id]; if (L) { s.dock.ledger[id] = L.filter(x => !(x.t === e.entity.truck && x.k === k && x.ref === p.ref)); if (!s.dock.ledger[id].length) delete s.dock.ledger[id]; } };
+    if (p.consolIds.includes(id)) {
+      p.consolIds = p.consolIds.filter(x => x !== id); drop('land');
+      const c = consolsOf(t).find(x => x.id === id);
+      if (c && p.cartons != null) { const left = p.cartons - c.cartons; p.cartons = left > 0 ? left : null; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons, t.minsPerCarton); }
+      if (p.linkBasis && !p.consolIds.length) { delete p.linkBasis; delete p.linkedLateAt; }
+      return null;
+    }
+    if (p.scanIds.includes(id)) { p.scanIds = p.scanIds.filter(x => x !== id); drop('off'); return null; }
+    return reject('not_found', `${id} is not on ${p.ref}`);
+  },
+
   // ── Halts ────────────────────────────────────────────────────────────
   'halt.start'(s, e) {
     const t = truck(s, e); if (t.code) return t;
@@ -498,6 +521,7 @@ export const backdockReducers = {
     const pid = dnumId(e.payload.pid);
     if (!pid || !t.team.some(m => m.pid === pid)) return reject('not_on_team', `${e.payload.pid} is not on this truck's team`);
     if ((t.breaks || []).some(b => b.pid === pid && !b.end)) return reject('invalid_event', `${pid} is already on a break`);
+    stepOff(t, pid, e.at);                           // off their pallet first, as DV did
     (t.breaks ||= []).push({ pid, start: e.at, end: null });
     return null;
   },
@@ -672,6 +696,7 @@ function takeLeftovers(t, id) {
 function closeTruck(s, id, t, at, carriedOut) {
   const open = t.halts[t.halts.length - 1];
   if (open && !open.end) open.end = at;
+  for (const b of t.breaks || []) if (!b.end) b.end = at;     // nobody stays on a break on a closed truck
   t.status = 'closed'; t.clearedAt = at;
   const row = historyRow(id, t);
   if (carriedOut) row.carriedOut = carriedOut;
@@ -724,6 +749,14 @@ function rematchScans(t) {
   }
 }
 function closeSegment(p, at) { for (const seg of p.segments) if (!seg.end) seg.end = at; }
+// Who is on which pallet now, and one person stepping off theirs (the
+// last one off leaves it paused, their time banked).
+function runningOn(t) { const out = {}; for (const p of Object.values(t.pallets)) for (const seg of p.segments) if (!seg.end) out[seg.pid] = p; return out; }
+function stepOff(t, pid, at) {
+  const p = runningOn(t)[pid]; if (!p) return;
+  for (const seg of p.segments) if (!seg.end && seg.pid === pid) seg.end = at;
+  if (!openSegs(p).length) { p.status = 'paused'; p.assignedTo = pid; }
+}
 const openSegs = p => p.segments.filter(x => !x.end);
 const isIso = v => typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v));
 export const startOf = t => t.decantStartAt || t.landedAt || null;

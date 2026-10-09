@@ -134,11 +134,11 @@ export class StoreObject extends DurableObject {
     try {
       switch (url.pathname) {
         case '/snapshot': return json(this.snapshot(claims, url.searchParams.get('areas')));
-        case '/changes': return json(this.changes(Number(url.searchParams.get('since') || 0), claims));
-        case '/events': { const body = await readBounded(request, BATCH_MAX); return json({ results: this.submit(body.events, claims) }); }
+        case '/changes': return json({ ...this.changes(Number(url.searchParams.get('since') || 0), claims), now: Date.now() });
+        case '/events': { const body = await readBounded(request, BATCH_MAX); return json({ results: this.submit(body.events, claims), now: Date.now() }); }
         case '/ws': return this.upgrade(request, claims);
         case '/devices': return json({ devices: this.state.devices });
-        case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readBounded(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true }); }
+        case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readBounded(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true, now: Date.now() }); }
         case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
         case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await request.json(), claims) : json(this.mapInfo());
@@ -567,8 +567,9 @@ export class StoreObject extends DurableObject {
         else ws.send(JSON.stringify({ t: 'snapshot', ...this.snapshot(claims, null) }));
         return;
       }
-      case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims) }));
-      case 'hb': return this.recordHb(claims, msg);
+      case 'submit': return ws.send(JSON.stringify({ t: 'ack', results: this.submit(msg.events, claims), now: Date.now() }));
+      // The worker's clock, so each device can stamp its events on it (decision 31).
+      case 'hb': this.recordHb(claims, msg); return ws.send(JSON.stringify({ t: 'clock', now: Date.now() }));
       case 'ping': return ws.send(JSON.stringify({ t: 'pong', seq: this.state.seq }));
       default: return ws.send(JSON.stringify({ t: 'error', code: 'invalid_request', message: `unknown frame ${msg.t}` }));
     }

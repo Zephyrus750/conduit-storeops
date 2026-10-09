@@ -36,6 +36,22 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   const breaker = new Breaker();
   let flushing = null;
 
+  // ── the store's clock (decision 31) ─────────────────────────────────────
+  // Events are stamped on the worker's clock, not this device's: the worker
+  // reports its time with each heartbeat and submit, and the offset (the
+  // middle of the last five readings, each taken at the midpoint of its
+  // round trip) corrects every new event's time. It is kept, so a device
+  // that goes offline still stamps on the store's clock.
+  let clockOffset = 0; const clockSamples = [];
+  function noteClock(now, sentAt) {
+    if (!Number.isFinite(now)) return;
+    const recv = Date.now(); if (sentAt && recv - sentAt > 10_000) return;   // a slow round trip says little
+    clockSamples.push(now - (sentAt ? (sentAt + recv) / 2 : recv)); if (clockSamples.length > 5) clockSamples.shift();
+    const sorted = clockSamples.slice().sort((a, b) => a - b), off = Math.round(sorted[sorted.length >> 1]);
+    if (off !== clockOffset) { clockOffset = off; storage.set(`clock:${no}`, { offset: off, at: recv }).catch?.(() => {}); emit('clock', off); }
+  }
+  const stamp = () => localIso(new Date(Date.now() + (Math.abs(clockOffset) >= 2000 ? clockOffset : 0)));
+
   // ── events out ────────────────────────────────────────────────────────
   // Iterate a snapshot: a listener may unsubscribe and resubscribe (a view
   // re-rendering), and a live Set would visit the new entry too, forever.
@@ -81,6 +97,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   async function load() {
     const snap = await storage.get(`snap:${no}`);
     if (snap?.state) base = { ...initialState(), ...snap.state, seq: snap.seq || 0 };
+    const clk = await storage.get(`clock:${no}`); if (Number.isFinite(clk?.offset)) { clockOffset = clk.offset; clockSamples.push(clk.offset); }
     pending = (await storage.list(`outbox:${no}:`)).map(r => r.value).sort((a, b) => (a.id < b.id ? -1 : 1));
     rebuild(); setStatus({});
     return state;
@@ -89,7 +106,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // ── dispatch ──────────────────────────────────────────────────────────
   async function dispatch({ type, entity = {}, payload = {}, at }) {
     const info = typeInfo(type);
-    const ev = { id: ulid(), store: no, area: info?.area, type, entity, payload, at: at || localIso(), v: info?.v ?? 1 };
+    const ev = { id: ulid(), store: no, area: info?.area, type, entity, payload, at: at || stamp(), v: info?.v ?? 1 };
     const bad = validateEvent(ev);
     if (bad) throw new TransportError(400, bad.code, bad.message, { event: ev });
     const probe = structuredClone(state);
@@ -114,7 +131,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
           let results;
           try {
             if (ws && ws.readyState === 1) results = await submitOverSocket(batch);
-            else results = (await transport.request(`/v1/store/${no}/events`, { method: 'POST', body: { events: batch }, token: await needToken() })).results;
+            else { const sent = Date.now(), r = await transport.request(`/v1/store/${no}/events`, { method: 'POST', body: { events: batch }, token: await needToken() }); noteClock(r.now, sent); results = r.results; }
             breaker.succeed(); setStatus({ lastError: null });
           } catch (e) {
             if (e instanceof TransportError && e.status === 401) { session.unauthorised(); return; }
@@ -147,7 +164,8 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     return new Promise((resolve, reject) => {
       const ids = new Set(batch.map(e => e.id));
       const t = timers.setTimeout(() => { socketWaiters.splice(socketWaiters.indexOf(w), 1); reject(new TransportError(0, 'network', 'socket submit timed out')); }, 10_000);
-      const w = (results) => { if (!results.some(r => ids.has(r.id))) return false; timers.clearTimeout(t); socketWaiters.splice(socketWaiters.indexOf(w), 1); resolve(results); return true; };
+      const sent = Date.now();
+      const w = (results, now) => { if (!results.some(r => ids.has(r.id))) return false; noteClock(now, sent); timers.clearTimeout(t); socketWaiters.splice(socketWaiters.indexOf(w), 1); resolve(results); return true; };
       socketWaiters.push(w);
       ws.send(JSON.stringify({ t: 'submit', events: batch }));
     });
@@ -186,7 +204,8 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
       case 'snapshot': replaceBase(f.seq, f.state); rebuild(); await persistSnapshot(); setStatus({ state: 'live' }); flush(); return;
       case 'delta': foldIntoBase(f.events); rebuild(); await persistSnapshot(); setStatus({ state: 'live' }); flush(); return;
       case 'event': if (foldIntoBase([f.event])) { rebuild(); await persistSnapshot(); setStatus({}); } return;
-      case 'ack': for (const w of [...socketWaiters]) if (w(f.results)) break; return;
+      case 'ack': for (const w of [...socketWaiters]) if (w(f.results, f.now)) break; return;
+      case 'clock': noteClock(f.now, hbSent); return;
       case 'error': if (f.code === 'unauthorised') session.unauthorised(); else setStatus({ lastError: f.message }); return;
       default: return;
     }
@@ -198,7 +217,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     const tick = async () => {
       if (closed) return;
       try {
-        const r = await transport.request(`/v1/store/${no}/changes?since=${base.seq}`, { token: await needToken() });
+        const sent = Date.now(), r = await transport.request(`/v1/store/${no}/changes?since=${base.seq}`, { token: await needToken() }); noteClock(r.now, sent);
         if (foldIntoBase(r.events)) { rebuild(); await persistSnapshot(); }
         setStatus({ state: ws ? status.state : 'polling', lastError: null }); flush();
       } catch (e) { if (e instanceof TransportError && e.status === 401) return session.unauthorised(); setStatus({ lastError: e.message, state: online() ? 'polling' : 'offline' }); }
@@ -213,7 +232,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   function heartbeat() {
     timers.clearTimeout(hbTimer);
     const hb = { app: session.app, online: online(), outbox: pending.length, lastError: status.lastError, area: session.current?.roles?.join(',') || null };
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'hb', ...hb }));
+    if (ws && ws.readyState === 1) { hbSent = Date.now(); ws.send(JSON.stringify({ t: 'hb', ...hb })); }
     else if (online() && !closed) sendHbHttp(hb);          // polling fallback still reports presence
     hbTimer = timers.setTimeout(heartbeat, HEARTBEAT_MS);
   }
@@ -221,9 +240,9 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // heartbeat must never surface an error or trip the auth path, so this
   // swallows everything and never calls unauthorised().
   async function sendHbHttp(hb) {
-    try { const token = await session.token(); if (token) await transport.request(`/v1/store/${no}/hb`, { method: 'POST', body: hb, token }); } catch {}
+    try { const token = await session.token(); if (token) { const sent = Date.now(), r = await transport.request(`/v1/store/${no}/hb`, { method: 'POST', body: hb, token }); noteClock(r?.now, sent); } } catch {}
   }
-  let hbSoon = null;
+  let hbSoon = null, hbSent = 0;
   function heartbeatSoon() { timers.clearTimeout(hbSoon); hbSoon = timers.setTimeout(heartbeat, 1000); }
 
   // The socket carries the claims it was opened with. When the session
@@ -255,10 +274,13 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     setStatus({ state: 'offline' });
   }
 
-  return { load, connect, close, resync, get, dispatch, flush, on, get status() { return status; }, get pending() { return pending.slice(); }, get seq() { return base.seq; } };
+  return { load, connect, close, resync, get, dispatch, flush, on, get status() { return status; }, get pending() { return pending.slice(); }, get seq() { return base.seq; }, get clockOffset() { return clockOffset; } };
 }
 
-function localIso(d = new Date()) {
+// A time as this device's wall clock writes it, with its zone: 08:00 in
+// Perth is "…T08:00:00+08:00". (It used to write the UTC time with the local
+// zone, eight hours early in Perth; a UTC test machine hid it.)
+export function localIso(d = new Date()) {
   const off = -d.getTimezoneOffset(), sign = off >= 0 ? '+' : '-', p = n => String(Math.abs(n)).padStart(2, '0');
-  return d.toISOString().slice(0, 19).replace(/Z$/, '') + sign + p(Math.floor(Math.abs(off) / 60)) + ':' + p(Math.abs(off) % 60);
+  return new Date(d.getTime() + off * 60000).toISOString().slice(0, 19) + sign + p(Math.floor(Math.abs(off) / 60)) + ':' + p(Math.abs(off) % 60);
 }

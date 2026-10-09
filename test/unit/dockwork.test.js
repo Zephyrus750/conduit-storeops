@@ -124,3 +124,41 @@ test('a suspect pallet credits nobody until fixed', () => {
   const row = s.dock.history.at(-1);
   assert.deepEqual([row.cartons, row.suspect, row.perPerson.length], [40, 1, 0], 'the truck still counts the cartons');
 });
+
+test('a break or a move off cutting steps the person off their pallet first (DV)', () => {
+  const s = dock();
+  ok(s, 'pallet.start', B('A1'), { pid: 'D1' }, '07:00'); ok(s, 'pallet.join', B('A1'), { pid: 'D3' }, '07:05');
+  ok(s, 'break.start', { truck: T1 }, { pid: 'D3' }, '07:20');
+  assert.deepEqual(T(s).pallets.A1.segments.map(x => [x.pid, x.end && x.end.slice(11, 16)]), [['D1', null], ['D3', '07:20']], 'D3 off, D1 still cutting');
+  assert.equal(T(s).pallets.A1.status, 'active');
+  // D1 becomes a runner: the last one off leaves the pallet paused, time banked.
+  ok(s, 'truck.team.set', { truck: T1 }, { team: [{ pid: 'D1', role: 'runner' }, { pid: 'D2', role: 'runner' }, { pid: 'D3', role: 'cutter' }] }, '07:30');
+  assert.deepEqual([T(s).pallets.A1.status, T(s).pallets.A1.segments[0].end.slice(11, 16)], ['paused', '07:30']);
+  // Taken off the truck while cutting: the same.
+  ok(s, 'break.end', { truck: T1 }, { pid: 'D3' }, '07:35'); ok(s, 'pallet.resume', B('A1'), { pid: 'D3' }, '07:40');
+  ok(s, 'truck.team.set', { truck: T1 }, { team: [{ pid: 'D1', role: 'runner' }, { pid: 'D2', role: 'runner' }] }, '07:50');
+  assert.equal(T(s).pallets.A1.status, 'paused');
+  // A finalise ends a break left open.
+  ok(s, 'truck.team.set', { truck: T1 }, { team: ['D1', 'D2'] }, '07:51'); ok(s, 'break.start', { truck: T1 }, { pid: 'D2' }, '08:00');
+  ok(s, 'truck.finalise', { truck: T1 }, {}, '09:00');
+  assert.ok(T(s).breaks.every(b => b.end), 'no break is left open on a closed truck');
+});
+
+test('a wrong consolidation scan comes off the pallet, so the right pallet can take it', () => {
+  const s = dock();
+  const cons = (n, cartons) => ({ cons: '0000000000' + String(100000000 + n), cartons, dept: '001' });
+  ok(s, 'manifest.attach', { truck: T1 }, { manNo: 'M1', consols: [cons(1, 12), cons(2, 30)] });
+  ok(s, 'pallet.land', B('A3'), { ptype: 'chep' }, '06:10');
+  ok(s, 'pallet.scan', B('A3'), { code: '100000001' }); ok(s, 'pallet.scan', B('A3'), { code: '100000002' });
+  assert.equal(T(s).pallets.A3.cartons, 42);
+  assert.equal(code(s, 'pallet.scan', B('A1'), { code: '100000002' }), 'consol_taken');
+  ok(s, 'pallet.unscan', B('A3'), { id: '100000002' });
+  assert.deepEqual([T(s).pallets.A3.consolIds, T(s).pallets.A3.cartons, T(s).pallets.A3.expectedMins], [['100000001'], 12, 6], 'its cartons and estimate go with it');
+  assert.ok(!(s.dock.ledger['100000002'] || []).some(x => x.k === 'land'), 'the ledger forgets the landing');
+  ok(s, 'pallet.scan', B('A1'), { code: '100000002' });
+  assert.equal(code(s, 'pallet.unscan', B('A3'), { id: '100000002' }), 'not_found');
+  // An off-manifest label saved on a pallet is dropped the same way.
+  ok(s, 'pallet.update', B('A2'), { scanIds: ['555555555'] });
+  ok(s, 'pallet.unscan', B('A2'), { id: '555555555' });
+  assert.deepEqual(T(s).pallets.A2.scanIds, []);
+});

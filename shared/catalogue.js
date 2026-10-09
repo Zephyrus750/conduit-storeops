@@ -102,6 +102,7 @@ export const CATALOGUE = {
   'pallet.reopen':       T('backdock', D, ['truck', 'bay']),
   'pallet.remove':       T('backdock', D, ['truck', 'bay']),
   'pallet.scan':         T('backdock', D, ['truck', 'bay'], { code: 'string' }),
+  'pallet.unscan':       T('backdock', D, ['truck', 'bay'], { id: 'string' }),     // a wrong scan comes off the pallet
   'pallet.move':         T('backdock', D, ['truck', 'bay'], { to: 'string' }),
   'pallet.join':         T('backdock', D, ['truck', 'bay'], { pid: 'string' }),
   'pallet.handover':     T('backdock', D, ['truck', 'bay'], { toPid: 'string' }),

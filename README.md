@@ -394,3 +394,16 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 
 A catalogued type without a reducer would be rejected `not_implemented`; the
 unit suite asserts there are none.
+
+**Event times.** Every event is stamped on the worker's clock (decision 31):
+the worker sends its time with heartbeats (the socket's `clock` frame, `POST
+/hb`) and with submits and `/changes`, and each device corrects new events by
+the measured offset, kept so an offline device still stamps on the store's
+clock. Receiving warns when a device's own clock is a minute or more out.
+
+**The dock tablet.** The Dock screen is the crew's: tap a pallet for Start
+or Resume (pick who from the team), Pause, Done, Join or Hand over, with the
+finish guard, as Decant Visualiser's dock tablet. Landing, removing, editing
+and finalising stay in Receiving, which on the phone also has Team & plan
+(roles, breaks, the huddle, the plan) and Complete decant (keep the
+unfinished pallets as rollover, or clear the dock).
