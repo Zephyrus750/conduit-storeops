@@ -5,9 +5,9 @@
   "description": "Conduit — unified store-ops program. One worker, one shell, one event log per store.",
   "type": "module",
   "scripts": {
-    "test": "node --test test/unit/*.test.js test/contract/*.test.js",
-    "test:unit": "node --test test/unit/*.test.js",
-    "test:contract": "node --test test/contract/*.test.js",
+    "test": "node --test --test-timeout=60000 test/unit/*.test.js test/contract/*.test.js",
+    "test:unit": "node --test --test-timeout=60000 test/unit/*.test.js",
+    "test:contract": "node --test --test-timeout=60000 test/contract/*.test.js",
     "dev": "node scripts/dev.js",
     "dev:worker": "wrangler dev --env staging",
     "css": "python3 scripts/extract-css.py ../vector-suite/docs/showcase/conduit-shell-swap.html",

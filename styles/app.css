@@ -422,7 +422,29 @@ svg.map.real { background: #fff; }
 .map.real .path-badge.current .path-badge-text { fill: #1a1a2e; }
 @media (prefers-reduced-motion: reduce) { .map.real .pick-route-flow { animation: none; opacity: .55; } }
 .mv .map.real .pick-route-line { stroke-width: 9; } .mv .map.real .pick-route-flow { display: none; }
-.selshelf .sid small.sub { font-size: 14px; color: var(--dim); font-weight: 700; margin-left: 6px; }
+.selshelf .sid { flex-wrap: wrap; row-gap: 6px; }
+/* "A16 S1": the run bold, the shelf's S1/S2 the same size and regular. */
+.shname { display: inline-flex; align-items: baseline; gap: .28em; line-height: 1; white-space: nowrap; }
+.shname b { font-weight: 800; }
+.shname span { font-weight: 400; }
+/* A micro-department the shelf is assigned to: "038 Kitchen". */
+.mic { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; max-width: 100%; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--ink2); background: var(--chip); border-radius: 7px; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mic b { font-weight: 800; color: var(--ink); }
+
+/* The phone Home's shelf card: the size of the mode panels (Refresh,
+   Emergency), so the map keeps one size whatever is selected. */
+.content.mv .mv-sel.home { height: 164px; overflow: auto; }
+@container shell (max-width:380px) { .content.mv .mv-sel.home { height: 132px; } }
+@container shell (max-width: 380px) { @media (max-height: 600px) { .content.mv .mv-sel.home { height: 120px; } } }
+.mv-sel.home .who2 .shname { font-size: 30px; letter-spacing: -.02em; }
+.mv-sel.home.shelf .what { align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.mv-sel.home .what .mics { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.mv-sel.home .what .mic { display: inline-flex; white-space: nowrap; }
+.mv-sel.home .what .mic b { display: inline; }
+.mv-sel.home .mvs-d { font-size: 12.5px; color: var(--dim); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mv-sel.home .mvs-btns { display: flex; gap: 8px; }
+.mv-sel.home .mvs-btns .mv-share { margin-left: 0; }
+@container shell (max-width:380px) { .mv-sel.home .who2 .shname { font-size: 26px; } .mv-sel.home .mvs-d { -webkit-line-clamp: 1; } .mv-sel.home.shelf .what { gap: 4px; } }
 
 /* Backfill review on a 1080p desk: the same type size as the rest of the
    program, wider rails, and the board's columns not stretched thin. */
@@ -1795,3 +1817,7 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .main:has(> .teambar:not([hidden])) { grid-template-rows: 60px auto minmax(0,1fr) 44px; }
 @container shell (min-width:1600px) { .main:has(> .teambar:not([hidden])) { grid-template-rows: 68px auto minmax(0,1fr) 50px; } }
 .frame.hdr-title .main:has(> .teambar:not([hidden])) { grid-template-rows: 84px auto minmax(0,1fr) 50px; }
+/* On the phone the strip sits above the content in one scrolling column:
+   the content takes what is left, so a map screen's bottom panel stays
+   above the tab bar. */
+@container shell (max-width:600px) { .main:has(> .teambar:not([hidden])) { display: flex; flex-direction: column; } .main:has(> .teambar:not([hidden])) > .teambar { flex: none; } .main:has(> .teambar:not([hidden])) > .content.mv { min-height: 0; flex: 1 0 auto; } }
