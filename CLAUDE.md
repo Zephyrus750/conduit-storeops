@@ -69,6 +69,10 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
   `shared/maprender.js`, the same request the console and `publish-map` send.
 - Storage keys are `mapeditor-*`. Icons come from the subset in
   `vendor/tabler/` (rebuild it when the editor uses a new `ti-*` icon).
+- Auto-detect's geometry (bay sizes, S1/S2 and E1/E2, what is already
+  drawn) is `shared/detect.js`, handed to the classic scripts as
+  `window.DetectCore` by `editor/detect-boot.js`; the editor only finds
+  the boxes. Test it in `test/unit/detect.test.js`.
 - The service worker leaves `editor/` to the network; it is not in the
   shell's release or `sw-precache.js`.
 

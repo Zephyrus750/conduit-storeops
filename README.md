@@ -281,7 +281,13 @@ no emergency markers or walk paths, floor ids) and sends it with the same
 request the console and `publish-map` build (`publishBody` in
 `shared/maprender.js`), and the **Suggestions** tab lists the store's
 suggested edits and accepts or declines them. Field Mode files from Conduit
-merge by shelf and floor. The page runs under the site's CSP like the rest:
+merge by shelf and floor. **Auto-detect** (Settings tab), run on the
+official layout at 100%: it learns the store's bay sizes (up to three)
+from the bay dividers the layout draws and fits every shelf to whole
+modules of one of them; a run two shelves deep becomes S1 and S2, and the
+short boxes at its ends become E1 and E2, as the maps draw them; shapes
+already under a drawn shelf are greyed, and **Next missed** steps through
+the ones still undrawn. The geometry is `shared/detect.js`, unit-tested. The page runs under the site's CSP like the rest:
 no inline code (`editor/handlers.js` binds what were inline handlers), the
 icon font is a self-hosted subset (`vendor/tabler/`), and the service
 worker leaves `editor/` to the network. Inside the store app there is only

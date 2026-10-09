@@ -211,6 +211,7 @@ window.EDITOR_HANDLERS = {
   h204: function (event) { detectSetAll(false); },   // click
   h205: function (event) { applyDetectedShelves(); },   // click
   h206: function (event) { cancelDetect(); },   // click
+  detectNext: function () { detectNextMissed(); },
   h207: function (event) { if(confirm('Load demo map? This will replace your current work.')) loadDemo(); },   // click
   h208: function (event) { pasteClipboard(); },   // click
   h209: function (event) { rotateBy45(); },   // click

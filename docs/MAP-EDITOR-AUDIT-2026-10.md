@@ -32,6 +32,10 @@ publishes straight to the worker. Fixed:
 - **§4:** the editor's dropdown and duplicate bugs, path-id collisions,
   six-way zoom.
 
+Since: auto-detect learns the store's bay sizes from the layout, splits
+runs into S1/S2 and E1/E2, and greys what is already drawn, with Next
+missed for the rest (`shared/detect.js`).
+
 Still open: the scale (1.7, decision 33); store details `orientation`
 (1.10); maintenance and cage pins tied to raw coordinates.
 
