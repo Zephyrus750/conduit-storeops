@@ -68,6 +68,7 @@ differs from the default.
 | 30 | Finalise with pallets left | Always held for the next truck | Offer hold or clear the dock, as DV did | `js/views/backdock/receiving.js` |
 | 31 | Whose clock times dock work | Each device's (up to 10 minutes ahead accepted) | Stamp on the worker | `worker/store.js`, `shared/reducers/backdock.js` |
 | 32 | Label integrity on the phone | A selected micro-department makes map taps assign shelves store-wide | Phone checks only; assigning stays on the desk | `js/views/labelint.js` |
+| 33 | What one grid square of the map editor is in metres (the map's scale, `metresPerUnit`) | No store has a scale, so shelf sizes, pick-route metres and evacuation distances never show in metres (map editor audit 1.7) | The editor's own rule: 20 units (one grid square) = 1 m, so 0.05 m per unit. Measure one known aisle in Busselton to confirm | `shared/maprender.js`, the editor's Set Scale |
 
 ## The test pass on a real PC (1920×1080 first)
 
