@@ -418,13 +418,14 @@ function openLauncher() {
 }
 // The phone's Departments picker (the showcase's): the whole floor, or one
 // department, grouped Home, Clothing, Kids, Other with its shelf count; a
-// department fades the rest of the map and zooms to it.
+// department fades the rest of the map and zooms to it. Home, Clothing
+// and Kids (four sub-departments each) are one row of square tiles.
 function openDepts() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const counts = mapStats()?.depts || {};
   const tile = d => `<button class="md-tile" data-pickdept="${esc(d)}"><i style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b><span>${esc(DEPT_NAME[d] || '')}</span><small>${counts[d] || 0} shelves</small></button>`;
   sh.innerHTML = `<div class="sheet md-sheet"><h3>Departments</h3><button class="md-all" data-pickdept="all">${ic('map')}<span><b>All departments</b><small>Whole floor, every colour</small></span></button>` +
-    DEPT_GROUPS.map(g => { const ds = g[2].filter(d => counts[d]); return ds.length ? `<div class="md-grp">${esc(g[0])}</div><div class="md-tiles">${ds.map(tile).join('')}</div>` : ''; }).join('') +
+    DEPT_GROUPS.map(g => { const ds = g[2].filter(d => counts[d]); const sq = ds.length <= 4 && ds.every(d => /^[a-z]\d$/.test(d)); return ds.length ? `<div class="md-grp">${esc(g[0])}</div><div class="md-tiles${sq ? ' sq' : ''}">${ds.map(tile).join('')}</div>` : ''; }).join('') +
     `<button class="mv-ghost" data-act="close-more">Close</button></div>`;
   sh.classList.add('open');
 }
