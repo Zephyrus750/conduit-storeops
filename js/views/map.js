@@ -5,6 +5,8 @@ import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, 
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, shelfDetail, canonCode, runText, runSubs } from '../map.js';
 import { markerSymbol } from '../../shared/maprender.js';
 import { openShare } from '../share.js';
+import { openScanner } from '../scan.js';
+import { voiceSupported } from '../voice.js';
 import { MICRO, microCode, microName } from '../data/micros.js';
 
 let selected = null, pcSel = null;
@@ -34,13 +36,19 @@ export function selCard(ctx, map, id) {
 // Emergency): the shelf beside a separator, then its micro-departments,
 // what it is and two actions.
 export function mvSel(ctx, map, id) {
-  if (!id) return `<div class="what"><span>Tap a shelf to see what is there, or search above.</span></div>`;
+  if (!id) return mvEmpty();
   const g = map.groups(id)[0]; if (!g) return '';
   const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id), d = shelfDetail(map, id), cd = map.code(id);
   const facts = [d.fixture || (info.sub.startsWith('E') ? 'End' : 'Side'), runText(cd.shelf, cd.sub, runSubs(map, cd.shelf), info.segments), d.modules ? `${d.modules} module${d.modules === 1 ? '' : 's'}` : '', d.range, d.size, d.shared.length ? 'also ' + d.shared.join(', ') : '', f.refreshed ? 'refreshed ' + fmtTime(f.refreshed.at) : ''].filter(Boolean);
   return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b>${shelfName(cd)}</div>` +
     `<div class="what">${f.micros.length ? `<div class="mics">${microChips(f.micros)}</div>` : ''}<div class="mvs-d">${facts.map(esc).join(' · ')}</div>` +
     `<div class="mvs-btns"><button class="mv-share" data-act="pick-add" data-shelf="${esc(id)}" aria-label="Add ${esc(id)} to the pick list" title="Add to pick list">${ic('m-picklist')}</button><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div></div>`;
+}
+// Nothing selected yet: the ways to find a shelf, each one a tap away.
+function mvEmpty() {
+  const b = (attrs, icon, label) => `<button ${attrs}>${ic(icon)}<span>${label}</span></button>`;
+  return `<div class="mvs-empty"><div class="mvs-eh"><span class="mvs-ei">${ic('pin')}</span><div><b>Find a shelf</b><small>Tap one on the map, or:</small></div></div>` +
+    `<div class="mvs-ebtns">${b('data-go="search"', 'search', 'Search')}${voiceSupported() ? b('data-voice aria-label="Search by voice"', 'mic', 'Say it') : ''}${b('data-act="scan-shelf"', 'barcode', 'Scan label')}${b('data-act="depts"', 'grid', '<i class="l">Departments</i><i class="s">Depts</i>')}</div></div>`;
 }
 // "A16 S1": the run name bold, the shelf's S1/S2 the same size, regular.
 function shelfName(cd) { return `<span class="shname"><b>${esc(cd.shelf)}</b>${cd.sub ? `<span>${esc(cd.sub)}</span>` : ''}</span>`; }
@@ -80,7 +88,7 @@ export default {
     else if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
     const paint = () => {
       const host = $('#selhost', root); if (host) host.innerHTML = pcSel ? pcCard(pcSel) : selCard(ctx, map, selected);
-      const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-d')); }
+      const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-d')); mv.classList.toggle('empty', !!mv.querySelector('.mvs-empty')); }
       const c = $('#mapcrumb', root); if (c) c.textContent = selected || '—';
       const mc = $('#mvcrumb', root); if (mc && selected) { const d = map.shelfInfo(map.groups(selected)[0]).dept; mc.innerHTML = `Floor › <i class="cb" style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${DEPT_NAME[d] || d}</b> › ${esc(selected)}`; }
     };
@@ -88,6 +96,12 @@ export default {
     root.addEventListener('click', e => {
       if (e.target.closest('[data-act="clear"]')) { selected = null; pcSel = null; map.select(''); paint(); }
       if (e.target.closest('[data-act="pc-goto"]') && pcSel?.location) { const gs = map.groups(pcSel.location); if (gs.length) { selected = canonCode(pcSel.location); pcSel = null; map.select(selected); map.highlight(gs); map.zoomTo(selected); paint(); } else toast(`${pcSel.location} is not on this map`, 'bad'); }
+      // The empty card's Scan label: a shelf or run label selects it here.
+      if (e.target.closest('[data-act="scan-shelf"]')) openScanner({ title: 'Scan a shelf label', hint: 'Point the camera at the shelf label', onCode: code => {
+        if (!map.groups(code).length) return toast(`${code} is not a shelf on this map`, 'bad');
+        selected = canonCode(code); pcSel = null; map.select(selected); map.zoomTo(selected); paint();
+      } });
+      if (e.target.closest('[data-act="depts"]')) document.querySelector('.mdepts')?.click();
       const pa = e.target.closest('[data-act="pick-add"]'); if (pa) addToPickList(ctx, pa.dataset.shelf);
       const sh = e.target.closest('[data-act="share"]'); if (sh) { const id = sh.dataset.shelf, g = map.groups(id)[0]; openShare({ storeNo: ctx.storeNo, storeName: ctx.storeName, shelf: id, dept: g ? map.shelfInfo(g).dept : '' }); }
     });
