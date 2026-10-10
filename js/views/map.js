@@ -46,7 +46,7 @@ export function mvSel(ctx, map, id) {
 }
 // Nothing selected yet: the ways to find a shelf, each one a tap away.
 function mvEmpty() {
-  const b = (attrs, icon, label) => `<button ${attrs}>${ic(icon)}<span>${label}</span></button>`;
+  const b = (attrs, icon, label) => `<button ${attrs}><span class="d">${ic(icon)}</span><span class="t">${label}</span></button>`;
   return `<div class="mvs-empty"><div class="mvs-eh"><span class="mvs-ei">${ic('pin')}</span><div><b>Find a shelf</b><small>Tap one on the map, or:</small></div></div>` +
     `<div class="mvs-ebtns">${b('data-go="search"', 'search', 'Search')}${voiceSupported() ? b('data-voice aria-label="Search by voice"', 'mic', 'Say it') : ''}${b('data-act="scan-shelf"', 'barcode', 'Scan label')}${b('data-act="depts"', 'grid', '<i class="l">Departments</i><i class="s">Depts</i>')}</div></div>`;
 }
@@ -80,15 +80,23 @@ export default {
   mount(ctx, root) {
     if (ctx.arg?.select) selected = ctx.arg.select;
     pcSel = null;
-    const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { selected = info.code; pcSel = null; paint(); } else if (info.kind === 'pricecheck') { pcSel = info; map.select(''); paint(); } } });
+    const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { map.highlight(null); selected = info.code; pcSel = null; paint(); } else if (info.kind === 'pricecheck') { pcSel = info; map.select(''); paint(); } } });
     bindMapChrome(root, map);
     if (ctx.arg?.select) { map.select(selected); map.zoomTo(selected); }
+    // From the phone's search: a micro-department's shelves ring on the map
+    // and the first is selected; with none assigned, its department shows.
+    if (ctx.arg?.micro) {
+      const id = String(ctx.arg.micro), shelvesOf = ctx.store.get('labels')?.assign?.[id] || [], gs = shelvesOf.flatMap(s => map.groups(s));
+      const [sd, code] = id.split('-'), e = (MICRO[sd] || []).find(x => microCode(x) === code), name = `${code} ${e ? microName(e) : ''}`.trim();
+      if (gs.length) { selected = shelvesOf[0]; map.select(selected); map.highlight(gs); map.zoomTo(selected); toast(`${name}: ${shelvesOf.length} shel${shelvesOf.length === 1 ? 'f' : 'ves'}`); }
+      else { map.zoomDept([sd]); toast(`${name} has no shelves assigned yet, so its department shows`); }
+    }
     // From the phone's Departments picker: one department, or 'all' to clear.
     if (ctx.arg?.dept && ctx.isMobile) { const d = String(ctx.arg.dept).toLowerCase(); map.zoomDept(d === 'all' ? [] : [d]); }
     else if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
     const paint = () => {
       const host = $('#selhost', root); if (host) host.innerHTML = pcSel ? pcCard(pcSel) : selCard(ctx, map, selected);
-      const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-d')); mv.classList.toggle('empty', !!mv.querySelector('.mvs-empty')); }
+      const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-d')); mv.classList.toggle('nosel', !!mv.querySelector('.mvs-empty')); }
       const c = $('#mapcrumb', root); if (c) c.textContent = selected || '—';
       const mc = $('#mvcrumb', root); if (mc && selected) { const d = map.shelfInfo(map.groups(selected)[0]).dept; mc.innerHTML = `Floor › <i class="cb" style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${DEPT_NAME[d] || d}</b> › ${esc(selected)}`; }
     };

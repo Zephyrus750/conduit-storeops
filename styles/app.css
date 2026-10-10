@@ -1840,21 +1840,42 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 @container shell (max-width:380px) { .mv-mtools { bottom: 8px; gap: 3px; padding: 3px; } .mv-mtools .ibtn { width: 36px; height: 36px; min-width: 36px; min-height: 36px; } }
 
 /* Home with nothing selected: the ways to find a shelf. */
-.mv-sel.home.empty { display: flex; flex-direction: column; justify-content: center; align-items: stretch; }
+.mv-sel.home.nosel { display: flex; flex-direction: column; justify-content: center; align-items: stretch; }
 .mvs-empty { display: flex; flex-direction: column; gap: 10px; }
 .mvs-eh { display: flex; align-items: center; gap: 10px; }
-.mvs-ei { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
-.mvs-ei svg.i { width: 18px; height: 18px; }
+.mvs-ei { flex: none; width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--accent); color: #fff; }
+.mvs-ei svg.i { display: block; width: 19px; height: 19px; color: #fff; }
 .mvs-eh > div { flex: 1; min-width: 0; text-align: left; }
-.mvs-eh b { display: block; font-size: 15px; font-weight: 800; }
+.mvs-eh b { display: block; font-size: 15px; font-weight: 800; color: var(--ink); }
 .mvs-eh small { display: block; font-size: 12.5px; color: var(--dim); }
-.mvs-ebtns { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
-.mvs-ebtns button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 58px; padding: 6px 4px; border-radius: 12px; border: 1px solid var(--line); background: var(--ground); color: var(--ink2); font-size: 12px; font-weight: 700; }
+.mvs-ebtns { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+.mvs-ebtns button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 66px; padding: 7px 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); box-shadow: 0 2px 6px -3px rgba(17,24,39,.18); color: var(--ink); font-size: 12px; font-weight: 700; }
 .mvs-ebtns button[hidden] { display: none; }
-.mvs-ebtns button svg.i { width: 20px; height: 20px; color: var(--accent); }
-.mvs-ebtns button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mvs-ebtns button span i { font-style: normal; }
-.mvs-ebtns button span i.s { display: none; }
-@container shell (max-width:520px) { .mvs-ebtns button span i.l { display: none; } .mvs-ebtns button span i.s { display: inline; } }
-@container shell (max-width:380px) { .mvs-empty { gap: 7px; } .mvs-ei { width: 28px; height: 28px; } .mvs-ebtns button { min-height: 50px; font-size: 11px; gap: 3px; } .mvs-ebtns button svg.i { width: 18px; height: 18px; } }
-@container shell (max-width: 380px) { @media (max-height: 600px) { .mvs-eh small { display: none; } .mvs-ebtns button { min-height: 42px; } .mv-mtools .ibtn { width: 32px; height: 32px; min-width: 32px; min-height: 32px; } } }
+.mvs-ebtns button:active { background: var(--accent-soft); }
+/* the icon sits dead centre in its disc: the disc is a flex box with no
+   line box of its own, and the icon is a block of a fixed size */
+.mvs-ebtns .d { flex: none; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; line-height: 0; background: var(--accent-soft); }
+.mvs-ebtns .d svg.i { display: block; width: 18px; height: 18px; color: var(--accent); }
+.frame.dark .mvs-ebtns .d { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.frame.dark .mvs-ebtns .d svg.i { color: #FDBA8C; }
+.mvs-ebtns .t { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; }
+.mvs-ebtns .t i { font-style: normal; }
+.mvs-ebtns .t i.s { display: none; }
+@container shell (max-width:520px) { .mvs-ebtns .t i.l { display: none; } .mvs-ebtns .t i.s { display: inline; } }
+@container shell (max-width:380px) { .mvs-empty { gap: 7px; } .mvs-ei { width: 30px; height: 30px; border-radius: 10px; } .mvs-ei svg.i { width: 16px; height: 16px; } .mvs-ebtns { gap: 6px; } .mvs-ebtns button { min-height: 54px; font-size: 11px; gap: 4px; } .mvs-ebtns .d { width: 28px; height: 28px; } .mvs-ebtns .d svg.i { width: 15px; height: 15px; } }
+@container shell (max-width: 380px) { @media (max-height: 600px) { .mvs-eh small { display: none; } .mvs-ebtns button { min-height: 46px; } .mv-mtools .ibtn { width: 32px; height: 32px; min-width: 32px; min-height: 32px; } } }
+
+/* The phone's search: no keyboard hints or kind chip, a Cancel button,
+   and a row of examples to try. */
+.omni .ocancel { display: none; }
+.omni.phone .okind, .omni.phone .esc, .omni.phone .ofoot { display: none; }
+.omni.phone .ocancel { display: inline-flex; align-items: center; flex: none; margin-left: 4px; padding: 6px 4px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; }
+.omni.phone .in input { font-size: 16px; }
+.ophone-try { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 4px 4px; font-size: 12.5px; color: var(--dim); }
+.ophone-try b { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-right: 2px; }
+.ophone-try button { border: 1px solid var(--line); background: var(--panel); color: var(--ink2); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; }
+.omni.phone .voicebtn { position: static; transform: none; flex: none; }
+.omni.phone .in:has(.voicebtn:not([hidden])) .okind { margin-right: 0; }
+.onote { display: flex; align-items: flex-start; gap: 10px; margin: 12px 4px 4px; padding: 12px; border-radius: 12px; background: var(--ground); border: 1px solid var(--line); font-size: 13px; color: var(--dim); line-height: 1.4; }
+.onote svg.i { flex: none; width: 20px; height: 20px; color: var(--faint); margin-top: 1px; }
+.onote b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 2px; }
