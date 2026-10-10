@@ -63,7 +63,7 @@ export default {
     const paint = () => {
       const m = model(ctx, map);
       for (const r of m.rows) r.el.style.opacity = !filterType || r.type === filterType ? '' : '.15';
-      const s = $('#emsub', root); if (s) s.innerHTML = `<b>${m.rows.length}</b> markers · ${m.due.length} services due`;
+      const s = $('#emsub', root); if (s) s.innerHTML = `<b>${m.rows.length}</b> markers${$('#emmob', root) ? '' : ` · ${m.due.length} services due`}`;
       const b = $('#evacBtn', root); if (b) { b.classList.toggle('on', !!evac); b.innerHTML = evac ? `${ic('x')}${evac === 'armed' ? 'Cancel' : 'Hide route'}` : `${ic('pin')}Nearest exit`; }
       const side = $('#emside', root); if (side) side.innerHTML = sidebar(m);
       const mob = $('#emmob', root); if (mob) { mob.innerHTML = mobile(m); if (evac) mob.scrollTop = 0; }
@@ -89,15 +89,17 @@ export default {
     return [ctx.store.on('assets', paint)];
   },
 };
-function detail(r) {
+// A marker's card. Servicing (due dates, the log, Service done) is for
+// managers on the desktop; the phone shows what it is and how to use it.
+function detail(r, phone = false) {
   const t = TYPES[r.type] || [r.type, '#64748B', 'alert'];
   const rec = r.rec;
   return `<div class="card"><div class="ch"><h3 style="color:${t[1]}">${t[0]}${r.extClass ? ` · ${extBand(r.extClass)}${esc(extName(r.extClass))}` : ''}</h3><span class="ibtn" data-act="close">${ic('x')}</span></div>` +
-    `<div class="mt-meta"><span>${esc(r.location || r.label || 'On the map')}</span>${r.dept ? `<span>${esc(r.dept.toUpperCase())}</span>` : ''}${rec ? `<span>${rec.due ? 'Due ' + fmtDate(rec.due) : 'No schedule'}</span><span>Every ${rec.intMonths} months</span>` : '<span class="cs-dim">Not serviced yet</span>'}</div>` +
+    `<div class="mt-meta"><span>${esc(r.location || r.label || 'On the map')}</span>${r.dept ? `<span>${esc(r.dept.toUpperCase())}</span>` : ''}${phone ? '' : rec ? `<span>${rec.due ? 'Due ' + fmtDate(rec.due) : 'No schedule'}</span><span>Every ${rec.intMonths} months</span>` : '<span class="cs-dim">Not serviced yet</span>'}</div>` +
     (r.detail ? `<div class="msh-sec"><b>${ic('file')}Notes</b><p>${esc(r.detail)}</p></div>` : '') +
     (r.method ? `<div class="msh-sec"><b>${ic('listcheck')}Method</b><p>${esc(r.method)}</p></div>` : '') + (r.operation ? `<div class="msh-sec"><b>${ic('tool')}Operation</b><p>${esc(r.operation)}</p></div>` : '') +
-    (rec ? `<div class="list">${rec.log.slice().reverse().slice(0, 6).map(l => `<div class="li"><span class="rt" style="margin:0">${fmtDate(l.t)}</span><span class="nm">${esc(l.a)}${l.n ? ' · ' + esc(l.n) : ''}</span></div>`).join('')}</div>` : '') +
-    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px"><span class="btn primary sm" data-act="service">${ic('check')}Service done</span><span class="btn sm" data-act="schedule">Set schedule</span></div></div>`;
+    (phone ? '' : (rec ? `<div class="list">${rec.log.slice().reverse().slice(0, 6).map(l => `<div class="li"><span class="rt" style="margin:0">${fmtDate(l.t)}</span><span class="nm">${esc(l.a)}${l.n ? ' · ' + esc(l.n) : ''}</span></div>`).join('')}</div>` : '') +
+    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px"><span class="btn primary sm" data-act="service">${ic('check')}Service done</span><span class="btn sm" data-act="schedule">Set schedule</span></div>`) + '</div>';
 }
 function sidebar(m) {
   const sel = m.rows.find(r => r.id === selected);
@@ -108,11 +110,11 @@ function sidebar(m) {
 function mobile(m) {
   const sel = m.rows.find(r => r.id === selected);
   if (evac) return evacCard(true) + assemblyCard();
-  if (sel) return detail(sel);
+  if (sel) return detail(sel, true);
   const types = Object.keys(m.counts);
   return `<div class="mv-mh">${ic('m-emergency')}<b>Emergency</b><span>${m.rows.length}</span></div><div class="em-filt"><button class="${!filterType ? 'on' : ''}" data-act="filter" data-type="">${ic('grid')}All</button>${types.map(t => `<button class="${filterType === t ? 'on' : ''}" data-act="filter" data-type="${t}">${ic((TYPES[t] || [])[2] || 'alert')}${(TYPES[t] || [t])[0]}</button>`).join('')}</div>` +
     `<div class="em-mevac">${mbig('Nearest exit', 'evac', 'pin', ' data-act="evac"')}</div>` + assemblyCard() +
-    (m.due.length ? `<div class="mv-hint">${m.due.length} service${m.due.length === 1 ? '' : 's'} due · tap a marker to log one</div>` : '<div class="mv-hint">Tap a marker for its method, operation and servicing.</div>');
+    '<div class="mv-hint">Tap a marker for what it is and how to use it.</div>';
 }
 
 // ── evacuation ─────────────────────────────────────────────────────────

@@ -945,6 +945,13 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .md-tile b { font-size: 13px; } .md-tile span { grid-column: 2; font-size: 12px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .md-tile small { grid-column: 2; font-size: 11px; color: var(--dim); }
 .md-tile b, .md-tile small { grid-column: 2; }
+.md-tiles.sq { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.md-tiles.sq .md-tile { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 2px; aspect-ratio: 1; padding: 8px; overflow: hidden; }
+.md-tiles.sq .md-tile i { width: 100%; height: 5px; border-radius: 3px; margin-bottom: 4px; flex: none; }
+.md-tiles.sq .md-tile b { font-size: 16px; line-height: 1.1; }
+.md-tiles.sq .md-tile span { font-size: 11px; line-height: 1.25; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.md-tiles.sq .md-tile small { margin-top: auto; font-size: 10.5px; }
+@container shell (max-width:380px) { .md-tiles.sq { gap: 5px; } .md-tiles.sq .md-tile { padding: 6px; } .md-tiles.sq .md-tile b { font-size: 14px; } .md-tiles.sq .md-tile span { font-size: 10px; } .md-tiles.sq .md-tile small { font-size: 9.5px; } }
 .fb-diag { white-space: pre-wrap; font-size: 11px; background: var(--chip); padding: 8px; border-radius: 8px; max-height: 200px; overflow: auto; }
 /* Settings: departments, feedback, how-to */
 .stg-dept { border-top: 1px solid var(--line-soft, var(--line)); padding-top: 8px; margin-top: 8px; }
@@ -1821,3 +1828,33 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
    the content takes what is left, so a map screen's bottom panel stays
    above the tab bar. */
 @container shell (max-width:600px) { .main:has(> .teambar:not([hidden])) { display: flex; flex-direction: column; } .main:has(> .teambar:not([hidden])) > .teambar { flex: none; } .main:has(> .teambar:not([hidden])) > .content.mv { min-height: 0; flex: 1 0 auto; } }
+
+/* The map's tools on the phone: one bar along the bottom of the map, as in
+   ShelfSearcher, with square buttons: scan and level, a divider, then zoom. */
+.mv-mtools { left: 50%; right: auto; bottom: 10px; transform: translateX(-50%); flex-direction: row; align-items: center; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 6px 18px -8px rgba(0,0,0,.35); }
+.mv-mtools .ibtn { flex: none; width: 40px; height: 40px; min-width: 40px; min-height: 40px; border: 0; border-radius: 10px; background: transparent; box-shadow: none; }
+.mv-mtools .ibtn:active { background: var(--chip); }
+.mv-mtools .ibtn.scan { background: var(--accent); color: #fff; }
+.mv-mtools .ibtn svg.i { width: 19px; height: 19px; }
+.mv-mtools .mv-mdiv { flex: none; width: 1px; height: 24px; margin: 0 3px; background: var(--line); }
+@container shell (max-width:380px) { .mv-mtools { bottom: 8px; gap: 3px; padding: 3px; } .mv-mtools .ibtn { width: 36px; height: 36px; min-width: 36px; min-height: 36px; } }
+
+/* Home with nothing selected: the ways to find a shelf. */
+.mv-sel.home.empty { display: flex; flex-direction: column; justify-content: center; align-items: stretch; }
+.mvs-empty { display: flex; flex-direction: column; gap: 10px; }
+.mvs-eh { display: flex; align-items: center; gap: 10px; }
+.mvs-ei { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.mvs-ei svg.i { width: 18px; height: 18px; }
+.mvs-eh > div { flex: 1; min-width: 0; text-align: left; }
+.mvs-eh b { display: block; font-size: 15px; font-weight: 800; }
+.mvs-eh small { display: block; font-size: 12.5px; color: var(--dim); }
+.mvs-ebtns { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
+.mvs-ebtns button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 58px; padding: 6px 4px; border-radius: 12px; border: 1px solid var(--line); background: var(--ground); color: var(--ink2); font-size: 12px; font-weight: 700; }
+.mvs-ebtns button[hidden] { display: none; }
+.mvs-ebtns button svg.i { width: 20px; height: 20px; color: var(--accent); }
+.mvs-ebtns button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mvs-ebtns button span i { font-style: normal; }
+.mvs-ebtns button span i.s { display: none; }
+@container shell (max-width:520px) { .mvs-ebtns button span i.l { display: none; } .mvs-ebtns button span i.s { display: inline; } }
+@container shell (max-width:380px) { .mvs-empty { gap: 7px; } .mvs-ei { width: 28px; height: 28px; } .mvs-ebtns button { min-height: 50px; font-size: 11px; gap: 3px; } .mvs-ebtns button svg.i { width: 18px; height: 18px; } }
+@container shell (max-width: 380px) { @media (max-height: 600px) { .mvs-eh small { display: none; } .mvs-ebtns button { min-height: 42px; } .mv-mtools .ibtn { width: 32px; height: 32px; min-width: 32px; min-height: 32px; } } }
