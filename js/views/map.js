@@ -80,9 +80,17 @@ export default {
   mount(ctx, root) {
     if (ctx.arg?.select) selected = ctx.arg.select;
     pcSel = null;
-    const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { selected = info.code; pcSel = null; paint(); } else if (info.kind === 'pricecheck') { pcSel = info; map.select(''); paint(); } } });
+    const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { map.highlight(null); selected = info.code; pcSel = null; paint(); } else if (info.kind === 'pricecheck') { pcSel = info; map.select(''); paint(); } } });
     bindMapChrome(root, map);
     if (ctx.arg?.select) { map.select(selected); map.zoomTo(selected); }
+    // From the phone's search: a micro-department's shelves ring on the map
+    // and the first is selected; with none assigned, its department shows.
+    if (ctx.arg?.micro) {
+      const id = String(ctx.arg.micro), shelvesOf = ctx.store.get('labels')?.assign?.[id] || [], gs = shelvesOf.flatMap(s => map.groups(s));
+      const [sd, code] = id.split('-'), e = (MICRO[sd] || []).find(x => microCode(x) === code), name = `${code} ${e ? microName(e) : ''}`.trim();
+      if (gs.length) { selected = shelvesOf[0]; map.select(selected); map.highlight(gs); map.zoomTo(selected); toast(`${name}: ${shelvesOf.length} shel${shelvesOf.length === 1 ? 'f' : 'ves'}`); }
+      else { map.zoomDept([sd]); toast(`${name} has no shelves assigned yet, so its department shows`); }
+    }
     // From the phone's Departments picker: one department, or 'all' to clear.
     if (ctx.arg?.dept && ctx.isMobile) { const d = String(ctx.arg.dept).toLowerCase(); map.zoomDept(d === 'all' ? [] : [d]); }
     else if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }

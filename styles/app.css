@@ -1864,3 +1864,18 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 @container shell (max-width:520px) { .mvs-ebtns .t i.l { display: none; } .mvs-ebtns .t i.s { display: inline; } }
 @container shell (max-width:380px) { .mvs-empty { gap: 7px; } .mvs-ei { width: 30px; height: 30px; border-radius: 10px; } .mvs-ei svg.i { width: 16px; height: 16px; } .mvs-ebtns { gap: 6px; } .mvs-ebtns button { min-height: 54px; font-size: 11px; gap: 4px; } .mvs-ebtns .d { width: 28px; height: 28px; } .mvs-ebtns .d svg.i { width: 15px; height: 15px; } }
 @container shell (max-width: 380px) { @media (max-height: 600px) { .mvs-eh small { display: none; } .mvs-ebtns button { min-height: 46px; } .mv-mtools .ibtn { width: 32px; height: 32px; min-width: 32px; min-height: 32px; } } }
+
+/* The phone's search: no keyboard hints or kind chip, a Cancel button,
+   and a row of examples to try. */
+.omni .ocancel { display: none; }
+.omni.phone .okind, .omni.phone .esc, .omni.phone .ofoot { display: none; }
+.omni.phone .ocancel { display: inline-flex; align-items: center; flex: none; margin-left: 4px; padding: 6px 4px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; }
+.omni.phone .in input { font-size: 16px; }
+.ophone-try { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 4px 4px; font-size: 12.5px; color: var(--dim); }
+.ophone-try b { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-right: 2px; }
+.ophone-try button { border: 1px solid var(--line); background: var(--panel); color: var(--ink2); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; }
+.omni.phone .voicebtn { position: static; transform: none; flex: none; }
+.omni.phone .in:has(.voicebtn:not([hidden])) .okind { margin-right: 0; }
+.onote { display: flex; align-items: flex-start; gap: 10px; margin: 12px 4px 4px; padding: 12px; border-radius: 12px; background: var(--ground); border: 1px solid var(--line); font-size: 13px; color: var(--dim); line-height: 1.4; }
+.onote svg.i { flex: none; width: 20px; height: 20px; color: var(--faint); margin-top: 1px; }
+.onote b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 2px; }

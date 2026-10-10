@@ -2,6 +2,8 @@
 // keycode, a shelf, a department or a tool name, and the store's own
 // records: manifests, consolidations, cages, inventory loads and off-site
 // pallets (shared/finder.js). Keycodes go to the catalogue
+// On a phone it is streamlined: shelves, departments and micro-departments
+// only, no keyboard hints, no records, and no product codes for now.
 // (client.catalogue.lookup); shelves come from the mounted map; tools from
 // the view registry. Opens from the header search, the rail search, Ctrl K,
 // and the phone's search bar.
@@ -11,6 +13,7 @@ import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } fr
 import { VIEWS, RAIL } from './registry.js';
 import { findRecords } from '../shared/finder.js';
 import { RING } from './views/stockroom/common.js';
+import { SUBS, MICRO, microId, microCode, microName } from './data/micros.js';
 
 const KIND = { prod: 'Product code', cons: 'Consolidation', shelf: 'Shelf', loc: 'Shelf or bay', name: 'Name', none: 'Type to search' };
 const KICON = { prod: 'm-product', cons: 'packages', shelf: 'pin', loc: 'pin', name: 'search', none: 'search' };
@@ -45,13 +48,13 @@ function recordsHtml(r, Q) {
   if (r.offsite.length) out += grp('Off-site pallets', r.offsite.length) + r.offsite.map(o => orow('', 'truck', `Off-site pallet ${hi(String(o.pid), Q)}`, `${esc(o.title || 'no description')}${o.has ? ` · <b>${o.has} of this keycode</b>` : ''}${o.rec ? ' · back' : o.cb ? ' · callback ' + esc(o.cb) : ''}`, 'Open', `data-view="inventory" data-pid="${esc(o.pid)}"`)).join('');
   return out;
 }
-const ARG_KEYS = ['select', 'dept', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay'];
+const ARG_KEYS = ['select', 'dept', 'micro', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay'];
 
 export function initSearch({ client, frame, go, tools = () => [], life = () => null, data = () => null, phone = () => false }) {
   // On a phone, the records that open desk-only views (manifests, inventory) are left out.
   const found = Q => { const r = findRecords(data(), Q); if (phone()) { r.manifests = []; r.loads = []; r.offsite = []; } return r; };
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
-  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like A16 S2, a manifest, a consolidation, a cage, a load or a tool…" autocomplete="off" inputmode="search"><button class="voicebtn" type="button" data-voice hidden aria-label="Search by voice" title="Search by voice">${ic('mic')}</button><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
+  el.innerHTML = `<div class="pal" role="dialog" aria-label="Search"><div class="in">${ic('search')}<input id="oq" placeholder="Search a keycode, a shelf like A16 S2, a manifest, a consolidation, a cage, a load or a tool…" autocomplete="off" inputmode="search"><button class="voicebtn" type="button" data-voice hidden aria-label="Search by voice" title="Search by voice">${ic('mic')}</button><span class="okind" id="okind">Type to search</span><span class="esc">Esc</span><button class="ocancel" type="button" data-ocancel>Cancel</button></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> <span id="oenter">open</span></span><span><kbd>Esc</kbd> close</span></div></div>`;
   frame.appendChild(el);
   const input = $('#oq', el), body = $('#obody', el), prev = $('#oprev', el), pal = $('.pal', el);
   let shelves = null, seq = 0, sel = 0;
@@ -68,11 +71,58 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
 
   // Focus goes back to whatever opened the palette when it closes.
   let opener = null;
-  function open(q = '') { if (!el.classList.contains('open')) opener = document.activeElement; el.classList.add('open'); input.value = q; render(q); try { input.focus(); } catch {} }
+  const DESK_PH = input.placeholder, PHONE_PH = 'Shelf, department or micro-dept';
+  function open(q = '') { if (!el.classList.contains('open')) opener = document.activeElement; el.classList.add('open'); el.classList.toggle('phone', phone()); input.placeholder = phone() ? PHONE_PH : DESK_PH; input.value = q; render(q); try { input.focus(); } catch {} }
   function close() { el.classList.remove('open'); prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide'); if (opener?.isConnected && opener !== document.body) { try { opener.focus(); } catch {} } opener = null; }
   const isOpen = () => el.classList.contains('open');
 
+  // The shelves a typed shelf, run or stockroom bay names. "A16S1",
+  // "A16 S1" and "A16-S1" name one shelf of the run A16: the row and the
+  // map keep that shelf rather than widening to the run. A stockroom bay
+  // number (7002) is found through the shelf that lists it.
+  function shelfRows(U) {
+    const bay = hasMap() && /^\d{3,6}[A-Z]?$/.test(canonCode(U)) ? shelfForLocation(canonCode(U)) : null;
+    const C = bay || canonCode(U), { shelf: id, sub: suffix } = splitCanon(C);
+    const hits = hasMap() ? shelfIndex().filter(s => s.c === C || s.c === id || (!suffix && !bay && s.c.startsWith(id))).slice(0, 8) : [];
+    const modOf = s => suffix && s.c !== C && s.subs.includes(suffix) ? suffix : '';
+    const sel = s => esc(s.id + modOf(s));
+    const rows = hits.map(s => orow('s', 'pin', `${modOf(s) || s.segments === 1 ? 'Shelf' : 'Run'} ${hi(s.id, id)}${modOf(s) ? ` ${esc(modOf(s))}` : suffix ? ` <small class="warn">no shelf ${esc(s.id)} ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${esc(runText(s.id, modOf(s), s.subs, s.segments))}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`));
+    return { hits, rows, bay, modOf, sel, id, suffix };
+  }
+
+  // The phone's search: a shelf or run, a department by its code (H1) or
+  // name (Kitchen), a micro-department by its number (038) or name. Product
+  // codes, records and tools are not searched here yet.
+  function renderPhone(q) {
+    const Q = q.trim(), ql = Q.toLowerCase(), k = classify(Q);
+    let out = '';
+    if (!Q) {
+      const r = recent().filter(x => x[1] !== 'prod' && x[1] !== 'cons');
+      if (r.length) out += grp('Recent') + r.map(x => orow('s', 'history', esc(x[0]), '', 'Search', `data-q="${esc(x[0])}"`)).join('');
+      out += `<div class="ophone-try"><b>Try</b>${['A16 S2', 'Kitchen', '038'].map(t => `<button type="button" data-q="${t}">${t}</button>`).join('')}</div>`;
+    } else if (/^\d{6,}$/.test(Q)) {
+      out += `<div class="onote">${ic('barcode')}<span><b>Product codes aren’t searchable yet</b>Search a shelf like A16 S2, a department like Kitchen or a micro-department like 038.</span></div>`;
+    } else {
+      const counts = {}; if (hasMap()) for (const sh of shelfIndex()) counts[sh.dept] = (counts[sh.dept] || 0) + sh.segments;
+      const depts = Object.entries(DEPT_NAME).filter(([d, n]) => d === ql || (ql.length >= 2 && n.toLowerCase().includes(ql)));
+      const assign = data()?.labels?.assign || {}, subName = Object.fromEntries(SUBS.map(x => [x[0], x]));
+      const micros = SUBS.flatMap(([sd]) => (MICRO[sd] || []).map(e => ({ id: microId(sd, e), sd, code: microCode(e), name: microName(e) })))
+        .filter(m => (/^\d+$/.test(Q) && m.code.startsWith(Q.padStart(Math.min(3, Q.length), '0'))) || (ql.length >= 2 && m.name.toLowerCase().includes(ql))).slice(0, 8);
+      const sh = k === 'shelf' || k === 'loc' ? shelfRows(Q.toUpperCase()) : null;
+      const deptRows = depts.map(([d, n]) => orow('s', 'map', `${dep(d)} ${hi(n, Q)}`, `${counts[d] || 0} shelves`, 'Show', `data-view="map" data-dept="${d}"`));
+      const microRows = micros.map(m => { const n = (assign[m.id] || []).length; return orow('s', 'tag', `<span class="mono">${hi(m.code, Q)}</span> ${hi(m.name, Q)} ${dep(m.sd)}`, `${esc(subName[m.sd]?.[2] || '')} · ${n ? `${n} ${n === 1 ? 'shelf' : 'shelves'}` : 'no shelves assigned yet'}`, 'Show', `data-view="map" data-micro="${esc(m.id)}"`); });
+      const shelfBlock = sh && sh.rows.length ? (sh.bay ? `<div class="ohint">Bay ${esc(Q.toUpperCase())} is on ${esc(sh.hits[0].id)}.</div>` : '') + grp('Shelves', sh.rows.length) + sh.rows.join('') : '';
+      const deptBlock = deptRows.length ? grp('Departments', deptRows.length) + deptRows.join('') : '';
+      const microBlock = microRows.length ? grp('Micro-departments', microRows.length) + microRows.join('') : '';
+      // A department code (H1) or micro number (038) before shelves that merely start with it.
+      out += k === 'shelf' ? shelfBlock + deptBlock + microBlock : deptBlock + microBlock + shelfBlock;
+      if (!out) out = `<div class="ohint">Nothing matches “${esc(Q)}”. Try a shelf like A16 S2, a department like Kitchen or a micro-department like 038.</div>`;
+    }
+    body.innerHTML = out; sel = 0; markSel(); prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide');
+  }
+
   async function render(q) {
+    if (phone()) { ++seq; return renderPhone(q); }
     const my = ++seq, k = classify(q), Q = q.trim(), U = Q.toUpperCase();
     $('#okind', el).className = 'okind ' + k; $('#okind', el).textContent = KIND[k]; el.setAttribute('data-kind', k);
     const use = el.querySelector('.in > svg.i use'); if (use) use.setAttribute('href', `icons.svg#i-${KICON[k]}`);
@@ -110,17 +160,9 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const r = found(Q);
       out += recordsHtml(r, Q) || `<div class="ohint">No consolidation ending ${esc(Q.slice(-9))} on a manifest or truck this device holds. The Back dock code opens its records.</div>`;
     } else if (k === 'shelf' || k === 'loc') {
-      // "A16S1", "A16 S1" and "A16-S1" name one shelf of the run A16: the
-      // row and the map keep that shelf rather than widening to the run.
-      // A stockroom bay number (7002) is found through the shelf that lists
-      // it, and shows that shelf, not the run.
-      const bay = hasMap() && /^\d{3,6}[A-Z]?$/.test(canonCode(U)) ? shelfForLocation(canonCode(U)) : null;
-      const C = bay || canonCode(U), { shelf: id, sub: suffix } = splitCanon(C);
-      const hits = hasMap() ? shelfIndex().filter(s => s.c === C || s.c === id || (!suffix && !bay && s.c.startsWith(id))).slice(0, 8) : [];
-      const modOf = s => suffix && s.c !== C && s.subs.includes(suffix) ? suffix : '';
-      const sel = s => esc(s.id + modOf(s));
+      const { hits, rows, bay, modOf, sel, id, suffix } = shelfRows(U);
       if (bay && hits.length) out += `<div class="ohint">Bay ${esc(U)} is on ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}.</div>`;
-      out += grp('Shelves', hits.length) + (hits.map(s => orow('s', 'pin', `${modOf(s) || s.segments === 1 ? 'Shelf' : 'Run'} ${hi(s.id, id)}${modOf(s) ? ` ${esc(modOf(s))}` : suffix ? ` <small class="warn">no shelf ${esc(s.id)} ${esc(suffix)}</small>` : ''} ${dep(s.dept)}`, `${DEPT_NAME[s.dept] || s.dept || 'no department'} · ${esc(runText(s.id, modOf(s), s.subs, s.segments))}`, 'Show on map', `data-view="map" data-select="${sel(s)}"`)).join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
+      out += grp('Shelves', hits.length) + (rows.join('') || `<div class="ohint">${hasMap() ? `No shelf ${suffix ? 'called' : 'starts with'} ${esc(id)} on this map.` : 'No map is published for this store yet.'}</div>`);
       out += recordsHtml(found(Q), Q);
       if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>${modOf(hits[0]) || hits[0].segments === 1 ? 'Shelf' : 'Run'} ${esc(hits[0].id)}${modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : ''}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}Show on the store map</a>`;
     } else {
@@ -160,7 +202,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   }
 
   input.addEventListener('input', () => render(input.value));
-  el.addEventListener('click', e => { if (e.target === el) return close(); const r = e.target.closest('.orow, .prev [data-view]'); if (r) { e.preventDefault(); act(r); } });
+  el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-ocancel]')) return close(); const t = e.target.closest('.ophone-try [data-q]'); if (t) { open(t.dataset.q); return; } const r = e.target.closest('.orow, .prev [data-view]'); if (r) { e.preventDefault(); act(r); } });
   el.addEventListener('keydown', e => {
     if (e.key === 'Escape') { close(); return; }
     const rows = $$('.orow', body);
