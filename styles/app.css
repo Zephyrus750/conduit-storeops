@@ -1999,4 +1999,25 @@ button.mv-row .c svg.i { width: 16px; height: 16px; transform: rotate(-90deg); }
 .rf-last { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); min-height: 22px; }
 .rf-last.ok { color: var(--green-ink); font-weight: 700; } .rf-last.bad { color: var(--red); font-weight: 700; }
 .rf-last svg.i { width: 18px; height: 18px; flex: none; }
-@container shell (max-width:380px) { .rf-scanbtn .rf-long { display: none; } .rf-scanbtn { padding: 0 12px; } }
+
+/* Phone Refresh panel: room to breathe. The scan button has its own row,
+   the Refresh / Plan toggle runs full width under it, and the focus
+   departments sit under their own label and wrap rather than squeeze. The
+   panel grows to fit them. */
+.content.mv .mv-sel.mode.rf { height: auto; max-height: 56cqh; gap: 14px; padding: 16px; }
+.mv-sel.mode.rf .rf-scanbtn { flex: none; width: 100%; min-height: 52px; border-radius: 14px; font-size: 15px; padding: 0 16px; gap: 10px; justify-content: center; }
+.mv-sel.mode.rf .rf-row { gap: 10px; }
+.mv-sel.mode.rf .rf-row:not(.plan) .seg2 { flex: 1; }
+.mv-sel.mode.rf .seg2 { padding: 4px; }
+.mv-sel.mode.rf .seg2 button { flex: 1; min-height: 40px; padding: 0 16px; font-size: 11.5px; }
+.mv-sel.mode.rf .rf-focus { flex-wrap: wrap; gap: 8px; overflow: visible; }
+.mv-sel.mode.rf .rf-focus .lbl { flex-basis: 100%; margin-bottom: -2px; }
+.mv-sel.mode.rf .rf-chip { min-height: 34px; padding: 4px 12px 4px 5px; gap: 7px; font-size: 13px; }
+.mv-sel.mode.rf .rf-chip .dep { font-size: 11px; padding: 2px 6px; }
+.mv-sel.mode.rf .rf-focus .mv-hint { font-size: 13px; }
+@container shell (max-width:380px) {
+  .content.mv .mv-sel.mode.rf { gap: 12px; padding: 14px; }
+  .mv-sel.mode.rf .rf-scanbtn { min-height: 48px; font-size: 14px; }
+  .mv-sel.mode.rf .seg2 button { font-size: 10.5px; min-height: 38px; }
+  .mv-sel.mode.rf .rf-chip { min-height: 32px; font-size: 12px; padding: 3px 10px 3px 4px; }
+}

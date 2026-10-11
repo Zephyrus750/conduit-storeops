@@ -206,7 +206,8 @@ function scanSheet() {
 function mobileBar(map, m) {
   const fc = focusCounts(map, m);
   return `<div class="mv-mh">${ic('m-refresh')}<b>Location refresh</b><span>${m.counted} / ${TARGET}</span></div>` +
-    `<div class="rf-row">${mode === 'plan' ? '' : `<button class="rf-scanbtn" data-act="scan-open">${ic('barcode')}<span>Scan or type<span class="rf-long"> a shelf</span></span></button>`}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div>` +
+    (mode === 'plan' ? '' : `<button class="rf-scanbtn" data-act="scan-open">${ic('barcode')}<span>Scan or type a shelf</span></button>`) +
+    `<div class="rf-row${mode === 'plan' ? ' plan' : ''}"><div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div>` +
     (mode === 'plan' ? `<div class="rf-pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : '') + `</div>` +
     (mode === 'plan' ? `<div class="mv-hint">Plan mode: tap a shelf to paint it for the team. Tap the same colour again to clear.</div>`
       : `<div class="rf-focus"><span class="lbl">Focus</span>${fc.map(f => `<button class="rf-chip" data-act="zoom-dept" data-dept="${f.d}"><i class="dep" style="background:${DEPT_COLOUR[f.d]}">${f.d.toUpperCase()}</i>${f.done}/${f.total}</button>`).join('') || '<span class="mv-hint" style="margin:0">No focus departments set this week</span>'}</div>`) +
