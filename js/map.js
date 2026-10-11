@@ -141,13 +141,13 @@ export function oneShelf(root, code) {
   if (ids.length > 1) return { error: `${String(code).toUpperCase()} is a run of ${ids.length} shelves: scan the shelf's own label (${ids.slice(0, 3).join(', ')}${ids.length > 3 ? '…' : ''})` };
   return { g: gs[0] };
 }
-export function bindShelfScan(root, map, onShelf) {
+export function bindShelfScan(root, map, onShelf, onError) {
   root.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || !e.target.matches?.('[data-field="shelfscan"]')) return;
     e.preventDefault();
     const code = e.target.value.trim(); e.target.value = ''; if (!code) return;
     const { g, error } = oneShelf(map.svg, code);
-    if (!g) return toast(error, 'bad');
+    if (!g) { toast(error, 'bad'); onError?.(error); return; }
     onShelf(map.shelfInfo(g));
   });
 }

@@ -1984,3 +1984,19 @@ button.mv-row { width: 100%; border: 0; border-top: 1px solid var(--line-soft); 
 .mv-rows > button.mv-row:first-child { border-top: 0; }
 button.mv-row .c svg.i { width: 16px; height: 16px; transform: rotate(-90deg); }
 .vh select.ad-in { width: auto; }
+
+/* Phone Refresh: one scan button; the sheet holds the camera and a box to type. */
+.rf-scanbtn { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.rf-scanbtn svg.i { width: 20px; height: 20px; color: var(--accent); flex: none; }
+.rf-scanbtn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rf-sheetback { position: fixed; inset: 0; z-index: 70; background: rgba(17,24,39,.45); display: flex; align-items: flex-end; }
+.rf-sheet { width: 100%; background: var(--panel); border-radius: 22px 22px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; box-shadow: 0 -12px 40px rgba(0,0,0,.18); }
+.rf-sheet .sheet-h { margin: 0; }
+.rf-sheet .mv-big { margin: 0; }
+.rf-type .lbl { display: block; margin-bottom: 6px; }
+.rf-type .shelfscan { margin: 0; display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; }
+.rf-type .shelfscan input { flex: 1; min-width: 0; font-size: 16px; padding: 8px 0; }
+.rf-last { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); min-height: 22px; }
+.rf-last.ok { color: var(--green-ink); font-weight: 700; } .rf-last.bad { color: var(--red); font-weight: 700; }
+.rf-last svg.i { width: 18px; height: 18px; flex: none; }
+@container shell (max-width:380px) { .rf-scanbtn .rf-long { display: none; } .rf-scanbtn { padding: 0 12px; } }
