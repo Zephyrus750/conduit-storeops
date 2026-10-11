@@ -306,11 +306,16 @@ suite lookup worker for keycode → name and product URL; the details worker
 for price, was, image and clearance) and caches per keycode in the edge
 Cache API: links for a week, details for a day, misses for an hour. The
 device library (`client/catalogue.js`) batches lookups and keeps hits for a
-week. The shell's search palette (Ctrl K, the header and phone search)
+week. The shell's search palette (Ctrl K and the header)
 understands a keycode, a shelf such as A16 S2, a department and a tool, and
 the store's records (`shared/finder.js`): manifests, consolidation labels
 (the truck and bay a consol is on), cages, inventory loads and off-site
-pallets, each opening its view on the item.
+pallets, each opening its view on the item. On a phone the search bar is
+typed into directly, as ShelfSearcher's was: a compact list of up to six
+rows drops under it (a run such as A16 lists its shelves S1, S2, E1, E2 and
+then the whole run; departments and micro-departments by code or name;
+recent searches when the bar is empty), and one tap shows the result on the
+map.
 
 **Voice search** (phones; decision 28). The microphone in the phone's
 search bar and in the palette listens for one shelf, run, bay or keycode,
