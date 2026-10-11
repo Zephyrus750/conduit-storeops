@@ -1,7 +1,7 @@
 // Store map and the selected shelf card. Also the phone's Home: the map with
 // the selected shelf beneath it.
 
-import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtTime, cycleId, toast } from '../ui.js';
+import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_GROUPS, weekId, fmtTime, cycleId, toast } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, shelfDetail, canonCode, runText, runSubs, setStrip, sx } from '../map.js';
 import { markerSymbol } from '../../shared/maprender.js';
 import { openShare } from '../share.js';
@@ -53,6 +53,21 @@ export function mvSel(ctx, map, id) {
 }
 // The strip under the phone Home's map: the shelf in one line, a price
 // check, or the ways to find one.
+// The phone map's breadcrumb, as ShelfSearcher's context bar read: the
+// area, the department's badge and name, then the shelf ("Home › H2 Bed,
+// Bath, Laundry › B7 S2"). With no shelf it names the department picked,
+// else all of them. The area and department step back out to them.
+function mvCrumb(map, id, scope) {
+  const g = id && map ? map.groups(id)[0] : null, d = g ? map.shelfInfo(g).dept : scope.length === 1 ? scope[0] : '';
+  const area = DEPT_GROUPS.find(a => a[0] !== 'Other' && (d ? a[2].includes(d) : a[2].join() === scope.join()));
+  if (!d && !area) return `${ic('grid')}<span class="ma">All departments</span>`;
+  const sep = '<i class="sep">›</i>';
+  return (area ? `<button type="button" class="ma" data-crumb="${area[2].join()}">${ic(area[1])}${area[0]}</button>` : ic(OTHER_ICON[d] || 'tag')) +
+    (d ? `${area ? sep : ''}<button type="button" class="md" data-crumb="${esc(d)}">${dep(d)}<span>${esc(DEPT_NAME[d] || d)}</span></button>` : '') +
+    (g ? `${sep}<b class="ms">${esc(id)}</b>` : '');
+}
+const OTHER_ICON = { checkouts: 'bag', flex: 'flame', stockroom: 'box' };
+
 function homeStrip(map, id, p) {
   if (p) { const title = p.variant === 'order' ? 'Order screen' : 'Price check'; return `${ic('barcode')}<b>${title}</b><span class="s">${esc(p.location || p.label || '')}</span>${p.location ? `<button class="act" type="button" data-act="pc-goto">${ic('pin')}Show</button>` : ''}`; }
   const g = id && map.groups(id)[0];
@@ -92,7 +107,7 @@ export default {
       `<div class="mapleg">${crumbx('Store map', ctx.storeNo)}<span><i style="background:transparent;border:2px solid #D24E0E"></i>Selected <b id="mapcrumb" style="color:var(--ink)">${selected ? esc(selected) : '—'}</b></span><span><i style="background:#CBD0D8"></i>Department colours from the key</span><span style="color:var(--faint)">Scroll to zoom · drag to pan · click a shelf</span></div></div>` +
       `<div id="selhost">${''}</div></div>`;
   },
-  mobile(ctx) { return mvMap({ badge: `<span id="mvcrumb">Floor</span>` }) + `<div class="mv-sel home" id="mvsel"></div>`; },
+  mobile(ctx) { return mvMap({ badge: `<span id="mvcrumb" class="mcrumb">${mvCrumb(null, null, [])}</span>` }) + `<div class="mv-sel home" id="mvsel"></div>`; },
   mount(ctx, root) {
     if (ctx.arg?.select) selected = ctx.arg.select;
     pcSel = null;
@@ -109,14 +124,16 @@ export default {
       else { map.zoomDept([sd]); toast(`${name} has no shelves assigned yet, so its department shows`); }
     }
     // From the phone's Departments picker: one department, an area's ("h1,h2,h3,h4"), or 'all' to clear.
-    if (ctx.arg?.dept && ctx.isMobile) { const d = String(ctx.arg.dept).toLowerCase(); map.zoomDept(d === 'all' ? [] : d.split(',').filter(Boolean)); }
+    let scope = [];
+    if (ctx.arg?.dept && ctx.isMobile) { const d = String(ctx.arg.dept).toLowerCase(); scope = d === 'all' ? [] : d.split(',').filter(Boolean); map.zoomDept(scope); }
+    if (ctx.isMobile) document.querySelector('.mdepts')?.classList.toggle('on', scope.length > 0);
     else if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
     const paint = () => {
       const host = $('#selhost', root); if (host) host.innerHTML = pcSel ? pcCard(pcSel) : selCard(ctx, map, selected);
       const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-d')); mv.classList.toggle('nosel', !!mv.querySelector('.mvs-empty')); }
       const c = $('#mapcrumb', root); if (c) c.textContent = selected || '—';
       setStrip(root, homeStrip(map, selected, pcSel));
-      const mc = $('#mvcrumb', root); if (mc && selected) { const d = map.shelfInfo(map.groups(selected)[0]).dept; mc.innerHTML = `Floor › <i class="cb" style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${DEPT_NAME[d] || d}</b> › ${esc(selected)}`; }
+      const mc = $('#mvcrumb', root); if (mc) mc.innerHTML = mvCrumb(map, pcSel ? null : selected, scope);
     };
     paint();
     root.addEventListener('click', e => {
@@ -128,6 +145,8 @@ export default {
         selected = canonCode(code); pcSel = null; map.locate(selected); paint();
       } });
       if (e.target.closest('[data-act="depts"]')) document.querySelector('.mdepts')?.click();
+      // The crumb's area and department step out of the shelf to that department.
+      const cr = e.target.closest('[data-crumb]'); if (cr) { const v = cr.dataset.crumb; scope = v ? v.split(',') : []; selected = null; pcSel = null; map.select(''); map.highlight(null); map.zoomDept(scope); document.querySelector('.mdepts')?.classList.toggle('on', scope.length > 0); paint(); }
       const pa = e.target.closest('[data-act="pick-add"]'); if (pa) addToPickList(ctx, pa.dataset.shelf);
       const sh = e.target.closest('[data-act="share"]'); if (sh) { const id = sh.dataset.shelf, g = map.groups(id)[0]; openShare({ storeNo: ctx.storeNo, storeName: ctx.storeName, shelf: id, dept: g ? map.shelfInfo(g).dept : '' }); }
     });
