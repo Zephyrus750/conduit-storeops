@@ -2019,3 +2019,11 @@ button.mv-row .c svg.i { width: 16px; height: 16px; transform: rotate(-90deg); }
   .mv-sel.mode.rf .rf-chip { min-height: 28px; font-size: 11.5px; padding: 2px 9px 2px 3px; }
   .mv-sel.mode.rf .rf-chip .dep { font-size: 10px; }
 }
+/* In Plan the colours fill the scan button's box, so the toggle never moves. */
+.mv-sel.mode.rf .rf-pal { flex: 1; min-width: 0; margin: 0; min-height: 44px; padding: 0 10px; justify-content: space-between; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.mv-sel.mode.rf .rf-pal i { width: 24px; height: 24px; flex: none; cursor: pointer; }
+@container shell (max-width:380px) { .mv-sel.mode.rf .rf-pal { min-height: 40px; padding: 0 8px; } .mv-sel.mode.rf .rf-pal i { width: 20px; height: 20px; } }
+/* The bottom row is one height in both modes, so nothing above it shifts. */
+.mv-sel.mode.rf > .rf-focus, .mv-sel.mode.rf > .mv-hint { height: 36px; flex: none; margin: 0; }
+.mv-sel.mode.rf > .mv-hint { font-size: 12.5px; line-height: 1.4; overflow: hidden; }
+@container shell (max-width:380px) { .mv-sel.mode.rf > .rf-focus, .mv-sel.mode.rf > .mv-hint { height: 31px; } .mv-sel.mode.rf > .mv-hint { font-size: 11px; } }
