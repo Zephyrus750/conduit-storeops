@@ -391,6 +391,17 @@ layered store map, Today at and logistics cards), Settings, Help (the tour)
 and Field Mode (a manager captures shelf codes for the map editor and exports
 them as a `field-capture/1` file).
 
+On a phone the map modes (Home, Refresh, Labels, Route, Emergency,
+Stocktake, Field Mode) give the map the screen: a dark strip above the tabs
+says what the mode is doing and carries its main action (Scan or type,
+Picked, Nearest exit, Mark checked), and its arrow opens the mode's panel as
+a sheet over the map with everything in full: the shelf's department,
+micro-departments, facts and status; the week's focus departments and the
+shelves still due; each department's label progress and the wrong labels;
+every route stop; the equipment and its service dates. Open or closed is
+kept per device. Maintenance is desk-only: a store PC logs and works issues,
+and a work-order link opened on a phone says so.
+
 The map (`js/map.js`) zooms with an eased animation, double-tap or
 double-click (×1.8), Ctrl + / − / 0 and a pinch; a flick coasts. Price checks
 open a card and cycle normal, large or hidden; tory lines switch on for a

@@ -2,7 +2,7 @@
 // Reads store.get('picklists')[device]; writes picklist.set.
 
 import { $, ic, esc, vh, sub, dep, DEPT_NAME, toast } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, canonCode } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, canonCode, setStrip, sx } from '../map.js';
 import { voiceSupported, dictate } from '../voice.js';
 import { spokenCodes, STOP_WORDS } from '../../shared/voice.js';
 import { haptic } from '../device.js';
@@ -32,7 +32,8 @@ export default {
       const r = map.drawRoute(m.items.map(i => i.code), m.items.filter(i => i.completed).map(i => i.code));
       const pd = $('#pkdist', root); if (pd) pd.textContent = !m.items.length ? 'Tap a shelf or type codes to build the list' : (r.network ? `${r.stops} stop${r.stops === 1 ? '' : 's'} on this level · along the walk paths` : 'No walk paths on this level yet: straight lines') + (r.metres ? ` · ~${r.metres} m` : '') + (r.exit ? ' · then the stairs' : '');
       const side = $('#pkside', root); if (side) side.innerHTML = list(map, m);
-      const mob = $('#pkmob', root); if (mob) mob.innerHTML = mobile(map, m);
+      const mob = $('#pkmob', root); if (mob) mob.innerHTML = mobile(map, m, r);
+      setStrip(root, rtStrip(m));
       const pb = document.querySelector('[data-act="plan"]'); if (pb) pb.disabled = m.items.length <= 2;
       const hs = document.querySelector('.vh .sub'); if (hs) { const picked = m.items.filter(i => i.completed).length; hs.innerHTML = sub(`${m.items.length} items`, `${picked} picked`, m.items.length ? `${m.items.length - picked} stops to go` : ''); }
       const b = $('#pkbadge', root); if (b) { const next = m.items.find(i => !i.completed); b.innerHTML = `<b>${m.items.filter(i => i.completed).length} / ${m.items.length}</b> picked${next ? ' · next ' + esc(next.code) : ''}`; }
@@ -109,9 +110,21 @@ function replan(map, items, added) {
   if (added) toast('Stops re-planned for the shortest walk');
   return [...items.filter(i => i.completed), ...order.map(c => by.get(c))];
 }
-function mobile(map, m) {
-  const cur = m.items.find(i => !i.completed);
-  return `<div class="rt-top">${ic('m-picklist')}<b>Pick list</b><span class="cnt">${m.items.filter(i => i.completed).length} / ${m.items.length}</span><span class="tools">${voiceSupported() ? `<button class="${dictation ? 'listening' : ''}" title="${dictation ? 'Stop listening' : 'Add shelves by voice'}" aria-label="${dictation ? 'Stop listening' : 'Add shelves by voice'}" data-act="voice-add">${ic('mic')}</button>` : ''}<button title="Zoom to next" data-act="zoom" data-code="${cur ? esc(cur.code) : ''}">${ic('pin')}</button><button title="Clear" data-act="clear">${ic('trash')}</button></span></div>` +
-    `<div class="rt-stops">${m.items.map((i, n) => `<span class="rt-stop ${i.completed ? 'done' : i === cur ? 'cur' : ''}" data-act="toggle" data-code="${esc(i.code)}"><i>${n + 1}</i>${esc(i.code)}${i.completed ? ic('check') : i === cur ? '<em>▶</em>' : ''}</span>`).join('') || `<span class="mv-hint" style="margin:0">Tap shelves on the map${voiceSupported() ? ', or tap the microphone and say them,' : ''} to build the list.</span>`}</div>` +
-    (cur ? `<div class="rt-h">${dep(deptOf(map, cur.code))}<b>${esc(cur.code)}</b><span class="nm">${DEPT_NAME[deptOf(map, cur.code)] || ''}</span><button class="rt-pick" data-act="pick-next" title="Picked · next stop">${ic('check')}Picked</button></div>` : '');
+// The phone's Route sheet (opened from the strip): every stop in walking
+// order with its department, ticks to pick (a tap toggles, × removes), the
+// walk, and what to do next.
+function mobile(map, m, r) {
+  const cur = m.items.find(i => !i.completed), done = m.items.filter(i => i.completed).length, n = m.items.length;
+  const walk = !n ? `Tap shelves on the map${voiceSupported() ? ', or tap Say it and say them,' : ''} to build the list.` : `${n} stop${n === 1 ? '' : 's'}${r?.metres ? ` · about ${r.metres} m` : ''}${r && !r.network ? ' · no walk paths on this level yet' : ''}${r?.exit ? ' · then the stairs' : ''}`;
+  const head = `<div class="sx-h">${ic('m-picklist')}Pick list<span class="n">${done} / ${n}</span></div><div class="sx-sub">${walk}</div>`;
+  const stops = n ? sx.sec('Stops', sx.rows(m.items.map((i, k) => { const d = deptOf(map, i.code);
+    return `<div class="sx-r rt-r${i.completed ? ' done' : i === cur ? ' cur' : ''}" data-act="toggle" data-code="${esc(i.code)}"><span class="rt-chk">${i.completed ? ic('check') : ''}</span><span class="rt-no">${k + 1}</span><div class="k"><b>${esc(i.code)}</b><span>${esc(DEPT_NAME[d] || '')}</span></div>${i === cur ? '<span class="v acc">Next</span>' : i.completed ? '<span class="v ok">Picked</span>' : ''}<button class="rt-x" type="button" data-act="remove" data-code="${esc(i.code)}" aria-label="Remove ${esc(i.code)}">${ic('x')}</button></div>`; })), done ? `${done} picked` : '') : '';
+  const acts = sx.acts([cur ? sx.btn('check', 'Picked · next', 'data-act="pick-next"', true) : '', voiceSupported() ? sx.btn('mic', dictation ? 'Stop listening' : 'Say it', 'data-act="voice-add"') : '', cur ? sx.btn('pin', `Show ${esc(cur.code)}`, `data-act="zoom" data-code="${esc(cur.code)}"`) : '', n ? sx.btn('trash', 'Clear', 'data-act="clear"') : '']);
+  return `<div class="sx">${head}${stops}${acts}</div>`;
+}
+// The strip under the phone's Route map: the count, the next stop and Picked.
+function rtStrip(m) {
+  const cur = m.items.find(i => !i.completed), done = m.items.filter(i => i.completed).length, n = m.items.length;
+  return `${ic('m-picklist')}<b>Route</b><span class="n">${done} / ${n}</span><span class="s">${cur ? `Next ${esc(cur.code)}` : n ? 'All picked' : 'Tap shelves to add them'}</span>` +
+    (cur ? `<button class="act go" type="button" data-act="pick-next">${ic('check')}Picked</button>` : voiceSupported() ? `<button class="act" type="button" data-act="voice-add">${ic('mic')}${dictation ? 'Stop' : 'Say it'}</button>` : '');
 }

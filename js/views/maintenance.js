@@ -1,8 +1,8 @@
 // Maintenance: log issues with a map pin, work them open → progress →
 // completed, reopen as recurring. Reads store.get('issues').
 
-import { $, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
+import { $, ic, esc, vh, sub, status, fmtTime, ago, toast } from '../ui.js';
+import { mountMap, mapbar, crumbx, bindMapChrome, segmentId } from '../map.js';
 import { ISSUE_CATS } from '../../shared/reducers/floor.js';
 import { printSheet, table, signoff } from '../print.js';
 import { paperMap } from '../printmap.js';
@@ -82,6 +82,7 @@ const newId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).s
 
 export default {
   id: 'maintenance', title: 'Maintenance', icon: 'm-maintenance',
+  deskOnly: true,   // not on the phone (2026-10-11): no menu row, no search result; a link goes home
   desktop(ctx) {
     const m = model(ctx);
     return vh('Maintenance', sub(`${m.open.length} open`, `${m.overdue} overdue`, `${m.recurring} recurring`, m.open.length ? `oldest ${m.oldest} days` : ''), `<button class="btn primary" data-act="new">${ic('plus')}Log new issue</button>`, 'm-maintenance') +
@@ -90,10 +91,6 @@ export default {
       `<div class="sidecol fill" id="mtside"></div></div>`;
   },
   // The phone gets the map too, so a report is pinned where the fault is.
-  mobile(ctx) {
-    const m = model(ctx);
-    return mvMap({ badge: `<b>${m.open.length}</b> open${m.recurring ? ` · ${m.recurring} recurring` : ''}` }) + `<div id="mtmob"></div>`;
-  },
   mount(ctx, root) {
     let map = null;
     // From the dashboard's map: open the issue whose pin was tapped.
@@ -102,7 +99,7 @@ export default {
     if (stage) {
       map = mountMap(stage, { onSelect: info => {
         // A pin opens its issue; while placing one it is just a spot on the floor.
-        if (info.kind === 'pin' && !draft) { selected = info.id; paint(); if (ctx.isMobile) $('#mtmob', root)?.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+        if (info.kind === 'pin' && !draft) { selected = info.id; paint(); return; }
         if (draft && (info.kind === 'floor' || info.kind === 'shelf' || info.kind === 'pin')) {
           readDraft(root);
           const p = info.point || map.centreOf(info.id); draft.x = Math.round(p[0] * 10) / 10; draft.y = Math.round(p[1] * 10) / 10; draft.floor = map.floorId() || null;
@@ -123,7 +120,6 @@ export default {
       if (map) { map.clearOverlays(); map.drawPins(m.list.filter(i => i.x != null && here(i)).map(i => ({ id: i.id, x: i.x, y: i.y, colour: colour(i), glyph: GLYPH[i.cat] || GLYPH.other, badge: i.recur ? (i.recur > 9 ? '9+' : String(i.recur)) : '', title: `${i.title} · ${CAT_NAME[i.cat]}` }))); if (draft?.x != null && here(draft)) map.drawPins([{ x: draft.x, y: draft.y, colour: 'var(--accent)', label: '+' }]); }
       const sel = m.all.find(x => x.id === selected); if (sel?.photos?.length) loadThumbs(ctx, sel.photos.map(p => p.id), paint);
       const side = $('#mtside', root); if (side) side.innerHTML = sidebar(m);
-      const mob = $('#mtmob', root); if (mob) mob.innerHTML = mobile(m);
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.open.length}</b> open${m.recurring ? ` · ${m.recurring} recurring` : ''}`;
       const hs = root.querySelector('.vh .sub'); if (hs) hs.innerHTML = sub(`${m.open.length} open`, `${m.overdue} overdue`, `${m.recurring} recurring`, m.open.length ? `oldest ${m.oldest} days` : '');
     };
@@ -180,7 +176,7 @@ export default {
           dropPhotoWhenSent(ctx, ev, a.dataset.photo);
         }
         else if (act === 'draft-photo-x') { draft.files.splice(Number(a.dataset.i), 1); readDraft(root); paint(); }
-        else if (act === 'show') { const i = ctx.store.get('issues')[selected]; if (map && i?.x != null) { if (i.floor && i.floor !== map.floorId() && map.floors().some(f => f.id === i.floor)) map.floor(i.floor); map.setVb([i.x - 700, i.y - 450, 1400, 900]); if (ctx.isMobile) stage?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } }
+        else if (act === 'show') { const i = ctx.store.get('issues')[selected]; if (map && i?.x != null) { if (i.floor && i.floor !== map.floorId() && map.floors().some(f => f.id === i.floor)) map.floor(i.floor); map.setVb([i.x - 700, i.y - 450, 1400, 900]); } }
       } catch (err) { toast(err.message, 'bad'); }
     });
     root.addEventListener('change', async e => {
@@ -198,12 +194,9 @@ function readDraft(root) {
   if (!draft) return;
   for (const f of ['title', 'note', 'loc', 'cat']) { const el = root.querySelector(`[data-draft="${f}"]`); if (el) draft[f] = el.value.trim(); }
 }
-function draftForm(mobileMode, m) {
+function draftForm(m) {
   const sevs = SEV.map((s, i) => `<button class="${draft.sev === i ? 'on' : ''}" data-act="draft-sev" data-sev="${i}">${s[0]}</button>`).join('');
   const cats = `<select data-draft="cat">${ISSUE_CATS.map(c => `<option value="${c}"${draft.cat === c ? ' selected' : ''}>${CAT_NAME[c]}</option>`).join('')}</select>`;
-  if (mobileMode) return mhead(draft.editId ? 'Edit issue' : 'Report an issue', draft.x != null ? 'Pinned on the map · where · what · how urgent' : 'Tap the map above to pin it · where · what · how urgent') +
-    `<div class="mv-field"><small>Where</small><input data-draft="loc" placeholder="Aisle K2, bay 8963" value="${esc(draft.loc)}"></div><div class="mv-field"><small>What</small><input data-draft="title" placeholder="Fluorescent tube out over the end bay" value="${esc(draft.title)}"></div><div class="mv-field"><small>Type</small>${cats}</div><div class="mv-sub">How urgent</div><div class="mv-chips">${sevs}</div>` +
-    draftPhotos() + mfoot(mbig(draft.editId ? 'Save changes' : 'Send report', '', 'check', ' data-act="draft-save"') + mghost('Cancel', ' data-act="draft-cancel"'));
   const dup = m ? nearby(m, draft).length : 0;
   return `<div class="card mtdet"><div class="ch"><h3>${draft.editId ? 'Edit issue' : 'New issue'}</h3><span class="cs-dim">${draft.x != null ? 'placed on the map' : 'tap the map to place it'}</span></div>` +
     (dup ? `<div class="mt-dup">${ic('alert')}${dup} previous issue${dup === 1 ? '' : 's'} logged near here. Check the list before saving.</div>` : '') +
@@ -213,7 +206,7 @@ function draftForm(mobileMode, m) {
 function sidebar(m) {
   const pills = [['active', `Open ${m.open.length}`], ['overdue', `Overdue ${m.overdue}`], ['recurring', `Recurring ${m.recurring}`], ['month', `Done this month ${m.month.length}`], ['done', `Completed ${m.all.length - m.open.length}`], ['all', 'All']];
   const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map((i, n) => `<div class="li mt-li${selected === i.id ? ' sel' : ''}" data-act="select" data-id="${i.id}"><span class="mt-pin" style="border-color:${colour(i)}">${glyphSvg(i.cat, colour(i))}</span><span class="nm" style="white-space:normal"><b style="font-weight:600">${esc(i.title)}${i.recur ? ` <span class="recur" title="Reopened ${i.recur} times">↻ ×${i.recur}</span>` : ''}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)"><i class="sevdot" style="background:${SEV[i.sev][1]}"></i>${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${ago(i.created)}${overdue(i) ? ` · <b class="mt-od">overdue</b>` : ''}</span></span>${status(i.status === 'open' ? 'warn' : i.status === 'progress' ? 'info' : 'good', i.status === 'open' ? 'Open' : i.status === 'progress' ? 'Done, to check' : 'Completed')}</div>`).join('') || '<div class="li" style="color:var(--dim)">Nothing here.</div>'}</div></div>`;
-  if (draft) return list + draftForm(false, m);
+  if (draft) return list + draftForm(m);
   const i = m.all.find(x => x.id === selected);
   if (!i) return list;
   const det = `<div class="card mtdet"><div class="ch"><h3>${esc(i.title)}</h3>${status(i.status === 'open' ? 'warn' : i.status === 'progress' ? 'info' : 'good', i.status === 'open' ? 'Open' : i.status === 'progress' ? 'Done, to check' : 'Completed')}</div>` +
@@ -224,28 +217,6 @@ function sidebar(m) {
   return list + det;
 }
 const stName = i => i.status === 'open' ? 'Open' : i.status === 'progress' ? 'Done, to check' : 'Completed';
-// The phone: the open list, and an issue opened from it or from its pin,
-// with the same actions as the desk (photos, done, complete, not fixed,
-// reopen, edit).
-function mobile(m) {
-  if (draft) return draftForm(true, m);
-  const i = m.all.find(x => x.id === selected);
-  if (i) {
-    const acts = [
-      i.status === 'open' ? mbig('Maintenance done', 'warn', 'tool', ' data-act="progress"') : '',
-      i.status !== 'completed' ? mbig('Complete', '', 'check', ' data-act="close"') : mbig('Reopen', 'sec', 'refresh', ' data-act="reopen"'),
-      i.status === 'progress' ? mbig('Not fixed', 'sec', 'refresh', ' data-act="reopen"') : '',
-    ].filter(Boolean);
-    return mhead(esc(i.title), `${stName(i)} · ${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])}`, `<button class="ibtn" data-act="back" aria-label="Back to the list">${ic('x')}</button>`) +
-      `<div class="mt-meta mv-pad"><span>Logged ${fmtTime(i.created)}</span>${i.recur ? `<span class="recur">↻ Reopened ${i.recur}×</span>` : ''}${i.status !== 'completed' ? `<span class="${overdue(i) ? 'mt-od' : 'cs-dim'}">Target ${SLA_DAYS[i.sev ?? 1]} day${SLA_DAYS[i.sev ?? 1] === 1 ? '' : 's'}${overdue(i) ? ' · overdue' : ''}</span>` : ''}<span class="cs-dim">${CAT_NAME[i.cat]} · by ${esc(i.by || 'unknown device')}</span></div>` +
-      `<div class="mv-pad">${photoStrip(i, i.status !== 'completed')}</div>` +
-      `<div class="mv-sub">Log</div><div class="mv-rows">${i.log.map(l => `<div class="mv-row"><span class="b">${esc(l.a)}${l.n ? '<br><small>' + esc(l.n) + '</small>' : ''}</span><span class="c">${fmtTime(l.t)}</span></div>`).join('')}</div>` +
-      mfoot(`<div class="mv-two">${acts.join('')}</div>` + `<div class="mv-two">${i.x != null ? mghost('Show on map', ' data-act="show"') : ''}${i.status !== 'completed' ? mghost('Edit', ' data-act="edit"') : ''}${mghost('Back to the list', ' data-act="back"')}</div><div class="mv-two">${mghost('Work order', ' data-act="work-order"')}${i.status !== 'completed' ? mghost('Contractor visited', ' data-act="visit"') : ''}</div>`);
-  }
-  const row = i => `<div class="mv-row" data-act="select" data-id="${esc(i.id)}"><span class="a" style="color:${SEV[i.sev][1]}">${SEV[i.sev][0]}</span><span class="b">${esc(i.title)}<br><small>${esc(i.loc || CAT_NAME[i.cat])}${i.status === 'progress' ? ' · done, to check' : ''}${overdue(i) ? ' · <b class="mt-od">overdue</b>' : ''}</small></span><span class="c">${ago(i.created)}</span></div>`;
-  return mhead('Report an issue', `${m.open.length} open at the store · tap a pin or a row to open it`) + `<div class="mv-tiles"><button class="mv-tile hot" data-act="new"><span class="ti">${ic('plus')}</span><span class="tx"><b>New report</b><span>Where, what, how urgent</span></span><span></span>${ic('chev')}</button></div>` +
-    `<div class="mv-sub">Open</div><div class="mv-rows">${m.open.sort((a, b) => (a.updated < b.updated ? 1 : -1)).slice(0, 40).map(row).join('') || '<div class="mv-row"><span class="b">Nothing open.</span></div>'}</div>`;
-}
 
 // The shelf nearest a point on the shown floor, by the centre of its box.
 function nearestShelf(map, p) {

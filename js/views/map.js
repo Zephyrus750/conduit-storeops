@@ -2,7 +2,7 @@
 // the selected shelf beneath it.
 
 import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtTime, cycleId, toast } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, shelfDetail, canonCode, runText, runSubs } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, shelfDetail, canonCode, runText, runSubs, setStrip, sx } from '../map.js';
 import { markerSymbol } from '../../shared/maprender.js';
 import { openShare } from '../share.js';
 import { openScanner } from '../scan.js';
@@ -32,19 +32,33 @@ export function selCard(ctx, map, id) {
     `<div class="rows" style="margin-top:12px;border-top:1px solid var(--line-soft)">${d.fixture ? row('Fixture', esc(d.fixture)) : ''}${d.modules ? row('Length', `${d.modules} module${d.modules === 1 ? '' : 's'}`) : ''}${d.range ? row(d.locations.length > 1 ? 'Locations' : 'Location', `<span title="${esc(d.locations.join(', '))}">${esc(d.range)}</span>`) : ''}${d.size ? row('Size', esc(d.size)) : ''}${d.shared.length ? row('Shares its name with', esc(d.shared.join(', '))) : ''}${row('Refreshed this week', f.refreshed ? fmtTime(f.refreshed.at) : 'not yet')}${row('Label micro-depts', f.micros.length ? `${f.checked.length}/${f.micros.length} checked` : 'none assigned')}${row('Planned', f.plan.length ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${f.plan[0]};vertical-align:-1px"></i> yes` : 'no')}</div>` +
     `<div class="acts2"><button class="btn primary sm" data-act="pick-add" data-shelf="${esc(id)}">${ic('m-picklist')}Add to pick list</button><a class="btn sm" data-go="refresh" data-select="${esc(id)}">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint" data-select="${esc(id)}">${ic('m-labelint')}Label check</a><button class="btn sm" data-act="share" data-shelf="${esc(id)}">${ic('qr')}Share</button></div></div>`;
 }
-// The phone Home's shelf card, the size of the mode panels (Refresh,
-// Emergency): its area (Home, Clothing, Kids), department and shelf in a
-// fixed-width column, so the separator sits in the same place for every
-// shelf, then its micro-departments, what it is and two actions.
+// The phone Home's sheet (opened from the strip): the shelf in full, its
+// area, department and run, the micro-departments on it by name, what the
+// map knows about it, this week's refresh and this cycle's labels, and what
+// to do with it.
 export function mvSel(ctx, map, id) {
   if (!id) return mvEmpty();
   const g = map.groups(id)[0]; if (!g) return '';
   const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id), d = shelfDetail(map, id), cd = map.code(id);
-  const facts = [d.fixture || (info.sub.startsWith('E') ? 'End' : 'Side'), runText(cd.shelf, cd.sub, runSubs(map, cd.shelf), info.segments), d.modules ? `${d.modules} module${d.modules === 1 ? '' : 's'}` : '', d.range, d.size, d.shared.length ? 'also ' + d.shared.join(', ') : '', f.refreshed ? 'refreshed ' + fmtTime(f.refreshed.at) : ''].filter(Boolean);
-  const area = DEPT_GROUPS.find(a => a[0] !== 'Other' && a[2].includes(info.dept));
-  return `<div class="who2">${area ? `<span class="ar">${ic(area[1])}${area[0]}</span>` : ''}${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b>${shelfName(cd)}</div>` +
-    `<div class="what">${f.micros.length ? `<div class="mics">${microChips(f.micros)}</div>` : ''}<div class="mvs-d">${facts.map(esc).join(' · ')}</div>` +
-    `<div class="mvs-btns"><button class="mv-share" data-act="pick-add" data-shelf="${esc(id)}" aria-label="Add ${esc(id)} to the pick list" title="Add to pick list">${ic('m-picklist')}</button><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div></div>`;
+  const area = DEPT_GROUPS.find(a => a[0] !== 'Other' && a[2].includes(info.dept)), kind = d.fixture || (info.sub.startsWith('E') ? 'End' : 'Side');
+  const head = `<div class="sx-hd">${area ? `<div class="sx-ar">${ic(area[1])}${area[0]}</div>` : ''}<div class="sx-dn">${dep(info.dept)} ${esc(DEPT_NAME[info.dept] || info.dept)}</div><div class="sx-big">${shelfName(cd)}</div><div class="sx-sub">${esc(kind)} · ${esc(runText(cd.shelf, cd.sub, runSubs(map, cd.shelf), info.segments))}</div></div>`;
+  const facts = sx.facts([['Fixture', esc(kind)], ['Length', d.modules ? `${d.modules} module${d.modules === 1 ? '' : 's'}` : ''], [d.locations.length > 1 ? 'Locations' : 'Location', esc(d.range)], ['Size', esc(d.size)], ['Shares its name', esc(d.shared.join(', '))]]);
+  const n = f.checked.length, of = f.micros.length;
+  const status = sx.rows([
+    f.refreshed ? sx.row('m-refresh', 'Refreshed', esc(fmtTime(f.refreshed.at)), 'This week', 'ok') : sx.row('m-refresh', 'Refresh', 'Not yet this week', f.plan.length ? 'Planned' : 'Not yet', f.plan.length ? 'acc' : 'dim'),
+    of ? sx.row('m-labelint', 'Labels', `${n} of ${of} micro-department${of === 1 ? '' : 's'} checked this cycle`, n === of ? 'Done' : `${of - n} to check`, n === of ? 'ok' : 'warn') : sx.row('m-labelint', 'Labels', 'No micro-departments assigned yet'),
+  ]);
+  const acts = sx.acts([sx.btn('m-picklist', 'Add to route', `data-act="pick-add" data-shelf="${esc(id)}"`, true), sx.btn('m-refresh', 'Refresh', `data-go="refresh" data-select="${esc(id)}"`), sx.btn('m-labelint', 'Label check', `data-go="labelint" data-select="${esc(id)}"`), sx.btn('qr', 'Share', `data-act="share" data-shelf="${esc(id)}"`)]);
+  return `<div class="sx">${head}${of ? sx.sec('On this shelf', `<div class="sx-chips">${microChips(f.micros)}</div>`) : ''}${sx.sec('About it', facts)}${sx.sec('Status', status)}${acts}</div>`;
+}
+// The strip under the phone Home's map: the shelf in one line, a price
+// check, or the ways to find one.
+function homeStrip(map, id, p) {
+  if (p) { const title = p.variant === 'order' ? 'Order screen' : 'Price check'; return `${ic('barcode')}<b>${title}</b><span class="s">${esc(p.location || p.label || '')}</span>${p.location ? `<button class="act" type="button" data-act="pc-goto">${ic('pin')}Show</button>` : ''}`; }
+  const g = id && map.groups(id)[0];
+  if (!g) return `${ic('pin')}<b>Find a shelf</b><span class="s"></span><button class="act" type="button" data-go="search">${ic('search')}Search</button><button class="act" type="button" data-act="scan-shelf" aria-label="Scan a shelf label" title="Scan a shelf label">${ic('barcode')}</button>`;
+  const info = map.shelfInfo(g), cd = map.code(id), kind = shelfDetail(map, id).fixture || (info.sub.startsWith('E') ? 'End' : 'Side');
+  return `<b>${esc(cd.shelf)}${cd.sub ? ` <span>${esc(cd.sub)}</span>` : ''}</b>${dep(info.dept)}<span class="s">${esc(DEPT_NAME[info.dept] || info.dept)} · ${esc(kind)}</span>`;
 }
 // Nothing selected yet: the ways to find a shelf, each one a tap away.
 function mvEmpty() {
@@ -100,6 +114,7 @@ export default {
       const host = $('#selhost', root); if (host) host.innerHTML = pcSel ? pcCard(pcSel) : selCard(ctx, map, selected);
       const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-d')); mv.classList.toggle('nosel', !!mv.querySelector('.mvs-empty')); }
       const c = $('#mapcrumb', root); if (c) c.textContent = selected || '—';
+      setStrip(root, homeStrip(map, selected, pcSel));
       const mc = $('#mvcrumb', root); if (mc && selected) { const d = map.shelfInfo(map.groups(selected)[0]).dept; mc.innerHTML = `Floor › <i class="cb" style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${DEPT_NAME[d] || d}</b> › ${esc(selected)}`; }
     };
     paint();

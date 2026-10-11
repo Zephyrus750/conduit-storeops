@@ -2,7 +2,7 @@
 // counted → verified, phase counting | final. Reads store.get('stocktake').
 
 import { $, ic, esc, vh, sub, prog, status, DEPT_COLOUR, DEPT_NAME, today, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, oneShelf, segmentId, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, oneShelf, segmentId, shelfScanField, bindShelfScan, keepScanFocus, setStrip } from '../map.js';
 import { openScanner } from '../scan.js';
 import { printSheet, tick, table, section, signoff } from '../print.js';
 import { csvLines } from '../../shared/records.js';
@@ -79,6 +79,7 @@ export default {
       const m = model(ctx, map); map.setMarks(marksFor(m));
       const side = $('#stside', root); if (side) side.innerHTML = sidebar(map, m) + missingCard(map, m) + historyCard(pastSessions(ctx, map));
       const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(m, shelfTotal(map));
+      setStrip(root, m.sess ? `${ic('m-stocktake')}<b>Stocktake</b><span class="n">${m.done}</span><span class="s">${m.sess.phase === 'final' ? 'Final check' : 'Counting'} · ${m.counts.verified} ✓✓</span><button class="act go" type="button" data-act="scan-shelf">${ic('camera')}Scan</button>` : `${ic('m-stocktake')}<b>Stocktake</b><span class="s">No session open</span>`);
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = m.sess ? `<b>${m.done}</b> counted · ${m.counts.verified} ✓✓ · ${esc(m.id)}` : 'No session open';
     });
     paint();

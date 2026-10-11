@@ -8,7 +8,7 @@
 
 import { haptic } from '../device.js';
 import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo, mapFloors } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo, mapFloors, setStrip, sx } from '../map.js';
 import { paperMap } from '../printmap.js';
 import { printSheet, table, tick, signoff } from '../print.js';
 import { markerSymbol, MARKER_NAMES } from '../../shared/maprender.js';
@@ -67,6 +67,7 @@ export default {
       const b = $('#evacBtn', root); if (b) { b.classList.toggle('on', !!evac); b.innerHTML = evac ? `${ic('x')}${evac === 'armed' ? 'Cancel' : 'Hide route'}` : `${ic('pin')}Nearest exit`; }
       const side = $('#emside', root); if (side) side.innerHTML = sidebar(m);
       const mob = $('#emmob', root); if (mob) { mob.innerHTML = mobile(m); if (evac) mob.scrollTop = 0; }
+      setStrip(root, emStrip(m));
     };
     paint();
     root.addEventListener('click', async e => {
@@ -107,14 +108,30 @@ function sidebar(m) {
   const eq = `<div class="card"><div class="ch"><h3>Equipment</h3></div><div class="list">${Object.entries(m.counts).map(([t, n]) => `<div class="li" data-act="filter" data-type="${filterType === t ? '' : t}"><span class="pt" style="background:${(TYPES[t] || [])[1] || '#64748B'}"></span><span class="nm">${(TYPES[t] || [t])[0]}</span><span class="rt">${m.rows.filter(r => r.type === t && r.st === 'ok').length} in date</span><b>${n}</b></div>`).join('')}</div></div>`;
   return evacCard() + assemblyCard() + (sel ? detail(sel) : '') + due + eq;
 }
+// The phone's Emergency sheet (opened from the strip): the nearest exit,
+// the markers by kind, the assembly point, and the equipment with its
+// service dates (a tap on one shows it).
 function mobile(m) {
   const sel = m.rows.find(r => r.id === selected);
-  if (evac) return evacCard(true) + assemblyCard();
-  if (sel) return detail(sel, true);
-  const types = Object.keys(m.counts);
-  return `<div class="mv-mh">${ic('m-emergency')}<b>Emergency</b><span>${m.rows.length}</span></div><div class="em-filt"><button class="${!filterType ? 'on' : ''}" data-act="filter" data-type="">${ic('grid')}All</button>${types.map(t => `<button class="${filterType === t ? 'on' : ''}" data-act="filter" data-type="${t}">${ic((TYPES[t] || [])[2] || 'alert')}${(TYPES[t] || [t])[0]}</button>`).join('')}</div>` +
-    `<div class="em-mevac">${mbig('Nearest exit', 'evac', 'pin', ' data-act="evac"')}</div>` + assemblyCard() +
-    '<div class="mv-hint">Tap a marker for what it is and how to use it.</div>';
+  if (evac) return `<div class="sx">${evacCard(true)}${assemblyCard()}</div>`;
+  if (sel) return `<div class="sx">${detail(sel, true)}</div>`;
+  const types = Object.keys(m.counts), name = t => (TYPES[t] || [t])[0], icon = t => (TYPES[t] || [])[2] || 'alert';
+  const head = `<div class="sx-h">${ic('m-emergency')}Emergency<span class="n red">${m.rows.length} marker${m.rows.length === 1 ? '' : 's'}</span></div>`;
+  const filt = `<div class="em-filt"><button class="${!filterType ? 'on' : ''}" data-act="filter" data-type="">${ic('grid')}All</button>${types.map(t => `<button class="${filterType === t ? 'on' : ''}" data-act="filter" data-type="${t}">${ic(icon(t))}${name(t)} ${m.counts[t]}</button>`).join('')}</div>`;
+  const due = m.due.map(r => sx.row(icon(r.type), `${name(r.type)} · ${esc(r.location || r.label || 'on the map')}`, `every ${r.rec.intMonths} months · due ${fmtDate(r.rec.due)}`, r.st === 'overdue' ? 'Overdue' : 'Due soon', r.st === 'overdue' ? 'bad' : 'warn', `data-act="select" data-id="${esc(r.id)}"`));
+  const eq = types.map(t => { const inDate = m.rows.filter(r => r.type === t && r.st === 'ok').length; return sx.row(icon(t), name(t), `${inDate} of ${m.counts[t]} in date`, '', '', `data-act="filter" data-type="${filterType === t ? '' : t}"`); });
+  return `<div class="sx">${head}<div class="em-mevac">${mbig('Nearest exit', 'evac', 'pin', ' data-act="evac"')}</div>${filt}${assemblyCard()}` +
+    (due.length ? sx.sec('Service due', sx.rows(due), 'next 30 days') : '') + (eq.length ? sx.sec('Equipment', sx.rows(eq)) : '') +
+    '<div class="sx-sub" style="margin-top:12px">Tap a marker for what it is and how to use it.</div></div>';
+}
+// The strip under the phone's Emergency map: the marker count and the
+// nearest exit, the walk once it is drawn, or the marker in hand.
+function emStrip(m) {
+  const sel = m.rows.find(r => r.id === selected);
+  if (evac === 'armed') return `${ic('pin')}<b>Nearest exit</b><span class="s">Tap where you are</span><button class="act" type="button" data-act="evac">${ic('x')}Cancel</button>`;
+  if (evac) { const x = evac.r?.exit, where = x?.target?.label || x?.target?.location || '', far = x && !x.straight ? metres(x.dist) : ''; return `${ic('pin')}<b>Nearest exit</b><span class="s">${esc([where, far].filter(Boolean).join(' · ') || 'Follow the green line')}</span><button class="act" type="button" data-act="evac">${ic('x')}Hide</button>`; }
+  if (sel) { const t = TYPES[sel.type] || [sel.type]; return `${ic(t[2] || 'alert')}<b>${esc(t[0])}</b><span class="s">${esc(sel.location || sel.label || '')}</span><button class="act" type="button" data-act="close">${ic('x')}Close</button>`; }
+  return `${ic('m-emergency')}<b>Emergency</b><span class="n red">${m.rows.length}</span><span class="s"></span><button class="act evac" type="button" data-act="evac">${ic('pin')}Nearest exit</button>`;
 }
 
 // ── evacuation ─────────────────────────────────────────────────────────
