@@ -1903,3 +1903,15 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .frame.rail-ink .rsec.adm .own { background: var(--accent); color: #fff; }
 .frame.rail-ink .bsearch { color: rgba(255,255,255,.85); }
 .frame.rail-ink .bsearch:hover { background: rgba(255,255,255,.1); color: #fff; }
+/* The ink rail on the phone: the top bar and the tab strip take the rail's
+   colour; the open tab is a solid accent pill. */
+.frame.rail-ink .m-appbar { background: var(--rail-ink, #111827); border-bottom-color: transparent; }
+.frame.rail-ink .m-appbar .search input { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); color: #fff; }
+.frame.rail-ink .m-appbar .search input::placeholder { color: rgba(255,255,255,.6); }
+.frame.rail-ink .m-appbar .search svg.i, .frame.rail-ink .m-appbar .voicebtn { color: rgba(255,255,255,.8); }
+.frame.rail-ink .m-appbar .mdepts { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); color: #fff; }
+.frame.rail-ink .m-tabs { background: var(--rail-ink, #111827); border-top-color: transparent; }
+.frame.rail-ink .m-tabs button { color: rgba(255,255,255,.75); }
+.frame.rail-ink .m-tabs button svg.i { color: rgba(255,255,255,.7); }
+.frame.rail-ink .m-tabs button.on { background: var(--accent); color: #fff; }
+.frame.rail-ink .m-tabs button.on svg.i { color: #fff; }
