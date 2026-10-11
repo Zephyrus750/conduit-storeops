@@ -321,6 +321,7 @@ function resetLive(svg, fl) {
   }
   for (const d of svg.querySelectorAll('.plan-dot')) d.remove();
   for (const b of svg.querySelectorAll('.shelf-badges [data-onroute]')) b.removeAttribute('data-onroute');
+  for (const b of svg.querySelectorAll('.shelf-badges [data-off]')) b.removeAttribute('data-off');
   const cur = fl.find(f => f.type === 'foh') || fl[0];
   for (const el of svg.querySelectorAll('.mfl')) el.style.display = el.getAttribute('data-fid') === cur.id ? '' : 'none';
   svg.setAttribute('viewBox', cur.vb);
@@ -438,8 +439,12 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // Zoom to the shelves of one or more departments: switches to the floor
     // holding most of them, dims the rest, and says what it found.
     zoomDept(codes) { return api.zoomDeptOn(codes, null); },
-    zoomDeptOn(codes, floorId, ms = 400) {   // ms 0 frames at once (paper)
+    // ms 0 frames at once (paper). Outside the departments the shelves
+    // fade and their run badges go, as ShelfSearcher's department view did;
+    // paper keeps its own faint-or-hidden choice (hideBadges false).
+    zoomDeptOn(codes, floorId, ms = 400, hideBadges = true) {
       const want = (codes || []).map(c => String(c).toLowerCase());
+      for (const t of $$('.shelf-badges .sb', svg)) { const off = hideBadges && want.length > 0 && !want.includes((t.getAttribute('data-dept') || '').toLowerCase()); t.toggleAttribute('data-off', off); t.previousElementSibling?.toggleAttribute('data-off', off); }
       if (!want.length) { for (const g of $$('.shelf-group[data-dept]', svg)) { g.style.opacity = ''; g.removeAttribute('data-dim'); } svg.removeAttribute('data-deptzoom'); api.fit(); return null; }
       const perFloor = new Map();
       for (const g of $$('.shelf-group[data-dept]', svg)) { if (!want.includes((g.getAttribute('data-dept') || '').toLowerCase())) continue; const fid = g.closest('.mfl')?.getAttribute('data-fid'); perFloor.set(fid, (perFloor.get(fid) || 0) + 1); }

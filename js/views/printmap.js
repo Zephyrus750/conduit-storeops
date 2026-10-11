@@ -88,7 +88,7 @@ function decorate(ctx, map) {
 }
 function frame(map, { fit = true } = {}) {
   const codes = codesOf(o.dept);
-  if (codes.length) map.zoomDeptOn(codes, map.floorId(), 0); else { map.zoomDeptOn([]); if (fit) map.fit(); }
+  if (codes.length) map.zoomDeptOn(codes, map.floorId(), 0, false); else { map.zoomDeptOn([]); if (fit) map.fit(); }
 }
 // One printed page: the title strip, the map as framed, the legend.
 function page(ctx, map, scope, ar) {
@@ -147,7 +147,7 @@ function printNow(ctx, map) {
 function printBooklet(ctx, map) {
   const ar = area(), back = { floor: map.floorId(), vb: map.vb(), dept: o.dept }, pages = [];
   for (const d of deptPages()) {
-    const info = map.zoomDeptOn(d.ids, null, 0); if (!info || !info.shelves) continue;
+    const info = map.zoomDeptOn(d.ids, null, 0, false); if (!info || !info.shelves) continue;
     o.dept = d.ids.length === 1 ? d.ids[0] : DEPT_GROUPS.find(g => g[2] === d.ids)?.[0].toLowerCase() || d.ids[0];
     decorate(ctx, map);
     pages.push(page(ctx, map, `${info.floor || ''} · ${d.label}`, ar));

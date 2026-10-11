@@ -1730,6 +1730,7 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .map.real.pp-nolm .landmark-group { display: none !important; }
 .map.real.pp-hide .shelf-group[data-dim], .map.real.pp-hide .shelf-badges [data-dim] { display: none !important; }
 .map.real .shelf-badges [data-dim] { opacity: .14; }
+.map.real .shelf-badges [data-off] { display: none; }
 /* Paper: one page per sheet, the map filling what the strips leave; colours
    print without the browser's "Background graphics" box ticked. */
 @media print {
