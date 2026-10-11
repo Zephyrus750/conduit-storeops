@@ -466,10 +466,11 @@ document.addEventListener('click', e => {
   const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }
   // The store chip opens the device and store page (Settings); store details are still to come.
   if (e.target.closest('.storechip')) { if (store) show('storeinfo'); return; }
-  const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') search.open(); else { const ga = {}; if (g.dataset.bay) ga.bay = g.dataset.bay; if (g.dataset.select) ga.select = g.dataset.select; if (g.dataset.dept) ga.dept = g.dataset.dept; show(g.getAttribute('data-go'), Object.keys(ga).length ? ga : undefined); } return; }
+  const g = e.target.closest('[data-go]'); if (g) { if (g.getAttribute('data-go') === 'search') { if (isMobile()) msBar.show(); else search.open(); } else { const ga = {}; if (g.dataset.bay) ga.bay = g.dataset.bay; if (g.dataset.select) ga.select = g.dataset.select; if (g.dataset.dept) ga.dept = g.dataset.dept; show(g.getAttribute('data-go'), Object.keys(ga).length ? ga : undefined); } return; }
   if (e.target.closest('[data-act="close-more"]') || (e.target.id === 'msheet')) $('#msheet')?.classList.remove('open');
   if (e.target.closest('#railToggle')) { $('#app').classList.toggle('railmin'); }
-  if (e.target.closest('#hsearch,.bsearch,#msearch')) { if (admin) toast('Find a store from the rail for now'); else search.open($('#msearch input')?.value || ''); }
+  if (e.target.closest('#msearch') && !e.target.closest('[data-voice]')) { if (admin) toast('Find a store from the rail for now'); else if (!e.target.closest('input')) $('#msearch input')?.focus(); }
+  else if (e.target.closest('#hsearch,.bsearch')) { if (admin) toast('Find a store from the rail for now'); else search.open(); }
 });
 // Installing and updating: the bar appears when a new release is waiting and
 // applies only on "Update now" (the worker never takes over on its own).
@@ -483,7 +484,8 @@ updates.on(kind => {
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
 const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]).filter(v => !(isMobile() && v.deskOnly)), phone: () => isMobile() });
-$('#msearch input')?.addEventListener('focus', e => { if (!admin && store) { e.target.blur(); search.open(e.target.value); } });
+// The phone's bar is typed into directly: a compact list drops under it.
+const msBar = search.bar($('#msearch'), () => !admin && !!store);
 
 // Voice search on the phone (ShelfSearcher's, decision 28): the microphone in
 // the search bar and in the palette. A spoken shelf, run or bay on the map
@@ -498,7 +500,7 @@ document.addEventListener('click', e => {
   if (listening) { listening.stop(); haptic('tap'); return; }
   if (!store || admin) return toast('Voice search works once a store is signed in');
   const input = btn.parentElement.querySelector('input'), was = input?.placeholder || '';
-  const fromBar = !!btn.closest('#msearch');
+  const fromBar = !!btn.closest('#msearch'); let again = null;   // what the bar searches when nothing on the map matched
   btn.classList.add('listening'); btn.setAttribute('aria-label', 'Stop listening'); if (input) { input.placeholder = 'Listening… say a shelf, like A16 S2'; if (fromBar) input.value = ''; }
   haptic('select');
   listening = listenOnce({
@@ -509,10 +511,10 @@ document.addEventListener('click', e => {
         const { shelf, sub } = splitCanon(r.code);
         haptic('success'); search.close(); show('map', { select: r.code });
         toast(`Heard “${r.heard}” · ${shelf}${sub ? ' ' + sub : ''}${r.how === 'corrected' ? ' (matched to the map)' : ''}`);
-      } else { haptic('error'); search.open(r.query || r.heard); }
+      } else { haptic('error'); if (fromBar) again = r.query || r.heard; else search.open(r.query || r.heard); }
     },
     onError: msg => toast(msg, 'bad'),
-    onEnd: () => { listening = null; btn.classList.remove('listening'); btn.setAttribute('aria-label', 'Search by voice'); if (input) { input.placeholder = was; if (fromBar) input.value = ''; } },
+    onEnd: () => { listening = null; btn.classList.remove('listening'); btn.setAttribute('aria-label', 'Search by voice'); if (input) { input.placeholder = was; if (fromBar) input.value = ''; } if (again != null) msBar.show(again); },
   });
 }, true);
 let lastMobile = isMobile();

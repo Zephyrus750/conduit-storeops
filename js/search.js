@@ -6,7 +6,7 @@
 // only, no keyboard hints, no records, and no product codes for now.
 // (client.catalogue.lookup); shelves come from the mounted map; tools from
 // the view registry. Opens from the header search, the rail search, Ctrl K,
-// and the phone's search bar.
+// and the phone's search bar (a compact list under the bar; see bar()).
 
 import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
@@ -201,6 +201,85 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (row.dataset.url) { try { window.open(row.dataset.url, '_blank', 'noopener'); } catch {} close(); return; }
   }
 
+  // The phone's search bar: type straight into the app bar and a compact
+  // list drops under it (ShelfSearcher's quick find). A run is listed shelf
+  // by shelf, then as the whole run; one tap shows it on the map.
+  const BAR_MAX = 6;
+  const SUB_RANK = x => (x[0] === 'S' ? 0 : x[0] === 'E' ? 1 : 2);
+  const subWord = s => s[0] === 'S' ? 'Side' : s[0] === 'E' ? 'End' : '';
+  const brow = (d, code, note, attrs) => { const c = DEPT_COLOUR[String(d || '').toLowerCase()] || '#64748B'; return `<div class="sdd-r" role="option" ${attrs}><i style="background:${c}"></i><b>${code}</b><span>${note}</span>${d ? dep(d) : ''}</div>`; };
+  function barHtml(q) {
+    const Q = q.trim(), ql = Q.toLowerCase(), k = classify(Q);
+    if (!Q) {
+      const r = recent().filter(x => x[1] !== 'prod' && x[1] !== 'cons');
+      return r.length ? `<div class="sdd-h">Recent<button type="button" data-clear>Clear</button></div>` + r.slice(0, BAR_MAX).map(x => `<div class="sdd-r rec" role="option" data-q="${esc(x[0])}">${ic('history')}<b>${esc(x[0])}</b></div>`).join('') : '';
+    }
+    if (/^\d{6,}$/.test(Q)) return `<div class="sdd-note">Product codes aren’t searchable yet. Try a shelf, a department or a micro-dept.</div>`;
+    const rows = [];
+    if (k === 'shelf' || k === 'loc') {
+      const { hits, bay, id, suffix, modOf } = shelfRows(Q.toUpperCase());
+      for (const s of hits) {
+        const dn = esc(DEPT_NAME[s.dept] || s.dept || 'No department');
+        const subs = [...new Set(s.subs)].sort((a, b) => SUB_RANK(a) - SUB_RANK(b) || a.localeCompare(b, undefined, { numeric: true }));
+        const own = suffix ? (modOf(s) ? [suffix] : []) : subs;
+        for (const sub of own) rows.push(brow(s.dept, `${hi(s.id, id)} ${esc(sub)}`, `${dn}${subWord(sub) ? ' · ' + subWord(sub) : ''}${bay ? ' · bay ' + esc(Q.toUpperCase()) : ''}`, `data-view="map" data-select="${esc(s.id + sub)}"`));
+        if (s.segments > 1 || !subs.length) rows.push(brow(s.dept, hi(s.id, id), `${dn} · ${s.segments > 1 ? `whole run · ${s.segments} shelves` : 'shelf'}`, `data-view="map" data-select="${esc(s.id)}"`));
+      }
+    }
+    const counts = {}; if (hasMap()) for (const sh of shelfIndex()) counts[sh.dept] = (counts[sh.dept] || 0) + sh.segments;
+    const depts = Object.entries(DEPT_NAME).filter(([d, n]) => d === ql || (ql.length >= 2 && n.toLowerCase().includes(ql)))
+      .map(([d, n]) => brow(d, hi(n, Q), `Department · ${counts[d] || 0} shelves`, `data-view="map" data-dept="${d}"`));
+    const micros = SUBS.flatMap(([sd]) => (MICRO[sd] || []).map(e => ({ id: microId(sd, e), sd, code: microCode(e), name: microName(e) })))
+      .filter(m => (/^\d+$/.test(Q) && m.code.startsWith(Q.padStart(Math.min(3, Q.length), '0'))) || (ql.length >= 2 && m.name.toLowerCase().includes(ql)))
+      .map(m => brow(m.sd, hi(m.code, Q), hi(m.name, Q), `data-view="map" data-micro="${esc(m.id)}"`));
+    // A department code (H1) or micro number (038) before shelves that merely start with it.
+    const all = k === 'shelf' ? [...rows, ...depts, ...micros] : [...depts, ...micros, ...rows];
+    return all.length ? all.slice(0, BAR_MAX).join('') : `<div class="sdd-note">Nothing matches “${esc(Q)}”. Try a shelf like A16 S2, a department or a micro-dept like 038.</div>`;
+  }
+  function bar(wrap, ok = () => true) {
+    const bi = $('input', wrap); if (!bi) return { show() {}, hide() {} };
+    const dd = document.createElement('div'); dd.className = 'sdd'; dd.id = 'sdd'; dd.setAttribute('role', 'listbox'); dd.hidden = true;
+    frame.appendChild(dd);
+    let at = 0;
+    const rowsOf = () => $$('.sdd-r', dd);
+    const mark = () => rowsOf().forEach((r, i) => r.classList.toggle('sel', i === at));
+    function draw() {
+      const html = ok() ? barHtml(bi.value) : ''; dd.innerHTML = html; dd.hidden = !html; at = 0; mark();
+      if (!html) return;
+      const b = wrap.getBoundingClientRect(), f = frame.getBoundingClientRect();
+      dd.style.top = (b.bottom - f.top + 6) + 'px'; dd.style.left = (b.left - f.left) + 'px'; dd.style.right = (f.right - b.right) + 'px';
+    }
+    const hide = () => { dd.hidden = true; dd.innerHTML = ''; };
+    function pick(row) {
+      if (!row) return;
+      if (row.dataset.q != null) { bi.value = row.dataset.q; try { bi.focus(); } catch {} draw(); return; }   // a recent search: run it again
+      const q = bi.value.trim(); if (q) remember(q, classify(q));
+      const arg = {}; for (const kk of ARG_KEYS) if (row.dataset[kk] != null) arg[kk] = row.dataset[kk];
+      bi.value = ''; bi.blur(); hide(); go(row.dataset.view, arg);
+    }
+    bi.placeholder = 'Shelf, dept or micro-dept';
+    bi.addEventListener('focus', draw);
+    bi.addEventListener('input', draw);
+    let blurT = 0;   // a beat after blur, so a tap on a row still lands (iOS blurs before the click)
+    bi.addEventListener('focus', () => clearTimeout(blurT));
+    bi.addEventListener('blur', () => { clearTimeout(blurT); blurT = setTimeout(hide, 250); });
+    bi.addEventListener('keydown', e => {
+      const rows = rowsOf();
+      if (e.key === 'Escape') { bi.blur(); return; }
+      if (e.key === 'ArrowDown') { at = Math.min(rows.length - 1, at + 1); mark(); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { at = Math.max(0, at - 1); mark(); e.preventDefault(); }
+      else if (e.key === 'Enter') { e.preventDefault(); pick(rows[at]); }
+    });
+    // Pressing a row keeps the input focused, so the list is still there for the click.
+    dd.addEventListener('pointerdown', e => e.preventDefault());
+    dd.addEventListener('mousedown', e => e.preventDefault());
+    dd.addEventListener('click', e => {
+      if (e.target.closest('[data-clear]')) { try { localStorage.removeItem(RECENT_KEY); } catch {} draw(); return; }
+      pick(e.target.closest('.sdd-r'));
+    });
+    return { show(q) { bi.value = q || ''; try { bi.focus(); } catch {} draw(); }, hide };
+  }
+
   input.addEventListener('input', () => render(input.value));
   el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-ocancel]')) return close(); const t = e.target.closest('.ophone-try [data-q]'); if (t) { open(t.dataset.q); return; } const r = e.target.closest('.orow, .prev [data-view]'); if (r) { e.preventDefault(); act(r); } });
   el.addEventListener('keydown', e => {
@@ -211,5 +290,5 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     else if (e.key === 'Enter') { e.preventDefault(); act(rows[sel]); }
   });
   document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (isOpen()) close(); else open(); } });
-  return { open, close, isOpen, invalidate };
+  return { open, close, isOpen, invalidate, bar };
 }
