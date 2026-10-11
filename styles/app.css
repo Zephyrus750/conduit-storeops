@@ -2150,7 +2150,7 @@ button.sx-chip { cursor: pointer; }
 .sx-acts { display: flex; gap: 7px; margin-top: 14px; overflow-x: auto; scrollbar-width: none; }
 .sx-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; background: #1F2937; border: 1px solid #263145; border-radius: 10px; padding: 9px 11px; font: inherit; font-weight: 700; font-size: 12.5px; color: var(--ink); cursor: pointer; }
 .sx-btn svg.i { width: 15px; height: 15px; }
-.sx-btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sx-btn.sx-pri { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* Refresh's scan sheet lives beside the panel, not in it: it opens from the strip with the panel closed. */
 .content.mv > .rf-scanhost { position: absolute; width: 0; height: 0; }
 .content.mv.sheet-open > .mv-sel .rf-row { margin-top: 12px; }
@@ -2185,3 +2185,9 @@ body:has(.content.mv > .mv-strip) #toasts { bottom: 146px; }
 .mcrumb .dep{font-size:10px;font-weight:800;padding:2px 5px;border-radius:4px;flex:none;letter-spacing:.02em}
 .mcrumb .sep{font-style:normal;opacity:.5;flex:none}
 .mcrumb .ms{flex:none;color:var(--ink);font-weight:800;letter-spacing:.02em}
+
+/* Pick list stops: the department's badge before its name, as on the map's crumb. */
+.pk-list .li .dep { flex: none; font-size: 10.5px; font-weight: 800; padding: 2px 6px; border-radius: 5px; letter-spacing: .02em; }
+.sx-r .k .rt-d { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-r .k .rt-d .dep { display: inline-block; flex: none; color: #fff; font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 4px; letter-spacing: .02em; }
+.pk-list .li .dep + .nm { margin-left: -6px; }

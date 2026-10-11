@@ -913,7 +913,7 @@ export const sx = {
   row: (icon, title, sub = '', value = '', tone = '', attrs = '') => `<div class="sx-r"${attrs ? ' ' + attrs : ''}>${icon.startsWith('<') ? icon : ic(icon)}<div class="k"><b>${title}</b>${sub ? `<span>${sub}</span>` : ''}</div>${value ? `<span class="v ${tone}">${value}</span>` : ''}</div>`,
   bar: (n, of, colour = 'var(--accent)') => `<span class="sx-bar"><i style="width:${of ? Math.min(100, Math.round(100 * n / of)) : 0}%;background:${colour}"></i></span>`,
   facts: pairs => `<div class="sx-facts">${pairs.filter(p => p && p[1]).map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('')}</div>`,
-  btn: (icon, label, attrs, pri = false) => `<button class="sx-btn${pri ? ' pri' : ''}" type="button" ${attrs}>${ic(icon)}${label}</button>`,
+  btn: (icon, label, attrs, pri = false) => `<button class="sx-btn${pri ? ' sx-pri' : ''}" type="button" ${attrs}>${ic(icon)}${label}</button>`,
   acts: btns => `<div class="sx-acts">${btns.filter(Boolean).join('')}</div>`,
 };
 export function mvMap(o = {}) {

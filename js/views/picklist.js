@@ -4,7 +4,7 @@
 import { $, ic, esc, vh, sub, dep, DEPT_NAME, toast } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, canonCode, setStrip, sx } from '../map.js';
 import { voiceSupported, dictate } from '../voice.js';
-import { spokenCodes, STOP_WORDS } from '../../shared/voice.js';
+import { spokenCodes, spokenStops, ofRun, STOP_WORDS } from '../../shared/voice.js';
 import { haptic } from '../device.js';
 
 // Voice add on the phone (ShelfSearcher's): say shelf codes, "done" to stop.
@@ -71,21 +71,40 @@ export default {
       if (!e.target.closest('[data-act="voice-add"]')) return;
       if (dictation) { dictation.stop(); return; }
       haptic('select');
+      // The run voice added last, for a moment: a shelf said straight after
+      // replaces it ("C4", then "C4 S1" or "side one"), and the run said again
+      // after its shelf is ignored, so a phrase heard in pieces adds one stop.
+      let recent = null;
+      const say = (msg, bad) => toast(msg, bad ? 'bad' : '', null, 'voice');
+      const lookup = c => (map.groups(c).length ? canonCode(c) : null);
       dictation = dictate({
-        onUtterance: text => {
+        onUtterance: guesses => {
+          const text = guesses[0];
           if (STOP_WORDS.test(text.toUpperCase())) return false;
-          const codes = spokenCodes(text);
-          if (!codes.length) { toast(`Didn’t catch a shelf: “${text.trim()}”`, 'bad'); return; }
-          const m = model(ctx), bad = codes.filter(c => !map.groups(c).length), fresh = codes.filter(c => map.groups(c).length && !m.items.some(i => canonCode(i.code) === c));
-          if (fresh.length) { haptic('navigate'); save(ctx, replan(map, [...m.items, ...fresh.map(code => ({ code, completed: false }))], 0)); }
-          const said = [fresh.length && `Added ${fresh.join(', ')}`, bad.length && `not in this store: ${bad.join(', ')}`, !fresh.length && !bad.length && `already in the list: ${codes.join(', ')}`].filter(Boolean).join(' · ');
-          toast(said.charAt(0).toUpperCase() + said.slice(1), fresh.length ? '' : 'bad');
+          const fresh = recent && Date.now() - recent.at < 6000 ? recent : null;
+          let { codes, bad } = spokenStops(guesses, lookup);
+          // Only a side ("side one", "S1"): the run just added, on that side.
+          if (!codes.length && fresh) { const side = spokenCodes(text).join('').match(/^[A-Z]?([SEP]\d)$/) || text.toUpperCase().match(/\b(?:SIDE|END)\s*(ONE|TWO|[12])\b/); if (side) { const sd = side[1].length === 2 ? side[1] : (/END/.test(side[0]) ? 'E' : 'S') + ({ ONE: 1, TWO: 2 }[side[1]] || side[1]); const hit = lookup(fresh.code + sd); if (hit) { codes = [hit]; bad = []; } } }
+          if (!codes.length && !bad.length) { say(`Didn’t catch a shelf: “${text}”`, true); return; }
+          const m = model(ctx), have = c => m.items.some(i => canonCode(i.code) === c);
+          let items = m.items.slice(); const added = [], swapped = [], had = [];
+          for (const c of codes) {
+            // A run whose shelf is already listed is that shelf heard again.
+            const shelf = m.items.find(i => !i.completed && ofRun(canonCode(i.code), c));
+            if (have(c) || shelf) { had.push(shelf ? canonCode(shelf.code) : c); continue; }
+            const k = fresh && ofRun(c, fresh.code) ? items.findIndex(i => canonCode(i.code) === fresh.code && !i.completed) : -1;
+            if (k >= 0) { items[k] = { code: c, completed: false }; swapped.push(`${c} (for ${fresh.code})`); } else { items.push({ code: c, completed: false }); added.push(c); }
+            recent = { code: c, at: Date.now() };
+          }
+          if (added.length || swapped.length) { haptic('navigate'); save(ctx, replan(map, items, 0)); }
+          const said = [added.length && `Added ${added.join(', ')}`, swapped.length && `Now ${swapped.join(', ')}`, bad.length && `not in this store: ${bad.join(', ')}`, !added.length && !swapped.length && had.length && `already in the list: ${had.join(', ')}`].filter(Boolean).join(' · ');
+          say(said.charAt(0).toUpperCase() + said.slice(1), !added.length && !swapped.length);
         },
         onError: msg => toast(msg, 'bad'),
-        onEnd: reason => { dictation = null; paint(); if (reason === 'silence') toast('Voice stopped (no speech)'); else if (reason !== 'error') toast('Voice stopped'); },
+        onEnd: reason => { dictation = null; paint(); if (reason === 'silence') toast('Voice stopped (no speech)', '', null, 'voice'); else if (reason !== 'error') toast('Voice stopped', '', null, 'voice'); },
       });
       paint();
-      if (dictation) toast('Listening: say shelf codes, “done” to stop');
+      if (dictation) toast('Listening: say shelf codes, “done” to stop', '', null, 'voice');
     });
     return [ctx.store.on('picklists', paint), () => { dictation?.stop(); dictation = null; }];
   },
@@ -97,7 +116,7 @@ function list(map, m) {
   const add = `<div class="ch"><h3>Stops</h3><span class="go" data-act="clear">Clear all</span></div><div class="msh-add"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input data-field="add" placeholder="Add shelf or paste list (e.g. A10, K12, Q15)"></div><button class="btn primary sm" data-act="add">Add</button></div>`;
   if (!m.items.length) return add + '<div class="list pk-list"><div class="li" style="color:var(--dim)">Tap shelves on the map or add codes above.</div></div>';
   const idx = new Map(m.items.map((i, n) => [i.code, n])), plan = map.floorPlan(m.items.map(i => i.code)), multi = plan.length > 1, here = map.floorId();
-  const row = i => { const n = idx.get(i.code); return `<div class="li" data-i="${n}"><span class="pk-grip" data-i="${n}" title="Drag to reorder" aria-label="Drag to reorder">${ic('grip')}</span><span class="stopn${i.completed ? ' done' : ''}">${n + 1}</span><span class="tick${i.completed ? ' done' : ''}" data-act="toggle" data-code="${esc(i.code)}"></span><span class="loc" data-act="zoom" data-code="${esc(i.code)}">${esc(i.code)}</span><span class="nm">${DEPT_NAME[deptOf(map, i.code)] || ''}</span>${dep(deptOf(map, i.code))}<span class="ibtn" data-act="remove" data-code="${esc(i.code)}">${ic('x')}</span></div>`; };
+  const row = i => { const n = idx.get(i.code); return `<div class="li" data-i="${n}"><span class="pk-grip" data-i="${n}" title="Drag to reorder" aria-label="Drag to reorder">${ic('grip')}</span><span class="stopn${i.completed ? ' done' : ''}">${n + 1}</span><span class="tick${i.completed ? ' done' : ''}" data-act="toggle" data-code="${esc(i.code)}"></span><span class="loc" data-act="zoom" data-code="${esc(i.code)}">${esc(i.code)}</span>${deptOf(map, i.code) ? dep(deptOf(map, i.code)) : ''}<span class="nm">${DEPT_NAME[deptOf(map, i.code)] || ''}</span><span class="ibtn" data-act="remove" data-code="${esc(i.code)}">${ic('x')}</span></div>`; };
   const byCode = new Map(m.items.map(i => [i.code, i])), placed = new Set(plan.flatMap(f => f.codes));
   const body = plan.map((f, k) => (multi ? `<div class="pk-floor${f.id === here ? ' on' : ''}" data-act="floor" data-floor="${esc(f.id)}">${ic('map')}<b>${esc(f.name)}</b><span>${f.type === 'boh' ? 'Back of house' : 'Front of house'} · ${f.codes.length} stop${f.codes.length === 1 ? '' : 's'}</span></div>` : '') + f.codes.map(c => row(byCode.get(c))).join('') + (multi && k < plan.length - 1 ? `<div class="pk-stairs">${ic('stairs')}Stairs to ${esc(plan[k + 1].name)}</div>` : '')).join('') + m.items.filter(i => !placed.has(i.code)).map(row).join('');
   return add + `<div class="list pk-list">${body}</div>`;
@@ -118,7 +137,7 @@ function mobile(map, m, r) {
   const walk = !n ? `Tap shelves on the map${voiceSupported() ? ', or tap Say it and say them,' : ''} to build the list.` : `${n} stop${n === 1 ? '' : 's'}${r?.metres ? ` · about ${r.metres} m` : ''}${r && !r.network ? ' · no walk paths on this level yet' : ''}${r?.exit ? ' · then the stairs' : ''}`;
   const head = `<div class="sx-h">${ic('m-picklist')}Pick list<span class="n">${done} / ${n}</span></div><div class="sx-sub">${walk}</div>`;
   const stops = n ? sx.sec('Stops', sx.rows(m.items.map((i, k) => { const d = deptOf(map, i.code);
-    return `<div class="sx-r rt-r${i.completed ? ' done' : i === cur ? ' cur' : ''}" data-act="toggle" data-code="${esc(i.code)}"><span class="rt-chk">${i.completed ? ic('check') : ''}</span><span class="rt-no">${k + 1}</span><div class="k"><b>${esc(i.code)}</b><span>${esc(DEPT_NAME[d] || '')}</span></div>${i === cur ? '<span class="v acc">Next</span>' : i.completed ? '<span class="v ok">Picked</span>' : ''}<button class="rt-x" type="button" data-act="remove" data-code="${esc(i.code)}" aria-label="Remove ${esc(i.code)}">${ic('x')}</button></div>`; })), done ? `${done} picked` : '') : '';
+    return `<div class="sx-r rt-r${i.completed ? ' done' : i === cur ? ' cur' : ''}" data-act="toggle" data-code="${esc(i.code)}"><span class="rt-chk">${i.completed ? ic('check') : ''}</span><span class="rt-no">${k + 1}</span><div class="k"><b>${esc(i.code)}</b><span class="rt-d">${d ? dep(d) : ''}${esc(DEPT_NAME[d] || '')}</span></div>${i === cur ? '<span class="v acc">Next</span>' : i.completed ? '<span class="v ok">Picked</span>' : ''}<button class="rt-x" type="button" data-act="remove" data-code="${esc(i.code)}" aria-label="Remove ${esc(i.code)}">${ic('x')}</button></div>`; })), done ? `${done} picked` : '') : '';
   const acts = sx.acts([cur ? sx.btn('check', 'Picked · next', 'data-act="pick-next"', true) : '', voiceSupported() ? sx.btn('mic', dictation ? 'Stop listening' : 'Say it', 'data-act="voice-add"') : '', cur ? sx.btn('pin', `Show ${esc(cur.code)}`, `data-act="zoom" data-code="${esc(cur.code)}"`) : '', n ? sx.btn('trash', 'Clear', 'data-act="clear"') : '']);
   return `<div class="sx">${head}${stops}${acts}</div>`;
 }

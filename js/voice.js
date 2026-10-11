@@ -22,9 +22,9 @@ const ERRORS = {
 };
 export const voiceError = code => ERRORS[code] || 'Voice search stopped. Try again.';
 
-function recogniser({ continuous }) {
+function recogniser({ continuous, interim = true }) {
   const r = new (SR())();
-  r.lang = 'en-US'; r.continuous = continuous; r.interimResults = true; r.maxAlternatives = 5;
+  r.lang = 'en-US'; r.continuous = continuous; r.interimResults = interim; r.maxAlternatives = 5;
   return r;
 }
 
@@ -53,18 +53,32 @@ export function listenOnce({ onHeard, onGuesses, onError, onEnd }) {
 }
 
 // Dictation (the pick list's voice add): listens until "done", 15 seconds
-// of silence or stop(); onUtterance(text) per finished phrase.
+// of silence or stop(); onUtterance(guesses) per finished phrase, top guess
+// first. One phrase per recogniser, restarted after each, with no interim
+// results (as ShelfSearcher listened): Android's continuous mode re-sends a
+// phrase as it grows ("C4", then "C4 S1") and sends empty finals, and each
+// became a stop or an error. Empty phrases and a phrase repeated within two
+// seconds are dropped.
 export function dictate({ onUtterance, onError, onEnd }) {
   if (!voiceSupported()) { onError?.('Voice is not supported in this browser.'); onEnd?.('error'); return { stop() {} }; }
   if (navigator.onLine === false) { onError?.(ERRORS.network); onEnd?.('error'); return { stop() {} }; }
-  let r = null, active = true, silence = null;
+  let r = null, active = true, silence = null, last = { text: '', at: 0 };
   const end = reason => { if (!active) return; active = false; clearTimeout(silence); try { r?.abort(); } catch {} onEnd?.(reason); };
   const quiet = () => { clearTimeout(silence); silence = setTimeout(() => end('silence'), 15000); };
   const start = () => {
-    r = recogniser({ continuous: true });
-    r.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) { quiet(); if (onUtterance?.(e.results[i][0].transcript || '') === false) return end('stopword'); } };
+    r = recogniser({ continuous: false, interim: false });
+    r.onresult = e => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i]; if (!res.isFinal) continue;
+        const guesses = [...res].map(a => (a.transcript || '').trim()).filter(Boolean); if (!guesses.length) continue;
+        const key = guesses[0].toUpperCase().replace(/\s+/g, ''), now = Date.now();
+        if (key === last.text && now - last.at < 2000) continue;
+        last = { text: key, at: now }; quiet();
+        if (onUtterance?.(guesses) === false) return end('stopword');
+      }
+    };
     r.onerror = e => { if (e.error === 'no-speech' || e.error === 'aborted') return; onError?.(voiceError(e.error)); end('error'); };
-    // The recogniser ends on its own after a pause; keep listening until told.
+    // The recogniser ends after each phrase; keep listening until told.
     r.onend = () => { if (active) { try { start(); } catch { end('error'); } } };
     r.start();
   };
