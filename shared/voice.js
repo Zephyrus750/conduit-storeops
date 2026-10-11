@@ -22,6 +22,7 @@
 //   misheard(text)                  → [code…] the same with mishearings undone
 //   resolveSpoken(guesses, lookup)  → { code, heard, query, how }
 //   spokenCodes(text)               → [code…] every code in one utterance (pick list)
+//   spokenStops(guesses, lookup)    → { codes, bad, heard } the stops one utterance names, map-checked
 //   STOP_WORDS                      → "done", "stop", … end a dictation
 
 const ONES = { ZERO: 0, ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6, SEVEN: 7, EIGHT: 8, NINE: 9 };
@@ -134,5 +135,32 @@ export function spokenCodes(text) {
   }
   return out;
 }
+
+// The stops one utterance names, checked against the map (the pick list's
+// voice add). Each guess is read with spokenCodes. A side the recogniser split
+// from its run ("A6 S1" heard as "A6", "nS1") rejoins it when that shelf is
+// real. A code not on the map tries its mishearings. A run said with one of
+// its own shelves gives way to the shelf, so "C4, C4 S1" adds only C4S1.
+// The guess naming the most real stops wins; on a tie, the top guess.
+export function spokenStops(guesses, lookup) {
+  const gs = (guesses || []).map(g => String(g || '').trim()).filter(Boolean);
+  let best = null;
+  for (const g of gs) {
+    const codes = spokenCodes(g), found = [], bad = [];
+    for (let i = 0; i < codes.length; i++) {
+      const c = codes[i], side = (codes[i + 1] || '').match(/^[A-Z]?([SEP]\d)$/);
+      if (side && /^[A-Z]+\d+$/.test(c)) { const hit = lookup(c + side[1]); if (hit) { if (!found.includes(hit)) found.push(hit); i++; continue; } }
+      // One code in the phrase: the whole phrase's mishearings, as search tries them.
+      const hit = lookup(c) || resolveSpoken([codes.length === 1 ? g : c], lookup).code;
+      if (hit) { if (!found.includes(hit)) found.push(hit); } else bad.push(c);
+    }
+    const kept = found.filter(c => !found.some(o => o !== c && ofRun(o, c)));
+    const score = kept.length * 2 - bad.length;
+    if (codes.length && (!best || score > best.score)) best = { codes: kept, bad, heard: g, score };
+  }
+  return best ? { codes: best.codes, bad: best.bad, heard: best.heard } : { codes: [], bad: [], heard: gs[0] || '' };
+}
+// "C4S1" is a shelf of the run "C4".
+export const ofRun = (shelf, run) => shelf.length > run.length && shelf.startsWith(run) && /^[SEP]\d$/.test(shelf.slice(run.length));
 
 export const STOP_WORDS = /\b(DONE|STOP|FINISH|FINISHED|END|CANCEL|EXIT|QUIT|THAT'?S ALL)\b/;

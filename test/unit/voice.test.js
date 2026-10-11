@@ -2,7 +2,7 @@
 // code, its two slips fixed, and the map check that picks among guesses.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spokenToCode, misheard, resolveSpoken, spokenCodes, STOP_WORDS } from '../../shared/voice.js';
+import { spokenToCode, misheard, resolveSpoken, spokenCodes, spokenStops, ofRun, STOP_WORDS } from '../../shared/voice.js';
 
 // A map as shelfForLocation answers it: runs, shelves and bays.
 const MAP = new Map([['A10', 'A10'], ['A16', 'A16'], ['A16S2', 'A16S2'], ['B22', 'B22'], ['B22E1', 'B22E1'], ['C5', 'C5'], ['Q15', 'Q15'], ['H27', 'H27'], ['A4', 'A4'], ['7002', 'A16S2'], ['D7', 'D7']]);
@@ -59,4 +59,20 @@ test('pick list dictation: every code in an utterance, and the stop words', () =
   assert.deepEqual(spokenCodes('hello there'), []);
   assert.ok(STOP_WORDS.test('THAT\'S ALL'));
   assert.ok(!STOP_WORDS.test('A10'));
+});
+
+test('pick list stops: checked against the map, a split side rejoined, the shelf over its run', () => {
+  const STOPS = new Map([['A6', 'A6'], ['A6S1', 'A6S1'], ['C4', 'C4'], ['C4S1', 'C4S1'], ['K7', 'K7'], ['A10', 'A10'], ['B22', 'B22']]);
+  const look = c => STOPS.get(c) || null;
+  // Heard as on the phone in the report: the side split off with a stray letter.
+  assert.deepEqual(spokenStops(['A6nS1'], look), { codes: ['A6S1'], bad: [], heard: 'A6nS1' });
+  assert.deepEqual(spokenStops(['A6 S1'], look).codes, ['A6S1']);
+  assert.deepEqual(spokenStops(['C4 C4 S1'], look).codes, ['C4S1'], 'the run said with its shelf gives way');
+  assert.deepEqual(spokenStops(['A10 and B twenty two'], look).codes, ['A10', 'B22']);
+  assert.deepEqual(spokenStops(['be 22'], look).codes, ['B22'], 'a misheard letter is tried against the map');
+  // A later guess that names real shelves beats a top guess that does not.
+  assert.deepEqual(spokenStops(['Z 99', 'K7'], look), { codes: ['K7'], bad: [], heard: 'K7' });
+  assert.deepEqual(spokenStops(['Z 99'], look), { codes: [], bad: ['Z99'], heard: 'Z 99' });
+  assert.deepEqual(spokenStops(['', 'hello'], look), { codes: [], bad: [], heard: 'hello' });
+  assert.ok(ofRun('C4S1', 'C4') && ofRun('A16E2', 'A16') && !ofRun('C41', 'C4') && !ofRun('C4', 'C4'));
 });

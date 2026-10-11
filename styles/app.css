@@ -2185,3 +2185,9 @@ body:has(.content.mv > .mv-strip) #toasts { bottom: 146px; }
 .mcrumb .dep{font-size:10px;font-weight:800;padding:2px 5px;border-radius:4px;flex:none;letter-spacing:.02em}
 .mcrumb .sep{font-style:normal;opacity:.5;flex:none}
 .mcrumb .ms{flex:none;color:var(--ink);font-weight:800;letter-spacing:.02em}
+
+/* Pick list stops: the department's badge before its name, as on the map's crumb. */
+.pk-list .li .dep { flex: none; font-size: 10.5px; font-weight: 800; padding: 2px 6px; border-radius: 5px; letter-spacing: .02em; }
+.sx-r .k .rt-d { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-r .k .rt-d .dep { display: inline-block; flex: none; color: #fff; font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 4px; letter-spacing: .02em; }
+.pk-list .li .dep + .nm { margin-left: -6px; }

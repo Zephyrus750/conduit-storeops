@@ -71,7 +71,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
 
   // Focus goes back to whatever opened the palette when it closes.
   let opener = null;
-  const DESK_PH = input.placeholder, PHONE_PH = 'Shelf, department or micro-dept';
+  const DESK_PH = input.placeholder, PHONE_PH = 'Search';
   function open(q = '') { if (!el.classList.contains('open')) opener = document.activeElement; el.classList.add('open'); el.classList.toggle('phone', phone()); input.placeholder = phone() ? PHONE_PH : DESK_PH; input.value = q; render(q); try { input.focus(); } catch {} }
   function close() { el.classList.remove('open'); prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide'); if (opener?.isConnected && opener !== document.body) { try { opener.focus(); } catch {} } opener = null; }
   const isOpen = () => el.classList.contains('open');
@@ -257,7 +257,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const arg = {}; for (const kk of ARG_KEYS) if (row.dataset[kk] != null) arg[kk] = row.dataset[kk];
       bi.value = ''; bi.blur(); hide(); go(row.dataset.view, arg);
     }
-    bi.placeholder = 'Shelf, dept or micro-dept';
+    bi.placeholder = 'Search';
     bi.addEventListener('focus', draw);
     bi.addEventListener('input', draw);
     let blurT = 0;   // a beat after blur, so a tap on a row still lands (iOS blurs before the click)

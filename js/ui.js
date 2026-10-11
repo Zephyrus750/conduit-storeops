@@ -131,9 +131,12 @@ export function greeting() { const h = new Date().getHours(); return h < 12 ? 'G
 
 // Tiny toast for rejections and confirmations.
 // action: { label, run } adds a button (Undo), and the toast stays a little longer.
-export function toast(msg, kind = '', action = null) {
+// A key makes one status line: a toast with the same key replaces the last
+// (the pick list's voice add says each phrase there, not in a stack).
+export function toast(msg, kind = '', action = null, key = '') {
   let host = $('#toasts'); if (!host) { host = document.createElement('div'); host.id = 'toasts'; document.body.appendChild(host); }
-  const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = msg; host.appendChild(t);
+  let swap = false; if (key) for (const o of host.querySelectorAll('.toast[data-key]')) if (o.dataset.key === key) { o.remove(); swap = true; }
+  const t = document.createElement('div'); t.className = 'toast ' + kind + (swap ? ' show' : ''); t.textContent = msg; if (key) t.dataset.key = key; host.appendChild(t);
   if (kind === 'bad') haptic('error');
   const close = () => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); };
   if (action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-act'; b.textContent = action.label; b.addEventListener('click', () => { close(); action.run(); }); t.appendChild(b); t.classList.add('has-act'); }
