@@ -236,7 +236,7 @@ async function showSignin({ error, owner } = {}) {
   let stores = [];
   try { stores = (await client.transport.request('/v1/stores')).stores; } catch (e) { error = error || (WORKER ? `Cannot reach the worker at ${WORKER}` : 'No worker configured: open with ?worker=https://…'); }
   const options = stores.map(s => `<option value="${esc(s.no)}">${esc(s.no)} ${esc(s.name)}${s.region ? ' · ' + esc(s.region) : ''}</option>`).join('');
-  const form = `<form class="si-form" id="siForm"><h2>Welcome back</h2><div class="si-sub">Choose your store. Everything keeps working offline once it is on this device.</div>` +
+  const form = `<form class="si-form" id="siForm"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>Welcome back</h2><div class="si-sub">Choose your store. Everything keeps working offline once it is on this device.</div>` +
     `<label>Store</label><select class="si-field" name="store" required>${options || '<option value="">No stores registered</option>'}</select>` +
     `<label>Store PIN</label><input class="si-pin" name="pin" inputmode="numeric" autocomplete="off" placeholder="••••" required>` +
     `<div class="si-role">${ic('users')}<div>The store PIN opens the Floor. Stockroom and Back dock take their crew code once per device; a manager code opens everything.</div></div>` +
@@ -267,7 +267,7 @@ function showOwnerSignin(error) {
   });
 }
 const friendly = (err, wrong = 'Wrong PIN.') => err.code === 'locked_out' ? `Too many attempts. Try again in ${Math.ceil((err.detail?.retryAfter || 60) / 60)} min.` : err.code === 'unauthorised' ? wrong : err.code === 'not_registered' ? 'That store is not registered.' : err.code === 'not_configured' ? 'The worker has no owner key set yet.' : err.message;
-const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/><path d="M22 10.2a8 8 0 1 0 0 11.6" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round"/><circle cx="16.5" cy="16" r="2.8" fill="#fff"/></svg>`;
+const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#0E7CA8"/><path d="M23.2 11.3A8.3 8.3 0 1 0 23.2 20.7" fill="none" stroke="#fff" stroke-width="5.6"/></svg>`;
 
 // ── rail, strip, status ───────────────────────────────────────────────
 // What each rail row does, shown beside it on hover (the showcase's rail

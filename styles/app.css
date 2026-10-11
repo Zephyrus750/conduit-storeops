@@ -1894,7 +1894,6 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
    header and footer stay white. */
 .frame.rail-ink .rail { background: var(--rail-ink, #111827); border-right-color: transparent; }
 .frame.rail-ink .brand .bname { color: #fff; }
-.frame.rail-ink .brand .vmark rect { fill: var(--accent); }
 .frame.rail-ink .rrow { color: rgba(255,255,255,.85); }
 .frame.rail-ink .rrow svg.i { color: rgba(255,255,255,.7); }
 .frame.rail-ink .rrow:hover { background: rgba(255,255,255,.08); }
@@ -2027,3 +2026,10 @@ button.mv-row .c svg.i { width: 16px; height: 16px; transform: rotate(-90deg); }
 .mv-sel.mode.rf > .rf-focus, .mv-sel.mode.rf > .mv-hint { height: 36px; flex: none; margin: 0; }
 .mv-sel.mode.rf > .mv-hint { font-size: 12.5px; line-height: 1.4; overflow: hidden; }
 @container shell (max-width:380px) { .mv-sel.mode.rf > .rf-focus, .mv-sel.mode.rf > .mv-hint { height: 31px; } .mv-sel.mode.rf > .mv-hint { font-size: 11px; } }
+
+/* The mark is the brand: Lagoon blue everywhere, the owner console too. */
+.vmark rect, .frame.adm .brand .vmark rect { fill: #0E7CA8; }
+/* Sign-in without the hero (a phone, or one store): the mark heads the form. */
+.si-mbrand { display: none; }
+.si-panel.si-centre .si-mbrand { display: flex; margin-bottom: 16px; }
+.si-panel.si-centre .si-mbrand b { font-size: 18px; font-weight: 800; }

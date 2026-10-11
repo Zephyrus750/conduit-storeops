@@ -2,7 +2,7 @@
 // The complete app shell for one release; the build id names its cache.
 self.PRECACHE = {
   "version": "v0.3.0",
-  "build": "010f13b97d",
+  "build": "df9f326b73",
   "files": [
     "./index.html",
     "./icons.svg",
@@ -117,6 +117,7 @@ self.PRECACHE = {
     "./icons/apple-touch-icon.png",
     "./icons/icon-192.png",
     "./icons/icon-512.png",
-    "./icons/icon-maskable-512.png"
+    "./icons/icon-maskable-512.png",
+    "./icons/icon.svg"
   ]
 };
