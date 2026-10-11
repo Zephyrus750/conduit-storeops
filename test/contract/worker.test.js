@@ -330,6 +330,11 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
   const reader = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, dev)).body.token;
   const before = (await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, reader)).body;
   assert.equal(before.state.backfill.subs['7012:2026-09-17'], undefined, 'a dry run writes nothing');
+  // The store object is awake now, and a store object sets itself a catch-up
+  // rollover alarm a second after it wakes; the rollover submits earlier-day
+  // bays still pending, so the imported 2026-09-18 board would be rolled over
+  // if the alarm landed mid-test (it did on a fast CI runner). Let it pass.
+  await new Promise(r => setTimeout(r, 1500));
 
   const run = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468' }, ownerToken);
   assert.equal(run.status, 200); assert.equal(run.body.applied, 13); assert.equal(run.body.duplicates, 0); assert.deepEqual(run.body.rejected, []);
