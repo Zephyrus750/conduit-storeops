@@ -41,7 +41,7 @@ export function applyPrefs(frame = document.querySelector('.frame')) {
   // Auto follows the device's light or dark setting, and changes with it.
   const p = prefs(), a = ACCENTS[p.accent] || ACCENTS[0], dark = p.skin === 'dark' || (p.skin === 'auto' && osDark());
   frame.classList.toggle('dark', dark);
-  for (const c of ['rail-light', 'rail-tint', 'rail-solid', 'rail-deep', 'bars-plain', 'bars-tint', 'bars-strong', 'hdr-classic', 'hdr-title']) frame.classList.remove(c);
+  for (const c of ['rail-light', 'rail-tint', 'rail-solid', 'rail-deep', 'rail-ink', 'bars-plain', 'bars-tint', 'bars-strong', 'hdr-classic', 'hdr-title']) frame.classList.remove(c);
   frame.classList.add('rail-' + p.rail, 'bars-' + p.bars, 'hdr-' + p.hdr);
   const s = frame.style;
   s.setProperty('--accent', a[1]); s.setProperty('--accent-ink', dark ? a[1] : a[2]);

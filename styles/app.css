@@ -1879,3 +1879,27 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .onote { display: flex; align-items: flex-start; gap: 10px; margin: 12px 4px 4px; padding: 12px; border-radius: 12px; background: var(--ground); border: 1px solid var(--line); font-size: 13px; color: var(--dim); line-height: 1.4; }
 .onote svg.i { flex: none; width: 20px; height: 20px; color: var(--faint); margin-top: 1px; }
 .onote b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 2px; }
+
+/* The ink rail: the owner console's look for the store shell. A charcoal
+   rail with white type, the open view on a solid accent row; the page,
+   header and footer stay white. */
+.frame.rail-ink .rail { background: var(--rail-ink, #111827); border-right-color: transparent; }
+.frame.rail-ink .brand .bname { color: #fff; }
+.frame.rail-ink .brand .vmark rect { fill: var(--accent); }
+.frame.rail-ink .rrow { color: rgba(255,255,255,.85); }
+.frame.rail-ink .rrow svg.i { color: rgba(255,255,255,.7); }
+.frame.rail-ink .rrow:hover { background: rgba(255,255,255,.08); }
+.frame.rail-ink .rrow.on { background: var(--accent); color: #fff; }
+.frame.rail-ink .rrow.on svg.i { color: #fff; }
+.frame.rail-ink .rrow.on::before { display: none; }
+.frame.rail-ink .rsec { color: rgba(255,255,255,.5); }
+.frame.rail-ink .storechip svg.i.sc-ic, .frame.rail-ink .storechip .sc-t b { color: #fff; }
+.frame.rail-ink .storechip .sc-t span, .frame.rail-ink .storechip svg.i { color: rgba(255,255,255,.6); }
+.frame.rail-ink .storechip:hover { background: rgba(255,255,255,.08); }
+.frame.rail-ink .railfoot { border-top-color: rgba(255,255,255,.14); }
+.frame.rail-ink .rrow .badge { background: rgba(255,255,255,.16); color: #fff; }
+.frame.rail-ink .rrow.on .badge { background: #fff; color: var(--accent-ink); }
+.frame.rail-ink .railscroll { scrollbar-color: rgba(255,255,255,.3) transparent; }
+.frame.rail-ink .rsec.adm .own { background: var(--accent); color: #fff; }
+.frame.rail-ink .bsearch { color: rgba(255,255,255,.85); }
+.frame.rail-ink .bsearch:hover { background: rgba(255,255,255,.1); color: #fff; }
