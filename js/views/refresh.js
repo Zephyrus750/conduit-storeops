@@ -3,7 +3,8 @@
 
 import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
 import { focusDone } from '../../shared/reducers/floor.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus } from '../map.js';
+import { retailPeriod } from '../../shared/time.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
 import { openScanner } from '../scan.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
@@ -124,7 +125,7 @@ export default {
   mobile(ctx) {
     const m = model(ctx);
     return mvMap({ badge: `<b>${m.counted}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}` }) +
-      `<div class="mv-sel mode rf" id="rfmob"></div>`;
+      `<div class="mv-sel mode rf" id="rfmob"></div><div class="rf-scanhost" id="rfscan"></div>`;
   },
   mount(ctx, root) {
     const map = mountMap($('#mapstage', root), { cls: 'rf', badges: false, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
@@ -141,6 +142,8 @@ export default {
       map.setMarks(marksFor(map, m)); applyPlan(map, m.plan, m.marks, mode === 'plan'); map.svg.classList.toggle('rfplan', mode === 'plan'); map.svg.toggleAttribute('data-focus', m.focus.length > 0);
       const side = $('#rfside', root); if (side) side.innerHTML = sidebar(map, m);
       const mob = $('#rfmob', root); if (mob) mob.innerHTML = mobileBar(map, m);
+      const sc = $('#rfscan', root); if (sc) sc.innerHTML = scanOpen && mode !== 'plan' ? scanSheet() : '';
+      setStrip(root, rfStrip(m));
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.counted}</b> / ${TARGET} this week${m.focus.length ? ' · focus ' + m.focus.map(d => d.toUpperCase()).join(' ') : ''}`;
     });
     paint();
@@ -203,14 +206,32 @@ function scanSheet() {
     `<div class="rf-type"><span class="lbl">Or type the shelf</span><div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="e.g. A16 S1" aria-label="Shelf label"><button class="btn primary sm" data-act="scan-go">Mark</button></div></div>` +
     (lastScan ? `<div class="rf-last ${lastScan.ok ? 'ok' : 'bad'}">${ic(lastScan.ok ? 'check' : 'alert')}<span>${esc(lastScan.text)}</span></div>` : '<div class="rf-last">Each label marks its shelf refreshed for the whole team.</div>') + '</div></div>';
 }
+// The phone's Refresh sheet (opened from the strip): the week's progress,
+// scan and the Refresh/Plan toggle, each focus department with its own bar,
+// the focus shelves still due (a tap finds one on the map) and the week so far.
 function mobileBar(map, m) {
-  const fc = focusCounts(map, m);
-  return `<div class="mv-mh">${ic('m-refresh')}<b>Location refresh</b><span>${m.counted} / ${TARGET}</span></div>` +
-    // The toggle keeps its place: in Plan the colours take the scan button's spot.
-    `<div class="rf-row">${mode === 'plan' ? `<div class="rf-pal" role="group" aria-label="Plan colour">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<button class="rf-scanbtn" data-act="scan-open" aria-label="Scan or type a shelf">${ic('barcode')}<span>Scan or type</span></button>`}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div></div>` +
-    (mode === 'plan' ? `<div class="mv-hint">Plan mode: tap a shelf to paint it for the team. Tap the same colour again to clear.</div>`
-      : `<div class="rf-focus"><span class="lbl">Focus</span>${fc.map(f => `<button class="rf-chip" data-act="zoom-dept" data-dept="${f.d}"><i class="dep" style="background:${DEPT_COLOUR[f.d]}">${f.d.toUpperCase()}</i>${f.done}/${f.total}</button>`).join('') || '<span class="mv-hint" style="margin:0">No focus departments set this week</span>'}</div>`) +
-    (scanOpen && mode !== 'plan' ? scanSheet() : '');
+  const fc = focusCounts(map, m), left = 7 - (new Date().getDay() + 6) % 7, due = stillDue(map, m);
+  const head = `<div class="sx-h">${ic('m-refresh')}Location refresh<span class="n">${m.counted} / ${TARGET}</span></div><div class="sx-sub">This week · ${retailPeriod(new Date())} · ${left} day${left === 1 ? '' : 's'} left</div><div style="margin-top:8px">${sx.bar(m.counted, TARGET)}</div>`;
+  // The toggle keeps its place: in Plan the colours take the scan button's spot.
+  const row = `<div class="rf-row">${mode === 'plan' ? `<div class="rf-pal" role="group" aria-label="Plan colour">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<button class="rf-scanbtn" data-act="scan-open" aria-label="Scan or type a shelf">${ic('barcode')}<span>Scan or type</span></button>`}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div></div>`;
+  if (mode === 'plan') return `<div class="sx">${head}${row}<div class="sx-sub">Tap a shelf to paint it for the team. Tap the same colour again to clear.</div></div>`;
+  const focus = sx.rows(fc.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${f.d}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) ;
+  return `<div class="sx">${head}${row}` +
+    sx.sec('This week’s focus', fc.length ? focus : sx.rows([sx.row('asterisk', 'No focus departments set this week', 'Managers set them on a store PC')]), fc.length ? 'set by managers' : '') +
+    (due.length ? sx.sec('Still due', `<div class="sx-chips">${due.slice(0, 12).map(seg => `<button class="sx-chip" type="button" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}</button>`).join('')}</div>`, `${due.length} in focus · tap to find`) : '') +
+    sx.sec('This week', sx.rows([sx.row('check', `${m.done} shel${m.done === 1 ? 'f' : 'ves'} refreshed`, !m.focus.length ? 'No focus departments this week' : m.done - m.counted > 0 ? `${m.done - m.counted} outside the focus departments` : 'All in the focus departments')])) + '</div>';
+}
+// The focus shelves not refreshed yet this week, in name order.
+function stillDue(map, m) {
+  if (!m.focus.length) return [];
+  const out = new Set();
+  for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(), full = segmentId(g); if (m.focus.includes(d) && !markKeysFor(m.marks, { full, id: g.getAttribute('data-shelf') }).length) out.add(full); }
+  return [...out].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+// The strip under the phone's Refresh map: the week's count and the scan.
+function rfStrip(m) {
+  if (mode === 'plan') return `${ic('m-refresh')}<b>Planning</b><span class="s">Tap shelves to paint them</span><button class="act" type="button" data-act="mode" data-mode="refresh">${ic('check')}Done</button>`;
+  return `${ic('m-refresh')}<b>Refresh</b><span class="n">${m.counted} / ${TARGET}</span><span class="s"></span><button class="act go" type="button" data-act="scan-open">${ic('barcode')}Scan or type</button>`;
 }
 function deptOfSeg(map, segId) { for (const g of map.segments()) if (segmentId(g) === segId) return (g.getAttribute('data-dept') || '').toLowerCase(); return ''; }
 

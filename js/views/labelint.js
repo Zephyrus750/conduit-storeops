@@ -2,7 +2,7 @@
 // shelf assignment and variance capture. Reads store.get('labels').
 
 import { $, $$, ic, esc, vh, sub, prog, dep, DEPT_COLOUR, cycleId, daysLeftInCycle, fmtDate, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, setStrip, sx } from '../map.js';
 import { SUBS, MICRO, microId, microCode, microName, microCount } from '../data/micros.js';
 import { printSheet, table, signoff } from '../print.js';
 
@@ -108,6 +108,7 @@ export default {
       map.setMarks(marksFor(m));
       const side = $('#liside', root); if (side) side.innerHTML = sidebar(m);
       const mob = $('#limob', root); if (mob) mob.innerHTML = mobileBar(m);
+      setStrip(root, liStrip(m));
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.done}</b> of ${m.total} · ${cycleLabel(m.cycle)}`;
     };
     paint();
@@ -172,10 +173,28 @@ function sidebar(m) {
   }).join('')}</div>`;
   return cyc + (varianceFor ? varianceForm(m) : sel) + acc;
 }
+// The phone's Labels sheet (opened from the strip): the cycle's progress,
+// then the micro-department in hand, or each department's progress (a tap
+// lists its micro-departments) and the wrong labels found this cycle.
 function mobileBar(m) {
+  const head = `<div class="sx-h">${ic('m-labelint')}Label check<span class="n">${m.done} / ${m.total}</span></div><div class="sx-sub">${cycleLabel(m.cycle)} · ${m.daysLeft} day${m.daysLeft === 1 ? '' : 's'} left</div><div style="margin:8px 0 4px">${sx.bar(m.done, m.total)}</div>`;
+  if (varianceFor || selected) return `<div class="sx">${head}<div class="li-mob">${mobileInner(m)}</div></div>`;
+  const depts = sx.rows(SUBS.map(([sd, code, name]) => { const list = MICRO[sd] || [], n = list.filter(x => m.checks[microId(sd, x)]).length;
+    return `<div class="sx-r" data-act="toggle-sub" data-sub="${sd}">${dep(sd)}<div class="k"><b>${esc(name)}</b></div>${sx.bar(n, list.length, DEPT_COLOUR[sd])}<span class="v">${n}/${list.length}</span></div>` +
+      (openSub === sd ? list.map(x => { const id = microId(sd, x); return `<div class="sx-r li-micro" data-act="select" data-micro="${id}"><span class="mc">${microCode(x)}</span><div class="k"><b>${esc(microName(x))}</b></div><span class="v ${m.checks[id] ? 'ok' : 'dim'}">${m.checks[id] ? 'Checked' : 'Not yet'}</span></div>`; }).join('') : ''); }));
+  const wrong = m.variances.slice(-5).reverse().map(v => { const [sd, code] = String(v.micro || '').split('-'), e = (MICRO[sd] || []).find(x => microCode(x) === code); return sx.row('alert', `${esc(code || v.micro)} ${e ? esc(microName(e)) : ''}`, `${v.keycode ? 'Keycode ' + esc(v.keycode) + ' · ' : ''}${esc(v.note || '')}`, esc(fmtDate(v.at)), 'warn'); });
+  return `<div class="sx">${head}${sx.sec('By department', depts, 'tap one to list it')}${wrong.length ? sx.sec('Wrong labels this cycle', sx.rows(wrong), `${m.variances.length} found`) : ''}</div>`;
+}
+// The strip under the phone's Labels map: the cycle's count, or the
+// micro-department in hand with its Checked button.
+function liStrip(m) {
+  if (varianceFor) return `${ic('alert')}<b>Wrong label</b><span class="s">${esc(varianceFor)}</span>`;
+  if (selected) { const [sd, code] = selected.split('-'), e = (MICRO[sd] || []).find(x => microCode(x) === code), c = m.checks[selected];
+    return `${ic('m-labelint')}<b>${esc(code)}</b><span class="s">${e ? esc(microName(e)) : ''}</span><button class="act${c ? '' : ' go'}" type="button" data-act="check" data-micro="${esc(selected)}">${ic('check')}${c ? 'Checked' : 'Mark checked'}</button>`; }
+  return `${ic('m-labelint')}<b>Labels</b><span class="n">${m.done} / ${m.total}</span><span class="s">${m.daysLeft}d left · tap a shelf</span>`;
+}
+function mobileInner(m) {
   if (varianceFor) return `<div class="mv-mh">${ic('m-labelint')}<b>Wrong label · ${esc(varianceFor)}</b></div><label class="fld"><span>Keycode</span><input data-field="keycode" inputmode="numeric"></label><label class="fld"><span>What is wrong</span><input data-field="note"></label><div class="mv-two">${mbig('Log variance', '', 'check', ' data-act="variance-save"')}${mghost('Cancel', ' data-act="variance-cancel"')}</div>`;
-  if (!selected) return `<div class="mv-mh">${ic('m-labelint')}<b>Label integrity</b><span>${m.done} / ${m.total}</span></div><div class="mv-hint">${cycleLabel(m.cycle)} · <b>${m.daysLeft}d left</b>. Tap a shelf on the map or pick a micro-department below, then mark it checked.</div><div class="chips" style="padding:0 12px 12px">${SUBS.map(sd => `<span class="chip" data-act="toggle-sub" data-sub="${sd[0]}"><span class="sw" style="background:${DEPT_COLOUR[sd[0]]}"></span>${sd[1]}</span>`).join('')}</div>` +
-    (openSub ? `<div class="mv-rows">${(MICRO[openSub] || []).map(x => { const id = microId(openSub, x); return `<div class="mv-row" data-act="select" data-micro="${id}"><span class="a">${microCode(x)}</span><span class="b">${esc(microName(x))}</span><span class="c">${m.checks[id] ? '✓' : ''}</span></div>`; }).join('')}</div>` : '');
   const [subId, code] = selected.split('-'); const entry = (MICRO[subId] || []).find(x => microCode(x) === code) || code; const c = m.checks[selected];
   return `<div class="mv-mh">${ic('m-labelint')}<b>${esc(code)} ${esc(microName(entry))}</b><span>${m.done} / ${m.total}</span></div><div class="mv-hint">${cycleLabel(m.cycle)} · <b>${m.daysLeft}d left</b> · ${subId.toUpperCase()} · ${c ? 'checked ' + fmtDate(c.at) : 'not checked yet'}</div><div class="mv-two">${mbig(c ? 'Uncheck' : 'Checked', c ? 'sec' : '', 'check', ` data-act="check" data-micro="${selected}"`)}${mbig('Price is wrong', 'warn', 'alert', ` data-act="variance" data-micro="${selected}"`)}</div><div class="mv-hint"><a data-act="toggle-sub" data-sub="${subId}">Choose another</a></div>`;
 }

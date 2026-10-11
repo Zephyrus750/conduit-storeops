@@ -99,7 +99,7 @@ function reloaded() { try { return performance.getEntriesByType('navigation')[0]
 function openPendingLink(s) {
   const l = pendingLink; pendingLink = null; if (!l) return false;
   if (l.store !== s.store) { toast(`That ${l.issue ? 'work order' : 'shelf link'} is for store ${l.store}. Add that store from Store details to open it.`); return false; }
-  if (l.issue) { show('maintenance', { issue: l.issue }); return true; }
+  if (l.issue) { if (isMobile()) { toast('Work orders open on a store PC'); return false; } show('maintenance', { issue: l.issue }); return true; }
   show('map', { select: l.shelf }); return true;
 }
 
@@ -422,6 +422,7 @@ function show(id, arg) {
     content.innerHTML = html;
   }
   scopeListeners(content, viewOff.signal);
+  if (!(useMobile && mountStrip(view))) content.classList.remove('sheet-open');
   const hs = $('#hdrslot'); hs.innerHTML = ''; if (!useMobile && frame.classList.contains('hdr-title')) { const vh0 = content.querySelector('.vh'); if (vh0) hs.appendChild(vh0); }
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   content.scrollTop = 0;
@@ -431,6 +432,21 @@ function show(id, arg) {
   // store update) leaves it open, so the launcher survives sign-in.
   if (prev !== view.id) $('#msheet')?.classList.remove('open');
   $('#crumb').textContent = view.title;
+}
+// The phone's map modes end in a strip above the tabs: what the mode is
+// doing and its main action (the view paints it with setStrip). The arrow
+// opens the mode's panel as a sheet over the bottom of the map; open or
+// closed is kept between modes and visits.
+const SHEET_KEY = 'map_sheet';
+let sheetOpen = false; try { sheetOpen = localStorage.getItem(SHEET_KEY) === '1'; } catch {}
+function mountStrip(view) {
+  if (!content.querySelector(':scope > .mv-map') || !content.querySelector(':scope > .mv-sel')) return false;
+  if (!content.querySelector(':scope > .mv-strip')) content.insertAdjacentHTML('beforeend', `<div class="mv-strip"><div class="mv-st">${ic(view.icon)}<b>${esc(view.title)}</b></div><button class="mv-tog" type="button" data-shell-act="sheet">${ic('chev')}</button></div>`);
+  paintSheet(); return true;
+}
+function paintSheet() {
+  content.classList.toggle('sheet-open', sheetOpen);
+  const t = content.querySelector(':scope > .mv-strip .mv-tog'); if (t) { t.setAttribute('aria-expanded', String(sheetOpen)); t.setAttribute('aria-label', sheetOpen ? 'Hide the details' : 'Show the details'); }
 }
 // Between the phone's map modes (Home, Refresh, Labels, Route, Emergency) the
 // map element stays where it is and only what is around it changes: moving
@@ -497,6 +513,7 @@ document.addEventListener('click', e => {
   if (sa) {
     const act = sa.getAttribute('data-shell-act');
     if (act === 'signout' || act === 'end-actas') signOut();
+    else if (act === 'sheet') { sheetOpen = !sheetOpen; try { localStorage.setItem(SHEET_KEY, sheetOpen ? '1' : '0'); } catch {} paintSheet(); haptic('tap'); }
     else if (act === 'update-now') updates.apply();
     else if (act === 'update-later') $('#updBar')?.remove();
     else if (act === 'owner-signin') showSignin({ owner: true });

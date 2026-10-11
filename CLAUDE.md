@@ -37,6 +37,11 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
   showcase in vector-suite; put app-only rules in `styles/app.css`.
 - Rendering is innerHTML; every value from another device goes through `esc()`.
 - The map is `js/map.js`: mount, pan/zoom, select, marks, pins, routes.
+- Phone map modes end in the strip (`mountStrip` in `js/shell.js`): a view
+  paints it with `setStrip(root, html)` and builds its sheet (the `.mv-sel`
+  panel, opened from the strip) from the `sx` blocks in `js/map.js`. A
+  strip button reuses the view's own `data-act`; anything a closed panel
+  must still show (Refresh's scan sheet) lives outside `.mv-sel`.
 
 ## Working here
 

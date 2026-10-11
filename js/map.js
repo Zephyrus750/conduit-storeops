@@ -863,6 +863,21 @@ function extraTools() {
   return (pc ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="Price checks: normal, large or hidden">${ic('barcode')}</span>` : '') + (tory ? `<span class="ibtn torybtn" data-tory hidden title="Show the tory lines">${ic('route')}</span>` : '');
 }
 export function crumbx(ctx, storeNo, storeName) { const f = mapFloors()[0]; return `<span class="crumbx">${ic('map')}<span data-crumbfloor>${f ? `${f.type.toUpperCase()} · ${esc(f.name)}` : 'FOH · Ground'}</span> <b>${esc(storeNo)}</b>${ctx ? ' › ' + ctx : ''}<span data-crumbdept></span></span>`; }
+// The strip the shell adds under a phone map mode: the mode's summary and
+// its main action, painted by the view (unchanged markup is left alone, so a
+// repaint never steals focus or restarts a tap).
+export function setStrip(root, html) { const s = root.querySelector(':scope > .mv-strip > .mv-st'); if (s && s.innerHTML !== html) s.innerHTML = html; }
+// Building blocks for the phone's sheets (a mode's panel, opened from the
+// strip). Callers escape what they pass in.
+export const sx = {
+  sec: (label, body, note = '') => `<div class="sx-sec"><div class="sx-lbl">${label}${note ? `<span>${note}</span>` : ''}</div>${body}</div>`,
+  rows: rows => `<div class="sx-rows">${rows.join('')}</div>`,
+  row: (icon, title, sub = '', value = '', tone = '', attrs = '') => `<div class="sx-r"${attrs ? ' ' + attrs : ''}>${icon.startsWith('<') ? icon : ic(icon)}<div class="k"><b>${title}</b>${sub ? `<span>${sub}</span>` : ''}</div>${value ? `<span class="v ${tone}">${value}</span>` : ''}</div>`,
+  bar: (n, of, colour = 'var(--accent)') => `<span class="sx-bar"><i style="width:${of ? Math.min(100, Math.round(100 * n / of)) : 0}%;background:${colour}"></i></span>`,
+  facts: pairs => `<div class="sx-facts">${pairs.filter(p => p && p[1]).map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('')}</div>`,
+  btn: (icon, label, attrs, pri = false) => `<button class="sx-btn${pri ? ' pri' : ''}" type="button" ${attrs}>${ic(icon)}${label}</button>`,
+  acts: btns => `<div class="sx-acts">${btns.filter(Boolean).join('')}</div>`,
+};
 export function mvMap(o = {}) {
   const fls = mapFloors();
   return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="Scan">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="Next level">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="Tory lines">${ic('route')}</span>` : ''}<span class="ibtn" data-zoom="in" title="Zoom in" aria-label="Zoom in">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="Zoom out" aria-label="Zoom out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit" aria-label="Fit the map">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
