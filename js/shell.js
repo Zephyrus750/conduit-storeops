@@ -416,17 +416,24 @@ function openLauncher() {
   sh.innerHTML = `<div class="sheet"><h3>Where are you working?</h3><p class="mv-sheet-sub">Pick your area to begin. Stockroom and Back dock take their crew code once on this device.</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
   sh.classList.add('open');
 }
-// The phone's Departments picker (the showcase's): the whole floor, or one
-// department, grouped Home, Clothing, Kids, Other with its shelf count; a
-// department fades the rest of the map and zooms to it. Home, Clothing
-// and Kids (four sub-departments each) are one row of square tiles.
+// The phone's Departments picker: the whole floor; Home, Clothing and
+// Kids as one row each, the area itself first (all four of its
+// sub-departments) and then its sub-departments; the other departments
+// as icon buttons side by side. A pick fades the rest of the map, zooms
+// to it and leaves only its badges.
+const PICK_ICON = { home: 'home', clothing: 'shirt', kids: 'star', checkouts: 'dollar', flex: 'stack', stockroom: 'box', bulk: 'cube' };
 function openDepts() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
-  const counts = mapStats()?.depts || {};
-  const tile = d => `<button class="md-tile" data-pickdept="${esc(d)}"><i style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b><span>${esc(DEPT_NAME[d] || '')}</span><small>${counts[d] || 0} shelves</small></button>`;
-  sh.innerHTML = `<div class="sheet md-sheet"><h3>Departments</h3><button class="md-all" data-pickdept="all">${ic('map')}<span><b>All departments</b><small>Whole floor, every colour</small></span></button>` +
-    DEPT_GROUPS.map(g => { const ds = g[2].filter(d => counts[d]); const sq = ds.length <= 4 && ds.every(d => /^[a-z]\d$/.test(d)); return ds.length ? `<div class="md-grp">${esc(g[0])}</div><div class="md-tiles${sq ? ' sq' : ''}">${ds.map(tile).join('')}</div>` : ''; }).join('') +
-    `<button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  const counts = mapStats()?.depts || {}, col = d => DEPT_COLOUR[d] || '#64748B';
+  const tile = d => `<button class="md-tile" data-pickdept="${esc(d)}"><i style="background:${col(d)}"></i><b>${esc(d.toUpperCase())}</b><span>${esc(DEPT_NAME[d] || '')}</span></button>`;
+  const area = (g, ds) => `<button class="md-area" data-pickdept="${esc(ds.join(','))}" aria-label="All of ${esc(g[0])}">${ic(PICK_ICON[g[0].toLowerCase()] || g[1] || 'layers')}<b>${esc(g[0])}</b><span>All ${ds.length}</span><span class="md-cols">${ds.map(d => `<i style="background:${col(d)}"></i>`).join('')}</span></button>`;
+  const other = d => `<button class="md-other" data-pickdept="${esc(d)}"><span class="md-oi" style="--dc:${col(d)}">${ic(PICK_ICON[d] || 'layers')}</span><b>${esc(DEPT_NAME[d] || d)}</b></button>`;
+  const rows = DEPT_GROUPS.map(g => {
+    const ds = g[2].filter(d => counts[d]); if (!ds.length) return '';
+    const coded = ds.length <= 4 && ds.every(d => /^[a-z]\d$/.test(d));
+    return coded ? `<div class="md-row">${area(g, ds)}${ds.map(tile).join('')}</div>` : `<div class="md-others">${ds.map(other).join('')}</div>`;
+  }).join('');
+  sh.innerHTML = `<div class="sheet md-sheet"><h3>Departments</h3><button class="md-all" data-pickdept="all">${ic('map')}<span><b>All departments</b><small>Whole floor, every colour</small></span></button>${rows}<button class="mv-ghost" data-act="close-more">Close</button></div>`;
   sh.classList.add('open');
 }
 function openMore() {

@@ -91,8 +91,8 @@ export default {
       if (gs.length) { selected = shelvesOf[0]; map.select(selected); map.highlight(gs); map.zoomTo(selected); toast(`${name}: ${shelvesOf.length} shel${shelvesOf.length === 1 ? 'f' : 'ves'}`); }
       else { map.zoomDept([sd]); toast(`${name} has no shelves assigned yet, so its department shows`); }
     }
-    // From the phone's Departments picker: one department, or 'all' to clear.
-    if (ctx.arg?.dept && ctx.isMobile) { const d = String(ctx.arg.dept).toLowerCase(); map.zoomDept(d === 'all' ? [] : [d]); }
+    // From the phone's Departments picker: one department, an area's ("h1,h2,h3,h4"), or 'all' to clear.
+    if (ctx.arg?.dept && ctx.isMobile) { const d = String(ctx.arg.dept).toLowerCase(); map.zoomDept(d === 'all' ? [] : d.split(',').filter(Boolean)); }
     else if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
     const paint = () => {
       const host = $('#selhost', root); if (host) host.innerHTML = pcSel ? pcCard(pcSel) : selCard(ctx, map, selected);
