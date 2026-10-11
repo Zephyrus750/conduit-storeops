@@ -111,7 +111,7 @@ async function enter() {
     if (s.actas) { await client.session.endActAs(); await enterAdmin(); toast(`Cannot open ${s.store}: ${e.message}`, 'bad'); return; }
     hideCover(); showSignin({ error: e.message }); return;
   }
-  admin = null; frame.classList.remove('adm'); capsSig = (client.session.current?.caps || []).join(',');
+  admin = null; frame.classList.remove('adm'); applyPrefs(frame); capsSig = (client.session.current?.caps || []).join(',');
   // After an update, What's New once (a device on its first run gets the walkthrough instead).
   { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }
   team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current) });
@@ -183,7 +183,7 @@ async function idleCheck() {
   finally { locking = false; }
 }
 function closeStore() { team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
-function leave() { closeStore(); admin = null; frame.classList.remove('adm'); actasBar(null); resetAdmin(); }
+function leave() { closeStore(); admin = null; frame.classList.remove('adm'); applyPrefs(frame); actasBar(null); resetAdmin(); }
 async function signOut() {
   try { await store?.flush(); } catch {}
   // A shared device keeps no store data past sign-out (the outbox was just
@@ -208,7 +208,7 @@ async function enterAdmin() {
   cover(`<div class="ld-center"><div class="ld-brand">${mark()}<span class="ld-word">Con<b>duit</b></span></div><div class="ld-store"><span>Owner</span><span class="num">console</span></div><div class="ld-text">Loading stores…</div><div class="ld-bar"><i></i></div></div>`, 'loading');
   try { await admin.refreshStores(); }
   catch (e) { admin = null; hideCover(); if (e.status === 401 || e.status === 403) { await client.session.signOut(); showSignin({ owner: true, error: 'Owner session expired. Sign in again.' }); } else showSignin({ owner: true, error: e.message }); return; }
-  frame.classList.add('adm'); setWs('admin');
+  frame.classList.add('adm'); applyPrefs(frame); setWs('admin');
   paintStatus({ state: 'owner' });
   hideCover();
   show(current && current.startsWith('admin') ? current : 'admin', currentArg);
@@ -407,7 +407,7 @@ function show(id, arg) {
 async function actAs(no) {
   try { await store?.flush(); } catch {}
   await client.session.actAs(no);
-  closeStore(); admin = null; frame.classList.remove('adm'); resetAdmin();
+  closeStore(); admin = null; frame.classList.remove('adm'); applyPrefs(frame); resetAdmin();
   await enter();
 }
 // Bottom sheets close from the top right, the way the team sheet does.

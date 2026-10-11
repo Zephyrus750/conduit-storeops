@@ -1,5 +1,8 @@
-// Per-device appearance preferences: tokens applied to the one frame.
+// Per-device preferences: tokens applied to the one frame.
 // Stored under suite_prefs (brand-neutral, feature-named).
+// The colour scheme is fixed store-wide (managers share PCs): charcoal bars
+// with the Lagoon accent in a store, charcoal with Signal orange in the owner
+// console. Only the display scale and the collapsed rail are per device.
 
 export const ACCENTS = [
   ["Signal orange", '#D24E0E', '#B84309', '#FDEEE5', '#F4C9B3', '', 'bright'],
@@ -32,26 +35,23 @@ const KEY = 'suite_prefs';
 // showcase did on a 1440-wide screen). Container queries see the scaled
 // width, so a half-screen window still gets the half-screen layout.
 export const SCALES = [['0.8', 'Small'], ['0.95', 'Compact'], ['1', 'Default'], ['1.15', 'Large']];
-const DEFAULTS = { skin: 'light', accent: 0, rail: 'light', bars: 'plain', hdr: 'classic', railmin: false, scale: '0.95' };
+const DEFAULTS = { railmin: false, scale: '0.95' };
+const LAGOON = ACCENTS.findIndex(a => a[0] === 'Lagoon');
+const STORE_LOOK = { accent: LAGOON, rail: 'ink' };
+// The console's rail is charcoal in its own stylesheet rules.
+const CONSOLE_LOOK = { accent: 0, rail: 'light' };
 let cur = null;
 export function prefs() { if (!cur) { try { cur = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) || '{}')) }; } catch { cur = { ...DEFAULTS }; } if (['0.75', '0.85', '0.9'].includes(cur.scale)) cur.scale = cur.scale === '0.75' ? '0.8' : '0.95'; } return cur; }
 export function setPref(k, v) { prefs()[k] = v; try { localStorage.setItem(KEY, JSON.stringify(cur)); } catch {} applyPrefs(); }
 export function applyPrefs(frame = document.querySelector('.frame')) {
   if (!frame) return;
-  // Auto follows the device's light or dark setting, and changes with it.
-  const p = prefs(), a = ACCENTS[p.accent] || ACCENTS[0], dark = p.skin === 'dark' || (p.skin === 'auto' && osDark());
-  frame.classList.toggle('dark', dark);
+  const p = prefs(), look = frame.classList.contains('adm') ? CONSOLE_LOOK : STORE_LOOK, a = ACCENTS[look.accent];
+  frame.classList.remove('dark');
   for (const c of ['rail-light', 'rail-tint', 'rail-solid', 'rail-deep', 'rail-ink', 'bars-plain', 'bars-tint', 'bars-strong', 'hdr-classic', 'hdr-title']) frame.classList.remove(c);
-  frame.classList.add('rail-' + p.rail, 'bars-' + p.bars, 'hdr-' + p.hdr);
+  frame.classList.add('rail-' + look.rail, 'bars-plain', 'hdr-classic');
   const s = frame.style;
-  s.setProperty('--accent', a[1]); s.setProperty('--accent-ink', dark ? a[1] : a[2]);
-  s.setProperty('--accent-soft', dark ? `color-mix(in srgb,${a[1]} 22%,#111827)` : a[3]);
-  s.setProperty('--accent-line', dark ? `color-mix(in srgb,${a[1]} 45%,#111827)` : a[4]);
-  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+  s.setProperty('--accent', a[1]); s.setProperty('--accent-ink', a[2]); s.setProperty('--accent-soft', a[3]); s.setProperty('--accent-line', a[4]);
+  document.documentElement.style.colorScheme = 'light';
   const app = frame.querySelector('#app'); if (app) app.classList.toggle('railmin', !!p.railmin);
   const z = Number(p.scale) || 1; s.zoom = z === 1 ? '' : String(z);
 }
-
-const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
-const osDark = () => !!mq?.matches;
-mq?.addEventListener?.('change', () => { if (prefs().skin === 'auto') applyPrefs(); });

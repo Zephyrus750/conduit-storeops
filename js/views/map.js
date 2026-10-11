@@ -33,14 +33,16 @@ export function selCard(ctx, map, id) {
     `<div class="acts2"><button class="btn primary sm" data-act="pick-add" data-shelf="${esc(id)}">${ic('m-picklist')}Add to pick list</button><a class="btn sm" data-go="refresh" data-select="${esc(id)}">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint" data-select="${esc(id)}">${ic('m-labelint')}Label check</a><button class="btn sm" data-act="share" data-shelf="${esc(id)}">${ic('qr')}Share</button></div></div>`;
 }
 // The phone Home's shelf card, the size of the mode panels (Refresh,
-// Emergency): the shelf beside a separator, then its micro-departments,
-// what it is and two actions.
+// Emergency): its area (Home, Clothing, Kids), department and shelf in a
+// fixed-width column, so the separator sits in the same place for every
+// shelf, then its micro-departments, what it is and two actions.
 export function mvSel(ctx, map, id) {
   if (!id) return mvEmpty();
   const g = map.groups(id)[0]; if (!g) return '';
   const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id), d = shelfDetail(map, id), cd = map.code(id);
   const facts = [d.fixture || (info.sub.startsWith('E') ? 'End' : 'Side'), runText(cd.shelf, cd.sub, runSubs(map, cd.shelf), info.segments), d.modules ? `${d.modules} module${d.modules === 1 ? '' : 's'}` : '', d.range, d.size, d.shared.length ? 'also ' + d.shared.join(', ') : '', f.refreshed ? 'refreshed ' + fmtTime(f.refreshed.at) : ''].filter(Boolean);
-  return `<div class="who2">${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b>${shelfName(cd)}</div>` +
+  const area = DEPT_GROUPS.find(a => a[0] !== 'Other' && a[2].includes(info.dept));
+  return `<div class="who2">${area ? `<span class="ar">${ic(area[1])}${area[0]}</span>` : ''}${dep(info.dept)}<b class="dn">${DEPT_NAME[info.dept] || info.dept}</b>${shelfName(cd)}</div>` +
     `<div class="what">${f.micros.length ? `<div class="mics">${microChips(f.micros)}</div>` : ''}<div class="mvs-d">${facts.map(esc).join(' · ')}</div>` +
     `<div class="mvs-btns"><button class="mv-share" data-act="pick-add" data-shelf="${esc(id)}" aria-label="Add ${esc(id)} to the pick list" title="Add to pick list">${ic('m-picklist')}</button><button class="mv-share" data-act="share" data-shelf="${esc(id)}" aria-label="Share ${esc(id)}" title="Share">${ic('qr')}</button></div></div>`;
 }
