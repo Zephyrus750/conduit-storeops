@@ -318,9 +318,9 @@ const setVar = (el, k, v) => { if (el.style.getPropertyValue(k) !== v) el.style.
 // needs it, and measuring it while a view mounts would lay the whole map out
 // before the view has painted its marks, and then again after (measured at
 // up to 400 ms a switch on a store phone).
-let liveW = 0, onLiveW = null, watched = null;
-const liveRO = typeof ResizeObserver === 'function' ? new ResizeObserver(es => { for (const e of es) { const w = e.contentRect.width; if (w && Math.abs(w - liveW) > 0.5) { liveW = w; onLiveW?.(); } } }) : null;
-function watchLive() { if (liveRO && watched !== live) { if (watched) liveRO.unobserve(watched); liveW = 0; watched = live; liveRO.observe(live); } }
+let liveW = 0, liveH = 0, onLiveW = null, watched = null;
+const liveRO = typeof ResizeObserver === 'function' ? new ResizeObserver(es => { for (const e of es) { const { width: w, height: h } = e.contentRect; if (h) liveH = h; if (w && Math.abs(w - liveW) > 0.5) { liveW = w; onLiveW?.(); } } }) : null;
+function watchLive() { if (liveRO && watched !== live) { if (watched) liveRO.unobserve(watched); liveW = liveH = 0; watched = live; liveRO.observe(live); } }
 // Whether the live map is the one mounted in this stage (the shell keeps it
 // there between the phone's map modes).
 export function liveIn(stage) { return !!live && live.parentNode === stage; }
@@ -525,18 +525,56 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       let x = 0, y = 0; for (const r of segs) { const b = r.getBBox(); x += b.x + b.width / 2; y += b.y + b.height / 2; }
       return [x / segs.length, y / segs.length];
     },
-    // Search highlight: the given groups get a ring, the rest dim; null clears.
+    // Search highlight: the given groups (and their run badges) pulse, the
+    // rest dim; null clears.
     highlight(groups) {
-      for (const g of $$('.shelf-group[data-hl]', svg)) g.removeAttribute('data-hl');
+      for (const g of $$('[data-hl]', svg)) g.removeAttribute('data-hl');
       if (!groups || !groups.length) { svg.classList.remove('has-hl'); return; }
-      for (const g of groups) g.setAttribute('data-hl', '1'); svg.classList.add('has-hl');
+      const runs = new Set(groups.map(g => g.getAttribute('data-shelf')));
+      for (const g of groups) g.setAttribute('data-hl', '1');
+      for (const b of $$('.shelf-badges [data-shelf]', svg)) if (runs.has(b.getAttribute('data-shelf'))) b.setAttribute('data-hl', '1');
+      svg.classList.add('has-hl');
     },
-    zoomTo(id, pad = 700) {
+    // The box around a shelf or run, in map units.
+    boxOf(id) {
+      const bs = api.groups(id).map(g => g.querySelector('.shelf')?.getBBox()).filter(Boolean); if (!bs.length) return null;
+      const x0 = Math.min(...bs.map(b => b.x)), y0 = Math.min(...bs.map(b => b.y)), x1 = Math.max(...bs.map(b => b.x + b.width)), y1 = Math.max(...bs.map(b => b.y + b.height));
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    },
+    // Frames a shelf so it is easy to see on any screen: its longer side
+    // takes about 45% of the view, never closer than minW map units (or one
+    // a screen pixel) across, so the aisles around it stay in view, shaped to the screen, and centred
+    // in the part of the map the phone's open sheet leaves visible.
+    zoomTo(id, minW = 420) {
       const fid = api.groups(id)[0]?.closest('.mfl')?.getAttribute('data-fid'); if (fid && fid !== cur?.id) api.floor(fid);
-      const c = api.centreOf(id); if (!c) return;
+      const b = api.boxOf(id); if (!b) return;
       const full = vb0.split(' ').map(Number);
-      const w = pad * 2, h = pad * 2 * (full[3] / full[2]);
-      animateTo([c[0] - w / 2, c[1] - h / 2, w, h], 400); svg.classList.add('zoomed');
+      const sw = svg === live && liveW ? liveW : svg.clientWidth, sh = svg === live && liveH ? liveH : svg.clientHeight;
+      const a = sw && sh ? sw / sh : full[2] / full[3];
+      // No closer than about a map unit a pixel, so a wide screen keeps the aisles around it.
+      const w = Math.min(Math.max(b.w / 0.45, (b.h / 0.45) * a, minW, sw || 0), full[2] * 1.2), h = w / a;
+      const sheet = stage.closest('.content.mv.sheet-open')?.querySelector(':scope > .mv-sel');
+      const st = stage.getBoundingClientRect(), shown = sheet ? Math.min(1, Math.max(0.3, (sheet.getBoundingClientRect().top - st.top) / (st.height || 1))) : 1;
+      animateTo([b.x + b.w / 2 - w / 2, b.y + b.h / 2 - h * shown / 2, w, h], 450); svg.classList.add('zoomed');
+    },
+    // Three rings ping out from a shelf so the eye finds it at once.
+    ping(id) {
+      const b = api.boxOf(id); if (!b) return;
+      svg.querySelector(':scope > .locate-ping')?.remove();
+      const r = Math.max(b.w, b.h) * 0.6 + 40, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g'); g.setAttribute('class', 'locate-ping');
+      g.innerHTML = [0, 1, 2].map(i => `<circle cx="${cx}" cy="${cy}" r="${r}" style="animation-delay:${i * 0.45}s"/>`).join('');
+      svg.appendChild(g); setTimeout(() => g.remove(), 2600);
+    },
+    // A found shelf, as ShelfSearcher showed it: selected, the rest of the
+    // map dimmed, its outline pulsing until something else is chosen, framed
+    // and pinged. The measuring waits a frame, so a view can call this while
+    // it mounts (a view switch in between cancels it).
+    locate(id, { zoom = true } = {}) {
+      const gs = api.groups(id); if (!gs.length) return false;
+      api.select(id); api.highlight(gs);
+      requestAnimationFrame(() => { if (off.signal.aborted || !svg.isConnected) return; if (zoom) api.zoomTo(id); api.ping(id); });
+      return true;
     },
     clearOverlays() { for (const el of $$('.route-layer,.route-path,.route-n,.pin', svg)) el.remove(); for (const g of $$('[data-onroute]', svg)) g.removeAttribute('data-onroute'); svg.classList.remove('has-route'); },
     // The pick route as ShelfSearcher drew it: legs along the walk-path
@@ -992,7 +1030,7 @@ function mapFind(root, input, map) {
     if (focus >= 0 && items[focus]) return pick(items[focus]);
     const q = input.value.trim(); if (!q) return;
     const gs = matchGroups(q);
-    if (gs.length) { const id = gs.length === map.groups(gs[0].getAttribute('data-shelf')).length ? gs[0].getAttribute('data-shelf') : canonCode(q); map.select(id); map.highlight(gs); map.zoomTo(id); remember(q.toUpperCase()); state('found'); announce(id); return hide(); }
+    if (gs.length) { const id = gs.length === map.groups(gs[0].getAttribute('data-shelf')).length ? gs[0].getAttribute('data-shelf') : canonCode(q); map.select(id); map.highlight(gs); map.zoomTo(id); map.ping(id); remember(q.toUpperCase()); state('found'); announce(id); return hide(); }
     const d = suggest(q).find(x => x.kind !== 'shelf'); if (d) return pick(d);
     state('not-found');
   };

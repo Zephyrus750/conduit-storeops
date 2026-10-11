@@ -149,7 +149,7 @@ export default {
     paint();
     // Carried from a shelf selected on the map: zoom to it and ring it. No
     // mark: a tap here toggles the refresh, so arriving only brings it into view.
-    if (ctx.arg?.select) { const code = canonCode(ctx.arg.select); if (map.groups(code).length) { map.select(code); map.zoomTo(code); } }
+    if (ctx.arg?.select) { const code = canonCode(ctx.arg.select); if (map.groups(code).length) { map.select(code); requestAnimationFrame(() => { map.zoomTo(code); map.ping(code); }); } }
     bindShelfScan(root, map, async info => { const was = !!markKeysFor(model(ctx).marks, info).length; await tap(ctx, info, { scanned: true }); lastScan = { ok: true, text: `${info.full} ${was ? 'was already refreshed this week' : 'marked refreshed'}` }; paint(); }, msg => { lastScan = { ok: false, text: msg }; paint(); });
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;

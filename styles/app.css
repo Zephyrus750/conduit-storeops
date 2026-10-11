@@ -349,15 +349,21 @@ svg.map.real { background: #fff; }
 .map.real .shelf-group:hover .shelf { stroke-width: 2.5; }
 .map.real .shelf-badges .sb { font-size: 24px; font-weight: 800; }
 .map.real .shelf-badges .sb[data-dept="k3"], .map.real .shelf-badges .sb[data-dept="k4"], .map.real .shelf-badges .sb[data-dept="c3"] { fill: #1a1a2e; }
-.map.real .shelf-group[data-sel] .shelf { stroke: #fff !important; stroke-width: 4 !important; fill-opacity: 1 !important; }
+.map.real .shelf-group[data-sel]:not([data-hl]) .shelf { stroke: #fff !important; stroke-width: 4 !important; fill-opacity: 1 !important; }
 .map.real .shelf-group[data-sel] .shelf-label { fill: #fff !important; font-weight: 800; }
 /* find on the map: cyan and magenta pulse on the hits, the rest step back */
 .map.real.has-hl .shelf-group:not([data-hl]) { opacity: .3; }
-.map.real.has-hl .shelf-badges [data-shelf] { opacity: .15; }
+.map.real.has-hl .shelf-badges [data-shelf]:not([data-hl]) { opacity: .15; }
 .map.real .shelf-group[data-hl] { opacity: 1 !important; }
 .map.real .shelf-group[data-hl] .shelf { stroke-width: 5 !important; fill-opacity: 1 !important; animation: shelf-pulse-border 1.4s ease-in-out infinite; }
 @keyframes shelf-pulse-border { 0%, 100% { stroke: #00e5ff; stroke-width: 5; } 50% { stroke: #ff40ff; stroke-width: 7; } }
 @media (prefers-reduced-motion: reduce) { .map.real .shelf-group[data-hl] .shelf { animation: none; stroke: #00e5ff; } }
+.map.real .shelf-group[data-hl] .shelf-label { fill: #fff !important; font-weight: 800; }
+/* A found shelf: three rings ping out from it (map.locate / map.ping). */
+.map.real .locate-ping { pointer-events: none; }
+.map.real .locate-ping circle { fill: none; stroke: #00e5ff; stroke-width: 3; vector-effect: non-scaling-stroke; transform-box: fill-box; transform-origin: center; opacity: 0; animation: locate-ping 1.3s ease-out both; }
+@keyframes locate-ping { from { transform: scale(.2); opacity: 1; stroke-width: 5; } to { transform: scale(1.5); opacity: 0; stroke-width: 2; } }
+@media (prefers-reduced-motion: reduce) { .map.real .locate-ping { display: none; } }
 
 /* The bar above the map and the crumb strip below stay in the flow, as
    the earlier design had them; only the map itself changed. */
@@ -2166,3 +2172,16 @@ button.sx-chip { cursor: pointer; }
 .li-mob .mv-mh { display: none; }
 /* Toasts clear the strip on the phone's map modes. */
 body:has(.content.mv > .mv-strip) #toasts { bottom: 146px; }
+
+/* The phone map's breadcrumb (ShelfSearcher's context bar): area › badge +
+   department › shelf. The department name gives way first on a narrow phone. */
+.mv-mbadge:has(.mcrumb){right:10px;max-width:max-content;display:flex;padding:5px 11px 5px 9px}
+.mcrumb{display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap;font-weight:600}
+.mcrumb svg.i{width:14px;height:14px;flex:none;color:var(--dim)}
+.mcrumb button{display:inline-flex;align-items:center;gap:5px;min-width:0;padding:0;background:none;border:0;font:inherit;color:inherit;cursor:pointer}
+.mcrumb .ma{flex:none}
+.mcrumb .md{flex:0 1 auto}
+.mcrumb .md span{overflow:hidden;text-overflow:ellipsis}
+.mcrumb .dep{font-size:10px;font-weight:800;padding:2px 5px;border-radius:4px;flex:none;letter-spacing:.02em}
+.mcrumb .sep{font-style:normal;opacity:.5;flex:none}
+.mcrumb .ms{flex:none;color:var(--ink);font-weight:800;letter-spacing:.02em}

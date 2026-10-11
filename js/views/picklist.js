@@ -48,7 +48,7 @@ export default {
       else if (act === 'pick-next') { const n = m.items.find(i => !i.completed); if (n) await save(ctx, m.items.map(i => i === n ? { ...i, completed: true } : i)); }
       else if (act === 'add') { const inp = $('[data-field="add"]', root); const codes = [...new Set(inp.value.toUpperCase().replace(/([A-Z]+\d+)\s*[- ]\s*([SE]\d+)/g, '$1$2').split(/[\s,;]+/).map(canonCode).filter(Boolean))]; const bad = codes.filter(c => !map.groups(c).length); if (bad.length) toast(`Not in this store: ${bad.join(', ')}`, 'bad'); const ok = codes.filter(c => map.groups(c).length && !m.items.some(i => i.code === c)); if (ok.length) await save(ctx, replan(map, [...m.items, ...ok.map(code => ({ code, completed: false }))], ok.length)); inp.value = ''; }
       else if (act === 'plan') { const order = map.planOrder(m.items.map(i => i.code)); const by = Object.fromEntries(m.items.map(i => [i.code, i])); await save(ctx, order.map(c => by[c])); toast('Stops ordered by the shortest walk'); }
-      else if (act === 'zoom') { map.zoomTo(code); map.select(code); }
+      else if (act === 'zoom') { map.zoomTo(code); map.select(code); map.ping(code); }
       else if (act === 'floor') { map.floor(a.dataset.floor); paint(); }
     });
     // Drag a stop by its grip to reorder (mouse or touch): the row under the
