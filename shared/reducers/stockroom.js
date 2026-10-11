@@ -12,7 +12,7 @@
 //                devices: [device ids that scanned it] (a phone's "My locations"),
 //                readd: code → { at, by, doneAt } (K2B's Re-add: stock found after the bay was finalised, scanned back in) }
 //                requested: date → [bays]      claims: bay → { by, at }
-//   adjustments  date → keycode → { qty (≤ 0, system SOH), counted (found, or null), name, location, confirmed, addedAt }
+//   adjustments  date → keycode → { qty (≤ 0, system SOH), counted (found, or null), name, location, confirmed, addedAt, source?, done?: { at, by } }
 //   daylist      date → { walkers, excluded: [bays], source }
 //   scanPresets  `${kind}:${W}x${H}` → { x, y, w, h (fractions of the shared screen), at, by }: the
 //                screen scan's region for a screen size, store-wide (K2B's ss presets)
@@ -25,13 +25,14 @@
 import { reject, badList, earlier } from './util.js';
 import { backfillMetrics, scannedCodes } from '../backfill.js';
 import { gs1Parse } from '../gs1.js';
+import { keepDates, KEEP_DAYS, KEEP_WEEKS } from '../stockintel.js';
 
 export const RINGS = ['new-lines', 'overstock', 'cant-work', 'online-picks'];
 export const SUBMISSION_STATUS = ['pending', 'corrected', 'submitted'];
 export const DAYLIST_SOURCES = ['requested', 'snapshot', ''];
 export const CLAIM_TTL_MS = 20 * 60_000;         // a desk's hold on a bay lapses after 20 minutes without a renewal
 export const CAGE_LOG = 40;                     // activity entries kept per cage
-export const SOH_KEEP = 26;                     // snapshots kept (about six months of weekly pastes)
+export const SOH_KEEP = KEEP_DAYS + KEEP_WEEKS;   // at most: the last 14 days, then one a week for 26 weeks
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SUB_CODES_MAX = 1000, CODE_LEN = 20, CAGE_LINES_MAX = 500;   // per update and per bay; code length; lines in one cage
 
@@ -294,8 +295,19 @@ export const stockroomReducers = {
     const loc = p.location ? String(p.location).toUpperCase() : '';
     // qty is the system SOH from the report (stored ≤ 0); counted is what the
     // person found on the shelf, kept as evidence when the phone sends it.
-    const counted = Number.isFinite(p.counted) ? Math.max(0, Math.round(p.counted)) : (day[kc]?.counted ?? null);
-    day[kc] = { qty: -Math.abs(p.qty), ...(counted != null ? { counted } : {}), name: p.name || day[kc]?.name || '', location: loc, confirmed: !!p.confirmed, addedAt: e.at };
+    // A later flag that leaves the bay or the confirmation out keeps what
+    // an earlier one (a review at the bay) recorded.
+    const cur = day[kc], counted = Number.isFinite(p.counted) ? Math.max(0, Math.round(p.counted)) : (cur?.counted ?? null);
+    const source = ['report', 'review', 'phone', 'desk', 'screen', 'import'].includes(p.source) ? p.source : cur?.source;
+    day[kc] = { qty: -Math.abs(p.qty), ...(counted != null ? { counted } : {}), name: p.name || cur?.name || '', location: p.location === undefined || (p.location === '' && cur?.location) ? cur?.location || '' : loc, confirmed: p.confirmed === undefined ? !!cur?.confirmed : !!p.confirmed || !!cur?.confirmed, addedAt: cur?.addedAt || e.at, ...(source ? { source } : {}), ...(cur?.done ? { done: cur.done } : {}) };
+    return null;
+  },
+  // Ticked off once the stock is adjusted in the system (or put back).
+  'adjustment.done'(s, e) {
+    const day = s.adjustments[e.entity.date], kc = String(e.entity.keycode);
+    if (!day?.[kc]) return reject('not_found', `${kc} is not on the ${e.entity.date} adjustments`);
+    if (e.payload?.undo) delete day[kc].done;
+    else day[kc].done = { at: e.at, by: e.actor?.device || null };
     return null;
   },
   'adjustment.remove'(s, e) {
@@ -321,8 +333,8 @@ export const stockroomReducers = {
   'soh.publish'(s, e) {
     const d = String(e.entity.date); if (!DAY_RE.test(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');
     const p = e.payload || {}, soh = (s.soh ||= { snaps: {}, verify: {} });
-    soh.snaps[d] = { rows: Number(p.rows) || 0, locs: Number(p.locs) || 0, week: String(p.week || '').slice(0, 9), at: e.at, by: e.actor?.device || null };
-    const keep = Object.keys(soh.snaps).sort().slice(-SOH_KEEP);
+    soh.snaps[d] = { rows: Number(p.rows) || 0, locs: Number(p.locs) || 0, week: String(p.week || '').slice(0, 9), at: e.at, by: e.actor?.device || null, ...(p.updatedLocs ? { updates: (soh.snaps[d]?.updates || 0) + 1 } : {}) };
+    const keep = keepDates(Object.keys(soh.snaps));
     for (const k of Object.keys(soh.snaps)) if (!keep.includes(k)) { delete soh.snaps[k]; delete soh.verify[k]; }
     return null;
   },

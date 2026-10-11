@@ -147,12 +147,15 @@ export default {
     // Carried from a shelf selected on the map: zoom to it and ring it. No
     // mark: a tap here toggles the refresh, so arriving only brings it into view.
     if (ctx.arg?.select) { const code = canonCode(ctx.arg.select); if (map.groups(code).length) { map.select(code); map.zoomTo(code); } }
-    bindShelfScan(root, map, info => tap(ctx, info, { scanned: true }));
+    bindShelfScan(root, map, async info => { const was = !!markKeysFor(model(ctx).marks, info).length; await tap(ctx, info, { scanned: true }); lastScan = { ok: true, text: `${info.full} ${was ? 'was already refreshed this week' : 'marked refreshed'}` }; paint(); }, msg => { lastScan = { ok: false, text: msg }; paint(); });
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act'), m = model(ctx);
       try {
         if (act === 'mode') { mode = a.getAttribute('data-mode'); paint(); }
+        else if (act === 'scan-open') { scanOpen = true; lastScan = null; paint(); setTimeout(() => root.querySelector('[data-field="shelfscan"]')?.focus(), 50); }
+        else if (act === 'scan-close') { if (e.target.closest('.rf-sheet') && !e.target.closest('.sheet-x')) return; scanOpen = false; paint(); }
+        else if (act === 'scan-go') { root.querySelector('[data-field="shelfscan"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }
         // Walk the aisle scanning shelf labels: each read marks that shelf
         // refreshed (one already done says so). "A013S02" and "A13 S2" name
         // one shelf (groupsFor); a run's name asks for the shelf's label.
@@ -189,20 +192,25 @@ function sidebar(map, m) {
     `<div class="pcard"><div class="plan"><span class="pt3" style="margin:0">Plan</span><span class="sw2${mode === 'plan' ? ' on' : ''}" data-act="mode" data-mode="${mode === 'plan' ? 'refresh' : 'plan'}"></span></div><div class="pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c && mode === 'plan' ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<span class="er${planColour === 'erase' && mode === 'plan' ? ' on' : ''}" data-act="colour" data-colour="erase">${ic('x')}</span></div><div class="lbl">${mode === 'plan' ? 'Plan mode: tap shelves to paint them for the team. Same colour again clears.' : 'Pick a colour, then tap shelves to mark them.'}</div></div>` +
     `<div class="pfoot"><button class="btn" data-act="reset-plan">${ic('refresh')}Reset planning</button></div>`;
 }
-// The team-sync chip reads the store's real connection state.
-function syncChip(s) {
-  const on = s.state === 'live' || s.state === 'polling';
-  const txt = s.state === 'live' ? 'live' : s.state === 'polling' ? 'polling' : s.state === 'connecting' ? 'connecting' : `offline${s.queued ? ` · ${s.queued} queued` : ''}`;
-  return `<span class="rf-sync${on ? ' live' : ''}" title="${esc(s.lastError || 'Team sync')}"><i></i>${txt}</span>`;
+// The phone's scan: one button opens a sheet with the camera and a box to
+// type the label in; it stays open for the next shelf, saying what the last
+// one did. The week's focus departments are a manager's call, made on the
+// desk, so the phone only shows them.
+let scanOpen = false, lastScan = null;
+function scanSheet() {
+  return `<div class="rf-sheetback" data-act="scan-close"><div class="sheet rf-sheet" role="dialog" aria-label="Mark a shelf refreshed"><div class="sheet-h"><h3>Mark a shelf refreshed</h3><button class="sheet-x" data-act="scan-close" aria-label="Close">${ic('x')}</button></div>` +
+    `<button class="mv-big" data-camera="shelfscan" data-camera-continuous title="Scan shelf labels">${ic('camera')}Scan with the camera</button>` +
+    `<div class="rf-type"><span class="lbl">Or type the shelf</span><div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="e.g. A16 S1" aria-label="Shelf label"><button class="btn primary sm" data-act="scan-go">Mark</button></div></div>` +
+    (lastScan ? `<div class="rf-last ${lastScan.ok ? 'ok' : 'bad'}">${ic(lastScan.ok ? 'check' : 'alert')}<span>${esc(lastScan.text)}</span></div>` : '<div class="rf-last">Each label marks its shelf refreshed for the whole team.</div>') + '</div></div>';
 }
 function mobileBar(map, m) {
   const fc = focusCounts(map, m);
   return `<div class="mv-mh">${ic('m-refresh')}<b>Location refresh</b><span>${m.counted} / ${TARGET}</span></div>` +
-    `<div class="rf-row">${mode === 'plan' ? '' : shelfScanField('Scan or type a shelf')}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div>` +
-    (mode === 'plan' ? `<div class="rf-pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : '') + `</div>` +
+    // The toggle keeps its place: in Plan the colours take the scan button's spot.
+    `<div class="rf-row">${mode === 'plan' ? `<div class="rf-pal" role="group" aria-label="Plan colour">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<button class="rf-scanbtn" data-act="scan-open" aria-label="Scan or type a shelf">${ic('barcode')}<span>Scan or type</span></button>`}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div></div>` +
     (mode === 'plan' ? `<div class="mv-hint">Plan mode: tap a shelf to paint it for the team. Tap the same colour again to clear.</div>`
-      : mode === 'focus' ? `<div class="rf-focus pick"><span class="lbl">Focus this week</span>${FOCUS_DEPTS.map(d => `<button class="rf-chip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}"><i class="dep" style="background:${DEPT_COLOUR[d]}">${d.toUpperCase()}</i></button>`).join('')}<button class="rf-chip done" data-act="mode" data-mode="refresh">Done</button></div>`
-      : `<div class="rf-focus"><span class="lbl">Focus</span>${fc.map(f => `<button class="rf-chip" data-act="zoom-dept" data-dept="${f.d}"><i class="dep" style="background:${DEPT_COLOUR[f.d]}">${f.d.toUpperCase()}</i>${f.done}/${f.total}</button>`).join('') || '<span class="mv-hint" style="margin:0">No focus areas set this week</span>'}<button class="rf-chip" data-act="mode" data-mode="focus">Choose…</button>${syncChip(m.sync)}</div>`);
+      : `<div class="rf-focus"><span class="lbl">Focus</span>${fc.map(f => `<button class="rf-chip" data-act="zoom-dept" data-dept="${f.d}"><i class="dep" style="background:${DEPT_COLOUR[f.d]}">${f.d.toUpperCase()}</i>${f.done}/${f.total}</button>`).join('') || '<span class="mv-hint" style="margin:0">No focus departments set this week</span>'}</div>`) +
+    (scanOpen && mode !== 'plan' ? scanSheet() : '');
 }
 function deptOfSeg(map, segId) { for (const g of map.segments()) if (segmentId(g) === segId) return (g.getAttribute('data-dept') || '').toLowerCase(); return ''; }
 

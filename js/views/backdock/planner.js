@@ -51,10 +51,11 @@ function editor(ctx, plan, dock) {
 function usedManifests(plan) { const s = new Set(); for (const day of Object.values(plan.days || {})) for (const sl of Object.values(day.slots || {})) if (sl.manifest?.manNo) s.add(sl.manifest.manNo); return s; }
 function waiting(ctx, plan, dock) {
   const used = usedManifests(plan), list = manifestIndex(dock).filter(m => !m.truck && !used.has(m.manNo));
-  return `<div class="card"><div class="ch"><h3>Manifests without a slot</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${m.consols} consols · ${m.totalCartons} cartons${m.despatch ? ' · despatch ' + esc(m.despatch) : ''}</span><button class="btn sm" data-act="stage-next" data-man="${esc(m.manNo)}">Stage → next free</button></div>`).join('')}</div>` : `<p class="lbl">Every published manifest has a truck.</p>`}<p class="lbl">Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.</p></div>`;
+  return `<div class="card"><div class="ch"><h3>Manifests without a slot</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${m.consols} consols · ${m.totalCartons} cartons${m.despatch ? ' · despatch ' + esc(m.despatch) : ''}</span><button class="btn sm" data-act="stage-next" data-day="0" data-man="${esc(m.manNo)}" title="The next free truck today">Today</button><button class="btn sm" data-act="stage-next" data-day="1" data-man="${esc(m.manNo)}" title="The next free truck tomorrow: for a report that came in the day before">Tomorrow</button></div>`).join('')}</div>` : `<p class="lbl">Every published manifest has a truck.</p>`}<p class="lbl">Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.</p></div>`;
 }
-function nextFree(plan, dock) {
-  for (let off = 0; off < 14; off++) { const d = new Date(); d.setDate(d.getDate() + off); const k = dkey(d); for (let n = 1; n <= 4; n++) if (!plan.days[k]?.slots?.[n] && !truckOf(dock, k, n)) return { date: k, n }; }
+// The next free truck slot from today (from = 0) or tomorrow (from = 1).
+function nextFree(plan, dock, from = 0) {
+  for (let off = from; off < 14; off++) { const d = new Date(); d.setDate(d.getDate() + off); const k = dkey(d); for (let n = 1; n <= 4; n++) if (!plan.days[k]?.slots?.[n] && !truckOf(dock, k, n)) return { date: k, n }; }
   return null;
 }
 export default {
@@ -86,7 +87,7 @@ export default {
         else if (act === 'stage' || act === 'stage-next') {
           let date, n, manNo;
           if (act === 'stage') { ({ date, n } = cur()); manNo = field('man'); if (!manNo) return toast('Choose a manifest first', 'bad'); }
-          else { const nf = nextFree(ctx.store.get('plan'), ctx.store.get('dock')); if (!nf) return toast('No free slot in the next two weeks', 'bad'); date = nf.date; n = nf.n; manNo = a.dataset.man; st.sel = `${date}-${n}`; }
+          else { const nf = nextFree(ctx.store.get('plan'), ctx.store.get('dock'), Number(a.dataset.day) || 0); if (!nf) return toast('No free slot in the next two weeks', 'bad'); date = nf.date; n = nf.n; manNo = a.dataset.man; st.sel = `${date}-${n}`; }
           a.disabled = true;
           const doc = await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(manNo)}`);
           await set(date, n, { manifest: { manNo: doc.manNo, dcNo: doc.dcNo || '', despatch: doc.despatch || '', consols: attachConsols(doc), attachedAt: new Date().toISOString() } });

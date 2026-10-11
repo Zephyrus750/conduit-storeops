@@ -10,6 +10,7 @@ import { previewManifest } from './mpreview.js';
 import { printAudit } from './audit.js';
 import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, ss } from './phonesearch.js';
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
+import { liveAudit } from '../../../shared/reducers/backdock.js';
 import { planCard, take5Card, needsTake5, queuePicker, onPlanAct, onPlanChange, ratesFor, guard, decantBoard } from './plan.js';
 
 const st = { truck: null, land: { ref: '', ptype: 'chep', cartons: '' }, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, pending: [], manPick: false, linking: false, finalising: false, more: false };
@@ -62,6 +63,15 @@ function holdRow(t, h, live) {
 function landForm() {
   return `<div class="bdr-land"><span class="lbl">Land a pallet</span><input class="bdr-in mono" data-field="ref" placeholder="Bay" maxlength="3" title="Grid ref, e.g. A1, or click an empty cell" value="${esc(st.land.ref)}"><span class="bdr-pts">${PTYPES.map(p => `<button class="bdr-pt${st.land.ptype === p[0] ? ' on' : ''}" data-act="ptype" data-pt="${p[0]}"><i style="background:${p[2]}"></i>${p[1]}</button>`).join('')}</span><input class="bdr-in mono" data-field="cartons" inputmode="numeric" placeholder="Cartons" maxlength="3" value="${esc(st.land.cartons)}"><button class="btn primary sm" data-act="land">${ic('plus')}Land</button></div>`;
 }
+// Against the manifest as the truck lands (DV's board tally): consols
+// matched, still to land, labels off the manifest, cartons short and pallets
+// with no label matched. Short counts what has not landed yet, so it falls
+// as the truck comes off.
+function tallyRow(t) {
+  const a = liveAudit(t); if (!a) return '';
+  const c = (cls, v, l, title) => `<span class="bdr-tal${cls ? ' ' + cls : ''}" title="${title}"><b>${v}</b>${l}</span>`;
+  return `<div class="bdr-tally">${c(a.matched === a.total ? 'ok' : '', `${a.matched}/${a.total}`, 'consols matched', 'Consolidations on the manifest that have landed')}${c(a.missing ? 'warn' : 'ok', a.missing, 'not landed', 'On the manifest, not scanned on any pallet yet')}${c(a.extra ? 'bad' : '', a.extra, 'off-manifest', 'Labels scanned that are not on this manifest')}${c(a.shortCartons ? 'warn' : '', a.shortCartons, 'ctn short', 'Cartons the consols not landed yet carry')}${a.unmatched ? c('bad', a.unmatched, 'no label', 'Pallets landed with no label scanned') : ''}</div>`;
+}
 function desktop(ctx) {
   const m = model(ctx), t = m.t, pr = m.pr, live = t?.status === 'live';
   const head = vh('Receiving', sub(fmtDate(todayKey()), `${m.open.length} truck${m.open.length === 1 ? '' : 's'} on the board`, t ? (live ? `T${truckNo(t.id)} live` : `T${truckNo(t.id)} staged`) : 'dock clear'),
@@ -71,7 +81,7 @@ function desktop(ctx) {
   const rates = ratesFor(m.dock), man = t.manifest, fc = forecast(t, Date.now(), rates), gp = t.goalAt ? goalPace(t) : null;
   const headcard = `<div class="card bdr-headcard"><div class="bdr-head"><span class="bdr-tile">${ic('truck')}</span><div class="bdr-tt"><b>Truck ${esc(truckNo(t.id))}</b><span class="tst ${esc(t.status)}">${live ? 'Live' : 'Staged'}</span><small>${live ? `landed ${fmtHM(t.landedAt)} · ${pr.count} pallet${pr.count === 1 ? '' : 's'}${pallets(t).some(p => p.carryover) ? ` (${pallets(t).filter(p => p.carryover).length} carryover)` : ''} · ${pr.active} decanting` : 'staged · the first pallet landed makes it live'}${m.halt ? ` · <b style="color:#B91C1C">${esc(holdName(m.halt))}</b>` : ''}</small></div><button class="btn sm" data-act="audit" title="Print the receiving audit">${ic('print')}Audit</button>` +
     `<div class="bdr-chips"><span class="bdr-chip"><span class="l">Manifest</span><span class="v">${man ? `${man.consols.length}<small> cons · ${man.consols.reduce((n, c) => n + c.cartons, 0)}c</small>` : '—'}</span></span><button class="bdr-chip" data-act="setstart" title="When the decant clock started (clear time and rate run from here)"><span class="l">Decant start</span><span class="v">${fmtHM(startOf(t))}${t.decantStartAt ? '' : '<small> landed</small>'}</span></button><span class="bdr-chip"><span class="l">Goal</span><span class="v">${t.goalAt ? fmtHM(t.goalAt) : '—'}</span></span><span class="bdr-chip"><span class="l">Forecast</span><span class="v">${fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}${fc.at && t.goalAt ? `<small class="${fc.at > Date.parse(t.goalAt) ? 'c-red' : 'c-green'}"> ${fc.at > Date.parse(t.goalAt) ? 'behind' : 'ahead'}</small>` : ''}</span></span><button class="bdr-chip${t.receivingConfirmed ? ' ok' : ''}" data-act="received" title="The receiver hands the truck over: the layout is set"><span class="l">Receiving</span><span class="v">${t.receivingConfirmed ? `${ic('check')}Handed over ${fmtHM(t.receivedAt)}` : 'Hand over'}</span></button></div></div>` +
-    `<div class="bdr-prog"><b class="bdr-big">${pr.done}</b><span class="bdr-of">/ ${pr.total} cartons</span><span class="bdr-pct">${pr.pct}%</span></div><div class="bdr-bar">${gp !== null ? `<b class="bdr-pace" style="left:${Math.round(gp * 100)}%" title="Where the team should be by now to make the goal"></b>` : ''}<i style="width:${pr.pct}%"></i></div></div>`;
+    `<div class="bdr-prog"><b class="bdr-big">${pr.done}</b><span class="bdr-of">/ ${pr.total} cartons</span><span class="bdr-pct">${pr.pct}%</span></div><div class="bdr-bar">${gp !== null ? `<b class="bdr-pace" style="left:${Math.round(gp * 100)}%" title="Where the team should be by now to make the goal"></b>` : ''}<i style="width:${pr.pct}%"></i></div>${tallyRow(t)}</div>`;
   const dock = `<div class="card kpi dk rcv bdr-dock"><div class="kh">${ic('box')}<h3>The dock</h3>${legend()}</div>${live ? landForm() : ''}${dockGrid(t, true)}${holdRow(t, m.halt, live)}</div>`;
   const teamcard = teamCard(t, m.run, live);
   const landed = Object.values(t.pallets || {}).slice().sort((a, b) => (a.landedAt || '').localeCompare(b.landedAt || ''));
@@ -214,7 +224,7 @@ async function onAct(ctx, a, root) {
     // unfinished pallets come with it on their bays. Pallets held at the last
     // finalise join the new truck unless the receiver starts it empty.
     if (act === 'newtruck') {
-      const nid = nextTruckId(m.dock), cur = t || m.open[0], payload = { landedAt: new Date().toISOString() };
+      const nid = nextTruckId(m.dock, ctx.store.get('plan')), cur = t || m.open[0], payload = { landedAt: new Date().toISOString() };
       if (cur) {
         const left = unfinished(cur);
         if (left.some(p => p.status === 'active')) return toast(`Pause or finish what is being decanted on Truck ${truckNo(cur.id)} first`, 'bad');
@@ -384,14 +394,16 @@ export default {
 };
 
 // Sightings from the dock's ledger: a consol manifested on an earlier
-// truck (a late arrival) or already scanned on another (a duplicate?).
-const sightOf = p => JSON.stringify([p?.lateFrom || null, p?.seenBefore || null]);
+// truck (a late arrival), on another planned truck's manifest (it may
+// belong to that truck) or already scanned on another (a duplicate?).
+const sightOf = p => JSON.stringify([p?.lateFrom || null, p?.seenBefore || null, p?.plannedFor || null]);
 function sightToast(ctx, ref, was) {
   const p = model(ctx).t?.pallets?.[ref]; if (!p || sightOf(p) === was) return false;
   const [lf] = JSON.parse(was);
   if (p.lateFrom && JSON.stringify(p.lateFrom) !== JSON.stringify(lf)) toast(`⚠ landed ${ref} — this consol was manifested ${fmtDate(p.lateFrom.d)} (Truck ${truckNo(p.lateFrom.t)}). Late arrival recorded.`, 'bad');
+  else if (p.plannedFor && JSON.stringify(p.plannedFor) !== JSON.stringify(JSON.parse(was)[2])) toast(`⚠ landed ${ref} — this consol is on the manifest for Truck ${truckNo(p.plannedFor.t)} on ${fmtDate(p.plannedFor.d)}. It may belong to that truck.`, 'bad');
   else if (p.seenBefore) toast(`⚠ landed ${ref} — this consol was already scanned ${fmtDate(p.seenBefore.d)} on Truck ${truckNo(p.seenBefore.t)}. Duplicate?`, 'bad');
   else return false;
   return true;
 }
-export const sightBadge = p => (p.lateFrom ? ` <span class="status warn" title="Manifested on Truck ${esc(truckNo(p.lateFrom.t))}">LATE — manifested ${esc(fmtDate(p.lateFrom.d))}</span>` : '') + (p.seenBefore ? ` <span class="status warn" title="Scanned on Truck ${esc(truckNo(p.seenBefore.t))}${p.seenBefore.ref ? ' at ' + esc(p.seenBefore.ref) : ''}">SEEN ${esc(fmtDate(p.seenBefore.d))}</span>` : '') + (p.linkedLateAt ? ` <span class="status">linked late · ${esc(p.linkBasis || 'manual')}</span>` : '');
+export const sightBadge = p => (p.plannedFor ? ` <span class="status warn" title="On the manifest staged for Truck ${esc(truckNo(p.plannedFor.t))} on ${esc(fmtDate(p.plannedFor.d))}: it may belong to that truck">ON T${esc(truckNo(p.plannedFor.t))} ${esc(fmtDate(p.plannedFor.d))}</span>` : '') + (p.lateFrom ? ` <span class="status warn" title="Manifested on Truck ${esc(truckNo(p.lateFrom.t))}">LATE — manifested ${esc(fmtDate(p.lateFrom.d))}</span>` : '') + (p.seenBefore ? ` <span class="status warn" title="Scanned on Truck ${esc(truckNo(p.seenBefore.t))}${p.seenBefore.ref ? ' at ' + esc(p.seenBefore.ref) : ''}">SEEN ${esc(fmtDate(p.seenBefore.d))}</span>` : '') + (p.linkedLateAt ? ` <span class="status">linked late · ${esc(p.linkBasis || 'manual')}</span>` : '');

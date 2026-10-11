@@ -54,3 +54,21 @@ test('the ledger: a consol scanned off-manifest that was manifested to an earlie
   assert.deepEqual(s.dock.trucks[T2].pallets.B1.lateFrom, { t: T1, d: '2026-09-07' });
   assert.equal(s.dock.ledger['000000444'].length, 2);
 });
+
+test('a label staged on another truck’s manifest says where it belongs, and the audit counts cartons short and unlabelled pallets', async () => {
+  const { liveAudit } = await import('../../shared/reducers/backdock.js');
+  const s = initialState();
+  ok(s, 'plan.set', { date: '2026-09-08', slot: '1' }, { manifest: man('M2', [consol(444, 9)]) }, '2026-09-07T05:00', 'manager');
+  ok(s, 'truck.create', { truck: T1 }, {}, '2026-09-07T06:00'); ok(s, 'truck.setLive', { truck: T1 }, {}, '2026-09-07T06:00');
+  ok(s, 'manifest.attach', { truck: T1 }, man('M1', [consol(111, 12), consol(222, 30)]), '2026-09-07T06:01');
+  ok(s, 'pallet.land', { truck: T1, bay: 'A1' }, { ptype: 'chep', cartons: 12 }, '2026-09-07T06:05');
+  ok(s, 'pallet.scan', { truck: T1, bay: 'A1' }, { code: '000000111' }, '2026-09-07T06:05');
+  ok(s, 'pallet.land', { truck: T1, bay: 'A2' }, { ptype: 'chep', cartons: 9 }, '2026-09-07T06:06');
+  ok(s, 'pallet.update', { truck: T1, bay: 'A2' }, { scanIds: ['000000444'] }, '2026-09-07T06:06');   // Add & flag
+  const t = s.dock.trucks[T1];
+  assert.deepEqual(t.pallets.A2.plannedFor, { t: T2, d: '2026-09-08' }, 'on tomorrow’s Truck 1 manifest');
+  assert.equal(t.pallets.A2.lateFrom, undefined);
+  ok(s, 'pallet.land', { truck: T1, bay: 'A3' }, { ptype: 'chep', cartons: 4 }, '2026-09-07T06:07');
+  const a = liveAudit(t);
+  assert.deepEqual([a.matched, a.total, a.missing, a.extra, a.shortCartons, a.unmatched], [1, 2, 1, 1, 30, 1]);
+});

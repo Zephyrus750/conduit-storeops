@@ -588,6 +588,10 @@ export const backdockReducers = {
     if (p.note !== undefined) cur.note = String(p.note || '').slice(0, 200);
     if (team !== undefined) cur.team = team;
     if (manifest !== undefined) cur.manifest = manifest;
+    // A staged manifest goes in the ledger as planned for this slot's truck,
+    // so a label scanned on another truck can say where it belongs (DV's
+    // "matches another manifest").
+    if (manifest) for (const c of manifest.consols) ledgerAdd(s, c.id || c.cons, { t: `${e.entity.date}-T${slot}`, d: e.entity.date, k: 'plan' }, e.at);
     // Booked minutes: a huddle at the decant start (it stops the clock and
     // is reported apart from downtime) and the team break the plan allows.
     Object.assign(cur, booked);
@@ -664,10 +668,13 @@ function ledgerFind(s, id, kinds, notTruck) {
   const k = led9(id); return k ? (s.dock.ledger?.[k] || []).filter(x => kinds.includes(x.k) && x.t !== notTruck).sort((a, b) => b.d.localeCompare(a.d)) : [];
 }
 // An off-manifest scan: manifested to an earlier truck is a late arrival;
+// on another planned truck's manifest it probably belongs to that truck;
 // seen on another truck before is a possible duplicate.
 function sighting(s, e, p, id) {
   const day = e.entity.truck.slice(0, 10), man = ledgerFind(s, id, ['man'], e.entity.truck).find(x => x.d <= day);
+  const plan = man ? null : ledgerFind(s, id, ['plan'], e.entity.truck)[0];
   if (man) p.lateFrom = { t: man.t, d: man.d };
+  else if (plan) p.plannedFor = { t: plan.t, d: plan.d };
   else if (!p.seenBefore) { const seen = ledgerFind(s, id, ['off', 'land'], e.entity.truck)[0]; if (seen) p.seenBefore = seen; }
   ledgerAdd(s, id, { t: e.entity.truck, d: day, k: 'off', ref: p.ref }, e.at);
 }
@@ -895,12 +902,23 @@ function perDeptOf(t, done, consols, nowMs) {
   }
   return Object.values(acc).filter(d => d.workedMins >= 0.5 || d.cartons >= 1).map(d => ({ dept: d.dept, pallets: Math.round(d.pallets * 10) / 10, cartons: Math.round(d.cartons), workedMins: Math.round(d.workedMins * 10) / 10 })).sort((a, b) => b.cartons - a.cartons);
 }
-function auditOf(consols, pallets) {
+// The receiving audit against the manifest (DV's): consols matched and
+// missing, the cartons the missing ones carry, labels off the manifest, and
+// pallets landed with no label matched at all.
+export function auditOf(consols, pallets) {
   const on = new Set(pallets.flatMap(p => p.consolIds));
   const total = consols.length;
   const matched = consols.filter(c => on.has(c.id)).length;
   const extra = pallets.reduce((n, p) => n + p.scanIds.length, 0);
-  const missingIds = consols.filter(c => !on.has(c.id)).slice(0, 40).map(c => ({ id: c.id, cartons: c.cartons, dept: c.dept || '' }));
+  const missing = consols.filter(c => !on.has(c.id));
+  const missingIds = missing.slice(0, 40).map(c => ({ id: c.id, cartons: c.cartons, dept: c.dept || '' }));
   const extraIds = pallets.flatMap(p => p.scanIds.map(id => ({ id, bay: p.ref }))).slice(0, 40);
-  return { matched, missing: total - matched, total, extra, missingIds, extraIds };
+  const shortCartons = missing.reduce((n, c) => n + (Number(c.cartons) || 0), 0);
+  const unmatched = pallets.filter(p => !p.carryover && !p.excluded && !p.consolIds.length && !p.scanIds.length).length;
+  return { matched, missing: total - matched, total, extra, missingIds, extraIds, shortCartons, unmatched };
+}
+// The same audit for an open truck, as it stands.
+export function liveAudit(t) {
+  const gone = new Set(t.carriedOutIds || []), all = consolsOf(t).filter(c => !gone.has(c.id));
+  return all.length ? auditOf(all, Object.values(t.pallets || {})) : null;
 }

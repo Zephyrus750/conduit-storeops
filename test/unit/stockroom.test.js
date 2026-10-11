@@ -183,3 +183,21 @@ test('a removal wins a same-second scan from another device; the device that rem
   assert.equal(apply(s, ev('submission.update', k, { codes: { 42977636: true } }, at)), null, 'P1 undoes its own removal');
   assert.equal(s.backfill.subs['7023:2026-09-07'].codes['42977636'].scanned, true);
 });
+
+test('adjustments: a later flag keeps the bay a review confirmed; ticked off once adjusted, and back', async () => {
+  const { initialState, apply } = await import('../../shared/reducers.js');
+  const { CATALOGUE } = await import('../../shared/catalogue.js');
+  const { ulid } = await import('../../shared/ulid.js');
+  const s = initialState(), d = '2026-10-11', ev = (type, entity, payload = {}) => ({ id: ulid(), store: '1241', area: CATALOGUE[type].area, type, entity, payload, actor: { role: 'stockroom', device: 'SR1', owner: false }, at: '2026-10-11T08:00:00+08:00', v: 1 });
+  assert.equal(apply(s, ev('adjustment.set', { keycode: '43307685', date: d }, { qty: -2, location: '7001', confirmed: true, source: 'review' })), null);
+  assert.equal(apply(s, ev('adjustment.set', { keycode: '43307685', date: d }, { qty: -3, location: '', confirmed: false, source: 'phone', counted: 4 })), null);
+  const it = s.adjustments[d]['43307685'];
+  assert.deepEqual([it.qty, it.location, it.confirmed, it.counted, it.source], [-3, '7001', true, 4, 'phone']);
+  assert.equal(apply(s, ev('adjustment.done', { keycode: '43307685', date: d })), null);
+  assert.equal(s.adjustments[d]['43307685'].done.by, 'SR1');
+  assert.equal(apply(s, ev('adjustment.set', { keycode: '43307685', date: d }, { qty: -3 })), null);
+  assert.ok(s.adjustments[d]['43307685'].done, 'a re-flag keeps the tick');
+  assert.equal(apply(s, ev('adjustment.done', { keycode: '43307685', date: d }, { undo: true })), null);
+  assert.equal(s.adjustments[d]['43307685'].done, undefined);
+  assert.equal(apply(s, ev('adjustment.done', { keycode: '99999999', date: d }))?.code, 'not_found');
+});

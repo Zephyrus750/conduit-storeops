@@ -6,9 +6,9 @@
 // day list turns the flagged ones into the walk's counts.
 
 import { ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
-import { todayKey, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf } from './common.js';
+import { todayKey, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf, ctnOf, depthChip } from './common.js';
 import { openScreenScan } from '../../screenscan.js';
-import { parseReport, sohBand, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
+import { parseReport, rowKey, sohBand, flagOf, flagsOf, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
 
 // The snapshot history, fetched when the index changes.
 const cache = { key: null, snaps: null, loading: null, error: null, built: null };
@@ -17,7 +17,7 @@ export function sohData(ctx, repaint) {
   loadProfiles(ctx, repaint);
   if (!key) return { snaps: [], history: {}, latest: null, checks: {}, index: idx };
   if (cache.key !== key && !cache.loading) {
-    cache.loading = ctx.api(`/v1/store/${ctx.storeNo}/soh?n=12`).then(r => { cache.snaps = r.snaps || []; cache.key = key; cache.error = null; cache.built = null; })
+    cache.loading = ctx.api(`/v1/store/${ctx.storeNo}/soh?n=12&weekly=1`).then(r => { cache.snaps = r.snaps || []; cache.key = key; cache.error = null; cache.built = null; })
       .catch(e => { cache.error = e.message; }).finally(() => { cache.loading = null; try { repaint(); } catch {} });
   }
   if (!cache.snaps) return null;
@@ -27,29 +27,64 @@ export function sohData(ctx, repaint) {
 }
 export const sohError = () => cache.error;
 
+// One bay from the newest snapshot: what the report puts there, its SOH,
+// the carton size and what it asks for (adjust, then pull, then the rest).
+// The phone's Location lookup shows the same.
+export const normLoc = v => { const d = String(v || '').replace(/\D/g, ''); return d ? String(Number(d)) : ''; };
+const FLAG_ORDER = { adjust: 0, pull: 1 };
+export function bayRows(data, loc) {
+  const snap = data?.latest, want = normLoc(loc); if (!snap || !want) return null;
+  return snap.rows.filter(r => r.loc === want).map(r => { const ctn = ctnOf(r.kc); return { ...r, ctn, flag: flagOf(r.soh, ctn) }; })
+    .sort((a, b) => (FLAG_ORDER[a.flag] ?? 2) - (FLAG_ORDER[b.flag] ?? 2) || a.kc.localeCompare(b.kc));
+}
+export const flagBadge = f => f === 'adjust' ? '<span class="sri-flag adjust" title="In a stockroom bay but the system says 0 or less: adjust it">ADJUST</span>' : f === 'pull' ? '<span class="sri-flag pull" title="Under two cartons in the whole store: the floor has most likely run out and the rest is out the back">PULL</span>' : '';
+export function bayList(rows) {
+  return `<div class="list sri-bay">${rows.map(r => `<div class="li"><span class="mono kc">${esc(r.kc)}</span><span class="nm">${nameHtml(r.kc)}<small>${depthChip(r.kc)}</small></span>${bandSoh(r.soh, r.ctn)}${flagBadge(r.flag)}</div>`).join('')}</div>`;
+}
+function lookupCard(ctx, data) {
+  const rows = st.loc ? bayRows(data, st.loc) : null;
+  if (rows?.length) ensureNames(ctx, rows.map(r => r.kc), () => ctx.rerender());
+  const n = rows ? { adjust: rows.filter(r => r.flag === 'adjust').length, pull: rows.filter(r => r.flag === 'pull').length } : null;
+  return `<div class="card"><div class="ch"><h3>Look up a location</h3><span class="cs-dim">${data?.latest ? `from ${esc(fmtDate(data.latest.date))}'s report` : 'no report yet'}</span></div>` +
+    `<div class="search">${ic('search')}<input data-field="sri-loc" value="${esc(st.loc)}" placeholder="Location, e.g. 7002" inputmode="numeric"></div>` +
+    (!st.loc ? '<p class="lbl">Everything the report puts in one bay, with its stock on hand, carton size and what to pull or adjust.</p>' : !data?.latest ? '' : !rows.length ? `<p class="lbl">Nothing in location ${esc(normLoc(st.loc))} on the latest report.</p>` :
+      `<p class="lbl">${rows.length} item${rows.length === 1 ? '' : 's'} in ${esc(normLoc(st.loc))}${n.pull ? ` · <b>${n.pull} to pull</b>` : ''}${n.adjust ? ` · <b>${n.adjust} to adjust</b>` : ''}</p>${bayList(rows)}`) + '</div>';
+}
+
 export const spark = (w, cls) => { if (w.length < 2) return ''; const max = Math.max(...w, 1), W = 78, H = 22; return `<svg class="sri-spark ${cls}" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><polyline points="${w.map((v, i) => `${(i / (w.length - 1) * (W - 2) + 1).toFixed(1)},${(H - 2 - Math.max(0, v) / max * (H - 4)).toFixed(1)}`).join(' ')}"/></svg>`; };
 export const clsBadge = (cls, flat) => `<span class="sri-cls ${cls}">${cls === 'frozen' ? `FROZEN · ${flat}w` : BADGE[cls]}</span>`;
 export const bandSoh = (soh, ctn) => `<span class="sri-soh ${sohBand(soh, ctn)}">SOH ${soh}</span>`;
 
-const st = { text: '', parsed: null, keep: false, filter: 'all', q: '', busy: false, open: false };
+const st = { text: '', parsed: null, keep: false, filter: 'all', q: '', busy: false, open: false, loc: '', saved: null };
 const FILTERS = ['all', 'stuck', 'ghost', 'frozen', 'deep', 'new', 'moving'];
 
 function pastePanel(ctx, data) {
-  const p = st.parsed, items = p ? Object.values(p.items).sort((a, b) => byLoc(a.loc, b.loc) || a.kc.localeCompare(b.kc)) : [];
+  const p = st.parsed, items = p ? Object.values(p.items).sort((a, b) => byLoc(a.loc, b.loc) || a.kc.localeCompare(b.kc)) : [], kcs = new Set(items.map(r => r.kc));
   const req = new Set((ctx.store.get('backfill').requested[todayKey()] || []).map(b => String(Number(String(b).replace(/\D/g, '')) || b)));
-  const locs = [...new Set(items.map(r => r.loc))].sort(byLoc), unknown = items.filter(r => nameOf(r.kc) === null).length, pending = items.filter(r => nameOf(r.kc) === '').length;
-  const bands = { r: 0, a: 0, g: 0 }; for (const r of items) bands[sohBand(r.soh, profileOf(r.kc)?.ctn)]++;
+  const locs = [...new Set(items.map(r => r.loc))].sort(byLoc), unknown = [...kcs].filter(k => nameOf(k) === null).length, pending = [...kcs].filter(k => nameOf(k) === '').length;
+  const fl = flagsOf(items, ctnOf), nAdj = new Set(fl.adjust.map(r => r.kc)).size, nPull = new Set(fl.pull.map(r => r.kc)).size, healthy = kcs.size - new Set([...fl.adjust, ...fl.pull].map(r => r.kc)).size;
   const missing = [...req].filter(l => !locs.includes(l));
   const outBack = locs.map(l => { const here = items.filter(r => r.loc === l), z = here.filter(r => profileOf(r.kc)?.ctn && r.soh <= 0); return z.length ? [l, z.length, here.length] : null; }).filter(Boolean);
-  const today = todayKey(), replaces = data?.index?.[today];
+  const today = todayKey(), replaces = data?.index?.[today], saveOff = (unknown && !st.keep) || pending || st.busy ? ' disabled' : '';
   return `<div class="card sri-paste"><div class="ch"><h3>Paste the SOH report</h3><span class="cs-dim">LOCATION · KEYCODE · APN · DESC · COLOUR · STATUS · PRICE · SOH</span></div>` +
     `<textarea class="sri-ta" data-field="report" placeholder="Paste the report text here: the whole report, or one more page at a time" spellcheck="false">${esc(st.text)}</textarea>` +
-    `<div class="sri-acts"><button class="btn primary sm" data-act="sri-read">${ic('check')}Read it</button><button class="btn sm" data-act="sri-screen" title="Read the report off the SIM screen">${ic('expand')}Screen scan</button>${p ? `<button class="btn sm" data-act="sri-clear">Clear</button>` : ''}<span class="cs-dim">${p ? `${items.length} keycodes at ${locs.length} locations${p.skipped ? ` · ${p.skipped} lines skipped` : ''}` : 'Paste more and read again: rows merge by keycode, so a page pasted twice changes nothing.'}</span></div>` +
-    (p && items.length ? `<div class="sri-sum"><span class="sri-soh r">${bands.r} at 0 or less</span><span class="sri-soh a">${bands.a} under two cartons</span><span class="sri-soh g">${bands.g} healthy</span>${pending ? `<span class="cs-dim">checking ${pending} names…</span>` : ''}${unknown ? `<span class="warn">${unknown} not in the catalogue</span>` : ''}</div>` +
+    `<div class="sri-acts"><button class="btn primary sm" data-act="sri-read">${ic('check')}Read it</button><button class="btn sm" data-act="sri-screen" title="Read the report off the SIM screen">${ic('expand')}Screen scan</button>${p ? `<button class="btn sm" data-act="sri-clear">Clear</button>` : ''}<span class="cs-dim">${p ? `${kcs.size} keycodes in ${items.length} rows at ${locs.length} locations${p.skipped ? ` · ${p.skipped} lines skipped` : ''}` : 'Paste more and read again: rows merge by keycode and location, so a page pasted twice changes nothing.'}</span></div>` +
+    (p && items.length ? `<div class="sri-sum"><span class="sri-soh r" title="In a stockroom bay but the system says 0 or less: these go to Adjustments once saved">${nAdj} to adjust · 0 or less</span><span class="sri-soh a" title="Under two cartons in the whole store: the floor has most likely run out">${nPull} to pull · under two cartons</span><span class="sri-soh g">${healthy} healthy</span>${pending ? `<span class="cs-dim">checking ${pending} names…</span>` : ''}${unknown ? `<span class="warn">${unknown} not in the catalogue</span>` : ''}</div>` +
       `<div class="sri-locs">${locs.slice(0, 80).map(l => `<span class="sri-loc">${esc(l)}${req.has(l) ? '<b class="req">REQ</b>' : '<b class="pre">PRE</b>'}</span>`).join('')}${missing.map(l => `<span class="sri-loc miss">${esc(l)}<b>MISSING</b></span>`).join('')}</div>` +
       outBack.slice(0, 6).map(([l, z, n]) => `<p class="lbl">▤ ${esc(l)}: ${z} of ${n} items here read 0 on hand but the carton profiles show depth: the stock is most likely out the back.</p>`).join('') +
       (unknown ? `<label class="sri-keep"><input type="checkbox" data-field="keep"${st.keep ? ' checked' : ''}> Keep the ${unknown} code${unknown === 1 ? '' : 's'} the catalogue does not know (mistyped by OCR, or new lines)</label>` : '') +
-      `<div class="sri-acts"><button class="btn primary" data-act="sri-save"${(unknown && !st.keep) || pending || st.busy ? ' disabled' : ''}>${ic('check')}Save as ${esc(fmtDate(today))}'s snapshot · ${isoWeek(today)}</button>${replaces ? `<span class="cs-dim">replaces the ${replaces.rows} rows saved earlier today</span>` : ''}</div>` : '') + '</div>';
+      (replaces ? `<div class="sri-acts"><button class="btn primary" data-act="sri-save" data-merge="1"${saveOff}>${ic('check')}Update ${locs.length} location${locs.length === 1 ? '' : 's'} in today's snapshot</button><button class="btn" data-act="sri-save"${saveOff}>Replace the whole day</button><span class="cs-dim">Update keeps the other locations saved earlier today (${replaces.rows} rows); replace starts the day again</span></div>`
+        : `<div class="sri-acts"><button class="btn primary" data-act="sri-save"${saveOff}>${ic('check')}Save as ${esc(fmtDate(today))}'s snapshot · ${isoWeek(today)}</button></div>`) : '') + '</div>';
+}
+
+// After a save: the items the report puts at 0 or less, sent to the day's
+// Adjustments once a manager confirms (a bad paste cannot flood the list).
+function sendCard(ctx) {
+  const sv = st.saved; if (!sv?.adjust.length) return '';
+  const adj = ctx.store.get('adjustments')?.[todayKey()] || {}, kcs = [...new Set(sv.adjust.map(r => r.kc))], fresh = kcs.filter(k => !adj[k]);
+  return `<div class="card sri-send"><div class="ch"><h3>${ic('alert')}${kcs.length} item${kcs.length === 1 ? '' : 's'} at 0 or less in the stockroom</h3><span class="go" data-act="sri-send-close">Dismiss</span></div>` +
+    `<p class="lbl">The report puts ${kcs.length === 1 ? 'it' : 'them'} in a stockroom location though the system says the store has none. ${fresh.length ? `Send ${fresh.length === kcs.length ? (kcs.length === 1 ? 'it' : 'them') : `the ${fresh.length} not already there`} to today's Adjustments to count and correct.` : 'All of them are on today’s Adjustments already.'}</p>` +
+    (fresh.length ? `<div class="sri-acts"><button class="btn primary" data-act="sri-send"${st.busy ? ' disabled' : ''}>${ic('m-adjust')}Send ${fresh.length} to Adjustments</button><a class="btn" data-go="adjust">Open Adjustments</a></div>` : `<div class="sri-acts"><a class="btn" data-go="adjust">Open Adjustments</a></div>`) + '</div>';
 }
 
 function classesCard(ctx, data) {
@@ -58,18 +93,18 @@ function classesCard(ctx, data) {
   const rows = Object.values(data.history).map(h => ({ ...h, ...classify(h, profileOf(h.kc)) }));
   const counts = Object.fromEntries(FILTERS.map(f => [f, f === 'all' ? rows.length : rows.filter(r => r.cls === f).length]));
   const q = st.q.trim().toLowerCase();
-  const list = rows.filter(r => (st.filter === 'all' || r.cls === st.filter) && (!q || r.kc.includes(q) || String(r.loc).includes(q) || (nameOf(r.kc) || r.name || '').toLowerCase().includes(q)))
+  const list = rows.filter(r => (st.filter === 'all' || r.cls === st.filter) && (!q || r.kc.includes(q) || (r.locs || [r.loc]).some(l => String(l).includes(q)) || (nameOf(r.kc) || r.name || '').toLowerCase().includes(q)))
     .sort((a, b) => PRIORITY[a.cls] - PRIORITY[b.cls] || b.flat - a.flat || byLoc(a.loc, b.loc));
   const verify = ctx.store.get('soh')?.verify?.[data.latest.date] || {};
   return `<div class="card"><div class="ch"><h3>Classes</h3><span class="cs-dim">${data.snaps.length} snapshot${data.snaps.length === 1 ? '' : 's'} · ${esc(data.snaps[0].date)} to ${esc(data.latest.date)}</span></div>` +
     `<div class="sri-filters">${FILTERS.map(f => `<button class="chip${st.filter === f ? ' on' : ''}" data-act="sri-filter" data-f="${f}">${f === 'all' ? 'All' : f[0].toUpperCase() + f.slice(1)} <b>${counts[f]}</b></button>`).join('')}<div class="search">${ic('search')}<input data-field="sri-q" value="${esc(st.q)}" placeholder="Keycode, location or name"></div></div>` +
-    `<div class="mfx-scroll"><table class="wb-t sri-t"><thead><tr><th>Class</th><th>Keycode</th><th>Product</th><th>Loc</th><th>Last ${Math.min(12, data.snaps.length)}</th><th class="n">SOH</th><th class="n">/ctn</th><th>Last landed</th></tr></thead><tbody>${list.slice(0, 300).map(r => `<tr><td>${clsBadge(r.cls, r.flat)}${r.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${verify[`${r.kc}|${r.loc}`] ? ' <span class="status good">✓ verified</span>' : ''}</td><td class="mono">${esc(r.kc)}</td><td>${nameHtml(r.kc)}</td><td class="mono">${esc(r.loc)}</td><td>${spark(r.w, r.cls)}</td><td class="n">${bandSoh(r.latest, r.ctn)}</td><td class="n">${r.ctn || '—'}</td><td>${r.lastArrival?.date ? esc(fmtDate(r.lastArrival.date)) : '—'}</td></tr>`).join('') || '<tr><td colspan="8" class="cs-dim">Nothing in this class.</td></tr>'}</tbody></table></div>${list.length > 300 ? `<p class="lbl">${list.length - 300} more: search or pick a class to narrow.</p>` : ''}</div>`;
+    `<div class="mfx-scroll"><table class="wb-t sri-t"><thead><tr><th>Class</th><th>Keycode</th><th>Product</th><th>Loc</th><th>Last ${Math.min(12, data.snaps.length)}</th><th class="n">SOH</th><th class="n">/ctn</th><th>Last landed</th></tr></thead><tbody>${list.slice(0, 300).map(r => `<tr><td>${clsBadge(r.cls, r.flat)}${r.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${verify[`${r.kc}|${r.loc}`] ? ' <span class="status good">✓ verified</span>' : ''}</td><td class="mono">${esc(r.kc)}</td><td>${nameHtml(r.kc)}</td><td class="mono">${esc((r.locs || [r.loc]).join(' '))}</td><td>${spark(r.w, r.cls)}</td><td class="n">${bandSoh(r.latest, r.ctn)}</td><td class="n">${r.ctn || '—'}</td><td>${r.lastArrival?.date ? esc(fmtDate(r.lastArrival.date)) : '—'}</td></tr>`).join('') || '<tr><td colspan="8" class="cs-dim">Nothing in this class.</td></tr>'}</tbody></table></div>${list.length > 300 ? `<p class="lbl">${list.length - 300} more: search or pick a class to narrow.</p>` : ''}</div>`;
 }
 
 function snapsCard(data) {
   if (!data?.snaps?.length) return '';
   const idx = data.index;
-  return `<div class="card"><div class="ch"><h3>Snapshots</h3><span class="cs-dim">newest 26 kept</span></div><div class="list">${Object.entries(idx).sort((a, b) => b[0].localeCompare(a[0])).map(([d, x]) => `<div class="li"><span class="loc">${esc(fmtDate(d))}</span><span class="nm">${esc(x.week)} · ${x.rows} rows · ${x.locs} locations</span><button class="btn sm" data-act="sri-remove" data-date="${esc(d)}" title="Remove a wrong paste">${ic('trash')}</button></div>`).join('')}</div></div>`;
+  return `<div class="card"><div class="ch"><h3>Snapshots</h3><span class="cs-dim">every day for 14 days, then weekly</span></div><div class="list">${Object.entries(idx).sort((a, b) => b[0].localeCompare(a[0])).map(([d, x]) => `<div class="li"><span class="loc">${esc(fmtDate(d))}</span><span class="nm">${esc(x.week)} · ${x.rows} rows · ${x.locs} locations</span><button class="btn sm" data-act="sri-remove" data-date="${esc(d)}" title="Remove a wrong paste">${ic('trash')}</button></div>`).join('')}</div></div>`;
 }
 
 export default {
@@ -77,31 +112,44 @@ export default {
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     const data = sohData(ctx, () => ctx.rerender()), idx = ctx.store.get('soh')?.snaps || {}, n = Object.keys(idx).length;
-    if (st.parsed) ensureNames(ctx, Object.keys(st.parsed.items), () => ctx.rerender());
+    if (st.parsed) ensureNames(ctx, [...new Set(Object.values(st.parsed.items).map(r => r.kc))], () => ctx.rerender());
     if (data?.history && st.filter !== 'all') ensureNames(ctx, Object.values(data.history).filter(h => classify(h, profileOf(h.kc)).cls === st.filter).slice(0, 300).map(h => h.kc), () => ctx.rerender());
     const head = vh('Stock intelligence', sub(`${n} snapshot${n === 1 ? '' : 's'}`, n ? `latest ${esc(Object.keys(idx).sort().at(-1))}` : 'none yet', 'STUCK · GHOST · FROZEN · DEEP'), `<button class="btn" data-view="daylist">${ic('m-daylist')}Day list</button>`, 'chart');
-    return head + `<div class="sri-grid"><div>${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${snapsCard(data)}<div class="card"><div class="ch"><h3>How the classes work</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} SOH has not moved for three snapshots although stock arrived: count it.</li><li>${clsBadge('ghost')} The system says zero but stock arrived: count it.</li><li>${clsBadge('frozen', 3)} Flat for three or more snapshots with nothing arriving: count it.</li><li>${clsBadge('deep')} Flat, but two cartons or more on hand: a spot-check.</li><li>${clsBadge('new')} Under three snapshots: not enough history yet.</li><li><span class="sri-badge recount">RECOUNT</span> Re-cartoned within the last four trucks: count, do not spot-check.</li></ul></div></div></div>`;
+    return head + `<div class="sri-grid"><div>${sendCard(ctx)}${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${lookupCard(ctx, data)}${snapsCard(data)}<div class="card"><div class="ch"><h3>How the classes work</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} SOH has not moved for three snapshots although stock arrived: count it.</li><li>${clsBadge('ghost')} The system says zero but stock arrived: count it.</li><li>${clsBadge('frozen', 3)} Flat for three or more snapshots with nothing arriving: count it.</li><li>${clsBadge('deep')} Flat, but two cartons or more on hand: a spot-check.</li><li>${clsBadge('new')} Under three snapshots: not enough history yet.</li><li><span class="sri-badge recount">RECOUNT</span> Re-cartoned within the last four trucks: count, do not spot-check.</li></ul></div></div></div>`;
   },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
       if (act === 'sri-read') { st.text = root.querySelector('[data-field="report"]')?.value || ''; const r = parseReport(st.text, st.parsed?.items ? { ...st.parsed.items } : {}); if (!Object.keys(r.items).length) return toast('No item rows found: the report needs a keycode, a location and an SOH on each row', 'bad'); st.parsed = { items: r.items, skipped: (st.parsed?.skipped || 0) + r.skipped }; st.text = ''; ctx.rerender(); }
-      else if (act === 'sri-screen') openScreenScan(ctx, { mode: 'rows', onUse: ({ items }) => { const merged = { ...(st.parsed?.items || {}) }; for (const r of Object.values(items)) merged[r.kc] = merged[r.kc] ? { ...merged[r.kc], loc: r.loc, soh: r.soh, price: r.price ?? merged[r.kc].price } : r; st.parsed = { items: merged, skipped: st.parsed?.skipped || 0 }; toast(`${Object.keys(items).length} rows read off the screen`); ctx.rerender(); } });
+      else if (act === 'sri-screen') openScreenScan(ctx, { mode: 'rows', onUse: ({ items }) => { const merged = { ...(st.parsed?.items || {}) }; for (const r of Object.values(items)) { const k = rowKey(r); merged[k] = merged[k] ? { ...merged[k], soh: r.soh, price: r.price ?? merged[k].price } : r; } st.parsed = { items: merged, skipped: st.parsed?.skipped || 0 }; toast(`${Object.keys(items).length} rows read off the screen`); ctx.rerender(); } });
       else if (act === 'sri-clear') { st.parsed = null; st.text = ''; st.keep = false; ctx.rerender(); }
       else if (act === 'sri-filter') { st.filter = a.dataset.f; ctx.rerender(); }
       else if (act === 'sri-save') {
         const items = Object.values(st.parsed?.items || {}); if (!items.length) return;
         st.busy = true; ctx.rerender();
-        try { const r = await ctx.api(`/v1/store/${ctx.storeNo}/soh`, { method: 'POST', body: { date: todayKey(), rows: items.map(x => ({ kc: x.kc, loc: x.loc, soh: x.soh, price: x.price, ...(nameOf(x.kc) ? { name: nameOf(x.kc) } : {}) })) }, timeoutMs: 60000 }); toast(`Snapshot saved · ${r.week} · ${r.rows} items`); st.parsed = null; st.keep = false; }
+        try {
+          const merge = a.dataset.merge === '1', r = await ctx.api(`/v1/store/${ctx.storeNo}/soh`, { method: 'POST', body: { date: todayKey(), ...(merge ? { merge: true } : {}), rows: items.map(x => ({ kc: x.kc, loc: x.loc, soh: x.soh, price: x.price, ...(nameOf(x.kc) ? { name: nameOf(x.kc) } : {}) })) }, timeoutMs: 60000 });
+          toast(r.updatedLocs ? `${r.updatedLocs} locations updated · today holds ${r.rows} rows` : `Snapshot saved · ${r.week} · ${r.rows} rows`);
+          st.saved = { date: r.date, adjust: flagsOf(items, ctnOf).adjust }; st.parsed = null; st.keep = false;
+        }
         catch (err) { toast(err.message, 'bad'); }
+        st.busy = false; ctx.rerender();
+      }
+      else if (act === 'sri-send-close') { st.saved = null; ctx.rerender(); }
+      else if (act === 'sri-send') {
+        const adj = ctx.store.get('adjustments')?.[todayKey()] || {}, seen = new Set(), rows = (st.saved?.adjust || []).filter(r => !adj[r.kc] && !seen.has(r.kc) && seen.add(r.kc));
+        if (!rows.length || !confirm(`Send ${rows.length} item${rows.length === 1 ? '' : 's'} at 0 or less to today's Adjustments?`)) return;
+        st.busy = true; ctx.rerender(); let n = 0;
+        try { for (const r of rows) { await ctx.store.dispatch({ type: 'adjustment.set', entity: { keycode: r.kc, date: todayKey() }, payload: { qty: Number(r.soh), location: r.loc, name: nameOf(r.kc) || '', source: 'report' } }); n++; } toast(`${n} sent to Adjustments`); st.saved = null; }
+        catch (err) { toast(`${n} sent; then: ${err.message}`, 'bad'); }
         st.busy = false; ctx.rerender();
       }
       else if (act === 'sri-remove') { if (!confirm(`Remove the snapshot for ${a.dataset.date}? The classes are worked out again without it.`)) return; try { await ctx.api(`/v1/store/${ctx.storeNo}/soh/${a.dataset.date}`, { method: 'DELETE' }); toast('Snapshot removed'); } catch (err) { toast(err.message, 'bad'); } }
     });
     root.addEventListener('change', e => { if (e.target.matches('[data-field="keep"]')) { st.keep = e.target.checked; ctx.rerender(); } });
     let typing = null;
-    root.addEventListener('input', e => { if (e.target.matches('[data-field="sri-q"]')) { st.q = e.target.value; clearTimeout(typing); typing = setTimeout(() => { const v = st.q; ctx.rerender(); const i = document.querySelector('#content [data-field="sri-q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 180); } else if (e.target.matches('[data-field="report"]')) st.text = e.target.value; });
-    return [ctx.store.on('soh', () => ctx.rerender())];
+    root.addEventListener('input', e => { if (e.target.matches('[data-field="sri-q"]')) { st.q = e.target.value; clearTimeout(typing); typing = setTimeout(() => { const v = st.q; ctx.rerender(); const i = document.querySelector('#content [data-field="sri-q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 180); } else if (e.target.matches('[data-field="report"]')) st.text = e.target.value; else if (e.target.matches('[data-field="sri-loc"]')) { st.loc = e.target.value; clearTimeout(typing); typing = setTimeout(() => { const v = st.loc; ctx.rerender(); const i = document.querySelector('#content [data-field="sri-loc"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); } });
+    return [ctx.store.on('soh', () => ctx.rerender()), ctx.store.on('adjustments', () => { if (st.saved) ctx.rerender(); })];
   },
 };

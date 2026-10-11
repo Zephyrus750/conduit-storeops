@@ -36,6 +36,11 @@ function entries(ctx) {
 }
 
 // Consol id → how far it has got on the truck that carries the manifest.
+// Consols this truck's manifest found already landed on an earlier truck.
+function earlyMap(ctx, e) {
+  const t = e?.truck && ctx.store.get('dock').trucks?.[e.truck];
+  return Object.fromEntries((t?.manifest?.consols || []).filter(c => c.landedEarlier).map(c => [c.id, c.landedEarlier]));
+}
 function landedMap(ctx, e) {
   const t = e?.truck && ctx.store.get('dock').trucks?.[e.truck], out = {};
   if (!t) return out;
@@ -87,7 +92,7 @@ function sorted(list) {
 }
 
 function explorer(ctx, e, doc) {
-  const landed = landedMap(ctx, e), allUnits = doc.consols.reduce((n, c) => n + units(c), 0), cartons = doc.totalCartons ?? doc.consols.reduce((n, c) => n + c.cartons, 0);
+  const landed = landedMap(ctx, e), early = earlyMap(ctx, e), allUnits = doc.consols.reduce((n, c) => n + units(c), 0), cartons = doc.totalCartons ?? doc.consols.reduce((n, c) => n + c.cartons, 0);
   const keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size, mpc = ctx.store.get('dock').trucks?.[e?.truck]?.minsPerCarton || STD_MINS_PER_CARTON, work = Math.round(cartons * mpc);
   const trucks = openTrucks(ctx.store.get('dock')), attachedTo = e?.truck, nLanded = doc.consols.filter(c => landed[c.id]).length;
   // The department-group rollup: cartons by Home / Clothing / Kids / Flex.
@@ -101,7 +106,7 @@ function explorer(ctx, e, doc) {
     : st.tab === 'depts' ? list.map(r => `<tr><td>${chip(r.dept)} <small class="cs-dim">${esc(r.dept)}</small></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
     : list.slice(0, 120).map(c => {
       const open = !!st.expanded[c.id] || (st.q && list.length <= 3), items = c.items || [];
-      return `<tr class="mfx-c" data-act="toggle" data-id="${esc(c.id)}"><td>${sq(c.state)}</td><td class="mono" title="Consolidation ${esc(c.cons || '')}">${esc(c.id)}</td><td>${(c.mix || []).slice(0, 4).map(x => chip(x[0])).join('')}</td><td class="n">${c.cartons}</td><td class="n">${c.units}</td><td class="n">${c.keycodes}</td></tr>` +
+      return `<tr class="mfx-c" data-act="toggle" data-id="${esc(c.id)}"><td>${sq(c.state)}</td><td class="mono" title="Consolidation ${esc(c.cons || '')}">${esc(c.id)}${early[c.id] ? ` <span class="status warn" title="Landed on Truck ${esc(truckNo(early[c.id].t))} before this manifest arrived">LANDED ${esc(fmtDate(early[c.id].d))}</span>` : ''}</td><td>${(c.mix || []).slice(0, 4).map(x => chip(x[0])).join('')}</td><td class="n">${c.cartons}</td><td class="n">${c.units}</td><td class="n">${c.keycodes}</td></tr>` +
         (open ? `<tr class="mfx-items"><td></td><td colspan="5">${items.slice(0, 40).map(it => `<div class="mfc-it${st.q && String(it.k).startsWith(st.q.trim()) ? ' hit' : ''}"><span class="kc">${shop(it.k)}</span><span class="nm">${esc(nameOf(it.k) || it.d || '')}</span>${it.dept ? chip(it.dept) : ''}<span class="ct">~${Math.round(itemCartons(c, it) * 10) / 10} ctn · ${it.q} units</span></div>`).join('')}${items.length > 40 ? `<div class="cs-dim">${items.length - 40} more lines</div>` : ''}</td></tr>` : '');
     }).join('');
   const more = st.tab === 'products' && list.length > 200 ? `${list.length - 200} more products: search to narrow` : st.tab === 'consols' && list.length > 120 ? `${list.length - 120} more consols: search to narrow` : '';

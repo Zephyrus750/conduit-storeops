@@ -27,7 +27,7 @@ export const TOOLS = [
   T('cages', 'stockroom', 'Cages', ['cages'], ['cage.']),
   T('adjust', 'stockroom', 'Adjustments', ['adjust'], ['adjustment.']),
   T('daylist', 'stockroom', 'Day list', ['daylist'], ['daylist.']),
-  T('intel', 'stockroom', 'Stock intelligence', ['srintel'], ['soh.']),
+  T('intel', 'stockroom', 'Stock intelligence', ['srintel', 'srloc'], ['soh.']),
   T('trends', 'stockroom', 'Trends', ['srtrends']),
   T('codelist', 'stockroom', 'Barcode list and Quick Scan', ['codelist']),
   T('receiving', 'backdock', 'Receiving, Team Board and Dock screen', ['receiving', 'teamboard', 'dockscreen'], ['truck.', 'pallet.', 'halt.', 'huddle.', 'break.', 'receiving.', 'manifest.attach', 'manifest.linkLate', 'plan.queues', 'dock.roster']),

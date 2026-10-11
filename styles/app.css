@@ -1953,3 +1953,77 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .md-sheet .sheet-h { margin-bottom: 12px; }
 .sheet-x { flex: none; width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--chip); color: var(--ink2); display: grid; place-items: center; cursor: pointer; }
 .sheet-x svg.i { width: 20px; height: 20px; }
+
+/* Receiving: the truck against its manifest, as it lands. */
+.bdr-tally { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.bdr-tal { display: inline-flex; align-items: baseline; gap: 5px; padding: 4px 9px; border-radius: 8px; background: var(--chip); color: var(--ink2); font-size: 12.5px; }
+.bdr-tal b { font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bdr-tal.ok { background: color-mix(in srgb, var(--green) 12%, transparent); }
+.bdr-tal.warn { background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.bdr-tal.bad { background: color-mix(in srgb, var(--red) 12%, transparent); }
+.bdr-tal.bad b { color: var(--red); }
+
+/* Adjustments: departments, and ticking an item off once adjusted. */
+.adj-depts { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.adj-row.done > :not(:nth-child(5)) { opacity: .45; }
+.adj-row.done .adj-qty { text-decoration: line-through; }
+.adj-done { border: 1px solid var(--line); background: var(--panel); color: var(--ink2); border-radius: 7px; padding: 2px 8px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.adj-done:hover { border-color: var(--accent); color: var(--accent-ink); }
+.adj-done.on { background: color-mix(in srgb, var(--green) 14%, transparent); border-color: transparent; color: var(--green-ink); }
+
+/* Stockroom report: what a row asks for, and one location's items. */
+.sri-flag { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.sri-flag.adjust { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.sri-flag.pull { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-ink); }
+.sri-bay .li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.sri-bay .li .nm small { display: block; margin-top: 2px; }
+.sri-bay .li .kc { font-size: 12.5px; color: var(--dim); }
+.ctn-chip.single { opacity: .8; font-style: italic; }
+.sri-send { border-color: color-mix(in srgb, var(--red) 40%, var(--line)); }
+button.mv-row { width: 100%; border: 0; border-top: 1px solid var(--line-soft); background: none; color: inherit; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.mv-rows > button.mv-row:first-child { border-top: 0; }
+button.mv-row .c svg.i { width: 16px; height: 16px; transform: rotate(-90deg); }
+.vh select.ad-in { width: auto; }
+
+/* Phone Refresh: one scan button; the sheet holds the camera and a box to type. */
+.rf-scanbtn { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.rf-scanbtn svg.i { width: 20px; height: 20px; color: var(--accent); flex: none; }
+.rf-scanbtn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rf-sheetback { position: fixed; inset: 0; z-index: 70; background: rgba(17,24,39,.45); display: flex; align-items: flex-end; }
+.rf-sheet { width: 100%; background: var(--panel); border-radius: 22px 22px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; box-shadow: 0 -12px 40px rgba(0,0,0,.18); }
+.rf-sheet .sheet-h { margin: 0; }
+.rf-sheet .mv-big { margin: 0; }
+.rf-type .lbl { display: block; margin-bottom: 6px; }
+.rf-type .shelfscan { margin: 0; display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; }
+.rf-type .shelfscan input { flex: 1; min-width: 0; font-size: 16px; padding: 8px 0; }
+.rf-last { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); min-height: 22px; }
+.rf-last.ok { color: var(--green-ink); font-weight: 700; } .rf-last.bad { color: var(--red); font-weight: 700; }
+.rf-last svg.i { width: 18px; height: 18px; flex: none; }
+
+/* Phone Refresh panel: the same height as the other modes' panels, its
+   three rows (title, scan and toggle, focus) spread evenly through it. */
+.content.mv .mv-sel.mode.rf { justify-content: space-between; gap: 8px; }
+.mv-sel.mode.rf .rf-row { gap: 10px; }
+.mv-sel.mode.rf .rf-scanbtn { min-height: 44px; border-radius: 12px; font-size: 14.5px; gap: 9px; }
+.mv-sel.mode.rf .seg2 { padding: 3px; }
+.mv-sel.mode.rf .seg2 button { min-height: 36px; padding: 0 13px; font-size: 11px; }
+.mv-sel.mode.rf .rf-focus { gap: 7px; overflow-x: auto; scrollbar-width: none; }
+.mv-sel.mode.rf .rf-focus::-webkit-scrollbar { display: none; }
+.mv-sel.mode.rf .rf-chip { min-height: 30px; padding: 3px 11px 3px 4px; gap: 6px; font-size: 12.5px; }
+.mv-sel.mode.rf .rf-chip .dep { font-size: 10.5px; padding: 2px 6px; }
+@container shell (max-width:380px) {
+  .content.mv .mv-sel.mode.rf { gap: 6px; }
+  .mv-sel.mode.rf .rf-row { gap: 8px; }
+  .mv-sel.mode.rf .rf-scanbtn { min-height: 40px; font-size: 13.5px; padding: 0 12px; }
+  .mv-sel.mode.rf .seg2 button { min-height: 32px; padding: 0 10px; font-size: 10px; }
+  .mv-sel.mode.rf .rf-chip { min-height: 28px; font-size: 11.5px; padding: 2px 9px 2px 3px; }
+  .mv-sel.mode.rf .rf-chip .dep { font-size: 10px; }
+}
+/* In Plan the colours fill the scan button's box, so the toggle never moves. */
+.mv-sel.mode.rf .rf-pal { flex: 1; min-width: 0; margin: 0; min-height: 44px; padding: 0 10px; justify-content: space-between; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.mv-sel.mode.rf .rf-pal i { width: 24px; height: 24px; flex: none; cursor: pointer; }
+@container shell (max-width:380px) { .mv-sel.mode.rf .rf-pal { min-height: 40px; padding: 0 8px; } .mv-sel.mode.rf .rf-pal i { width: 20px; height: 20px; } }
+/* The bottom row is one height in both modes, so nothing above it shifts. */
+.mv-sel.mode.rf > .rf-focus, .mv-sel.mode.rf > .mv-hint { height: 36px; flex: none; margin: 0; }
+.mv-sel.mode.rf > .mv-hint { font-size: 12.5px; line-height: 1.4; overflow: hidden; }
+@container shell (max-width:380px) { .mv-sel.mode.rf > .rf-focus, .mv-sel.mode.rf > .mv-hint { height: 31px; } .mv-sel.mode.rf > .mv-hint { font-size: 11px; } }
