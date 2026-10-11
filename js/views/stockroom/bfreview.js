@@ -309,7 +309,7 @@ async function onClick(e, ctx, root, repaint) {
     const qty = Number(String(ans).trim().replace(/[^\d.-]/g, ''));
     if (!Number.isFinite(qty) || String(ans).trim() === '') return toast('Type the SOH from the report, like -3 or 0', 'bad');
     if (qty > 0) return toast('Only SOH of 0 or below goes on the adjustment list', 'bad');
-    const r = await send(ctx, 'adjustment.set', { keycode: kc, date }, { qty: Math.round(qty), location: s.bay, confirmed: true, name: nameOf(kc) || had?.name || '' });
+    const r = await send(ctx, 'adjustment.set', { keycode: kc, date }, { qty: Math.round(qty), location: s.bay, confirmed: true, name: nameOf(kc) || had?.name || '', source: 'review' });
     if (r) toast(`${kc} flagged for Adjustments at ${Math.round(qty)} · ${s.bay}`);
   }
   // phone

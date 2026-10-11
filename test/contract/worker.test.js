@@ -340,7 +340,7 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
   const t = s.backfill.subs['7014:2026-09-18'];
   assert.equal(t.status, 'pending'); assert.equal(t.codes['42345501'].scanned, true); assert.equal(t.codes['43006311'].scanned, true, 'every K2B code was scanned by a phone; its own flag meant keyed into the PDT'); assert.deepEqual(t.incorrect, ['43006311']);
   assert.equal(s.backfill.subs['7016:2026-09-18'].status, 'submitted'); assert.equal(s.backfill.subs['7016:2026-09-18'].metrics.accuracy, 100);
-  assert.deepEqual(s.adjustments['2026-09-18']['43302210'], { qty: -6, name: 'Paper plates 20 pk', location: '7014', confirmed: true, addedAt: new Date(T + 240000).toISOString().replace(/\.\d{3}Z$/, '+00:00') });
+  assert.deepEqual(s.adjustments['2026-09-18']['43302210'], { qty: -6, name: 'Paper plates 20 pk', location: '7014', confirmed: true, addedAt: new Date(T + 240000).toISOString().replace(/\.\d{3}Z$/, '+00:00'), source: 'import' });
 
   const again = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468' }, ownerToken);
   assert.equal(again.body.applied, 0); assert.equal(again.body.duplicates, 13, 'the import is idempotent');
@@ -431,6 +431,15 @@ test('SOH snapshots: save one a day, list through the projection, read the histo
   assert.equal((await api('DELETE', '/v1/store/1241/soh/2026-09-28', undefined, sr)).status, 200);
   assert.equal((await api('DELETE', '/v1/store/1241/soh/2026-09-28', undefined, sr)).status, 404);
   assert.deepEqual((await api('GET', '/v1/store/1241/soh', undefined, sr)).body.snaps.map(x => x.date), ['2026-10-05']);
+  // A department re-pasted later the same day updates its bays and keeps the rest.
+  const up = await api('POST', '/v1/store/1241/soh', { date: '2026-10-05', merge: true, rows: [{ kc: '42977636', loc: '7002', soh: 5 }, { kc: '43307685', loc: '7002', soh: 9 }] }, sr);
+  assert.equal(up.status, 201); assert.deepEqual([up.body.updatedLocs, up.body.rows], [1, 3]);
+  const day = (await api('GET', '/v1/store/1241/soh?n=1', undefined, sr)).body.snaps[0].rows;
+  assert.deepEqual(day.map(r => `${r.kc}@${r.loc}=${r.soh}`).sort(), ['42977636@7002=5', '43307685@7001=9', '43307685@7002=9'], 'bay 7001 kept with the new store-wide SOH; 7002 replaced; a keycode in two bays');
+  // Daily pastes: the classes read the last of each week.
+  for (const d of ['2026-10-06', '2026-10-07', '2026-10-12']) assert.equal((await api('POST', '/v1/store/1241/soh', { date: d, rows }, sr)).status, 201);
+  assert.deepEqual((await api('GET', '/v1/store/1241/soh?n=5&weekly=1', undefined, sr)).body.snaps.map(x => x.date), ['2026-10-07', '2026-10-12']);
+  assert.deepEqual((await api('GET', '/v1/store/1241/soh?n=5', undefined, sr)).body.snaps.map(x => x.date), ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-12']);
 });
 
 test('manifests: publish the report, list it through the projection, read it, attach it to a truck, scan against it, remove it', async () => {

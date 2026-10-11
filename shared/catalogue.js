@@ -75,6 +75,7 @@ export const CATALOGUE = {
   'submission.readd':    T('stockroom', S, ['bay', 'date'], { code: 'string' }), // payload.done: scanned back in
   'adjustment.set':      T('stockroom', S, ['keycode', 'date'], { qty: 'number' }),
   'adjustment.remove':   T('stockroom', S, ['keycode', 'date']),
+  'adjustment.done':     T('stockroom', S, ['keycode', 'date']),                 // ticked off once adjusted in the system; payload.undo puts it back
   'daylist.set':         T('stockroom', S, ['date'], { walkers: 'number' }),
   'scan.preset':         T('stockroom', S, ['size']),                           // payload: kind codes | rows, x, y, w, h (fractions) | remove
   'soh.publish':         T('stockroom', S, ['date']),                           // emitted by the worker on POST /soh: rows, locs, week

@@ -1962,3 +1962,25 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .bdr-tal.warn { background: color-mix(in srgb, var(--amber) 14%, transparent); }
 .bdr-tal.bad { background: color-mix(in srgb, var(--red) 12%, transparent); }
 .bdr-tal.bad b { color: var(--red); }
+
+/* Adjustments: departments, and ticking an item off once adjusted. */
+.adj-depts { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.adj-row.done > :not(:nth-child(5)) { opacity: .45; }
+.adj-row.done .adj-qty { text-decoration: line-through; }
+.adj-done { border: 1px solid var(--line); background: var(--panel); color: var(--ink2); border-radius: 7px; padding: 2px 8px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.adj-done:hover { border-color: var(--accent); color: var(--accent-ink); }
+.adj-done.on { background: color-mix(in srgb, var(--green) 14%, transparent); border-color: transparent; color: var(--green-ink); }
+
+/* Stockroom report: what a row asks for, and one location's items. */
+.sri-flag { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.sri-flag.adjust { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.sri-flag.pull { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-ink); }
+.sri-bay .li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.sri-bay .li .nm small { display: block; margin-top: 2px; }
+.sri-bay .li .kc { font-size: 12.5px; color: var(--dim); }
+.ctn-chip.single { opacity: .8; font-style: italic; }
+.sri-send { border-color: color-mix(in srgb, var(--red) 40%, var(--line)); }
+button.mv-row { width: 100%; border: 0; border-top: 1px solid var(--line-soft); background: none; color: inherit; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.mv-rows > button.mv-row:first-child { border-top: 0; }
+button.mv-row .c svg.i { width: 16px; height: 16px; transform: rotate(-90deg); }
+.vh select.ad-in { width: auto; }

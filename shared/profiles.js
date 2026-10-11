@@ -8,6 +8,7 @@
 //
 //   profiles[kc] = { ctn, trucks, consistency, last_arrival: { date, units, cartons, manNo },
 //                    arrivals: [{ date, units, cartons, ctn, manNo }], pack_change?: { prev_ctn, since_trucks, changed } }
+//   last[kc]     = { date, units, cartons, ctn }: the latest arrival of every keycode, ungated
 
 const isoDate = s => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '')); if (m) return `${m[3]}-${m[2]}-${m[1]}`; const t = Date.parse(s); return isNaN(t) ? null : new Date(t).toISOString().slice(0, 10); };
 
@@ -37,7 +38,10 @@ export function buildProfiles(docs, { store = '', now = new Date() } = {}) {
     for (const [kc, r] of Object.entries(byKc)) { if (!(r.units > 0) || !(r.cartons > 0)) continue; const ctn = Math.round(r.units / r.cartons); if (!(ctn > 0)) continue; (per[kc] ||= []).push({ date: a.date, units: r.units, cartons: Math.round(r.cartons * 10) / 10, ctn, manNo: a.manNo }); }
   }
   const nowMs = now.getTime(), since = w => new Date(nowMs - w * 7 * 86400000).toISOString().slice(0, 10);
-  const profiles = {};
+  // Every keycode's latest arrival, gated or not: a first or second
+  // delivery still tells the stockroom how many come in a carton.
+  const profiles = {}, last = {};
+  for (const [kc, all] of Object.entries(per)) { const x = all[all.length - 1]; last[kc] = { date: x.date, units: x.units, cartons: x.cartons, ctn: x.ctn }; }
   for (const [kc, all] of Object.entries(per)) {
     const recent = all.filter(x => x.date >= since(CTN_WINDOW_WEEKS)), arr = recent.length ? recent : all;
     const vals = arr.map(x => x.ctn), last = all[all.length - 1];
@@ -54,7 +58,7 @@ export function buildProfiles(docs, { store = '', now = new Date() } = {}) {
     p.arrivals = all.filter(x => x.date >= since(ARRIVAL_WINDOW_WEEKS));
     profiles[kc] = p;
   }
-  return { schema: 'carton-profiles/1', store: String(store), generated: now.toISOString(), profile_window_weeks: ARRIVAL_WINDOW_WEEKS, trucks_sampled: arrivalsOf.length, gates: { min_trucks: PROFILE_GATES.minTrucks, min_consistency: PROFILE_GATES.minConsistency, min_units_per_ctn: PROFILE_GATES.minUnitsPerCtn }, keycodes: Object.keys(profiles).length, profiles };
+  return { schema: 'carton-profiles/1', store: String(store), generated: now.toISOString(), profile_window_weeks: ARRIVAL_WINDOW_WEEKS, trucks_sampled: arrivalsOf.length, gates: { min_trucks: PROFILE_GATES.minTrucks, min_consistency: PROFILE_GATES.minConsistency, min_units_per_ctn: PROFILE_GATES.minUnitsPerCtn }, keycodes: Object.keys(profiles).length, profiles, last };
 }
 
 // Depth chip text and class for a keycode, as K2B read it.

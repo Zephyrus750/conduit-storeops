@@ -3,10 +3,13 @@
 // the STUCK / GHOST / FROZEN / DEEP / NEW / MOVING classes and the
 // weight-balanced walker split. Pure: the device, the worker and tests.
 //
-//   parseReport(text, into?)          report rows by keycode: { loc, kc, soh, price, apns, brand }
+//   parseReport(text, into?)          report rows by keycode and location: { loc, kc, soh, price, apns, brand }
 //   sohBand(soh, ctn)                 'r' (≤ 0), 'a' (under two cartons), 'g'
+//   flagOf(soh, ctn), flagsOf(rows)   'adjust' (≤ 0 in a stockroom bay), 'pull' (under two cartons), or none
 //   isoWeek(day)                      '2026-W41'
-//   historyOf(snaps)                  keycode → { loc, name, price, w: [soh…], dates: […] }, oldest first
+//   historyOf(snaps)                  keycode → { loc, locs, name, price, w: [soh…], dates: […] }, oldest first
+//   keepDates(dates)                  the snapshot dates kept: the last 14 days, then the last of each week
+//   weeklyDates(dates, n)             the last snapshot date of each of the newest n weeks
 //   classify(item, profile)           { cls, flat, latest, ctn, arrivalSince, recount }
 //   checksFor(items, profiles)        location → the flagged items to check there, by priority
 //   splitWalkers(locs, checks, n)     contiguous groups of locations, balanced by 1 + checks
@@ -39,8 +42,11 @@ function rowToRecord(line, ctxLoc) {
   return { loc: String(Number(loc)), kc, soh, price, apns, brand: '' };
 }
 
-// Rows merge by keycode: a later paste of the same keycode updates its
-// location, SOH and price and adds APNs, so pasting twice changes nothing.
+// Rows merge by keycode and location: an item stocked in two bays keeps
+// both, and a page pasted twice changes nothing (its SOH and price update,
+// its APNs add). The SOH is the item's whole-store figure, so every bay of
+// an item reads the same number.
+export const rowKey = r => `${r.kc}|${r.loc}`;
 export function parseReport(text, into = {}) {
   const out = into; let ctxLoc = null, last = null, rows = 0, skipped = 0;
   for (const line of String(text || '').split(/\r?\n/)) {
@@ -49,9 +55,9 @@ export function parseReport(text, into = {}) {
     const r = rowToRecord(line, ctxLoc);
     if (r) {
       rows++;
-      const cur = out[r.kc];
-      if (cur) { cur.loc = r.loc; cur.soh = r.soh; if (r.price != null) cur.price = r.price; for (const a of r.apns) if (!cur.apns.includes(a)) cur.apns.push(a); last = cur; }
-      else { out[r.kc] = r; last = r; }
+      const cur = out[rowKey(r)];
+      if (cur) { cur.soh = r.soh; if (r.price != null) cur.price = r.price; for (const a of r.apns) if (!cur.apns.includes(a)) cur.apns.push(a); last = cur; }
+      else { out[rowKey(r)] = r; last = r; }
       continue;
     }
     // A continuation line: more APNs, and the brand.
@@ -63,6 +69,27 @@ export function parseReport(text, into = {}) {
 
 export const sohBand = (soh, ctn) => soh <= 0 ? 'r' : ctn && soh < INTEL.deepMultiple * ctn ? 'a' : 'g';
 
+// What a row in a stockroom bay asks for. The report's SOH is the whole
+// store's (floor, stockroom and between), so an item sitting in a stockroom
+// bay that the system puts at 0 or less is wrong: adjust it. One with stock
+// but under two cartons' worth has most likely run out on the floor, the
+// rest being the carton out the back: pull it.
+export const PULL_CARTONS = 2;
+export function flagOf(soh, ctn) {
+  if (!(Number.isFinite(soh))) return null;
+  if (soh <= 0) return 'adjust';
+  if (ctn && soh < PULL_CARTONS * ctn) return 'pull';
+  return null;
+}
+// The rows of a snapshot (or a paste) that ask for something, by flag.
+// cartonOf(kc) → units a carton or null.
+export function flagsOf(rows, cartonOf = () => null) {
+  const out = { adjust: [], pull: [] };
+  for (const r of rows || []) { const ctn = cartonOf(r.kc), f = flagOf(Number(r.soh), ctn); if (f) out[f].push({ ...r, ctn }); }
+  for (const l of Object.values(out)) l.sort((a, b) => byLoc(a.loc, b.loc) || a.kc.localeCompare(b.kc));
+  return out;
+}
+
 export function isoWeek(day) {
   const d = new Date(String(day).slice(0, 10) + 'T00:00:00Z'), dow = (d.getUTCDay() + 6) % 7;
   d.setUTCDate(d.getUTCDate() - dow + 3);
@@ -71,13 +98,34 @@ export function isoWeek(day) {
 }
 
 // snaps: [{ date, rows: [{ kc, loc, soh, price, name }] }] in any order.
+// One SOH a keycode a snapshot (the report's figure is store-wide); its
+// locations are the bays the newest snapshot holding it lists.
 export function historyOf(snaps) {
   const out = {};
-  for (const s of [...(snaps || [])].sort((a, b) => a.date.localeCompare(b.date))) for (const r of s.rows || []) {
-    const h = (out[r.kc] ||= { kc: r.kc, w: [], dates: [] });
-    h.w.push(Number(r.soh)); h.dates.push(s.date); h.loc = r.loc; h.price = r.price ?? h.price ?? null; if (r.name) h.name = r.name;
+  for (const s of [...(snaps || [])].sort((a, b) => a.date.localeCompare(b.date))) {
+    const seen = new Set();
+    for (const r of s.rows || []) {
+      const h = (out[r.kc] ||= { kc: r.kc, w: [], dates: [], locs: [] });
+      if (!seen.has(r.kc)) { seen.add(r.kc); h.w.push(Number(r.soh)); h.dates.push(s.date); h.locs = []; h.price = r.price ?? h.price ?? null; }
+      if (!h.locs.includes(r.loc)) h.locs.push(r.loc);
+      h.loc = h.locs[0]; if (r.name) h.name = r.name;
+    }
   }
   return out;
+}
+
+// Snapshots can be pasted every day. The last 14 dates are kept as they
+// are, and older ones only as the last of their week, for 26 weeks: the
+// classes read one snapshot a week, as the K2B paste was weekly.
+export const KEEP_DAYS = 14, KEEP_WEEKS = 26;
+export function keepDates(dates) {
+  const all = [...new Set(dates)].sort(), recent = all.slice(-KEEP_DAYS);
+  return [...new Set([...recent, ...weeklyDates(all, KEEP_WEEKS)])].sort();
+}
+export function weeklyDates(dates, n) {
+  const byWeek = new Map();
+  for (const d of [...dates].sort()) byWeek.set(isoWeek(d), d);
+  return [...byWeek.values()].slice(-n);
 }
 
 export function classify(item, profile = null) {
@@ -101,7 +149,7 @@ export function checksFor(history, profiles = {}) {
   const out = {};
   for (const h of Object.values(history)) {
     const c = classify(h, profiles[h.kc]); if (!CHECKED.includes(c.cls)) continue;
-    (out[h.loc] ||= []).push({ ...h, ...c });
+    for (const loc of h.locs?.length ? h.locs : [h.loc]) (out[loc] ||= []).push({ ...h, ...c, loc });
   }
   for (const list of Object.values(out)) list.sort((a, b) => PRIORITY[a.cls] - PRIORITY[b.cls] || a.kc.localeCompare(b.kc));
   return out;

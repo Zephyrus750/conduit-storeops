@@ -32,7 +32,7 @@ import { HttpError, json, fail, CORS, readJson, reportError } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { buildProfiles } from '../shared/profiles.js';
-import { isoWeek } from '../shared/stockintel.js';
+import { isoWeek, weeklyDates } from '../shared/stockintel.js';
 import { toolForEvent, toolOff } from '../shared/tools.js';
 import { storeKpis } from '../shared/kpis.js';
 import { SOH_KEEP } from '../shared/reducers/stockroom.js';
@@ -167,7 +167,7 @@ export class StoreObject extends DurableObject {
           if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1], claims));
-          if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readJson(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12)); }
+          if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readJson(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12), url.searchParams.get('weekly') === '1'); }
           const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
           if (sohDay) { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
           if (url.pathname === '/manifest' && request.method === 'POST') return this.needTool('manifests') || this.publishManifest(await readJson(request, MANIFEST_MAX), claims);
@@ -470,18 +470,31 @@ export class StoreObject extends DurableObject {
       if (!/^\d{6,8}$/.test(kc) || !/^\d{1,5}$/.test(loc) || !Number.isFinite(soh)) throw new HttpError(400, 'invalid_request', `row ${rows.length + 1}: keycode, location and SOH are needed`);
       rows.push({ kc, loc, soh: Math.round(soh), ...(Number.isFinite(Number(r.price)) && r.price !== null ? { price: Number(r.price) } : {}), ...(r.name ? { name: String(r.name).slice(0, 80) } : {}) });
     }
+    // An update (merge) replaces only the bays this paste covers in the
+    // day's snapshot and keeps the rest: a department re-pasted at noon.
+    const pasted = new Set(rows.map(r => r.loc));
+    const prior = body.merge ? this.sql.exec('SELECT doc FROM soh WHERE date = ?', date).toArray()[0] : null;
+    // The SOH is store-wide: a keycode in the new paste carries its new
+    // figure into the bays kept from earlier.
+    const fresh = new Map(rows.map(r => [r.kc, r.soh]));
+    if (prior) for (const r of JSON.parse(prior.doc).rows || []) if (!pasted.has(r.loc)) rows.push(fresh.has(r.kc) ? { ...r, soh: fresh.get(r.kc) } : r);
+    if (rows.length > SOH_ROWS) throw new HttpError(400, 'invalid_request', `a snapshot holds at most ${SOH_ROWS} rows`);
     const at = new Date().toISOString(), by = claims.device || (claims.owner ? 'owner' : ''), week = isoWeek(date), locs = new Set(rows.map(r => r.loc)).size;
-    const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.publish', entity: { date }, payload: { rows: rows.length, locs, week }, at, v: 1 };
+    const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'soh.publish', entity: { date }, payload: { rows: rows.length, locs, week, ...(prior ? { updatedLocs: pasted.size } : {}) }, at, v: 1 };
     const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('INSERT OR REPLACE INTO soh (date, doc, at, by) VALUES (?, ?, ?, ?)', date, JSON.stringify({ date, week, rows }), at, by);
     const keep = Object.keys(this.state.soh?.snaps || {});
     for (const old of this.sql.exec('SELECT date FROM soh').toArray().map(x => x.date)) if (!keep.includes(old)) this.sql.exec('DELETE FROM soh WHERE date = ?', old);
-    return json({ ok: true, date, week, rows: rows.length, locs, seq: r.seq }, 201);
+    return json({ ok: true, date, week, rows: rows.length, locs, ...(prior ? { updatedLocs: pasted.size } : {}), seq: r.seq }, 201);
   }
-  sohDocs(n) {
+  // The newest n snapshots, or with weekly the last of each of the newest n
+  // weeks (what the classes read).
+  sohDocs(n, weekly) {
     const lim = Math.max(1, Math.min(SOH_KEEP, Number.isFinite(n) ? Math.round(n) : 12));
-    const snaps = this.sql.exec('SELECT doc FROM soh ORDER BY date DESC LIMIT ?', lim).toArray().map(r => JSON.parse(r.doc)).reverse();
+    const all = this.sql.exec('SELECT date FROM soh ORDER BY date').toArray().map(r => r.date);
+    const dates = weekly ? weeklyDates(all, lim) : all.slice(-lim);
+    const snaps = dates.map(d => JSON.parse(this.sql.exec('SELECT doc FROM soh WHERE date = ?', d).toArray()[0].doc));
     return json({ snaps });
   }
   removeSoh(date, claims) {

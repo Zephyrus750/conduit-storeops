@@ -50,14 +50,22 @@ export async function copyText(text, what) {
 // profiles and how long since the last arrival; a recent one (21 days)
 // means stock is likely out the back. RECOUNT when the supplier re-cartoned
 // within the last few trucks: count it, do not spot-check.
-let profiles = null, profilesAt = 0, profilesLoading = null;
+let profiles = null, lastArrival = {}, profilesAt = 0, profilesLoading = null;
 export function loadProfiles(ctx, repaint) {
   if (profilesLoading || Date.now() - profilesAt < 12 * 3600000) return;
-  profilesLoading = ctx.api(`/v1/store/${ctx.storeNo}/profiles`).then(doc => { profiles = doc?.profiles || {}; profilesAt = Date.now(); paintSoon(repaint); }).catch(() => { profiles = profiles || {}; profilesAt = Date.now(); }).finally(() => { profilesLoading = null; });
+  profilesLoading = ctx.api(`/v1/store/${ctx.storeNo}/profiles`).then(doc => { profiles = doc?.profiles || {}; lastArrival = doc?.last || {}; profilesAt = Date.now(); paintSoon(repaint); }).catch(() => { profiles = profiles || {}; profilesAt = Date.now(); }).finally(() => { profilesLoading = null; });
 }
 export const profileOf = kc => profiles?.[String(kc)] || null;
+// Units a carton for the pull and depth checks: the profile when three or
+// more trucks agree, else the latest delivery's (one or two so far).
+export function cartonOf(kc) {
+  const p = profileOf(kc); if (p?.ctn) return { ctn: p.ctn, basis: 'profile', last: p.last_arrival || null };
+  const l = lastArrival[String(kc)]; return l?.ctn ? { ctn: l.ctn, basis: 'delivery', last: l } : null;
+}
+export const ctnOf = kc => cartonOf(kc)?.ctn || null;
 export function depthChip(kc, now = Date.now()) {
-  const p = profileOf(kc); if (!p?.ctn) return '';
+  const p = profileOf(kc);
+  if (!p?.ctn) { const l = lastArrival[String(kc)]; return l?.ctn ? `<span class="ctn-chip single" title="From the latest delivery (${esc(l.date)}: ${l.units} units in ${l.cartons} cartons); it firms up once three trucks agree">▤ ${l.ctn}/ctn · latest delivery</span>` : ''; }
   const t = p.last_arrival?.date ? Date.parse(p.last_arrival.date + 'T00:00:00') : NaN, days = isNaN(t) ? null : Math.round((now - t) / 86400000), recent = days != null && days <= 21;
   const recount = p.pack_change && p.pack_change.since_trucks < 4;
   return `<span class="ctn-chip${recent ? ' recent' : ''}" title="${p.ctn} units a carton over ${p.trucks} truck${p.trucks === 1 ? '' : 's'}${p.last_arrival?.date ? `; last landed ${esc(p.last_arrival.date)}` : ''}${recent ? '; likely out the back' : ''}">▤ ${p.ctn}/ctn${days == null ? '' : days <= 0 ? ' · today' : ` · ${days}d ago`}${recent ? ' · out back?' : ''}</span>` +

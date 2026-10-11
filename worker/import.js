@@ -122,7 +122,7 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
   const neg = await call('sub=negsohlist');
   for (const it of neg.items || []) {
     const kc = String(it.keycode || '').replace(/\D/g, ''); if (!/^\d{6,13}$/.test(kc)) { warnings.push(`negative SOH item skipped: ${it.keycode}`); continue; }
-    await push(`neg:${kc}:${neg.date || today}`, it.addedAt || dayMs, 'adjustment.set', 'stockroom', { keycode: kc, date: String(neg.date || today).slice(0, 10) }, { qty: Math.abs(Number(it.qty) || 0), name: String(it.name || '').slice(0, 120), location: it.location || '', confirmed: !!it.confirmed });
+    await push(`neg:${kc}:${neg.date || today}`, it.addedAt || dayMs, 'adjustment.set', 'stockroom', { keycode: kc, date: String(neg.date || today).slice(0, 10) }, { source: 'import', qty: Math.abs(Number(it.qty) || 0), name: String(it.name || '').slice(0, 120), location: it.location || '', confirmed: !!it.confirmed });
   }
 
   if (noSubmitTime) warnings.push(`${noSubmitTime} earlier bay${noSubmitTime === 1 ? ' had' : 's had'} no submit time in K2B and imported as submitted at ${noSubmitTime === 1 ? 'its' : 'their'} ready time`);

@@ -12,17 +12,18 @@ Location : 7002
 42977636 CANDLE JAR 0 5.00 O
 garbage line with no item`;
 
-test('report paste: rows, OCR fixes, header locations, continuation APNs and brand, merge by keycode', () => {
-  const r = parseReport(REPORT);
-  assert.deepEqual(Object.keys(r.items).sort(), ['42977636', '43307685', '43308210']);
-  const tee = r.items['43307685'];
+test('report paste: rows, OCR fixes, header locations, continuation APNs and brand, merge by keycode and location', () => {
+  const r = parseReport(REPORT), at = kc => Object.values(r.items).find(x => x.kc === kc);
+  assert.deepEqual(Object.keys(r.items).sort(), ['42977636|7002', '43307685|7001', '43308210|7001']);
+  const tee = at('43307685');
   assert.deepEqual([tee.loc, tee.soh, tee.price], ['7001', 12, 8]); assert.deepEqual(tee.apns, ['9341234567890', '9341234567891']); assert.equal(tee.brand, 'KMART');
-  assert.deepEqual([r.items['43308210'].soh, r.items['43308210'].price], [-2, 12.5], 'negative SOH kept, comma price');
-  assert.deepEqual([r.items['42977636'].loc, r.items['42977636'].soh], ['7002', 0], 'header location, O read as 0');
+  assert.deepEqual([at('43308210').soh, at('43308210').price], [-2, 12.5], 'negative SOH kept, comma price');
+  assert.deepEqual([at('42977636').loc, at('42977636').soh], ['7002', 0], 'header location, O read as 0');
   assert.deepEqual(parseReport('43117659 RUG GREY 29.00 4').items, {}, 'no location: rejected');
   assert.deepEqual(parseReport('7003 43117659 RUG GREY 29.00').items, {}, 'no SOH: rejected');
-  const again = parseReport('7009 43307685 8.00 15', r.items);
-  assert.deepEqual([again.items['43307685'].loc, again.items['43307685'].soh, again.items['43307685'].apns.length], ['7009', 15, 2], 'a later paste updates and keeps APNs');
+  const again = parseReport('7001 43307685 8.00 15', r.items);
+  assert.deepEqual([again.items['43307685|7001'].soh, again.items['43307685|7001'].apns.length, Object.keys(again.items).length], [15, 2, 3], 'the same bay again updates it and keeps its APNs');
+  assert.equal(Object.keys(parseReport('7009 43307685 8.00 15', { ...r.items }).items).length, 4, 'another bay is another row');
 });
 
 test('bands and ISO weeks', () => {
@@ -64,4 +65,20 @@ test('scan.preset: a region per kind and screen size, inside the screen; remove 
   assert.equal(apply(s, ev({ size: '1920x1080' }, { kind: 'rows', x: 0.8, y: 0, w: 0.3, h: 1 }))?.code, 'invalid_event', 'off the right edge');
   assert.equal(apply(s, ev({ size: 'big' }, { x: 0, y: 0, w: 1, h: 1 }))?.code, 'invalid_event');
   apply(s, ev({ size: '1920x1080' }, { kind: 'codes', remove: true })); assert.deepEqual(s.scanPresets, {});
+});
+
+test('a keycode in two bays keeps both; one store-wide SOH a snapshot; checks go to each bay', async () => {
+  const { keepDates, weeklyDates, flagOf, flagsOf } = await import('../../shared/stockintel.js');
+  const r = parseReport('7001 43307685 8.00 3\n7005 43307685 8.00 3\n7001 43307685 8.00 3');
+  assert.deepEqual(Object.values(r.items).map(x => x.loc), ['7001', '7005'], 'both bays, the repeat merged');
+  const h = historyOf([{ date: '2026-10-05', rows: Object.values(r.items) }, { date: '2026-10-12', rows: [{ kc: '43307685', loc: '7005', soh: 3 }] }]);
+  assert.deepEqual([h['43307685'].w, h['43307685'].locs], [[3, 3], ['7005']], 'one SOH a snapshot; bays from the newest');
+  assert.deepEqual([flagOf(0, 6), flagOf(-2), flagOf(5, 6), flagOf(11, 6), flagOf(12, 6), flagOf(4, null)], ['adjust', 'adjust', 'pull', 'pull', null, null]);
+  const f = flagsOf([{ kc: '1', loc: '7002', soh: 0 }, { kc: '2', loc: '7001', soh: 4 }, { kc: '3', loc: '7001', soh: 40 }], kc => ({ 2: 6, 3: 6 })[kc] || null);
+  assert.deepEqual([f.adjust.map(x => x.kc), f.pull.map(x => [x.kc, x.ctn])], [['1'], [['2', 6]]]);
+  // Daily pastes: 14 days kept as they are, older ones as the last of each week; the classes read weekly.
+  const days = Array.from({ length: 40 }, (_, i) => new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10));
+  const kept = keepDates(days);
+  assert.ok(days.slice(-14).every(d => kept.includes(d)) && !kept.includes('2026-09-02') && kept.includes('2026-09-06'), 'Sunday 6 Sep ends its week');
+  assert.deepEqual(weeklyDates(days, 2), ['2026-10-04', '2026-10-10']);
 });
