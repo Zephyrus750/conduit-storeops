@@ -267,7 +267,7 @@ function showOwnerSignin(error) {
   });
 }
 const friendly = (err, wrong = 'Wrong PIN.') => err.code === 'locked_out' ? `Too many attempts. Try again in ${Math.ceil((err.detail?.retryAfter || 60) / 60)} min.` : err.code === 'unauthorised' ? wrong : err.code === 'not_registered' ? 'That store is not registered.' : err.code === 'not_configured' ? 'The worker has no owner key set yet.' : err.message;
-const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#0E7CA8"/><path d="M22.4 10.1A8.6 8.6 0 1 0 22.4 21.9" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/><circle cx="22.4" cy="10.1" r="2.7" fill="#fff"/><circle cx="22.4" cy="21.9" r="2.7" fill="#fff"/></svg>`;
+const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#0E7CA8"/><path d="M23.2 11.3A8.3 8.3 0 1 0 23.2 20.7" fill="none" stroke="#fff" stroke-width="5.6"/></svg>`;
 
 // ── rail, strip, status ───────────────────────────────────────────────
 // What each rail row does, shown beside it on hover (the showcase's rail
