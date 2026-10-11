@@ -85,6 +85,12 @@ const SUBNAMES_ENDS = ['E1', 'E2'];
 
 // Store default departments for reset
 const DEFAULT_DEPARTMENTS = JSON.parse(JSON.stringify(state.departments));
+// The coded sub-departments (H1-H4, C1-C4, K1-K4) keep their company-wide
+// names when an older map is opened (C3 became Footwear, C4 Cosmetics &
+// Accessories); colours and everything else stay as the map has them.
+function officialDeptNames(list) {
+  return list.map(d => { const o = /^[hck]\d$/.test(d.id) ? DEFAULT_DEPARTMENTS.find(x => x.id === d.id) : null; return o ? { ...d, name: o.name } : d; });
+}
 const DEFAULT_DEPT_GROUPS = JSON.parse(JSON.stringify(state.deptGroups));
 
 let isDrawing = false, drawStart = null, drawPreview = null, drawLabel = null;
@@ -6521,7 +6527,7 @@ function handleImport(event) {
       const data = parseMapText(e.target.result, f.name);
       if (data.storeNumber) document.getElementById('storeNumber').value = data.storeNumber;
       if (data.storeName) document.getElementById('storeName').value = data.storeName;
-      if (data.departments) state.departments = data.departments.map(d => ({ ...d, parent: d.parent || null }));
+      if (data.departments) state.departments = officialDeptNames(data.departments.map(d => ({ ...d, parent: d.parent || null })));
       if (data.deptGroups) state.deptGroups = data.deptGroups;
       if (data.moduleWidth) { state.moduleWidth = data.moduleWidth; document.getElementById('globalModuleW').value = data.moduleWidth; }
       if (data.shelfDepth) { state.shelfDepth = data.shelfDepth; document.getElementById('globalShelfDepth').value = data.shelfDepth; }
@@ -7952,7 +7958,7 @@ function loadStoreData(storeNum) {
     if (data.stockroomDepth) { state.stockroomDepth = data.stockroomDepth; document.getElementById('globalStockDepth').value = data.stockroomDepth; }
     if (data.gridSize) { state.gridSize = data.gridSize; document.getElementById('globalGridSize').value = data.gridSize; updateGridPatterns(); }
     state.metresPerUnit = data.metresPerUnit > 0 ? data.metresPerUnit : null;
-    if (data.departments) state.departments = data.departments;
+    if (data.departments) state.departments = officialDeptNames(data.departments);
     if (data.deptGroups) state.deptGroups = data.deptGroups;
 
     // Floor system — backwards compatible

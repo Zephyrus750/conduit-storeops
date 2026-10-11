@@ -62,6 +62,10 @@ const GROUP_ICON = { home: 'home', clothing: 'shirt', kids: 'star' };
 // The map file names departments "H1 Kitchen": the badge is the id, the
 // rest is the common name shown beside it.
 export function deptCommonName(d) { const n = String(d.name || d.id || '').trim(); const m = n.match(/^([A-Za-z]\d+)\s+(.+)$/); return m && m[1].toLowerCase() === String(d.id).toLowerCase() ? m[2] : n; }
+// The coded sub-departments (H1–H4, C1–C4, K1–K4) are company-wide, so their
+// names come from here even when an older map names them otherwise (C3
+// became Footwear and C4 Cosmetics & Accessories); colours stay the map's.
+const OFFICIAL_NAME = Object.fromEntries(DEPTS_DEFAULT.filter(d => /^[hck]\d$/.test(d.id)).map(d => [d.id, d.name]));
 export function setDepartments(list) {
   if (!Array.isArray(list) || !list.length) return false;
   for (const k of Object.keys(DEPT_COLOUR)) delete DEPT_COLOUR[k];
@@ -70,7 +74,7 @@ export function setDepartments(list) {
   const groups = new Map(), loose = [];
   for (const d of list) {
     const id = String(d.id || '').toLowerCase(); if (!id) continue;
-    DEPT_COLOUR[id] = d.color || '#64748B'; DEPT_NAME[id] = deptCommonName(d);
+    DEPT_COLOUR[id] = d.color || '#64748B'; DEPT_NAME[id] = OFFICIAL_NAME[id] || deptCommonName(d);
     const parent = d.parent ? String(d.parent).toLowerCase() : '';
     if (parent) { if (!groups.has(parent)) groups.set(parent, []); groups.get(parent).push(id); } else loose.push(id);
   }
