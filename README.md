@@ -402,6 +402,12 @@ every route stop; the equipment and its service dates. Open or closed is
 kept per device. Maintenance is desk-only: a store PC logs and works issues,
 and a work-order link opened on a phone says so.
 
+A shelf found by search, voice, a scan or a link is shown as ShelfSearcher
+showed it (`map.locate`): the rest of the map dims, its outline pulses cyan
+and magenta until something else is chosen, three rings ping out from it,
+and it is framed to the screen (its longer side about 45% of the view, the
+aisles around it in view, clear of the phone's open sheet).
+
 The map (`js/map.js`) zooms with an eased animation, double-tap or
 double-click (×1.8), Ctrl + / − / 0 and a pinch; a flick coasts. Price checks
 open a card and cycle normal, large or hidden; tory lines switch on for a

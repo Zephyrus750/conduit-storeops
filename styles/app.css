@@ -349,15 +349,21 @@ svg.map.real { background: #fff; }
 .map.real .shelf-group:hover .shelf { stroke-width: 2.5; }
 .map.real .shelf-badges .sb { font-size: 24px; font-weight: 800; }
 .map.real .shelf-badges .sb[data-dept="k3"], .map.real .shelf-badges .sb[data-dept="k4"], .map.real .shelf-badges .sb[data-dept="c3"] { fill: #1a1a2e; }
-.map.real .shelf-group[data-sel] .shelf { stroke: #fff !important; stroke-width: 4 !important; fill-opacity: 1 !important; }
+.map.real .shelf-group[data-sel]:not([data-hl]) .shelf { stroke: #fff !important; stroke-width: 4 !important; fill-opacity: 1 !important; }
 .map.real .shelf-group[data-sel] .shelf-label { fill: #fff !important; font-weight: 800; }
 /* find on the map: cyan and magenta pulse on the hits, the rest step back */
 .map.real.has-hl .shelf-group:not([data-hl]) { opacity: .3; }
-.map.real.has-hl .shelf-badges [data-shelf] { opacity: .15; }
+.map.real.has-hl .shelf-badges [data-shelf]:not([data-hl]) { opacity: .15; }
 .map.real .shelf-group[data-hl] { opacity: 1 !important; }
 .map.real .shelf-group[data-hl] .shelf { stroke-width: 5 !important; fill-opacity: 1 !important; animation: shelf-pulse-border 1.4s ease-in-out infinite; }
 @keyframes shelf-pulse-border { 0%, 100% { stroke: #00e5ff; stroke-width: 5; } 50% { stroke: #ff40ff; stroke-width: 7; } }
 @media (prefers-reduced-motion: reduce) { .map.real .shelf-group[data-hl] .shelf { animation: none; stroke: #00e5ff; } }
+.map.real .shelf-group[data-hl] .shelf-label { fill: #fff !important; font-weight: 800; }
+/* A found shelf: three rings ping out from it (map.locate / map.ping). */
+.map.real .locate-ping { pointer-events: none; }
+.map.real .locate-ping circle { fill: none; stroke: #00e5ff; stroke-width: 3; vector-effect: non-scaling-stroke; transform-box: fill-box; transform-origin: center; opacity: 0; animation: locate-ping 1.3s ease-out both; }
+@keyframes locate-ping { from { transform: scale(.2); opacity: 1; stroke-width: 5; } to { transform: scale(1.5); opacity: 0; stroke-width: 2; } }
+@media (prefers-reduced-motion: reduce) { .map.real .locate-ping { display: none; } }
 
 /* The bar above the map and the crumb strip below stay in the flow, as
    the earlier design had them; only the map itself changed. */

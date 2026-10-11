@@ -98,7 +98,8 @@ export default {
     pcSel = null;
     const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { map.highlight(null); selected = info.code; pcSel = null; paint(); } else if (info.kind === 'pricecheck') { pcSel = info; map.select(''); paint(); } } });
     bindMapChrome(root, map);
-    if (ctx.arg?.select) { map.select(selected); map.zoomTo(selected); }
+    // From a search (the bar, voice, the palette, a link): found, as ShelfSearcher showed it.
+    if (ctx.arg?.select) map.locate(selected);
     // From the phone's search: a micro-department's shelves ring on the map
     // and the first is selected; with none assigned, its department shows.
     if (ctx.arg?.micro) {
@@ -120,11 +121,11 @@ export default {
     paint();
     root.addEventListener('click', e => {
       if (e.target.closest('[data-act="clear"]')) { selected = null; pcSel = null; map.select(''); paint(); }
-      if (e.target.closest('[data-act="pc-goto"]') && pcSel?.location) { const gs = map.groups(pcSel.location); if (gs.length) { selected = canonCode(pcSel.location); pcSel = null; map.select(selected); map.highlight(gs); map.zoomTo(selected); paint(); } else toast(`${pcSel.location} is not on this map`, 'bad'); }
+      if (e.target.closest('[data-act="pc-goto"]') && pcSel?.location) { const gs = map.groups(pcSel.location); if (gs.length) { selected = canonCode(pcSel.location); pcSel = null; map.locate(selected); paint(); } else toast(`${pcSel.location} is not on this map`, 'bad'); }
       // The empty card's Scan label: a shelf or run label selects it here.
       if (e.target.closest('[data-act="scan-shelf"]')) openScanner({ title: 'Scan a shelf label', hint: 'Point the camera at the shelf label', onCode: code => {
         if (!map.groups(code).length) return toast(`${code} is not a shelf on this map`, 'bad');
-        selected = canonCode(code); pcSel = null; map.select(selected); map.zoomTo(selected); paint();
+        selected = canonCode(code); pcSel = null; map.locate(selected); paint();
       } });
       if (e.target.closest('[data-act="depts"]')) document.querySelector('.mdepts')?.click();
       const pa = e.target.closest('[data-act="pick-add"]'); if (pa) addToPickList(ctx, pa.dataset.shelf);

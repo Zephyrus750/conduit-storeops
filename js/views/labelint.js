@@ -117,7 +117,7 @@ export default {
     if (ctx.arg?.select && map.groups(ctx.arg.select).length) {
       const sel = ctx.arg.select, micro = microOf(sel);
       if (micro) { selected = micro; openSub = micro.split('-')[0]; assigning = false; paint(); }
-      map.select(sel); map.zoomTo(sel);
+      map.select(sel); requestAnimationFrame(() => { map.zoomTo(sel); map.ping(sel); });
     }
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
