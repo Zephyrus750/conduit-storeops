@@ -89,11 +89,21 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
   shell replaces a view's content); the search palette's preview reuses
   a second one. Never `innerHTML` the map per view: parsing 800 KB and the
   first layout and paint of fresh nodes cost 700 ms or more.
+- Between the phone's map modes the map never moves: the shell keeps
+  `.mv-map` and its stage and swaps only the panels (`keepMap()` in
+  `js/shell.js`); listeners on a kept element are scoped to the view
+  (`scopeListeners`). Moving the map re-styles and re-lays out all of it.
+- Never measure the map while a view mounts (the live map's width comes
+  from a ResizeObserver), never rewrite a viewBox or a fade variable
+  (`--badge-opacity`, `--label-*`) with the value it already has: each
+  write restyles or re-lays out every shelf.
 - No `transition` or `filter` on `.shelf`. A state that lands on hundreds
   of shelves at once (refresh marks, a route) re-rasters the whole map
   for every frame of a transition. Stroke and fill changes alone are cheap.
-- Shelf labels are `display:none` while the run badges show; two thousand
-  invisible `<text>` elements still cost layout and paint.
+- Shelf labels are `display:none` while the run badges show, and on a
+  phone below 2.5× zoom in a view without badges (Refresh), where they are
+  two pixels tall; two thousand invisible `<text>` elements still cost
+  layout and paint.
 - Shelves and runs: "A16 S1" is a shelf, "A16" is its run (the shelves
   sharing that name). Every shelf is its own: tapped, scanned, counted,
   marked and assigned on its own. `groupsFor()` in `js/map.js` is the one

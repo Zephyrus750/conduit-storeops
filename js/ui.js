@@ -149,6 +149,13 @@ export function toast(msg, kind = '', action = null) {
 const ACTIONABLE = '[data-act],[data-go],[data-view],[data-shell-act],[data-zoom],[data-key],[data-mapgroup],[data-mapdept],[data-mapfloor],[data-mapfloor-next],[data-tab],.storechip';
 const NATIVE = new Set(['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'OPTION', 'FORM', 'LABEL']);
 const needsHelp = el => !(NATIVE.has(el.tagName) || (el.tagName === 'A' && el.hasAttribute('href'))) && !el.closest('svg');
+// Every listener added to `el` from now on ends when `signal` aborts: an
+// element that outlives one view (the phone's map, kept between map modes)
+// drops that view's listeners when the next view mounts.
+export function scopeListeners(el, signal) {
+  el.addEventListener = (type, fn, opts) => EventTarget.prototype.addEventListener.call(el, type, fn,
+    opts == null || typeof opts === 'boolean' ? { capture: !!opts, signal } : { ...opts, signal: opts.signal && AbortSignal.any ? AbortSignal.any([opts.signal, signal]) : signal });
+}
 export function enhanceControls(root = document) {
   const els = root.matches?.(ACTIONABLE) ? [root, ...root.querySelectorAll(ACTIONABLE)] : root.querySelectorAll(ACTIONABLE);
   for (const el of els) {

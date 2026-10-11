@@ -3,7 +3,7 @@
 // filter. Ported from the showcase's map chrome; the map document itself
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
-import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast } from './ui.js';
+import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast, scopeListeners } from './ui.js';
 import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords, linkedNode } from '../shared/route.js';
 import { markerGlyph, locationRange, markerSymbol, MARKER_NAMES, LANDMARK_NAMES, markerType } from '../shared/maprender.js';
 import { prefs, setPref } from './prefs.js';
@@ -259,6 +259,7 @@ export function symbolsHtml(list = mapSymbols()) {
 // Badges: one per run on a sales floor, drawn over the whole run so the
 // name reads when zoomed out; they fade into the per-shelf labels
 // as the map zooms in (the legacy viewer's shelf badges).
+const LABEL_MIN_Z = 2.5;   // a map without badges hides its labels below this zoom on a phone
 const BADGE_START = 5.5, BADGE_END = 8;   // zoom factors, relative to the floor fitted
 function buildBadges(floorEl) {
   const NS = 'http://www.w3.org/2000/svg', byName = new Map();
@@ -308,11 +309,27 @@ let tpl = null, live = null, pv = null;
 // The shell calls this before it replaces a view's content: the live map
 // steps out first, so the next view re-inserts the same element instead of
 // the browser destroying five thousand nodes and building them again.
+// The label/badge fade lives in custom properties on the map: changing one
+// restyles every element of the map (about 130 ms on a store phone), so a
+// value is written only when it changes.
+const FADE_VARS = ['--badge-opacity', '--label-opacity', '--label-display'];
+const setVar = (el, k, v) => { if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v); };
+// The live map's width on screen, kept by a ResizeObserver: the marker scale
+// needs it, and measuring it while a view mounts would lay the whole map out
+// before the view has painted its marks, and then again after (measured at
+// up to 400 ms a switch on a store phone).
+let liveW = 0, onLiveW = null, watched = null;
+const liveRO = typeof ResizeObserver === 'function' ? new ResizeObserver(es => { for (const e of es) { const w = e.contentRect.width; if (w && Math.abs(w - liveW) > 0.5) { liveW = w; onLiveW?.(); } } }) : null;
+function watchLive() { if (liveRO && watched !== live) { if (watched) liveRO.unobserve(watched); liveW = 0; watched = live; liveRO.observe(live); } }
+// Whether the live map is the one mounted in this stage (the shell keeps it
+// there between the phone's map modes).
+export function liveIn(stage) { return !!live && live.parentNode === stage; }
 export function parkMap() { if (live?.isConnected) live.remove(); }
 // Everything a view can leave on the map, undone: marks, selection, find
 // rings, dimming, route and pins, plan colours, classes, floor and zoom.
 function resetLive(svg, fl) {
-  svg.setAttribute('class', 'map real'); svg.removeAttribute('data-deptzoom'); svg.removeAttribute('data-focus'); svg.removeAttribute('style');
+  svg.setAttribute('class', 'map real'); svg.removeAttribute('data-deptzoom'); svg.removeAttribute('data-focus');
+  for (const k of [...svg.style]) if (!FADE_VARS.includes(k)) svg.style.removeProperty(k);   // the fade stays: setLabelFade rewrites only what changed
   for (const el of [...svg.children]) if (!el.classList.contains('mfl')) el.remove();
   for (const g of svg.querySelectorAll('.shelf-group')) {
     for (const a of ['data-mark', 'data-sel', 'data-hl', 'data-onroute', 'data-dim', 'data-plan', 'data-heat', 'data-paint']) if (g.hasAttribute(a)) g.removeAttribute(a);
@@ -324,7 +341,7 @@ function resetLive(svg, fl) {
   for (const b of svg.querySelectorAll('.shelf-badges [data-off]')) b.removeAttribute('data-off');
   const cur = fl.find(f => f.type === 'foh') || fl[0];
   for (const el of svg.querySelectorAll('.mfl')) el.style.display = el.getAttribute('data-fid') === cur.id ? '' : 'none';
-  svg.setAttribute('viewBox', cur.vb);
+  if (svg.getAttribute('viewBox') !== cur.vb) svg.setAttribute('viewBox', cur.vb);   // even an unchanged viewBox lays out every shelf again
 }
 function template(fl) {
   const main = fl === floors;
@@ -349,10 +366,13 @@ function template(fl) {
 export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false, tip = null, tips = true, doc = null, badges = true, clone = false } = {}) {
   const fl = doc ? parseFloors(doc) : floors;
   let cur = fl.find(f => f.type === 'foh') || fl[0];
+  // A stage can outlive a view (the phone keeps its map between map modes):
+  // what the last mount listened for on it ends here.
+  stage.__off?.abort(); const off = stage.__off = new AbortController(); scopeListeners(stage, off.signal);
   // A view gets the one live map element (reset, moved into its stage); a
   // preview that must not disturb the view behind it asks for a clone.
   const shared = cur && fl === floors && !clone;
-  if (shared) { if (!live) live = template(fl).cloneNode(true); resetLive(live, fl); stage.replaceChildren(live); }
+  if (shared) { if (!live) live = template(fl).cloneNode(true); resetLive(live, fl); if (live.parentNode === stage) { for (const n of [...stage.childNodes]) if (n !== live) n.remove(); } else stage.replaceChildren(live); watchLive(); }
   else if (cur && fl === floors && clone === 'preview') { if (!pv) pv = template(fl).cloneNode(true); resetLive(pv, fl); stage.replaceChildren(pv); }
   else if (cur) stage.replaceChildren(template(fl).cloneNode(true)); else stage.innerHTML = PLACEHOLDER;
   const svg = stage.querySelector('svg.map.real');
@@ -388,11 +408,15 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   const setLabelFade = () => {
     const z = (Number(vb0.split(' ')[2]) || 1) / (Number(svg.getAttribute('viewBox').split(' ')[2]) || 1);
     const badge = z <= BADGE_START ? 1 : z >= BADGE_END ? 0 : 1 - (z - BADGE_START) / (BADGE_END - BADGE_START);
-    svg.style.setProperty('--badge-opacity', badge.toFixed(2)); svg.style.setProperty('--label-opacity', (1 - badge).toFixed(2));
+    setVar(svg, '--badge-opacity', badge.toFixed(2)); setVar(svg, '--label-opacity', (1 - badge).toFixed(2));
     // Two thousand shelf labels that are invisible when zoomed out still
     // cost a layout and a paint each; take them out of the tree until the
     // badges start handing over (views without badges keep them).
-    svg.style.setProperty('--label-display', badge >= 1 && !svg.classList.contains('nobadges') ? 'none' : 'inline');
+    // A view without badges (Refresh) keeps its labels, except on a phone
+    // zoomed out, where they are two to four pixels tall: there they come
+    // back from 2.5 times the whole-store zoom, about five pixels.
+    const tiny = z < LABEL_MIN_Z && ((svg === live && liveW) || innerWidth) < 600;
+    setVar(svg, '--label-display', svg.classList.contains('nobadges') ? (tiny ? 'none' : 'inline') : badge >= 1 ? 'none' : 'inline');
   };
   // Emergency markers are authored at translate(x,y) only; scale them so a
   // sign is about 32px on screen whatever the zoom (the legacy viewer did
@@ -401,7 +425,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   let pcMode = prefs().priceChecks || 'small', pcScaled = false;
   const scaleMarkers = () => {
     if (!markerEls.length && !pcEls.length) return;
-    const w = svg.getBoundingClientRect().width || 600, vbw = Number(svg.getAttribute('viewBox').split(' ')[2]) || 1;
+    const w = (svg === live && liveW) || svg.getBoundingClientRect().width || 600, vbw = Number(svg.getAttribute('viewBox').split(' ')[2]) || 1;
     const k = Math.max(1, Math.min(12, (32 * vbw / w) / 28)).toFixed(3);
     for (const m of markerEls) m.setAttribute('transform', `translate(${m.getAttribute('data-x')},${m.getAttribute('data-y')}) scale(${k})`);
     // Large price checks hold about 32px on screen (ShelfSearcher's size
@@ -695,12 +719,17 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   api.setMarks(marks);
   if (select) api.select(select);
   svg.classList.toggle('on-boh', cur?.type === 'boh');
+  if (shared) onLiveW = () => { if (svg.isConnected) { scaleMarkers(); setLabelFade(); } };
+  // Hidden labels leave the tree before anything measures the map, so the
+  // first layout never lays out two thousand labels only to drop them.
+  setLabelFade();
   api.priceChecks(pcMode);
-  scaleMarkers(); setLabelFade();
+  scaleMarkers();
 
   // pan, zoom, tap. Two fingers pinch and pan the map itself (the stage
   // has touch-action:none, so the page never zooms with it).
   let drag = null, pinch = null, coast = 0, lastTap = null; const ptrs = new Map();
+  off.signal.addEventListener('abort', () => { cancelAnimationFrame(anim); cancelAnimationFrame(coast); });   // a move still running belongs to the last view
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) || 1, mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   stage.addEventListener('wheel', e => { e.preventDefault(); api.zoomBy(e.deltaY > 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
   stage.addEventListener('pointerdown', e => {
@@ -804,7 +833,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       else if (k === '-' || k === '_') { e.preventDefault(); api.zoomBy(1.25, null, null, 300); }
       else if (k === '0') { e.preventDefault(); api.fit(400); }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, { signal: off.signal });
   }
   return api;
 }
