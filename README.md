@@ -370,6 +370,11 @@ code rather than the other way round. `js/registry.js` is the one view registry:
 a view is `{ id, title, icon, desktop(ctx), mobile?(ctx), mount?(ctx, root) }`
 and renders into the content region; it owns no chrome and no stylesheet.
 
+The colour scheme is fixed for every store device (managers share PCs):
+charcoal rail and phone bars with the Lagoon accent, set in `js/prefs.js`.
+The owner console keeps charcoal with Signal orange. Display size and the
+collapsed rail are the only per-device appearance settings.
+
 Floor views live on real data: Store map, Pick list, Location refresh, Label
 integrity, Emergency, Maintenance, Stocktake, Inventory (off-site register,
 loads, heat on the map, trends, clearance watch), plus Dashboard (with the
