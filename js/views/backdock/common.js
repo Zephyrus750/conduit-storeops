@@ -24,7 +24,14 @@ export function fmtHM(iso) { if (!iso) return '—'; const d = new Date(iso); re
 export function openTrucks(dock) { return Object.entries(dock.trucks).filter(([, t]) => t.status !== 'closed').map(([id, t]) => ({ id, ...t })).sort((a, b) => b.id.slice(0, 10).localeCompare(a.id.slice(0, 10)) || Number(truckNo(a.id)) - Number(truckNo(b.id))); }
 // The next free number today: trucks on the board and in the history (an
 // imported legacy record holds its number too).
-export function nextTruckId(dock) { const day = todayKey(), used = new Set([...Object.keys(dock.trucks || {}), ...(dock.history || []).map(r => r.id)]); let n = 1; while (used.has(`${day}-T${n}`)) n++; return `${day}-T${n}`; }
+// The next truck today: the lowest planned slot with no truck yet (so it
+// takes that slot's staged manifest), else the lowest number not used.
+export function nextTruckId(dock, plan) {
+  const day = todayKey(), used = new Set([...Object.keys(dock.trucks || {}), ...(dock.history || []).map(r => r.id)]);
+  const planned = Object.keys(plan?.days?.[day]?.slots || {}).map(Number).sort((a, b) => a - b).find(n => !used.has(`${day}-T${n}`));
+  if (planned) return `${day}-T${planned}`;
+  let n = 1; while (used.has(`${day}-T${n}`)) n++; return `${day}-T${n}`;
+}
 export function pallets(t) { return Object.values(t?.pallets || {}).filter(p => !p.excluded); }
 export function progress(t) {
   const ps = pallets(t); let total = 0, done = 0;

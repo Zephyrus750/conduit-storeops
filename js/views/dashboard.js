@@ -100,14 +100,20 @@ function maintCard(ctx, r) {
 function morning(ctx) {
   const t = today(), dockOk = canRead(ctx, 'backdock'), srOk = canRead(ctx, 'stockroom');
   const slots = dockOk ? Object.entries(ctx.store.get('plan')?.days?.[t]?.slots || {}).sort((a, b) => a[0] - b[0]) : [];
-  const withMan = slots.filter(([, s]) => s.manifest), dock = dockOk ? ctx.store.get('dock') : null;
+  const dock = dockOk ? ctx.store.get('dock') : null;
+  // Today's trucks with their manifests: those on the dock or finished (a
+  // truck takes over its planned slot) and the slots still to come.
+  const tr = dock ? [...openTrucks(dock).filter(x => x.id.slice(0, 10) === t).map(x => [Number(x.id.slice(12)), x.manifest?.manNo, 'on the dock']), ...(dock.history || []).filter(h => h.id.slice(0, 10) === t).map(h => [Number(h.id.slice(12)), h.manifest?.manNo, 'done'])] : [];
+  const mans = [...tr, ...slots.filter(([n]) => !tr.some(x => x[0] === Number(n))).map(([n, s]) => [Number(n), s.manifest?.manNo])].sort((a, b) => a[0] - b[0]);
+  const tk = (() => { const d = new Date(t + 'T12:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })(), ts = dockOk ? Object.values(ctx.store.get('plan')?.days?.[tk]?.slots || {}) : [];
+  const tmrw = ts.length ? ` · tomorrow ${ts.filter(x => x.manifest).length}/${ts.length} staged` : '';
   const first = dock ? [...openTrucks(dock).filter(x => x.id.slice(0, 10) === t), ...(dock.history || []).filter(h => h.id.slice(0, 10) === t)].sort((a, b) => a.id.localeCompare(b.id))[0] : null;
   const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen), liToday = Object.entries(L.checks[cyc] || {}).filter(([, c]) => dayOf(c.at) === t);
   const rep = report && srOk ? report : null, midday = rep && new Date(rep.at).getHours() >= 12;
   const A = [
     srOk && ['Inventory report', rep ? `Pasted ${fmtHM(new Date(rep.at).toISOString())} · ${Object.keys(rep.byLoc || {}).length} bays · ${Object.values(rep.byLoc || {}).reduce((n, l) => n + l.length, 0)} codes` : 'Not pasted yet · the board compares against nothing until it is', !!rep, 'Paste whole report', 'Re-paste', 'bfreview'],
-    dockOk && ['Manifests for today’s trucks', !slots.length ? 'No trucks planned today' : withMan.length === slots.length ? `${withMan.map(([n, s]) => `${esc(s.manifest)} → T${n}`).join(' · ')} · all attached` : `${slots.length} truck${slots.length === 1 ? '' : 's'} planned · ${withMan.length} attached`, slots.length > 0 && withMan.length === slots.length, 'Attach a manifest', 'Open', 'manifests'],
-    dockOk && ['Planner', slots.length ? `${slots.map(([n, s]) => `T${n}${s.eta ? ' ' + s.eta : ''}`).join(' · ')}${slots.every(([, s]) => (s.team || []).length) ? ' · teams set' : ''}` : 'Today’s trucks not planned', slots.length > 0, 'Plan today’s trucks', 'Open', 'planner'],
+    dockOk && ['Manifests for today’s trucks', !mans.length ? 'No trucks planned today' + tmrw : mans.every(x => x[1]) ? `${mans.map(([n, m]) => `${esc(m)} → T${n}`).join(' · ')} · all attached${tmrw}` : `${mans.length} truck${mans.length === 1 ? '' : 's'} today · ${mans.filter(x => x[1]).length} with a manifest${tmrw}`, mans.length > 0 && mans.every(x => x[1]), 'Attach a manifest', 'Open', 'manifests'],
+    dockOk && ['Planner', mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · teams set' : ''}` : 'Today’s trucks not planned', mans.length > 0, 'Plan today’s trucks', 'Open', 'planner'],
   ].filter(Boolean);
   const B = [
     dockOk && ['First truck decant', !first ? 'No truck on the dock yet today' : first.status === 'closed' || first.clearMins != null ? `Closed · ${fmtMins(first.clearMins || 0)}` : `${first.goalAt ? `goal ${fmtHM(first.goalAt)} · ` : ''}${progress(first).pct}% decanted`, !!first && (first.status === 'closed' || first.clearMins != null), 'Open the dock', 'History', first && first.clearMins != null ? 'rhistory' : 'receiving'],

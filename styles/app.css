@@ -1953,3 +1953,12 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .md-sheet .sheet-h { margin-bottom: 12px; }
 .sheet-x { flex: none; width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--chip); color: var(--ink2); display: grid; place-items: center; cursor: pointer; }
 .sheet-x svg.i { width: 20px; height: 20px; }
+
+/* Receiving: the truck against its manifest, as it lands. */
+.bdr-tally { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.bdr-tal { display: inline-flex; align-items: baseline; gap: 5px; padding: 4px 9px; border-radius: 8px; background: var(--chip); color: var(--ink2); font-size: 12.5px; }
+.bdr-tal b { font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bdr-tal.ok { background: color-mix(in srgb, var(--green) 12%, transparent); }
+.bdr-tal.warn { background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.bdr-tal.bad { background: color-mix(in srgb, var(--red) 12%, transparent); }
+.bdr-tal.bad b { color: var(--red); }

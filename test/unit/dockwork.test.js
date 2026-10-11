@@ -178,7 +178,7 @@ test('a truck made from a planner slot files its manifest: the ledger knows it a
   ok(s, 'truck.create', { truck: '2026-09-08-T1' }, {}, '06:00');
   const t = s.dock.trucks['2026-09-08-T1'];
   assert.equal(t.manifest.manNo, 'M-88'); assert.equal(t.manifest.consols[0].id, '400000001');
-  assert.deepEqual(s.dock.ledger['400000002'].map(x => [x.t, x.k]), [['2026-09-08-T1', 'man']]);
+  assert.deepEqual(s.dock.ledger['400000002'].map(x => [x.t, x.k]), [['2026-09-08-T1', 'plan'], ['2026-09-08-T1', 'man']], 'staged, then manifested');
   assert.equal(s.dock.manifests['M-88'].truck, '2026-09-08-T1');
   assert.equal(s.plan.days['2026-09-08'].slots[1], undefined, 'the slot is used up');
   // A slot whose manifest is not valid refuses the truck and changes nothing.
