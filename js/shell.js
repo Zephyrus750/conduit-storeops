@@ -10,11 +10,11 @@
 
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
-import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS } from './ui.js';
+import { $, $$, ic, esc, greeting, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners } from './ui.js';
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
-import { loadMap, setMap, mapInfo, parkMap, mapStats, shelfForLocation, splitCanon } from './map.js';
+import { loadMap, setMap, mapInfo, parkMap, liveIn, mapStats, shelfForLocation, splitCanon } from './map.js';
 import { initSearch } from './search.js';
 import { voiceSupported, listenOnce } from './voice.js';
 import { resolveSpoken } from '../shared/voice.js';
@@ -407,14 +407,21 @@ function show(id, arg) {
   for (const u of unsubs) u(); unsubs = [];
   currentArg = arg !== undefined ? arg : (id === current ? currentArg : null);
   current = id;
-  // A fresh content element each time, so a view's listeners die with it.
-  parkMap();
-  const fresh = content.cloneNode(false); content.replaceWith(fresh); content = fresh;
   const cur = client.session.current;
   const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, api: (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token })), storage: client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
   const useMobile = mobile && typeof view.mobile === 'function';
-  content.classList.toggle('mv', useMobile);
-  content.innerHTML = useMobile ? view.mobile(ctx) : view.desktop(ctx);
+  const html = useMobile ? view.mobile(ctx) : view.desktop(ctx);
+  // A fresh content element each time, so a view's listeners die with it;
+  // between the phone's map modes the map stays put instead (keepMap) and
+  // the last view's listeners end with its signal.
+  viewOff?.abort(); viewOff = new AbortController();
+  if (!(useMobile && keepMap(html))) {
+    parkMap();
+    const fresh = content.cloneNode(false); content.replaceWith(fresh); content = fresh;
+    content.classList.toggle('mv', useMobile);
+    content.innerHTML = html;
+  }
+  scopeListeners(content, viewOff.signal);
   const hs = $('#hdrslot'); hs.innerHTML = ''; if (!useMobile && frame.classList.contains('hdr-title')) { const vh0 = content.querySelector('.vh'); if (vh0) hs.appendChild(vh0); }
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   content.scrollTop = 0;
@@ -424,6 +431,25 @@ function show(id, arg) {
   // store update) leaves it open, so the launcher survives sign-in.
   if (prev !== view.id) $('#msheet')?.classList.remove('open');
   $('#crumb').textContent = view.title;
+}
+// Between the phone's map modes (Home, Refresh, Labels, Route, Emergency) the
+// map element stays where it is and only what is around it changes: moving
+// it re-styles and re-lays out every shelf and label of the map, which cost
+// a store phone a third of a second on every switch.
+let viewOff = null;
+function keepMap(html) {
+  const old = content.querySelector(':scope > .mv-map'), stage = old?.querySelector(':scope > #mapstage');
+  if (!content.classList.contains('mv') || !stage || !liveIn(stage)) return false;
+  const t = document.createElement('div'); t.innerHTML = html;
+  const next = t.querySelector(':scope > .mv-map');
+  if (!next?.querySelector(':scope > #mapstage')) return false;
+  old.className = next.className;
+  for (const n of [...old.childNodes]) if (n !== stage) n.remove();
+  for (const n of [...next.childNodes]) if (n.id !== 'mapstage') old.appendChild(n);
+  for (const n of [...content.childNodes]) if (n !== old) n.remove();
+  let before = true;
+  for (const n of [...t.childNodes]) { if (n === next) { before = false; continue; } if (before) content.insertBefore(n, old); else content.appendChild(n); }
+  return true;
 }
 async function actAs(no) {
   try { await store?.flush(); } catch {}

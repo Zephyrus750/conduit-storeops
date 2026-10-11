@@ -2062,3 +2062,7 @@ button.mv-row .c svg.i { width: 16px; height: 16px; transform: rotate(-90deg); }
 .si-ready { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--green-ink); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .si-ready svg.i { width: 14px; height: 14px; }
 .si-alt { display: block; text-align: center; margin-top: 12px; font-size: 13.5px; font-weight: 700; color: var(--accent-ink); cursor: pointer; }
+
+/* The phone's map is its own layout: a change in the panel or the map tools
+   around it never lays the six thousand map elements out again. */
+.mv-map .mapstage { contain: strict; }
