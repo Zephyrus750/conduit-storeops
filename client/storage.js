@@ -3,6 +3,7 @@
 //
 //   get(key) → value | undefined     set(key, value)     del(key)
 //   list(prefix) → [{ key, value }] in key order
+//   count(prefix) → how many keys start with prefix   has(key) → boolean (neither reads values)
 //
 // Keys are feature-named and brand-neutral (suite_*, outbox:, snap:).
 
@@ -13,6 +14,8 @@ export function memoryStorage(seed = {}) {
     async set(k, v) { m.set(k, v); },
     async del(k) { m.delete(k); },
     async list(prefix) { return [...m.entries()].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, value]) => ({ key, value })); },
+    async count(prefix) { let n = 0; for (const k of m.keys()) if (k.startsWith(prefix)) n++; return n; },
+    async has(k) { return m.has(k); },
   };
 }
 
@@ -47,6 +50,14 @@ export function indexedDbStorage(dbName = 'suite-store') {
         r.onsuccess = () => { const c = r.result; if (!c) return res(out); out.push({ key: c.key, value: c.value }); c.continue(); };
         r.onerror = () => rej(r.error);
       });
+    },
+    async count(prefix) {
+      const db = await open();
+      return new Promise((res, rej) => { const r = db.transaction('kv').objectStore('kv').count(IDBKeyRange.bound(prefix, prefix + '\uffff')); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    },
+    async has(k) {
+      const db = await open();
+      return new Promise((res, rej) => { const r = db.transaction('kv').objectStore('kv').count(k); r.onsuccess = () => res(r.result > 0); r.onerror = () => rej(r.error); });
     },
   };
 }

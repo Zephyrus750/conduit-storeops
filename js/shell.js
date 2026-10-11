@@ -90,8 +90,12 @@ let pendingLink = takeDeepLink();
   if (pendingLink && s?.store && !s.actas && s.store !== pendingLink.store) {
     try { if ((await client.session.parked()).some(p => p.store === pendingLink.store)) s = await client.session.switchTo(pendingLink.store); } catch {}
   }
-  if (s?.store) await enter(); else if (s?.owner) await enterAdmin(); else showSignin();
+  // Opening the app shows the store to continue in; a reload (or the
+  // owner acting as a store) goes straight back in.
+  if (s?.store) { if (s.actas || reloaded()) await enter(); else await showContinue(s); }
+  else if (s?.owner) await enterAdmin(); else showSignin();
 })();
+function reloaded() { try { return performance.getEntriesByType('navigation')[0]?.type === 'reload'; } catch { return false; } }
 function openPendingLink(s) {
   const l = pendingLink; pendingLink = null; if (!l) return false;
   if (l.store !== s.store) { toast(`That ${l.issue ? 'work order' : 'shelf link'} is for store ${l.store}. Add that store from Store details to open it.`); return false; }
@@ -189,7 +193,9 @@ async function signOut() {
   // A shared device keeps no store data past sign-out (the outbox was just
   // flushed; anything still queued stays so it is not lost).
   const no = client.session.current?.store;
-  if (no && !client.session.current?.actas && !(store?.pending?.length)) try { await client.storage.del(`snap:${no}`); } catch {}
+  // Signed out from the Continue screen, the store was never opened: its outbox is read from the device.
+  let queued = store?.pending?.length || 0; if (!store && no) try { queued = await client.storage.count(`outbox:${no}:`); } catch { queued = 1; }
+  if (no && !client.session.current?.actas && !queued) try { await client.storage.del(`snap:${no}`); } catch {}
   if (client.session.current?.actas) { closeStore(); await client.session.endActAs(); await enterAdmin(); return; }
   leave(); await client.session.signOut(); showSignin();
 }
@@ -242,8 +248,7 @@ async function showSignin({ error, owner } = {}) {
     `<div class="si-role">${ic('users')}<div>The store PIN opens the Floor. Stockroom and Back dock take their crew code once per device; a manager code opens everything.</div></div>` +
     `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit">Enter store${ic('arrow')}</button>` +
     `<div class="si-foot"><span>${ic('check')}Offline ready</span><span class="si-count">${stores.length} store${stores.length === 1 ? '' : 's'}</span><a class="si-owner-link" data-shell-act="owner-signin">Owner sign-in</a><span class="ver">Conduit ${VERSION}</span></div></form>`;
-  const hero = `<div class="si-hero"><div class="si-brand">${mark()}<b>Conduit</b></div><div class="si-greet">${greeting()}</div><h1>Run the <span>whole store</span>.</h1><p>Live maps, back-dock receiving and stockroom backfill. One team, one sign-in, on and off the wifi.</p><div class="si-off">${ic('check')}Works offline once it is on this device</div></div>`;
-  const el = cover(polyBackground() + (mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${hero}${form}</div>`));
+  const el = cover(polyBackground() + (mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${siHero()}${form}</div>`));
   if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? "Sign in to open the work order." : `Sign in to open shelf ${pendingLink.shelf}.`); }
   $('#siForm', el).addEventListener('submit', async e => {
     e.preventDefault();
@@ -251,6 +256,22 @@ async function showSignin({ error, owner } = {}) {
     try { await client.session.signIn({ store: f.get('store'), pin: f.get('pin') }); await enter(); }
     catch (err) { $('#siErr', el).textContent = friendly(err); btn.disabled = false; }
   });
+}
+const siHero = () => `<div class="si-hero"><div class="si-brand">${mark()}<b>Conduit</b></div><div class="si-greet">${greeting()}</div><h1>Run the <span>whole store</span>.</h1><p>Live maps, back-dock receiving and stockroom backfill. One team, one sign-in, on and off the wifi.</p><div class="si-off">${ic('check')}Works offline once it is on this device</div></div>`;
+// Opening the app on a device that is signed in: the store to continue in,
+// one tap away (no PIN, no network), or sign out to use another store.
+async function showContinue(s) {
+  const mobile = isMobile(), name = s.name || `Store ${s.store}`;
+  let last = 'floor'; try { last = localStorage.getItem('last_workspace') || 'floor'; } catch {}
+  let ready = false; try { ready = await client.storage.has(`snap:${s.store}`); } catch {}
+  const area = { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock' }[last] || 'Floor';
+  const link = pendingLink && pendingLink.store === s.store ? (pendingLink.issue ? ' and open the work order' : ` and open shelf ${pendingLink.shelf}`) : '';
+  const form = `<form class="si-form" id="siCont"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>Welcome back</h2><div class="si-sub">This device is signed in. Continue to pick up where you left off${esc(link)}.</div>` +
+    `<div class="si-store"><span class="si-sav">${esc(s.store)}</span><div><b>${esc(name)}</b><small>Store ${esc(s.store)} · ${area}</small></div>${ready ? `<span class="si-ready">${ic('check')}Ready</span>` : ''}</div>` +
+    `<button class="si-cta" type="submit">Continue in ${esc(name)}${ic('arrow')}</button><a class="si-alt" data-shell-act="signout" role="button" tabindex="0">Use a different store</a></form>`;
+  const el = cover(polyBackground() + (mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${siHero()}${form}</div>`));
+  $('#siCont', el).addEventListener('submit', e => { e.preventDefault(); e.target.querySelector('.si-cta').disabled = true; enter(); });
+  if (!mobile) try { $('#siCont .si-cta', el).focus(); } catch {}   // Enter continues at a desk
 }
 function showOwnerSignin(error) {
   const el = cover(polyBackground() + `<div class="si-panel si-owner"><form class="si-own" id="siOwner"><div class="si-brand">${mark()}<b>Conduit</b><span class="own">Owner</span></div><h2>Owner sign-in</h2><p>For the developer. Store teams sign in on the store screen and never see this.</p>` +

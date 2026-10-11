@@ -74,6 +74,10 @@ staging worker by default (`js/config.js`); open it once with
 `?worker=<url>` to point a device at another worker on `WORKER_ALLOWED` in
 the same file (any other origin is ignored, so a link cannot send a store's
 PIN elsewhere). The sign-in names the worker when it is not the default.
+Opening the app on a signed-in device shows the store to continue in:
+"Continue in <store>" goes in with no PIN and no network, "Use a different
+store" signs out (unsent changes stay on the device). A reload goes straight
+back in.
 
 D1, R2 and KV bindings are added when the features that need them land
 (history, manifests and exports, map cache). See `wrangler.toml`.
