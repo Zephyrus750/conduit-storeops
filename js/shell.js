@@ -421,12 +421,14 @@ function openLauncher() {
 // sub-departments) and then its sub-departments; the other departments
 // as icon buttons side by side. A pick fades the rest of the map, zooms
 // to it and leaves only its badges.
+// Shorter labels where the full name would not fit a tile.
+const PICK_LABEL = { c4: 'Cosmetics Accessories' };
 const PICK_ICON = { home: 'home', clothing: 'shirt', kids: 'star', checkouts: 'dollar', flex: 'stack', stockroom: 'box', bulk: 'cube' };
 function openDepts() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const counts = mapStats()?.depts || {}, col = d => DEPT_COLOUR[d] || '#64748B';
-  const tile = d => `<button class="md-tile" data-pickdept="${esc(d)}"><i style="background:${col(d)}"></i><b>${esc(d.toUpperCase())}</b><span>${esc(DEPT_NAME[d] || '')}</span></button>`;
-  const area = (g, ds) => `<button class="md-area" data-pickdept="${esc(ds.join(','))}" aria-label="All of ${esc(g[0])}">${ic(PICK_ICON[g[0].toLowerCase()] || g[1] || 'layers')}<b>${esc(g[0])}</b><span>All ${ds.length}</span><span class="md-cols">${ds.map(d => `<i style="background:${col(d)}"></i>`).join('')}</span></button>`;
+  const tile = d => `<button class="md-tile" data-pickdept="${esc(d)}" style="--dc:${col(d)}"><i></i><b>${esc(d.toUpperCase())}</b><span>${esc(PICK_LABEL[d] || DEPT_NAME[d] || '')}</span></button>`;
+  const area = (g, ds) => `<button class="md-area${g[0].length > 5 ? ' long' : ''}" data-pickdept="${esc(ds.join(','))}" aria-label="All of ${esc(g[0])}">${ic(PICK_ICON[g[0].toLowerCase()] || g[1] || 'layers')}<b>${esc(g[0])}</b><span>All ${ds.length}</span></button>`;
   const other = d => `<button class="md-other" data-pickdept="${esc(d)}"><span class="md-oi" style="--dc:${col(d)}">${ic(PICK_ICON[d] || 'layers')}</span><b>${esc(DEPT_NAME[d] || d)}</b></button>`;
   const rows = DEPT_GROUPS.map(g => {
     const ds = g[2].filter(d => counts[d]); if (!ds.length) return '';
