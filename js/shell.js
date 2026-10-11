@@ -410,28 +410,39 @@ async function actAs(no) {
   closeStore(); admin = null; frame.classList.remove('adm'); resetAdmin();
   await enter();
 }
+// Bottom sheets close from the top right, the way the team sheet does.
+const SHEET_X = `<button class="sheet-x" data-act="close-more" aria-label="Close">${ic('x')}</button>`;
 function openLauncher() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const caps = client.session.current?.caps || [];
-  sh.innerHTML = `<div class="sheet"><h3>Where are you working?</h3><p class="mv-sheet-sub">Pick your area to begin. Stockroom and Back dock take their crew code once on this device.</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>Where are you working?</h3>${SHEET_X}</div><p class="mv-sheet-sub">Pick your area to begin. Stockroom and Back dock take their crew code once on this device.</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div></div>`;
   sh.classList.add('open');
 }
-// The phone's Departments picker (the showcase's): the whole floor, or one
-// department, grouped Home, Clothing, Kids, Other with its shelf count; a
-// department fades the rest of the map and zooms to it. Home, Clothing
-// and Kids (four sub-departments each) are one row of square tiles.
+// The phone's Departments picker: the whole floor; Home, Clothing and
+// Kids as one row each, the area itself first (all four of its
+// sub-departments) and then its sub-departments; the other departments
+// as icon buttons side by side. A pick fades the rest of the map, zooms
+// to it and leaves only its badges.
+// Shorter labels where the full name would not fit a tile.
+const PICK_LABEL = { c4: 'Cosmetics Accessories' };
+const PICK_ICON = { home: 'home', clothing: 'shirt', kids: 'star', checkouts: 'dollar', flex: 'stack', stockroom: 'box', bulk: 'cube' };
 function openDepts() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
-  const counts = mapStats()?.depts || {};
-  const tile = d => `<button class="md-tile" data-pickdept="${esc(d)}"><i style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b><span>${esc(DEPT_NAME[d] || '')}</span><small>${counts[d] || 0} shelves</small></button>`;
-  sh.innerHTML = `<div class="sheet md-sheet"><h3>Departments</h3><button class="md-all" data-pickdept="all">${ic('map')}<span><b>All departments</b><small>Whole floor, every colour</small></span></button>` +
-    DEPT_GROUPS.map(g => { const ds = g[2].filter(d => counts[d]); const sq = ds.length <= 4 && ds.every(d => /^[a-z]\d$/.test(d)); return ds.length ? `<div class="md-grp">${esc(g[0])}</div><div class="md-tiles${sq ? ' sq' : ''}">${ds.map(tile).join('')}</div>` : ''; }).join('') +
-    `<button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  const counts = mapStats()?.depts || {}, col = d => DEPT_COLOUR[d] || '#64748B';
+  const tile = d => `<button class="md-tile" data-pickdept="${esc(d)}" style="--dc:${col(d)}"><i></i><b>${esc(d.toUpperCase())}</b><span>${esc(PICK_LABEL[d] || DEPT_NAME[d] || '')}</span></button>`;
+  const area = (g, ds) => `<button class="md-area${g[0].length > 5 ? ' long' : ''}" data-pickdept="${esc(ds.join(','))}" aria-label="All of ${esc(g[0])}">${ic(PICK_ICON[g[0].toLowerCase()] || g[1] || 'layers')}<b>${esc(g[0])}</b><span>All ${ds.length}</span></button>`;
+  const other = d => `<button class="md-other" data-pickdept="${esc(d)}"><span class="md-oi" style="--dc:${col(d)}">${ic(PICK_ICON[d] || 'layers')}</span><b>${esc(DEPT_NAME[d] || d)}</b></button>`;
+  const rows = DEPT_GROUPS.map(g => {
+    const ds = g[2].filter(d => counts[d]); if (!ds.length) return '';
+    const coded = ds.length <= 4 && ds.every(d => /^[a-z]\d$/.test(d));
+    return coded ? `<div class="md-row">${area(g, ds)}${ds.map(tile).join('')}</div>` : `<div class="md-others">${ds.map(other).join('')}</div>`;
+  }).join('');
+  sh.innerHTML = `<div class="sheet md-sheet"><div class="sheet-h"><h3>Departments</h3>${SHEET_X}</div><button class="md-all" data-pickdept="all">${ic('map')}<span><b>All departments</b><small>Whole floor, every colour</small></span></button>${rows}</div>`;
   sh.classList.add('open');
 }
 function openMore() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
-  sh.innerHTML = `<div class="sheet"><h3>More</h3><div class="mv-tiles">${MORE[ws].filter(m => !offView(m[0])).map(m => `<button class="mv-tile" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><span class="tx"><b>${m[2]}</b></span><span></span>${ic('chev')}</button>`).join('')}<button class="mv-tile" data-shell-act="switch-area"><span class="ti">${ic('grid')}</span><span class="tx"><b>Switch area</b></span><span></span>${ic('chev')}</button><button class="mv-tile" data-shell-act="signout"><span class="ti">${ic('lock')}</span><span class="tx"><b>${client.session.current?.actas ? 'Back to the console' : 'Sign out'}</b></span><span></span>${ic('chev')}</button></div><button class="mv-ghost" data-act="close-more">Close</button></div>`;
+  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>More</h3>${SHEET_X}</div><div class="mv-tiles">${MORE[ws].filter(m => !offView(m[0])).map(m => `<button class="mv-tile" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><span class="tx"><b>${m[2]}</b></span><span></span>${ic('chev')}</button>`).join('')}<button class="mv-tile" data-shell-act="switch-area"><span class="ti">${ic('grid')}</span><span class="tx"><b>Switch area</b></span><span></span>${ic('chev')}</button><button class="mv-tile" data-shell-act="signout"><span class="ti">${ic('lock')}</span><span class="tx"><b>${client.session.current?.actas ? 'Back to the console' : 'Sign out'}</b></span><span></span>${ic('chev')}</button></div></div>`;
   sh.classList.add('open');
 }
 document.addEventListener('click', e => {
