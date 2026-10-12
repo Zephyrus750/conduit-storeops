@@ -2191,3 +2191,7 @@ body:has(.content.mv > .mv-strip) #toasts { bottom: 146px; }
 .sx-r .k .rt-d { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sx-r .k .rt-d .dep { display: inline-block; flex: none; color: #fff; font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 4px; letter-spacing: .02em; }
 .pk-list .li .dep + .nm { margin-left: -6px; }
+
+/* The phone's launcher sheets (Departments, More, area switch) open over
+   the map strip, which sits at z-index 6 above the map and its sheet. */
+.m-launcher { z-index: 10; }
