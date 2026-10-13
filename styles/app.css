@@ -2318,3 +2318,9 @@ body:has(.content.mv > .mv-strip) #toasts { bottom: 146px; }
   .signin .si-form h2 { font-size: 24px; }
   .si-wm { right: -150px; top: -140px; width: 360px; height: 360px; }
 }
+
+/* Shelf card: how recent a date is (Last refreshed). */
+.selshelf .age-now { color: var(--green-ink); }
+.selshelf .age-last { color: var(--amber-ink); }
+.selshelf .age-old { color: var(--red); }
+.selshelf .age-none { color: var(--dim); font-weight: 500; }
