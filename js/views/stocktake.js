@@ -2,7 +2,7 @@
 // counted → verified, phase counting | final. Reads store.get('stocktake').
 
 import { $, ic, esc, vh, sub, prog, status, DEPT_COLOUR, DEPT_NAME, today, fmtTime, toast, mbig } from '../ui.js';
-import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, oneShelf, segmentId, shelfScanField, bindShelfScan, keepScanFocus, setStrip } from '../map.js';
+import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, oneShelf, segmentId, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
 import { openScanner } from '../scan.js';
 import { printSheet, tick, table, section, signoff } from '../print.js';
 import { csvLines } from '../../shared/records.js';
@@ -78,7 +78,7 @@ export default {
     const paint = () => keepScanFocus(root, () => {
       const m = model(ctx, map); map.setMarks(marksFor(m));
       const side = $('#stside', root); if (side) side.innerHTML = sidebar(map, m) + missingCard(map, m) + historyCard(pastSessions(ctx, map));
-      const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(m, shelfTotal(map));
+      const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(map, m, shelfTotal(map));
       setStrip(root, m.sess ? `${ic('m-stocktake')}<b>Stocktake</b><span class="n">${m.done}</span><span class="s">${m.sess.phase === 'final' ? 'Final check' : 'Counting'} · ${m.counts.verified} ✓✓</span><button class="act go" type="button" data-act="scan-shelf">${ic('camera')}Scan</button>` : `${ic('m-stocktake')}<b>Stocktake</b><span class="s">No session open</span>`);
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = m.sess ? `<b>${m.done}</b> counted · ${m.counts.verified} ✓✓ · ${esc(m.id)}` : 'No session open';
     });
@@ -117,9 +117,13 @@ function sidebar(map, m) {
     `<div class="card"><div class="ch"><h3>By department</h3></div><div class="chips">${byDept(map, m).map(d => `<span class="chip" data-act="zoom-dept" data-dept="${d.d}"><span class="sw" style="background:${DEPT_COLOUR[d.d]}"></span>${d.d.toUpperCase()} ${d.done}/${d.total}</span>`).join('')}</div><p class="lbl" style="margin-top:14px">Tap a shelf to start counting it (yellow), again when it is counted (green); tap a counted shelf to verify it (blue).</p></div>`;
 }
 const pct = (n, total) => total ? Math.min(100, Math.round(n / total * 100)) : 0;
-function mobileBar(m, total) {
+function mobileBar(map, m, total) {
   if (!m.sess) return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b></div><div class="mv-hint">No stocktake session is open yet. Counting starts here when one opens.</div>`;
-  return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b><span class="phase">${m.sess.phase === 'final' ? 'Final' : 'Counting'}</span></div><div class="st-prog"><i><u class="v" style="width:${pct(m.counts.verified, total)}%"></u><u class="c" style="width:${pct(m.done, total)}%"></u></i><span><b>${m.done}</b> counted · ${m.counts.verified} ✓✓</span></div>${shelfScanField()}<div class="mv-hint">Tap or scan a shelf to start counting, again when counted, hold to step back. Session <b>${esc(m.id)}</b> is controlled from the desktop.</div>`;
+  // Still to count (Refresh's old still-due list): shelves not started or
+  // mid-count, by department then name, a tap away on the map.
+  const left = shelfStates(map, m).filter(r => r.state === 'not started' || r.state === 'pending');
+  const todo = left.length ? sx.sec('Still to count', `<div class="sx-chips">${left.slice(0, 12).map(r => `<button class="sx-chip${r.state === 'pending' ? ' st-counting' : ''}" type="button" data-act="locate" data-shelf="${esc(r.id)}"><i class="sw" style="background:${DEPT_COLOUR[r.dept] || '#64748B'}"></i>${esc(r.id)}</button>`).join('')}${left.length > 12 ? `<span class="sx-chip dim">+${left.length - 12} more</span>` : ''}</div>`, `${left.length} to count · tap to find`) : sx.sec('Still to count', sx.rows([sx.row('check', 'Every shelf is counted')]));
+  return `<div class="mv-mh">${ic('m-stocktake')}<b>Stocktake</b><span class="phase">${m.sess.phase === 'final' ? 'Final' : 'Counting'}</span></div><div class="st-prog"><i><u class="v" style="width:${pct(m.counts.verified, total)}%"></u><u class="c" style="width:${pct(m.done, total)}%"></u></i><span><b>${m.done}</b> counted · ${m.counts.verified} ✓✓</span></div>${shelfScanField()}${todo}<div class="mv-hint">Tap or scan a shelf to start counting, again when counted, hold to step back. Session <b>${esc(m.id)}</b> is controlled from the desktop.</div>`;
 }
 
 // Every shelf on the map with its department and this session's state.

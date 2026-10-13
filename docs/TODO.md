@@ -57,6 +57,27 @@ brackets below).
    - K2B: the department map, the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH and its desk's SOH snapshots (not on the worker). History codes import right since October.
    - DV: anything still missing once a real store is imported.
 
+## Planned: the manager phone login (showcased 2026-10-12)
+
+A **Team member / Manager** switch on the sign-in. The store and the manager
+code open Floor, Stockroom and Back dock at once; the phone drops back to the
+Floor after the store's idle re-lock. What it adds over a team phone:
+
+- **Today:** the store at a glance (needs you, Floor, Stockroom, Back dock,
+  devices) and a strip of Today · Floor · Stock · Dock · More.
+- **Refresh:** progress by department, refreshes per phone, set the focus.
+- **Back dock:** pace against plan, each person's rate against their 28 days,
+  hold-ups, late manifests, moving roles, reopening a truck.
+- **Emergency:** the service dates and history (team phones show only where
+  the markers are and how to use them; built 2026-10-13: the manager code
+  already brings them back).
+- **Field Mode:** only on a manager login (built 2026-10-13: Settings shows
+  it once the manager code is on).
+
+Open questions (`docs/OPEN-DECISIONS.md` style): the manager code alone or
+the PIN and the code; how soon it locks; per-person rates on a phone; and
+anything per person waits on "who's using this phone".
+
 ## Things only you can do (deploy and set-up)
 
 - Create the R2 buckets once: `npx wrangler r2 bucket create store-photos-staging` and `npx wrangler r2 bucket create store-photos`.

@@ -397,10 +397,18 @@ says what the mode is doing and carries its main action (Scan or type,
 Picked, Nearest exit, Mark checked), and its arrow opens the mode's panel as
 a sheet over the map with everything in full: the shelf's department,
 micro-departments, facts and status; the week's focus departments and the
-shelves still due; each department's label progress and the wrong labels;
-every route stop; the equipment and its service dates. Open or closed is
-kept per device. Maintenance is desk-only: a store PC logs and works issues,
-and a work-order link opened on a phone says so.
+shelves refreshed by department; each department's label progress and the
+wrong labels; every route stop; a tile per kind of emergency marker with the
+map's own symbol (a tap shows only that kind); the stocktake's shelves still
+to count. Open or closed is kept per device. Maintenance is desk-only: a
+store PC logs and works issues, and a work-order link opened on a phone says
+so.
+
+A phone keeps to what a person on the floor does. Service dates and
+history, store settings, the refresh focus and target, the map and its
+symbols in Store details, and Field Mode stay on a store PC or behind the
+manager code (`docs/TODO.md`, the manager phone login). The price-check size
+is a map button (normal, large, hidden), as ShelfSearcher's was.
 
 A shelf found by search, voice, a scan or a link is shown as ShelfSearcher
 showed it (`map.locate`): the rest of the map dims, its outline pulses cyan
