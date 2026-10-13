@@ -898,7 +898,7 @@ export function mapbar() {
 // tory-line switch, shown only while a back-of-house floor with lines is up.
 function extraTools() {
   const syms = mapSymbols(), pc = syms.some(x => x.kind === 'pc' || x.kind === 'order'), tory = syms.some(x => x.kind === 'tory');
-  return (pc ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="Price checks: normal, large or hidden">${ic('barcode')}</span>` : '') + (tory ? `<span class="ibtn torybtn" data-tory hidden title="Show the tory lines">${ic('route')}</span>` : '');
+  return (pc ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="Price checks: normal, large or hidden">${ic('tag')}</span>` : '') + (tory ? `<span class="ibtn torybtn" data-tory hidden title="Show the tory lines">${ic('route')}</span>` : '');
 }
 export function crumbx(ctx, storeNo, storeName) { const f = mapFloors()[0]; return `<span class="crumbx">${ic('map')}<span data-crumbfloor>${f ? `${f.type.toUpperCase()} · ${esc(f.name)}` : 'FOH · Ground'}</span> <b>${esc(storeNo)}</b>${ctx ? ' › ' + ctx : ''}<span data-crumbdept></span></span>`; }
 // The strip the shell adds under a phone map mode: the mode's summary and
@@ -918,7 +918,7 @@ export const sx = {
 };
 export function mvMap(o = {}) {
   const fls = mapFloors();
-  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="Scan">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="Next level">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="Tory lines">${ic('route')}</span>` : ''}<span class="ibtn" data-zoom="in" title="Zoom in" aria-label="Zoom in">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="Zoom out" aria-label="Zoom out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit" aria-label="Fit the map">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="Scan">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="Next level">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="Tory lines">${ic('route')}</span>` : ''}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="Price checks: normal, large or hidden" aria-label="Price checks: normal, large or hidden">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="Zoom in" aria-label="Zoom in">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="Zoom out" aria-label="Zoom out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit" aria-label="Fit the map">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
 }
 
 // Wire zoom buttons and group chips on a mounted view.

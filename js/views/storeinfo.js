@@ -16,7 +16,7 @@ const dayLabel = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', 
 
 let parked = [], adding = false;
 
-function details(ctx, si) {
+function details(ctx, si, phone = false) {
   const addr = si.addressLines?.length ? si.addressLines.map(esc).join('<br>') : '';
   const hours = si.hoursDays?.length ? `<table class="si-hours">${si.hoursDays.map(([d, t]) => `<tr${/^sat/i.test(d) ? ' class="wk"' : ''}><th>${esc(d)}</th><td>${esc(t)}</td></tr>`).join('')}</table>` : '';
   const today = isoDay(new Date());
@@ -28,7 +28,7 @@ function details(ctx, si) {
     (dirs ? `<div class="si-acts">${dirs}</div>` : '') +
     (hours ? `<div class="si-sec"><div class="si-k">Opening hours</div>${hours}</div>` : '') +
     (holsHtml ? `<div class="si-sec"><div class="si-k">Public holidays</div>${holsHtml}</div>` : '') +
-    (!addr && !hours && !holsHtml ? '<p class="lbl">No address or hours yet. The owner adds them in the map editor’s Store Info and republishes the map.</p>' : '') + `</div>`;
+    (!addr && !hours && !holsHtml ? `<p class="lbl">No address or hours yet.${phone ? '' : ' The owner adds them in the map editor’s Store Info and republishes the map.'}</p>` : '') + `</div>`;
 }
 function logistics(si) {
   const fmt = [si.brand, si.storeType, si.storeStyle, si.storeSize ? `${esc(si.storeSize)} m² store` : ''].filter(Boolean);
@@ -73,7 +73,9 @@ export default {
   },
   mobile(ctx) {
     const si = mapInfo()?.storeInfo || {};
-    return mhead('Store details', `${esc(ctx.storeNo)} ${esc(ctx.storeName)}`) + `<div class="si-mob">${details(ctx, si)}${logistics(si)}${mapStatus()}${symbols()}<div id="sistores">${stores(ctx)}</div></div>`;
+    // The phone keeps the address, hours and logistics; what the map covers
+    // and its symbols stay on a store PC.
+    return mhead('Store details', `${esc(ctx.storeNo)} ${esc(ctx.storeName)}`) + `<div class="si-mob">${details(ctx, si, true)}${logistics(si)}<div id="sistores">${stores(ctx)}</div></div>`;
   },
   mount(ctx, root) {
     const repaint = () => { const h = root.querySelector('#sistores'); if (h) h.innerHTML = stores(ctx); };

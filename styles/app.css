@@ -2195,3 +2195,50 @@ body:has(.content.mv > .mv-strip) #toasts { bottom: 146px; }
 /* The phone's launcher sheets (Departments, More, area switch) open over
    the map strip, which sits at z-index 6 above the map and its sheet. */
 .m-launcher { z-index: 10; }
+
+/* Phone Settings: the heading over Help and feedback. */
+.stg-grp-h { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 18px 4px 8px; }
+
+/* Phone Refresh: completed shelves by department. */
+.rf-mdone { background: #1A2333; border-radius: 12px; padding: 4px 11px; }
+.rf-mgrp { padding: 9px 0; border-top: 1px solid #222C3D; }
+.rf-mgrp:first-child { border-top: 0; }
+.rf-mgh { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.rf-mgh .dep { font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 4px; color: #fff; flex: none; }
+.rf-mgh .n { margin-left: auto; color: #4ADE80; font-weight: 800; font-size: 12px; }
+.rf-mdone .rf-seg { color: #4ADE80; background: rgba(74,222,128,.12); }
+.rf-mdone .rf-seg.more { color: var(--dim); background: #263145; }
+/* Phone Stocktake: the still-to-count chips carry their department colour. */
+.sx-chip .sw { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.sx-chip.st-counting { border-color: #EAB308; }
+.sx-chip.dim { color: var(--dim); }
+
+/* Phone Emergency: a tile per kind of marker with the map's own symbol;
+   the kind picked shows alone on the map. */
+.em-kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.em-kind { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 6px 8px; border-radius: 12px; border: 1px solid #263145; background: #1A2333; color: var(--ink); font: inherit; cursor: pointer; min-width: 0; }
+.em-kind .sym { width: 30px; height: 30px; display: grid; place-items: center; }
+.em-kind .sym svg { width: 28px; height: 28px; }
+.em-kind .sym .all { width: 28px; height: 28px; border-radius: 8px; background: #263145; display: grid; place-items: center; }
+.em-kind .sym .all svg.i { width: 16px; height: 16px; color: var(--ink2); }
+.em-kind b { font-size: 11.5px; line-height: 1.2; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.em-kind small { font-size: 11px; font-weight: 800; color: var(--dim); }
+.em-kind.on { border-color: var(--accent); background: #0E3B4E; }
+.em-kind.on small { color: #7DD3FC; }
+.em-kind.off { opacity: .55; }
+.em-ssym { display: grid; place-items: center; flex: none; }
+.em-ssym svg { width: 22px; height: 22px; }
+@container shell (max-width: 380px) { .em-kinds { gap: 5px; } .em-kind { padding: 8px 4px 6px; } .em-kind b { font-size: 10.5px; } }
+
+/* Phone breathing room. A view that wraps its screen in one plain div gets
+   the same 12px rhythm as the content itself (Backfill scan, Cages, Adjust,
+   Day list), so headers, steps and coloured buttons stop touching; the big
+   button in a sheet keeps clear of the heading above it; a six-tab strip
+   keeps its labels inside their pill. */
+.content.mv > div:not([class]) { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.sx .em-mevac { margin: 14px 0 4px; }
+.sx-sec + .sx-acts, .sx-rows + .sx-acts { margin-top: 16px; }
+.stg-fb .btn.primary { margin-top: 4px; align-self: flex-start; }
+@container shell (max-width: 600px) {
+  .m-tabs:has(> :nth-child(6)) button { flex: 1 1 auto; min-width: 0; font-size: 11px; padding-left: 6px; padding-right: 6px; }
+}

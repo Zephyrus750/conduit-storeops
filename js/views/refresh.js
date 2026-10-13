@@ -208,9 +208,9 @@ function scanSheet() {
 }
 // The phone's Refresh sheet (opened from the strip): the week's progress,
 // scan and the Refresh/Plan toggle, each focus department with its own bar,
-// the focus shelves still due (a tap finds one on the map) and the week so far.
+// and the shelves refreshed this week by department (a tap finds one).
 function mobileBar(map, m) {
-  const fc = focusCounts(map, m), left = 7 - (new Date().getDay() + 6) % 7, due = stillDue(map, m);
+  const fc = focusCounts(map, m), left = 7 - (new Date().getDay() + 6) % 7;
   const head = `<div class="sx-h">${ic('m-refresh')}Location refresh<span class="n">${m.counted} / ${TARGET}</span></div><div class="sx-sub">This week · ${retailPeriod(new Date())} · ${left} day${left === 1 ? '' : 's'} left</div><div style="margin-top:8px">${sx.bar(m.counted, TARGET)}</div>`;
   // The toggle keeps its place: in Plan the colours take the scan button's spot.
   const row = `<div class="rf-row">${mode === 'plan' ? `<div class="rf-pal" role="group" aria-label="Plan colour">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<button class="rf-scanbtn" data-act="scan-open" aria-label="Scan or type a shelf">${ic('barcode')}<span>Scan or type</span></button>`}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div></div>`;
@@ -218,15 +218,16 @@ function mobileBar(map, m) {
   const focus = sx.rows(fc.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${f.d}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) ;
   return `<div class="sx">${head}${row}` +
     sx.sec('This week’s focus', fc.length ? focus : sx.rows([sx.row('asterisk', 'No focus departments set this week', 'Managers set them on a store PC')]), fc.length ? 'set by managers' : '') +
-    (due.length ? sx.sec('Still due', `<div class="sx-chips">${due.slice(0, 12).map(seg => `<button class="sx-chip" type="button" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}</button>`).join('')}</div>`, `${due.length} in focus · tap to find`) : '') +
-    sx.sec('This week', sx.rows([sx.row('check', `${m.done} shel${m.done === 1 ? 'f' : 'ves'} refreshed`, !m.focus.length ? 'No focus departments this week' : m.done - m.counted > 0 ? `${m.done - m.counted} outside the focus departments` : 'All in the focus departments')])) + '</div>';
+    sx.sec('Completed this week', doneByDept(map, m), `${m.done} shel${m.done === 1 ? 'f' : 'ves'}${m.focus.length && m.done - m.counted > 0 ? ` · ${m.done - m.counted} outside the focus` : ''}`) + '</div>';
 }
-// The focus shelves not refreshed yet this week, in name order.
-function stillDue(map, m) {
-  if (!m.focus.length) return [];
-  const out = new Set();
-  for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(), full = segmentId(g); if (m.focus.includes(d) && !markKeysFor(m.marks, { full, id: g.getAttribute('data-shelf') }).length) out.add(full); }
-  return [...out].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+// The phone's completed list: each department with its badge, name and
+// count, and its shelves as chips (a tap finds one); the first eight, then
+// "+N more" opens the rest.
+function doneByDept(map, m) {
+  const groups = refreshedByDept(map, m);
+  if (!groups.length) return sx.rows([sx.row('check', 'Nothing refreshed yet this week', 'Scan or tap a shelf once it is done')]);
+  return `<div class="rf-mdone">${groups.map(([d, segs]) => { const open = openDept === d, shown = open ? segs : segs.slice(0, 8);
+    return `<div class="rf-mgrp"><div class="rf-mgh">${DEPT_NAME[d] ? dep(d) : ''}<b>${esc(DEPT_NAME[d] || (d === 'other' ? 'Other' : d.toUpperCase()))}</b><span class="n">${segs.length}</span></div><div class="rf-chips">${shown.map(seg => `<button class="rf-seg" type="button" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}</button>`).join('')}${segs.length > shown.length ? `<button class="rf-seg more" type="button" data-act="open-dept" data-dept="${esc(d)}">+${segs.length - shown.length} more</button>` : open && segs.length > 8 ? `<button class="rf-seg more" type="button" data-act="open-dept" data-dept="">Show less</button>` : ''}</div></div>`; }).join('')}</div>`;
 }
 // The strip under the phone's Refresh map: the week's count and the scan.
 function rfStrip(m) {

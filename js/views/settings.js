@@ -30,7 +30,11 @@ export default {
     const nav = `<div class="stg-nav">${NAV.map(n => n[0] === '_' ? `<div class="stg-grp">${n[1]}</div>` : `<button class="stg-row${n[0] === sec ? ' on' : ''}" data-act="sec" data-sec="${n[0]}">${ic(n[2])}${n[1]}</button>`).join('')}<div class="stg-ver">Conduit ${VERSION} · ${ctx.store ? 'store ' + esc(ctx.storeNo) : 'owner'} · signed in on this device</div></div>`;
     return vh('Settings and utilities', ctx.store ? sub(`Store ${esc(ctx.storeNo)}`, esc(ctx.storeName), VERSION) : sub('Owner console', VERSION), '', 'm-settings') + `<div class="stg">${nav}<div class="stg-body">${body(ctx)}</div></div>`;
   },
-  mobile(ctx) { return `<div class="mv-head"><div><h2>Settings</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : 'Owner console'} · ${VERSION}</span></div></div><div class="stg-body">${body(ctx, 'general')}${body(ctx, 'appearance')}${ctx.store ? storeBody(ctx) + refreshBody(ctx) + feedbackBody(ctx) : ''}<div id="stgStorage"></div>${howtoBody(true)}</div>`; },
+  // The phone keeps what a person on the floor changes on their own device.
+  // Store settings, the refresh focus and target, and the price-check size
+  // are set on a store PC; Field Mode shows once the manager code is on.
+  // Help and feedback sit together at the foot.
+  mobile(ctx) { return `<div class="mv-head"><div><h2>Settings</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : 'Owner console'} · ${VERSION}</span></div></div><div class="stg-body">${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div>${ctx.store && canEdit(ctx) ? fieldCard(ctx) : ''}<div class="stg-grp-h">Help and feedback</div>${ctx.store ? feedbackBody(ctx) : ''}${howtoBody(true)}</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
@@ -86,9 +90,9 @@ function body(ctx, sec = currentSec()) {
   const who = ctx.store ? row('Store', `${esc(ctx.storeNo)} ${esc(ctx.storeName)} · verified against the worker${cur?.actas ? ' · acting as the store as owner' : ''}`, '<span class="chip">Signed in</span>') : row('Owner', 'Signed in with the owner key · every action is logged in the registry', '<span class="chip">Owner</span>');
   const sync = s ? row('Sync', `${esc(s.state)} · ${s.queued} queued · seq ${s.seq}${s.lastError ? ' · ' + esc(s.lastError) : ''}`, `<span class="btn sm" data-act="resync">${ic('refresh')}Resync</span>`) : '';
   return `<div class="stg-card"><div class="stg-h">This device</div>${who}${row('Device id', esc(ctx.session.device), '')}${row('Roles', esc((cur?.roles || []).join(', ')), '<span class="stg-dim">hard-restricted by role</span>')}${sync}</div>` +
-    `<div class="stg-card"><div class="stg-h">Scanner and feedback</div>${row('Beep on a read', 'The camera scanner beeps when it reads a code.', tgl(prefs().scanSound !== false, 'scan-sound'))}${row('Vibrate on a read', 'The phone buzzes when a code is read.', tgl(prefs().scanVibrate !== false, 'scan-vibrate'))}${row('Vibration feedback', 'A short buzz when a shelf is tapped, a department opens, a search finds or misses, and on errors (phones only).', tgl(prefs().haptics !== false, 'haptics'))}${isPhone() ? row('Rotation', prefs().allowLandscape ? 'Rotation allowed: the app turns with the phone.' : 'Portrait locked: the app stays upright when the phone turns (installed app).', tgl(!prefs().allowLandscape, 'portrait')) : ''}</div>` +
+    `<div class="stg-card"><div class="stg-h">Scanner and vibration</div>${row('Beep on a read', 'The camera scanner beeps when it reads a code.', tgl(prefs().scanSound !== false, 'scan-sound'))}${row('Vibrate on a read', 'The phone buzzes when a code is read.', tgl(prefs().scanVibrate !== false, 'scan-vibrate'))}${row('Vibration feedback', 'A short buzz when a shelf is tapped, a department opens, a search finds or misses, and on errors (phones only).', tgl(prefs().haptics !== false, 'haptics'))}${isPhone() ? row('Rotation', prefs().allowLandscape ? 'Rotation allowed: the app turns with the phone.' : 'Portrait locked: the app stays upright when the phone turns (installed app).', tgl(!prefs().allowLandscape, 'portrait')) : ''}</div>` +
     `<div class="stg-card"><div class="stg-h">Updates</div>${updatesRow()}${row('Force reload', 'Clears the cached release and reloads from the worker. Signed-in state, maps and queued changes are kept.', `<span class="btn sm" data-act="force-reload">${ic('refresh')}Force reload</span>`)}${installRow()}</div>` +
-    `<div class="stg-card"><div class="stg-h">Map</div>${ctx.isMobile ? '' : row('Hover details', 'Show a shelf’s department, run and status when the pointer rests on it.', tgl(prefs().mapTips !== false, 'map-tips'))}${row('Price checks', 'How price checks and order screens show on the map: normal, large (the same size at any zoom) or hidden.', segOf('pc-mode', [['small', 'Normal'], ['large', 'Large'], ['off', 'Hidden']], prefs().priceChecks || 'small'))}</div>` +
+    (ctx.isMobile ? '' : `<div class="stg-card"><div class="stg-h">Map</div>${row('Hover details', 'Show a shelf’s department, run and status when the pointer rests on it.', tgl(prefs().mapTips !== false, 'map-tips'))}${row('Price checks', 'How price checks and order screens show on the map: normal, large (the same size at any zoom) or hidden.', segOf('pc-mode', [['small', 'Normal'], ['large', 'Large'], ['off', 'Hidden']], prefs().priceChecks || 'small'))}</div>`) +
     `<div class="stg-card"><div class="stg-h">Account</div>${row('Sign out', ctx.store ? (cur?.actas ? 'Returns to the owner console. Queued changes are sent first.' : 'Forgets the store on this device. Queued changes are sent first.') : 'Forgets the owner session on this device.', `<span class="btn sm" style="color:var(--red)" data-act="signout">${cur?.actas ? 'Back to the console' : 'Sign out'}</span>`)}</div>`;
 }
 function updatesRow() {
@@ -108,7 +112,6 @@ function storeBody(ctx) {
   const zones = ZONES.some(z => z[0] === cfg.tz) ? ZONES : [[cfg.tz, cfg.tz], ...ZONES];
   const sel = (field, list, cur, label) => `<select class="stg-in" data-field="${field}" aria-label="${label}"${dis}>${opts(list, cur)}</select>`;
   const changed = raw?.at ? `Last changed ${esc(ago(raw.at))}${raw.by ? ' from ' + esc(raw.by) : ''}.` : 'Every value is the default.';
-  const field = `<div class="stg-card"><div class="stg-h">Field Mode</div>${row('Capture shelf codes', edit ? 'Walk the floor with a phone, scan each shelf’s label and add a comment, then export the file for the map editor. Captures stay on this device.' : 'A manager code opens Field Mode.', `<span class="btn sm${edit ? '' : ' disabled'}"${edit ? ' data-go="fieldmode"' : ''}>${ic('m-map')}Open</span>`)}</div>`;
   const settings = `<div class="stg-card stg-store"><div class="stg-h">Store settings</div><p class="stg-p">${edit ? 'These apply to every device in the store.' : 'A manager code changes these.'} ${changed}</p>` +
     row('Time zone', 'The store’s day, week and cycle, and the end-of-day backfill rollover, follow this clock.', sel('tz', zones.map(z => [z[0], z[1]]), cfg.tz, 'Time zone')) +
     row('Dock grid', `Pallet bays on the back dock: rows (A, B, C…) by bays per row. Trucks created afterwards use it. Default ${SETTINGS_DEFAULTS.dockGrid.rows} × ${SETTINGS_DEFAULTS.dockGrid.cols}.`, `<span class="stg-pair">${sel('rows', range(1, 8), cfg.dockGrid.rows, 'Dock rows')}<span>×</span>${sel('cols', range(1, 12), cfg.dockGrid.cols, 'Bays per row')}</span>`) +
@@ -116,7 +119,11 @@ function storeBody(ctx) {
     row('Stockroom departments', 'Bay ranges to department, one a line, e.g. “7001-7040 h1”. History groups bays by these; the narrowest range wins.', `<textarea class="stg-in stg-ranges mono" data-field="ranges" rows="4" aria-label="Stockroom department ranges"${dis}>${esc(cfg.deptRanges.map(r => `${r.from}-${r.to} ${r.dept}`).join('\n'))}</textarea>`) +
     row('Idle re-lock', 'A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.', sel('lock', AUTO_LOCK_CHOICES.map(n => [n, n ? `${n} min` : 'Never']), cfg.autoLockMins, 'Idle re-lock')) +
     (edit ? `<div class="stg-actions"><span class="btn sm primary" data-act="save-store">${ic('check')}Save store settings</span></div>` : '') + '</div>';
-  return settings + field;
+  return settings + fieldCard(ctx);
+}
+function fieldCard(ctx) {
+  const edit = canEdit(ctx);
+  return `<div class="stg-card"><div class="stg-h">Field Mode</div>${row('Capture shelf codes', edit ? 'Walk the floor with a phone, scan each shelf’s label and add a comment, then export the file for the map editor. Captures stay on this device.' : 'A manager code opens Field Mode.', `<span class="btn sm${edit ? '' : ' disabled'}"${edit ? ' data-go="fieldmode"' : ''}>${ic('m-map')}Open</span>`)}</div>`;
 }
 // Location refresh: the focus departments for this week and the next three,
 // each named by its retail week too.
