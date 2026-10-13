@@ -58,8 +58,11 @@ export const HOME = { floor: 'map', stockroom: 'srhome', backdock: 'bdhome', adm
 export const WORKSPACES = [['floor', 'Floor', 'm-map', 'Map, refresh, labels, routes, stocktake'], ['stockroom', 'Stockroom', 'box', 'Backfill scan, cages, adjustments, day list'], ['backdock', 'Back dock', 'truck', 'Land and decant pallets, run the truck']];
 // The owner console's rail: stores are added at runtime, these are the system rows.
 export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminmaps', 'm-map', 'Maps'], ['adminservice', 'm-settings', 'Service'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
+// The phone's More sheet: each area's tools (with a line on what each is
+// for), then the store and the app; Switch area and Sign out sit at the foot.
 export const MORE = {
-  floor: [['stocktake', 'm-stocktake', 'Stocktake'], ['mapedits', 'edit', 'Suggest map edits'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
-  stockroom: [['daylist', 'm-daylist', 'Day list'], ['codelist', 'barcode', 'Quick Scan'], ['srhistory', 'm-srhistory', 'History'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
-  backdock: [['rhistory', 'm-rhistory', 'History'], ['dockscreen', 'grid', 'Dock screen'], ['wallboard', 'chart', 'Wallboard'], ['storeinfo', 'm-map', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  floor: [['stocktake', 'm-stocktake', 'Stocktake', 'Count shelves in a session'], ['mapedits', 'edit', 'Suggest map edits', 'A wrong name or a missing shelf'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  stockroom: [['daylist', 'm-daylist', 'Day list', 'What to backfill next'], ['codelist', 'barcode', 'Quick Scan', 'Scan codes into a list'], ['srhistory', 'm-srhistory', 'History', 'Today’s sent bays'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  backdock: [['rhistory', 'm-rhistory', 'History', 'Finished trucks'], ['dockscreen', 'grid', 'Dock screen', 'The big screen at the dock'], ['wallboard', 'chart', 'Wallboard', 'Progress for the team'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
 };
+export const MORE_STORE = ['storeinfo', 'help', 'settings'];

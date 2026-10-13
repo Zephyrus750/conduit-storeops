@@ -408,7 +408,9 @@ A phone keeps to what a person on the floor does. Service dates and
 history, store settings, the refresh focus and target, the map and its
 symbols in Store details, and Field Mode stay on a store PC or behind the
 manager code (`docs/TODO.md`, the manager phone login). The price-check size
-is a map button (normal, large, hidden), as ShelfSearcher's was.
+is a map button (normal, large, hidden), as ShelfSearcher's was. More, in each area, says who is signed in, lists the area's
+tools (each with a line on what it is for) and then the store and app, with
+Switch area and Sign out side by side at the foot.
 
 A shelf found by search, voice, a scan or a link is shown as ShelfSearcher
 showed it (`map.locate`): the rest of the map dims, its outline pulses cyan

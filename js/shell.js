@@ -22,7 +22,7 @@ import { takeDeepLink } from './share.js';
 import { installLog } from './diag.js';
 installLog();
 import { updates, initUpdates } from './updates.js';
-import { VIEWS, RAIL, STRIP, MORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
+import { VIEWS, RAIL, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { toolForView, toolOff } from '../shared/tools.js';
 import { ensureArea, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
@@ -288,7 +288,9 @@ function showOwnerSignin(error) {
   });
 }
 const friendly = (err, wrong = 'Wrong PIN.') => err.code === 'locked_out' ? `Too many attempts. Try again in ${Math.ceil((err.detail?.retryAfter || 60) / 60)} min.` : err.code === 'unauthorised' ? wrong : err.code === 'not_registered' ? 'That store is not registered.' : err.code === 'not_configured' ? 'The worker has no owner key set yet.' : err.message;
-const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#0E7CA8"/><path d="M23.2 11.3A8.3 8.3 0 1 0 23.2 20.7" fill="none" stroke="#fff" stroke-width="5.6"/></svg>`;
+// The mark: a C in three parts, one tone each for the Floor, the Stockroom
+// and the Back dock, on the charcoal of the shell.
+const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#111827"/><path d="M21.94 21.94A8.4 8.4 0 0 1 10.94 22.71" fill="none" stroke="#7DD3FC" stroke-width="5.4"/><path d="M9.66 21.51A8.4 8.4 0 0 1 9.66 10.49" fill="none" stroke="#22A6D6" stroke-width="5.4"/><path d="M10.94 9.29A8.4 8.4 0 0 1 21.94 10.06" fill="none" stroke="#0E7CA8" stroke-width="5.4"/></svg>`;
 
 // ── rail, strip, status ───────────────────────────────────────────────
 // What each rail row does, shown beside it on hover (the showcase's rail
@@ -505,7 +507,13 @@ function openDepts() {
 }
 function openMore() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
-  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>More</h3>${SHEET_X}</div><div class="mv-tiles">${MORE[ws].filter(m => !offView(m[0])).map(m => `<button class="mv-tile" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><span class="tx"><b>${m[2]}</b></span><span></span>${ic('chev')}</button>`).join('')}<button class="mv-tile" data-shell-act="switch-area"><span class="ti">${ic('grid')}</span><span class="tx"><b>Switch area</b></span><span></span>${ic('chev')}</button><button class="mv-tile" data-shell-act="signout"><span class="ti">${ic('lock')}</span><span class="tx"><b>${client.session.current?.actas ? 'Back to the console' : 'Sign out'}</b></span><span></span>${ic('chev')}</button></div></div>`;
+  const cur = client.session.current, area = WORKSPACES.find(w => w[0] === ws)?.[1] || '', items = MORE[ws].filter(m => !offView(m[0]));
+  const row = m => `<button class="mo-row" type="button" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><b>${m[2]}${m[3] ? `<small>${m[3]}</small>` : ''}</b>${ic('chev', 'chv')}</button>`;
+  const group = (label, list) => list.length ? `<div class="mo-sec">${label}</div><div class="mo-list">${list.map(row).join('')}</div>` : '';
+  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>More</h3>${SHEET_X}</div>` +
+    (cur?.store ? `<div class="mo-who"><span class="av">${esc(cur.store)}</span><div><b>${esc(cur.name || 'Store ' + cur.store)}${area ? ' · ' + area : ''}</b><small>${cur.actas ? 'Acting as the store from the console' : 'Signed in on this phone'}</small></div></div>` : '') +
+    group('Tools', items.filter(m => !MORE_STORE.includes(m[0]))) + group('Store and app', items.filter(m => MORE_STORE.includes(m[0]))) +
+    `<div class="mo-foot"><button type="button" data-shell-act="switch-area">${ic('grid')}Switch area</button><button type="button" class="out" data-shell-act="signout">${ic('lock')}${cur?.actas ? 'Back to the console' : 'Sign out'}</button></div></div>`;
   sh.classList.add('open');
 }
 document.addEventListener('click', e => {
