@@ -46,9 +46,10 @@ r.post('/v1/auth/signin', async (req, env) => {
     const { trust } = trusted.ok ? { trust: String(b.trust) } : await registry(env, 'POST', '/trust/issue', { device });
     return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, owner: true, trust });
   }
-  const res = await registry(env, 'POST', '/signin', { store: String(b.store || ''), pin: b.pin, device, ip: clientIp(req) });
-  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device, epoch: res.epoch, ttl: ttl(env) });
-  const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: res.store, device, roles: res.roles, owner: false });
+  // The store PIN, or a manager's code in its place (every area at once).
+  const res = await registry(env, 'POST', '/signin', { store: String(b.store || ''), pin: b.pin, managerCode: b.managerCode != null && b.pin == null ? String(b.managerCode) : undefined, device, ip: clientIp(req) });
+  const { refresh, roleExpires } = await registry(env, 'POST', '/refresh/issue', { store: res.store, device, roles: res.roles, owner: false, elevated: res.elevated ? Date.now() : null });
+  const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device, epoch: res.epoch, ttl: roleTtl(env, roleExpires) });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, store: res.store, name: res.name, roles: res.roles, caps: res.caps, status: res.status });
 });
 

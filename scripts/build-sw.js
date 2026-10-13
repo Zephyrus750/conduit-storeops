@@ -17,7 +17,7 @@ const FILES = ['index.html', 'icons.svg', 'manifest.webmanifest'];
 
 export function buildPrecache() {
   const files = [...FILES];
-  const walk = d => { for (const e of fs.readdirSync(path.join(root, d), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const p = `${d}/${e.name}`; if (e.isDirectory()) walk(p); else if (/\.(js|css|svg|png|webmanifest|json)$/.test(e.name)) files.push(p); } };
+  const walk = d => { for (const e of fs.readdirSync(path.join(root, d), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const p = `${d}/${e.name}`; if (e.isDirectory()) walk(p); else if (/\.(js|css|svg|png|webmanifest|json|woff2)$/.test(e.name)) files.push(p); } };
   for (const d of DIRS) walk(d);
   const h = crypto.createHash('sha256');
   for (const f of files) { h.update(f); h.update(fs.readFileSync(path.join(root, f))); }

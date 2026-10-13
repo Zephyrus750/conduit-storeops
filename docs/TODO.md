@@ -61,7 +61,10 @@ brackets below).
 
 A **Team member / Manager** switch on the sign-in. The store and the manager
 code open Floor, Stockroom and Back dock at once; the phone drops back to the
-Floor after the store's idle re-lock. What it adds over a team phone:
+Floor after the store's idle re-lock. **Built 2026-10-14** for desktop and
+phone: the worker takes `managerCode` in place of the PIN (same lockout), the
+session holds the manager role for the shift (`ROLE_TTL_SECONDS`, 12 h), and
+no crew code is asked. Needs the worker deploy. Still to build on top of it:
 
 - **Today:** the store at a glance (needs you, Floor, Stockroom, Back dock,
   devices) and a strip of Today · Floor · Stock · Dock · More.
@@ -74,9 +77,9 @@ Floor after the store's idle re-lock. What it adds over a team phone:
 - **Field Mode:** only on a manager login (built 2026-10-13: Settings shows
   it once the manager code is on).
 
-Open questions (`docs/OPEN-DECISIONS.md` style): the manager code alone or
-the PIN and the code; how soon it locks; per-person rates on a phone; and
-anything per person waits on "who's using this phone".
+Open questions: how soon it locks; per-person rates on a phone; and anything
+per person waits on "who's using this phone". (Settled 2026-10-14: the
+manager code alone signs a manager in.)
 
 ## Things only you can do (deploy and set-up)
 

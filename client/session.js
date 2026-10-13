@@ -28,8 +28,11 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     return snapshot();
   }
 
-  async function signIn({ store, pin }) {
-    const r = await transport.request('/v1/auth/signin', { method: 'POST', body: { store: String(store), pin: String(pin), device } });
+  // The store PIN, or a manager's code in its place: the worker then signs
+  // the session in with the manager role (every area) for the shift.
+  async function signIn({ store, pin, managerCode }) {
+    const body = managerCode != null ? { store: String(store), managerCode: String(managerCode), device } : { store: String(store), pin: String(pin), device };
+    const r = await transport.request('/v1/auth/signin', { method: 'POST', body });
     cur = { token: r.token, refresh: r.refresh, expires: r.expires, store: r.store, name: r.name, roles: r.roles, caps: r.caps, owner: false };
     await save(); return snapshot();
   }

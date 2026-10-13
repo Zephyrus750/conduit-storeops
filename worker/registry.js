@@ -4,7 +4,7 @@
 // logged here so the admin console has its own tail.
 //
 // The worker talks to it over an internal fetch with a JSON body:
-//   POST /signin        { store, pin, device }             → { store, roles, caps } | error
+//   POST /signin        { store, pin | managerCode, device } → { store, roles, caps, elevated } | error
 //   POST /unlock        { store, code }                    → { role } | error
 //   POST /refresh/issue { store, device, roles, owner }    → { refresh }
 //   POST /refresh/use   { refresh }                        → { store, device, roles, owner, epoch, refresh } | error
@@ -115,18 +115,25 @@ export class RegistryObject extends DurableObject {
   // one a person mistyping meets. The device id is the client's own word, so
   // the store key and the network key also count, over a window, and a
   // success never clears them: a new device id buys no fresh attempts.
-  async signin({ store, pin, device, ip }) {
+  // A manager signs in with the store's manager code in place of the PIN:
+  // the session holds the Floor and the manager role at once (every
+  // entitled area, desktop and phone), elevated from now, so it lasts the
+  // shift (ROLE_TTL) and drops back to the Floor on the idle re-lock like
+  // a code entered later. Both count against the same sign-in lockout.
+  async signin({ store, pin, managerCode, device, ip }) {
     const keys = [`signin:dev:${store}:${device || 'nodevice'}`, ...guardKeys('signin', store, ip)];
     for (const k of keys) this.checkLocked(k);
     const row = this.get(store);
     if (!row) { this.failAll(guardKeys('signin', '', ip)); throw new HttpError(404, 'not_registered', `store ${store} is not registered`); }
-    if (!(await verifySecret(String(pin ?? ''), row.pin_hash))) {
+    const manager = managerCode != null && pin == null;
+    const hash = manager ? JSON.parse(row.codes || '{}').manager : row.pin_hash;
+    if (!hash || !(await verifySecret(manager ? normCode(managerCode) : String(pin ?? ''), hash))) {
       this.failAll(keys);
-      throw new HttpError(403, 'unauthorised', 'wrong PIN');
+      throw new HttpError(403, 'unauthorised', manager ? 'wrong manager code' : 'wrong PIN');
     }
     if (row.status === 'suspended') throw new HttpError(403, 'suspended', `store ${store} is suspended`);
     this.clear(keys[0]);
-    return { store: row.no, name: row.name, roles: ['floor'], caps: this.caps(row), status: row.status, epoch: row.epoch || 0 };
+    return { store: row.no, name: row.name, roles: manager ? ['floor', 'manager'] : ['floor'], caps: this.caps(row), status: row.status, epoch: row.epoch || 0, elevated: manager };
   }
 
   // Per device first, so one device guessing locks out only itself; the

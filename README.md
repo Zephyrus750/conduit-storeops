@@ -34,8 +34,9 @@ npm run dev          # worker in workerd on :8787 (store 1241, PIN 2468) + shell
 ```
 
 Open http://127.0.0.1:8080/. The shell finds the worker at `?worker=` (remembered
-per device) or defaults to :8787 on localhost. Sign in as 1241 / 2468, or
-follow "Owner sign-in" with `dev-owner-key` for the admin console.
+per device) or defaults to :8787 on localhost. A PC signs in as a manager
+(1241 / manager code `MGR-CODE`); a phone-width window also offers Team member
+(1241 / PIN 2468). "Owner sign-in" takes `dev-owner-key` for the admin console.
 
 ## Run the tests
 
@@ -86,7 +87,7 @@ D1, R2 and KV bindings are added when the features that need them land
 
 | Route | Who | Status |
 | --- | --- | --- |
-| `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` (answers a `trust` secret the device sends back next time, so the owner-wide lockout cannot shut it out) |
+| `POST /v1/auth/signin` | anyone | live: store + PIN; store + `managerCode` in place of the PIN (a manager: the Floor and the manager role, every area, for the shift); or `ownerKey` (answers a `trust` secret the device sends back next time, so the owner-wide lockout cannot shut it out) |
 | `POST /v1/auth/unlock` | signed-in device | live: area or manager code adds a role |
 | `POST /v1/auth/refresh` | signed-in device | live: rotates the refresh token |
 | `POST /v1/auth/lock` | signed-in store device | live: idle re-lock, drops area and manager codes back to the floor session |
@@ -424,7 +425,11 @@ open a card and cycle normal, large or hidden; tory lines switch on for a
 back-of-house floor; an editor's department zoom box frames its department;
 shelf tips and cards show the fixture, location range, shared names and, when
 the map has a scale, the size in metres. `js/lowpoly.js` draws the sign-in
-background from the accent and ground tokens. `js/device.js` holds haptics
+background from the accent and ground tokens; the sign-in is one card on it,
+manager code only on a PC (the store PIN returns there only when the worker
+predates manager sign-in) and Team member or Manager on a phone. Inter, the
+face the tokens name, ships in `styles/fonts/` (variable weight, OFL) and is
+precached with the shell. `js/device.js` holds haptics
 and the phone portrait lock.
 
 ## Where things stand

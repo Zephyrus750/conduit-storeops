@@ -1,6 +1,10 @@
 /* App-specific rules that the showcase did not need: the frame fills the
    window, form fields, toasts, inert rail rows. Everything else is tokens
    (tokens.css) and the shell (shell.css). */
+/* Inter, the face the tokens name, shipped with the app (variable weight,
+   Latin; OFL, styles/fonts/LICENSE-inter.txt). Without it a PC falls back to
+   Segoe UI, whose 800 weight is Segoe UI Black. */
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(fonts/inter-var.woff2) format('woff2-variations'), url(fonts/inter-var.woff2) format('woff2'); }
 html, body { height: 100%; margin: 0; background: var(--ground); }
 body { font-family: var(--body); color: var(--ink); }
 .frame { position: relative; width: 100%; height: 100%; border: none; border-radius: 0; box-shadow: none; overflow: hidden; container-type: inline-size; container-name: shell; background: var(--ground); color: var(--ink); }
@@ -2266,3 +2270,51 @@ body:has(.content.mv > .mv-strip) #toasts { bottom: 146px; }
 .m-more .mo-foot button svg.i { width: 16px; height: 16px; }
 .m-more .mo-foot button.out { color: #B91C1C; }
 @container shell (max-width: 380px) { .m-more .mo-row { padding: 9px 12px; gap: 10px; } .m-more .mo-row b { font-size: 14px; } .m-more .mo-row .ti { width: 30px; height: 30px; } .m-more .mo-sec { margin-top: 10px; } .m-more .mo-foot button { padding: 10px; font-size: 13px; } }
+
+/* Sign-in: team member or manager. */
+.si-seg { display: flex; background: var(--chip, #F1F3F6); border-radius: 12px; padding: 3px; margin: 14px 0 2px; }
+.si-seg button { flex: 1; padding: 9px 6px; border: 0; border-radius: 9px; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--dim); cursor: pointer; }
+.si-seg button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.si-form.as-manager .si-seg button[data-as="manager"] { background: var(--accent); color: #fff; }
+.si-form .si-cred { display: contents; }
+
+/* ── Sign-in card ─────────────────────────────────────────────────────── */
+/* One light card on the low-poly ground, PC and phone alike (the crew-code
+   gate shares it): brand, the form, a quiet footer, the three-part C faint
+   in the top corner. Sentence-case labels, 600-weight actions. */
+.signin .si-panel.si-centre { width: min(480px, 92%); min-height: 0; border: none; border-radius: 24px; box-shadow: 0 40px 90px -30px rgba(15,23,42,.45), 0 0 0 1px rgba(15,23,42,.05); }
+.si-wm { position: absolute; right: -170px; top: -150px; width: 440px; height: 440px; pointer-events: none; fill: none; stroke-width: 5.4; opacity: .1; }
+.signin .si-form { position: relative; padding: 40px 44px 30px; gap: 0; }
+.signin .si-panel.si-centre .si-mbrand { margin-bottom: 30px; }
+.signin .si-panel.si-centre .si-mbrand .vmark { width: 40px; height: 40px; }
+.signin .si-panel.si-centre .si-mbrand b { font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+.signin .si-form h2 { font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin: 0; line-height: 1.15; }
+.signin .si-sub { font-size: 14.5px; line-height: 1.5; margin: 6px 0 20px; }
+.signin .si-form label { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink2, var(--dim)); margin: 0 0 6px; }
+.signin .si-form .si-field, .signin .si-form input.si-pin { height: 48px; box-sizing: border-box; border-radius: 11px; border: 1px solid var(--line); background-color: var(--panel); padding: 0 14px; font-size: 15px; color: var(--ink); margin-bottom: 16px; outline: none; }
+.signin .si-form select.si-field { padding-right: 40px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; background-size: 18px; }
+.signin .si-form .si-field:focus, .signin .si-form input.si-pin:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.signin .si-form input.si-pin { font-size: 20px; letter-spacing: .3em; }
+.signin .si-form input.si-pin.si-code, .unlock .si-form input.si-pin { font-size: 16px; letter-spacing: .08em; text-transform: uppercase; }
+.signin .si-form input.si-pin::placeholder { color: var(--faint); }
+.signin .si-err { min-height: 0; margin: 0 0 4px; }
+.signin .si-err:empty { display: none; }
+.signin .si-err a { color: var(--accent-ink); font-weight: 600; text-decoration: underline; cursor: pointer; }
+.signin .si-cta { margin-top: 6px; min-height: 52px; border-radius: 12px; font-size: 16px; font-weight: 600; letter-spacing: -.005em; }
+.signin .si-alt { margin-top: 16px; font-size: 14px; font-weight: 500; }
+.signin .si-store { margin: 0 0 6px; }
+.signin .si-store b { font-weight: 600; }
+.signin .si-sav { width: auto; min-width: 50px; padding: 0 8px; border-radius: 11px; font-weight: 700; }
+.signin .si-ready { font-weight: 600; font-size: 12.5px; }
+.signin .si-seg { margin: 0 0 20px; }
+.signin .si-seg button { font-weight: 500; }
+.signin .si-seg button[aria-pressed="true"] { font-weight: 600; }
+.signin .si-foot { display: flex; justify-content: center; gap: 16px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line-soft, var(--line)); font-size: 12.5px; font-weight: 500; color: var(--dim); }
+.signin .si-foot .si-owner-link { font-weight: 500; }
+.signin .si-foot .ver { margin-left: 0; border: 0; padding: 0; border-radius: 0; color: var(--dim); }
+@container shell (max-width: 600px) {
+  .signin .si-form { padding: 30px 24px 22px; }
+  .signin .si-panel.si-centre .si-mbrand { margin-bottom: 22px; }
+  .signin .si-form h2 { font-size: 24px; }
+  .si-wm { right: -150px; top: -140px; width: 360px; height: 360px; }
+}
