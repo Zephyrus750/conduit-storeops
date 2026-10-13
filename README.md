@@ -86,7 +86,7 @@ D1, R2 and KV bindings are added when the features that need them land
 
 | Route | Who | Status |
 | --- | --- | --- |
-| `POST /v1/auth/signin` | anyone | live: store + PIN, or `ownerKey` (answers a `trust` secret the device sends back next time, so the owner-wide lockout cannot shut it out) |
+| `POST /v1/auth/signin` | anyone | live: store + PIN; store + `managerCode` in place of the PIN (a manager: the Floor and the manager role, every area, for the shift); or `ownerKey` (answers a `trust` secret the device sends back next time, so the owner-wide lockout cannot shut it out) |
 | `POST /v1/auth/unlock` | signed-in device | live: area or manager code adds a role |
 | `POST /v1/auth/refresh` | signed-in device | live: rotates the refresh token |
 | `POST /v1/auth/lock` | signed-in store device | live: idle re-lock, drops area and manager codes back to the floor session |

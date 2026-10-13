@@ -242,19 +242,44 @@ async function showSignin({ error, owner } = {}) {
   let stores = [];
   try { stores = (await client.transport.request('/v1/stores')).stores; } catch (e) { error = error || (WORKER ? `Cannot reach the worker at ${WORKER}` : 'No worker configured: open with ?worker=https://…'); }
   const options = stores.map(s => `<option value="${esc(s.no)}">${esc(s.no)} ${esc(s.name)}${s.region ? ' · ' + esc(s.region) : ''}</option>`).join('');
+  // Team member or manager: a manager signs in with the store's manager code
+  // in place of the PIN and gets every area at once, on a PC or a phone.
+  // The choice is remembered on this device.
+  let asManager = false; try { asManager = localStorage.getItem('signin_as') === 'manager'; } catch {}
   const form = `<form class="si-form" id="siForm"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>Welcome back</h2><div class="si-sub">Choose your store. Everything keeps working offline once it is on this device.</div>` +
+    `<div class="si-seg" role="group" aria-label="Sign in as"><button type="button" data-as="team" aria-pressed="${!asManager}">Team member</button><button type="button" data-as="manager" aria-pressed="${asManager}">Manager</button></div>` +
     `<label>Store</label><select class="si-field" name="store" required>${options || '<option value="">No stores registered</option>'}</select>` +
-    `<label>Store PIN</label><input class="si-pin" name="pin" inputmode="numeric" autocomplete="off" placeholder="••••" required>` +
-    `<div class="si-role">${ic('users')}<div>The store PIN opens the Floor. Stockroom and Back dock take their crew code once per device; a manager code opens everything.</div></div>` +
-    `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit">Enter store${ic('arrow')}</button>` +
+    `<div class="si-cred"></div>` +
+    `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit"></button>` +
     `<div class="si-foot"><span>${ic('check')}Offline ready</span><span class="si-count">${stores.length} store${stores.length === 1 ? '' : 's'}</span><a class="si-owner-link" data-shell-act="owner-signin">Owner sign-in</a><span class="ver">Conduit ${VERSION}</span></div></form>`;
   const el = cover(polyBackground() + (mobile ? `<div class="si-panel si-centre">${form}</div>` : `<div class="si-panel si-duo">${siHero()}${form}</div>`));
   if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? "Sign in to open the work order." : `Sign in to open shelf ${pendingLink.shelf}.`); }
+  const cred = () => {
+    const f = $('#siForm', el);
+    for (const b of f.querySelectorAll('[data-as]')) b.setAttribute('aria-pressed', String((b.dataset.as === 'manager') === asManager));
+    f.classList.toggle('as-manager', asManager);
+    $('.si-cred', f).innerHTML = asManager
+      ? `<label>Manager code</label><input class="si-pin" name="mcode" type="password" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MG-······" required>` +
+        `<div class="si-role">${ic('users')}<div>The manager code opens the Floor, the Stockroom and the Back dock at once, with no crew codes. It lasts the shift and drops back to the Floor when this device is left idle.</div></div>`
+      : `<label>Store PIN</label><input class="si-pin" name="pin" inputmode="numeric" autocomplete="off" placeholder="••••" required>` +
+        `<div class="si-role">${ic('users')}<div>The store PIN opens the Floor. Stockroom and Back dock take their crew code once per device; managers sign in as Manager for everything.</div></div>`;
+    $('.si-cta', f).innerHTML = `${asManager ? 'Enter as manager' : 'Enter store'}${ic('arrow')}`;
+  };
+  cred();
+  $('#siForm', el).addEventListener('click', e => {
+    const b = e.target.closest('[data-as]'); if (!b) return;
+    asManager = b.dataset.as === 'manager'; try { localStorage.setItem('signin_as', asManager ? 'manager' : 'team'); } catch {}
+    $('#siErr', el).textContent = ''; cred(); try { $('.si-cred input', el).focus(); } catch {}
+  });
   $('#siForm', el).addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target); const btn = e.target.querySelector('.si-cta'); btn.disabled = true;
-    try { await client.session.signIn({ store: f.get('store'), pin: f.get('pin') }); await enter(); }
-    catch (err) { $('#siErr', el).textContent = friendly(err); btn.disabled = false; }
+    try { await client.session.signIn(asManager ? { store: f.get('store'), managerCode: f.get('mcode') } : { store: f.get('store'), pin: f.get('pin') }); await enter(); }
+    catch (err) {
+      // A worker from before manager sign-in answers "wrong PIN" to a code.
+      $('#siErr', el).textContent = asManager && err.code === 'unauthorised' && /PIN/.test(err.message || '') ? 'Manager sign-in needs the latest worker. Sign in as Team member with the store PIN for now, then enter the manager code at Stockroom or Back dock.' : friendly(err, asManager ? 'Wrong manager code.' : 'Wrong PIN.');
+      btn.disabled = false;
+    }
   });
 }
 const siHero = () => `<div class="si-hero"><div class="si-brand">${mark()}<b>Conduit</b></div><div class="si-greet">${greeting()}</div><h1>Run the <span>whole store</span>.</h1><p>Live maps, back-dock receiving and stockroom backfill. One team, one sign-in, on and off the wifi.</p><div class="si-off">${ic('check')}Works offline once it is on this device</div></div>`;

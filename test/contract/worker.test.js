@@ -230,6 +230,26 @@ test('events: entitlement, role, validation, duplicate, conflict rule, and a sec
   ws.close();
 });
 
+test('manager sign-in: the manager code in place of the PIN opens every area for the shift', async () => {
+  const wrong = await api('POST', '/v1/auth/signin', { store: '1241', managerCode: 'SR-CODE', device: 'mgr-desk' });
+  assert.equal(wrong.status, 403, 'a crew code is not a manager sign-in'); assert.equal(wrong.body.code, 'unauthorised');
+  const ok = await api('POST', '/v1/auth/signin', { store: '1241', managerCode: 'mgr code', device: 'mgr-desk' });   // spelling is forgiven
+  assert.equal(ok.status, 200, JSON.stringify(ok.body)); assert.deepEqual(ok.body.roles, ['floor', 'manager']);
+  // No crew code needed: the session already holds the manager role.
+  const ev = { id: '01J9MGRSIGNIN0000000000001', store: '1241', area: 'store', type: 'store.settings.set', entity: {}, payload: { autoLockMins: 30 }, at: new Date().toISOString(), v: 1 };
+  assert.notEqual((await api('POST', '/v1/store/1241/events', { events: [ev] }, ok.body.token)).body.results[0].code, 'unauthorised');
+  // The shift carries through a refresh; the idle re-lock drops back to the Floor.
+  const ref = await api('POST', '/v1/auth/refresh', { refresh: ok.body.refresh });
+  assert.equal(ref.status, 200); assert.deepEqual(ref.body.roles, ['floor', 'manager']);
+  const locked = await api('POST', '/v1/auth/lock', { refresh: ref.body.refresh }, ref.body.token);
+  assert.equal(locked.status, 200); assert.deepEqual(locked.body.roles, ['floor']);
+  // Wrong codes count against the same sign-in lockout as wrong PINs.
+  for (let i = 0; i < 3; i++) assert.equal((await api('POST', '/v1/auth/signin', { store: '1241', managerCode: 'MG-NOPE', device: 'mgr-guess' })).status, 403);
+  assert.equal((await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'mgr-guess' })).status, 429);
+  // The PIN still signs in to the Floor only.
+  assert.deepEqual((await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'team-phone' })).body.roles, ['floor']);
+});
+
 test('devices cannot send the events only the worker writes (map, manifest and SOH indexes, retention)', async () => {
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'mgr-phone' })).body.token;
   const mgr = (await api('POST', '/v1/auth/unlock', { code: 'MGR-CODE' }, dev)).body.token;

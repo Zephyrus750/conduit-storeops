@@ -2266,3 +2266,10 @@ body:has(.content.mv > .mv-strip) #toasts { bottom: 146px; }
 .m-more .mo-foot button svg.i { width: 16px; height: 16px; }
 .m-more .mo-foot button.out { color: #B91C1C; }
 @container shell (max-width: 380px) { .m-more .mo-row { padding: 9px 12px; gap: 10px; } .m-more .mo-row b { font-size: 14px; } .m-more .mo-row .ti { width: 30px; height: 30px; } .m-more .mo-sec { margin-top: 10px; } .m-more .mo-foot button { padding: 10px; font-size: 13px; } }
+
+/* Sign-in: team member or manager. */
+.si-seg { display: flex; background: var(--chip, #F1F3F6); border-radius: 12px; padding: 3px; margin: 14px 0 2px; }
+.si-seg button { flex: 1; padding: 9px 6px; border: 0; border-radius: 9px; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--dim); cursor: pointer; }
+.si-seg button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.si-form.as-manager .si-seg button[data-as="manager"] { background: var(--accent); color: #fff; }
+.si-form .si-cred { display: contents; }
