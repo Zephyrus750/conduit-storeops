@@ -1,7 +1,7 @@
 // Store map and the selected shelf card. Also the phone's Home: the map with
 // the selected shelf beneath it.
 
-import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_GROUPS, weekId, fmtTime, cycleId, toast } from '../ui.js';
+import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_GROUPS, weekId, fmtTime, fmtDate, cycleId, toast } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, shelfDetail, canonCode, runText, runSubs, setStrip, sx } from '../map.js';
 import { markerSymbol } from '../../shared/maprender.js';
 import { openShare } from '../share.js';
@@ -14,13 +14,22 @@ function shelfFacts(ctx, map, id) {
   const r = ctx.store.get('refresh'), week = weekId(), marks = r.weeks[week] || {};
   const segs = map.groups(id).map(g => segmentId(g));
   const refreshed = segs.map(s => marks[s]).filter(Boolean).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
+  // The newest refresh of this shelf in any kept week, and how old it is:
+  // this week, last week, or older.
+  let last = null, lastWeek = null;
+  for (const [w, wm] of Object.entries(r.weeks)) for (const sg of segs) { const m = wm[sg]; if (m && (!last || m.at > last.at)) { last = m; lastWeek = w; } }
+  const age = !last ? 'none' : lastWeek === week ? 'now' : lastWeek === weekId(new Date(Date.now() - 7 * 86400000)) ? 'last' : 'old';
   const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen);
   // Assignments are per shelf; older ones name the whole run (label integrity).
   const keys = new Set([...segs, map.code(id)?.shelf].filter(Boolean));
   const micros = Object.entries(L.assign).filter(([, shelves]) => shelves.some(s => keys.has(s))).map(([m]) => m);
   const checked = micros.filter(m => (L.checks[cyc] || {})[m]);
   const plan = segs.map(s => r.plan[s]).filter(Boolean);
-  return { segs, refreshed, micros, checked, plan };
+  // The last stocktake that counted this shelf: its newest counted or
+  // verified mark across the kept sessions (older sessions keyed the run).
+  let counted = null;
+  for (const sess of Object.values(ctx.store.get('stocktake')?.sessions || {})) for (const k of keys) { const m = sess.shelves?.[k]; if (m && (m.state === 'counted' || m.state === 'verified') && (!counted || m.at > counted.at)) counted = m; }
+  return { segs, refreshed, last, age, micros, checked, plan, counted };
 }
 export function selCard(ctx, map, id) {
   if (!id) return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>Selected shelf</h3></div><p class="lbl">Click a shelf on the map.</p></div>`;
@@ -29,7 +38,7 @@ export function selCard(ctx, map, id) {
   const row = (k, v) => `<div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;color:var(--dim)">${k}<b style="color:var(--ink)">${v}</b></div>`;
   return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>${cd.sub || info.segments === 1 ? 'Selected shelf' : 'Selected run'}</h3><span class="go" data-act="clear">Clear</span></div>` +
     `<div class="sid">${shelfName(cd)}${dep(info.dept)}${microChips(f.micros)}</div><div class="meta">${DEPT_NAME[info.dept] || info.dept} · ${esc(runText(cd.shelf, cd.sub, runSubs(map, cd.shelf), info.segments))}</div>` +
-    `<div class="rows" style="margin-top:12px;border-top:1px solid var(--line-soft)">${d.fixture ? row('Fixture', esc(d.fixture)) : ''}${d.modules ? row('Length', `${d.modules} module${d.modules === 1 ? '' : 's'}`) : ''}${d.range ? row(d.locations.length > 1 ? 'Locations' : 'Location', `<span title="${esc(d.locations.join(', '))}">${esc(d.range)}</span>`) : ''}${d.size ? row('Size', esc(d.size)) : ''}${d.shared.length ? row('Shares its name with', esc(d.shared.join(', '))) : ''}${row('Refreshed this week', f.refreshed ? fmtTime(f.refreshed.at) : 'not yet')}${row('Label micro-depts', f.micros.length ? `${f.checked.length}/${f.micros.length} checked` : 'none assigned')}${row('Planned', f.plan.length ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${f.plan[0]};vertical-align:-1px"></i> yes` : 'no')}</div>` +
+    `<div class="rows" style="margin-top:12px;border-top:1px solid var(--line-soft)">${d.fixture ? row('Fixture', esc(d.fixture)) : ''}${d.modules ? row('Length', `${d.modules} module${d.modules === 1 ? '' : 's'}`) : ''}${d.range ? row(d.locations.length > 1 ? 'Locations' : 'Location', `<span title="${esc(d.locations.join(', '))}">${esc(d.range)}</span>`) : ''}${d.size ? row('Size', esc(d.size)) : ''}${d.shared.length ? row('Shares its name with', esc(d.shared.join(', '))) : ''}${row('Last refreshed', f.last ? `<span class="age-${f.age}" title="${f.age === 'now' ? 'This week' : f.age === 'last' ? 'Last week' : 'Over a week ago'}">${esc(f.age === 'now' ? fmtTime(f.last.at) : fmtDate(f.last.at))}</span>` : '<span class="age-none">none on record</span>')}${row('Last stocktake', f.counted ? esc(fmtDate(f.counted.at)) : '<span class="age-none">none on record</span>')}${row('Label micro-depts', f.micros.length ? `${f.checked.length}/${f.micros.length} checked` : 'none assigned')}${row('Planned', f.plan.length ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${f.plan[0]};vertical-align:-1px"></i> yes` : 'no')}</div>` +
     `<div class="acts2"><button class="btn primary sm" data-act="pick-add" data-shelf="${esc(id)}">${ic('m-picklist')}Add to pick list</button><a class="btn sm" data-go="refresh" data-select="${esc(id)}">${ic('m-refresh')}Refresh</a><a class="btn sm" data-go="labelint" data-select="${esc(id)}">${ic('m-labelint')}Label check</a><button class="btn sm" data-act="share" data-shelf="${esc(id)}">${ic('qr')}Share</button></div></div>`;
 }
 // The phone Home's sheet (opened from the strip): the shelf in full, its
@@ -151,7 +160,7 @@ export default {
       const sh = e.target.closest('[data-act="share"]'); if (sh) { const id = sh.dataset.shelf, g = map.groups(id)[0]; openShare({ storeNo: ctx.storeNo, storeName: ctx.storeName, shelf: id, dept: g ? map.shelfInfo(g).dept : '' }); }
     });
     map.stage.addEventListener('mapselect', e => { selected = e.detail.code; paint(); });
-    return [ctx.store.on('refresh', paint), ctx.store.on('labels', paint)];
+    return [ctx.store.on('refresh', paint), ctx.store.on('labels', paint), ctx.store.on('stocktake', paint)];
   },
 };
 
