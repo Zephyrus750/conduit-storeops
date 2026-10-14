@@ -401,9 +401,12 @@ micro-departments, facts and status; the week's focus departments and the
 shelves refreshed by department; each department's label progress and the
 wrong labels; every route stop; a tile per kind of emergency marker with the
 map's own symbol (a tap shows only that kind); the stocktake's shelves still
-to count. Open or closed is kept per device. Maintenance is desk-only: a
-store PC logs and works issues, and a work-order link opened on a phone says
-so.
+to count. Open or closed is kept per device. Maintenance is on a manager's
+phone only (More, in every area): Report clears the map to pin the fault,
+then the sheet takes what, where, type, urgency, a note and up to four
+photos; an issue opens with its photos, log and actions (done, complete,
+not fixed, reopen, show, edit, contractor visited). On a team member's phone
+it is not listed, and a work-order link says it opens on a store PC.
 
 A phone keeps to what a person on the floor does. Service dates and
 history, store settings, the refresh focus and target, the map and its

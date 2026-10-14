@@ -2,7 +2,7 @@
 // completed, reopen as recurring. Reads store.get('issues').
 
 import { $, ic, esc, vh, sub, status, fmtTime, ago, toast } from '../ui.js';
-import { mountMap, mapbar, crumbx, bindMapChrome, segmentId } from '../map.js';
+import { mountMap, mapbar, crumbx, bindMapChrome, segmentId, mvMap, setStrip, sx } from '../map.js';
 import { ISSUE_CATS } from '../../shared/reducers/floor.js';
 import { printSheet, table, signoff } from '../print.js';
 import { paperMap } from '../printmap.js';
@@ -82,7 +82,10 @@ const newId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).s
 
 export default {
   id: 'maintenance', title: 'Maintenance', icon: 'm-maintenance',
-  deskOnly: true,   // not on the phone (2026-10-11): no menu row, no search result; a link goes home
+  // On a phone, managers only (2026-10-14): a manager reports and works
+  // issues on the go, photos and all, from More in any area; for everyone
+  // else it stays a desk tool (no menu row, no search result, a link goes home).
+  deskOnly: s => !isManager(s),
   desktop(ctx) {
     const m = model(ctx);
     return vh('Maintenance', sub(`${m.open.length} open`, `${m.overdue} overdue`, `${m.recurring} recurring`, m.open.length ? `oldest ${m.oldest} days` : ''), `<button class="btn primary" data-act="new">${ic('plus')}Log new issue</button>`, 'm-maintenance') +
@@ -90,7 +93,13 @@ export default {
       `<div class="mapleg">${crumbx('Maintenance', ctx.storeNo)}<span><i style="background:#DC2626;border-radius:50%"></i>Open</span><span><i style="background:#D97706;border-radius:50%"></i>Done, to check</span><span><i style="background:#16A34A;border-radius:50%"></i>Completed</span><span style="color:var(--faint)">${draft ? (draft.editId ? 'Tap the map to move this issue' : 'Tap the map to place the new issue') : 'Log a new issue, then tap the map to place it'}</span></div></div>` +
       `<div class="sidecol fill" id="mtside"></div></div>`;
   },
-  // The phone gets the map too, so a report is pinned where the fault is.
+  // The phone gets the map too, so a report is pinned where the fault is;
+  // the strip carries the count and Report, the sheet the list, the issue
+  // or the report form.
+  mobile(ctx) {
+    const m = model(ctx);
+    return mvMap({ badge: `<b>${m.open.length}</b> open` }) + `<div class="mv-sel mode mt" id="mtmob"></div>`;
+  },
   mount(ctx, root) {
     let map = null;
     // From the dashboard's map: open the issue whose pin was tapped.
@@ -99,14 +108,14 @@ export default {
     if (stage) {
       map = mountMap(stage, { onSelect: info => {
         // A pin opens its issue; while placing one it is just a spot on the floor.
-        if (info.kind === 'pin' && !draft) { selected = info.id; paint(); return; }
+        if (info.kind === 'pin' && !draft) { selected = info.id; paint(); openSheet(); return; }
         if (draft && (info.kind === 'floor' || info.kind === 'shelf' || info.kind === 'pin')) {
           readDraft(root);
           const p = info.point || map.centreOf(info.id); draft.x = Math.round(p[0] * 10) / 10; draft.y = Math.round(p[1] * 10) / 10; draft.floor = map.floorId() || null;
           // A tap on bare floor still names the nearest shelf on this floor.
           const near = info.kind === 'shelf' ? { id: info.full, dept: info.dept } : nearestShelf(map, p);
           if (near && (!draft.loc || /^near /.test(draft.loc))) { draft.loc = 'near ' + near.id; draft.dept = near.dept; }
-          paint();
+          paint(); openSheet();
         }
       } });
       bindMapChrome(root, map);
@@ -115,11 +124,16 @@ export default {
     // Pins show on their own floor. An issue whose floor the map does not
     // know (logged before issues recorded their floor) shows on every floor.
     const here = i => { if (!map) return true; const ids = map.floors().map(f => f.id); return !i.floor || !ids.includes(i.floor) || i.floor === map.floorId(); };
+    // The phone's sheet opens on its own for a report or an issue.
+    // A new report starts with the map clear to pin it; the form comes up once it is pinned.
+    const sheet = open => { if (ctx.isMobile && root.classList.contains('sheet-open') !== open) root.querySelector(':scope > .mv-strip .mv-tog')?.click(); };
+    const openSheet = () => sheet(true);
     const paint = () => {
       const m = model(ctx);
       if (map) { map.clearOverlays(); map.drawPins(m.list.filter(i => i.x != null && here(i)).map(i => ({ id: i.id, x: i.x, y: i.y, colour: colour(i), glyph: GLYPH[i.cat] || GLYPH.other, badge: i.recur ? (i.recur > 9 ? '9+' : String(i.recur)) : '', title: `${i.title} · ${CAT_NAME[i.cat]}` }))); if (draft?.x != null && here(draft)) map.drawPins([{ x: draft.x, y: draft.y, colour: 'var(--accent)', label: '+' }]); }
       const sel = m.all.find(x => x.id === selected); if (sel?.photos?.length) loadThumbs(ctx, sel.photos.map(p => p.id), paint);
       const side = $('#mtside', root); if (side) side.innerHTML = sidebar(m);
+      const mob = $('#mtmob', root); if (mob) { mob.innerHTML = phone(m); setStrip(root, phoneStrip(m)); }
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = `<b>${m.open.length}</b> open${m.recurring ? ` · ${m.recurring} recurring` : ''}`;
       const hs = root.querySelector('.vh .sub'); if (hs) hs.innerHTML = sub(`${m.open.length} open`, `${m.overdue} overdue`, `${m.recurring} recurring`, m.open.length ? `oldest ${m.oldest} days` : '');
     };
@@ -129,10 +143,11 @@ export default {
       const act = a.getAttribute('data-act');
       try {
         if (act === 'filter') { filter = a.getAttribute('data-filter'); paint(); }
-        else if (act === 'select') { selected = a.getAttribute('data-id'); paint(); }
+        else if (act === 'select') { selected = a.getAttribute('data-id'); paint(); openSheet(); }
         else if (act === 'back') { selected = null; paint(); }
-        else if (act === 'new') { draft = { cat: 'other', sev: 1, title: '', note: '', loc: '', x: null, y: null, files: [] }; paint(); }
-        else if (act === 'edit') { const i = ctx.store.get('issues')[selected]; if (i) { draft = { editId: selected, cat: i.cat, sev: i.sev, title: i.title, note: i.note || '', loc: i.loc || '', dept: i.dept || null, x: i.x, y: i.y, floor: i.floor || null }; paint(); } }
+        else if (act === 'new') { draft = { cat: 'other', sev: 1, title: '', note: '', loc: '', x: null, y: null, files: [] }; paint(); sheet(false); }
+        else if (act === 'draft-open') openSheet();
+        else if (act === 'edit') { const i = ctx.store.get('issues')[selected]; if (i) { draft = { editId: selected, cat: i.cat, sev: i.sev, title: i.title, note: i.note || '', loc: i.loc || '', dept: i.dept || null, x: i.x, y: i.y, floor: i.floor || null }; paint(); openSheet(); } }
         else if (act === 'draft-sev') { draft.sev = Number(a.getAttribute('data-sev')); readDraft(root); paint(); }
         else if (act === 'draft-cancel') { draft = null; paint(); }
         else if (act === 'draft-save') {
@@ -187,7 +202,8 @@ export default {
         try { toast('Adding the photo…'); await uploadPhoto(ctx, selected, f); toast('Photo added'); } catch (err) { toast(photoError(err), 'bad'); }
       }
     });
-    return [ctx.store.on('issues', paint)];
+    // A store update mid-report keeps what was typed.
+    return [ctx.store.on('issues', () => { readDraft(root); paint(); })];
   },
 };
 function readDraft(root) {
@@ -217,6 +233,63 @@ function sidebar(m) {
   return list + det;
 }
 const stName = i => i.status === 'open' ? 'Open' : i.status === 'progress' ? 'Done, to check' : 'Completed';
+const isManager = s => (s?.roles || []).includes('manager') || !!s?.owner;
+
+// ── the phone (managers) ──────────────────────────────────────────────
+// The strip: the open count and Report; the issue in hand and Close; or the
+// report being written, where to pin it, and Send.
+function phoneStrip(m) {
+  if (draft) return `${ic('m-maintenance')}<b>${draft.editId ? 'Edit issue' : 'New report'}</b><span class="s">${draft.x != null ? 'Pinned' : 'Tap the map to pin it'}</span>` +
+    (draft.x != null || draft.editId ? `<button class="act go" type="button" data-act="draft-save">${ic('check')}${draft.editId ? 'Save' : 'Send'}</button>` : `<button class="act" type="button" data-act="draft-open">${ic('chev')}Skip</button>`);
+  const i = m.all.find(x => x.id === selected);
+  if (i) return `<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span><b>${esc(i.title)}</b><span class="s">${stName(i)}</span><button class="act" type="button" data-act="back">${ic('x')}Close</button>`;
+  return `${ic('m-maintenance')}<b>Maintenance</b><span class="n${m.overdue ? ' red' : ''}">${m.open.length}</span><span class="s">${m.overdue ? `${m.overdue} overdue` : ''}</span><button class="act go" type="button" data-act="new">${ic('plus')}Report</button>`;
+}
+// The sheet: the report form, an issue with its photos, log and actions, or
+// the open list.
+function phone(m) {
+  if (draft) {
+    const dup = nearby(m, draft).length;
+    const sevs = SEV.map((v, n) => `<button class="sx-chip${draft.sev === n ? ' on' : ''}" type="button" data-act="draft-sev" data-sev="${n}"><i class="sevdot" style="background:${v[1]}"></i>${v[0]}</button>`).join('');
+    const cats = `<select class="sx-in" data-draft="cat" aria-label="Type">${ISSUE_CATS.map(c => `<option value="${c}"${draft.cat === c ? ' selected' : ''}>${CAT_NAME[c]}</option>`).join('')}</select>`;
+    return `<div class="sx"><div class="sx-h">${ic('m-maintenance')}${draft.editId ? 'Edit issue' : 'Report an issue'}</div><div class="sx-sub">${draft.x != null ? `Pinned on the map${draft.loc ? ' · ' + esc(draft.loc) : ''}. Tap again to move it.` : 'Tap the map to pin where the fault is.'}</div>` +
+      (dup ? `<div class="mt-dup">${ic('alert')}${dup} issue${dup === 1 ? '' : 's'} already logged near here. Check the list before sending.</div>` : '') +
+      sx.sec('What', `<input class="sx-in" data-draft="title" placeholder="Light out over the end bay" value="${esc(draft.title)}" aria-label="What">`) +
+      sx.sec('Where', `<input class="sx-in" data-draft="loc" placeholder="Aisle K2, bay 8963" value="${esc(draft.loc)}" aria-label="Where">`) +
+      sx.sec('Type', cats) + sx.sec('How urgent', `<div class="sx-chips">${sevs}</div>`) +
+      sx.sec('Note', `<input class="sx-in" data-draft="note" placeholder="Anything the contractor should know" value="${esc(draft.note)}" aria-label="Note">`, 'optional') +
+      (draft.editId ? '' : sx.sec('Photos', draftPhotos(false), 'up to 4')) +
+      sx.acts([sx.btn('check', draft.editId ? 'Save changes' : 'Send report', 'data-act="draft-save"', true), sx.btn('x', 'Cancel', 'data-act="draft-cancel"')]) + `</div>`;
+  }
+  const i = m.all.find(x => x.id === selected);
+  if (i) {
+    const sla = SLA_DAYS[i.sev ?? 1], open = i.status !== 'completed';
+    return `<div class="sx"><div class="sx-h"><span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>${esc(i.title)}<span class="n${i.status === 'open' ? ' red' : ''}">${stName(i)}</span></div>` +
+      `<div class="sx-sub">${esc(i.loc || CAT_NAME[i.cat])}${i.recur ? ` · <span class="recur">↻ reopened ${i.recur}×</span>` : ''}</div><div class="sx-sec">` +
+      sx.facts([['Urgency', SEV[i.sev][0]], ['Type', CAT_NAME[i.cat]], ['Logged', esc(fmtTime(i.created))], open ? ['Target', `${sla} day${sla === 1 ? '' : 's'}${overdue(i) ? ' · overdue' : ''}`] : ['Completed', esc(fmtTime(doneAt(i)))]]) + `</div>` +
+      (i.note ? sx.sec('Note', `<div class="sx-sub" style="margin:0">${esc(i.note)}</div>`) : '') +
+      ((i.photos || []).length || open ? sx.sec('Photos', photoStrip(i, open), `${(i.photos || []).length} of 4`) : '') +
+      sx.acts([
+        i.status === 'open' ? sx.btn('tool', 'Maintenance done', 'data-act="progress"', true) : '',
+        i.status === 'progress' ? sx.btn('check', 'Complete', 'data-act="close"', true) : '',
+        i.status === 'progress' ? sx.btn('refresh', 'Not fixed', 'data-act="reopen"') : '',
+        i.status === 'open' ? sx.btn('check', 'Complete', 'data-act="close"') : '',
+        i.status === 'completed' ? sx.btn('refresh', 'Reopen', 'data-act="reopen"', true) : '',
+        i.x != null ? sx.btn('pin', 'Show on map', 'data-act="show"') : '',
+        open ? sx.btn('edit', 'Edit', 'data-act="edit"') : '',
+        open ? sx.btn('users', 'Contractor visited', 'data-act="visit"') : '',
+      ]) +
+      sx.sec('Log', sx.rows([...i.log].reverse().map(l => sx.row('history', esc(l.a), l.n ? esc(l.n) : '', esc(fmtTime(l.t)))))) +
+      sx.acts([sx.btn('x', 'Back to the list', 'data-act="back"')]) + `</div>`;
+  }
+  const row = i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), `${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${ago(i.created)}`, overdue(i) ? 'Overdue' : i.status === 'progress' ? 'To check' : 'Open', overdue(i) ? 'bad' : i.status === 'progress' ? 'warn' : 'dim', `data-act="select" data-id="${esc(i.id)}"`);
+  const open = [...m.open].sort((a, b) => (overdue(b) - overdue(a)) || (a.updated < b.updated ? 1 : -1));
+  const done = m.all.filter(i => i.status === 'completed').sort((a, b) => (doneAt(a) < doneAt(b) ? 1 : -1)).slice(0, 5);
+  return `<div class="sx"><div class="sx-h">${ic('m-maintenance')}Maintenance<span class="n${m.overdue ? ' red' : ''}">${m.open.length} open</span></div>` +
+    sx.acts([sx.btn('plus', 'Report an issue', 'data-act="new"', true)]) +
+    sx.sec('Open', open.length ? sx.rows(open.slice(0, 40).map(row)) : sx.rows([sx.row('check', 'Nothing open')]), m.overdue ? `${m.overdue} overdue` : 'tap one to open it') +
+    (done.length ? sx.sec('Recently completed', sx.rows(done.map(i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), `${esc(i.loc || CAT_NAME[i.cat])} · done ${ago(doneAt(i))}`, '', '', `data-act="select" data-id="${esc(i.id)}"`)))) : '') + `</div>`;
+}
 
 // The shelf nearest a point on the shown floor, by the centre of its box.
 function nearestShelf(map, p) {
@@ -231,9 +304,9 @@ function nearestShelf(map, p) {
 }
 
 // Photos chosen while writing a report go up once it is logged.
-function draftPhotos() {
+function draftPhotos(head = true) {
   const files = draft.files || [];
-  return `<div class="mv-sub">Photos</div><div class="mt-phs">${files.map((f, n) => `<div class="mt-ph pend"><span>${ic('camera')}${esc(String(n + 1))}</span><button class="mt-ph-x" data-act="draft-photo-x" data-i="${n}" aria-label="Remove photo">${ic('x')}</button></div>`).join('')}${files.length < 4 ? `<label class="mt-ph add">${ic('camera')}<span>Add photo</span><input type="file" accept="image/*" capture="environment" data-photo-input hidden></label>` : ''}</div><p class="mt-ph-note">Photograph the fault, not people.</p>`;
+  return `${head ? '<div class="mv-sub">Photos</div>' : ''}<div class="mt-phs">${files.map((f, n) => `<div class="mt-ph pend"><span>${ic('camera')}${esc(String(n + 1))}</span><button class="mt-ph-x" data-act="draft-photo-x" data-i="${n}" aria-label="Remove photo">${ic('x')}</button></div>`).join('')}${files.length < 4 ? `<label class="mt-ph add">${ic('camera')}<span>Add photo</span><input type="file" accept="image/*" capture="environment" data-photo-input hidden></label>` : ''}</div><p class="mt-ph-note">Photograph the fault, not people.</p>`;
 }
 function openPhoto(url) {
   if (!url || url === 'gone') return;

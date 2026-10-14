@@ -60,9 +60,10 @@ export const WORKSPACES = [['floor', 'Floor', 'm-map', 'Map, refresh, labels, ro
 export const ADMIN_RAIL = [['admin', 'grid', 'Overview'], ['adminmaps', 'm-map', 'Maps'], ['adminservice', 'm-settings', 'Service'], ['adminreg', 'plus', 'Register a store'], ['adminactions', 'history', 'Owner actions']];
 // The phone's More sheet: each area's tools (with a line on what each is
 // for), then the store and the app; Switch area and Sign out sit at the foot.
+// A desk-only view drops out (Maintenance shows on a manager's phone only).
 export const MORE = {
-  floor: [['stocktake', 'm-stocktake', 'Stocktake', 'Count shelves in a session'], ['mapedits', 'edit', 'Suggest map edits', 'A wrong name or a missing shelf'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
-  stockroom: [['daylist', 'm-daylist', 'Day list', 'What to backfill next'], ['codelist', 'barcode', 'Quick Scan', 'Scan codes into a list'], ['srhistory', 'm-srhistory', 'History', 'Today’s sent bays'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
-  backdock: [['rhistory', 'm-rhistory', 'History', 'Finished trucks'], ['dockscreen', 'grid', 'Dock screen', 'The big screen at the dock'], ['wallboard', 'chart', 'Wallboard', 'Progress for the team'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  floor: [['stocktake', 'm-stocktake', 'Stocktake', 'Count shelves in a session'], ['maintenance', 'm-maintenance', 'Maintenance', 'Report a fault, with photos'], ['mapedits', 'edit', 'Suggest map edits', 'A wrong name or a missing shelf'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  stockroom: [['daylist', 'm-daylist', 'Day list', 'What to backfill next'], ['codelist', 'barcode', 'Quick Scan', 'Scan codes into a list'], ['srhistory', 'm-srhistory', 'History', 'Today’s sent bays'], ['maintenance', 'm-maintenance', 'Maintenance', 'Report a fault, with photos'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
+  backdock: [['rhistory', 'm-rhistory', 'History', 'Finished trucks'], ['dockscreen', 'grid', 'Dock screen', 'The big screen at the dock'], ['wallboard', 'chart', 'Wallboard', 'Progress for the team'], ['maintenance', 'm-maintenance', 'Maintenance', 'Report a fault, with photos'], ['storeinfo', 'm-store', 'Store details'], ['help', 'star', 'Help'], ['settings', 'm-settings', 'Settings']],
 };
 export const MORE_STORE = ['storeinfo', 'help', 'settings'];
