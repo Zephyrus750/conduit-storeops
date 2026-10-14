@@ -46,6 +46,7 @@ export default {
       else if (act === 'portrait') { setPref('allowLandscape', !prefs().allowLandscape); applyOrientation(); ctx.rerender(); }
       else if (act === 'scale') setPref('scale', a.getAttribute('data-v')), ctx.rerender();
       else if (act === 'railmin') setPref('railmin', !prefs().railmin), ctx.rerender();
+      else if (act === 'hdr') setPref('hdr', prefs().hdr === 'title' ? 'classic' : 'title'), ctx.rerender();
       else if (act === 'signout') { if (confirm(ctx.store ? 'Sign out of this store on this device?' : 'Sign out of the owner console on this device?')) await ctx.signOut(); }
       else if (act === 'reload') location.reload();
       else if (act === 'force-reload') { if (confirm('Reload Conduit from the worker? You stay signed in; queued changes are kept.')) await updates.forceReload(); }
@@ -77,7 +78,7 @@ function body(ctx, sec = currentSec()) {
   const p = prefs();
   if (sec === 'appearance') {
     const seg = (act, opts, cur) => `<span class="seg stg-seg">${opts.map(o => `<button class="${cur === o[0] ? 'on' : ''}" data-act="${act}" data-v="${o[0]}">${o[1]}</button>`).join('')}</span>`;
-    return `<div class="stg-card"><div class="stg-h">Display</div><p class="stg-p">Every store device shares one colour scheme. Size and the rail are set on each device.</p>${row('Display size', 'How large the whole app renders on this device. Small is 80%, Compact 95%, Large 115%.', seg('scale', SCALES, String(p.scale)))}${ctx.isMobile ? '' : row('Rail', 'Start with the rail collapsed to icons', tgl(p.railmin, 'railmin'))}</div>`;
+    return `<div class="stg-card"><div class="stg-h">Display</div><p class="stg-p">Every store device shares one colour scheme. Size, the title bar and the rail are set on each device.</p>${row('Display size', 'How large the whole app renders on this device. Small is 80%, Compact 95%, Large 115%.', seg('scale', SCALES, String(p.scale)))}${ctx.isMobile ? '' : row('Title bar', 'Move each view’s title into the header and fold search into the logo.', tgl(p.hdr === 'title', 'hdr')) + row('Rail', 'Start with the rail collapsed to icons', tgl(p.railmin, 'railmin'))}</div>`;
   }
   if (sec === 'store') return storeBody(ctx);
   if (sec === 'refresh') return refreshBody(ctx);

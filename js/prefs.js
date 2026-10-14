@@ -35,7 +35,7 @@ const KEY = 'suite_prefs';
 // showcase did on a 1440-wide screen). Container queries see the scaled
 // width, so a half-screen window still gets the half-screen layout.
 export const SCALES = [['0.8', 'Small'], ['0.95', 'Compact'], ['1', 'Default'], ['1.15', 'Large']];
-const DEFAULTS = { railmin: false, scale: '0.95' };
+const DEFAULTS = { railmin: false, scale: '0.95', hdr: 'classic' };
 const LAGOON = ACCENTS.findIndex(a => a[0] === 'Lagoon');
 const STORE_LOOK = { accent: LAGOON, rail: 'ink' };
 // The console's rail is charcoal in its own stylesheet rules.
@@ -48,7 +48,9 @@ export function applyPrefs(frame = document.querySelector('.frame')) {
   const p = prefs(), look = frame.classList.contains('adm') ? CONSOLE_LOOK : STORE_LOOK, a = ACCENTS[look.accent];
   frame.classList.remove('dark');
   for (const c of ['rail-light', 'rail-tint', 'rail-solid', 'rail-deep', 'rail-ink', 'bars-plain', 'bars-tint', 'bars-strong', 'hdr-classic', 'hdr-title']) frame.classList.remove(c);
-  frame.classList.add('rail-' + look.rail, 'bars-plain', 'hdr-classic');
+  // The title bar (hdr-title) moves each view's title into the header and
+  // folds search into the logo; a per-device choice in Settings › Display.
+  frame.classList.add('rail-' + look.rail, 'bars-plain', p.hdr === 'title' ? 'hdr-title' : 'hdr-classic');
   const s = frame.style;
   s.setProperty('--accent', a[1]); s.setProperty('--accent-ink', a[2]); s.setProperty('--accent-soft', a[3]); s.setProperty('--accent-line', a[4]);
   document.documentElement.style.colorScheme = 'light';
