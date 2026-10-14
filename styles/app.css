@@ -2351,3 +2351,14 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .bf-empty .ic svg.i { width: 32px; height: 32px; }
 .bf-empty b { font-size: 19px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
 .bf-empty small { font-size: 14.5px; color: var(--dim); max-width: 46ch; line-height: 1.5; }
+
+/* Title bar (Settings › Display): the header never widens the page. On a
+   narrow window the title gives way first, then the view's buttons scroll
+   sideways inside the bar, and Show map keeps only its icon. */
+.frame.hdr-title .main, .frame.hdr-title .top, .frame.hdr-title #hdrslot { min-width: 0; }
+.frame.hdr-title .top .vh .vt { min-width: 0; }
+.frame.hdr-title .top .vh h2 { overflow: hidden; text-overflow: ellipsis; }
+.frame.hdr-title .top .vh .acts { min-width: 0; flex-shrink: 1; overflow-x: auto; scrollbar-width: none; }
+.frame.hdr-title .top .vh .acts::-webkit-scrollbar { display: none; }
+.frame.hdr-title .top .vh .acts > * { flex: none; }
+@container shell (max-width: 1280px) { .frame.hdr-title .top .btn.showmap { font-size: 0; gap: 0; padding: 0; width: 40px; height: 40px; justify-content: center; flex: none; } .frame.hdr-title .top .btn.showmap svg.i { margin: 0; } }
