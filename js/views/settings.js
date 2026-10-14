@@ -32,9 +32,9 @@ export default {
   },
   // The phone keeps what a person on the floor changes on their own device.
   // Store settings, the refresh focus and target, and the price-check size
-  // are set on a store PC; Field Mode shows once the manager code is on.
+  // are set on a store PC. A manager sees Field Mode first, under Manager.
   // Help and feedback sit together at the foot.
-  mobile(ctx) { return `<div class="mv-head"><div><h2>Settings</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : 'Owner console'} · ${VERSION}</span></div></div><div class="stg-body">${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div>${ctx.store && canEdit(ctx) ? fieldCard(ctx) : ''}<div class="stg-grp-h">Help and feedback</div>${ctx.store ? feedbackBody(ctx) : ''}${howtoBody(true)}</div>`; },
+  mobile(ctx) { return `<div class="mv-head"><div><h2>Settings</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : 'Owner console'} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">Manager</div>${fieldCard(ctx)}<div class="stg-grp-h">This phone</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">Help and feedback</div>${ctx.store ? feedbackBody(ctx) : ''}${howtoBody(true)}</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
