@@ -164,7 +164,7 @@ function helpSheet() {
     k(['Space'], 'Focus: checked, next code') + k(['⌫'], 'Focus: incorrect, next code') + k(['←', '→'], 'Focus: move between codes') + k(['?'], 'this sheet') + k(['Esc'], 'close a sheet') + '</div></div>';
 }
 function middle(ctx, m) {
-  if (!st.sel) return `<div class="scol-empty" style="padding:40px">${ic('m-bfreview')}<b>Nothing on the board yet</b><small>Phones send bays here as they scan. Request a bay on the left to put it on the day list.</small></div>`;
+  if (!st.sel) return `<div class="bf-empty"><span class="ic">${ic('m-bfreview')}</span><b>Nothing on the board yet</b><small>Phones send bays here as they scan. Request a bay on the left to put it on the day list.</small></div>`;
   if (st.sel.startsWith('req:')) {
     const bay = st.sel.slice(4), sys = m.sys?.[bay] || null;
     return `<div class="smid-h"><span class="bigloc">${esc(bay)}</span><span class="bc" title="Bay ${esc(bay)}: scan into the PDT">${barcodeSvg(bay, { module: 1.3, height: 30, text: false })}</span><span class="status req">${ic('clock')}Requested</span>${pin(bay)}<span class="hm"><span><b>${sys ? sys.length : '—'}</b>expected</span><span><b>0</b>scanned</span></span><span class="sp"></span><button class="btn" data-act="cancel-req" data-bay="${esc(bay)}">${ic('x')}Cancel request</button></div>` +

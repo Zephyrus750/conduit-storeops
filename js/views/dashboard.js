@@ -11,6 +11,7 @@ import { addDays, retailPeriod } from '../../shared/time.js';
 import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, ago, dep } from '../ui.js';
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
+import { teamChip, openTeamFor } from '../team.js';
 import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast } from './backdock/common.js';
 import { ratesFor } from './backdock/plan.js';
 import { registerSummary, isFixture, consolidate } from '../../shared/inventory.js';
@@ -192,7 +193,9 @@ const codeName = c => CODE_NAME.get(c) || '';
 function dashTop(ctx) {
     const r = range(), reg = register(ctx, r);
     const tabs = `<div class="tabs" id="ptabs">${PERIODS.map(([k, l]) => `<button class="${period === k ? 'on' : ''}" data-period="${k}">${l}</button>`).join('')}</div>`;
-    return vh(`<span class="greet">${greeting()}</span><span id="dashTitle">How we’re tracking</span>`, '', tabs, 'm-dashboard') +
+    // The team message and today's briefing sit in the title row on a PC.
+    const team = teamChip({ store: ctx.store, session: ctx.session, storeNo: ctx.storeNo, today });
+    return vh(`<span class="greet">${greeting()}</span><span id="dashTitle">How we’re tracking</span>`, '', team + tabs, 'm-dashboard') +
       `<div class="dash"><div class="kpis">${backfillCard(ctx, r)}${refreshCard(ctx, r)}${labelsCard(ctx, r)}</div><div class="side2">${dockCard(ctx, r)}${maintCard(ctx, r)}</div>` +
       `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>Operations register</h3></div><div class="hl">${reg.count} tools · <b style="color:var(--ink);font-weight:600">${reg.need} need attention</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">Modules</div>${reg.html}</div></div>` +
       `<div class="dash2">${todayAt(ctx)}${logistics(ctx)}</div>`;
@@ -206,8 +209,9 @@ export default {
   mount(ctx, root) {
     const re = () => { const top = root.querySelector('#dashTop'); if (top) top.innerHTML = dashTop(ctx); };
     root.addEventListener('click', e => { const b = e.target.closest('[data-period]'); if (b) { period = b.dataset.period; re(); } });
+    root.addEventListener('click', e => { if (e.target.closest('[data-team="open"]')) openTeamFor({ store: ctx.store, session: ctx.session, storeNo: ctx.storeNo, today, onClose: re }); });
     // Today's pasted report lives on the desk that pasted it (bfreview).
     if (ctx.storage && ctx.storeNo) ctx.storage.get(`simreport:${ctx.storeNo}:${today()}`).then(v => { const had = !!report; report = v || null; if (report || had) re(); }).catch(() => {});
-    return ['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock', 'plan', 'inventory'].map(k => ctx.store.on(k, re));
+    return ['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock', 'plan', 'inventory', 'comms'].map(k => ctx.store.on(k, re));
   },
 };
