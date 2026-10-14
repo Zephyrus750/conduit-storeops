@@ -118,7 +118,7 @@ async function enter() {
   admin = null; frame.classList.remove('adm'); applyPrefs(frame); capsSig = (client.session.current?.caps || []).join(',');
   // After an update, What's New once (a device on its first run gets the walkthrough instead).
   { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }
-  team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current) });
+  team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current), desk: () => !isMobile() });
   store.on('status', paintStatus); store.on('reject', r => toast(`${r.code}: ${r.message}`, 'bad'));
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));

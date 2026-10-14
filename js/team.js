@@ -1,10 +1,14 @@
 // Team communication (TODO 2, decision 20): the store's team message and
-// today's briefing, in one strip above every view, desk and phone. Tapping
-// it opens the sheet with both in full; managers and the owner write them
-// there (team.message.set, team.briefing.set). A device hides the strip for
-// a message it has read until a new one is published.
+// today's briefing. On a phone, a strip above the view; on a PC, a card in
+// the Dashboard's title row (teamChip) and a dot on the rail's Dashboard row
+// while it is unread, so no view is pushed down (2026-10-14). Tapping either
+// opens the sheet with both in full; managers and the owner write them there
+// (team.message.set, team.briefing.set). A device marks a message read
+// until a new one is published.
 //
-//   mountTeam({ store, session, host, today, storeNo, isHome }) → { repaint, off }
+//   mountTeam({ store, session, host, today, storeNo, isHome, desk }) → { repaint, off }
+//   teamChip({ store, session, storeNo, today }) → html for the Dashboard
+//   openTeamFor({ store, session, storeNo, today, onClose }) opens the sheet and marks it read
 
 import { ic, esc, toast, fmtTime } from './ui.js';
 import { MESSAGE_MAX, BRIEFING_MAX } from '../shared/reducers/store.js';
@@ -29,16 +33,37 @@ export function richText(text) {
 }
 const canWrite = session => { const c = session.current; return !!(c && (c.owner || c.actas || (c.roles || []).includes('manager'))); };
 const live = (m, today) => m && (!m.until || m.until >= today);
+const state = (store, day) => { const c = store.get('comms') || {}, msg = live(c.message, day) ? c.message : null, brief = c.briefings?.[day] || null; return { msg, brief, key: [msg?.at, brief?.at].filter(Boolean).join('|') }; };
+const firstLine = t => esc(String(t).split('\n').find(x => x.trim()) || '').replace(/\*\*/g, '');
 
-export function mountTeam({ store, session, host, today, storeNo, isHome = () => false }) {
+// The Dashboard's card: unread shows the first line and Read; read (or
+// nothing yet, for a manager) a quiet way back in.
+export function teamChip({ store, session, storeNo, today }) {
+  const { msg, brief, key } = state(store, today()), w = canWrite(session);
+  if (key && seen(storeNo) !== key) {
+    const it = brief || msg, label = brief ? 'Today’s briefing' : 'Team message';
+    return `<button class="tm-chip" type="button" data-team="open">${ic('users')}<span class="t"><b>${label}${msg && brief ? ' and team message' : ''}</b><span>${firstLine(it.text)}</span></span><span class="rd">Read</span></button>`;
+  }
+  if (key || w) return `<button class="tm-chip read" type="button" data-team="open">${ic('users')}<span class="t"><b>${key ? 'Team message and briefing' : 'Write a team message or briefing'}</b></span></button>`;
+  return '';
+}
+export function openTeamFor({ store, session, storeNo, today, onClose }) {
+  return openTeam({ store, session, today, onClose: () => { markSeen(storeNo, state(store, today()).key); document.querySelector('.rrow[data-view="dashboard"]')?.classList.remove('tm-unread'); onClose?.(); } });
+}
+
+export function mountTeam({ store, session, host, today, storeNo, isHome = () => false, desk = () => false }) {
   if (!host) return { off() {}, repaint() {} };
-  const now = () => { const c = store.get('comms') || {}, day = today(), msg = live(c.message, day) ? c.message : null, brief = c.briefings?.[day] || null; return { msg, brief, key: [msg?.at, brief?.at].filter(Boolean).join('|') }; };
+  const now = () => state(store, today());
+  const dot = on => document.querySelector('.rrow[data-view="dashboard"]')?.classList.toggle('tm-unread', on);
   const paint = () => {
     const { msg, brief, key } = now(), w = canWrite(session);
+    // A PC: no strip; the Dashboard carries it (teamChip) and the rail's dot says it is unread.
+    if (desk()) { host.hidden = true; host.innerHTML = ''; dot(!!key && seen(storeNo) !== key); return; }
+    dot(false);
     // Unread: the whole strip, on every view. Read (or nothing yet): a small
     // way back in on the home screens, to read again or for a manager to write.
     if (key && seen(storeNo) !== key) {
-      const first = t => esc(String(t).split('\n').find(x => x.trim()) || '').replace(/\*\*/g, '');
+      const first = firstLine;
       host.hidden = false; host.className = 'teambar';
       host.innerHTML = `<button class="tb-open" data-team="open">${ic('users')}<span class="tb-txt">${msg ? `<b>Team message</b> ${first(msg.text)}` : ''}${msg && brief ? '<i class="tb-sep"></i>' : ''}${brief ? `<b>Today’s briefing</b> ${first(brief.text)}` : ''}</span><span class="tb-more">Read</span></button><button class="tb-x" data-team="hide" aria-label="Hide until there is something new" title="Hide until there is something new">${ic('x')}</button>`;
     } else if (isHome() && (key || w)) {
@@ -51,7 +76,7 @@ export function mountTeam({ store, session, host, today, storeNo, isHome = () =>
   host.addEventListener('click', onClick);
   paint();
   const offs = [store.on('comms', paint), session.on('change', paint)];
-  return { repaint: paint, off() { host.removeEventListener('click', onClick); for (const o of offs) o(); host.hidden = true; host.innerHTML = ''; } };
+  return { repaint: paint, off() { host.removeEventListener('click', onClick); for (const o of offs) o(); host.hidden = true; host.innerHTML = ''; dot(false); } };
 }
 
 export function openTeam({ store, session, today, onClose }) {

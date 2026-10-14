@@ -2325,3 +2325,29 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .mv-sel.mt .recur { color: #FBBF24; }
 .mv-sel.mt .sx-h { align-items: flex-start; line-height: 1.25; }
 .mv-sel.mt .sx-h .n { flex: none; }
+
+/* The team message and today's briefing on a PC: a card in the Dashboard's
+   title row (js/team.js teamChip), and a dot on the rail's Dashboard row
+   while it is unread. */
+.vh .acts:has(.tm-chip) { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.tm-chip { display: flex; align-items: center; gap: 12px; min-width: 0; max-width: 560px; padding: 9px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.tm-chip > svg.i { width: 20px; height: 20px; color: var(--accent-ink); flex: none; }
+.tm-chip .t { min-width: 0; display: flex; flex-direction: column; }
+.tm-chip .t b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-chip .t span { font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-chip .rd { margin-left: auto; padding-left: 6px; flex: none; color: var(--accent-ink); font-weight: 700; font-size: 13px; }
+.tm-chip.read { border: 1px dashed var(--line); background: none; padding: 8px 12px; }
+.tm-chip.read .t b { color: var(--dim); }
+.tm-chip.read > svg.i { width: 17px; height: 17px; color: var(--dim); }
+.tm-chip:hover { border-color: var(--accent); }
+@container shell (max-width: 1100px) { .tm-chip { max-width: 320px; } }
+.rrow.tm-unread::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #F87171; flex: none; }
+.app.railmin .rrow.tm-unread::after { position: absolute; right: 8px; top: 6px; }
+
+/* Backfill review with nothing on the board: the view's own icon in its
+   accent tile (not the green of a column's "all done"), at a readable size. */
+.bf-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 72px 24px; text-align: center; color: var(--dim); }
+.bf-empty .ic { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); margin-bottom: 10px; }
+.bf-empty .ic svg.i { width: 32px; height: 32px; }
+.bf-empty b { font-size: 19px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.bf-empty small { font-size: 14.5px; color: var(--dim); max-width: 46ch; line-height: 1.5; }
