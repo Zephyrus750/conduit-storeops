@@ -13,10 +13,7 @@ import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast } from './backdock/common.js';
 import { ratesFor } from './backdock/plan.js';
-import { mountMap, bindMapChrome, hasMap, mapSymbols, mapFloors } from '../map.js';
-import { issuePin } from './maintenance.js';
 import { registerSummary, isFixture, consolidate } from '../../shared/inventory.js';
-import { prefs } from '../prefs.js';
 
 const TARGET = 100, DAILY = 20;
 const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month']];
@@ -154,12 +151,10 @@ function register(ctx, r) {
   return { html, count: rows.length, need: need.length };
 }
 
-// ── Today at the store, logistics and the combined map (Floor P2) ───────
-// Five tiles for what the floor did today (ShelfSearcher's "Today at"),
-// three logistics cards from the inventory hub, and the store map with its
-// layers switched by chips: emergency signs, open maintenance issues, price
-// checks and label checks. The map mounts once in its own container; the
-// cards above it re-render without touching it.
+// ── Today at the store and logistics (Floor P2) ─────────────────────────
+// Five tiles for what the floor did today (ShelfSearcher's "Today at") and
+// three logistics cards from the inventory hub. The store map left the
+// dashboard (2026-10-14); it has its own view.
 function todayAt(ctx) {
   const t = today(), wk = weekId(), R = ctx.store.get('refresh'), marks = Object.values(R.weeks[wk] || {});
   const rToday = marks.filter(m => dayOf(m.at) === t).length;
@@ -194,19 +189,6 @@ const fmtDay = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { 
 const CODE_NAME = new Map(); for (const list of Object.values(MICRO)) for (const e of list) if (!CODE_NAME.has(microCode(e))) CODE_NAME.set(microCode(e), microName(e));
 const codeName = c => CODE_NAME.get(c) || '';
 
-const LAYERS = [['em', 'Emergency', '#DC2626', 'm-emergency'], ['mt', 'Maintenance', '#6F4527', 'tool'], ['pc', 'Price checks', '#0FA3A3', 'barcode'], ['li', 'Label checks', '#7C3AED', 'm-labelint']];
-const LKEY = 'dash_layers', MKEY = 'dash_map';
-const layers = () => { try { return { em: true, mt: true, pc: true, li: false, ...JSON.parse(localStorage.getItem(LKEY) || '{}') }; } catch { return { em: true, mt: true, pc: true, li: false }; } };
-const mapOpen = () => { try { return localStorage.getItem(MKEY) !== '0'; } catch { return true; } };
-function mapCard() {
-  if (!hasMap()) return '';
-  const on = layers(), hasPc = mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order');
-  // Every floor, so back-of-house pins and checks can be reached.
-  const fls = mapFloors(), floorSeg = fls.length > 1 && mapOpen() ? `<div class="seg2 floorseg" data-floorseg>${fls.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}" title="${f.type === 'boh' ? 'Back of house' : 'Sales floor'}">${esc(f.name)}</button>`).join('')}</div>` : '';
-  return `<div class="card dmap${mapOpen() ? '' : ' closed'}" id="dmap"><div class="ch"><h3>${ic('m-map')}Store map</h3><div class="dlayers">${LAYERS.filter(l => l[0] !== 'pc' || hasPc).map(([k, label, col, icon]) => `<button class="dlay${on[k] ? ' on' : ''}" data-layer="${k}" style="--lc:${col}" aria-pressed="${!!on[k]}">${ic(icon)}${label}</button>`).join('')}</div>${floorSeg}<button class="btn sm" data-act="dmap-toggle">${mapOpen() ? 'Hide map' : 'Show map'}</button></div>` +
-    `<div class="dmap-body"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="dmap-tools"><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span></div></div><div class="dmap-leg" id="dmapLeg"></div></div></div>`;
-}
-
 function dashTop(ctx) {
     const r = range(), reg = register(ctx, r);
     const tabs = `<div class="tabs" id="ptabs">${PERIODS.map(([k, l]) => `<button class="${period === k ? 'on' : ''}" data-period="${k}">${l}</button>`).join('')}</div>`;
@@ -219,39 +201,10 @@ function dashTop(ctx) {
 export default {
   id: 'dashboard', title: 'Dashboard', icon: 'm-dashboard',
   desktop(ctx) {
-    return `<div id="dashTop">${dashTop(ctx)}</div>` + mapCard();
+    return `<div id="dashTop">${dashTop(ctx)}</div>`;
   },
   mount(ctx, root) {
-    const re = () => { const top = root.querySelector('#dashTop'); if (top) top.innerHTML = dashTop(ctx); paintLayers(); };
-    // The combined map: mounted once, its layers repainted when they change.
-    const stage = root.querySelector('#dmap #mapstage');
-    // A tapped issue pin opens it in Maintenance.
-    const map = stage && mapOpen() ? mountMap(stage, { badges: true, onSelect: info => { if (info.kind === 'pin') ctx.go('maintenance', { issue: info.id }); } }) : null;
-    if (map) bindMapChrome(root.querySelector('#dmap'), map);
-    const paintLayers = () => {
-      if (!map) return;
-      const on = layers();
-      map.svg.classList.toggle('showem', !!on.em);
-      map.priceChecks(on.pc ? (prefs().priceChecks === 'off' ? 'small' : prefs().priceChecks || 'small') : 'off');
-      map.clearOverlays();
-      const fids = map.floors().map(f => f.id), here = i => !i.floor || !fids.includes(i.floor) || i.floor === map.floorId();
-      const open = on.mt ? Object.entries(ctx.store.get('issues')).map(([id, i]) => ({ id, ...i })).filter(i => !i.removed && i.status !== 'completed' && i.x != null && here(i)) : [];
-      if (open.length) map.drawPins(open.map(i => ({ ...issuePin(i), id: i.id })));
-      // Label checks: shelves of the micro-departments checked this cycle in
-      // blue, assigned but not yet checked in amber.
-      const marks = {};
-      if (on.li) { const L = ctx.store.get('labels'), done = L.checks[cycleId(L.cycleLen)] || {}; for (const [m, shelves] of Object.entries(L.assign || {})) for (const sh of shelves) if (done[m]) marks[sh] = 'checked'; else if (!marks[sh]) marks[sh] = 'lidue'; }
-      map.setMarks(marks);
-      const leg = root.querySelector('#dmapLeg');
-      if (leg) leg.innerHTML = [on.em && `<span><i style="background:#DC2626"></i>Emergency signs</span>`, on.mt && `<span><i style="background:#DC2626;border-radius:50%"></i>${open.length} open issue${open.length === 1 ? '' : 's'}</span>`, on.pc && `<span><i style="background:#0FA3A3;border-radius:50%"></i>Price checks</span>`, on.li && `<span><i style="background:#2563EB"></i>Checked this cycle</span><span><i style="background:#F59E0B"></i>Assigned, not checked</span>`].filter(Boolean).join('') || '<span class="cs-dim">No layers on</span>';
-    };
-    paintLayers();
-    if (map) map.stage.addEventListener('mapfloor', paintLayers);
-    root.addEventListener('click', e => {
-      const lb = e.target.closest('[data-layer]');
-      if (lb) { const on = layers(); on[lb.dataset.layer] = !on[lb.dataset.layer]; try { localStorage.setItem(LKEY, JSON.stringify(on)); } catch {} lb.classList.toggle('on', on[lb.dataset.layer]); lb.setAttribute('aria-pressed', String(on[lb.dataset.layer])); paintLayers(); return; }
-      if (e.target.closest('[data-act="dmap-toggle"]')) { try { localStorage.setItem(MKEY, mapOpen() ? '0' : '1'); } catch {} ctx.rerender(); }
-    });
+    const re = () => { const top = root.querySelector('#dashTop'); if (top) top.innerHTML = dashTop(ctx); };
     root.addEventListener('click', e => { const b = e.target.closest('[data-period]'); if (b) { period = b.dataset.period; re(); } });
     // Today's pasted report lives on the desk that pasted it (bfreview).
     if (ctx.storage && ctx.storeNo) ctx.storage.get(`simreport:${ctx.storeNo}:${today()}`).then(v => { const had = !!report; report = v || null; if (report || had) re(); }).catch(() => {});

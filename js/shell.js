@@ -99,7 +99,7 @@ function reloaded() { try { return performance.getEntriesByType('navigation')[0]
 function openPendingLink(s) {
   const l = pendingLink; pendingLink = null; if (!l) return false;
   if (l.store !== s.store) { toast(`That ${l.issue ? 'work order' : 'shelf link'} is for store ${l.store}. Add that store from Store details to open it.`); return false; }
-  if (l.issue) { if (isMobile()) { toast('Work orders open on a store PC'); return false; } show('maintenance', { issue: l.issue }); return true; }
+  if (l.issue) { if (isMobile() && deskOnly(VIEWS.maintenance)) { toast('Work orders open on a store PC'); return false; } show('maintenance', { issue: l.issue }); return true; }
   show('map', { select: l.shelf }); return true;
 }
 
@@ -230,7 +230,11 @@ function buildAdminRail() {
 }
 
 // ── covers ────────────────────────────────────────────────────────────
-function hideCover() { $('#cover')?.remove(); }
+// The tab names the sign-in while it shows, so a PC with several tabs open
+// can tell it from a signed-in one.
+const TITLE = document.title;
+function hideCover() { $('#cover')?.remove(); document.title = TITLE; }
+const signinTitle = (what = 'Sign in') => { document.title = `${TITLE} | ${what}`; };
 function cover(html, cls = '') { hideCover(); const el = document.createElement('div'); el.id = 'cover'; el.className = 'signin ' + cls; el.innerHTML = html; frame.appendChild(el); return el; }
 function showLoading() {
   const s = client.session.current;
@@ -253,7 +257,7 @@ async function showSignin({ error, owner } = {}) {
     `<div class="si-cred"></div>` +
     `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit"></button>` +
     `<div class="si-foot"><span>Works offline</span><a class="si-owner-link" data-shell-act="owner-signin">Owner sign-in</a><span class="ver">${VERSION}</span></div></form>`;
-  const el = cover(polyBackground() + siCard(form));
+  const el = cover(polyBackground() + siCard(form)); signinTitle();
   if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? "Sign in to open the work order." : `Sign in to open shelf ${pendingLink.shelf}.`); }
   const cred = () => {
     const f = $('#siForm', el);
@@ -303,7 +307,7 @@ async function showContinue(s) {
   const form = `<form class="si-form" id="siCont"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>Welcome back</h2><div class="si-sub">${link ? `This ${mobile ? 'device' : 'PC'} is signed in. Continue${esc(link)}.` : `This ${mobile ? 'device' : 'PC'} is signed in.`}</div>` +
     `<div class="si-store"><span class="si-sav">${esc(s.store)}</span><div><b>${esc(name)}</b><small>Store ${esc(s.store)} · ${area}</small></div>${ready ? `<span class="si-ready">${ic('check')}Ready</span>` : ''}</div>` +
     `<button class="si-cta" type="submit">Continue in ${esc(name)}${ic('arrow')}</button><a class="si-alt" data-shell-act="signout" role="button" tabindex="0">Use a different store</a></form>`;
-  const el = cover(polyBackground() + siCard(form));
+  const el = cover(polyBackground() + siCard(form)); signinTitle();
   $('#siCont', el).addEventListener('submit', e => { e.preventDefault(); e.target.querySelector('.si-cta').disabled = true; enter(); });
   if (!mobile) try { $('#siCont .si-cta', el).focus(); } catch {}   // Enter continues at a desk
 }
@@ -312,7 +316,7 @@ function showOwnerSignin(error) {
     `<label for="ownerKey">Owner key</label><div class="si-pin own"><input id="ownerKey" name="ownerKey" type="password" autocomplete="current-password" placeholder="••••••••••••" required>${ic('lock')}</div>` +
     `<label>This device</label><div class="si-field own"><span>${esc(client.session.device || 'this device')}</span><small>${esc(WORKER.replace(/^https?:\/\//, ''))}</small></div>` +
     `<div class="si-err" id="siErr">${error ? esc(error) : ''}</div>${workerLine()}<button class="si-cta own" type="submit">Open the admin console${ic('arrow')}</button>` +
-    `<div class="si-foot own"><a data-shell-act="store-signin">Store sign-in instead</a><span class="ver">Conduit ${VERSION}</span></div></form></div>`);
+    `<div class="si-foot own"><a data-shell-act="store-signin">Store sign-in instead</a><span class="ver">Conduit ${VERSION}</span></div></form></div>`); signinTitle('Owner sign-in');
   $('#ownerKey', el).focus();
   $('#siOwner', el).addEventListener('submit', async e => {
     e.preventDefault();
@@ -408,6 +412,9 @@ function paintStatus(s) {
   el.innerHTML = `<span class="dot ${s.state === 'live' || s.state === 'polling' ? '' : 'off'}"></span>${txt}`;
   el.title = s.lastError || '';
 }
+// A view's deskOnly is true, or a test of the session: Maintenance is on a
+// manager's phone and nobody else's.
+function deskOnly(v) { return typeof v.deskOnly === 'function' ? !!v.deskOnly(client.session.current) : !!v.deskOnly; }
 function markRail() {
   const id = current, no = currentArg?.no == null ? null : String(currentArg.no);
   for (const b of $$('.rrow[data-view]')) b.classList.toggle('on', b.getAttribute('data-view') === id && (!b.dataset.no || b.dataset.no === no));
@@ -424,7 +431,7 @@ function show(id, arg) {
   if (id === 'launcher') return openLauncher();
   let view = VIEWS[id] || VIEWS[admin ? 'admin' : 'dashboard'];
   // A desk-only view (deskOnly) is not part of the phone: a link to one goes home.
-  if (mobile && view.deskOnly) { id = HOME[ws] || 'map'; view = VIEWS[id]; arg = undefined; }
+  if (mobile && deskOnly(view)) { id = HOME[ws] || 'map'; view = VIEWS[id]; arg = undefined; }
   // Admin views need the owner session; store views need a store.
   if (view.id.startsWith('admin') && !admin) view = VIEWS.dashboard;
   if (!view.id.startsWith('admin') && view.id !== 'settings' && !store) view = VIEWS.admin;
@@ -541,7 +548,7 @@ function openDepts() {
 }
 function openMore() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
-  const cur = client.session.current, area = WORKSPACES.find(w => w[0] === ws)?.[1] || '', items = MORE[ws].filter(m => !offView(m[0]));
+  const cur = client.session.current, area = WORKSPACES.find(w => w[0] === ws)?.[1] || '', items = MORE[ws].filter(m => !offView(m[0]) && !(VIEWS[m[0]] && deskOnly(VIEWS[m[0]])));
   const row = m => `<button class="mo-row" type="button" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><b>${m[2]}${m[3] ? `<small>${m[3]}</small>` : ''}</b>${ic('chev', 'chv')}</button>`;
   const group = (label, list) => list.length ? `<div class="mo-sec">${label}</div><div class="mo-list">${list.map(row).join('')}</div>` : '';
   sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>More</h3>${SHEET_X}</div>` +
@@ -589,7 +596,7 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>Updating…</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]).filter(v => !(isMobile() && v.deskOnly)), phone: () => isMobile() });
+const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]).filter(v => !(isMobile() && deskOnly(v))), phone: () => isMobile() });
 // The phone's bar is typed into directly: a compact list drops under it.
 const msBar = search.bar($('#msearch'), () => !admin && !!store);
 
