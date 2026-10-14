@@ -363,7 +363,7 @@ function template(fl) {
 // clone: true builds a throwaway copy; 'preview' reuses one kept for the
 // search palette's small map, so opening the palette never pays for a
 // fresh five-thousand-node tree.
-export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false, tip = null, tips = true, doc = null, badges = true, clone = false } = {}) {
+export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false, tip = null, tips = true, doc = null, badges = true, clone = false, unnamed = false } = {}) {
   const fl = doc ? parseFloors(doc) : floors;
   let cur = fl.find(f => f.type === 'foh') || fl[0];
   // A stage can outlive a view (the phone keeps its map between map modes):
@@ -821,6 +821,8 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     if (pin) onSelect?.({ kind: 'pin', id: pin.getAttribute('data-pin'), point });
     else if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
     else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, el: g, point, long: Date.now() - t > 500 }); }   // the shelf tapped, never its whole run
+    // Field Mode taps a shelf the map has no name for: it is known by its floor and position.
+    else if (g && unnamed) { const r = g.querySelector('.shelf'), n = k => Number(r?.getAttribute(k)); onSelect?.({ kind: 'unnamed', el: g, point, floor: g.closest('.mfl')?.getAttribute('data-fid') || null, pos: r?.tagName === 'circle' ? { x: n('cx'), y: n('cy') } : { x: n('x'), y: n('y') } }); }
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m), point });
     else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
   });

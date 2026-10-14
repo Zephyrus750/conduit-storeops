@@ -10,7 +10,13 @@
        is a shelf code ("A17 S2"); a free-text name ("Kitchen gadgets") is
        shown so the owner can make the change by hand. Either way Conduit
        marks the suggestion accepted.
+     · NAME   → (Field Mode) a shelf the map has no name for, found by its
+                floor and position: [Accept] names it when the name is a
+                shelf code.
      · FLAG   → [Resolve] marks it accepted once handled; [Decline] declines.
+     A suggestion from Field Mode says so. The owner console can also apply
+     shelf-code renames and names straight to the published map; open the
+     store from Conduit again afterwards so this draft has them.
      · Clicking a row highlights the shelf on the canvas.
 */
 (function () {
@@ -84,6 +90,32 @@
     return count;
   }
 
+  // A Field Mode name: the unnamed shelf at that position on that floor.
+  function applyName(p) {
+    var to = String(p.to || '').trim().toUpperCase(), m = CODE.exec(to), pos = p.pos;
+    if (!m) return -1;
+    if (!pos) return 0;
+    if (typeof saveState === 'function') saveState();
+    if (typeof syncCurrentFloor === 'function') { try { syncCurrentFloor(); } catch (e) {} }
+    var count = 0;
+    function nameIn(arr) {
+      (arr || []).forEach(function (s) {
+        if (s && !s.name && Math.abs(Number(s.x) - pos.x) < 0.5 && Math.abs(Number(s.y) - pos.y) < 0.5) { s.name = m[1]; s.subname = m[2] || ''; count++; }
+      });
+    }
+    try {
+      if (typeof state !== 'undefined') {
+        if (!p.floor || p.floor === state.currentFloorId) nameIn(state.shelves);
+        (state.floors || []).forEach(function (f) {
+          if (f.id === state.currentFloorId || (p.floor && f.id !== p.floor)) return;
+          nameIn(f.data && f.data.shelves);
+        });
+      }
+    } catch (e) {}
+    if (count && typeof renderAll === 'function') { try { renderAll(); } catch (e) {} }
+    return count;
+  }
+
   /* ── UI ── */
   function ensureUI() {
     if ($('tabSuggest')) return;
@@ -121,16 +153,16 @@
       return;
     }
     list.innerHTML = edits.map(function (p) {
-      var isRename = p.kind === 'rename';
-      var head = esc(p.shelf) + (isRename ? ' → ' + esc(p.to) : '');
-      var sub = (isRename ? 'Rename' + (p.note ? ': ' + esc(p.note) : '') : esc(p.note || 'Flagged for review')) + (p.floor ? ' · ' + esc(p.floor) : '');
+      var isRename = p.kind === 'rename', isName = p.kind === 'name';
+      var head = isName ? 'Unnamed shelf' + (p.near ? ' beside ' + esc(p.near) : '') + ' → ' + esc(p.to) : esc(p.shelf) + (isRename ? ' → ' + esc(p.to) : '');
+      var sub = (isRename ? 'Rename' + (p.note ? ': ' + esc(p.note) : '') : isName ? 'Name it' + (p.note ? ': ' + esc(p.note) : '') : esc(p.note || 'Flagged for review')) + (p.floor ? ' · ' + esc(p.floor) : '') + (p.src === 'field' ? ' · Field Mode' : '');
       return '<div class="sq-row" data-sid="' + esc(p.id) + '" data-shelf="' + esc(p.shelf) + '">' +
-        '<span class="sq-ic">' + (isRename ? '✎' : '⚑') + '</span>' +
+        '<span class="sq-ic">' + (isRename ? '✎' : isName ? '＋' : '⚑') + '</span>' +
         '<span class="sq-tx">' +
           '<b>' + head + '</b>' +
           '<em>' + sub + ' · ' + fmt(p.at) + '</em>' +
         '</span>' +
-        '<button class="sq-btn accept" data-act="accept">' + (isRename ? 'Accept' : 'Resolve') + '</button>' +
+        '<button class="sq-btn accept" data-act="accept">' + (isRename || isName ? 'Accept' : 'Resolve') + '</button>' +
         '<button class="sq-btn" data-act="dismiss">Decline</button>' +
         '</div>';
     }).join('');
@@ -158,6 +190,10 @@
         var n = applyRename(p);
         if (n === -1 && !confirm('"' + p.to + '" isn\'t a shelf code, so it can\'t be applied for you.\n\nMake the change on the map, then press OK to mark it accepted in Conduit.')) return;
         if (n === 0 && !confirm('No shelf "' + p.shelf + '" on the loaded map.\n\nOpen the store from Conduit first, or mark it accepted anyway?')) return;
+      } else if (p.kind === 'name') {
+        var k = applyName(p);
+        if (k === -1 && !confirm('"' + p.to + '" isn\'t a shelf code, so it can\'t be applied for you.\n\nName the shelf on the map, then press OK to mark it accepted in Conduit.')) return;
+        if (k === 0 && !confirm('No unnamed shelf at that spot on the loaded map' + (p.near ? ' (beside ' + p.near + ')' : '') + '.\n\nOpen the store from Conduit first, or mark it accepted anyway?')) return;
       }
       resolveRemote(p.id, 'accepted');
       return;

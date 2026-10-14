@@ -9,6 +9,7 @@
 
 import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName, DEPTS_DEFAULT } from '../ui.js';
 import { parseMapFile, renderMap, publishBody } from '../../shared/maprender.js';
+import { applyEdit, parseCode } from '../../shared/mapedits.js';
 import { mountMap, bindMapChrome } from '../map.js';
 import { MAP_EDITOR_URL } from '../config.js';
 import { TOOLS } from '../../shared/tools.js';
@@ -309,19 +310,25 @@ function mapTab(rec, c) {
     `<div class="si-err" id="pubErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit">${ic('check')}Publish</button></div><p class="lbl">Publishing writes the document to the store and logs a <span class="mono">map.publish</span> event with your owner id. Every signed-in device downloads the new version once and keeps it offline.</p></form>`;
   return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>Published map</h3>${editorBtn('sm')}<span class="btn sm" data-act="refresh">${ic('refresh')}Refresh</span></div>${cur}${preview}</div><div class="ad-col">${form}${editsCard(c.snap?.mapedits)}</div></div>`;
 }
-// The store's suggested edits: the owner makes each change in the map
-// editor, publishes, then accepts it (or declines it) here.
+// The store's suggested edits. A rename or a name that reads as a shelf code
+// applies to the published map from here (Apply to map: a new version, and
+// the suggestion accepted); anything else is made in the map editor, then
+// accepted, or declined.
+const canApply = x => (x.kind === 'rename' || x.kind === 'name') && !!parseCode(x.to);
+const editWhat = x => x.kind === 'rename' ? `Rename to <b>${esc(x.to)}</b>${x.note ? ` · ${esc(x.note)}` : ''}` : x.kind === 'name' ? `Name it <b>${esc(x.to)}</b>${x.note ? ` · ${esc(x.note)}` : ''}` : `${x.src === 'field' ? 'Note' : 'Flag'} · ${esc(x.note)}`;
+const editShelf = x => x.kind === 'name' ? `<b>Unnamed</b><small>${x.near ? 'beside ' + esc(x.near) : esc(x.floor || '')}</small>` : `<b>${esc(x.shelf)}</b>${x.floor ? `<small>${esc(x.floor)}</small>` : ''}`;
+const fieldTag = x => x.src === 'field' ? ` <span class="fq-src">${ic('m-map')}Field Mode</span>` : '';
 function editsCard(edits) {
   if (edits === undefined) return `<div class="card"><div class="ch"><h3>Suggested edits</h3></div><div class="ohint">Loading…</div></div>`;
   const all = Object.entries(edits || {}).map(([id, x]) => ({ id, ...x }));
   const open = all.filter(x => x.status === 'open').sort((a, b) => (a.at < b.at ? -1 : 1));
   const done = all.filter(x => x.status !== 'open').sort((a, b) => (a.resolvedAt < b.resolvedAt ? 1 : -1)).slice(0, 8);
-  const what = x => x.kind === 'rename' ? `Rename to <b>${esc(x.to)}</b>${x.note ? ` · ${esc(x.note)}` : ''}` : `Flag · ${esc(x.note)}`;
-  const row = x => `<tr><td class="mono"><b>${esc(x.shelf)}</b>${x.floor ? `<small>${esc(x.floor)}</small>` : ''}</td><td style="white-space:normal">${what(x)}</td><td class="mono">${fmtTime(x.at)}<small>${esc(x.by || '')}</small></td><td>${x.status === 'open' ? `<span class="ad-edacts"><button class="btn sm primary" data-act="edit-accept" data-id="${esc(x.id)}">${ic('check')}Accept</button><button class="btn sm" data-act="edit-decline" data-id="${esc(x.id)}">Decline</button></span>` : `${status(x.status === 'accepted' ? 'good' : '', x.status === 'accepted' ? 'Accepted' : 'Declined')}<small>${fmtTime(x.resolvedAt)}${x.reply ? ' · ' + esc(x.reply) : ''}</small>`}</td></tr>`;
-  return `<div class="card"><div class="ch"><h3>Suggested edits</h3><span class="cs-dim">${open.length} waiting · from the store's Suggest map edits</span></div>` +
+  const row = x => `<tr><td class="mono">${editShelf(x)}</td><td style="white-space:normal">${editWhat(x)}${fieldTag(x)}</td><td class="mono">${fmtTime(x.at)}<small>${esc(x.by || '')}</small></td><td>${x.status === 'open' ? `<span class="ad-edacts">${canApply(x) ? `<button class="btn sm primary" data-act="edit-apply" data-id="${esc(x.id)}" title="Write it into the published map and publish a new version">${ic('check')}Apply to map</button>` : ''}<button class="btn sm${canApply(x) ? '' : ' primary'}" data-act="edit-accept" data-id="${esc(x.id)}" title="${canApply(x) ? 'Made it by hand in the editor' : 'Done'}">${canApply(x) ? '' : ic('check')}${canApply(x) ? 'Accept' : 'Resolve'}</button><button class="btn sm" data-act="edit-decline" data-id="${esc(x.id)}">Decline</button></span>` : `${status(x.status === 'accepted' ? 'good' : '', x.status === 'accepted' ? 'Accepted' : 'Declined')}<small>${fmtTime(x.resolvedAt)}${x.reply ? ' · ' + esc(x.reply) : ''}</small>`}</td></tr>`;
+  const apply = open.filter(canApply);
+  return `<div class="card"><div class="ch"><h3>Suggested edits</h3><span class="cs-dim">${open.length} waiting · from Suggest map edits and Field Mode</span>${apply.length > 1 ? `<button class="btn sm primary" data-act="edit-apply-all">${ic('check')}Apply all ${apply.length} to the map</button>` : ''}</div>` +
     table(['Shelf', 'Suggestion', 'Sent', ''], open.map(row), 'ad-tbl') +
     (done.length ? `<div class="ad-subh">Recently resolved</div>` + table(['Shelf', 'Suggestion', 'Sent', ''], done.map(row), 'ad-tbl') : '') +
-    `<p class="lbl">A suggestion never changes the map. Make the change in the map editor, publish the new version here, then accept it; the store sees it resolved.</p></div>`;
+    `<p class="lbl">Apply to map writes a shelf-code rename or name into the published map and publishes it as a new version; the store has it within a minute and sees the suggestion accepted. Anything else (a free-text name, a flag) is made in the map editor, then accepted here.</p></div>`;
 }
 const editorBtn = (cls = '') => `<button class="btn${cls ? ' ' + cls : ''}" data-act="open-editor" title="Open the full map editor in a new tab">${ic('edit')}Map editor</button>`;
 function openEditor() {
@@ -377,6 +384,11 @@ async function onStoreClick(e, ctx) {
   if (act === 'tab') { st.tab = a.dataset.tab; st.rot = null; st.rotDone = null; st.edit = false; ctx.rerender(); }
   else if (act === 'refresh') { invalidate(no); ctx.rerender(); }
   else if (act === 'open-editor') openEditor();
+  else if (act === 'edit-apply' || act === 'edit-apply-all') {
+    const open = Object.entries(c.snap?.mapedits || {}).map(([id, x]) => ({ id, ...x })).filter(x => x.status === 'open' && canApply(x));
+    const list = act === 'edit-apply' ? open.filter(x => x.id === a.dataset.id) : open;
+    a.disabled = true; await applyToMap(ctx, no, list); a.disabled = false;
+  }
   else if (act === 'edit-accept' || act === 'edit-decline') {
     const status = act === 'edit-accept' ? 'accepted' : 'declined';
     const note = prompt(status === 'accepted' ? 'Accepted: the change is in a published map version. Note for the store (optional):' : 'Decline this suggestion. Why? (optional)', '');
@@ -511,11 +523,11 @@ const maps = {
     const rows = stores.map(r => { const c = forStore(r.no), m = c.map, open = Object.values(c.snap?.mapedits || {}).filter(x => x.status === 'open').length;
       return `<tr><td class="mono"><a class="go" data-view="adminstore" data-no="${esc(r.no)}" data-tab="map">${esc(r.no)}</a></td><td>${esc(r.name)}</td><td class="mono">${m === undefined ? '…' : m && m.version ? esc(m.version) : '<span class="cs-dim">none</span>'}</td><td>${m?.at ? ago(m.at) : '—'}</td><td>${m?.floors ? m.floors.length : '—'}</td><td>${c.snap === undefined ? '…' : open ? `<b class="c-amber">${open}</b>` : '0'}</td><td><button class="btn sm" data-act="maps-editor" data-no="${esc(r.no)}">${ic('edit')}Open editor</button></td></tr>`; });
     const queue = stores.flatMap(r => Object.entries(forStore(r.no).snap?.mapedits || {}).filter(([, x]) => x.status === 'open').map(([id, x]) => ({ id, no: r.no, name: r.name, ...x }))).sort((a, b) => (a.at < b.at ? -1 : 1));
-    const what = x => x.kind === 'rename' ? `Rename <b class="mono">${esc(x.shelf)}</b> to <b class="mono">${esc(x.to)}</b>` : `Flag <b class="mono">${esc(x.shelf)}</b>`;
-    const q = queue.map(x => `<div class="li"><span class="loc mono">${esc(x.no)}</span><span class="nm">${what(x)}${x.note ? ` · ${esc(x.note)}` : ''} <span class="cs-dim">· ${ago(x.at)}</span></span><a class="btn sm" data-view="adminstore" data-no="${esc(x.no)}" data-tab="map">Review</a></div>`).join('');
+    const what = x => x.kind === 'rename' ? `Rename <b class="mono">${esc(x.shelf)}</b> to <b class="mono">${esc(x.to)}</b>` : x.kind === 'name' ? `Name the unnamed shelf${x.near ? ` beside <b class="mono">${esc(x.near)}</b>` : ''} as <b class="mono">${esc(x.to)}</b>` : `${x.src === 'field' ? 'Note on' : 'Flag'} <b class="mono">${esc(x.shelf)}</b>`;
+    const q = queue.map(x => `<div class="li fq-li"><span class="loc mono">${esc(x.no)}</span><span class="nm">${what(x)}${x.note ? ` · ${esc(x.note)}` : ''}${fieldTag(x)} <span class="cs-dim">· ${ago(x.at)}</span></span><span class="fq-acts">${canApply(x) ? `<button class="btn sm primary" data-act="maps-apply" data-no="${esc(x.no)}" data-id="${esc(x.id)}">${ic('check')}Apply to map</button>` : ''}<a class="btn sm" data-view="adminstore" data-no="${esc(x.no)}" data-tab="map">Review</a></span></div>`).join('');
     return vh('Maps', sub('every store’s published map', 'suggested edits from the floor'), `${editorBtn()}<button class="btn" data-act="maps-refresh">${ic('refresh')}Refresh</button>`, 'm-map') +
       `<div class="card"><div class="ch"><h3>Published maps</h3><span class="cs-dim">open the editor on a store, publish, then accept its suggestions</span></div>${table(['Store', 'Name', 'Version', 'Published', 'Floors', 'Open suggestions', ''], rows)}</div>` +
-      `<div class="card"><div class="ch"><h3>Suggestions waiting</h3><span class="cs-dim">${queue.length} open, oldest first</span></div>${q ? `<div class="list">${q}</div>` : '<p class="lbl">Nothing waiting. Floor staff suggest renames and flags from a shelf card.</p>'}</div>`;
+      `<div class="card"><div class="ch"><h3>Suggestions waiting</h3><span class="cs-dim">${queue.length} open, oldest first</span></div>${q ? `<div class="list">${q}</div>` : '<p class="lbl">Nothing waiting. Floor staff suggest renames and flags from a shelf card; managers send Field Mode checks.</p>'}</div>`;
   },
   mount(ctx, root) {
     const stores = ctx.admin.stores || [];
@@ -525,10 +537,39 @@ const maps = {
       if (a.dataset.act === 'maps-editor') { st.no = a.dataset.no; openEditor(); }
       else if (a.dataset.act === 'maps-refresh') { for (const r of stores) { const c = forStore(r.no); delete c.map; delete c.snap; } ctx.rerender(); }
       else if (a.dataset.act === 'open-editor') openEditor();
+      else if (a.dataset.act === 'maps-apply') {
+        const no = a.dataset.no, x = Object.entries(forStore(no).snap?.mapedits || {}).map(([id, v]) => ({ id, ...v })).find(v => v.id === a.dataset.id);
+        if (x) { a.disabled = true; applyToMap(ctx, no, [x]).finally(() => { a.disabled = false; }); }
+      }
     });
     return [];
   },
 };
+
+// Apply to map: the published map's source takes each rename or name, is
+// published as the next version, and each suggestion is accepted with that
+// version. The map editor's draft does not have the change until it opens
+// the store from Conduit again (its publish warns when it is behind).
+async function applyToMap(ctx, no, list) {
+  if (!list.length) return;
+  let info, src;
+  try { [info, src] = await Promise.all([ctx.admin.api(`/v1/store/${no}/map`), ctx.admin.api(`/v1/store/${no}/map/latest/source`)]); }
+  catch (e) { return e.status === 404 ? toast(`Store ${no}'s map was published from drawings only, with no editor source to change. Open it in the map editor, make the change and publish from there; that also makes Apply to map work next time.`, 'bad') : fail(e); }
+  const doc = JSON.parse(JSON.stringify(src)), done = [], missed = [];
+  for (const x of list) (applyEdit(doc, x) ? done : missed).push(x);
+  if (!done.length) return toast(`No shelf on the published map matches ${missed.length === 1 ? 'that suggestion' : 'those suggestions'}: make ${missed.length === 1 ? 'it' : 'them'} in the map editor`, 'bad');
+  let version = bump(info.version);
+  if (!confirm(`Apply ${done.length} change${done.length === 1 ? '' : 's'} to store ${no}'s map and publish it as version ${version}?${missed.length ? `\n\n${missed.length} could not be matched and stay waiting.` : ''}\n\nEvery device gets the new map within a minute. Open the map editor from Conduit again before editing there.`)) return;
+  const name = ctx.admin.stores.find(r => String(r.no) === String(no))?.name;
+  for (let tries = 0; ; tries++) {
+    try { await ctx.admin.api(`/v1/store/${no}/map`, { method: 'POST', body: publishBody(doc, { version, name }) }); break; }
+    catch (e) { if (e.code === 'exists' && tries < 5) { version = bump(version); continue; } return fail(e); }
+  }
+  let ok = 0;
+  for (const x of done) { try { await ctx.admin.api(`/v1/admin/stores/${no}/mapedits/${encodeURIComponent(x.id)}`, { method: 'POST', body: { status: 'accepted', note: `On the map in version ${version}` } }); ok++; } catch (e) { fail(e); } }
+  toast(`Version ${version} published · ${ok} suggestion${ok === 1 ? '' : 's'} applied${missed.length ? ` · ${missed.length} left for the editor` : ''}`);
+  invalidate(no); await ctx.admin.refreshStores(); ctx.rerender();
+}
 
 const actions = {
   id: 'adminactions', title: 'Owner actions', icon: 'history',

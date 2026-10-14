@@ -2362,3 +2362,42 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .frame.hdr-title .top .vh .acts::-webkit-scrollbar { display: none; }
 .frame.hdr-title .top .vh .acts > * { flex: none; }
 @container shell (max-width: 1280px) { .frame.hdr-title .top .btn.showmap { font-size: 0; gap: 0; padding: 0; width: 40px; height: 40px; justify-content: center; flex: none; } .frame.hdr-title .top .btn.showmap svg.i { margin: 0; } }
+
+/* Field Mode: the sheet's label field with its camera, what Save will send,
+   the state of each sent suggestion, and shelves the map has no name for
+   (outlined in blue; named on this device: solid blue). On a PC the same
+   blocks sit light in the side card. */
+.fmx-scan { display: flex; gap: 8px; }
+.fmx-scan .sx-in { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: .02em; }
+.fmx-scan button { flex: none; width: 44px; height: 44px; border-radius: 10px; border: 1px solid #263145; background: #1F2937; color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.fmx-scan button svg.i { width: 20px; height: 20px; color: #5CC4EA; }
+.fmx-diff { display: flex; gap: 9px; align-items: flex-start; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(14,124,168,.18); color: #BAE6FD; font-size: 12.5px; line-height: 1.4; }
+.fmx-diff svg.i { width: 16px; height: 16px; flex: none; margin-top: 1px; color: #5CC4EA; }
+.fmx-diff b { color: #fff; }
+.fmx-diff.ok { background: rgba(22,163,74,.16); color: #BBF7D0; } .fmx-diff.ok svg.i { color: #4ADE80; }
+.fmx-tag { flex: none; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 6px; background: #263145; color: var(--ink2); }
+.fmx-tag.ok { background: rgba(22,163,74,.2); color: #4ADE80; } .fmx-tag.wait { background: rgba(217,119,6,.2); color: #FBBF24; } .fmx-tag.no { background: #263145; color: var(--faint); }
+.map.real.fm .shelf-group[data-shelf=""]:not([data-sel]) .shelf { fill: #E0F2FE; stroke: #0EA5E9; stroke-width: 2.5; stroke-dasharray: 6 4; }
+.map.real.fm .shelf-group[data-fmnamed]:not([data-sel]) .shelf { fill: #BAE6FD; stroke: #0284C7; stroke-dasharray: none; }
+.fm-desk { padding: 18px; }
+.fm-desk .sx-h { color: var(--ink); }
+.fm-desk .sx-rows { background: var(--ground); }
+.fm-desk .sx-r { border-top-color: var(--line-soft); }
+.fm-desk .sx-in { background: var(--panel); border-color: var(--line); color: var(--ink); }
+.fm-desk .sx-btn { background: var(--panel); border-color: var(--line); color: var(--ink); }
+.fm-desk .sx-btn.sx-pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fm-desk .fmx-scan button { background: var(--panel); border-color: var(--line); }
+.fm-desk .fmx-scan button svg.i { color: var(--accent-ink); }
+.fm-desk .fmx-diff { background: var(--accent-soft); color: var(--ink2); } .fm-desk .fmx-diff b { color: var(--ink); } .fm-desk .fmx-diff svg.i { color: var(--accent-ink); }
+.fm-desk .fmx-diff.ok { background: #DCFCE7; } .fm-desk .fmx-diff.ok svg.i { color: #15803D; }
+.fm-desk .fmx-tag { background: var(--chip); color: var(--ink2); } .fm-desk .fmx-tag.ok { background: #DCFCE7; color: #15803D; } .fm-desk .fmx-tag.wait { background: #FEF3C7; color: #B45309; }
+.fm-desk .rt-x { color: var(--dim); }
+
+/* Owner console: suggestions from Field Mode carry a tag; the Maps queue's
+   row keeps its actions on the right. */
+.fq-src { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); margin-left: 6px; white-space: nowrap; vertical-align: 1px; }
+.fq-src svg.i { width: 13px; height: 13px; }
+.fq-li { display: flex; align-items: center; gap: 12px; }
+.fq-li .nm { flex: 1; min-width: 0; }
+.fq-acts { display: flex; gap: 6px; flex: none; }
+.ad-edacts { display: inline-flex; gap: 6px; flex-wrap: wrap; }

@@ -88,7 +88,9 @@ export function storeState() {
 // flag something wrong with it. A suggestion never changes the map: the
 // owner makes the change in the map editor, publishes a new version and
 // marks the suggestion accepted (or declined). Resolved ones are capped.
-export const MAP_EDIT_KINDS = ['rename', 'flag'];
+// rename: a shelf's new name; flag: what is wrong (a note); name: a name
+// for a shelf the map has none for, found by its position on its floor.
+export const MAP_EDIT_KINDS = ['rename', 'flag', 'name'];
 const EDITS_KEPT = 300;
 const text = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -124,10 +126,14 @@ export const storeReducers = {
     if (edits[id]) return reject('exists', `suggestion ${id} already exists`);
     if (!MAP_EDIT_KINDS.includes(p.kind)) return reject('invalid_event', `kind must be ${MAP_EDIT_KINDS.join(' or ')}`);
     const shelf = text(p.shelf, 40).toUpperCase(), to = text(p.to, 40), note = text(p.note, 300);
-    if (!shelf) return reject('invalid_event', 'which shelf?');
-    if (p.kind === 'rename' && !to) return reject('invalid_event', 'a rename needs the new name');
+    const named = p.kind === 'name', pos = named && p.pos && Number.isFinite(Number(p.pos.x)) && Number.isFinite(Number(p.pos.y)) ? { x: Number(p.pos.x), y: Number(p.pos.y) } : null;
+    if (!shelf && !named) return reject('invalid_event', 'which shelf?');
+    if ((p.kind === 'rename' || named) && !to) return reject('invalid_event', `a ${named ? 'name' : 'rename'} needs the new name`);
     if (p.kind === 'flag' && !note) return reject('invalid_event', 'a flag needs a note saying what is wrong');
-    edits[id] = { shelf, kind: p.kind, to: p.kind === 'rename' ? to : null, note, floor: p.floor ? text(p.floor, 40) : null, at: e.at, by: e.actor?.device || null, status: 'open', resolvedAt: null, resolvedBy: null, reply: '' };
+    if (named && (!pos || !p.floor)) return reject('invalid_event', 'naming a shelf needs its floor and position');
+    // Field Mode's suggestions say so (src), and a named one keeps the shelf beside it (near).
+    const near = named ? text(p.near, 40).toUpperCase() : '';
+    edits[id] = { shelf, kind: p.kind, to: p.kind === 'rename' || named ? to : null, note, floor: p.floor ? text(p.floor, 40) : null, ...(pos ? { pos } : {}), ...(near ? { near } : {}), ...(p.src === 'field' ? { src: 'field' } : {}), at: e.at, by: e.actor?.device || null, status: 'open', resolvedAt: null, resolvedBy: null, reply: '' };
     const done = Object.entries(edits).filter(([, x]) => x.status !== 'open').sort((a, b) => (a[1].resolvedAt < b[1].resolvedAt ? -1 : 1));
     for (const [k] of done.slice(0, Math.max(0, done.length - EDITS_KEPT))) delete edits[k];
     return null;

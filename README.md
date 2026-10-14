@@ -288,8 +288,10 @@ it, **Publish** checks it (unnamed shelves, names used twice on a floor,
 no emergency markers or walk paths, floor ids) and sends it with the same
 request the console and `publish-map` build (`publishBody` in
 `shared/maprender.js`), and the **Suggestions** tab lists the store's
-suggested edits and accepts or declines them. Field Mode files from Conduit
-merge by shelf and floor. **Auto-detect** (Settings tab), run on the
+suggested edits and accepts or declines them (a Field Mode name finds its
+unnamed shelf by floor and position). Field Mode files from Conduit merge by
+shelf and floor. Publish warns when the store's map moved on after the draft
+was opened from Conduit (`mapeditor-base-<store>`), as Apply to map does. **Auto-detect** (Settings tab), run on the
 official layout at 100%: it learns the store's bay sizes (up to three)
 from the bay dividers the layout draws and fits every shelf to whole
 modules of one of them; a run two shelves deep becomes S1 and S2, and the
@@ -388,9 +390,19 @@ collapsed rail are the only per-device appearance settings.
 Floor views live on real data: Store map, Pick list, Location refresh, Label
 integrity, Emergency, Maintenance, Stocktake, Inventory (off-site register,
 loads, heat on the map, trends, clearance watch), plus Dashboard (with the
-layered store map, Today at and logistics cards), Settings, Help (the tour)
-and Field Mode (a manager captures shelf codes for the map editor and exports
-them as a `field-capture/1` file).
+Today at and logistics cards), Settings, Help (the tour) and Field Mode (a
+manager checks each shelf against its label, names shelves the map has none
+for, and sends the differences to the owner as suggested map edits with
+`src: 'field'`; the export still writes a `field-capture/1` file).
+
+The owner's queue (console › Maps, and a store's Map tab) holds Suggest map
+edits and Field Mode alike. **Apply to map** writes a rename or a name that
+reads as a shelf code into the published map's editor source
+(`applyEdit` in `shared/mapedits.js`), publishes it as the next version and
+accepts the suggestion with that version, so the store has the change within
+a minute and the phone that sent it shows it on the map. Anything else is made
+in the map editor, then accepted. A map published from drawings alone has no
+source to change.
 
 On a phone the map modes (Home, Refresh, Labels, Route, Emergency,
 Stocktake, Field Mode) give the map the screen: a dark strip above the tabs
