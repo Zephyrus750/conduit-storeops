@@ -161,6 +161,13 @@ and those are set, the legacy suite and details workers (`LOOKUP_URL`,
 `DETAILS_URL`) answer instead; after that they can be removed from
 `wrangler.toml`. `npm run dev` serves stand-in sitemaps on :8791.
 
+Keycodes on screen link to the website (Decant Visualiser's and K2B's
+links): `kcLink()` and `itemName()` in `js/views/stockroom/common.js` open
+the catalogue's product page once the code is verified (a green tick on
+the name), else the site's search for the code, in a new tab. Manifests,
+Analytics' top products and a pallet's contents on Receiving use them; the
+Stockroom lists use `nameHtml()`, the same verified link.
+
 ## Admin console
 
 The owner's views live in the same shell (`js/views/admin.js`): "Owner

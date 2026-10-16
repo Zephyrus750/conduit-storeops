@@ -27,6 +27,23 @@ export function nameHtml(kc, missing = 'Unverified · not in the catalogue') {
   if (n === null) { const dm = near.get(kc); return `<span class="warn nm-unv" title="Not found in the catalogue: double-check this code">⚠ ${esc(missing)}</span>${dm?.length ? ` <span class="nm-near">Did you mean ${dm.slice(0, 2).map(x => `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? `${x.name}: tap to copy` : 'Tap to copy')}">${esc(x.keycode)}</b>`).join(' or ')}?</span>` : ''}`; }
   return n.url ? `<a class="nm-ok" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer" title="View on Kmart">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`;
 }
+// A keycode on the website (Decant Visualiser's klink, K2B's verified
+// link): the product page once the catalogue knows the code, else the
+// site's search for it. Opens in a new tab.
+export const searchUrl = kc => `https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(kc)}`;
+export const urlOf = kc => names.get(String(kc))?.url || searchUrl(kc);
+export function kcLink(kc, label = kc) {
+  const ok = !!names.get(String(kc))?.url;
+  return `<a class="klink${ok ? ' ok' : ''}" href="${esc(urlOf(kc))}" target="_blank" rel="noopener noreferrer" title="${ok ? 'Open the product page on kmart.com.au' : 'Search kmart.com.au for this code'}">${esc(label)}</a>`;
+}
+// A line's product: the verified name with its page and a tick; else the
+// description the report carried, marked when the catalogue has no such code.
+export function itemName(kc, fallback = '') {
+  const n = names.get(String(kc));
+  if (n) return `<a class="nm-ok" href="${esc(n.url || searchUrl(kc))}" target="_blank" rel="noopener noreferrer" title="Verified · open on kmart.com.au"><span class="nm-tick">✓</span>${esc(n.name)} ↗</a>`;
+  if (n === null) return `<span title="Not in the catalogue: not sold online, or a retired code">${esc(fallback)} <small class="nm-off">not online</small></span>`;
+  return esc(fallback);
+}
 export function ensureNames(ctx, codes, repaint) {
   const want = [...new Set(codes.map(String))].filter(kc => !names.has(kc) && /^\d{6,12}$/.test(kc));
   if (!want.length) return;

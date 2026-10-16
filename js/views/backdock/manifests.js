@@ -8,14 +8,15 @@
 // landed. Publish a report here or at Receiving; attach one to a truck.
 
 import { ic, esc, vh, sub, toast, dep, mhead, ago, fmtDate } from '../../ui.js';
-import { ensureNames, nameOf } from '../stockroom/common.js';
+import { ensureNames, nameOf, kcLink, itemName } from '../stockroom/common.js';
+import { settingsOf } from '../../../shared/reducers/store.js';
 import { previewManifest } from './mpreview.js';
-import { manifestIndex, microDept, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
+import { manifestIndex, microDept, microChip, microName, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
 import { retailPeriod } from '../../../shared/time.js';
 
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {} };
-const chip = d => { const dd = microDept(d); return dd ? dep(dd) : `<span class="dep" style="background:#64748B">${esc(d || '???')}</span>`; };
+const chip = microChip;
 const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'Kids', '#F59E0B'], ['flex', 'Flex', '#64748B']];
 const groupOf = code => { const d = microDept(code); return !d ? '?' : d === 'flex' ? 'flex' : d[0]; };
 const STATUS = { done: ['Done', 'good'], live: ['Decanting', 'warn'], staged: ['Receiving', ''], planned: ['Planned', ''], library: ['Published', ''] };
@@ -58,7 +59,7 @@ function rows(doc, landed) {
     const m = new Map();
     for (const c of consols) for (const it of c.items || []) {
       if (st.group && groupOf(it.dept) !== st.group) continue;
-      const r = m.get(it.k) || { k: it.k, name: nameOf(it.k) || it.d || '', dept: it.dept, units: 0, cartons: 0, consols: [] };
+      const r = m.get(it.k) || { k: it.k, name: nameOf(it.k) || it.d || '', d: it.d || '', dept: it.dept, units: 0, cartons: 0, consols: [] };
       r.units += Number(it.q) || 0; r.cartons += itemCartons(c, it); r.consols.push(c.id); m.set(it.k, r);
     }
     let list = [...m.values()].map(r => ({ ...r, cartons: Math.round(r.cartons * 10) / 10, landed: r.consols.filter(id => landed[id]).length }));
@@ -72,8 +73,8 @@ function rows(doc, landed) {
       const k = String(it.dept || '???'), r = m.get(k) || { dept: k, units: 0, cartons: 0, landedCtn: 0, keycodes: new Set(), consols: new Set() };
       const ct = itemCartons(c, it); r.units += Number(it.q) || 0; r.cartons += ct; if (landed[c.id]) r.landedCtn += ct; r.keycodes.add(it.k); r.consols.add(c.id); m.set(k, r);
     }
-    let list = [...m.values()].map(r => ({ dept: r.dept, units: r.units, cartons: Math.round(r.cartons), keycodes: r.keycodes.size, consols: r.consols.size, pct: r.cartons ? Math.round(r.landedCtn / r.cartons * 100) : 0 }));
-    if (q) list = list.filter(r => r.dept.includes(q) || (microDept(r.dept) || '').includes(q));
+    let list = [...m.values()].map(r => ({ dept: r.dept, name: microName(r.dept), units: r.units, cartons: Math.round(r.cartons), keycodes: r.keycodes.size, consols: r.consols.size, pct: r.cartons ? Math.round(r.landedCtn / r.cartons * 100) : 0 }));
+    if (q) list = list.filter(r => r.dept.includes(q) || (microDept(r.dept) || '').includes(q) || r.name.toLowerCase().includes(q));
     return list;
   }
   let list = consols.map(c => ({ ...c, units: units(c), keycodes: new Set((c.items || []).map(i => i.k)).size, state: landed[c.id] || (c.carried ? 'carried' : null) }));
@@ -93,7 +94,7 @@ function sorted(list) {
 
 function explorer(ctx, e, doc) {
   const landed = landedMap(ctx, e), early = earlyMap(ctx, e), allUnits = doc.consols.reduce((n, c) => n + units(c), 0), cartons = doc.totalCartons ?? doc.consols.reduce((n, c) => n + c.cartons, 0);
-  const keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size, mpc = ctx.store.get('dock').trucks?.[e?.truck]?.minsPerCarton || STD_MINS_PER_CARTON, work = Math.round(cartons * mpc);
+  const keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size, mpc = ctx.store.get('dock').trucks?.[e?.truck]?.minsPerCarton || settingsOf(ctx.store.get('settings')).minsPerCarton || STD_MINS_PER_CARTON, work = Math.round(cartons * mpc);
   const trucks = openTrucks(ctx.store.get('dock')), attachedTo = e?.truck, nLanded = doc.consols.filter(c => landed[c.id]).length;
   // The department-group rollup: cartons by Home / Clothing / Kids / Flex.
   const gc = {}; for (const c of doc.consols) for (const it of c.items || []) { const g = groupOf(it.dept); gc[g] = (gc[g] || 0) + itemCartons(c, it); }
@@ -101,18 +102,17 @@ function explorer(ctx, e, doc) {
   const roll = `<div class="mfx-roll">${gs.map(g => `<button class="mfx-seg${st.group === g[0] ? ' on' : ''}${st.group && st.group !== g[0] ? ' dim' : ''}" data-act="group" data-g="${g[0]}" style="flex:${gc[g[0]]};background:${g[2]}" title="${g[1]}: ${Math.round(gc[g[0]])} cartons">${gc[g[0]] / gt > 0.08 ? `${g[1]} ${Math.round(gc[g[0]] / gt * 100)}%` : ''}</button>`).join('')}</div>${st.group ? `<div class="cs-dim" style="margin:-4px 0 8px">Showing ${esc(GROUPS.find(g => g[0] === st.group)?.[1] || 'Unknown')} only · <span class="go" data-act="group" data-g="${esc(st.group)}">show all</span></div>` : ''}`;
   const list = sorted(rows(doc, landed)), cols = COLS[st.tab];
   const th = cols.map(([label, key]) => key ? `<th data-act="sort" data-k="${key}" class="${st.sort === key ? 'on' : ''}">${label}${st.sort === key ? (st.dir > 0 ? ' ▲' : ' ▼') : ''}</th>` : `<th>${label}</th>`).join('');
-  const shop = k => `<a class="mfx-link" href="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(k)}" target="_blank" rel="noopener" title="Open the product page">${esc(k)}</a>`;
-  const body = st.tab === 'products' ? list.slice(0, 200).map(r => `<tr><td class="mono">${shop(r.k)}</td><td>${esc(r.name)}</td><td>${chip(r.dept)}</td><td class="n">${r.units}</td><td class="n">${r.cartons}</td><td class="n">${r.consols.length}</td><td>${r.consols.slice(0, 6).map(id => sq(landed[id])).join('')}</td></tr>`).join('')
-    : st.tab === 'depts' ? list.map(r => `<tr><td>${chip(r.dept)} <small class="cs-dim">${esc(r.dept)}</small></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
+    const body = st.tab === 'products' ? list.slice(0, 200).map(r => `<tr><td class="mono">${kcLink(r.k)}</td><td>${itemName(r.k, r.d)}</td><td>${chip(r.dept)}</td><td class="n">${r.units}</td><td class="n">${r.cartons}</td><td class="n">${r.consols.length}</td><td>${r.consols.slice(0, 6).map(id => sq(landed[id])).join('')}</td></tr>`).join('')
+    : st.tab === 'depts' ? list.map(r => `<tr><td>${chip(r.dept)} <span class="mfx-dn"><small class="cs-dim mono">${esc(r.dept)}</small> ${esc(r.name || 'Unknown department')}</span></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
     : list.slice(0, 120).map(c => {
       const open = !!st.expanded[c.id] || (st.q && list.length <= 3), items = c.items || [];
       return `<tr class="mfx-c" data-act="toggle" data-id="${esc(c.id)}"><td>${sq(c.state)}</td><td class="mono" title="Consolidation ${esc(c.cons || '')}">${esc(c.id)}${early[c.id] ? ` <span class="status warn" title="Landed on Truck ${esc(truckNo(early[c.id].t))} before this manifest arrived">LANDED ${esc(fmtDate(early[c.id].d))}</span>` : ''}</td><td>${(c.mix || []).slice(0, 4).map(x => chip(x[0])).join('')}</td><td class="n">${c.cartons}</td><td class="n">${c.units}</td><td class="n">${c.keycodes}</td></tr>` +
-        (open ? `<tr class="mfx-items"><td></td><td colspan="5">${items.slice(0, 40).map(it => `<div class="mfc-it${st.q && String(it.k).startsWith(st.q.trim()) ? ' hit' : ''}"><span class="kc">${shop(it.k)}</span><span class="nm">${esc(nameOf(it.k) || it.d || '')}</span>${it.dept ? chip(it.dept) : ''}<span class="ct">~${Math.round(itemCartons(c, it) * 10) / 10} ctn · ${it.q} units</span></div>`).join('')}${items.length > 40 ? `<div class="cs-dim">${items.length - 40} more lines</div>` : ''}</td></tr>` : '');
+        (open ? `<tr class="mfx-items"><td></td><td colspan="5">${items.slice(0, 40).map(it => `<div class="mfc-it${st.q && String(it.k).startsWith(st.q.trim()) ? ' hit' : ''}"><span class="kc">${kcLink(it.k)}</span><span class="nm">${itemName(it.k, it.d || '')}</span>${it.dept ? chip(it.dept) : ''}<span class="ct">~${Math.round(itemCartons(c, it) * 10) / 10} ctn · ${it.q} units</span></div>`).join('')}${items.length > 40 ? `<div class="cs-dim">${items.length - 40} more lines</div>` : ''}</td></tr>` : '');
     }).join('');
   const more = st.tab === 'products' && list.length > 200 ? `${list.length - 200} more products: search to narrow` : st.tab === 'consols' && list.length > 120 ? `${list.length - 120} more consols: search to narrow` : '';
-  const stat = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+  const stat = (k, v, tip, note) => `<div${tip ? ` title="${esc(tip)}"` : ''}><span>${k}</span><b>${v}</b>${note ? `<small>${esc(note)}</small>` : ''}</div>`;
   return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>despatch <b>${esc(doc.despatch || '—')}</b></span><span>DC <b>${esc(doc.dcNo || '—')}</b></span>${attachedTo ? `<span>Truck <b>${esc(truckNo(attachedTo))}</b> · ${nLanded}/${doc.consols.length} landed</span>` : ''}</span></div>` +
-    `<div class="ps-facts mfx-stats">${stat('Consols', doc.consols.length)}${stat('Cartons', cartons.toLocaleString())}${stat('Keycodes', keycodes.toLocaleString())}${stat('Units', allUnits.toLocaleString())}${stat('Est. work', `${Math.floor(work / 60)}h ${String(work % 60).padStart(2, '0')}m`)}</div>` + roll +
+    `<div class="ps-facts mfx-stats">${stat('Consols', doc.consols.length)}${stat('Cartons', cartons.toLocaleString())}${stat('Keycodes', keycodes.toLocaleString())}${stat('Units', allUnits.toLocaleString())}${stat('Est. work', `${Math.floor(work / 60)}h ${String(work % 60).padStart(2, '0')}m`, `${cartons.toLocaleString()} cartons × ${mpc} min a carton = ${work.toLocaleString()} minutes of decanting for one person (Minutes per carton in Settings › Store settings${e?.truck ? ', as this truck took it' : ''}). Split it across the team: four people ≈ ${Math.floor(work / 4 / 60)}h ${String(Math.round(work / 4) % 60).padStart(2, '0')}m.`, `${mpc} min/ctn · one person`)}</div>` + roll +
     `<div class="mfd-acts">${attachedTo ? `<span class="status good">On Truck ${esc(truckNo(attachedTo))}</span>` : trucks.length ? `<select class="ad-in" data-field="truck">${trucks.map(t => `<option value="${esc(t.id)}">Truck ${esc(truckNo(t.id))} · ${esc(t.status)}</option>`).join('')}</select><button class="btn primary sm" data-act="attach">${ic('truck')}Attach to truck</button>` : '<span class="cs-dim">No truck on the board to attach to</span>'}<button class="btn sm" data-act="remove" style="margin-left:auto">${ic('trash')}Remove</button></div>` +
     `<div class="mfx-bar"><div class="seg">${[['consols', 'Consols'], ['products', 'Products'], ['depts', 'Departments']].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="find consol, keycode, product, dept…" aria-label="Search this manifest"></div><span class="mfd-hit">${list.length} ${st.tab === 'depts' ? 'departments' : st.tab}</span></div>` +
     `<div class="mfx-legend">${['landed', 'active', 'done', 'carried', 'none'].map(s => `${sq(s)}${SQ_NAME[s]}`).join('')}</div>` +
@@ -154,8 +154,13 @@ export default {
     };
     load();
     const doc = st.docFor === st.open ? st.doc : null;
-    // Names for what is on screen: the products tab's first rows, or the opened consols.
-    if (doc && st.tab !== 'depts') { const want = new Set(); for (const c of doc.consols) if (st.tab === 'products' || st.expanded[c.id]) for (const it of (c.items || []).slice(0, 40)) { if (want.size >= 200) break; want.add(it.k); } if (want.size) ensureNames(ctx, [...want], () => ctx.rerender()); }
+    // Names and product pages for what is on screen: the products tab's rows
+    // as sorted, or the opened consols' lines (the catalogue batches them).
+    if (doc && st.tab !== 'depts') {
+      const want = st.tab === 'products' ? sorted(rows(doc, landedMap(ctx, entries(ctx).find(x => x.manNo === st.open)))).slice(0, 200).map(r => r.k)
+        : doc.consols.filter(c => st.expanded[c.id] || (st.q && rows(doc, {}).length <= 3)).flatMap(c => (c.items || []).slice(0, 40).map(i => i.k));
+      if (want.length) ensureNames(ctx, want, () => ctx.rerender());
+    }
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;

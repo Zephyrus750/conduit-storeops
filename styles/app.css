@@ -1063,7 +1063,6 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .mfx-items .mfc-it { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
 .mfx-items .mfc-it .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mfx-items .mfc-it.hit { background: rgba(245,158,11,.15); border-radius: 6px; }
-.mfx-link { color: inherit; text-decoration: underline dotted; }
 .mfx-pct { display: inline-block; width: 60px; height: 6px; border-radius: 3px; background: var(--line-soft); vertical-align: middle; overflow: hidden; }
 .mfx-pct i { display: block; height: 100%; background: #16A34A; }
 .ll-warn h3 { display: flex; align-items: center; gap: 8px; color: #B45309; }
@@ -1071,6 +1070,17 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .ll .ll-row .nm { flex: 1; min-width: 140px; }
 .ll .ll-row select { flex: 0 1 360px; min-width: 220px; width: auto; }
 /* The explorer needs the room: the list goes above it below 1400px of shell. */
+/* The manifest list is a picker: narrower than the shell's 440px so the explorer gets the room. */
+.mgrid:has(.mfx) { grid-template-columns: 340px minmax(0, 1fr); }
+.mfx-stats small { font-size: 11px; color: var(--dim); margin-top: 1px; }
+.mfx-stats > div[title] { cursor: help; }
+.mfx-dn { margin-left: 4px; }
+.mfx-dn small { margin-right: 4px; }
+.klink { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+.klink:hover, .klink.ok { color: var(--accent-ink); }
+.klink:hover { text-decoration-style: solid; }
+.nm-tick { color: #16A34A; font-weight: 700; margin-right: 4px; }
+.nm-off { color: var(--dim); font-size: 11px; }
 @container shell (max-width: 1400px) { .mgrid:has(.mfx) { grid-template-columns: 1fr; } .mgrid:has(.mfx) .mfl { max-height: 260px; overflow: auto; } }
 @container shell (max-width: 760px) { .mfx-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 

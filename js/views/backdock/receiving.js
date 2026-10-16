@@ -8,7 +8,7 @@ import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate, camButton } from '../..
 import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
 import { previewManifest } from './mpreview.js';
 import { printAudit } from './audit.js';
-import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, ss } from './phonesearch.js';
+import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, verifyContents, ss } from './phonesearch.js';
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
 import { liveAudit } from '../../../shared/reducers/backdock.js';
 import { planCard, take5Card, needsTake5, queuePicker, onPlanAct, onPlanChange, ratesFor, guard, decantBoard } from './plan.js';
@@ -358,6 +358,7 @@ export default {
     if (ctx.arg?.truck && ctx.arg !== usedArg && ctx.store.get('dock').trucks?.[ctx.arg.truck]) { usedArg = ctx.arg; st.truck = ctx.arg.truck; st.sel = ctx.arg.bay && ctx.store.get('dock').trucks[ctx.arg.truck].pallets?.[ctx.arg.bay] ? ctx.arg.bay : null; setTimeout(() => ctx.rerender(), 0); }
     root.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (a) onAct(ctx, a, root); });
     root.addEventListener('input', e => onSearchInput(ctx, e, root));
+    verifyContents(ctx, root);
     root.addEventListener('change', e => { if (e.target.dataset.ll != null) linkPick(e.target.dataset.ll, e.target.value); });
     root.addEventListener('change', async e => {
       if (!e.target.matches('[data-field="manfile"]')) return;
