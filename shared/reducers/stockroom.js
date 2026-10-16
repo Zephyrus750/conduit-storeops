@@ -329,6 +329,17 @@ export const stockroomReducers = {
     return null;
   },
 
+  // ── The day's pasted inventory report (the worker emits this when it
+  // stores one): the desk's SIM report is kept on the worker so every
+  // computer and phone in the store reads the same one. The state keeps
+  // only what it is; devices fetch the report itself.
+  'backfill.report.publish'(s, e) {
+    const d = String(e.entity.date); if (!DAY_RE.test(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');
+    const p = e.payload || {}, cur = s.backfill.report;
+    s.backfill.report = { date: d, at: Number(p.at) || Date.parse(e.at), bays: Number(p.bays) || 0, codes: Number(p.codes) || 0, by: e.actor?.device || null, rev: (cur?.date === d ? cur.rev || 0 : 0) + 1 };
+    return null;
+  },
+
   // ── SOH snapshots (the worker emits soh.publish when it stores one) ───
   'soh.publish'(s, e) {
     const d = String(e.entity.date); if (!DAY_RE.test(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');

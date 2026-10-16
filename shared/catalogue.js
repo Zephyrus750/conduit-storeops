@@ -79,6 +79,7 @@ export const CATALOGUE = {
   'daylist.set':         T('stockroom', S, ['date'], { walkers: 'number' }),
   'scan.preset':         T('stockroom', S, ['size']),                           // payload: kind codes | rows, x, y, w, h (fractions) | remove
   'soh.publish':         T('stockroom', S, ['date']),                           // emitted by the worker on POST /soh: rows, locs, week
+  'backfill.report.publish': T('stockroom', S, ['date']),                       // emitted by the worker on POST /backfill/report: at, bays, codes
   'soh.remove':          T('stockroom', S, ['date']),
   'soh.verify':          T('stockroom', S, ['date', 'keycode'], { loc: 'string' }), // payload.done false clears the tick
 

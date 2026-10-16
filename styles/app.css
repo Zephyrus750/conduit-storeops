@@ -2416,3 +2416,4 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .fq-li .nm { flex: 1; min-width: 0; }
 .fq-acts { display: flex; gap: 6px; flex: none; }
 .ad-edacts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.pedit .pman select.inp { flex: 1; min-width: 0; }

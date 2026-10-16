@@ -955,3 +955,25 @@ test('the Service page: version, bindings and secrets as set or not, each store 
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'svc-1' })).body.token;
   assert.equal((await api('GET', '/v1/admin/service', undefined, dev)).status, 403);
 });
+
+test('backfill report: the desk saves the pasted report, every device reads the same one', async () => {
+  const desk = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'sr-desk-2' })).body.token;
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, desk)).body.token;
+  const report = { at: Date.parse('2026-10-16T08:30:00Z'), byLoc: { 7001: ['43307685', '42977636'], 7002: ['43302210'] }, range: { from: '7001', to: '7002' }, delta: {}, bayAt: {} };
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: '2026-10-16', report }, desk)).status, 403, 'the store PIN alone cannot save it');
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: '16/10/2026', report }, sr)).status, 400);
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: '2026-10-16', report: { byLoc: { 7001: ['x'] } } }, sr)).status, 400);
+  const saved = await api('POST', '/v1/store/1241/backfill/report', { date: '2026-10-16', report }, sr);
+  assert.equal(saved.status, 201, JSON.stringify(saved.body)); assert.deepEqual([saved.body.bays, saved.body.codes], [2, 3]);
+  // Another computer: the projection says a report is there, and the report itself reads back whole.
+  const other = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'sr-desk-3' })).body.token)).body.token;
+  const meta = (await api('GET', '/v1/store/1241/snapshot', undefined, other)).body.state.backfill.report;
+  assert.deepEqual([meta.date, meta.bays, meta.codes, meta.at, meta.rev], ['2026-10-16', 2, 3, report.at, 1]);
+  const got = await api('GET', '/v1/store/1241/backfill/report?date=2026-10-16', undefined, other);
+  assert.equal(got.status, 200); assert.deepEqual(got.body.byLoc, { 7001: ['43307685', '42977636'], 7002: ['43302210'] }); assert.equal(got.body.at, report.at);
+  assert.equal((await api('GET', '/v1/store/1241/backfill/report?date=2026-10-15', undefined, other)).status, 404);
+  const floor = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'floor-9' })).body.token;
+  assert.equal((await api('GET', '/v1/store/1241/backfill/report?date=2026-10-16', undefined, floor)).status, 403, 'the Floor does not read the stockroom report');
+  // A device may not log the event itself: only the worker does, when it stores the report.
+  assert.notEqual((await api('POST', '/v1/store/1241/events', { events: [{ id: '01JA0000000000000000000000', store: '1241', area: 'stockroom', type: 'backfill.report.publish', entity: { date: '2026-10-16' }, payload: {}, at: new Date().toISOString(), v: 1 }] }, sr)).body?.results?.[0]?.ok, true);
+});

@@ -4,8 +4,10 @@
 // (writes the system-only codes as scanned:false and sends the bay's report
 // list with submission.ready so the worker's metrics match the desk's) and
 // Submits it; the lifecycle is pending → corrected → submitted. The pasted
-// report is desk-side state under `simreport:<store>:<date>`, as it was in
-// K2B; only a readied bay's own list goes to the worker.
+// report goes to the worker (POST /backfill/report) so every computer and
+// phone reads the same one; each device keeps a copy under
+// `simreport:<store>:<date>` for offline, and fetches the worker's when the
+// backfill.report.publish event says a newer one is there.
 //
 // Phone: bay → scan → send. Each scan is its own submission.update, so a
 // phone that loses wifi mid-bay keeps its scans in the outbox.
@@ -93,7 +95,7 @@ export default {
     const renew = setInterval(() => claimNow(ctx, true), CLAIM_TTL_MS / 4);
     const onHide = () => { if (document.visibilityState === 'hidden') releaseClaim(ctx); else if (st.sel && !st.claimed) select(ctx, st.sel); };
     document.addEventListener('visibilitychange', onHide);
-    return [ctx.store.on('backfill', () => { ensureNames(ctx, allCodes(ctx), repaint); repaint(); }), () => document.removeEventListener('keydown', onKey),
+    return [ctx.store.on('backfill', () => { ensureNames(ctx, allCodes(ctx), repaint); repaint(); loadReport(ctx).then(c => { if (c) { ensureNames(ctx, allCodes(ctx), repaint); repaint(); } }); }), () => document.removeEventListener('keydown', onKey),
       () => { clearInterval(renew); document.removeEventListener('visibilitychange', onHide); clearTimeout(releaseSoon); releaseSoon = setTimeout(() => releaseClaim(ctx), 1500); }];
   },
 };
@@ -130,9 +132,36 @@ async function deskKey(e, ctx) {
 }
 
 function allCodes(ctx) { const out = []; for (const s of Object.values(ctx.store.get('backfill').subs)) if (s.date === todayKey()) out.push(...Object.keys(s.codes)); if (st.report) for (const l of Object.values(st.report.byLoc)) out.push(...l); return out; }
-async function loadReport(ctx) {
-  const k = reportKey(ctx); if (st.reportFor === k) return false;
-  st.reportFor = k; st.report = (await ctx.storage.get(k)) || null; return true;
+// The day's report: this device's copy first (offline, instant), then the
+// store's when it is newer (another desk pasted or updated it); a paste that
+// could not be sent is sent again.
+let loading = null;
+function loadReport(ctx) { return loading ||= syncReport(ctx).finally(() => { loading = null; }); }
+async function syncReport(ctx) {
+  const k = reportKey(ctx); let changed = false;
+  if (st.reportFor !== k) { st.reportFor = k; st.report = (await ctx.storage.get(k)) || null; changed = true; }
+  if (st.report?.unsent) return (await pushReport(ctx, st.report)) || changed;
+  const meta = ctx.store.get('backfill').report;
+  if (meta?.date !== todayKey() || meta.rev === st.report?.rev) return changed;
+  try {
+    const doc = await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report?date=${todayKey()}`);
+    if (st.reportFor !== k) return changed;
+    st.report = { at: doc.at, byLoc: doc.byLoc || {}, range: doc.range ?? null, delta: doc.delta || {}, bayAt: doc.bayAt || {}, rev: meta.rev };
+    await ctx.storage.set(k, st.report); return true;
+  } catch { return changed; }
+}
+// Save the report here and send it to the store; offline it waits (unsent)
+// and goes with the next load.
+async function saveReport(ctx, report) {
+  st.report = report; await ctx.storage.set(reportKey(ctx), report);
+  if (!(await pushReport(ctx, report))) toast('Saved on this computer. It reaches the store’s other devices once the connection is back.', 'warn');
+}
+async function pushReport(ctx, r) {
+  try {
+    await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report`, { method: 'POST', body: { date: todayKey(), report: { at: r.at, byLoc: r.byLoc, range: r.range ?? null, delta: r.delta || {}, bayAt: r.bayAt || {} } }, timeoutMs: 60000 });
+    if (r.unsent) { delete r.unsent; await ctx.storage.set(reportKey(ctx), r); }
+    return true;
+  } catch { if (!r.unsent) { r.unsent = true; await ctx.storage.set(reportKey(ctx), r); } return false; }
 }
 function pasteSheet() {
   return `<div class="card" style="margin-bottom:14px"><div class="ch"><h3>Paste the whole SIM report</h3><span class="cs-dim">one paste, every bay pre-compared</span><span class="btn sm" style="margin-left:auto" data-act="paste-close">${ic('x')}Close</span></div><textarea class="ad-in" data-field="paste" rows="7" placeholder="Location · keycode · … one line per code, or “Location: 7012” headers. Copy the report from SIM and paste it here."></textarea><div class="acts" style="margin-top:10px"><button class="btn primary" data-act="paste-save">${ic('check')}Use this report</button><span class="cs-dim" id="pasteCount"></span></div></div>`;
@@ -246,7 +275,7 @@ async function onClick(e, ctx, root, repaint) {
     const byLoc = parseReportByLocation(text); const n = Object.keys(byLoc).length;
     if (!n) return toast('No location lines found. Each line needs a bay number and a keycode.', 'bad');
     const prev = st.report?.byLoc || {};
-    st.report = { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {} }; await ctx.storage.set(reportKey(ctx), st.report);
+    await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {} });
     st.paste = false; toast(`Report pasted: ${n} bays, ${Object.values(byLoc).reduce((x, l) => x + l.length, 0)} codes`); ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender();
   }
   else if (act === 'bay-paste') { st.bayPaste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="baypaste"]')?.focus(), 30); }
@@ -263,7 +292,7 @@ async function onClick(e, ctx, root, repaint) {
     const byLoc = { ...(st.report?.byLoc || {}) }, bayAt = { ...(st.report?.bayAt || {}) };
     if (act === 'bay-paste-clear') { delete byLoc[s.bay]; delete bayAt[s.bay]; }
     else { const r = parseKeycodeText(root.querySelector('[data-field="baypaste"]')?.value || ''); if (!r.codes.length) return toast('No keycodes found in that paste.', 'bad'); byLoc[s.bay] = r.codes; bayAt[s.bay] = Date.now(); }
-    st.report = { ...(st.report || { at: Date.now(), range: null, delta: {} }), byLoc, bayAt }; await ctx.storage.set(reportKey(ctx), st.report);
+    await saveReport(ctx, { ...(st.report || { at: Date.now(), range: null, delta: {} }), byLoc, bayAt, unsent: undefined });
     st.bayPaste = false; toast(act === 'bay-paste-clear' ? `${s.bay}: compare cleared` : `${s.bay}: ${byLoc[s.bay].length} codes to compare`); ctx.rerender();
   }
   else if (act === 'req-paste') { st.reqPaste = !st.reqPaste; ctx.rerender(); }
