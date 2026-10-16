@@ -236,6 +236,7 @@ async function onAct(ctx, a, root) {
         if (!confirm(`${n} pallet${n === 1 ? '' : 's'} held from Truck ${truckNo(m.dock.rollover.from)} join${n === 1 ? 's' : ''} Truck ${truckNo(nid)}.\n\nOK takes ${n === 1 ? 'it' : 'them'} on. Cancel starts the truck empty and lets ${n === 1 ? 'it' : 'them'} go.`)) payload.takeRollover = false;
       }
       await dispatch(ctx, 'truck.create', { truck: nid }, payload); await dispatch(ctx, 'truck.setLive', { truck: nid }, {});
+      attachPlanned(ctx, nid);
       st.truck = nid; st.sel = null; toast(payload.carryFrom ? `Truck ${truckNo(payload.carryFrom)} finalised · Truck ${truckNo(nid)} is receiving` : `Truck ${truckNo(nid)} is receiving`); return;
     }
     if (act === 'golive') { await dispatch(ctx, 'truck.setLive', { truck: id }, {}); return; }
@@ -349,11 +350,24 @@ async function onAct(ctx, a, root) {
   } catch (e) { toast(e.message, 'bad'); }
 }
 
+// A truck started from a planner slot names the report the slot staged; this
+// device puts it on the truck from the library (once per truck per session;
+// a failure leaves the Attach list on Receiving).
+const attaching = new Set();
+function attachPlanned(ctx, id) {
+  const t = ctx.store.get('dock').trucks?.[id];
+  if (!t?.plannedManifest || t.manifest || t.status === 'closed' || attaching.has(id)) return;
+  attaching.add(id);
+  attachManifest(ctx, id, t.plannedManifest).then(() => toast(`Manifest ${t.plannedManifest} attached to Truck ${truckNo(id)}`))
+    .catch(e => toast(`Could not attach the planned manifest ${t.plannedManifest}: ${e.message}. Attach it from the manifest list.`, 'bad'));
+}
+
 export default {
   id: 'receiving', title: 'Receiving', icon: 'm-receiving', area: 'backdock',
   desktop(ctx) { return desktop(ctx); },
   mobile(ctx) { return mobile(ctx); },
   mount(ctx, root) {
+    for (const id of Object.keys(ctx.store.get('dock').trucks || {})) attachPlanned(ctx, id);
     // From search: the truck and the pallet a consolidation is on.
     if (ctx.arg?.truck && ctx.arg !== usedArg && ctx.store.get('dock').trucks?.[ctx.arg.truck]) { usedArg = ctx.arg; st.truck = ctx.arg.truck; st.sel = ctx.arg.bay && ctx.store.get('dock').trucks[ctx.arg.truck].pallets?.[ctx.arg.bay] ? ctx.arg.bay : null; setTimeout(() => ctx.rerender(), 0); }
     root.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (a) onAct(ctx, a, root); });

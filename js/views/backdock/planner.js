@@ -5,19 +5,20 @@
 // week grid with a side editor.
 
 import { $, ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
-import { attachConsols } from '../../../shared/manifest.js';
-import { manifestIndex, truckNo, who, dnumId, progress, fmtMins } from './common.js';
+import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, slotRef } from './common.js';
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const st = { week: 0, sel: null, busy: false };
 const dkey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function weekDays(off) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + off * 7); return Array.from({ length: 7 }, (_, i) => { const x = new Date(d); x.setDate(d.getDate() + i); return x; }); }
-const cartonsOf = m => (m?.consols || []).reduce((n, c) => n + (Number(c.cartons) || 0), 0);
+// A staged reference carries its counts; a truck's (or an older slot's) manifest carries the consols.
+const cartonsOf = m => m?.ref ? m.cartons : (m?.consols || []).reduce((n, c) => n + (Number(c.cartons) || 0), 0);
+const consolsN = m => m?.ref ? m.n : (m?.consols || []).length;
 // The manifest's keycodes (distinct item lines) and units (by the mix, else the lines), as DV's planner card.
-const keycodesOf = m => { const set = new Set(), cs = m?.consols || []; let lines = 0; for (const c of cs) for (const it of c.items || []) { lines++; if (it.k) set.add(it.k); } return set.size || lines; };
-const unitsOf = m => (m?.consols || []).reduce((n, c) => n + ((c.mix || []).reduce((k, x) => k + (Number(x[2]) || 0), 0) || (c.items || []).reduce((k, it) => k + (Number(it.q) || 0), 0)), 0);
+const keycodesOf = m => { if (m?.ref) return m.keycodes; const set = new Set(), cs = m?.consols || []; let lines = 0; for (const c of cs) for (const it of c.items || []) { lines++; if (it.k) set.add(it.k); } return set.size || lines; };
+const unitsOf = m => m?.ref ? m.units : (m?.consols || []).reduce((n, c) => n + ((c.mix || []).reduce((k, x) => k + (Number(x[2]) || 0), 0) || (c.items || []).reduce((k, it) => k + (Number(it.q) || 0), 0)), 0);
 const abbr = n => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : n.toLocaleString();
-const metrics = m => `${(m.consols || []).length} consols · ${abbr(cartonsOf(m))}c · ${abbr(keycodesOf(m))} keycodes · ${abbr(unitsOf(m))} units`;
+const metrics = m => `${consolsN(m)} consols · ${abbr(cartonsOf(m))}c · ${abbr(keycodesOf(m))} keycodes · ${abbr(unitsOf(m))} units`;
 const truckOf = (dock, date, n) => dock.trucks[`${date}-T${n}`] || (dock.history || []).find(h => h.id === `${date}-T${n}`) && { status: 'closed' } || null;
 // Truck numbers with a slot planned or a truck created (a created truck consumes its slot).
 const numbersOf = (plan, dock, date) => [...new Set([...Object.keys(plan.days[date]?.slots || {}).map(Number), ...Object.keys(dock.trucks).filter(id => id.startsWith(date + '-T')).map(id => Number(truckNo(id))), ...(dock.history || []).filter(h => h.id.startsWith(date + '-T')).map(h => Number(truckNo(h.id)))])].filter(n => n >= 1 && n <= 4).sort((a, b) => a - b);
@@ -41,7 +42,7 @@ function editor(ctx, plan, dock) {
   const free = idx.filter(m => !m.truck && !usedManifests(plan).has(m.manNo) || m.manNo === slot.manifest?.manNo);
   return `<div class="card pedit"><div class="ch"><h3>Truck ${n} · ${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MON[d.getMonth()]}</h3>${t ? `<span class="tst ${esc(t.status)}">${esc(t.status)}</span>` : ''}</div>` +
     `<div class="pf"><label>ETA</label><input class="inp" data-field="eta" value="${esc(slot.eta || '')}" placeholder="06:30" maxlength="5"><span class="cs-dim">24h · the dock board sorts by it</span></div>` +
-    `<div class="pf"><label>Manifest</label>${slot.manifest ? `<div class="pman">${ic('file')}<div><b>${esc(slot.manifest.manNo)}</b><span>${(slot.manifest.consols || []).length} consols · ${cartonsOf(slot.manifest)} cartons</span></div><button class="btn sm" data-act="unstage">Remove</button></div>` : ''}<div class="pman"><select class="inp" data-field="man"><option value="">${free.length ? 'Choose a published manifest…' : 'Nothing free in the library'}</option>${free.filter(m => m.manNo !== slot.manifest?.manNo).map(m => `<option value="${esc(m.manNo)}">${esc(m.manNo)} · ${m.consols} consols · ${m.totalCartons}c${m.despatch ? ' · ' + esc(m.despatch) : ''}</option>`).join('')}</select><button class="btn sm primary" data-act="stage">Stage</button></div></div>` +
+    `<div class="pf"><label>Manifest</label>${slot.manifest ? `<div class="pman">${ic('file')}<div><b>${esc(slot.manifest.manNo)}</b><span>${consolsN(slot.manifest)} consols · ${cartonsOf(slot.manifest)} cartons</span></div><button class="btn sm" data-act="unstage">Remove</button></div>` : ''}<div class="pman"><select class="inp" data-field="man"><option value="">${free.length ? 'Choose a published manifest…' : 'Nothing free in the library'}</option>${free.filter(m => m.manNo !== slot.manifest?.manNo).map(m => `<option value="${esc(m.manNo)}">${esc(m.manNo)} · ${m.consols} consols · ${m.totalCartons}c${m.despatch ? ' · ' + esc(m.despatch) : ''}</option>`).join('')}</select><button class="btn sm primary" data-act="stage">Stage</button></div></div>` +
     `<div class="pf"><label>Decant team</label><div class="dk-team">${(slot.team || []).map(m => `<span class="dk-tc on"><span class="av">${esc(who(m))}</span><button class="dk-x" data-act="team-drop" data-pid="${esc(m.pid)}" title="Remove">${ic('x')}</button></span>`).join('')}<span class="dk-tc add"><input class="inp" data-field="team" placeholder="D4" maxlength="6" autocapitalize="characters" style="width:70px"><button class="ibtn sm" data-act="team-add" title="Add">${ic('plus')}</button></span></div><span class="cs-dim">D-numbers only: no names are kept on the dock.</span></div>` +
     `<div class="pf"><label>Huddle · break</label><span class="pf-pair"><input class="inp mono" data-field="huddle" type="number" min="0" max="120" value="${slot.huddleMins || ''}" placeholder="0"><span class="cs-dim">min huddle</span><input class="inp mono" data-field="break" type="number" min="0" max="120" value="${slot.breakMins || ''}" placeholder="0"><span class="cs-dim">min team break</span></span><span class="cs-dim">The huddle is booked at the decant start and stops the clock; the break is the plan’s allowance.</span></div>` +
     ((slot.team || []).length ? `<div class="pf"><label>Times</label><div class="pf-times">${(slot.team || []).map(m => `<div class="pf-time"><b>${esc(who(m))}</b><input type="time" class="inp" data-mtime="start" data-pid="${esc(m.pid)}" value="${esc(m.start || '')}" title="Start (empty follows the ETA)"><input type="time" class="inp" data-mtime="finish" data-pid="${esc(m.pid)}" value="${esc(m.finish || '')}" title="Finish"></div>`).join('')}</div><span class="cs-dim">Empty start follows the ETA. Finish times keep auto-balance within each shift.</span></div>` : '') +
@@ -90,7 +91,7 @@ export default {
           else { const nf = nextFree(ctx.store.get('plan'), ctx.store.get('dock'), Number(a.dataset.day) || 0); if (!nf) return toast('No free slot in the next two weeks', 'bad'); date = nf.date; n = nf.n; manNo = a.dataset.man; st.sel = `${date}-${n}`; }
           a.disabled = true;
           const doc = await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(manNo)}`);
-          await set(date, n, { manifest: { manNo: doc.manNo, dcNo: doc.dcNo || '', despatch: doc.despatch || '', consols: attachConsols(doc), attachedAt: new Date().toISOString() } });
+          await set(date, n, { manifest: slotRef(doc) });
           toast(`${manNo} staged to Truck ${n} on ${fmtDate(date)}`);
         }
         else if (act === 'roster-add') { const pid = dnumId(field('roster').trim()); if (!pid) return toast('Enter a D-number, like D4. Names are not kept.', 'bad'); const cur0 = ctx.store.get('dock').roster?.pids || []; if (cur0.includes(pid)) return; await ctx.store.dispatch({ type: 'dock.roster', entity: {}, payload: { pids: [...cur0, pid] } }); }

@@ -128,6 +128,14 @@ export async function publishParsed(ctx, parsed, { filename = '', manNo } = {}) 
   const r = await ctx.api(`/v1/store/${ctx.storeNo}/manifest`, { method: 'POST', body: doc, timeoutMs: 60000 });
   return { ...r, doc };
 }
+// What a planner slot keeps of a published report: its number, the counts
+// the planner shows and the consol ids for the ledger (the reducer's
+// slotManifest). The report goes on the truck when Receiving starts it.
+export function slotRef(doc) {
+  const keys = new Set(), cs = doc.consols || [];
+  let units = 0; for (const c of cs) for (const it of c.items || []) { keys.add(it.k); units += Number(it.q) || 0; }
+  return { ref: true, manNo: doc.manNo, dcNo: doc.dcNo || '', despatch: doc.despatch || '', n: cs.length, cartons: doc.totalCartons ?? cs.reduce((n, c) => n + (Number(c.cartons) || 0), 0), keycodes: keys.size, units, ids: cs.map(c => String(c.id || String(c.cons).slice(-9))).filter(x => /^\d{9}$/.test(x)).slice(0, 500), attachedAt: new Date().toISOString() };
+}
 export async function attachManifest(ctx, truck, manNo) {
   const doc = await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(manNo)}`);
   await ctx.store.dispatch({ type: 'manifest.attach', entity: { truck }, payload: { manNo: doc.manNo, dcNo: doc.dcNo || '', despatch: doc.despatch || '', consols: attachConsols(doc) } });
