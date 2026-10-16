@@ -83,6 +83,7 @@ function manifestConsols(p) {
 // planner no longer offers it.
 function fileManifest(s, truckId, t, p, consols, e) {
   t.manifest = { manNo: String(p.manNo), dcNo: String(p.dcNo || '').slice(0, 20), despatch: String(p.despatch || '').slice(0, 20), consols, attachedAt: e.at, by: e.actor?.device || null };
+  delete t.plannedManifest;
   rematchScans(t);
   const day = truckId.slice(0, 10);
   for (const c of consols) { const seen = ledgerFind(s, c.id, ['off', 'land'], truckId).find(x => x.d < day); if (seen) c.landedEarlier = seen; ledgerAdd(s, c.id, { t: truckId, d: day, k: 'man' }, e.at); }
@@ -91,9 +92,21 @@ function fileManifest(s, truckId, t, p, consols, e) {
   s.dock.manifests[String(p.manNo)] = { ...cur, manNo: String(p.manNo), dcNo: p.dcNo || cur.dcNo || '', despatch: p.despatch || cur.despatch || '', truck: truckId, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), consols: consols.length, keycodes: cur.keycodes || new Set(consols.flatMap(c => c.items.map(i => i.k))).size, publishedAt: cur.publishedAt || e.at, attachedAt: e.at };
   capManifests(s);
 }
+// A slot holds the manifest by reference (ref: true): its number, the
+// counts the planner shows and the consol ids for the ledger. The report
+// itself stays in the library and goes on the truck when Receiving starts
+// it (manifest.attach); a whole report would not fit a planner event, and
+// a week of them would crowd the store's state. Slots staged before this
+// carry the consols and are filed by truck.create as they were.
+const count = v => Math.max(0, Math.min(1e7, Math.round(Number(v) || 0)));
 function slotManifest(m) {
   if (m === null) return null;
   if (!m || typeof m !== 'object' || !MAN_NO.test(String(m.manNo ?? ''))) return reject('invalid_event', 'a slot manifest needs a manifest number (letters, digits and dashes)');
+  if (m.ref) {
+    const ids = Array.isArray(m.ids) ? m.ids.map(String) : [];
+    if (ids.length > 500 || ids.some(x => !/^\d{9}$/.test(x))) return reject('invalid_event', 'a staged manifest lists up to 500 consol ids of 9 digits');
+    return { ref: true, manNo: String(m.manNo), dcNo: String(m.dcNo || '').slice(0, 20), despatch: String(m.despatch || '').slice(0, 20), n: count(m.n ?? ids.length), cartons: count(m.cartons), keycodes: count(m.keycodes), units: count(m.units), ids, consols: [], attachedAt: m.attachedAt || null };
+  }
   const consols = Array.isArray(m.consols) ? m.consols : [];
   if (consols.length > 500) return reject('invalid_event', 'a manifest holds at most 500 consolidations');
   return { ...m, manNo: String(m.manNo), consols };
@@ -122,7 +135,7 @@ export const backdockReducers = {
     if (startAt !== null && !isIso(startAt)) return reject('invalid_event', 'decantStartAt must be an ISO time');
     const date = id.slice(0, 10), slot = e.payload.slot ?? Number(id.slice(id.lastIndexOf('T') + 1));
     const slotMan = s.plan.days[date]?.slots[slot]?.manifest || null;
-    const slotConsols = slotMan ? manifestConsols(slotMan) : null; if (slotConsols?.code) return slotConsols;
+    const slotConsols = slotMan && !slotMan.ref ? manifestConsols(slotMan) : null; if (slotConsols?.code) return slotConsols;
     const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, decantStartAt: startAt, goalAt: null, ...truckSetup(s), team: [], halts: [], breaks: [], manifest: null, pallets: {}, carriedConsols: [], receivingConfirmed: false, receivedAt: null };
     if (carry) t.grid = widerGrid(t.grid, carry.grid);
     // Creating from a planner slot consumes the slot's team and manifest.
@@ -155,7 +168,9 @@ export const backdockReducers = {
     }
     s.dock.trucks[id] = t;
     // The slot's manifest is filed as an attach would: ledger and library.
-    if (slotMan) fileManifest(s, id, t, slotMan, slotConsols, e);
+    if (slotMan && !slotMan.ref) fileManifest(s, id, t, slotMan, slotConsols, e);
+    // A staged reference: the device that started the truck attaches the report.
+    else if (slotMan) t.plannedManifest = slotMan.manNo;
     return null;
   },
   'truck.setLive'(s, e) {
@@ -591,7 +606,7 @@ export const backdockReducers = {
     // A staged manifest goes in the ledger as planned for this slot's truck,
     // so a label scanned on another truck can say where it belongs (DV's
     // "matches another manifest").
-    if (manifest) for (const c of manifest.consols) ledgerAdd(s, c.id || c.cons, { t: `${e.entity.date}-T${slot}`, d: e.entity.date, k: 'plan' }, e.at);
+    if (manifest) for (const id of manifest.ref ? manifest.ids : manifest.consols.map(c => c.id || c.cons)) ledgerAdd(s, id, { t: `${e.entity.date}-T${slot}`, d: e.entity.date, k: 'plan' }, e.at);
     // Booked minutes: a huddle at the decant start (it stops the clock and
     // is reported apart from downtime) and the team break the plan allows.
     Object.assign(cur, booked);

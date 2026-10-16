@@ -132,7 +132,7 @@ export const CATALOGUE = {
   'store.areas.set':   T('store', M, [], { on: 'array' }),                     // worker only: the areas the store is entitled to, as the owner set them
   'store.tools.set':     T('store', M, [], { off: 'array' }),
   'store.retain':        T('store', M, [], { day: 'string' }),                   // worker only, nightly: trims finished records (shared/retain.js)                    // owner only: the tools switched off (shared/tools.js)
-  'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note)
+  'map.edit.suggest':    T('store', ['floor', 'stockroom', 'dock', 'manager'], ['edit'], { shelf: 'string', kind: 'string' }),  // rename (payload.to) | flag (payload.note) | name (payload.to, floor, pos {x,y}, near); payload.src 'field' from Field Mode
   'map.edit.resolve':    T('store', M, ['edit'], { status: 'string' }),       // accepted | declined; payload.note                                     // any of tz, dockGrid, minsPerCarton, autoLockMins (null = default)
   'feedback.send':       T('store', ['floor', 'stockroom', 'dock', 'manager'], ['note'], { kind: 'string', text: 'string' }),   // payload.view, version, diag
 };

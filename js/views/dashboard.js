@@ -12,7 +12,7 @@ import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, 
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
-import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast } from './backdock/common.js';
+import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex } from './backdock/common.js';
 import { ratesFor } from './backdock/plan.js';
 import { registerSummary, isFixture, consolidate } from '../../shared/inventory.js';
 
@@ -95,13 +95,27 @@ function maintCard(ctx, r) {
 // ticked it by hand): the inventory report pasted on this desk, manifests
 // attached to today's planned trucks, today's trucks planned; then the
 // first truck cleared, the midday re-paste and today's label check.
+// Manifests for today's trucks. Done when every truck today has one (on the
+// truck or staged on its slot); with no truck today, done once a report is
+// published and waiting in the library: the truck takes it when it starts.
+function manRow(mans, lib, tmrw, dock, day) {
+  const ready = lib.length ? `${lib.slice(0, 3).map(m => esc(m.manNo)).join(', ')}${lib.length > 3 ? ` +${lib.length - 3}` : ''} in the library, ready to attach` : '';
+  if (!mans.length) return ['Manifests for today’s trucks', `No trucks planned today · ${ready || 'no manifest published yet'}${tmrw}`, lib.length > 0, 'Publish a manifest', 'Open', 'manifests'];
+  if (mans.every(x => x[1])) return ['Manifests for today’s trucks', `${mans.map(([n, m]) => `${esc(m)} → T${n}`).join(' · ')} · all attached${tmrw}`, true, '', 'Open', 'manifests'];
+  // A truck on the dock without one attaches at Receiving; a planned slot stages in the Planner.
+  const onDock = openTrucks(dock).some(x => x.id.slice(0, 10) === day && !x.manifest && !x.plannedManifest);
+  return ['Manifests for today’s trucks', `${mans.length} truck${mans.length === 1 ? '' : 's'} today · ${mans.filter(x => x[1]).length} with a manifest${ready ? ' · ' + ready : ''}${tmrw}`, false, 'Attach a manifest', 'Open', onDock ? 'receiving' : 'planner'];
+}
 function morning(ctx) {
   const t = today(), dockOk = canRead(ctx, 'backdock'), srOk = canRead(ctx, 'stockroom');
   const slots = dockOk ? Object.entries(ctx.store.get('plan')?.days?.[t]?.slots || {}).sort((a, b) => a[0] - b[0]) : [];
   const dock = dockOk ? ctx.store.get('dock') : null;
   // Today's trucks with their manifests: those on the dock or finished (a
   // truck takes over its planned slot) and the slots still to come.
-  const tr = dock ? [...openTrucks(dock).filter(x => x.id.slice(0, 10) === t).map(x => [Number(x.id.slice(12)), x.manifest?.manNo, 'on the dock']), ...(dock.history || []).filter(h => h.id.slice(0, 10) === t).map(h => [Number(h.id.slice(12)), h.manifest?.manNo, 'done'])] : [];
+  const tr = dock ? [...openTrucks(dock).filter(x => x.id.slice(0, 10) === t).map(x => [Number(x.id.slice(12)), x.manifest?.manNo || x.plannedManifest, 'on the dock']), ...(dock.history || []).filter(h => h.id.slice(0, 10) === t).map(h => [Number(h.id.slice(12)), h.manifest?.manNo, 'done'])] : [];
+  // Published reports not yet on a truck or a planner slot: uploaded and ready to attach.
+  const staged = new Set(Object.values(ctx.store.get('plan')?.days || {}).flatMap(d => Object.values(d.slots || {}).map(x => x.manifest?.manNo).filter(Boolean)));
+  const lib = dock ? manifestIndex(dock).filter(m => !m.truck && !staged.has(m.manNo)) : [];
   const mans = [...tr, ...slots.filter(([n]) => !tr.some(x => x[0] === Number(n))).map(([n, s]) => [Number(n), s.manifest?.manNo])].sort((a, b) => a[0] - b[0]);
   const tk = (() => { const d = new Date(t + 'T12:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })(), ts = dockOk ? Object.values(ctx.store.get('plan')?.days?.[tk]?.slots || {}) : [];
   const tmrw = ts.length ? ` · tomorrow ${ts.filter(x => x.manifest).length}/${ts.length} staged` : '';
@@ -110,7 +124,7 @@ function morning(ctx) {
   const rep = report && srOk ? report : null, midday = rep && new Date(rep.at).getHours() >= 12;
   const A = [
     srOk && ['Inventory report', rep ? `Pasted ${fmtHM(new Date(rep.at).toISOString())} · ${Object.keys(rep.byLoc || {}).length} bays · ${Object.values(rep.byLoc || {}).reduce((n, l) => n + l.length, 0)} codes` : 'Not pasted yet · the board compares against nothing until it is', !!rep, 'Paste whole report', 'Re-paste', 'bfreview'],
-    dockOk && ['Manifests for today’s trucks', !mans.length ? 'No trucks planned today' + tmrw : mans.every(x => x[1]) ? `${mans.map(([n, m]) => `${esc(m)} → T${n}`).join(' · ')} · all attached${tmrw}` : `${mans.length} truck${mans.length === 1 ? '' : 's'} today · ${mans.filter(x => x[1]).length} with a manifest${tmrw}`, mans.length > 0 && mans.every(x => x[1]), 'Attach a manifest', 'Open', 'manifests'],
+    dockOk && manRow(mans, lib, tmrw, dock, t),
     dockOk && ['Planner', mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · teams set' : ''}` : 'Today’s trucks not planned', mans.length > 0, 'Plan today’s trucks', 'Open', 'planner'],
   ].filter(Boolean);
   const B = [

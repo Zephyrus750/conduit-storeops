@@ -91,10 +91,17 @@ async function openStore(no) {
     return dialog(`<h3>Store ${esc(no)}</h3><p>Couldn't open the map: ${esc(e.message)}</p>`, { cancel: false });
   }
   const draft = typeof getStoreSaveInfo === 'function' ? getStoreSaveInfo(no) : null;
-  const open = () => { src.storeNumber = no; importMapData(src, `${no}-conduit`); document.querySelectorAll('.store-dropdown.open, .store-dropdown.visible').forEach(d => d.classList.remove('open', 'visible')); };
+  // The version this draft starts from: publish warns when the store has moved on.
+  let base = null; try { base = (await api(`/v1/store/${encodeURIComponent(no)}/map`)).version; } catch {}
+  const open = () => { src.storeNumber = no; importMapData(src, `${no}-conduit`); setBase(no, base); document.querySelectorAll('.store-dropdown.open, .store-dropdown.visible').forEach(d => d.classList.remove('open', 'visible')); };
   if (draft && draft.shelfCount > 0) dialog(`<h3>Open ${esc(no)} from Conduit?</h3><p>This replaces the draft on this computer (${draft.shelfCount} shelves) with the map as last published.</p>`, { okText: 'Open', onOk: open });
   else open();
 }
+
+// The published version a draft was opened from (mapeditor-base-<store>).
+const baseKey = no => `mapeditor-base-${no}`;
+function setBase(no, v) { try { if (v) localStorage.setItem(baseKey(no), String(v)); else localStorage.removeItem(baseKey(no)); } catch {} }
+function getBase(no) { try { return localStorage.getItem(baseKey(no)); } catch { return null; } }
 
 // ── publish ──────────────────────────────────────────────────────────────
 const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`; };
@@ -120,7 +127,10 @@ async function publish() {
   const rec = stores.find(s => String(s.no) === no);
   if (!rec) return dialog(`<h3>Publish</h3><p>Store ${esc(no)} isn't registered in Conduit. Register it in the owner console first.</p>`, { cancel: false });
   let info = null; try { info = await api(`/v1/store/${encodeURIComponent(no)}/map`); } catch {}
-  const list = checks(doc), blocked = list.some(c => c.bad);
+  const list = checks(doc), blocked = list.some(c => c.bad), base = getBase(no);
+  // The store's map changed after this draft was opened (Apply to map in the
+  // console, or another computer): publishing this draft would undo that.
+  if (info && base && info.version !== base) list.unshift({ text: `Store ${no} is now on version ${info.version}, published after this draft was opened from ${base} (suggestions applied from the owner console, or another computer). Publishing this draft puts those changes back: open the store from Conduit again first unless you mean to.` });
   const shelves = doc.floors.reduce((n, f) => n + (f.shelves || []).filter(s => !s.inactive).length, 0);
   dialog(`<h3>Publish ${esc(no)} ${esc(rec.name || '')}</h3>
     <p>${doc.floors.length} floor${doc.floors.length === 1 ? '' : 's'} · ${shelves} shelves in use${info ? ` · replaces version <b>${esc(info.version)}</b> (${esc(new Date(info.at).toLocaleString())})` : ' · the first map for this store'}.</p>
@@ -135,6 +145,7 @@ async function publish() {
       try {
         const r = await api(`/v1/store/${encodeURIComponent(no)}/map`, { method: 'POST', body });
         if (typeof markClean === 'function') try { markClean(); } catch {}
+        setBase(no, r.version);
         dialog(`<h3>Published</h3><p>Store ${esc(no)} is on version <b>${esc(r.version)}</b>: ${r.floors.map(f => `${esc(f.name)} ${f.shelves} shelves`).join(', ')}.${r.stripped ? ` The worker removed ${r.stripped} unsafe item${r.stripped === 1 ? '' : 's'} from the drawing.` : ''}</p>`, { cancel: false });
       } catch (e) { throw new Error(e.code === 'exists' ? `Version ${version} is already published. Use a new version.` : e.message); }
     },

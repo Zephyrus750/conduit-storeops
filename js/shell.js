@@ -34,6 +34,7 @@ import { whatsNewOnce } from './whatsnew.js';
 import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
 import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
+import { installProductLinks } from './views/stockroom/common.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -58,6 +59,7 @@ const frame = $('.frame');
 installKeyboard();
 applyOrientation();
 installCameraButtons(document);
+installProductLinks(client.catalogue);
 let content = $('#content');
 const isMobile = () => frame.clientWidth <= 600;
 

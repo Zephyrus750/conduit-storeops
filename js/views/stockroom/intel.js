@@ -6,7 +6,7 @@
 // day list turns the flagged ones into the walk's counts.
 
 import { ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
-import { todayKey, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf, ctnOf, depthChip } from './common.js';
+import { todayKey, kcCopy, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf, ctnOf, depthChip } from './common.js';
 import { openScreenScan } from '../../screenscan.js';
 import { parseReport, rowKey, sohBand, flagOf, flagsOf, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
 
@@ -39,7 +39,7 @@ export function bayRows(data, loc) {
 }
 export const flagBadge = f => f === 'adjust' ? '<span class="sri-flag adjust" title="In a stockroom bay but the system says 0 or less: adjust it">ADJUST</span>' : f === 'pull' ? '<span class="sri-flag pull" title="Under two cartons in the whole store: the floor has most likely run out and the rest is out the back">PULL</span>' : '';
 export function bayList(rows) {
-  return `<div class="list sri-bay">${rows.map(r => `<div class="li"><span class="mono kc">${esc(r.kc)}</span><span class="nm">${nameHtml(r.kc)}<small>${depthChip(r.kc)}</small></span>${bandSoh(r.soh, r.ctn)}${flagBadge(r.flag)}</div>`).join('')}</div>`;
+  return `<div class="list sri-bay">${rows.map(r => `<div class="li"><span class="mono kc">${kcCopy(r.kc)}</span><span class="nm">${nameHtml(r.kc)}<small>${depthChip(r.kc)}</small></span>${bandSoh(r.soh, r.ctn)}${flagBadge(r.flag)}</div>`).join('')}</div>`;
 }
 function lookupCard(ctx, data) {
   const rows = st.loc ? bayRows(data, st.loc) : null;
@@ -98,7 +98,7 @@ function classesCard(ctx, data) {
   const verify = ctx.store.get('soh')?.verify?.[data.latest.date] || {};
   return `<div class="card"><div class="ch"><h3>Classes</h3><span class="cs-dim">${data.snaps.length} snapshot${data.snaps.length === 1 ? '' : 's'} · ${esc(data.snaps[0].date)} to ${esc(data.latest.date)}</span></div>` +
     `<div class="sri-filters">${FILTERS.map(f => `<button class="chip${st.filter === f ? ' on' : ''}" data-act="sri-filter" data-f="${f}">${f === 'all' ? 'All' : f[0].toUpperCase() + f.slice(1)} <b>${counts[f]}</b></button>`).join('')}<div class="search">${ic('search')}<input data-field="sri-q" value="${esc(st.q)}" placeholder="Keycode, location or name"></div></div>` +
-    `<div class="mfx-scroll"><table class="wb-t sri-t"><thead><tr><th>Class</th><th>Keycode</th><th>Product</th><th>Loc</th><th>Last ${Math.min(12, data.snaps.length)}</th><th class="n">SOH</th><th class="n">/ctn</th><th>Last landed</th></tr></thead><tbody>${list.slice(0, 300).map(r => `<tr><td>${clsBadge(r.cls, r.flat)}${r.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${verify[`${r.kc}|${r.loc}`] ? ' <span class="status good">✓ verified</span>' : ''}</td><td class="mono">${esc(r.kc)}</td><td>${nameHtml(r.kc)}</td><td class="mono">${esc((r.locs || [r.loc]).join(' '))}</td><td>${spark(r.w, r.cls)}</td><td class="n">${bandSoh(r.latest, r.ctn)}</td><td class="n">${r.ctn || '—'}</td><td>${r.lastArrival?.date ? esc(fmtDate(r.lastArrival.date)) : '—'}</td></tr>`).join('') || '<tr><td colspan="8" class="cs-dim">Nothing in this class.</td></tr>'}</tbody></table></div>${list.length > 300 ? `<p class="lbl">${list.length - 300} more: search or pick a class to narrow.</p>` : ''}</div>`;
+    `<div class="mfx-scroll"><table class="wb-t sri-t"><thead><tr><th>Class</th><th>Keycode</th><th>Product</th><th>Loc</th><th>Last ${Math.min(12, data.snaps.length)}</th><th class="n">SOH</th><th class="n">/ctn</th><th>Last landed</th></tr></thead><tbody>${list.slice(0, 300).map(r => `<tr><td>${clsBadge(r.cls, r.flat)}${r.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${verify[`${r.kc}|${r.loc}`] ? ' <span class="status good">✓ verified</span>' : ''}</td><td class="mono">${kcCopy(r.kc)}</td><td>${nameHtml(r.kc)}</td><td class="mono">${esc((r.locs || [r.loc]).join(' '))}</td><td>${spark(r.w, r.cls)}</td><td class="n">${bandSoh(r.latest, r.ctn)}</td><td class="n">${r.ctn || '—'}</td><td>${r.lastArrival?.date ? esc(fmtDate(r.lastArrival.date)) : '—'}</td></tr>`).join('') || '<tr><td colspan="8" class="cs-dim">Nothing in this class.</td></tr>'}</tbody></table></div>${list.length > 300 ? `<p class="lbl">${list.length - 300} more: search or pick a class to narrow.</p>` : ''}</div>`;
 }
 
 function snapsCard(data) {

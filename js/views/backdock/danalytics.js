@@ -5,15 +5,15 @@
 // micro-department (landed and cleared) and its top products.
 
 import { ic, esc, vh, sub, toast, mhead, fmtDate, dep } from '../../ui.js';
-import { truckNo, fmtMins, holdName, microDept, openTrucks, pallets } from './common.js';
+import { truckNo, fmtMins, holdName, microDept, microChip, microName, openTrucks, pallets } from './common.js';
 import { consolsOf } from '../../../shared/reducers/backdock.js';
 import { workerPerf, deptSpeed, downtimeBy, teamCsv, PERIODS, TREND_PCT } from '../../../shared/dockstats.js';
 import { itemCartons } from './manifests.js';
-import { ensureNames, nameOf } from '../stockroom/common.js';
+import { ensureNames, kcCopy, itemName } from '../stockroom/common.js';
 
 const st = { period: '7', down: 7 };
 const DOWN = [[7, 'Week'], [14, 'Fortnight'], [30, 'Month'], [0, 'All']];
-const chip = d => { const dd = microDept(d); return dd ? dep(dd) : `<span class="dep" style="background:#64748B">${esc(d || '???')}</span>`; };
+const chip = microChip;
 const spark = xs => { if (xs.length < 2) return ''; const max = Math.max(...xs), min = Math.min(...xs), W = 80, H = 22; return `<svg class="da-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><path d="${xs.map((v, i) => `${i ? 'L' : 'M'}${(i / (xs.length - 1) * W).toFixed(1)} ${(H - 2 - (max === min ? 0.5 : (v - min) / (max - min)) * (H - 4)).toFixed(1)}`).join('')}"/></svg>`; };
 
 // The truck in hand: the one on the dock, else the latest still kept with its pallets.
@@ -56,8 +56,8 @@ function page(ctx) {
   let truckCards = '';
   if (t) {
     const mt = microTable(t), top = topProducts(t);
-    truckCards = `<div class="card"><div class="ch"><h3>Manifest by micro-department</h3><span class="cs-dim">Truck ${esc(truckNo(t.id))} · ${esc(t.manifest.manNo)}</span></div><table class="wb-t"><thead><tr><th>Dept</th><th class="n">Cartons</th><th class="n">Share</th><th>Landed</th><th>Cleared</th></tr></thead><tbody>${mt.rows.map(r => { const l = r.ctn ? Math.round(r.landed / r.ctn * 100) : 0, d = r.ctn ? Math.round(r.done / r.ctn * 100) : 0; return `<tr><td>${chip(r.dept)} <small class="cs-dim">${esc(r.dept)}</small></td><td class="n">${Math.round(r.ctn)}</td><td class="n">${mt.total ? Math.round(r.ctn / mt.total * 100) : 0}%</td><td><span class="mfx-pct"><i style="width:${l}%;background:#3B82F6"></i></span> ${l}%</td><td><span class="mfx-pct"><i style="width:${d}%"></i></span> ${d}%</td></tr>`; }).join('')}</tbody></table></div>` +
-      `<div class="card"><div class="ch"><h3>Top products</h3><span class="cs-dim">by units · Truck ${esc(truckNo(t.id))}</span></div>${top.map((r, i) => `<div class="da-top"><b>${i + 1}</b><span class="mono">${esc(r.k)}</span><span class="nm">${esc(nameOf(r.k) || r.d || '')}</span>${chip(r.dept)}<span class="n">${r.units} units</span></div>`).join('') || '<p class="lbl">The manifest carries no lines.</p>'}</div>`;
+    truckCards = `<div class="card"><div class="ch"><h3>Manifest by micro-department</h3><span class="cs-dim">Truck ${esc(truckNo(t.id))} · ${esc(t.manifest.manNo)}</span></div><table class="wb-t"><thead><tr><th>Dept</th><th class="n">Cartons</th><th class="n">Share</th><th>Landed</th><th>Cleared</th></tr></thead><tbody>${mt.rows.map(r => { const l = r.ctn ? Math.round(r.landed / r.ctn * 100) : 0, d = r.ctn ? Math.round(r.done / r.ctn * 100) : 0; return `<tr><td>${chip(r.dept)} <span class="mfx-dn"><small class="cs-dim mono">${esc(r.dept)}</small> ${esc(microName(r.dept) || 'Unknown department')}</span></td><td class="n">${Math.round(r.ctn)}</td><td class="n">${mt.total ? Math.round(r.ctn / mt.total * 100) : 0}%</td><td><span class="mfx-pct"><i style="width:${l}%;background:#3B82F6"></i></span> ${l}%</td><td><span class="mfx-pct"><i style="width:${d}%"></i></span> ${d}%</td></tr>`; }).join('')}</tbody></table></div>` +
+      `<div class="card"><div class="ch"><h3>Top products</h3><span class="cs-dim">by units · Truck ${esc(truckNo(t.id))}</span></div>${top.map((r, i) => `<div class="da-top"><b>${i + 1}</b><span class="mono">${kcCopy(r.k)}</span><span class="nm">${itemName(r.k, r.d || '')}</span>${chip(r.dept)}<span class="n">${r.units} units</span></div>`).join('') || '<p class="lbl">The manifest carries no lines.</p>'}</div>`;
   }
   return head + `<div class="da-grid"><div>${perfCard}${trucksCard}${truckCards ? `<div class="wb-two">${truckCards}</div>` : ''}</div><div>${speedCard}${downCard}</div></div>`;
 }

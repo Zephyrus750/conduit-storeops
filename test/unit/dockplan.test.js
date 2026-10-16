@@ -88,3 +88,22 @@ test('a new truck takes the roster when no slot names a team, and a goal from re
   assert.deepEqual(t.team.map(m => m.pid), ['D3']);
   assert.equal(Date.parse(t.goalAt) - Date.parse(at('06:00')), 110 * MIN);
 });
+
+test('a planner slot stages a published manifest by reference; the truck made from it names the report to attach', () => {
+  const s = initialState();
+  const ids = Array.from({ length: 500 }, (_, i) => String(601804000 + i));
+  const ref = { ref: true, manNo: '7031482', dcNo: '4101533', despatch: '14/10/2026', n: 500, cartons: 1468, keycodes: 900, units: 8820, ids };
+  // A whole 500-consol report never fits a planner event; the reference does.
+  assert.ok(JSON.stringify(ref).length < 32_000);
+  ok(s, 'plan.set', { date: '2026-09-07', slot: 1 }, { eta: '06:30', manifest: ref });
+  const sl = s.plan.days['2026-09-07'].slots[1].manifest;
+  assert.deepEqual([sl.ref, sl.manNo, sl.n, sl.cartons, sl.consols.length], [true, '7031482', 500, 1468, 0]);
+  assert.equal(s.dock.ledger['601804000'][0].k, 'plan', 'the staged consols are in the ledger');
+  assert.equal(code(s, 'plan.set', { date: '2026-09-07', slot: 2 }, { manifest: { ...ref, ids: ['12'] } }), 'invalid_event');
+  ok(s, 'truck.create', { truck: T1 }, {});
+  assert.equal(s.dock.trucks[T1].manifest, null, 'the report is attached by the device, not copied from the slot');
+  assert.equal(s.dock.trucks[T1].plannedManifest, '7031482');
+  ok(s, 'manifest.attach', { truck: T1 }, { manNo: '7031482', consols: [{ cons: '093008012601804000', cartons: 30, dept: '021' }] });
+  assert.equal(s.dock.trucks[T1].manifest.manNo, '7031482');
+  assert.equal(s.dock.trucks[T1].plannedManifest, undefined);
+});
