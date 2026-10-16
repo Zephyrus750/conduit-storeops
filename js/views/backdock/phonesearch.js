@@ -9,7 +9,7 @@
 import { ic, esc, toast, camButton, dep } from '../../ui.js';
 import { truckNo, grid, pallets, microDept, microChip, fmtHM } from './common.js';
 import { consolsOf } from '../../../shared/reducers/backdock.js';
-import { nameOf, kcLink, itemName, ensureNames } from '../stockroom/common.js';
+import { nameOf, kcCopy, itemName, ensureNames } from '../stockroom/common.js';
 import { itemCartons } from './manifests.js';
 
 export const ss = { open: false, tab: 'scan', q: '', hit: null, info: false };
@@ -84,7 +84,7 @@ export function palletContents(t, p) {
   const cons = consolsOf(t).filter(c => (p.consolIds || []).includes(c.id)); if (!cons.length) return '';
   const depts = {}; for (const c of cons) for (const it of c.items || []) { const d = it.dept || '???'; const r = (depts[d] ||= { ctn: 0, u: 0 }); r.ctn += itemCartons(c, it); r.u += Number(it.q) || 0; }
   return `<details class="ps-contents"><summary>Contents · ${cons.length} consol${cons.length === 1 ? '' : 's'}</summary><div class="ps-depts">${Object.entries(depts).sort((a, b) => b[1].ctn - a[1].ctn).map(([d, r]) => `<span>${chip(d)} <small>${Math.round(r.ctn)} ctn · ${r.u}u</small></span>`).join(' ')}</div>` +
-    cons.map(c => `<div class="pt3">${esc(c.id)}<span class="cs-dim">${c.cartons} ctn</span></div>${(c.items || []).slice(0, 30).map(it => `<div class="mfc-it" data-kc="${esc(it.k)}" data-d="${esc(it.d || '')}"><span class="kc mono">${kcLink(it.k)}</span><span class="nm">${itemName(it.k, it.d || '')}</span>${chip(it.dept)}<span class="ct">${it.q}u</span></div>`).join('')}${(c.items || []).length > 30 ? `<div class="cs-dim">${c.items.length - 30} more lines</div>` : ''}`).join('') + '</details>';
+    cons.map(c => `<div class="pt3">${esc(c.id)}<span class="cs-dim">${c.cartons} ctn</span></div>${(c.items || []).slice(0, 30).map(it => `<div class="mfc-it" data-kc="${esc(it.k)}" data-d="${esc(it.d || '')}"><span class="kc mono">${kcCopy(it.k)}</span><span class="nm">${itemName(it.k, it.d || '')}</span>${chip(it.dept)}<span class="ct">${it.q}u</span></div>`).join('')}${(c.items || []).length > 30 ? `<div class="cs-dim">${c.items.length - 30} more lines</div>` : ''}`).join('') + '</details>';
 }
 
 // A pallet's contents, opened: verify its lines against the catalogue and
@@ -93,7 +93,7 @@ export function verifyContents(ctx, root) {
   root.addEventListener('toggle', e => {
     const d = e.target; if (!d.matches?.('details.ps-contents') || !d.open) return;
     const its = [...d.querySelectorAll('.mfc-it[data-kc]')];
-    ensureNames(ctx, its.map(x => x.dataset.kc), () => { for (const x of its) if (x.isConnected) { x.querySelector('.kc').innerHTML = kcLink(x.dataset.kc); x.querySelector('.nm').innerHTML = itemName(x.dataset.kc, x.dataset.d); } });
+    ensureNames(ctx, its.map(x => x.dataset.kc), () => { for (const x of its) if (x.isConnected) { x.querySelector('.kc').innerHTML = kcCopy(x.dataset.kc); x.querySelector('.nm').innerHTML = itemName(x.dataset.kc, x.dataset.d); } });
   }, true);
 }
 

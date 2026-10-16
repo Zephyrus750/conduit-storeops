@@ -1076,9 +1076,12 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .mfx-stats > div[title] { cursor: help; }
 .mfx-dn { margin-left: 4px; }
 .mfx-dn small { margin-right: 4px; }
-.klink { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
-.klink:hover, .klink.ok { color: var(--accent-ink); }
-.klink:hover { text-decoration-style: solid; }
+button.kcopy { cursor: copy; }
+.kcopy { font: inherit; color: inherit; background: none; border: 0; padding: 1px 3px; margin: -1px -3px; border-radius: 4px; text-decoration: underline dotted; text-underline-offset: 3px; transition: background-color .2s; }
+.kcopy:hover { background: var(--chip); text-decoration-style: solid; }
+.kcopy.copied { background: rgba(22,163,74,.18); color: #15803D; text-decoration: none; }
+a.nm-go { color: inherit; text-decoration: none; }
+a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .nm-tick { color: #16A34A; font-weight: 700; margin-right: 4px; }
 .nm-off { color: var(--dim); font-size: 11px; }
 @container shell (max-width: 1400px) { .mgrid:has(.mfx) { grid-template-columns: 1fr; } .mgrid:has(.mfx) .mfl { max-height: 260px; overflow: auto; } }

@@ -25,24 +25,46 @@ export function nameHtml(kc, missing = 'Unverified · not in the catalogue') {
   const n = names.get(kc);
   if (n === undefined) return '<span class="cs-dim">…</span>';
   if (n === null) { const dm = near.get(kc); return `<span class="warn nm-unv" title="Not found in the catalogue: double-check this code">⚠ ${esc(missing)}</span>${dm?.length ? ` <span class="nm-near">Did you mean ${dm.slice(0, 2).map(x => `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? `${x.name}: tap to copy` : 'Tap to copy')}">${esc(x.keycode)}</b>`).join(' or ')}?</span>` : ''}`; }
-  return n.url ? `<a class="nm-ok" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer" title="View on Kmart">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`;
+  return n.url ? `<a class="nm-ok" ${goAttrs(kc)} title="Open the product page on kmart.com.au">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`;
 }
-// A keycode on the website (Decant Visualiser's klink, K2B's verified
-// link): the product page once the catalogue knows the code, else the
-// site's search for it. Opens in a new tab.
+// Keycodes and product names (K2B's review, Decant Visualiser's klink): a
+// click on the keycode copies it, a click on the name opens its product page
+// on kmart.com.au in a new tab. The page comes from the catalogue; a name
+// clicked before its lookup has landed asks on the click, and a code the
+// catalogue does not know opens the site's search for it.
 export const searchUrl = kc => `https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(kc)}`;
 export const urlOf = kc => names.get(String(kc))?.url || searchUrl(kc);
-export function kcLink(kc, label = kc) {
-  const ok = !!names.get(String(kc))?.url;
-  return `<a class="klink${ok ? ' ok' : ''}" href="${esc(urlOf(kc))}" target="_blank" rel="noopener noreferrer" title="${ok ? 'Open the product page on kmart.com.au' : 'Search kmart.com.au for this code'}">${esc(label)}</a>`;
-}
-// A line's product: the verified name with its page and a tick; else the
-// description the report carried, marked when the catalogue has no such code.
+export const kcCopy = kc => `<button type="button" class="kcopy mono" data-copykc="${esc(kc)}" title="Copy ${esc(kc)}">${esc(kc)}</button>`;
+const goAttrs = kc => `href="${esc(urlOf(kc))}" data-kcgo="${esc(kc)}" target="_blank" rel="noopener noreferrer"`;
+// A line's product: the verified name with a tick; else the description the
+// report carried, marked when the catalogue has no such code.
 export function itemName(kc, fallback = '') {
   const n = names.get(String(kc));
-  if (n) return `<a class="nm-ok" href="${esc(n.url || searchUrl(kc))}" target="_blank" rel="noopener noreferrer" title="Verified · open on kmart.com.au"><span class="nm-tick">✓</span>${esc(n.name)} ↗</a>`;
-  if (n === null) return `<span title="Not in the catalogue: not sold online, or a retired code">${esc(fallback)} <small class="nm-off">not online</small></span>`;
-  return esc(fallback);
+  if (n) return `<a class="nm-ok" ${goAttrs(kc)} title="Open the product page on kmart.com.au"><span class="nm-tick">✓</span>${esc(n.name)} ↗</a>`;
+  if (n === null) return `<a class="nm-go" ${goAttrs(kc)} title="Not in the catalogue (not sold online, or a retired code): search kmart.com.au">${esc(fallback || kc)}</a> <small class="nm-off">not online</small>`;
+  return `<a class="nm-go" ${goAttrs(kc)} title="Open the product page on kmart.com.au">${esc(fallback || kc)}</a>`;
+}
+// One listener for the whole app, in the capture phase so a row's own tap
+// (open, toggle, select) never fires under a copy or a product link.
+export function installProductLinks(catalogue) {
+  document.addEventListener('click', e => {
+    const c = e.target.closest?.('[data-copykc]');
+    if (c) { e.preventDefault(); e.stopPropagation(); copyCode(c.dataset.copykc, c); return; }
+    const a = e.target.closest?.('a[data-kcgo]'); if (!a) return;
+    e.stopPropagation();
+    const kc = a.dataset.kcgo, n = names.get(kc);
+    if (n !== undefined) { a.href = urlOf(kc); return; }   // known: the link goes as it is
+    // Not looked up yet: open the tab now (a later open is a blocked pop-up), then send it on.
+    e.preventDefault();
+    const w = window.open('about:blank', '_blank');
+    const send = u => { if (w && !w.closed) { try { w.opener = null; } catch {} w.location.replace(u); } else window.open(u, '_blank', 'noopener'); };
+    catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || 'Verified product', url: it.url || null } : null); send(urlOf(kc)); }).catch(() => send(searchUrl(kc)));
+  }, true);
+}
+async function copyCode(kc, el) {
+  const { toast } = await import('../../ui.js');
+  try { await navigator.clipboard.writeText(kc); el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 700); toast(`${kc} copied`); }
+  catch { toast('Could not copy: check the clipboard permission', 'bad'); }
 }
 export function ensureNames(ctx, codes, repaint) {
   const want = [...new Set(codes.map(String))].filter(kc => !names.has(kc) && /^\d{6,12}$/.test(kc));

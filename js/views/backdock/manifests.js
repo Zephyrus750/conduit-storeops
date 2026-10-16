@@ -8,7 +8,7 @@
 // landed. Publish a report here or at Receiving; attach one to a truck.
 
 import { ic, esc, vh, sub, toast, dep, mhead, ago, fmtDate } from '../../ui.js';
-import { ensureNames, nameOf, kcLink, itemName } from '../stockroom/common.js';
+import { ensureNames, nameOf, kcCopy, itemName } from '../stockroom/common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
 import { previewManifest } from './mpreview.js';
 import { manifestIndex, microDept, microChip, microName, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
@@ -102,12 +102,12 @@ function explorer(ctx, e, doc) {
   const roll = `<div class="mfx-roll">${gs.map(g => `<button class="mfx-seg${st.group === g[0] ? ' on' : ''}${st.group && st.group !== g[0] ? ' dim' : ''}" data-act="group" data-g="${g[0]}" style="flex:${gc[g[0]]};background:${g[2]}" title="${g[1]}: ${Math.round(gc[g[0]])} cartons">${gc[g[0]] / gt > 0.08 ? `${g[1]} ${Math.round(gc[g[0]] / gt * 100)}%` : ''}</button>`).join('')}</div>${st.group ? `<div class="cs-dim" style="margin:-4px 0 8px">Showing ${esc(GROUPS.find(g => g[0] === st.group)?.[1] || 'Unknown')} only · <span class="go" data-act="group" data-g="${esc(st.group)}">show all</span></div>` : ''}`;
   const list = sorted(rows(doc, landed)), cols = COLS[st.tab];
   const th = cols.map(([label, key]) => key ? `<th data-act="sort" data-k="${key}" class="${st.sort === key ? 'on' : ''}">${label}${st.sort === key ? (st.dir > 0 ? ' ▲' : ' ▼') : ''}</th>` : `<th>${label}</th>`).join('');
-    const body = st.tab === 'products' ? list.slice(0, 200).map(r => `<tr><td class="mono">${kcLink(r.k)}</td><td>${itemName(r.k, r.d)}</td><td>${chip(r.dept)}</td><td class="n">${r.units}</td><td class="n">${r.cartons}</td><td class="n">${r.consols.length}</td><td>${r.consols.slice(0, 6).map(id => sq(landed[id])).join('')}</td></tr>`).join('')
+    const body = st.tab === 'products' ? list.slice(0, 200).map(r => `<tr><td class="mono">${kcCopy(r.k)}</td><td>${itemName(r.k, r.d)}</td><td>${chip(r.dept)}</td><td class="n">${r.units}</td><td class="n">${r.cartons}</td><td class="n">${r.consols.length}</td><td>${r.consols.slice(0, 6).map(id => sq(landed[id])).join('')}</td></tr>`).join('')
     : st.tab === 'depts' ? list.map(r => `<tr><td>${chip(r.dept)} <span class="mfx-dn"><small class="cs-dim mono">${esc(r.dept)}</small> ${esc(r.name || 'Unknown department')}</span></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
     : list.slice(0, 120).map(c => {
       const open = !!st.expanded[c.id] || (st.q && list.length <= 3), items = c.items || [];
       return `<tr class="mfx-c" data-act="toggle" data-id="${esc(c.id)}"><td>${sq(c.state)}</td><td class="mono" title="Consolidation ${esc(c.cons || '')}">${esc(c.id)}${early[c.id] ? ` <span class="status warn" title="Landed on Truck ${esc(truckNo(early[c.id].t))} before this manifest arrived">LANDED ${esc(fmtDate(early[c.id].d))}</span>` : ''}</td><td>${(c.mix || []).slice(0, 4).map(x => chip(x[0])).join('')}</td><td class="n">${c.cartons}</td><td class="n">${c.units}</td><td class="n">${c.keycodes}</td></tr>` +
-        (open ? `<tr class="mfx-items"><td></td><td colspan="5">${items.slice(0, 40).map(it => `<div class="mfc-it${st.q && String(it.k).startsWith(st.q.trim()) ? ' hit' : ''}"><span class="kc">${kcLink(it.k)}</span><span class="nm">${itemName(it.k, it.d || '')}</span>${it.dept ? chip(it.dept) : ''}<span class="ct">~${Math.round(itemCartons(c, it) * 10) / 10} ctn · ${it.q} units</span></div>`).join('')}${items.length > 40 ? `<div class="cs-dim">${items.length - 40} more lines</div>` : ''}</td></tr>` : '');
+        (open ? `<tr class="mfx-items"><td></td><td colspan="5">${items.slice(0, 40).map(it => `<div class="mfc-it${st.q && String(it.k).startsWith(st.q.trim()) ? ' hit' : ''}"><span class="kc">${kcCopy(it.k)}</span><span class="nm">${itemName(it.k, it.d || '')}</span>${it.dept ? chip(it.dept) : ''}<span class="ct">~${Math.round(itemCartons(c, it) * 10) / 10} ctn · ${it.q} units</span></div>`).join('')}${items.length > 40 ? `<div class="cs-dim">${items.length - 40} more lines</div>` : ''}</td></tr>` : '');
     }).join('');
   const more = st.tab === 'products' && list.length > 200 ? `${list.length - 200} more products: search to narrow` : st.tab === 'consols' && list.length > 120 ? `${list.length - 120} more consols: search to narrow` : '';
   const stat = (k, v, tip, note) => `<div${tip ? ` title="${esc(tip)}"` : ''}><span>${k}</span><b>${v}</b>${note ? `<small>${esc(note)}</small>` : ''}</div>`;

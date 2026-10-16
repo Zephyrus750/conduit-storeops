@@ -161,12 +161,14 @@ and those are set, the legacy suite and details workers (`LOOKUP_URL`,
 `DETAILS_URL`) answer instead; after that they can be removed from
 `wrangler.toml`. `npm run dev` serves stand-in sitemaps on :8791.
 
-Keycodes on screen link to the website (Decant Visualiser's and K2B's
-links): `kcLink()` and `itemName()` in `js/views/stockroom/common.js` open
-the catalogue's product page once the code is verified (a green tick on
-the name), else the site's search for the code, in a new tab. Manifests,
-Analytics' top products and a pallet's contents on Receiving use them; the
-Stockroom lists use `nameHtml()`, the same verified link.
+Keycodes and product names work as in K2B and Decant Visualiser: a click
+on a keycode (`kcCopy()`) copies it, a click on a product name
+(`itemName()`, `nameHtml()`) opens its product page on kmart.com.au in a new
+tab. Both live in `js/views/stockroom/common.js`; one capture-phase listener
+(`installProductLinks()`, installed by the shell) handles them, so a row's
+own tap never fires underneath. The page comes from the catalogue; a name
+clicked before its lookup has landed asks on the click, and a code the
+catalogue does not know opens the site's search for it.
 
 ## Admin console
 
