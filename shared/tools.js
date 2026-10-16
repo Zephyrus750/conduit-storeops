@@ -33,7 +33,7 @@ export const TOOLS = [
   T('receiving', 'backdock', 'Receiving, Team Board and Dock screen', ['receiving', 'teamboard', 'dockscreen'], ['truck.', 'pallet.', 'halt.', 'huddle.', 'break.', 'receiving.', 'manifest.attach', 'manifest.linkLate', 'plan.queues', 'dock.roster']),
   T('manifests', 'backdock', 'Manifests', ['manifests'], ['manifest.publish', 'manifest.remove']),
   T('profiles', 'backdock', 'Carton profiles', ['profiles']),
-  T('planner', 'backdock', 'Planner', ['planner'], ['plan.set', 'plan.remove']),
+  T('planner', 'backdock', 'Planner', ['planner'], ['plan.set', 'plan.remove', 'plan.noTrucks']),
   T('rhistory', 'backdock', 'Receiving history', ['rhistory']),
   T('boards', 'backdock', 'Wallboard and analytics', ['wallboard', 'danalytics']),
 ];
