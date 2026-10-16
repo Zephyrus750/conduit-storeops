@@ -24,19 +24,19 @@ export default {
   },
   mobile(ctx) { return mvMap({ badge: '<span id="pkbadge"></span>' }) + `<div class="mv-sel route" id="pkmob"></div>`; },
   mount(ctx, root) {
-    const map = mountMap($('#mapstage', root), { cls: 'pk', onSelect: info => { if (info.kind !== 'shelf') return; const m = model(ctx); if (m.items.some(i => canonCode(i.code) === info.code)) return; save(ctx, replan(map, [...m.items, { code: info.code, completed: false }], 1)); } });
+    const map = mountMap($('#mapstage', root), { cls: 'pk', onSelect: info => { if (info.kind !== 'shelf') return; const m = model(ctx); if (m.items.some(i => canonCode(i.code) === info.code)) return; save(ctx, [...m.items, { code: info.code, completed: false }]); } });
     bindMapChrome(root, map);
     const paint = () => {
       const m = model(ctx);
       const marks = {}; for (const i of m.items) marks[i.code] = i.completed ? 'done' : 'stop';
-      const r = map.drawRoute(m.items.map(i => i.code), m.items.filter(i => i.completed).map(i => i.code));
+      const w = walked(map, m), r = map.drawRoute(w.map(i => i.code), m.items.filter(i => i.completed).map(i => i.code));
       const pd = $('#pkdist', root); if (pd) pd.textContent = !m.items.length ? 'Tap a shelf or type codes to build the list' : (r.network ? `${r.stops} stop${r.stops === 1 ? '' : 's'} on this level · along the walk paths` : 'No walk paths on this level yet: straight lines') + (r.metres ? ` · ~${r.metres} m` : '') + (r.exit ? ' · then the stairs' : '');
       const side = $('#pkside', root); if (side) side.innerHTML = list(map, m);
       const mob = $('#pkmob', root); if (mob) mob.innerHTML = mobile(map, m, r);
-      setStrip(root, rtStrip(m));
+      setStrip(root, rtStrip({ items: w }));
       const pb = document.querySelector('[data-act="plan"]'); if (pb) pb.disabled = m.items.length <= 2;
       const hs = document.querySelector('.vh .sub'); if (hs) { const picked = m.items.filter(i => i.completed).length; hs.innerHTML = sub(`${m.items.length} items`, `${picked} picked`, m.items.length ? `${m.items.length - picked} stops to go` : ''); }
-      const b = $('#pkbadge', root); if (b) { const next = m.items.find(i => !i.completed); b.innerHTML = `<b>${m.items.filter(i => i.completed).length} / ${m.items.length}</b> picked${next ? ' · next ' + esc(next.code) : ''}`; }
+      const b = $('#pkbadge', root); if (b) { const next = w.find(i => !i.completed); b.innerHTML = `<b>${m.items.filter(i => i.completed).length} / ${m.items.length}</b> picked${next ? ' · next ' + esc(next.code) : ''}`; }
     };
     paint();
     root.addEventListener('click', async e => {
@@ -45,9 +45,10 @@ export default {
       if (act === 'toggle') await save(ctx, m.items.map(i => i.code === code ? { ...i, completed: !i.completed } : i));
       else if (act === 'remove') await save(ctx, m.items.filter(i => i.code !== code));
       else if (act === 'clear') { const n = m.items.length; if (n && confirm(`Clear all ${n} stop${n === 1 ? '' : 's'} from the pick list?`)) await save(ctx, []); }
-      else if (act === 'pick-next') { const n = m.items.find(i => !i.completed); if (n) await save(ctx, m.items.map(i => i === n ? { ...i, completed: true } : i)); }
-      else if (act === 'add') { const inp = $('[data-field="add"]', root); const codes = [...new Set(inp.value.toUpperCase().replace(/([A-Z]+\d+)\s*[- ]\s*([SE]\d+)/g, '$1$2').split(/[\s,;]+/).map(canonCode).filter(Boolean))]; const bad = codes.filter(c => !map.groups(c).length); if (bad.length) toast(`Not in this store: ${bad.join(', ')}`, 'bad'); const ok = codes.filter(c => map.groups(c).length && !m.items.some(i => i.code === c)); if (ok.length) await save(ctx, replan(map, [...m.items, ...ok.map(code => ({ code, completed: false }))], ok.length)); inp.value = ''; }
-      else if (act === 'plan') { const order = map.planOrder(m.items.map(i => i.code)); const by = Object.fromEntries(m.items.map(i => [i.code, i])); await save(ctx, order.map(c => by[c])); toast('Stops ordered by the shortest walk'); }
+      else if (act === 'pick-next') { const n = walked(map, m).find(i => !i.completed); if (n) await save(ctx, m.items.map(i => i === n ? { ...i, completed: true } : i)); }
+      else if (act === 'add') { const inp = $('[data-field="add"]', root); const codes = [...new Set(inp.value.toUpperCase().replace(/([A-Z]+\d+)\s*[- ]\s*([SE]\d+)/g, '$1$2').split(/[\s,;]+/).map(canonCode).filter(Boolean))]; const bad = codes.filter(c => !map.groups(c).length); if (bad.length) toast(`Not in this store: ${bad.join(', ')}`, 'bad'); const ok = codes.filter(c => map.groups(c).length && !m.items.some(i => i.code === c)); if (ok.length) await save(ctx, [...m.items, ...ok.map(code => ({ code, completed: false }))]); inp.value = ''; }
+      else if (act === 'plan') { const order = map.planOrder(m.items.map(i => i.code)); const by = Object.fromEntries(m.items.map(i => [i.code, i])); await save(ctx, order.map(c => by[c])); setRouteView(false); toast('List reordered by the shortest walk'); }
+      else if (act === 'route-on' || act === 'route-off') { setRouteView(act === 'route-on'); paint(); }
       else if (act === 'zoom') { map.zoomTo(code); map.select(code); map.ping(code); }
       else if (act === 'floor') { map.floor(a.dataset.floor); paint(); }
     });
@@ -96,7 +97,7 @@ export default {
             if (k >= 0) { items[k] = { code: c, completed: false }; swapped.push(`${c} (for ${fresh.code})`); } else { items.push({ code: c, completed: false }); added.push(c); }
             recent = { code: c, at: Date.now() };
           }
-          if (added.length || swapped.length) { haptic('navigate'); save(ctx, replan(map, items, 0)); }
+          if (added.length || swapped.length) { haptic('navigate'); save(ctx, items); }
           const said = [added.length && `Added ${added.join(', ')}`, swapped.length && `Now ${swapped.join(', ')}`, bad.length && `not in this store: ${bad.join(', ')}`, !added.length && !swapped.length && had.length && `already in the list: ${had.join(', ')}`].filter(Boolean).join(' · ');
           say(said.charAt(0).toUpperCase() + said.slice(1), !added.length && !swapped.length);
         },
@@ -116,30 +117,58 @@ function list(map, m) {
   const add = `<div class="ch"><h3>Stops</h3><span class="go" data-act="clear">Clear all</span></div><div class="msh-add"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input data-field="add" placeholder="Add shelf or paste list (e.g. A10, K12, Q15)"></div><button class="btn primary sm" data-act="add">Add</button></div>`;
   if (!m.items.length) return add + '<div class="list pk-list"><div class="li" style="color:var(--dim)">Tap shelves on the map or add codes above.</div></div>';
   const idx = new Map(m.items.map((i, n) => [i.code, n])), plan = map.floorPlan(m.items.map(i => i.code)), multi = plan.length > 1, here = map.floorId();
-  const row = i => { const n = idx.get(i.code); return `<div class="li" data-i="${n}"><span class="pk-grip" data-i="${n}" title="Drag to reorder" aria-label="Drag to reorder">${ic('grip')}</span><span class="stopn${i.completed ? ' done' : ''}">${n + 1}</span><span class="tick${i.completed ? ' done' : ''}" data-act="toggle" data-code="${esc(i.code)}"></span><span class="loc" data-act="zoom" data-code="${esc(i.code)}">${esc(i.code)}</span>${deptOf(map, i.code) ? dep(deptOf(map, i.code)) : ''}<span class="nm">${DEPT_NAME[deptOf(map, i.code)] || ''}</span><span class="ibtn" data-act="remove" data-code="${esc(i.code)}">${ic('x')}</span></div>`; };
+  const w = walked(map, m), rn = w === m.items ? null : new Map(w.map((i, n) => [i.code, n + 1])), next = w.find(i => !i.completed);
+  const row = i => { const n = idx.get(i.code); return `<div class="li${i === next ? ' cur' : ''}" data-i="${n}"><span class="pk-grip" data-i="${n}" title="Drag to reorder" aria-label="Drag to reorder">${ic('grip')}</span><span class="stopn${i.completed ? ' done' : ''}" title="List order">${n + 1}</span>${rn ? `<span class="stopn walk${i.completed ? ' done' : ''}" title="Route order">${rn.get(i.code)}</span>` : ''}<span class="tick${i.completed ? ' done' : ''}" data-act="toggle" data-code="${esc(i.code)}"></span><span class="loc" data-act="zoom" data-code="${esc(i.code)}">${esc(i.code)}</span>${deptOf(map, i.code) ? dep(deptOf(map, i.code)) : ''}<span class="nm">${DEPT_NAME[deptOf(map, i.code)] || ''}</span><span class="ibtn" data-act="remove" data-code="${esc(i.code)}">${ic('x')}</span></div>`; };
   const byCode = new Map(m.items.map(i => [i.code, i])), placed = new Set(plan.flatMap(f => f.codes));
   const body = plan.map((f, k) => (multi ? `<div class="pk-floor${f.id === here ? ' on' : ''}" data-act="floor" data-floor="${esc(f.id)}">${ic('map')}<b>${esc(f.name)}</b><span>${f.type === 'boh' ? 'Back of house' : 'Front of house'} · ${f.codes.length} stop${f.codes.length === 1 ? '' : 's'}</span></div>` : '') + f.codes.map(c => row(byCode.get(c))).join('') + (multi && k < plan.length - 1 ? `<div class="pk-stairs">${ic('stairs')}Stairs to ${esc(plan[k + 1].name)}</div>` : '')).join('') + m.items.filter(i => !placed.has(i.code)).map(row).join('');
-  return add + `<div class="list pk-list">${body}</div>`;
+  return add + routeNote(map, m) + `<div class="list pk-list">${body}</div>`;
 }
-// Adding stops re-plans the walk for what is left: picked stops keep their
-// places at the front and the rest follow the shortest walk.
-function replan(map, items, added) {
-  const left = items.filter(i => !i.completed); if (left.length < 3) return items;
-  const by = new Map(left.map(i => [i.code, i])), order = map.planOrder(left.map(i => i.code));
-  if (added) toast('Stops re-planned for the shortest walk');
-  return [...items.filter(i => i.completed), ...order.map(c => by.get(c))];
+// The route order beside the list's own: the list keeps the order it was
+// given (the official system's, or as built), and when a shorter walk
+// exists for the stops still to pick it is offered next to it. "Show route
+// order" walks that order (map, Next, Picked) and numbers each stop with
+// it; "Reorder list" makes it the list's order. Measured over every floor.
+const RV_KEY = 'picklist_route';
+let routeView = false; try { routeView = localStorage.getItem(RV_KEY) === '1'; } catch {}
+const setRouteView = on => { routeView = on; try { localStorage.setItem(RV_KEY, on ? '1' : '0'); } catch {} };
+let bestMemo = { key: null, v: null };
+function best(map, m) {
+  const left = m.items.filter(i => !i.completed).map(i => i.code), key = m.items.map(i => i.code + (i.completed ? '+' : '')).join(',');
+  if (bestMemo.key === key && bestMemo.map === map) return bestMemo.v;
+  let v = null;
+  if (left.length >= 3) {
+    const order = map.planOrder(left), cur = map.routeLength(left), opt = map.routeLength(order), gain = cur.dist - opt.dist, pct = cur.dist ? gain / cur.dist : 0;
+    const same = order.every((c, k) => c === left[k]);
+    v = { order, cur, opt, pct, same, worth: !same && pct >= 0.08, saved: cur.metres != null && opt.metres != null ? cur.metres - opt.metres : null };
+  }
+  bestMemo = { key, map, v }; return v;
+}
+// The stops in the order they are walked: the list's, or the route order's when it is shown.
+function walked(map, m) {
+  const b = routeView ? best(map, m) : null; if (!b || b.same) return m.items;
+  const by = new Map(m.items.map(i => [i.code, i]));
+  return [...m.items.filter(i => i.completed), ...b.order.map(c => by.get(c))];
+}
+const shorter = b => `${b.cur.metres != null ? `about ${b.cur.metres} m` : ''}${b.cur.metres != null ? ' → ' : ''}${b.opt.metres != null ? `${b.opt.metres} m · ` : ''}${Math.round(b.pct * 100)}% shorter`;
+// The recommendation over the list: a shorter walk exists, or the route order is being walked.
+function routeNote(map, m) {
+  const b = best(map, m); if (!b) return '';
+  if (routeView && !b.same) return `<div class="pk-opt on">${ic('route')}<div><b>Walking the route order</b><span>The teal numbers are the walk; the list keeps its own numbers. ${b.pct > 0 ? esc(shorter(b)) + ' than the list order.' : ''}</span></div><div class="pk-opt-a"><button class="btn sm" data-act="route-off">List order</button><button class="btn sm" data-act="plan">Reorder list</button></div></div>`;
+  if (b.worth) return `<div class="pk-opt">${ic('route')}<div><b>A shorter route is available</b><span>${esc(shorter(b))} than walking the list in order.</span></div><div class="pk-opt-a"><button class="btn sm primary" data-act="route-on">Show route order</button><button class="btn sm" data-act="plan">Reorder list</button></div></div>`;
+  return `<div class="pk-opt ok">${ic('check')}<div><span>This order is already about the shortest walk.</span></div></div>`;
 }
 // The phone's Route sheet (opened from the strip): every stop in walking
 // order with its department, ticks to pick (a tap toggles, × removes), the
 // walk, and what to do next.
 function mobile(map, m, r) {
-  const cur = m.items.find(i => !i.completed), done = m.items.filter(i => i.completed).length, n = m.items.length;
+  const w = walked(map, m), rn = w === m.items ? null : new Map(w.map((i, n) => [i.code, n + 1]));
+  const cur = w.find(i => !i.completed), done = m.items.filter(i => i.completed).length, n = m.items.length;
   const walk = !n ? `Tap shelves on the map${voiceSupported() ? ', or tap Say it and say them,' : ''} to build the list.` : `${n} stop${n === 1 ? '' : 's'}${r?.metres ? ` · about ${r.metres} m` : ''}${r && !r.network ? ' · no walk paths on this level yet' : ''}${r?.exit ? ' · then the stairs' : ''}`;
   const head = `<div class="sx-h">${ic('m-picklist')}Pick list<span class="n">${done} / ${n}</span></div><div class="sx-sub">${walk}</div>`;
   const stops = n ? sx.sec('Stops', sx.rows(m.items.map((i, k) => { const d = deptOf(map, i.code);
-    return `<div class="sx-r rt-r${i.completed ? ' done' : i === cur ? ' cur' : ''}" data-act="toggle" data-code="${esc(i.code)}"><span class="rt-chk">${i.completed ? ic('check') : ''}</span><span class="rt-no">${k + 1}</span><div class="k"><b>${esc(i.code)}</b><span class="rt-d">${d ? dep(d) : ''}${esc(DEPT_NAME[d] || '')}</span></div>${i === cur ? '<span class="v acc">Next</span>' : i.completed ? '<span class="v ok">Picked</span>' : ''}<button class="rt-x" type="button" data-act="remove" data-code="${esc(i.code)}" aria-label="Remove ${esc(i.code)}">${ic('x')}</button></div>`; })), done ? `${done} picked` : '') : '';
+    return `<div class="sx-r rt-r${i.completed ? ' done' : i === cur ? ' cur' : ''}" data-act="toggle" data-code="${esc(i.code)}"><span class="rt-chk">${i.completed ? ic('check') : ''}</span><span class="rt-no" title="List order">${k + 1}</span>${rn ? `<span class="rt-no walk" title="Route order">${rn.get(i.code)}</span>` : ''}<div class="k"><b>${esc(i.code)}</b><span class="rt-d">${d ? dep(d) : ''}${esc(DEPT_NAME[d] || '')}</span></div>${i === cur ? '<span class="v acc">Next</span>' : i.completed ? '<span class="v ok">Picked</span>' : ''}<button class="rt-x" type="button" data-act="remove" data-code="${esc(i.code)}" aria-label="Remove ${esc(i.code)}">${ic('x')}</button></div>`; })), done ? `${done} picked` : '') : '';
   const acts = sx.acts([cur ? sx.btn('check', 'Picked · next', 'data-act="pick-next"', true) : '', voiceSupported() ? sx.btn('mic', dictation ? 'Stop listening' : 'Say it', 'data-act="voice-add"') : '', cur ? sx.btn('pin', `Show ${esc(cur.code)}`, `data-act="zoom" data-code="${esc(cur.code)}"`) : '', n ? sx.btn('trash', 'Clear', 'data-act="clear"') : '']);
-  return `<div class="sx">${head}${stops}${acts}</div>`;
+  return `<div class="sx">${head}${routeNote(map, m)}${stops}${acts}</div>`;
 }
 // The strip under the phone's Route map: the count, the next stop and Picked.
 function rtStrip(m) {
