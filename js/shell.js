@@ -96,7 +96,12 @@ let pendingLink = takeDeepLink();
   // owner acting as a store) goes straight back in.
   if (s?.store) { if (s.actas || reloaded()) await enter(); else await showContinue(s); }
   else if (s?.owner) await enterAdmin(); else showSignin();
-})();
+})().catch(e => {
+  // Opening failed part-way (a bad saved session, a view that threw): the
+  // sign-in, with the reason, rather than an empty frame with no way in.
+  console.error(e); try { leave(); } catch {}
+  showSignin({ error: `Conduit could not open (${e.message || e}). Sign in again, or reload.` });
+});
 function reloaded() { try { return performance.getEntriesByType('navigation')[0]?.type === 'reload'; } catch { return false; } }
 function openPendingLink(s) {
   const l = pendingLink; pendingLink = null; if (!l) return false;
@@ -455,7 +460,9 @@ function show(id, arg) {
   const cur = client.session.current;
   const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, api: (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token })), storage: client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
   const useMobile = mobile && typeof view.mobile === 'function';
-  const html = useMobile ? view.mobile(ctx) : view.desktop(ctx);
+  // A view that fails to paint shows why and a way out, never an empty frame.
+  let html; try { html = useMobile ? view.mobile(ctx) : view.desktop(ctx); }
+  catch (e) { console.error(e); html = `<div class="card view-err"><h3>${ic('alert')}${esc(view.title)} could not open</h3><p class="lbl">${esc(e.message || String(e))}</p><div class="acts2"><button class="btn primary" data-shell-act="reload">${ic('refresh')}Reload Conduit</button>${view.id !== (admin ? 'admin' : 'dashboard') ? `<button class="btn" data-go="mhome">Go home</button>` : ''}</div></div>`; }
   // A fresh content element each time, so a view's listeners die with it;
   // between the phone's map modes the map stays put instead (keepMap) and
   // the last view's listeners end with its signal.
@@ -567,6 +574,7 @@ document.addEventListener('click', e => {
     else if (act === 'sheet') { sheetOpen = !sheetOpen; try { localStorage.setItem(SHEET_KEY, sheetOpen ? '1' : '0'); } catch {} paintSheet(); haptic('tap'); }
     else if (act === 'update-now') updates.apply();
     else if (act === 'update-later') $('#updBar')?.remove();
+    else if (act === 'reload') location.reload();
     else if (act === 'owner-signin') showSignin({ owner: true });
     else if (act === 'switch-area') { $('#msheet')?.classList.remove('open'); if (store) openLauncher(); }
     else if (act === 'store-signin') showSignin();
