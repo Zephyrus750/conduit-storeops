@@ -631,6 +631,19 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       const mpu = mapMeta?.metresPerUnit;
       return { dist: total, metres: mpu ? Math.round(total * mpu) : null, stops: onFloor.length, network: !!graph, entry: !!legs.entry, exit: !!legs.exit };
     },
+    // The walk a list takes in the order given, over every floor it visits
+    // (the stairs legs as drawRoute walks them), without drawing it: what the
+    // pick list compares its own order against the route order with.
+    routeLength(ids) {
+      const plan = api.floorPlan(ids), legs = api.stairsLegs(ids); let total = 0;
+      for (const f of plan) {
+        const graph = graphFor(fl.find(x => x.id === f.id)), lg = legs[f.id] || {};
+        const pts = [...(lg.entry ? [{ x: lg.entry.x, y: lg.entry.y }] : []), ...f.codes.map(id => api.centreOf(id)).filter(Boolean).map(c => ({ x: c[0], y: c[1] })), ...(lg.exit ? [{ x: lg.exit.x, y: lg.exit.y }] : [])];
+        for (let i = 0; i < pts.length - 1; i++) { const leg = graph ? routeBetween(graph, pts[i], pts[i + 1]) : null; total += leg ? leg.dist : Math.hypot(pts[i].x - pts[i + 1].x, pts[i].y - pts[i + 1].y); }
+      }
+      const mpu = mapMeta?.metresPerUnit;
+      return { dist: total, metres: mpu ? Math.round(total * mpu) : null };
+    },
     // The floors a list visits, in the order it reaches them, with each
     // floor's codes: the plan the pick list shows floor by floor.
     floorPlan(ids) {
