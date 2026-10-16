@@ -45,6 +45,7 @@ import { retiring, rowKey } from '../shared/retain.js';
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
 const SOH_MAX = 4_000_000, SOH_ROWS = 20_000;     // one SOH report: a whole store's stockroom
+const REPORT_MAX = 1_900_000, REPORT_KEEP = 3;       // the backfill desk's pasted SIM report: one row (2 MB), the last three days kept
 const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object hold 2 MB
 const MAP_SOURCE_MAX = 1_900_000;
 const MAP_BODY_MAX = 16_000_000;   // a publish: every floor plus the source, checked before parsing  // the editor's document kept beside a version (no floor drawings in it)
@@ -55,7 +56,7 @@ const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // an issue is completed or removed (a photo can show people; it is kept no
 // longer than it helps).
 const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
-const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'store.retain', 'store.areas.set']);
+const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'backfill.report.publish', 'store.retain', 'store.areas.set']);
 const SNAPSHOT_MAX = 1_900_000;       // the state is saved as one row, and a Durable Object row holds 2 MB
 const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
 
@@ -78,6 +79,7 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS simreport (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, at TEXT NOT NULL, by TEXT NOT NULL, size INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS archive (kind TEXT NOT NULL, key TEXT NOT NULL, date TEXT NOT NULL, row TEXT NOT NULL, PRIMARY KEY (kind, key));
@@ -168,6 +170,7 @@ export class StoreObject extends DurableObject {
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1], claims));
           if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readJson(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12), url.searchParams.get('weekly') === '1'); }
+          if (url.pathname === '/backfill/report') { const no = needArea(claims, 'stockroom'); if (no) return no; return request.method === 'POST' ? this.publishReport(await readJson(request, REPORT_MAX), claims) : this.reportDoc(url.searchParams.get('date') || ''); }
           const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
           if (sohDay) { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
           if (url.pathname === '/manifest' && request.method === 'POST') return this.needTool('manifests') || this.publishManifest(await readJson(request, MANIFEST_MAX), claims);
@@ -453,6 +456,40 @@ export class StoreObject extends DurableObject {
   }
 
   needTool(id) { return toolOff(this.state.tools?.off, id) ? fail(403, 'tool_off', 'that tool is switched off for this store') : null; }
+
+  // ── The backfill desk's inventory report ─────────────────────────────
+  // The SIM report pasted at Backfill review, whole (bay → keycodes, the
+  // per-bay lists, the paste's range and delta), one a day: a re-paste
+  // replaces it. Indexed by a backfill.report.publish event so every device
+  // knows a newer one is there and fetches it. Last write wins.
+  publishReport(body, claims) {
+    if (!hasRole(claims, ['stockroom', 'manager']) && !claims.owner) throw new HttpError(403, 'unauthorised', 'saving the report needs the stockroom code');
+    const date = String(body?.date || ''), r = body?.report;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, 'invalid_request', 'date must be YYYY-MM-DD');
+    if (!r || typeof r !== 'object' || !r.byLoc || typeof r.byLoc !== 'object' || Array.isArray(r.byLoc)) throw new HttpError(400, 'invalid_request', 'report.byLoc must map each bay to its keycodes');
+    const byLoc = {}; let codes = 0;
+    for (const [bay, list] of Object.entries(r.byLoc)) {
+      if (!/^[\w-]{1,12}$/.test(bay) || !Array.isArray(list) || list.some(k => !/^\d{6,13}$/.test(String(k)))) throw new HttpError(400, 'invalid_request', `bay ${String(bay).slice(0, 12)}: keycodes of 6 to 13 digits`);
+      byLoc[bay] = list.map(String); codes += list.length;
+    }
+    const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    const at = Number(r.at) || Date.now(), doc = JSON.stringify({ date, at, byLoc, range: r.range ?? null, delta: obj(r.delta), bayAt: obj(r.bayAt) });
+    if (doc.length > REPORT_MAX) throw new HttpError(413, 'payload_too_large', 'the report is over 1.9 MB');
+    const by = claims.device || (claims.owner ? 'owner' : ''), bays = Object.keys(byLoc).length;
+    const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'backfill.report.publish', entity: { date }, payload: { at, bays, codes }, at: new Date().toISOString(), v: 1 };
+    const [res] = this.submit([ev], claims, { internal: true });
+    if (!res.ok) throw new HttpError(res.code === 'unauthorised' ? 403 : 400, res.code, res.message);
+    this.sql.exec('INSERT OR REPLACE INTO simreport (date, doc, at, by) VALUES (?, ?, ?, ?)', date, doc, ev.at, by);
+    const keep = this.sql.exec('SELECT date FROM simreport ORDER BY date DESC').toArray().map(x => x.date).slice(0, REPORT_KEEP);
+    this.sql.exec(`DELETE FROM simreport WHERE date NOT IN (${keep.map(() => '?').join(',')})`, ...keep);
+    return json({ ok: true, date, at, bays, codes, seq: res.seq }, 201);
+  }
+  reportDoc(date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, 'invalid_request', 'date must be YYYY-MM-DD');
+    const row = this.sql.exec('SELECT doc FROM simreport WHERE date = ?', date).toArray()[0];
+    if (!row) throw new HttpError(404, 'not_found', `no inventory report for ${date}`);
+    return new Response(row.doc, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...CORS } });
+  }
 
   // ── SOH snapshots ─────────────────────────────────────────────────────
   // The stock-on-hand report pasted at the stockroom desk, kept one per day

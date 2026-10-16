@@ -262,6 +262,8 @@ r.get('/v1/store/:no/export/:kind', (req, env, _c, p) => anyStoreCall(req, env, 
 r.post('/v1/store/:no/soh', (req, env, _c, p) => storeCall(req, env, p.no, '/soh'));
 r.get('/v1/store/:no/soh', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/soh', new URL(req.url).search));   // stockroom-gated in the store object
 r.delete('/v1/store/:no/soh/:date', (req, env, _c, p) => storeCall(req, env, p.no, `/soh/${p.date}`));
+r.post('/v1/store/:no/backfill/report', (req, env, _c, p) => storeCall(req, env, p.no, '/backfill/report'));
+r.get('/v1/store/:no/backfill/report', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/backfill/report', new URL(req.url).search));   // stockroom-gated in the store object
 // ── manifests: the DC report published whole, read on demand ──────────────
 r.post('/v1/store/:no/manifest', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/manifest'));
 r.get('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));

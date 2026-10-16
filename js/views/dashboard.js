@@ -18,7 +18,7 @@ import { registerSummary, isFixture, consolidate } from '../../shared/inventory.
 
 const TARGET = 100, DAILY = 20;
 const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month']];
-let period = 'today', report = null;          // report: today's pasted SIM report on this device, if any
+let period = 'today', report = null;          // report: this device's copy of today's SIM report (the store's is in state.backfill.report)
 const SEV = [['Low', '#6B7280'], ['Medium', '#D97706'], ['High', '#DC2626'], ['Urgent', '#7F1D1D']];
 
 function kpi(cls, icon, title, go, n, d, hl, rows, pct) {
@@ -121,9 +121,11 @@ function morning(ctx) {
   const tmrw = ts.length ? ` · tomorrow ${ts.filter(x => x.manifest).length}/${ts.length} staged` : '';
   const first = dock ? [...openTrucks(dock).filter(x => x.id.slice(0, 10) === t), ...(dock.history || []).filter(h => h.id.slice(0, 10) === t)].sort((a, b) => a.id.localeCompare(b.id))[0] : null;
   const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen), liToday = Object.entries(L.checks[cyc] || {}).filter(([, c]) => dayOf(c.at) === t);
-  const rep = report && srOk ? report : null, midday = rep && new Date(rep.at).getHours() >= 12;
+  // Today's inventory report: the store's (any desk pasted it), else this device's own copy.
+  const meta = srOk ? ctx.store.get('backfill')?.report : null;
+  const rep = meta?.date === t ? meta : report && srOk ? { at: report.at, bays: Object.keys(report.byLoc || {}).length, codes: Object.values(report.byLoc || {}).reduce((n, l) => n + l.length, 0) } : null, midday = rep && new Date(rep.at).getHours() >= 12;
   const A = [
-    srOk && ['Inventory report', rep ? `Pasted ${fmtHM(new Date(rep.at).toISOString())} · ${Object.keys(rep.byLoc || {}).length} bays · ${Object.values(rep.byLoc || {}).reduce((n, l) => n + l.length, 0)} codes` : 'Not pasted yet · the board compares against nothing until it is', !!rep, 'Paste whole report', 'Re-paste', 'bfreview'],
+    srOk && ['Inventory report', rep ? `Pasted ${fmtHM(new Date(rep.at).toISOString())} · ${rep.bays} bays · ${rep.codes} codes` : 'Not pasted yet · the board compares against nothing until it is', !!rep, 'Paste whole report', 'Re-paste', 'bfreview'],
     dockOk && manRow(mans, lib, tmrw, dock, t),
     dockOk && ['Planner', mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · teams set' : ''}` : 'Today’s trucks not planned', mans.length > 0, 'Plan today’s trucks', 'Open', 'planner'],
   ].filter(Boolean);

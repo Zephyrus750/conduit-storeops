@@ -5,7 +5,7 @@
 // week grid with a side editor.
 
 import { $, ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
-import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, slotRef } from './common.js';
+import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, slotRef, attachManifest } from './common.js';
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const st = { week: 0, sel: null, busy: false };
@@ -38,21 +38,36 @@ function editor(ctx, plan, dock) {
   if (!st.sel) return `<div class="card"><div class="ch"><h3>Pick a truck</h3></div><p class="lbl">Click a slot to set its ETA, manifest and decant team, or + Truck on a day to plan one.</p></div>`;
   const [date, n] = [st.sel.slice(0, 10), Number(st.sel.slice(11))], slot = plan.days[date]?.slots?.[n] || { eta: '', note: '', team: [], manifest: null }, t = truckOf(dock, date, n);
   const d = new Date(date + 'T00:00:00'), idx = manifestIndex(dock);
-  if (t) return `<div class="card pedit"><div class="ch"><h3>Truck ${n} · ${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MON[d.getMonth()]}</h3><span class="tst ${esc(t.status)}">${esc(t.status)}</span></div><p class="lbl">${t.status === 'closed' ? 'This truck has been decanted and finalised. Its record is in Receiving history.' : 'This truck is on the dock board; its team and manifest are managed at Receiving now.'}</p><div class="pf-acts"><button class="btn primary" data-view="${t.status === 'closed' ? 'rhistory' : 'receiving'}">${ic(t.status === 'closed' ? 'm-rhistory' : 'truck')}Open at ${t.status === 'closed' ? 'History' : 'Receiving'}</button></div></div>`;
-  const free = idx.filter(m => !m.truck && !usedManifests(plan).has(m.manNo) || m.manNo === slot.manifest?.manNo);
+  // A truck on the dock: its manifest goes straight on the truck (a closed one is History's).
+  if (t) {
+    const live = t.status !== 'closed', id = `${date}-T${n}`;
+    const pick = live && !t.manifest ? `<div class="pf"><label>Manifest</label><div class="pman">${manSelect(idx, plan, dock, null, id)}<button class="btn primary sm" data-act="attach-truck" data-truck="${esc(id)}">Attach</button></div><span class="cs-dim">Goes on the truck now, as attaching at Receiving does.</span></div>` : '';
+    const has = t.manifest ? `<div class="pman">${ic('file')}<div><b>${esc(t.manifest.manNo)}</b><span>${(t.manifest.consols || []).length} consols · ${cartonsOf(t.manifest)} cartons · on the truck</span></div></div>` : t.plannedManifest ? `<p class="lbl">Manifest ${esc(t.plannedManifest)} is attaching from this slot.</p>` : '';
+    return `<div class="card pedit"><div class="ch"><h3>Truck ${n} · ${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MON[d.getMonth()]}</h3><span class="tst ${esc(t.status)}">${esc(t.status)}</span></div><p class="lbl">${live ? 'This truck is on the dock board; its team is managed at Receiving now.' : 'This truck has been decanted and finalised. Its record is in Receiving history.'}</p>${has}${pick}<div class="pf-acts"><button class="btn${pick ? '' : ' primary'}" data-view="${live ? 'receiving' : 'rhistory'}">${ic(live ? 'truck' : 'm-rhistory')}Open at ${live ? 'Receiving' : 'History'}</button></div></div>`;
+  }
   return `<div class="card pedit"><div class="ch"><h3>Truck ${n} · ${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MON[d.getMonth()]}</h3>${t ? `<span class="tst ${esc(t.status)}">${esc(t.status)}</span>` : ''}</div>` +
     `<div class="pf"><label>ETA</label><input class="inp" data-field="eta" value="${esc(slot.eta || '')}" placeholder="06:30" maxlength="5"><span class="cs-dim">24h · the dock board sorts by it</span></div>` +
-    `<div class="pf"><label>Manifest</label>${slot.manifest ? `<div class="pman">${ic('file')}<div><b>${esc(slot.manifest.manNo)}</b><span>${consolsN(slot.manifest)} consols · ${cartonsOf(slot.manifest)} cartons</span></div><button class="btn sm" data-act="unstage">Remove</button></div>` : ''}<div class="pman"><select class="inp" data-field="man"><option value="">${free.length ? 'Choose a published manifest…' : 'Nothing free in the library'}</option>${free.filter(m => m.manNo !== slot.manifest?.manNo).map(m => `<option value="${esc(m.manNo)}">${esc(m.manNo)} · ${m.consols} consols · ${m.totalCartons}c${m.despatch ? ' · ' + esc(m.despatch) : ''}</option>`).join('')}</select><button class="btn sm primary" data-act="stage">Stage</button></div></div>` +
+    `<div class="pf"><label>Manifest</label>${slot.manifest ? `<div class="pman">${ic('file')}<div><b>${esc(slot.manifest.manNo)}</b><span>${consolsN(slot.manifest)} consols · ${cartonsOf(slot.manifest)} cartons</span></div><button class="btn sm" data-act="unstage">Remove</button></div>` : ''}<div class="pman">${manSelect(idx, plan, dock, slot.manifest?.manNo)}<button class="btn sm primary" data-act="stage">Stage</button></div></div>` +
     `<div class="pf"><label>Decant team</label><div class="dk-team">${(slot.team || []).map(m => `<span class="dk-tc on"><span class="av">${esc(who(m))}</span><button class="dk-x" data-act="team-drop" data-pid="${esc(m.pid)}" title="Remove">${ic('x')}</button></span>`).join('')}<span class="dk-tc add"><input class="inp" data-field="team" placeholder="D4" maxlength="6" autocapitalize="characters" style="width:70px"><button class="ibtn sm" data-act="team-add" title="Add">${ic('plus')}</button></span></div><span class="cs-dim">D-numbers only: no names are kept on the dock.</span></div>` +
     `<div class="pf"><label>Huddle · break</label><span class="pf-pair"><input class="inp mono" data-field="huddle" type="number" min="0" max="120" value="${slot.huddleMins || ''}" placeholder="0"><span class="cs-dim">min huddle</span><input class="inp mono" data-field="break" type="number" min="0" max="120" value="${slot.breakMins || ''}" placeholder="0"><span class="cs-dim">min team break</span></span><span class="cs-dim">The huddle is booked at the decant start and stops the clock; the break is the plan’s allowance.</span></div>` +
     ((slot.team || []).length ? `<div class="pf"><label>Times</label><div class="pf-times">${(slot.team || []).map(m => `<div class="pf-time"><b>${esc(who(m))}</b><input type="time" class="inp" data-mtime="start" data-pid="${esc(m.pid)}" value="${esc(m.start || '')}" title="Start (empty follows the ETA)"><input type="time" class="inp" data-mtime="finish" data-pid="${esc(m.pid)}" value="${esc(m.finish || '')}" title="Finish"></div>`).join('')}</div><span class="cs-dim">Empty start follows the ETA. Finish times keep auto-balance within each shift.</span></div>` : '') +
     `<div class="pf"><label>Note</label><input class="inp" data-field="note" value="${esc(slot.note || '')}" placeholder="Anything the dock should know" maxlength="200"></div>` +
     `<div class="pf-acts"><button class="btn primary" data-act="save">${ic('check')}Save</button><button class="btn" data-act="remove">Remove truck</button></div></div>`;
 }
+// The library as a picker: unused reports first; then the ones already on a
+// truck or staged on a slot, labelled where (a re-run, or one staged to the
+// wrong day), so a published report is never hidden.
+function manSelect(idx, plan, dock, cur, forTruck) {
+  const staged = {}; for (const [date, day] of Object.entries(plan.days || {})) for (const [n, sl] of Object.entries(day.slots || {})) if (sl.manifest?.manNo) staged[sl.manifest.manNo] = `${date}-T${n}`;
+  const where = m => m.truck ? (dock.trucks[m.truck] && dock.trucks[m.truck].status !== 'closed' ? `on Truck ${truckNo(m.truck)} now` : `used on Truck ${truckNo(m.truck)} · ${fmtDate(m.truck.slice(0, 10))}`) : staged[m.manNo] ? `staged for Truck ${truckNo(staged[m.manNo])} · ${fmtDate(staged[m.manNo].slice(0, 10))}` : '';
+  const list = idx.filter(m => m.manNo !== cur && m.truck !== forTruck), free = list.filter(m => !where(m)), used = list.filter(m => where(m));
+  const opt = m => `<option value="${esc(m.manNo)}">${esc(m.manNo)} · ${m.consols} consols · ${m.totalCartons}c${m.despatch ? ' · ' + esc(m.despatch) : ''}${where(m) ? ' · ' + esc(where(m)) : ''}</option>`;
+  return `<select class="inp" data-field="man"><option value="">${!list.length ? 'Nothing in the library yet: publish one in Manifests' : free.length ? 'Choose a published manifest…' : 'Every report is on a truck or staged: choose one below'}</option>${free.map(opt).join('')}${used.length ? `<optgroup label="Already on a truck or staged">${used.map(opt).join('')}</optgroup>` : ''}</select>`;
+}
 function usedManifests(plan) { const s = new Set(); for (const day of Object.values(plan.days || {})) for (const sl of Object.values(day.slots || {})) if (sl.manifest?.manNo) s.add(sl.manifest.manNo); return s; }
 function waiting(ctx, plan, dock) {
   const used = usedManifests(plan), list = manifestIndex(dock).filter(m => !m.truck && !used.has(m.manNo));
-  return `<div class="card"><div class="ch"><h3>Manifests without a slot</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${m.consols} consols · ${m.totalCartons} cartons${m.despatch ? ' · despatch ' + esc(m.despatch) : ''}</span><button class="btn sm" data-act="stage-next" data-day="0" data-man="${esc(m.manNo)}" title="The next free truck today">Today</button><button class="btn sm" data-act="stage-next" data-day="1" data-man="${esc(m.manNo)}" title="The next free truck tomorrow: for a report that came in the day before">Tomorrow</button></div>`).join('')}</div>` : `<p class="lbl">Every published manifest has a truck.</p>`}<p class="lbl">Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.</p></div>`;
+  return `<div class="card"><div class="ch"><h3>Manifests without a slot</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${m.consols} consols · ${m.totalCartons} cartons${m.despatch ? ' · despatch ' + esc(m.despatch) : ''}</span><button class="btn sm" data-act="stage-next" data-day="0" data-man="${esc(m.manNo)}" title="Today's truck: the one on the dock if it has no manifest, else the next free slot">Today</button><button class="btn sm" data-act="stage-next" data-day="1" data-man="${esc(m.manNo)}" title="The next free truck tomorrow: for a report that came in the day before">Tomorrow</button></div>`).join('')}</div>` : `<p class="lbl">Every published manifest has a truck.</p>`}<p class="lbl">Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.</p></div>`;
 }
 // The next free truck slot from today (from = 0) or tomorrow (from = 1).
 function nextFree(plan, dock, from = 0) {
@@ -88,7 +103,12 @@ export default {
         else if (act === 'stage' || act === 'stage-next') {
           let date, n, manNo;
           if (act === 'stage') { ({ date, n } = cur()); manNo = field('man'); if (!manNo) return toast('Choose a manifest first', 'bad'); }
-          else { const nf = nextFree(ctx.store.get('plan'), ctx.store.get('dock'), Number(a.dataset.day) || 0); if (!nf) return toast('No free slot in the next two weeks', 'bad'); date = nf.date; n = nf.n; manNo = a.dataset.man; st.sel = `${date}-${n}`; }
+          else {
+            // Today, with a truck on the dock that has no manifest yet: it goes on that truck.
+            const dock = ctx.store.get('dock'), t0 = !Number(a.dataset.day) && Object.entries(dock.trucks).find(([id, x]) => id.startsWith(dkey(new Date())) && x.status !== 'closed' && !x.manifest && !x.plannedManifest);
+            if (t0) { a.disabled = true; await attachManifest(ctx, t0[0], a.dataset.man); st.sel = `${t0[0].slice(0, 10)}-${truckNo(t0[0])}`; return toast(`${a.dataset.man} attached to Truck ${truckNo(t0[0])}, on the dock now`); }
+            const nf = nextFree(ctx.store.get('plan'), dock, Number(a.dataset.day) || 0); if (!nf) return toast('No free slot in the next two weeks', 'bad'); date = nf.date; n = nf.n; manNo = a.dataset.man; st.sel = `${date}-${n}`;
+          }
           a.disabled = true;
           const doc = await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(manNo)}`);
           await set(date, n, { manifest: slotRef(doc) });
@@ -96,6 +116,7 @@ export default {
         }
         else if (act === 'roster-add') { const pid = dnumId(field('roster').trim()); if (!pid) return toast('Enter a D-number, like D4. Names are not kept.', 'bad'); const cur0 = ctx.store.get('dock').roster?.pids || []; if (cur0.includes(pid)) return; await ctx.store.dispatch({ type: 'dock.roster', entity: {}, payload: { pids: [...cur0, pid] } }); }
         else if (act === 'roster-drop') { const cur0 = ctx.store.get('dock').roster?.pids || []; await ctx.store.dispatch({ type: 'dock.roster', entity: {}, payload: { pids: cur0.filter(x => x !== a.dataset.pid) } }); }
+        else if (act === 'attach-truck') { const manNo = field('man'); if (!manNo) return toast('Choose a manifest first', 'bad'); a.disabled = true; await attachManifest(ctx, a.dataset.truck, manNo); toast(`${manNo} attached to Truck ${truckNo(a.dataset.truck)}`); }
         else if (act === 'unstage') { const { date, n } = cur(); await set(date, n, { manifest: null }); }
       } catch (err) { toast(err.message, 'bad'); ctx.rerender(); }
     });
