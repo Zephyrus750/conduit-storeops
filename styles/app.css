@@ -52,6 +52,8 @@ body { font-family: var(--body); color: var(--ink); }
 .radm .rrow.ad { gap: 8px; }
 .radm-top b { white-space: nowrap; }
 .ad-two .li .nm { white-space: normal; }
+/* The owner overview stacks several two-column rows: each keeps its full height (the shell lets a view's single grid shrink to the window, which overlapped these). */
+.content > .grid2.ad-two { flex: none; }
 .radm .rrow.soon { opacity: .55; font-size: 13px; }
 .ad-banner > div { flex: 1; min-width: 0; }
 .ad-banner.actas { position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%); z-index: 20; margin: 0; max-width: min(720px, calc(100% - 32px)); box-shadow: var(--shadow); background: #111827; color: #fff; }
