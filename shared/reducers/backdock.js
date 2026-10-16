@@ -167,6 +167,7 @@ export const backdockReducers = {
       closeTruck(s, from, carry, e.at, { pallets: Object.keys(moved.pallets).length, cartons: moved.cartons, to: id });
     }
     s.dock.trucks[id] = t;
+    if (s.plan.days[date]) delete s.plan.days[date].noTrucks;   // a truck came after all
     // The slot's manifest is filed as an attach would: ledger and library.
     if (slotMan && !slotMan.ref) fileManifest(s, id, t, slotMan, slotConsols, e);
     // A staged reference: the device that started the truck attaches the report.
@@ -598,6 +599,7 @@ export const backdockReducers = {
     const manifest = p.manifest === undefined ? undefined : slotManifest(p.manifest);
     if (manifest && manifest.code) return manifest;
     const day = (s.plan.days[e.entity.date] ||= { slots: {} });
+    delete day.noTrucks;   // a truck planned: the day expects one after all
     const cur = { ...(day.slots[slot] || { eta: null, note: '', team: [], manifest: null }) };
     if (p.eta !== undefined) cur.eta = p.eta;
     if (p.note !== undefined) cur.note = String(p.note || '').slice(0, 200);
@@ -616,6 +618,17 @@ export const backdockReducers = {
   'plan.remove'(s, e) {
     const day = s.plan.days[e.entity.date];
     if (day) delete day.slots[Number(e.entity.slot)];
+    return null;
+  },
+  // A day confirmed with no trucks (from the Planner, ahead or on the day):
+  // nothing is expected, so no manifest is either. Planning a truck on the
+  // day, or a truck arriving anyway, clears it.
+  'plan.noTrucks'(s, e) {
+    const d = String(e.entity.date); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');
+    if (e.payload?.on === false) { if (s.plan.days[d]) delete s.plan.days[d].noTrucks; return null; }
+    if (Object.keys(s.plan.days[d]?.slots || {}).length) return reject('day_has_trucks', `trucks are planned on ${d}: remove them first`);
+    if (Object.keys(s.dock.trucks).some(id => id.startsWith(d + '-T')) || (s.dock.history || []).some(h => h.id.startsWith(d + '-T'))) return reject('day_has_trucks', `a truck has already been on the dock on ${d}`);
+    (s.plan.days[d] ||= { slots: {} }).noTrucks = { at: e.at, by: e.actor?.device || null };
     return null;
   },
   // Each cutter's queue of pallets (DV's plan.setQueues): the whole set is

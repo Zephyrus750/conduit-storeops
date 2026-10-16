@@ -103,7 +103,7 @@ export function decantBoard(dock, plan, day) {
   const slots = plan?.days?.[day]?.slots || {}, nums = new Set(Object.keys(slots).map(Number));
   for (const id of Object.keys(dock.trucks)) if (id.startsWith(day + '-T')) nums.add(Number(truckNo(id)));
   for (const h of dock.history || []) if (h.id.startsWith(day + '-T')) nums.add(Number(truckNo(h.id)));
-  if (!nums.size) return `<div class="card db"><div class="ch"><h3>Today’s decants</h3></div><p class="lbl">Nothing yet planned for today. A decant appears here the moment Receiving opens a truck.</p></div>`;
+  if (!nums.size) return `<div class="card db"><div class="ch"><h3>Today’s decants</h3></div><p class="lbl">${plan?.days?.[day]?.noTrucks ? 'No trucks today: confirmed in the Planner.' : 'Nothing yet planned for today. A decant appears here the moment Receiving opens a truck.'}</p></div>`;
   const card = n => {
     const id = `${day}-T${n}`, t = dock.trucks[id], h = (dock.history || []).find(x => x.id === id), sl = slots[n];
     if (h || t?.status === 'closed') return `<div class="db-c done"><b>Truck ${n}</b><span class="status good">Done</span><small>${h ? `${h.cartons} ctn cleared in ${Math.floor((h.clearMins || 0) / 60)}h ${String((h.clearMins || 0) % 60).padStart(2, '0')}m` : 'cleared'}</small></div>`;
