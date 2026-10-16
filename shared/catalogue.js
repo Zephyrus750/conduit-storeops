@@ -123,6 +123,7 @@ export const CATALOGUE = {
   'truck.take5':         T('backdock', D, ['truck'], { items: 'array' }),
   'dock.roster':         T('backdock', D, [], { pids: 'array' }),
   'plan.remove':         T('backdock', D, ['date', 'slot']),
+  'plan.noTrucks':       T('backdock', D, ['date']),                            // a day confirmed with no trucks; payload.on false clears it
 
   // ── Store-wide ───────────────────────────────────────────────────────
   'map.publish':         T('store', M, ['version']),

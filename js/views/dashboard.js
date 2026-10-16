@@ -118,7 +118,9 @@ function morning(ctx) {
   const lib = dock ? manifestIndex(dock).filter(m => !m.truck && !staged.has(m.manNo)) : [];
   const mans = [...tr, ...slots.filter(([n]) => !tr.some(x => x[0] === Number(n))).map(([n, s]) => [Number(n), s.manifest?.manNo])].sort((a, b) => a[0] - b[0]);
   const tk = (() => { const d = new Date(t + 'T12:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })(), ts = dockOk ? Object.values(ctx.store.get('plan')?.days?.[tk]?.slots || {}) : [];
-  const tmrw = ts.length ? ` · tomorrow ${ts.filter(x => x.manifest).length}/${ts.length} staged` : '';
+  // A day confirmed in the Planner with no trucks: nothing expected, so its checklist items are done.
+  const none = dockOk && !mans.length && !!ctx.store.get('plan')?.days?.[t]?.noTrucks, noneTmrw = dockOk && !ts.length && !!ctx.store.get('plan')?.days?.[tk]?.noTrucks;
+  const tmrw = ts.length ? ` · tomorrow ${ts.filter(x => x.manifest).length}/${ts.length} staged` : noneTmrw ? ' · tomorrow no trucks' : '';
   const first = dock ? [...openTrucks(dock).filter(x => x.id.slice(0, 10) === t), ...(dock.history || []).filter(h => h.id.slice(0, 10) === t)].sort((a, b) => a.id.localeCompare(b.id))[0] : null;
   const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen), liToday = Object.entries(L.checks[cyc] || {}).filter(([, c]) => dayOf(c.at) === t);
   // Today's inventory report: the store's (any desk pasted it), else this device's own copy.
@@ -126,11 +128,11 @@ function morning(ctx) {
   const rep = meta?.date === t ? meta : report && srOk ? { at: report.at, bays: Object.keys(report.byLoc || {}).length, codes: Object.values(report.byLoc || {}).reduce((n, l) => n + l.length, 0) } : null, midday = rep && new Date(rep.at).getHours() >= 12;
   const A = [
     srOk && ['Inventory report', rep ? `Pasted ${fmtHM(new Date(rep.at).toISOString())} · ${rep.bays} bays · ${rep.codes} codes` : 'Not pasted yet · the board compares against nothing until it is', !!rep, 'Paste whole report', 'Re-paste', 'bfreview'],
-    dockOk && manRow(mans, lib, tmrw, dock, t),
-    dockOk && ['Planner', mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · teams set' : ''}` : 'Today’s trucks not planned', mans.length > 0, 'Plan today’s trucks', 'Open', 'planner'],
+    dockOk && (none ? ['Manifests for today’s trucks', `No trucks today · confirmed in the Planner${tmrw}`, true, '', 'Open', 'planner'] : manRow(mans, lib, tmrw, dock, t)),
+    dockOk && none ? ['Planner', 'No trucks today · confirmed', true, '', 'Open', 'planner'] : dockOk && ['Planner', mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · teams set' : ''}` : 'Today’s trucks not planned · or confirm no trucks in the Planner', mans.length > 0, 'Plan today’s trucks', 'Open', 'planner'],
   ].filter(Boolean);
   const B = [
-    dockOk && ['First truck decant', !first ? 'No truck on the dock yet today' : first.status === 'closed' || first.clearMins != null ? `Closed · ${fmtMins(first.clearMins || 0)}` : `${first.goalAt ? `goal ${fmtHM(first.goalAt)} · ` : ''}${progress(first).pct}% decanted`, !!first && (first.status === 'closed' || first.clearMins != null), 'Open the dock', 'History', first && first.clearMins != null ? 'rhistory' : 'receiving'],
+    dockOk && none ? ['First truck decant', 'No trucks today', true, '', 'Open', 'planner'] : dockOk && ['First truck decant', !first ? 'No truck on the dock yet today' : first.status === 'closed' || first.clearMins != null ? `Closed · ${fmtMins(first.clearMins || 0)}` : `${first.goalAt ? `goal ${fmtHM(first.goalAt)} · ` : ''}${progress(first).pct}% decanted`, !!first && (first.status === 'closed' || first.clearMins != null), 'Open the dock', 'History', first && first.clearMins != null ? 'rhistory' : 'receiving'],
     srOk && ['Midday report re-paste', midday ? `Pasted ${fmtHM(new Date(rep.at).toISOString())}` : 'due 12:00 · the room moves after the next truck lands', !!midday, 'Paste whole report', 'Re-paste', 'bfreview'],
     ['Label integrity · today’s department', liToday.length ? liToday.map(([id]) => { const [sid, code] = id.split('-'); const e = (MICRO[sid] || []).find(x => microCode(x) === code); return `${esc(sid.toUpperCase())} ${esc(code)}${e ? ' ' + esc(microName(e)) : ''}`; }).join(' · ') + ' · checked' : 'pick the micro-department and print the sheet', liToday.length > 0, 'Pick department', 'Open', 'labelint'],
   ].filter(Boolean);

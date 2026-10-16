@@ -107,3 +107,21 @@ test('a planner slot stages a published manifest by reference; the truck made fr
   assert.equal(s.dock.trucks[T1].manifest.manNo, '7031482');
   assert.equal(s.dock.trucks[T1].plannedManifest, undefined);
 });
+
+test('plan.noTrucks: a day confirmed without trucks; planning a truck or a truck arriving clears it; a day with trucks refuses it', () => {
+  const s = initialState(), D = '2026-09-07';
+  ok(s, 'plan.noTrucks', { date: D }, {});
+  assert.equal(s.plan.days[D].noTrucks.by, 'DK1');
+  ok(s, 'plan.noTrucks', { date: D }, { on: false });
+  assert.equal(s.plan.days[D].noTrucks, undefined);
+  ok(s, 'plan.noTrucks', { date: D }, {});
+  ok(s, 'plan.set', { date: D, slot: 1 }, { eta: '06:30' });
+  assert.equal(s.plan.days[D].noTrucks, undefined, 'a truck planned clears it');
+  const before = JSON.stringify(s);
+  assert.equal(code(s, 'plan.noTrucks', { date: D }, {}), 'day_has_trucks');
+  assert.equal(JSON.stringify(s), before, 'refused: nothing changed');
+  ok(s, 'plan.noTrucks', { date: '2026-09-08' }, {});
+  ok(s, 'truck.create', { truck: '2026-09-08-T1' }, {});
+  assert.equal(s.plan.days['2026-09-08'].noTrucks, undefined, 'a truck that came anyway clears it');
+  assert.equal(code(s, 'plan.noTrucks', { date: '8/9/2026' }, {}), 'invalid_event');
+});

@@ -2417,3 +2417,13 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .fq-acts { display: flex; gap: 6px; flex: none; }
 .ad-edacts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .pedit .pman select.inp { flex: 1; min-width: 0; }
+/* Planner: days confirmed without trucks. */
+.pnone { color: #15803D; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.pnone svg.i { width: 14px; height: 14px; }
+.pnt { margin: 6px auto 0; display: flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent-ink); background: var(--accent-soft); border: 1px dashed var(--accent); border-radius: 8px; padding: 6px 10px; }
+.pnt svg.i { width: 13px; height: 13px; }
+.pundo { font: inherit; font-size: 12px; color: var(--dim); background: none; border: 0; text-decoration: underline; padding: 0 2px; }
+.pnt-card .rows { margin-top: 8px; }
+.pnt-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+.pnt-row:last-child { border-bottom: 0; }
+.pnt-st { display: inline-flex; align-items: center; gap: 8px; }

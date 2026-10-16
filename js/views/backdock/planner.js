@@ -4,7 +4,7 @@
 // and manifest. Ported from Vector's backdock-planner to the showcase's
 // week grid with a side editor.
 
-import { $, ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, mhead, fmtDate, today as storeToday } from '../../ui.js';
 import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, slotRef, attachManifest } from './common.js';
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -78,12 +78,12 @@ export default {
   id: 'planner', title: 'Planner', icon: 'm-planner', area: 'backdock',
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
-    const plan = ctx.store.get('plan'), dock = ctx.store.get('dock'), days = weekDays(st.week), today = dkey(new Date());
+    const plan = ctx.store.get('plan'), dock = ctx.store.get('dock'), days = weekDays(st.week), today = storeToday();
     const count = days.reduce((n, d) => n + numbersOf(plan, dock, dkey(d)).length, 0), todayN = numbersOf(plan, dock, today).length;
     const range = `${days[0].getDate()} ${MON[days[0].getMonth()]} – ${days[6].getDate()} ${MON[days[6].getMonth()]}`;
-    const week = `<div class="pweek">${days.map(d => { const k = dkey(d), slots = plan.days[k]?.slots || {}, ns = numbersOf(plan, dock, k); let next = 1; while (ns.includes(next)) next++; return `<div class="pday${k === today ? ' today' : ''}"><div class="dl">${DOW[(d.getDay() + 6) % 7]}<b>${d.getDate()}</b>${ns.length ? `<span class="cs-dim">${ns.length} truck${ns.length > 1 ? 's' : ''}</span>` : ''}</div>${ns.length ? ns.map(n => slotHtml(ctx, k, n, slots[n], dock)).join('') : `<div class="pempty">No trucks</div>`}${next <= 4 ? `<div class="padd" data-act="add" data-slot="${k}-${next}">+ Truck ${next}</div>` : ''}</div>`; }).join('')}</div>`;
+    const week = `<div class="pweek">${days.map(d => { const k = dkey(d), slots = plan.days[k]?.slots || {}, ns = numbersOf(plan, dock, k); let next = 1; while (ns.includes(next)) next++; return `<div class="pday${k === today ? ' today' : ''}"><div class="dl">${DOW[(d.getDay() + 6) % 7]}<b>${d.getDate()}</b>${ns.length ? `<span class="cs-dim">${ns.length} truck${ns.length > 1 ? 's' : ''}</span>` : ''}</div>${ns.length ? ns.map(n => slotHtml(ctx, k, n, slots[n], dock)).join('') : noneHtml(plan, k, today)}${next <= 4 ? `<div class="padd" data-act="add" data-slot="${k}-${next}">+ Truck ${next}</div>` : ''}</div>`; }).join('')}</div>`;
     return vh('Planner', sub(st.week === 0 ? 'This week' : st.week === 1 ? 'Next week' : st.week === -1 ? 'Last week' : `${st.week > 0 ? '+' : ''}${st.week} weeks`, range, `${count} truck${count === 1 ? '' : 's'}${st.week === 0 ? ` · ${todayN} today` : ''}`), `<span class="pills"><button data-act="wk" data-d="-1">‹</button><button class="${st.week === 0 ? 'on' : ''}" data-act="wk" data-d="0">This week</button><button data-act="wk" data-d="1">›</button></span>`, 'm-planner') +
-      `<div class="grid2 pgrid">${week}<div class="sidecol">${editor(ctx, plan, dock)}${summary(plan, dock, days)}${roster(dock)}${waiting(ctx, plan, dock)}</div></div>`;
+      `<div class="grid2 pgrid">${week}<div class="sidecol">${editor(ctx, plan, dock)}${noTruckCard(plan, dock, days, today)}${summary(plan, dock, days)}${roster(dock)}${waiting(ctx, plan, dock)}</div></div>`;
   },
   mount(ctx, root) {
     const field = n => root.querySelector(`[data-field="${n}"]`)?.value ?? '';
@@ -105,7 +105,7 @@ export default {
           if (act === 'stage') { ({ date, n } = cur()); manNo = field('man'); if (!manNo) return toast('Choose a manifest first', 'bad'); }
           else {
             // Today, with a truck on the dock that has no manifest yet: it goes on that truck.
-            const dock = ctx.store.get('dock'), t0 = !Number(a.dataset.day) && Object.entries(dock.trucks).find(([id, x]) => id.startsWith(dkey(new Date())) && x.status !== 'closed' && !x.manifest && !x.plannedManifest);
+            const dock = ctx.store.get('dock'), t0 = !Number(a.dataset.day) && Object.entries(dock.trucks).find(([id, x]) => id.startsWith(storeToday()) && x.status !== 'closed' && !x.manifest && !x.plannedManifest);
             if (t0) { a.disabled = true; await attachManifest(ctx, t0[0], a.dataset.man); st.sel = `${t0[0].slice(0, 10)}-${truckNo(t0[0])}`; return toast(`${a.dataset.man} attached to Truck ${truckNo(t0[0])}, on the dock now`); }
             const nf = nextFree(ctx.store.get('plan'), dock, Number(a.dataset.day) || 0); if (!nf) return toast('No free slot in the next two weeks', 'bad'); date = nf.date; n = nf.n; manNo = a.dataset.man; st.sel = `${date}-${n}`;
           }
@@ -116,6 +116,7 @@ export default {
         }
         else if (act === 'roster-add') { const pid = dnumId(field('roster').trim()); if (!pid) return toast('Enter a D-number, like D4. Names are not kept.', 'bad'); const cur0 = ctx.store.get('dock').roster?.pids || []; if (cur0.includes(pid)) return; await ctx.store.dispatch({ type: 'dock.roster', entity: {}, payload: { pids: [...cur0, pid] } }); }
         else if (act === 'roster-drop') { const cur0 = ctx.store.get('dock').roster?.pids || []; await ctx.store.dispatch({ type: 'dock.roster', entity: {}, payload: { pids: cur0.filter(x => x !== a.dataset.pid) } }); }
+        else if (act === 'notrucks' || act === 'notrucks-off') { const on = act === 'notrucks'; await ctx.store.dispatch({ type: 'plan.noTrucks', entity: { date: a.dataset.date }, payload: { on } }); toast(on ? `${fmtDate(a.dataset.date)}: no trucks, confirmed` : `${fmtDate(a.dataset.date)}: no-trucks mark cleared`); }
         else if (act === 'attach-truck') { const manNo = field('man'); if (!manNo) return toast('Choose a manifest first', 'bad'); a.disabled = true; await attachManifest(ctx, a.dataset.truck, manNo); toast(`${manNo} attached to Truck ${truckNo(a.dataset.truck)}`); }
         else if (act === 'unstage') { const { date, n } = cur(); await set(date, n, { manifest: null }); }
       } catch (err) { toast(err.message, 'bad'); ctx.rerender(); }
@@ -134,6 +135,23 @@ export default {
 // The week at a glance (DV's planner summary): trucks planned, cartons on
 // their manifests, trucks cleared (planned or not), average clear time and
 // cartons decanted.
+// Days without trucks: confirmed ahead (or on the day) so nothing expects a
+// manifest and the morning checklist reads green. Past days are history.
+function noneHtml(plan, k, today) {
+  const nt = plan.days[k]?.noTrucks;
+  if (nt) return `<div class="pempty pnone">${ic('check')}No trucks · confirmed${k >= today ? `<button class="pundo" data-act="notrucks-off" data-date="${k}" title="Trucks after all: undo">Undo</button>` : ''}</div>`;
+  return `<div class="pempty">No trucks</div>${k >= today ? `<button class="pnt" data-act="notrucks" data-date="${k}">${ic('check')}Confirm no trucks</button>` : ''}`;
+}
+function noTruckCard(plan, dock, days, today) {
+  const ahead = days.map(dkey).filter(k => k >= today); if (!ahead.length) return '';
+  const label = k => { const d = new Date(k + 'T00:00:00'); return `${k === today ? 'Today' : DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MON[d.getMonth()]}`; };
+  const row = k => {
+    const n = numbersOf(plan, dock, k).length, nt = plan.days[k]?.noTrucks;
+    const st = n ? `<span class="cs-dim">${n} truck${n === 1 ? '' : 's'}</span>` : nt ? `<span class="status good">No trucks</span><button class="pundo" data-act="notrucks-off" data-date="${k}">Undo</button>` : `<span class="cs-dim">not planned</span><button class="btn sm" data-act="notrucks" data-date="${k}">No trucks</button>`;
+    return `<div class="row pnt-row${nt ? ' on' : ''}"><span>${label(k)}</span><span class="pnt-st">${st}</span></div>`;
+  };
+  return `<div class="card pnt-card"><div class="ch"><h3>Days without trucks</h3></div><p class="lbl">Confirm a day ahead or on the day: it expects no truck and no manifest, and the Dashboard’s morning checklist marks it done. Planning a truck on it clears the mark.</p><div class="rows">${ahead.map(row).join('')}</div></div>`;
+}
 function summary(plan, dock, days) {
   const keys = days.map(dkey), slots = keys.flatMap(k => Object.values(plan.days[k]?.slots || {})), live = Object.entries(dock.trucks).filter(([id]) => keys.includes(id.slice(0, 10)));
   const cleared = (dock.history || []).filter(h => keys.includes(h.id.slice(0, 10))), avg = cleared.length ? cleared.reduce((n, h) => n + (h.clearMins || 0), 0) / cleared.length : 0;
