@@ -19,5 +19,5 @@ export const MICRO = {
 // micro id as the legacy mode keys it: "<sub>-<code>", e.g. h4-024
 export const microId = (sub, entry) => `${sub}-${entry.slice(0, 3)}`;
 export const microCode = entry => entry.slice(0, 3);
-export const microName = entry => entry.slice(4);
+export const microName = entry => String(entry || '').slice(4);   // a bare or missing code names nothing, never throws
 export const microCount = () => Object.values(MICRO).reduce((n, l) => n + l.length, 0);

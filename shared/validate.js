@@ -28,11 +28,15 @@ export function validateEvent(ev) {
     if (entity[k] === undefined || entity[k] === null || entity[k] === '') return bad(`entity.${k} is required`);
   }
   // Entity values become map keys in the reducers (weeks, bays, trucks,
-  // cycles…): plain short strings or numbers, never a prototype name.
+  // cycles…) and ids in other devices' screens: plain short strings or
+  // numbers, never a prototype name and never a character that means
+  // something in HTML (an issue id carrying `"><meta …>` once redirected
+  // every desk that opened Maintenance; audit 19 Oct S3).
   for (const [k, v] of Object.entries(entity)) {
     if (RESERVED.has(k)) return bad(`entity key ${k} is not allowed`);
     if (typeof v === 'number' ? !Number.isFinite(v) : typeof v !== 'string') return bad(`entity.${k} must be a string or number`);
     if (String(v).length > ENTITY_MAX) return bad(`entity.${k} is over ${ENTITY_MAX} characters`);
+    if (ENTITY_BAD.test(String(v))) return bad(`entity.${k} has a character that is not allowed (< > " ' \` or a control character)`);
     if (RESERVED.has(String(v).trim())) return bad(`entity.${k} is not allowed`);
   }
 
@@ -55,6 +59,7 @@ export function validateEvent(ev) {
 // anywhere in a payload may be one of these.
 const RESERVED = new Set(['__proto__', 'prototype', 'constructor']);
 const ENTITY_MAX = 100;
+const ENTITY_BAD = /[<>"'`\u0000-\u001f\u007f]/;
 function reservedIn(v, path, depth = 0) {
   if (depth > 12) return `${path} (nested too deep)`;
   if (typeof v === 'string') return RESERVED.has(v.trim()) ? path : null;

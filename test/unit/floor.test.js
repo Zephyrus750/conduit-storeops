@@ -127,3 +127,12 @@ test('issues: a contractor visit from the work order is logged and keeps the sta
   assert.deepEqual([s.issues.w1.status, s.issues.w1.visits, s.issues.w1.log.at(-1).a, s.issues.w1.log.at(-1).n], ['open', 1, 'Contractor visited', 'Sparky & Co · replaced two tubes']);
   assert.equal(apply(s, ev('issue.visit', { issue: 'nope' }, { who: 'x' })).code, 'not_found');
 });
+
+test('label and focus keys are ids: a micro-department without its sub, or a focus department that is not a code, is refused (audit 19 Oct S3)', () => {
+  const s = initialState();
+  assert.equal(apply(s, ev('label.assign', { micro: 'nodash' }, { shelves: ['H4S1'] }))?.code, 'invalid_event');
+  assert.equal(apply(s, ev('label.check', { micro: 'h4', cycle: '2026-10' }))?.code, 'invalid_event');
+  assert.equal(apply(s, ev('refresh.focus.set', { week: '2026-W37' }, { departments: ['h1', 'b style=x'] }))?.code, 'invalid_event');
+  assert.deepEqual(s.labels.assign, {}); assert.deepEqual(s.refresh.focus, {});
+  assert.equal(apply(s, ev('label.check', { micro: 'h4-024', cycle: '2026-10' })), null);
+});

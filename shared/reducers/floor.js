@@ -15,6 +15,9 @@
 //             offsiteAt, offsiteSrc; loads id → { id, label, date, status, recvDate, src, pallets[{pid, items[{k,d,q,dept}]}], at, by }
 
 import { reject, badList, earlier } from './util.js';
+// A department code (h1, k4, flex, checkouts) and a micro-department id
+// ("<sub>-<code>", h4-024): label and focus keys reach other screens as ids.
+const DEPT_RE = /^[a-z0-9]{1,12}$/, MICRO_RE = /^[a-z0-9]{1,12}-[0-9a-z]{1,6}$/i;
 import { storeDay, DEFAULT_TZ } from '../time.js';
 import { OFFSITE_CAP, LOAD_CAP, LOAD_PALLET_CAP, LOAD_LINE_CAP, LOAD_STATUS } from '../inventory.js';
 
@@ -80,7 +83,9 @@ export const floorReducers = {
     return null;
   },
   'refresh.focus.set'(s, e) {
+    const no = badList(e.payload.departments, 'departments', 40, 12); if (no) return reject('invalid_event', no);
     const depts = e.payload.departments.map(d => String(d).toLowerCase());
+    if (depts.some(d => !DEPT_RE.test(d))) return reject('invalid_event', 'departments are department codes like h1 or k4');
     if (depts.length) s.refresh.focus[e.entity.week] = depts; else delete s.refresh.focus[e.entity.week];
     return null;
   },
@@ -105,12 +110,14 @@ export const floorReducers = {
     return null;
   },
   'label.assign'(s, e) {
+    if (!MICRO_RE.test(e.entity.micro)) return reject('invalid_event', 'micro must be a micro-department id like h4-024');
     const no = badList(e.payload.shelves, 'shelves', LABEL_SHELVES_MAX, 24); if (no) return reject('invalid_event', no);
     const shelves = e.payload.shelves.map(String);
     if (shelves.length) s.labels.assign[e.entity.micro] = shelves; else delete s.labels.assign[e.entity.micro];
     return null;
   },
   'label.check'(s, e) {
+    if (!MICRO_RE.test(e.entity.micro)) return reject('invalid_event', 'micro must be a micro-department id like h4-024');
     const cycle = (s.labels.checks[e.entity.cycle] ||= {});
     cycle[e.entity.micro] = { at: e.at, device: e.actor?.device || null };
     return null;
@@ -121,6 +128,7 @@ export const floorReducers = {
     return null;
   },
   'label.variance'(s, e) {
+    if (!MICRO_RE.test(e.entity.micro)) return reject('invalid_event', 'micro must be a micro-department id like h4-024');
     if (!/^\d{6,13}$/.test(e.payload.keycode)) return reject('invalid_event', 'keycode must be 6 to 13 digits');
     const list = s.labels.variances[e.entity.cycle] || [];
     if (list.length >= VARIANCES_MAX) return reject('invalid_event', `a cycle holds at most ${VARIANCES_MAX} variances`);

@@ -19,6 +19,23 @@ test('envelope faults are named', () => {
   assert.match(validateEvent({ ...good(), v: 2 }).message, /schema v1/);
 });
 
+test('ids and names carry no HTML: < > quotes, backticks and control characters are refused in entity values (audit 19 Oct S3)', () => {
+  for (const v of ['"><meta http-equiv=refresh content=0;url=//x>', "a'b", 'a<b', 'a`b', 'a\nb', 'a\u0000b']) {
+    const r = validateEvent({ ...good(), entity: { truck: 'T1', bay: v } });
+    assert.equal(r?.code, 'invalid_event', JSON.stringify(v)); assert.match(r.message, /not allowed/);
+  }
+  for (const v of ['A16 S1', '2026-09-07-T1', 'h4-024', 'BSN1240417', 'Aisle 3/4: Bay #2 & co.']) assert.equal(validateEvent({ ...good(), entity: { truck: 'T1', bay: v } }), null, v);
+  assert.equal(validateEvent({ ...good(), type: 'pallet.fly' }).reason, 'unknown_type', 'a device can tell its app is ahead of the worker');
+  assert.equal(validateEvent({ ...good(), v: 2 }).reason, 'schema_version');
+});
+
+test('a route parameter is one decoded path segment (audit 19 Oct S1)', () => {
+  const r = new Router().get('/v1/store/:no/life/:keycode', () => 'life');
+  assert.deepEqual(r.match('GET', '/v1/store/1241/life/43166022').params, { no: '1241', keycode: '43166022' });
+  for (const p of ['/v1/store/1241/life/..%2Ftail', '/v1/store/1241/life/..%5Ctail', '/v1/store/1241/life/%2E%2E', '/v1/store/1241/life/%E0%A4%A', '/v1/store/1241/life/a%00b', '/v1/store/1241/life/50%25'])
+    assert.ok(r.match('GET', p).bad, p);
+});
+
 test('ulid: shape, monotonic time, parse', () => {
   const a = ulid(1_700_000_000_000), b = ulid(1_700_000_000_001);
   assert.ok(isUlid(a)); assert.ok(a < b);
