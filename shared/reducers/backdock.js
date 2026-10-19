@@ -685,12 +685,14 @@ function rebuildHistory(s, id, t) {
 // the manifest (off), for 60 days, eight sightings an id.
 const LEDGER_DAYS = 60;
 const led9 = x => { const d = String(x || '').replace(/\D/g, ''); return d.length >= 6 ? d.slice(-9) : null; };
+// Only the id's own list is trimmed here; the whole ledger is pruned once a
+// day by retention (shared/retain.js). Pruning all of it on every sighting
+// cost 3.5 s per 300-consolidation manifest (audit 19 Oct P2).
 function ledgerAdd(s, id, entry, at) {
   const k = led9(id); if (!k) return;
-  const L = (s.dock.ledger ||= {}), list = (L[k] ||= []);
+  const L = (s.dock.ledger ||= {}), cutoff = new Date(Date.parse(at) - LEDGER_DAYS * 86400000).toISOString().slice(0, 10);
+  const list = L[k] = (L[k] || []).filter(x => x.d >= cutoff);
   if (!list.some(x => x.t === entry.t && x.k === entry.k)) { list.push(entry); if (list.length > 8) list.splice(0, list.length - 8); }
-  const cutoff = new Date(Date.parse(at) - LEDGER_DAYS * 86400000).toISOString().slice(0, 10);
-  for (const [key, xs] of Object.entries(L)) { const keep = xs.filter(x => x.d >= cutoff); if (keep.length) L[key] = keep; else delete L[key]; }
 }
 function ledgerFind(s, id, kinds, notTruck) {
   const k = led9(id); return k ? (s.dock.ledger?.[k] || []).filter(x => kinds.includes(x.k) && x.t !== notTruck).sort((a, b) => b.d.localeCompare(a.d)) : [];

@@ -94,3 +94,18 @@ test('the console says when a store nears its 2 MB', () => {
   assert.match(k(1_300_000), /warn:.*1\.3 MB/);
   assert.match(k(1_800_000), /bad:.*1\.8 MB/);
 });
+
+test('the consolidation ledger: a sighting leaves other ids alone; retention prunes the 60-day window once a day (audit 19 Oct P2)', () => {
+  const s = initialState();
+  s.dock.ledger = { 100000001: [{ t: '2026-07-01-T1', d: '2026-07-01', k: 'man' }], 100000002: [{ t: '2026-07-01-T1', d: '2026-07-01', k: 'man' }, { t: '2026-10-01-T1', d: '2026-10-01', k: 'land' }] };
+  const at = '2026-10-08T08:00:00+08:00', ev = (type, entity, payload = {}) => ({ id: `01J${String(Math.random()).slice(2, 25).padEnd(23, '0')}`.slice(0, 26).toUpperCase().replace(/[ILOU]/g, '0'), store: '1241', area: 'backdock', type, entity, payload, actor: { role: 'dock', device: 'DK', owner: false }, at, v: 1 });
+  assert.equal(apply(s, ev('truck.create', { truck: '2026-10-08-T1' })), null);
+  assert.equal(apply(s, ev('manifest.attach', { truck: '2026-10-08-T1' }, { manNo: 'M9', consols: [{ cons: '0000000000300000003', cartons: 2, dept: '021', mix: [['021', 2, 8]] }] })), null);
+  assert.ok(s.dock.ledger['300000003'], 'the new consol is on the ledger');
+  assert.ok(s.dock.ledger['100000001'], 'another id is not swept on every sighting any more');
+  const done = retain(s, DAY);
+  assert.equal(done.ledger, 2);
+  assert.equal(s.dock.ledger['100000001'], undefined, 'older than 60 days: gone');
+  assert.deepEqual(s.dock.ledger['100000002'].map(x => x.d), ['2026-10-01'], 'only its old sighting goes');
+  assert.ok(s.dock.ledger['300000003']);
+});

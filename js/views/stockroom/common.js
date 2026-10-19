@@ -66,6 +66,12 @@ async function copyCode(kc, el) {
   try { await navigator.clipboard.writeText(kc); el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 700); toast(`${kc} copied`); }
   catch { toast('Could not copy: check the clipboard permission', 'bad'); }
 }
+const NEAR_MAX = 30;
+// Run fn over items with at most n in flight.
+async function inTurn(items, n, fn) {
+  const queue = items.slice();
+  await Promise.all(Array.from({ length: Math.min(n, queue.length) }, async () => { while (queue.length) await fn(queue.shift()); }));
+}
 export function ensureNames(ctx, codes, repaint) {
   const want = [...new Set(codes.map(String))].filter(kc => !names.has(kc) && /^\d{6,12}$/.test(kc));
   if (!want.length) return;
@@ -74,9 +80,11 @@ export function ensureNames(ctx, codes, repaint) {
     .then(() => {
       paintSoon(repaint);
       // Unverified codes ask for their one-digit near misses.
-      const miss = want.filter(kc => names.get(kc) === null && !near.has(kc));
+      // At most NEAR_MAX per screen, four at a time: a list of codes the
+      // catalogue does not know is a list to check by hand, not 200 requests.
+      const miss = want.filter(kc => names.get(kc) === null && !near.has(kc)).slice(0, NEAR_MAX);
       for (const kc of miss) near.set(kc, []);
-      if (miss.length) Promise.all(miss.map(kc => ctx.catalogue.nearMiss(kc).then(r => near.set(kc, r || [])).catch(() => {}))).then(() => paintSoon(repaint));
+      if (miss.length) inTurn(miss, 4, kc => ctx.catalogue.nearMiss(kc).then(r => near.set(kc, r || [])).catch(() => {})).then(() => paintSoon(repaint));
     });
 }
 // Copy one code (a click on it) or a list, as K2B's review did.

@@ -67,6 +67,10 @@ export function retain(s, day) {
   }
   if ((s.dock?.history || []).length > KEEP_DOCK_HISTORY) { done.dockHistory = s.dock.history.length - KEEP_DOCK_HISTORY; s.dock.history.splice(0, done.dockHistory); }
   for (const d of Object.keys(s.plan?.days || {})) if (d < d60) { delete s.plan.days[d]; n('planDays'); }
+  // The consolidation ledger keeps 60 days of sightings, pruned here once a
+  // day rather than on every consolidation recorded.
+  const L = s.dock?.ledger || {};
+  for (const [k, xs] of Object.entries(L)) { const keep = xs.filter(x => x.d >= d60); if (keep.length === xs.length) continue; if (keep.length) L[k] = keep; else delete L[k]; n('ledger'); }
 
   // Floor: the last 13 refresh weeks and label cycles, the 10 newest ended
   // stocktakes, closed or removed issues for 180 days.
