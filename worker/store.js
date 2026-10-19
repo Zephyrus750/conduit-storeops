@@ -28,6 +28,7 @@ import { initialState, apply, replay } from '../shared/reducers.js';
 import { validateEvent } from '../shared/validate.js';
 import { typeInfo, AREA_PROJECTIONS } from '../shared/catalogue.js';
 import { hasRole } from './auth.js';
+import { primaryRole } from '../shared/roles.js';
 import { HttpError, json, fail, CORS, readJson, reportError } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
@@ -719,11 +720,6 @@ export class StoreObject extends DurableObject {
 
 function rowToEvent(r) {
   return { id: r.id, seq: r.seq, type: r.type, area: r.area, entity: JSON.parse(r.entity), payload: JSON.parse(r.payload), actor: JSON.parse(r.actor), at: r.at, v: r.v };
-}
-function primaryRole(claims, roles) {
-  if (claims.actor) return claims.actor;
-  for (const r of roles) if (claims.roles.includes(r)) return r;
-  return claims.roles.includes('manager') ? 'manager' : claims.roles[0];
 }
 
 // What a token may read. The store PIN opens the Floor; Stockroom and Back

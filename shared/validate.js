@@ -15,10 +15,12 @@ export function validateEvent(ev) {
   if (!STORE_RE.test(String(ev.store || ''))) return bad('store must be a store number');
   if (typeof ev.type !== 'string') return bad('type is required');
   const info = CATALOGUE[ev.type];
-  if (!info) return { code: 'invalid_event', message: `unknown type ${ev.type}` };
+  // reason tells a device its app is ahead of this worker (a deploy in
+  // flight): the change waits in its outbox instead of being dropped.
+  if (!info) return { code: 'invalid_event', reason: 'unknown_type', message: `unknown type ${ev.type}` };
   if (ev.area !== info.area) return bad(`area must be ${info.area} for ${ev.type}`);
   if (typeof ev.at !== 'string' || !ISO_RE.test(ev.at)) return bad('at must be an ISO 8601 timestamp with offset');
-  if ((ev.v ?? 1) !== info.v) return { code: 'invalid_event', message: `${ev.type} is at schema v${info.v}` };
+  if ((ev.v ?? 1) !== info.v) return { code: 'invalid_event', reason: 'schema_version', message: `${ev.type} is at schema v${info.v}` };
 
   const entity = ev.entity || {};
   if (typeof entity !== 'object' || Array.isArray(entity)) return bad('entity must be an object');

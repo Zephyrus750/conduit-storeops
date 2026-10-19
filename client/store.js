@@ -3,7 +3,8 @@
 //   store.get('backfill')                       the projection, right now
 //   store.dispatch({ type, entity, payload })   validate, apply locally, queue, submit
 //   store.on('backfill', render)                re-render when that projection changes
-//   store.on('status' | 'reject' | '*', fn)
+//   store.on('status' | 'reject' | 'hold' | '*', fn)
+//   store.held / store.retry() / store.discard(id)   changes waiting on the worker
 //
 // Local state = the last server snapshot (base) with the outbox replayed on
 // top, so optimism is automatic and a rejection rolls back by rebuilding
@@ -17,12 +18,27 @@ import { initialState, apply, replay } from '../shared/reducers.js';
 import { validateEvent } from '../shared/validate.js';
 import { typeInfo } from '../shared/catalogue.js';
 import { ulid } from '../shared/ulid.js';
+import { primaryRole } from '../shared/roles.js';
 import { TransportError, Breaker, backoffMs } from './transport.js';
 
 export const HEARTBEAT_MS = 180_000;
 export const POLL_MS = 15_000;
 export const PERSIST_MS = 2_000;
 const APPLIED_KEEP = 2000;
+const RETRY_MS = 15_000;
+
+// Refusals that can clear without the change being wrong: the area code
+// lapsed or was locked (unauthorised), the area or tool was switched off,
+// the device clock was out, the worker is older than this app (a deploy in
+// flight) or hit a fault. The change waits in the outbox, marked with the
+// reason, and is sent again when the session, the clock or the connection
+// changes, or when the person taps Retry. Anything else (bad data, a real
+// conflict) is dropped and the person told, as before.
+const WAIT_CODES = new Set(['unauthorised', 'not_entitled', 'tool_off', 'clock_skew', 'internal', 'not_implemented']);
+export function refusalWaits(r) {
+  if (WAIT_CODES.has(r?.code)) return true;
+  return r?.code === 'invalid_event' && (r.reason === 'unknown_type' || r.reason === 'schema_version' || /^unknown type |is at schema v\d/.test(r.message || ''));
+}
 
 export function createStore({ storeNo, session, transport, storage, WebSocketImpl = globalThis.WebSocket, timers = globalThis, online = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false) }) {
   const no = String(storeNo);
@@ -35,7 +51,8 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   let ws = null, wsAttempt = 0, wsTimer = null, pollTimer = null, hbTimer = null, closed = false, opening = false;
   let status = { state: 'offline', queued: 0, lastError: null, seq: 0 };
   const breaker = new Breaker();
-  let flushing = null;
+  let flushing = null, retryTimer = null;
+  const held = new Map();                      // event id → the refusal it waits on
 
   // ── the store's clock (decision 31) ─────────────────────────────────────
   // Events are stamped on the worker's clock, not this device's: the worker
@@ -49,7 +66,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     const recv = Date.now(); if (sentAt && recv - sentAt > 10_000) return;   // a slow round trip says little
     clockSamples.push(now - (sentAt ? (sentAt + recv) / 2 : recv)); if (clockSamples.length > 5) clockSamples.shift();
     const sorted = clockSamples.slice().sort((a, b) => a - b), off = Math.round(sorted[sorted.length >> 1]);
-    if (off !== clockOffset) { clockOffset = off; storage.set(`clock:${no}`, { offset: off, at: recv }).catch?.(() => {}); emit('clock', off); }
+    if (off !== clockOffset) { clockOffset = off; storage.set(`clock:${no}`, { offset: off, at: recv }).catch?.(() => {}); emit('clock', off); retryHeld('clock_skew'); }
   }
   const stamp = () => localIso(new Date(Date.now() + (Math.abs(clockOffset) >= 2000 ? clockOffset : 0)));
 
@@ -58,7 +75,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // re-rendering), and a live Set would visit the new entry too, forever.
   const emit = (k, v) => { for (const f of [...(listeners.get(k) || [])]) { try { f(v); } catch (e) { console.error(e); } } };
   function on(k, f) { if (!listeners.has(k)) listeners.set(k, new Set()); listeners.get(k).add(f); return () => listeners.get(k).delete(f); }
-  function setStatus(patch) { status = { ...status, ...patch, queued: pending.length, seq: base.seq }; emit('status', status); }
+  function setStatus(patch) { status = { ...status, ...patch, queued: pending.length, held: held.size, seq: base.seq }; emit('status', status); }
   function changed(keys) { for (const k of keys) emit(k, state[k]); emit('*', { keys, state }); }
 
   // ── state ─────────────────────────────────────────────────────────────
@@ -121,7 +138,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     const bad = validateEvent(ev);
     if (bad) throw new TransportError(400, bad.code, bad.message, { event: ev });
     const probe = structuredClone(state);
-    const rej = apply(probe, { ...ev, actor: { role: session.current?.roles?.[0] || null, device: session.device, owner: !!session.current?.owner } });
+    const rej = apply(probe, { ...ev, actor: actorFor(ev) });
     if (rej) throw new TransportError(409, rej.code, rej.message, { event: ev });
     pending.push(ev);
     await storage.set(`outbox:${no}:${ev.id}`, ev);
@@ -131,44 +148,92 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     return ev;
   }
 
+  // The actor this device's own changes are judged and folded as: the
+  // worker's answer for the same session (shared/roles.js).
+  function actorFor(ev) {
+    const cur = session.current;
+    return { role: primaryRole({ roles: cur?.roles || [], actor: cur?.actas ? 'owner' : null }, typeInfo(ev.type)?.roles || []), device: session.device, owner: !!cur?.owner };
+  }
+
   // ── submit ────────────────────────────────────────────────────────────
+  // What goes next: the queue in order, less the changes waiting on a
+  // refusal and everything queued after them in the same area (a scan
+  // waits behind the cage it belongs to).
+  function sendable() {
+    const stuck = new Set(), out = [];
+    for (const e of pending) { if (held.has(e.id) || stuck.has(e.area)) { stuck.add(e.area); continue; } out.push(e); }
+    return out;
+  }
+  // The running flush is kept until it ends, and only it clears itself: a
+  // flush that stops before its first await (offline, the breaker open)
+  // used to clear `flushing` before it was set, leaving it set for good and
+  // the outbox never sent again until a reload.
   function flush() {
     if (flushing || !pending.length || closed) return flushing;
-    flushing = (async () => {
+    const run = (async () => {
+      await null;
       try {
-        while (pending.length && !closed) {
-          if (breaker.open || !online()) { setStatus({ state: online() ? status.state : 'offline' }); return; }
-          const batch = pending.slice(0, 100);
+        while (!closed) {
+          const batch = sendable().slice(0, 100);
+          if (!batch.length) return;
+          if (breaker.open || !online()) { setStatus({ state: online() ? status.state : 'offline' }); retrySoon(); return; }
           let results;
           try {
             if (ws && ws.readyState === 1) results = await submitOverSocket(batch);
             else { const sent = Date.now(), r = await transport.request(`/v1/store/${no}/events`, { method: 'POST', body: { events: batch }, token: await needToken() }); noteClock(r.now, sent); results = r.results; }
-            breaker.succeed(); setStatus({ lastError: null });
+            // A send that went through means the device is not offline.
+            breaker.succeed(); setStatus({ lastError: null, ...(status.state === 'offline' ? { state: ws?.readyState === 1 ? 'live' : pollTimer ? 'polling' : 'connecting' } : {}) });
           } catch (e) {
             if (e instanceof TransportError && e.status === 401) { session.unauthorised(); return; }
-            breaker.fail(); setStatus({ lastError: e.message }); return;
+            breaker.fail(); setStatus({ lastError: e.message }); retrySoon(); return;
           }
           await handleResults(batch, results);
         }
-      } finally { flushing = null; }
+      } finally { if (flushing === run) flushing = null; }
     })();
-    return flushing;
+    flushing = run;
+    return run;
+  }
+  // A send that could not go (offline, the breaker open, a failed request)
+  // tries again by itself; the browser's `online` event and a reconnect
+  // try sooner.
+  function retrySoon() {
+    if (retryTimer || closed) return;
+    retryTimer = timers.setTimeout(() => { retryTimer = null; flush(); }, Math.max(RETRY_MS, breaker.openUntil - Date.now()));
   }
   async function handleResults(batch, results) {
     const byId = new Map(results.map(r => [r.id, r]));
-    const rejected = [];
+    const rejected = [], waiting = [];
     for (const ev of batch) {
       const r = byId.get(ev.id);
       if (!r) continue;
-      pending = pending.filter(p => p.id !== ev.id);
+      if (!r.ok && refusalWaits(r)) { held.set(ev.id, { code: r.code, reason: r.reason || null, message: r.message || '' }); waiting.push({ ...r, event: ev }); continue; }
+      pending = pending.filter(p => p.id !== ev.id); held.delete(ev.id);
       await storage.del(`outbox:${no}:${ev.id}`);
       if (r.ok) {
         // If the broadcast frame has not folded it in yet (HTTP path, or our own frame delayed), fold now.
-        if (!applied.has(ev.id)) foldIntoBase([{ ...ev, seq: r.seq, actor: { role: session.current?.roles?.[0] || null, device: session.device, owner: !!session.current?.owner } }], { own: true });
+        if (!applied.has(ev.id)) foldIntoBase([{ ...ev, seq: r.seq, actor: actorFor(ev) }], { own: true });
       } else rejected.push({ ...r, event: ev });
     }
     rebuild(); await persistSnapshot(); setStatus({});
+    if (waiting.length) emit('hold', waiting);
     for (const r of rejected) emit('reject', r);
+  }
+  // Waiting changes are sent again: all of them, or those held for one code.
+  function retryHeld(code) {
+    let n = 0;
+    for (const [id, h] of [...held]) if (!code || h.code === code) { held.delete(id); n += 1; }
+    if (n) { setStatus({}); flush(); }
+    return n;
+  }
+  // The person gives up on one queued change (from the waiting list). It
+  // never reached the worker, so nothing is deleted from the log.
+  async function discard(id) {
+    if (!pending.some(e => e.id === id)) return false;
+    pending = pending.filter(e => e.id !== id); held.delete(id);
+    await storage.del(`outbox:${no}:${id}`);
+    rebuild(); setStatus({}); flush();
+    return true;
   }
   const socketWaiters = [];
   function submitOverSocket(batch) {
@@ -198,7 +263,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     try { sock = new WebSocketImpl(`${transport.wsBase}/v1/store/${no}/ws`, ['conduit', token]); }
     catch { return scheduleReconnect(); }
     ws = sock;
-    sock.onopen = () => { wsAttempt = 0; stopPolling(); sock.send(JSON.stringify({ t: 'hello', since: fullNext ? 0 : base.seq })); fullNext = false; heartbeat(); };
+    sock.onopen = () => { wsAttempt = 0; stopPolling(); sock.send(JSON.stringify({ t: 'hello', since: fullNext ? 0 : base.seq })); fullNext = false; heartbeat(); retryHeld(); };
     sock.onmessage = (m) => onFrame(JSON.parse(m.data));
     sock.onclose = () => { if (ws === sock) ws = null; if (!closed) scheduleReconnect(); };
     sock.onerror = () => { try { sock.close(); } catch {} };
@@ -282,20 +347,29 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     lastRoles = roles;
     if (ws && !closed) { const s = ws; ws = null; try { s.close(); } catch {} wsAttempt = 0; connect(); }
     else if (fullNext && pollTimer && !closed) snapshotNow();
+    // A new token (a code entered, a renewal, the areas changed) may be
+    // what a waiting change needed; sent after the old socket is closed,
+    // so it goes with the new claims.
+    if (snap && !closed) retryHeld();
   });
   async function snapshotNow() {
     try { const r = await transport.request(`/v1/store/${no}/snapshot`, { token: await needToken() }); replaceBase(r.seq, r.state); fullNext = false; rebuild(); await persistSnapshot(); }
     catch (e) { setStatus({ lastError: e.message }); }
   }
 
+  // Back online: send now rather than at the next retry.
+  const onOnline = () => { breaker.succeed(); flush(); heartbeatSoon(); };
+  globalThis.addEventListener?.('online', onOnline);
+
   function close() {
-    closed = true; offSession(); timers.clearTimeout(wsTimer); timers.clearTimeout(hbTimer); timers.clearTimeout(hbSoon); stopPolling();
+    closed = true; offSession(); timers.clearTimeout(wsTimer); timers.clearTimeout(hbTimer); timers.clearTimeout(hbSoon); timers.clearTimeout(retryTimer); retryTimer = null; stopPolling();
+    globalThis.removeEventListener?.('online', onOnline);
     timers.clearTimeout(persistTimer); persistTimer = null;   // never written after close: sign-out has just deleted it
     if (ws) { const s = ws; ws = null; try { s.close(); } catch {} }
     setStatus({ state: 'offline' });
   }
 
-  return { load, connect, close, resync, get, dispatch, flush, on, get status() { return status; }, get pending() { return pending.slice(); }, get seq() { return base.seq; }, get clockOffset() { return clockOffset; } };
+  return { load, connect, close, resync, get, dispatch, flush, on, discard, retry: () => { breaker.succeed(); return retryHeld() || (flush(), 0); }, get status() { return status; }, get pending() { return pending.slice(); }, get held() { return pending.filter(e => held.has(e.id)).map(e => ({ event: e, ...held.get(e.id) })); }, get seq() { return base.seq; }, get clockOffset() { return clockOffset; } };
 }
 
 // A time as this device's wall clock writes it, with its zone: 08:00 in

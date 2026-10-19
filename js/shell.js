@@ -35,6 +35,7 @@ import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
 import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
 import { installProductLinks } from './views/stockroom/common.js';
+import { holdToast, refusalText } from './sync.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -126,7 +127,7 @@ async function enter() {
   // After an update, What's New once (a device on its first run gets the walkthrough instead).
   { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }
   team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current), desk: () => !isMobile() });
-  store.on('status', paintStatus); store.on('reject', r => toast(/^unknown type /.test(r.message || '') ? 'The server has not taken this update yet (it follows the app by a minute or so). Try that again shortly.' : `${r.code}: ${r.message}`, 'bad'));
+  store.on('status', paintStatus); store.on('reject', r => toast(refusalText(r), 'bad')); store.on('hold', onHold);
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
   store.on('backfill', paintBadges); store.on('cages', paintBadges);
@@ -187,7 +188,9 @@ async function idleCheck() {
   try {
     try { await store.flush(); } catch {}
     await client.session.lock();
-    toast(`Locked after ${lockMins} min idle. The store PIN's floor session stays open.`);
+    // Area changes that could not send yet wait for their code (the outbox keeps them).
+    const left = store.pending.filter(e => e.area !== 'store').length;
+    toast(`Locked after ${lockMins} min idle. The store PIN's floor session stays open.${left ? ` ${left} Stockroom or Back dock change${left === 1 ? '' : 's'} will send once the code is entered again.` : ''}`);
     const area = VIEWS[current]?.area;
     if (area && area !== 'floor' && area !== 'admin') { setWs('floor'); show('mhome'); } else if (current) show(current, currentArg);
   } catch { /* offline: tried again on the next check */ }
@@ -412,6 +415,9 @@ function setWs(w) {
   const cur = client.session.current;
   if (store && !admin && !cur?.owner && !cur?.actas && w !== 'admin') setTimeout(() => { if (ws === w && store) firstRun(w); }, 700);
 }
+// Changes that started waiting on a refusal that can clear (a code, the
+// server updating): one toast; the sync pill lists them.
+function onHold(list) { toast(holdToast(list), 'warn', null, 'hold'); }
 function paintStatus(s) {
   const el = $('#footSync'); if (!el) return;
   if (s.state === 'owner') { el.innerHTML = `<span class="dot"></span>Owner console`; el.title = ''; return; }
