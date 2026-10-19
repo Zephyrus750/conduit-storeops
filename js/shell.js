@@ -35,7 +35,7 @@ import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
 import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
 import { installProductLinks } from './views/stockroom/common.js';
-import { holdToast, refusalText } from './sync.js';
+import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -420,14 +420,44 @@ function setWs(w) {
 }
 // Changes that started waiting on a refusal that can clear (a code, the
 // server updating): one toast; the sync pill lists them.
-function onHold(list) { toast(holdToast(list), 'warn', null, 'hold'); }
+function onHold(list) { toast(holdToast(list), 'warn', { label: 'See', run: openSync }, 'hold'); }
+// Sync state in two places: the desk's footer and, on the phone, a pill in
+// the app bar that shows only when there is something to say (offline,
+// sending, or changes waiting). Both open the list of what is on the device.
 function paintStatus(s) {
+  const pill = $('#msync'), p = s.state === 'owner' ? null : pillState(s);
+  if (pill) { pill.hidden = !p; if (p) { pill.className = `msync ${p.tone}`; pill.innerHTML = `<span class="dot"></span>${esc(p.text)}`; pill.setAttribute('aria-label', `Sync: ${p.text}. Show the changes on this device`); } }
   const el = $('#footSync'); if (!el) return;
-  if (s.state === 'owner') { el.innerHTML = `<span class="dot"></span>Owner console`; el.title = ''; return; }
-  const txt = s.state === 'live' ? 'Synced to cloud' : s.state === 'polling' ? 'Synced (polling)' : s.state === 'connecting' ? 'Connecting…' : `Offline${s.queued ? ` · ${s.queued} change${s.queued === 1 ? '' : 's'} queued` : ''}`;
-  el.innerHTML = `<span class="dot ${s.state === 'live' || s.state === 'polling' ? '' : 'off'}"></span>${txt}`;
-  el.title = s.lastError || '';
+  if (s.state === 'owner') { el.innerHTML = `<span class="dot"></span>Owner console`; el.title = ''; el.removeAttribute('data-shell-act'); el.removeAttribute('role'); return; }
+  const queued = s.queued ? ` · ${s.queued} change${s.queued === 1 ? '' : 's'} queued` : '';
+  const txt = s.held ? `${s.held} change${s.held === 1 ? '' : 's'} waiting` : s.state === 'live' ? `Synced to cloud${queued}` : s.state === 'polling' ? `Synced (polling)${queued}` : s.state === 'connecting' ? 'Connecting…' : `Offline${queued}`;
+  el.innerHTML = `<span class="dot ${s.held ? 'warn' : s.state === 'live' || s.state === 'polling' ? '' : 'off'}"></span>${txt}`;
+  el.title = s.lastError || ''; el.setAttribute('data-shell-act', 'sync'); el.setAttribute('role', 'button'); el.tabIndex = 0;
+  if (syncOpen()) paintSync();
 }
+// The list of what is on this device: a sheet on the phone, a popover
+// above the desk's footer. It repaints with every status change while open.
+const syncOpen = () => (isMobile() ? $('#msheet.open')?.dataset.kind === 'sync' : !!$('#syncDlg') && !$('#syncDlg').hidden);
+function paintSync() {
+  if (!store) return;
+  const body = syncPanel({ status: store.status, held: store.held, pending: store.pending }, { esc, ic });
+  if (isMobile()) { const sh = $('#msheet'); if (sh) sh.innerHTML = `<div class="sheet msh sy-sheet" role="dialog" aria-label="Changes on this device"><div class="sheet-h"><h3>Changes on this device</h3>${SHEET_X}</div>${body}</div>`; }
+  else { const d = $('#syncDlg'); if (d) d.innerHTML = `<div class="sheet-h"><h3>Changes on this device</h3><button class="sheet-x" data-sync="close" aria-label="Close">${ic('x')}</button></div>${body}`; }
+}
+function openSync() {
+  if (!store) return;
+  if (isMobile()) { let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); } sh.dataset.kind = 'sync'; sh.classList.add('open'); }
+  else { let d = $('#syncDlg'); if (!d) { d = document.createElement('div'); d.id = 'syncDlg'; d.className = 'sy-pop'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Changes on this device'); frame.appendChild(d); } d.hidden = false; }
+  paintSync();
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-sync]'); if (!b || !store) return;
+  const act = b.dataset.sync;
+  if (act === 'close') { $('#syncDlg').hidden = true; return; }
+  if (act === 'retry') { const n = store.retry(); toast(n ? `Trying ${n} waiting change${n === 1 ? '' : 's'} again` : 'Sending now'); }
+  if (act === 'discard') { const h = store.held.find(x => x.event.id === b.dataset.id); if (h && confirm('Discard this change? It never reached the store, so it is lost from this device for good.')) { await store.discard(h.event.id); toast('Discarded'); } }
+  paintSync();
+});
 // A view's deskOnly is true, or a test of the session: Maintenance is on a
 // manager's phone and nobody else's.
 function deskOnly(v) { return typeof v.deskOnly === 'function' ? !!v.deskOnly(client.session.current) : !!v.deskOnly; }
@@ -438,6 +468,30 @@ function markRail() {
 }
 
 // ── views ─────────────────────────────────────────────────────────────
+// A scrolled panel is found again by its id, or by its tag and classes and
+// its place among the panels that share them (Settings' .stg-body, lists).
+function placeKey(el, root) {
+  if (el.id) return [`#${CSS.escape(el.id)}`, 0];
+  const sel = el.tagName.toLowerCase() + [...el.classList].map(c => '.' + CSS.escape(c)).join('');
+  return [sel, [...root.querySelectorAll(sel)].indexOf(el)];
+}
+function keepPlace(root) {
+  const panels = [];
+  // HTML elements only: the map's SVG is never read.
+  for (const el of root.getElementsByTagName('*')) if (el instanceof HTMLElement && (el.scrollTop > 0 || el.scrollLeft > 0)) panels.push([...placeKey(el, root), el.scrollTop, el.scrollLeft]);
+  const a = document.activeElement, field = a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) ? a : null;
+  const sel = field && (field.id ? `#${CSS.escape(field.id)}` : field.dataset.field ? `[data-field="${CSS.escape(field.dataset.field)}"]` : field.name ? `[name="${CSS.escape(field.name)}"]` : field.dataset.draft ? `[data-draft="${CSS.escape(field.dataset.draft)}"]` : null);
+  let caret = null; try { caret = field ? [field.selectionStart, field.selectionEnd] : null; } catch {}
+  return { top: root.scrollTop, left: root.scrollLeft, panels, field: sel ? { sel, value: field.value, caret } : null };
+}
+function restorePlace(root, k) {
+  root.scrollTop = k.top; root.scrollLeft = k.left;
+  for (const [sel, i, t, l] of k.panels) { const el = root.querySelectorAll(sel)[i]; if (el) { el.scrollTop = t; el.scrollLeft = l; } }
+  // Focus comes back only to the same field still holding the same text
+  // (a field the view cleared after a save is left alone).
+  const f = k.field && root.querySelector(k.field.sel);
+  if (f && f.value === k.field.value) { f.focus({ preventScroll: true }); try { if (k.field.caret?.[0] != null) f.setSelectionRange(...k.field.caret); } catch {} }
+}
 function show(id, arg) {
   if (!store && !admin) return;
   const prev = current;
@@ -476,6 +530,10 @@ function show(id, arg) {
   // between the phone's map modes the map stays put instead (keepMap) and
   // the last view's listeners end with its signal.
   viewOff?.abort(); viewOff = new AbortController();
+  // A redraw of the same screen (a live update, a clock tick) keeps where
+  // the person was: the scroll of the page and of its scrolled panels, and
+  // the field they were typing in (audit 19 Oct F5).
+  const keep = prev === view.id ? keepPlace(content) : null;
   if (!(useMobile && keepMap(html))) {
     parkMap();
     const fresh = content.cloneNode(false); content.replaceWith(fresh); content = fresh;
@@ -486,7 +544,7 @@ function show(id, arg) {
   if (!(useMobile && mountStrip(view))) content.classList.remove('sheet-open');
   const hs = $('#hdrslot'); hs.innerHTML = ''; if (!useMobile && frame.classList.contains('hdr-title')) { const vh0 = content.querySelector('.vh'); if (vh0) hs.appendChild(vh0); }
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
-  content.scrollTop = 0;
+  if (keep) restorePlace(content, keep); else content.scrollTop = 0;
   team?.repaint();
   markRail();
   // A sheet closes when the view changes; a repaint of the same view (a
@@ -540,7 +598,7 @@ function openLauncher() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const caps = client.session.current?.caps || [];
   sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>Where are you working?</h3>${SHEET_X}</div><p class="mv-sheet-sub">Pick your area to begin.${(client.session.current?.roles || []).includes('manager') ? ' Signed in as manager: every area is open.' : ' Stockroom and Back dock take their crew code once on this device.'}</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : 'Not on for this store'}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div></div>`;
-  sh.classList.add('open');
+  sh.dataset.kind = ''; sh.classList.add('open');
 }
 // The phone's Departments picker: the whole floor; Home, Clothing and
 // Kids as one row each, the area itself first (all four of its
@@ -562,7 +620,7 @@ function openDepts() {
     return coded ? `<div class="md-row">${area(g, ds)}${ds.map(tile).join('')}</div>` : `<div class="md-others">${ds.map(other).join('')}</div>`;
   }).join('');
   sh.innerHTML = `<div class="sheet md-sheet"><div class="sheet-h"><h3>Departments</h3>${SHEET_X}</div><button class="md-all" data-pickdept="all">${ic('map')}<span><b>All departments</b><small>Whole floor, every colour</small></span></button>${rows}</div>`;
-  sh.classList.add('open');
+  sh.dataset.kind = ''; sh.classList.add('open');
 }
 function openMore() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
@@ -573,7 +631,7 @@ function openMore() {
     (cur?.store ? `<div class="mo-who"><span class="av">${esc(cur.store)}</span><div><b>${esc(cur.name || 'Store ' + cur.store)}${area ? ' · ' + area : ''}</b><small>${cur.actas ? 'Acting as the store from the console' : 'Signed in on this phone'}</small></div></div>` : '') +
     group('Tools', items.filter(m => !MORE_STORE.includes(m[0]))) + group('Store and app', items.filter(m => MORE_STORE.includes(m[0]))) +
     `<div class="mo-foot"><button type="button" data-shell-act="switch-area">${ic('grid')}Switch area</button><button type="button" class="out" data-shell-act="signout">${ic('lock')}${cur?.actas ? 'Back to the console' : 'Sign out'}</button></div></div>`;
-  sh.classList.add('open');
+  sh.dataset.kind = ''; sh.classList.add('open');
 }
 document.addEventListener('click', e => {
   const sa = e.target.closest('[data-shell-act]');
@@ -581,6 +639,7 @@ document.addEventListener('click', e => {
     const act = sa.getAttribute('data-shell-act');
     if (act === 'signout' || act === 'end-actas') signOut();
     else if (act === 'sheet') { sheetOpen = !sheetOpen; try { localStorage.setItem(SHEET_KEY, sheetOpen ? '1' : '0'); } catch {} paintSheet(); haptic('tap'); }
+    else if (act === 'sync') openSync();
     else if (act === 'update-now') updates.apply();
     else if (act === 'update-later') $('#updBar')?.remove();
     else if (act === 'reload') location.reload();
@@ -651,4 +710,4 @@ document.addEventListener('click', e => {
 }, true);
 let lastMobile = isMobile();
 window.addEventListener('resize', () => { const m = isMobile(); if (m !== lastMobile) { lastMobile = m; if (current) show(current, currentArg); } });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#msheet')?.classList.remove('open'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#msheet')?.classList.remove('open'); const d = $('#syncDlg'); if (d) d.hidden = true; } });

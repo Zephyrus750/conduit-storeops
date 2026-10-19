@@ -283,7 +283,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     switch (f.t) {
       case 'snapshot': replaceBase(f.seq, f.state); rebuild(); await persistSnapshot(); setStatus({ state: 'live' }); flush(); return;
       case 'delta': foldIntoBase(f.events); rebuild(); await persistSnapshot(); setStatus({ state: 'live' }); flush(); return;
-      case 'event': if (foldIntoBase([f.event])) { rebuild(); await persistSnapshot(); setStatus({}); } return;
+      case 'event': if (foldIntoBase([f.event])) { rebuild(); await persistSnapshot(); setStatus(status.state === 'offline' ? { state: 'live' } : {}); } return;
       case 'ack': for (const w of [...socketWaiters]) if (w(f.results, f.now)) break; return;
       case 'clock': noteClock(f.now, hbSent); return;
       // An expired token is renewed (the session change reconnects); a
@@ -361,13 +361,17 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     catch (e) { setStatus({ lastError: e.message }); }
   }
 
-  // Back online: send now rather than at the next retry.
-  const onOnline = () => { breaker.succeed(); flush(); heartbeatSoon(); };
+  // The browser's own word on the connection: offline shows at once (a
+  // socket can sit open for a while after the network goes), and back
+  // online sends now rather than at the next retry.
+  const onOnline = () => { breaker.succeed(); if (status.state === 'offline') setStatus({ state: ws?.readyState === 1 ? 'live' : pollTimer ? 'polling' : 'connecting' }); flush(); heartbeatSoon(); };
+  const onOffline = () => setStatus({ state: 'offline' });
   globalThis.addEventListener?.('online', onOnline);
+  globalThis.addEventListener?.('offline', onOffline);
 
   function close() {
     closed = true; offSession(); timers.clearTimeout(wsTimer); timers.clearTimeout(hbTimer); timers.clearTimeout(hbSoon); timers.clearTimeout(retryTimer); retryTimer = null; stopPolling();
-    globalThis.removeEventListener?.('online', onOnline);
+    globalThis.removeEventListener?.('online', onOnline); globalThis.removeEventListener?.('offline', onOffline);
     timers.clearTimeout(persistTimer); persistTimer = null;   // never written after close: sign-out has just deleted it
     if (ws) { const s = ws; ws = null; try { s.close(); } catch {} }
     setStatus({ state: 'offline' });
