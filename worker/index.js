@@ -17,7 +17,9 @@ import { importDV } from './import-dv.js';
 const r = new Router();
 
 // ── health ────────────────────────────────────────────────────────────────
-r.get('/v1/health', (_req, env) => json({ ok: true, version: VERSION, env: env.ENVIRONMENT || 'dev' }));
+// build: the commit CI deployed (wrangler --var BUILD), so the deploy can
+// check the worker answering is the one it just sent.
+r.get('/v1/health', (_req, env) => json({ ok: true, version: VERSION, build: env.BUILD || null, env: env.ENVIRONMENT || 'dev' }));
 
 // ── auth ──────────────────────────────────────────────────────────────────
 r.post('/v1/auth/signin', async (req, env) => {

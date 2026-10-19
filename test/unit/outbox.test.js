@@ -139,3 +139,17 @@ test('a manager’s device judges a manager-only change as the worker does (role
   assert.equal(s.get('dock').trucks[truck].manifest.manNo, 'M1');
   s.close();
 });
+
+test('a change of a type this app does not know (from a newer app) is reported once, so the device can update', async () => {
+  const ev = (type, seq) => ({ id: ulid(), seq, store: '1241', area: 'store', type, entity: {}, payload: {}, actor: { role: 'floor', device: 'X', owner: false }, at: localIso(), v: 1 });
+  // The polling fallback folds what /changes returns, as the socket does.
+  const transport = { wsBase: 'ws://none', request: async () => ({ now: Date.now(), events: [ev('future.thing', 1), ev('future.thing', 2)] }) };
+  const once = { setTimeout: (f, ms) => { if (ms === 0) queueMicrotask(f); return 0; }, clearTimeout() {} };   // the first poll only
+  const s = createStore({ storeNo: '1241', session: fakeSession(['floor']), transport, storage: memoryStorage(), WebSocketImpl: null, timers: once, online: () => true });
+  const seen = []; s.on('newer', t => seen.push(t));
+  await s.load(); s.connect();
+  for (let i = 0; i < 50 && s.seq < 2; i++) await new Promise(r => setTimeout(r, 5));
+  assert.deepEqual(seen, ['future.thing'], 'once, however many arrive');
+  assert.equal(s.seq, 2, 'the device still moves on');
+  s.close();
+});

@@ -3,7 +3,7 @@
 //   store.get('backfill')                       the projection, right now
 //   store.dispatch({ type, entity, payload })   validate, apply locally, queue, submit
 //   store.on('backfill', render)                re-render when that projection changes
-//   store.on('status' | 'reject' | 'hold' | '*', fn)
+//   store.on('status' | 'reject' | 'hold' | 'newer' | '*', fn)
 //   store.held / store.retry() / store.discard(id)   changes waiting on the worker
 //
 // Local state = the last server snapshot (base) with the outbox replayed on
@@ -97,9 +97,13 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // otherwise the events other devices logged in between would be skipped.
   // An event at or below base.seq is already in base (a poll that returns
   // after a snapshot replaced it) and is never applied twice.
+  // An event of a type this app does not know comes from a newer app: it
+  // cannot show it until it updates, so it says so ('newer', once a type).
+  const newerSeen = new Set();
   function foldIntoBase(events, { own = false } = {}) {
     let n = 0;
     for (const e of events) {
+      if (e?.type && !typeInfo(e.type) && !newerSeen.has(e.type)) { newerSeen.add(e.type); emit('newer', e.type); }
       const seq = typeof e.seq === 'number' ? e.seq : null;
       if (!own && seq != null && seq <= base.seq) { remember(e.id); continue; }
       if (!applied.has(e.id)) { apply(base, { ...e, seq: undefined }); remember(e.id); n += 1; }   // apply() would set base.seq itself

@@ -128,6 +128,9 @@ async function enter() {
   { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }
   team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current), desk: () => !isMobile() });
   store.on('status', paintStatus); store.on('reject', r => toast(refusalText(r), 'bad')); store.on('hold', onHold);
+  // Another device sent a kind of change this app does not know: a newer
+  // release is out. Look for it now, so the update bar shows.
+  store.on('newer', () => { updates.check(); toast('A newer Conduit is out. Tap Update now when it shows, so this device sees every change.', 'warn', null, 'newer'); });
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
   store.on('backfill', paintBadges); store.on('cages', paintBadges);
