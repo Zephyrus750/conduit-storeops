@@ -13,15 +13,26 @@ export class Router {
   patch(p, h) { return this.add('PATCH', p, h); }
   delete(p, h) { return this.add('DELETE', p, h); }
 
+  // A parameter is one path segment once decoded: an encoded slash,
+  // backslash, dot segment or control character in it is refused (`bad`),
+  // so `..%2Ftail` cannot walk a forwarded path onto another route.
   match(method, pathname) {
     for (const r of this.routes) {
       if (r.method !== method) continue;
       const m = r.re.exec(pathname);
       if (!m) continue;
       const params = {};
-      r.keys.forEach((k, i) => { params[k] = decodeURIComponent(m[i + 1]); });
+      for (const [i, k] of r.keys.entries()) {
+        let v; try { v = decodeURIComponent(m[i + 1]); } catch { return { bad: `${k} is not a valid path segment` }; }
+        if (!segmentOk(v)) return { bad: `${k} is not a valid path segment` };
+        params[k] = v;
+      }
       return { handler: r.handler, params };
     }
     return null;
   }
+}
+
+export function segmentOk(v) {
+  return typeof v === 'string' && v.length > 0 && v.length <= 200 && v !== '.' && v !== '..' && !/[\/\\%\u0000-\u001f\u007f]/.test(v);
 }

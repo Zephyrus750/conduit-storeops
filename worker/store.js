@@ -157,10 +157,11 @@ export class StoreObject extends DurableObject {
         }
         case '/events': { const body = await readJson(request, BATCH_MAX); return json({ results: this.submit(body.events, claims), now: Date.now() }); }
         case '/ws': return this.upgrade(request, claims);
-        case '/devices': return json({ devices: this.state.devices });
+        // Owner reads (the console): refused for a store token however it got here.
+        case '/devices': return raw.owner ? json({ devices: this.state.devices }) : fail(403, 'unauthorised', 'owner only');
         case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readJson(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true, now: Date.now() }); }
-        case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
-        case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
+        case '/kpis': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
+        case '/tail': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await readJson(request, MAP_BODY_MAX), claims) : json(this.mapInfo());
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);

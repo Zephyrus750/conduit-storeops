@@ -611,6 +611,8 @@ test('sessions: revoke, rotation and suspension sign devices out; sign-out ends 
   assert.equal(refused.status, 401); assert.equal(refused.body.code, 'revoked');
   assert.equal((await api('POST', '/v1/auth/refresh', { refresh: a.refresh })).status, 401, 'the refresh token went too');
   assert.equal((await api('POST', '/v1/auth/unlock', { code: 'DK-2007' }, a.token)).status, 401, 'an old token cannot unlock');
+  const relock = await api('POST', '/v1/auth/lock', { refresh: a.refresh }, a.token);
+  assert.equal(relock.status, 401, 'nor re-lock its way to a new session (audit 19 Oct S2)'); assert.equal(relock.body.code, 'revoked');
 
   const b = (await signin('rb1')).body;
   assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, b.token)).status, 200, 'signing in again works');
@@ -628,6 +630,29 @@ test('sessions: revoke, rotation and suspension sign devices out; sign-out ends 
   assert.equal((await signin('rd1')).status, 200);
   const log = await api('GET', '/v1/admin/actions', undefined, ownerToken);
   assert.ok(log.body.actions.some(x => x.type === 'sessions.revoke' && x.store === '2007'));
+});
+
+test('an encoded slash or dot segment in a route parameter is refused, never walked onto another route (audit 19 Oct S1)', async () => {
+  assert.equal((await reg2('2015')).status, 201);
+  const floor = (await api('POST', '/v1/auth/signin', { store: '2015', pin: '135790', device: 'tr1' })).body.token;
+  assert.equal((await api('GET', '/v1/store/2015/tail', undefined, floor)).status, 404, 'no such store route');
+  const tries = [
+    ['GET', '/v1/store/2015/life/..%2Ftail'], ['GET', '/v1/store/2015/life/..%2Fdevices'], ['GET', '/v1/store/2015/life/..%2Fkpis'],
+    ['GET', '/v1/store/2015/history/..%2F..%2Ftail'], ['GET', '/v1/store/2015/export/..%2Ftail'], ['GET', '/v1/store/2015/map/..%2Ftail'],
+    ['GET', '/v1/store/2015/map/..%2Ftail/source'], ['GET', '/v1/store/2015/manifest/..%2Ftail'], ['GET', '/v1/store/2015/photo/..%2Ftail'],
+    ['DELETE', '/v1/store/2015/soh/..%2Ftail'], ['DELETE', '/v1/store/2015/manifest/%2E%2E%2Ftail'], ['GET', '/v1/store/2015/life/..%5Ctail'],
+    ['GET', '/v1/store/2015/life/%2E%2E'], ['GET', '/v1/store/2015%2F..%2F2016/snapshot'],
+  ];
+  for (const [method, path] of tries) {
+    // 400 from the router; a bare %2E%2E segment is resolved by the URL
+    // parser itself, which leaves no route (404). Never the owner's data.
+    const r = await api(method, path, undefined, floor);
+    assert.ok([400, 404].includes(r.status), `${method} ${path}: ${r.status}`);
+    assert.ok(!r.body?.events && !r.body?.devices && !r.body?.alerts, `${method} ${path} leaked`);
+  }
+  const broken = await api('GET', '/v1/store/2015/life/%E0%A4%A', undefined, floor);
+  assert.equal(broken.status, 400, 'a malformed escape is a 400, not an unhandled 500');
+  assert.equal((await api('GET', '/v1/admin/stores/2015/tail', undefined, ownerToken)).status, 200, 'the owner route still works');
 });
 
 test('an unlocked code lasts a shift: after ROLE_TTL_SECONDS the next refresh drops back to the Floor', async () => {
