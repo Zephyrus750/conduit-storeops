@@ -62,3 +62,20 @@ test('applyEdit renames a shelf or names an unnamed one in the published source;
   d = doc(); assert.equal(applyEdit(d, { kind: 'name', to: 'H28', floor: 'ground', pos: { x: 60, y: 40 } }), 0, 'nothing unnamed there');
   d = doc(); assert.equal(applyEdit(d, { kind: 'flag', shelf: 'A16 S2', note: 'gone' }), 0);
 });
+
+test('a rename changes one shelf: the only one with that name, or the one at its position; never every shelf sharing it (audit 19 Oct D6)', async () => {
+  const { applyEdit } = await import('../../shared/mapedits.js');
+  const doc = () => ({ floors: [{ id: 'ground', shelves: [{ name: 'A16', subname: 'S2', x: 10, y: 20 }, { name: 'A16', subname: 'S2', x: 10, y: 60 }, { name: 'B3', subname: '', x: 50, y: 20 }] }] });
+  let d = doc();
+  assert.equal(applyEdit(d, { kind: 'rename', shelf: 'A16 S2', to: 'A17 S2', floor: 'ground' }), 0, 'two shelves share the name and no position says which');
+  assert.deepEqual(d.floors[0].shelves.map(s => s.name), ['A16', 'A16', 'B3'], 'nothing changed');
+  d = doc();
+  assert.equal(applyEdit(d, { kind: 'rename', shelf: 'A16 S2', to: 'A17 S2', floor: 'ground', pos: { x: 10, y: 60 } }), 1);
+  assert.deepEqual(d.floors[0].shelves.map(s => s.name + s.subname), ['A16S2', 'A17S2', 'B3'], 'only the tapped one');
+  d = doc();
+  assert.equal(applyEdit(d, { kind: 'rename', shelf: 'B3', to: 'B4', floor: 'ground' }), 1, 'a unique name needs no position');
+  // The suggestion keeps the position it was made with.
+  const s = initialState();
+  assert.equal(apply(s, ev('map.edit.suggest', { edit: 'e9pos' }, { shelf: 'A16 S2', kind: 'rename', to: 'A17 S2', floor: 'ground', pos: { x: 10, y: 60 } })), null);
+  assert.deepEqual(s.mapedits.e9pos.pos, { x: 10, y: 60 });
+});

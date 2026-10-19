@@ -44,7 +44,10 @@ export const HALT_KINDS = ['halt', 'huddle', 'transition', 'break'];
 export const TRANS_REASONS = ['cages', 'tables', 'tubs', 'moving', 'changeover', 'other'];
 export const TEAM_ROLES = ['cutter', 'runner', 'cleaner'];
 export const STD_MINS_PER_CARTON = 0.5;
-const HISTORY_CAP = 500;
+// A guard well above retention's 500 (shared/retain.js), which archives
+// what it drops each night. At 500 the reducer trimmed the 501st truck's
+// oldest row before retention could archive it (audit 19 Oct D8).
+const HISTORY_CAP = 1000;
 const MANIFEST_INDEX_CAP = 20;
 const BAY_RE = /^[A-Z]\d{1,2}$/;
 const MAX_CARTONS = 500;

@@ -51,7 +51,7 @@ export default {
     if (!isManager(ctx) || !hasMap()) return [];
     sel = null;
     const map = mountMap($('#mapstage', root), { cls: 'fm', badges: false, tips: false, unnamed: true, onSelect: info => {
-      if (info.kind === 'shelf') { sel = { key: info.full, shelf: info.full, unnamed: false, floor: map.floorId() || null, dept: info.dept }; haptic('select'); paint(true); }
+      if (info.kind === 'shelf') { sel = { key: info.full, shelf: info.full, unnamed: false, floor: map.floorId() || null, dept: info.dept, ...(info.pos ? { pos: info.pos } : {}) }; haptic('select'); paint(true); }
       else if (info.kind === 'unnamed' && info.pos && Number.isFinite(info.pos.x)) { const floor = info.floor || map.floorId() || null; sel = { key: unnamedKey(floor, info.pos), shelf: '', unnamed: true, floor, pos: info.pos, near: nearest(info.el) }; haptic('select'); paint(true); }
     } });
     bindMapChrome(root, map);

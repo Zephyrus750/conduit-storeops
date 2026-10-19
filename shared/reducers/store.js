@@ -126,7 +126,9 @@ export const storeReducers = {
     if (edits[id]) return reject('exists', `suggestion ${id} already exists`);
     if (!MAP_EDIT_KINDS.includes(p.kind)) return reject('invalid_event', `kind must be ${MAP_EDIT_KINDS.join(' or ')}`);
     const shelf = text(p.shelf, 40).toUpperCase(), to = text(p.to, 40), note = text(p.note, 300);
-    const named = p.kind === 'name', pos = named && p.pos && Number.isFinite(Number(p.pos.x)) && Number.isFinite(Number(p.pos.y)) ? { x: Number(p.pos.x), y: Number(p.pos.y) } : null;
+    // A rename may carry the tapped shelf's position too: two shelves with
+    // one name (the case that prompts a rename) are told apart by it.
+    const named = p.kind === 'name', pos = (named || p.kind === 'rename') && p.pos && Number.isFinite(Number(p.pos.x)) && Number.isFinite(Number(p.pos.y)) ? { x: Number(p.pos.x), y: Number(p.pos.y) } : null;
     if (!shelf && !named) return reject('invalid_event', 'which shelf?');
     if ((p.kind === 'rename' || named) && !to) return reject('invalid_event', `a ${named ? 'name' : 'rename'} needs the new name`);
     if (p.kind === 'flag' && !note) return reject('invalid_event', 'a flag needs a note saying what is wrong');

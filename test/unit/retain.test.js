@@ -109,3 +109,15 @@ test('the consolidation ledger: a sighting leaves other ids alone; retention pru
   assert.deepEqual(s.dock.ledger['100000002'].map(x => x.d), ['2026-10-01'], 'only its old sighting goes');
   assert.ok(s.dock.ledger['300000003']);
 });
+
+test('the 501st truck: its oldest history row is still there for retention to archive (audit 19 Oct D8)', () => {
+  const s = initialState();
+  s.dock.history = Array.from({ length: 500 }, (_, i) => ({ id: `2026-0${1 + (i % 9)}-01-T${i}`, date: '2026-05-01', cartons: i }));
+  const at = '2026-10-08T08:00:00+08:00', T = '2026-10-08-T1', ev = (type) => ({ id: `01JA${String(Math.random()).slice(2, 24).padEnd(22, '0')}`.slice(0, 26), store: '1241', area: 'backdock', type, entity: { truck: T }, payload: {}, actor: { role: 'dock', device: 'DK', owner: false }, at, v: 1 });
+  for (const t of ['truck.create', 'truck.setLive', 'truck.finalise']) assert.equal(apply(s, ev(t)), null, t);
+  assert.equal(s.dock.history.length, 501);
+  const out = retiring(s, DAY).filter(r => r.kind === 'receiving');
+  assert.equal(out.length, 1, 'one row to archive before it leaves the live state');
+  retain(s, DAY);
+  assert.equal(s.dock.history.length, 500);
+});
