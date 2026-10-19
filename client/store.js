@@ -19,6 +19,7 @@ import { validateEvent } from '../shared/validate.js';
 import { typeInfo } from '../shared/catalogue.js';
 import { ulid } from '../shared/ulid.js';
 import { primaryRole } from '../shared/roles.js';
+import { toolForEvent } from '../shared/tools.js';
 import { TransportError, Breaker, backoffMs } from './transport.js';
 
 export const HEARTBEAT_MS = 180_000;
@@ -161,11 +162,13 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
 
   // ── submit ────────────────────────────────────────────────────────────
   // What goes next: the queue in order, less the changes waiting on a
-  // refusal and everything queued after them in the same area (a scan
-  // waits behind the cage it belongs to).
+  // refusal and everything queued after them in the same tool (a scan
+  // waits behind the cage it belongs to), or the same area for changes no
+  // tool owns. Other tools carry on: one switched off holds only its own.
+  const lane = e => toolForEvent(e.type)?.id || e.area;
   function sendable() {
     const stuck = new Set(), out = [];
-    for (const e of pending) { if (held.has(e.id) || stuck.has(e.area)) { stuck.add(e.area); continue; } out.push(e); }
+    for (const e of pending) { const k = lane(e); if (held.has(e.id) || stuck.has(k)) { stuck.add(k); continue; } out.push(e); }
     return out;
   }
   // The running flush is kept until it ends, and only it clears itself: a
