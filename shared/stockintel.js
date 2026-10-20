@@ -35,8 +35,8 @@ function rowToRecord(line, ctxLoc) {
   let soh = null, price = null; const apns = [];
   for (const x of t.slice(ki + 1)) {
     if (/^\d{12,13}$/.test(x)) { if (!apns.includes(x)) apns.push(x); }
-    else if (/^\d+[.,]\d{2}$/.test(x)) price = Number(x.replace(',', '.'));
-    else if (SOH_RE.test(x) && /\d/.test(x)) soh = Number(fix(x));
+    else if (/^\d+[.,]\d{2}$/.test(x)) { price = Number(x.replace(',', '.')); soh = null; }   // SOH is the last column, after the price: a STATUS 0 before it is not the SOH
+    else if (SOH_RE.test(x) && (price !== null || /\d/.test(x))) soh = Number(fix(x));   // after the price an OCR'd O is a 0
   }
   if (soh === null || !loc || !Number.isFinite(soh)) return null;
   return { loc: String(Number(loc)), kc, soh, price, apns, brand: '' };

@@ -1,11 +1,20 @@
 # Test on every push and pull request; deploy the worker to staging on push
-# to main. Production is a manual run of this workflow with env=production.
+# to main, then publish the site. Production is a manual run of this
+# workflow with env=production.
+#
+# The worker goes first and the site follows once the worker answering is
+# this build: a new app never sends a change the worker does not know yet
+# (it used to be refused for a minute after each merge; audit 19 Oct T1).
 #
 # Repository secrets needed once:
 #   CLOUDFLARE_API_TOKEN   API token with the "Edit Cloudflare Workers" template
 #   CLOUDFLARE_ACCOUNT_ID  from the Workers overview page
 #   TOKEN_SECRET           any long random string (signs access tokens)
 #   OWNER_KEY              the owner key itself; the workflow stores only its hash
+#   NETLIFY_AUTH_TOKEN     a Netlify personal access token   } with Netlify's auto
+#   NETLIFY_SITE_ID        the site's API ID (Site configuration) } publishing locked
+#                          (docs/SETUP.md step 5); without them Netlify publishes
+#                          on its own, ahead of the worker
 name: deploy
 on:
   push:
@@ -37,6 +46,8 @@ jobs:
     needs: test
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # One deploy at a time, in order: a later merge waits for the one before.
+    concurrency: { group: deploy, cancel-in-progress: false }
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -47,8 +58,10 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       # Deploy first: a secret can only be attached to a worker that exists.
+      # BUILD stamps the commit on the worker, so the health check below can
+      # tell this build from the one it replaces.
       - name: Deploy
-        run: npx wrangler deploy --env "$TARGET"
+        run: npx wrangler deploy --env "$TARGET" --var "BUILD:${GITHUB_SHA::12}"
       # Secrets reach the shell as environment variables, never inlined, so a
       # key containing $ ` " or ! survives intact. hash-secret trims stdin.
       - name: Worker secrets (first run, or when asked)
@@ -62,7 +75,33 @@ jobs:
           printf '%s' "$TOKEN_SECRET" | npx wrangler secret put TOKEN_SECRET --env "$TARGET"
           printf '%s' "$OWNER_KEY" | npm run --silent hash-secret | npx wrangler secret put OWNER_KEY_HASH --env "$TARGET"
           echo "owner key length: ${#OWNER_KEY} characters (hash stored, key never printed)"
+      # Fails unless the worker answers with this build within two minutes.
       - name: Health
         run: |
-          sleep 5
-          NAME=$([ "$TARGET" = production ] && echo conduit || echo conduit-staging); curl -s "https://$NAME.zephyrus-np750.workers.dev/v1/health"; echo
+          NAME=$([ "$TARGET" = production ] && echo conduit || echo conduit-staging); WANT="${GITHUB_SHA::12}"
+          for i in $(seq 1 24); do
+            BODY=$(curl -fsS "https://$NAME.zephyrus-np750.workers.dev/v1/health" || true); echo "$BODY"
+            [ "$(printf '%s' "$BODY" | jq -r '.build // empty' 2>/dev/null)" = "$WANT" ] && exit 0
+            sleep 5
+          done
+          echo "::error::the worker is not answering as build $WANT"; exit 1
+      # The site: Netlify builds each commit as usual (netlify.toml and its
+      # headers apply) but, with auto publishing locked, publishes only when
+      # this step asks, after the worker is live. Staging is the site's worker.
+      - name: Site (after the worker)
+        if: env.TARGET == 'staging'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "::warning::NETLIFY_AUTH_TOKEN or NETLIFY_SITE_ID is not set: Netlify publishes the site on its own, ahead of the worker (docs/SETUP.md step 5)"; exit 0
+          fi
+          API=https://api.netlify.com/api/v1/sites/$NETLIFY_SITE_ID; AUTH="Authorization: Bearer $NETLIFY_AUTH_TOKEN"; ID=""
+          for i in $(seq 1 40); do
+            ID=$(curl -fsS -H "$AUTH" "$API/deploys?per_page=30" | jq -r --arg sha "$GITHUB_SHA" '[.[] | select(.commit_ref == $sha and .context == "production" and .state == "ready")][0].id // empty')
+            [ -n "$ID" ] && break; sleep 15
+          done
+          [ -n "$ID" ] || { echo "::error::Netlify has no ready deploy of $GITHUB_SHA after ten minutes"; exit 1; }
+          curl -fsS -X POST -H "$AUTH" "$API/deploys/$ID/restore" > /dev/null
+          echo "published Netlify deploy $ID ($GITHUB_SHA)"

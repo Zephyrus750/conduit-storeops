@@ -28,6 +28,7 @@ import { initialState, apply, replay } from '../shared/reducers.js';
 import { validateEvent } from '../shared/validate.js';
 import { typeInfo, AREA_PROJECTIONS } from '../shared/catalogue.js';
 import { hasRole } from './auth.js';
+import { primaryRole } from '../shared/roles.js';
 import { HttpError, json, fail, CORS, readJson, reportError } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
@@ -156,10 +157,11 @@ export class StoreObject extends DurableObject {
         }
         case '/events': { const body = await readJson(request, BATCH_MAX); return json({ results: this.submit(body.events, claims), now: Date.now() }); }
         case '/ws': return this.upgrade(request, claims);
-        case '/devices': return json({ devices: this.state.devices });
+        // Owner reads (the console): refused for a store token however it got here.
+        case '/devices': return raw.owner ? json({ devices: this.state.devices }) : fail(403, 'unauthorised', 'owner only');
         case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readJson(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true, now: Date.now() }); }
-        case '/kpis': return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
-        case '/tail': return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
+        case '/kpis': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
+        case '/tail': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? this.publishMap(await readJson(request, MAP_BODY_MAX), claims) : json(this.mapInfo());
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
@@ -473,7 +475,14 @@ export class StoreObject extends DurableObject {
       byLoc[bay] = list.map(String); codes += list.length;
     }
     const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-    const at = Number(r.at) || Date.now(), doc = JSON.stringify({ date, at, byLoc, range: r.range ?? null, delta: obj(r.delta), bayAt: obj(r.bayAt) });
+    // The report's SOH column, by keycode (the review offers it when a code
+    // is flagged, and items at 0 or less go to Adjustments).
+    const soh = {};
+    for (const [kc, v] of Object.entries(obj(r.soh))) {
+      if (!/^\d{6,13}$/.test(kc) || !Number.isFinite(Number(v))) throw new HttpError(400, 'invalid_request', `soh ${String(kc).slice(0, 13)}: a keycode and a number`);
+      soh[kc] = Math.round(Number(v));
+    }
+    const at = Number(r.at) || Date.now(), doc = JSON.stringify({ date, at, byLoc, range: r.range ?? null, delta: obj(r.delta), bayAt: obj(r.bayAt), soh });
     if (doc.length > REPORT_MAX) throw new HttpError(413, 'payload_too_large', 'the report is over 1.9 MB');
     const by = claims.device || (claims.owner ? 'owner' : ''), bays = Object.keys(byLoc).length;
     const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'backfill.report.publish', entity: { date }, payload: { at, bays, codes }, at: new Date().toISOString(), v: 1 };
@@ -719,11 +728,6 @@ export class StoreObject extends DurableObject {
 
 function rowToEvent(r) {
   return { id: r.id, seq: r.seq, type: r.type, area: r.area, entity: JSON.parse(r.entity), payload: JSON.parse(r.payload), actor: JSON.parse(r.actor), at: r.at, v: r.v };
-}
-function primaryRole(claims, roles) {
-  if (claims.actor) return claims.actor;
-  for (const r of roles) if (claims.roles.includes(r)) return r;
-  return claims.roles.includes('manager') ? 'manager' : claims.roles[0];
 }
 
 // What a token may read. The store PIN opens the Floor; Stockroom and Back

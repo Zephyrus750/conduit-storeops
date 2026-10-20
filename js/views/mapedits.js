@@ -36,7 +36,7 @@ export default {
     const openFor = full => model(ctx).open.filter(x => x.shelf === full);
     if (stage) {
       map = mountMap(stage, {
-        onSelect: info => { if (info.kind !== 'shelf') return; draft = { shelf: info.full.toUpperCase(), kind: draft?.kind || 'rename', to: '', note: '', floor: map.floorId() || null }; paint(); },
+        onSelect: info => { if (info.kind !== 'shelf') return; draft = { shelf: info.full.toUpperCase(), kind: draft?.kind || 'rename', to: '', note: '', floor: map.floorId() || null, ...(info.pos ? { pos: info.pos } : {}) }; paint(); },
         tip: info => { const n = openFor(info.full.toUpperCase()).length; return n ? tipLine('o', 'edit', `${n} edit${n === 1 ? '' : 's'} suggested`) : ''; },
       });
       bindMapChrome(root, map);
@@ -64,7 +64,7 @@ export default {
           if (!shelf) return toast('Which shelf? Tap it on the map or type its code', 'bad');
           if (draft.kind === 'rename' && !draft.to) return toast('Type the new name', 'bad');
           if (draft.kind === 'flag' && !draft.note) return toast('Say what is wrong', 'bad');
-          await ctx.store.dispatch({ type: 'map.edit.suggest', entity: { edit: newId() }, payload: { shelf, kind: draft.kind, ...(draft.kind === 'rename' ? { to: draft.to } : {}), ...(draft.note ? { note: draft.note } : {}), ...(draft.floor ? { floor: draft.floor } : {}) } });
+          await ctx.store.dispatch({ type: 'map.edit.suggest', entity: { edit: newId() }, payload: { shelf, kind: draft.kind, ...(draft.kind === 'rename' ? { to: draft.to } : {}), ...(draft.note ? { note: draft.note } : {}), ...(draft.floor ? { floor: draft.floor } : {}), ...(draft.pos ? { pos: draft.pos } : {}) } });
           draft = null; filter = 'open'; toast('Suggestion sent to the owner'); paint();
         }
         else if (act === 'decline') {

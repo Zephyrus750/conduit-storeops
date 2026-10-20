@@ -15,10 +15,12 @@ export function validateEvent(ev) {
   if (!STORE_RE.test(String(ev.store || ''))) return bad('store must be a store number');
   if (typeof ev.type !== 'string') return bad('type is required');
   const info = CATALOGUE[ev.type];
-  if (!info) return { code: 'invalid_event', message: `unknown type ${ev.type}` };
+  // reason tells a device its app is ahead of this worker (a deploy in
+  // flight): the change waits in its outbox instead of being dropped.
+  if (!info) return { code: 'invalid_event', reason: 'unknown_type', message: `unknown type ${ev.type}` };
   if (ev.area !== info.area) return bad(`area must be ${info.area} for ${ev.type}`);
   if (typeof ev.at !== 'string' || !ISO_RE.test(ev.at)) return bad('at must be an ISO 8601 timestamp with offset');
-  if ((ev.v ?? 1) !== info.v) return { code: 'invalid_event', message: `${ev.type} is at schema v${info.v}` };
+  if ((ev.v ?? 1) !== info.v) return { code: 'invalid_event', reason: 'schema_version', message: `${ev.type} is at schema v${info.v}` };
 
   const entity = ev.entity || {};
   if (typeof entity !== 'object' || Array.isArray(entity)) return bad('entity must be an object');
@@ -26,11 +28,15 @@ export function validateEvent(ev) {
     if (entity[k] === undefined || entity[k] === null || entity[k] === '') return bad(`entity.${k} is required`);
   }
   // Entity values become map keys in the reducers (weeks, bays, trucks,
-  // cycles…): plain short strings or numbers, never a prototype name.
+  // cycles…) and ids in other devices' screens: plain short strings or
+  // numbers, never a prototype name and never a character that means
+  // something in HTML (an issue id carrying `"><meta …>` once redirected
+  // every desk that opened Maintenance; audit 19 Oct S3).
   for (const [k, v] of Object.entries(entity)) {
     if (RESERVED.has(k)) return bad(`entity key ${k} is not allowed`);
     if (typeof v === 'number' ? !Number.isFinite(v) : typeof v !== 'string') return bad(`entity.${k} must be a string or number`);
     if (String(v).length > ENTITY_MAX) return bad(`entity.${k} is over ${ENTITY_MAX} characters`);
+    if (ENTITY_BAD.test(String(v))) return bad(`entity.${k} has a character that is not allowed (< > " ' \` or a control character)`);
     if (RESERVED.has(String(v).trim())) return bad(`entity.${k} is not allowed`);
   }
 
@@ -53,6 +59,7 @@ export function validateEvent(ev) {
 // anywhere in a payload may be one of these.
 const RESERVED = new Set(['__proto__', 'prototype', 'constructor']);
 const ENTITY_MAX = 100;
+const ENTITY_BAD = /[<>"'`\u0000-\u001f\u007f]/;
 function reservedIn(v, path, depth = 0) {
   if (depth > 12) return `${path} (nested too deep)`;
   if (typeof v === 'string') return RESERVED.has(v.trim()) ? path : null;

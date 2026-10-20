@@ -6,7 +6,7 @@
 // The worker talks to it over an internal fetch with a JSON body:
 //   POST /signin        { store, pin | managerCode, device } → { store, roles, caps, elevated } | error
 //   POST /unlock        { store, code }                    → { role } | error
-//   POST /refresh/issue { store, device, roles, owner }    → { refresh }
+//   POST /refresh/issue { store, device, roles, owner, epoch } → { refresh } (a store token from before the store's epoch is refused)
 //   POST /refresh/use   { refresh }                        → { store, device, roles, owner, epoch, refresh } | error
 //   POST /refresh/revoke { refresh }                       → { ok } (sign-out)
 //   GET  /stores                                           → public list
@@ -64,7 +64,7 @@ export class RegistryObject extends DurableObject {
     // Columns added after first deploy: a lockout window start, the store's
     // credential epoch (bumped to revoke every session), and the tools
     // switched off inside its entitled areas ({ toolId: false }).
-    for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT', 'ALTER TABLE refresh ADD COLUMN elevated INTEGER', "ALTER TABLE stores ADD COLUMN tools TEXT NOT NULL DEFAULT '{}'"]) {
+    for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT', 'ALTER TABLE refresh ADD COLUMN elevated INTEGER', 'ALTER TABLE refresh ADD COLUMN epoch INTEGER', "ALTER TABLE stores ADD COLUMN tools TEXT NOT NULL DEFAULT '{}'"]) {
       try { this.sql.exec(ddl); } catch { /* already there */ }
     }
   }
@@ -204,11 +204,19 @@ export class RegistryObject extends DurableObject {
   // roles it added last ROLE_TTL_SECONDS (a shift, 12 h) and then drop back
   // to the Floor, so a code typed once on a shared device does not stay.
   roleTtlMs() { return Number(this.env.ROLE_TTL_SECONDS || 43200) * 1000; }
-  async issueRefresh({ store, device, roles, owner, elevated = null }) {
+  // A store refresh token is issued at the store's current epoch, and only
+  // to a caller at that epoch: an access token from before "Sign out every
+  // device" (or a PIN change) cannot mint a new session through the idle
+  // re-lock, which used to issue one to any valid token.
+  async issueRefresh({ store, device, roles, owner, elevated = null, epoch }) {
+    const rec = store ? this.get(store) : null;
+    if (store && !rec) throw new HttpError(404, 'not_registered', `store ${store} is not registered`);
+    if (rec?.status === 'suspended') throw new HttpError(403, 'suspended', `store ${store} is suspended`);
+    if (rec && epoch !== undefined && (Number(epoch) || 0) < (rec.epoch || 0)) throw new HttpError(401, 'revoked', 'this device was signed out; sign in again');
     const refresh = randomToken(32);
     const ttl = Number(this.env.REFRESH_TTL_SECONDS || 2592000);
-    this.sql.exec('INSERT INTO refresh (hash, store, device, roles, owner, issued, expires, fp, elevated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      await sha256(refresh), store || null, device || null, JSON.stringify(roles || []), owner ? 1 : 0, new Date().toISOString(), Date.now() + ttl * 1000, owner ? await this.ownerFp() : null, elevated);
+    this.sql.exec('INSERT INTO refresh (hash, store, device, roles, owner, issued, expires, fp, elevated, epoch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      await sha256(refresh), store || null, device || null, JSON.stringify(roles || []), owner ? 1 : 0, new Date().toISOString(), Date.now() + ttl * 1000, owner ? await this.ownerFp() : null, elevated, rec ? rec.epoch || 0 : null);
     return { refresh, roleExpires: elevated ? elevated + this.roleTtlMs() : null };
   }
   async useRefresh({ refresh }) {
@@ -220,12 +228,13 @@ export class RegistryObject extends DurableObject {
     const store = row.store ? this.get(row.store) : null;
     if (row.store && !store) throw new HttpError(404, 'not_registered', `store ${row.store} is not registered`);
     if (store?.status === 'suspended') throw new HttpError(403, 'suspended', `store ${row.store} is suspended`);
+    if (store && row.epoch != null && row.epoch < (store.epoch || 0)) throw new HttpError(401, 'revoked', 'this device was signed out; sign in again');
     let roles = JSON.parse(row.roles), elevated = row.elevated || null;
     if (!row.owner && roles.some(r => r !== 'floor')) {
       if (!elevated) elevated = Date.now();                  // a session from before roles expired: its shift starts now
       else if (Date.now() - elevated >= this.roleTtlMs()) { roles = ['floor']; elevated = null; }
     }
-    const next = await this.issueRefresh({ store: row.store, device: row.device, roles, owner: !!row.owner, elevated });
+    const next = await this.issueRefresh({ store: row.store, device: row.device, roles, owner: !!row.owner, elevated, epoch: store?.epoch || 0 });
     return { store: row.store, device: row.device, roles, owner: !!row.owner, caps: store ? this.caps(store) : [], epoch: store?.epoch || 0, refresh: next.refresh, roleExpires: next.roleExpires };
   }
   // Sign-out: the refresh token stops working now, not in 30 days.

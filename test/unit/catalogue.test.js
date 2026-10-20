@@ -44,3 +44,23 @@ test('details: JSON-LD price and image, a was-price means clearance, only kmart 
   assert.deepEqual(extractDetails('<meta property="og:image" content="javascript:x"><script>{"price": 9}</script>'), { price: 9, was: null, img: null, clr: false });
   assert.equal(okHost('https://www.kmart.com.au/product/x-1/'), true); assert.equal(okHost('https://evil.test/'), false);
 });
+
+test('device lookups go in chunks of 50: a screen asking for 120 names gets them all (audit 19 Oct P1)', async () => {
+  const { createCatalogue, CHUNK } = await import('../../client/catalogue.js');
+  const { memoryStorage } = await import('../../client/storage.js');
+  const calls = [];
+  // The worker refuses a request for more than 50 codes, as worker/catalogue.js does.
+  const transport = { request: async path => { const kcs = new URL('https://x' + path).searchParams.get('kc').split(','); calls.push(kcs.length); if (kcs.length > 50) throw Object.assign(new Error('at most 50'), { status: 400 }); return { items: Object.fromEntries(kcs.map(kc => [kc, kc.endsWith('7') ? null : { kc, name: 'Item ' + kc, url: 'https://www.kmart.com.au/product/x-' + kc + '/' }])) }; } };
+  const cat = createCatalogue({ transport, storage: memoryStorage() });
+  const codes = Array.from({ length: 120 }, (_, i) => String(43000000 + i));
+  const got = await cat.lookupMany(codes);
+  assert.equal(CHUNK, 50); assert.deepEqual(calls, [50, 50, 20]);
+  assert.equal(got.filter(Boolean).length, 108); assert.equal(got[0].name, 'Item 43000000');
+  assert.equal(got[7], null, 'a code no upstream knows');
+  // An unreachable worker: those codes answer null and are not asked again straight away.
+  const down = { n: 0, request: async () => { down.n += 1; throw new Error('offline'); } };
+  const cat2 = createCatalogue({ transport: down, storage: memoryStorage() });
+  assert.deepEqual(await cat2.lookupMany(['42977636', '43307685']), [null, null]);
+  assert.deepEqual(await cat2.lookupMany(['42977636']), [null]);
+  assert.equal(down.n, 1);
+});

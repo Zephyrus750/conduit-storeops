@@ -1,6 +1,6 @@
 // Adjustments: the below-zero SOH evidence list, per day, most negative
 // first; the office works it top-down. Items arrive from the morning's
-// report (sent from Stock intelligence once a manager confirms), flagged
+// report (Stock intelligence: sent once it is read, or when it is saved), flagged
 // from Backfill review (confirmed at a bay) or the phone, or typed here;
 // kept per day in the log. Each is ticked off (scanned or tapped) once it
 // is adjusted in the system; the list filters by department.
@@ -41,7 +41,7 @@ export default {
       `<div class="cs-dim" style="padding:10px 2px 0">A ✓ location means the item was confirmed present when that bay was backfilled.</div></div>` +
       `<div class="sidecol"><div class="card"><div class="ch"><h3>Tick off by scanning</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="tick" placeholder="Scan a keycode once it is adjusted" inputmode="numeric" autocomplete="off"></div><div class="cs-dim">${m.done.length} of ${m.items.length} adjusted${m.today ? ' today' : ''}. A scanner's Enter ticks it off.</div></div></div>` +
       `<div class="card"><div class="ch"><h3>Add an item</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="kc" placeholder="Keycode" inputmode="numeric" autocomplete="off"></div><div class="adj-form2"><input class="ad-in" data-field="qty" placeholder="SOH (report)" aria-label="SOH from the report" inputmode="numeric"><input class="ad-in mono" data-field="loc" placeholder="Location (optional)"></div><button class="btn primary" style="justify-content:center" data-act="add">${ic('plus')}${m.today ? 'Add to today' : `Add to ${esc(m.date)}`}</button><div class="cs-dim">Stored as below zero either way. The name fills in from the catalogue.</div></div></div>` +
-      `<div class="card"><div class="ch"><h3>Last 14 days</h3></div><div class="bars" style="height:64px">${m.days.map(([d, x], i) => `<div class="${d === m.date ? 'hi' : ''}" style="height:${Object.keys(x).length ? Math.round(Object.keys(x).length / max * 100) : 3}%" title="${d}"></div>`).join('') || '<div style="height:3%"></div>'}</div><div class="cs-dim" style="margin-top:8px">${m.days.reduce((n, [, x]) => n + Object.keys(x).length, 0)} items recorded</div></div></div></div>`;
+      `<div class="card"><div class="ch"><h3>Last 14 days</h3></div><div class="bars" style="height:64px">${m.days.map(([d, x], i) => `<div class="${d === m.date ? 'hi' : ''}" style="height:${Object.keys(x).length ? Math.round(Object.keys(x).length / max * 100) : 3}%" title="${esc(d)}"></div>`).join('') || '<div style="height:3%"></div>'}</div><div class="cs-dim" style="margin-top:8px">${m.days.reduce((n, [, x]) => n + Object.keys(x).length, 0)} items recorded</div></div></div></div>`;
   },
   mobile(ctx) { return `<div id="adjmob">${mobile(ctx)}</div>`; },
   mount(ctx, root) {

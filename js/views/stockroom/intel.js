@@ -69,7 +69,7 @@ function pastePanel(ctx, data) {
   return `<div class="card sri-paste"><div class="ch"><h3>Paste the SOH report</h3><span class="cs-dim">LOCATION · KEYCODE · APN · DESC · COLOUR · STATUS · PRICE · SOH</span></div>` +
     `<textarea class="sri-ta" data-field="report" placeholder="Paste the report text here: the whole report, or one more page at a time" spellcheck="false">${esc(st.text)}</textarea>` +
     `<div class="sri-acts"><button class="btn primary sm" data-act="sri-read">${ic('check')}Read it</button><button class="btn sm" data-act="sri-screen" title="Read the report off the SIM screen">${ic('expand')}Screen scan</button>${p ? `<button class="btn sm" data-act="sri-clear">Clear</button>` : ''}<span class="cs-dim">${p ? `${kcs.size} keycodes in ${items.length} rows at ${locs.length} locations${p.skipped ? ` · ${p.skipped} lines skipped` : ''}` : 'Paste more and read again: rows merge by keycode and location, so a page pasted twice changes nothing.'}</span></div>` +
-    (p && items.length ? `<div class="sri-sum"><span class="sri-soh r" title="In a stockroom bay but the system says 0 or less: these go to Adjustments once saved">${nAdj} to adjust · 0 or less</span><span class="sri-soh a" title="Under two cartons in the whole store: the floor has most likely run out">${nPull} to pull · under two cartons</span><span class="sri-soh g">${healthy} healthy</span>${pending ? `<span class="cs-dim">checking ${pending} names…</span>` : ''}${unknown ? `<span class="warn">${unknown} not in the catalogue</span>` : ''}</div>` +
+    (p && items.length ? `<div class="sri-sum"><span class="sri-soh r" title="In a stockroom bay but the system says 0 or less: these go to today's Adjustments">${nAdj} to adjust · 0 or less</span><span class="sri-soh a" title="Under two cartons in the whole store: the floor has most likely run out">${nPull} to pull · under two cartons</span><span class="sri-soh g">${healthy} healthy</span>${pending ? `<span class="cs-dim">checking ${pending} names…</span>` : ''}${unknown ? `<span class="warn">${unknown} not in the catalogue</span>` : ''}</div>` + adjustOffer(ctx, items) +
       `<div class="sri-locs">${locs.slice(0, 80).map(l => `<span class="sri-loc">${esc(l)}${req.has(l) ? '<b class="req">REQ</b>' : '<b class="pre">PRE</b>'}</span>`).join('')}${missing.map(l => `<span class="sri-loc miss">${esc(l)}<b>MISSING</b></span>`).join('')}</div>` +
       outBack.slice(0, 6).map(([l, z, n]) => `<p class="lbl">▤ ${esc(l)}: ${z} of ${n} items here read 0 on hand but the carton profiles show depth: the stock is most likely out the back.</p>`).join('') +
       (unknown ? `<label class="sri-keep"><input type="checkbox" data-field="keep"${st.keep ? ' checked' : ''}> Keep the ${unknown} code${unknown === 1 ? '' : 's'} the catalogue does not know (mistyped by OCR, or new lines)</label>` : '') +
@@ -77,14 +77,35 @@ function pastePanel(ctx, data) {
         : `<div class="sri-acts"><button class="btn primary" data-act="sri-save"${saveOff}>${ic('check')}Save as ${esc(fmtDate(today))}'s snapshot · ${isoWeek(today)}</button></div>`) : '') + '</div>';
 }
 
-// After a save: the items the report puts at 0 or less, sent to the day's
-// Adjustments once a manager confirms (a bad paste cannot flood the list).
-function sendCard(ctx) {
-  const sv = st.saved; if (!sv?.adjust.length) return '';
-  const adj = ctx.store.get('adjustments')?.[todayKey()] || {}, kcs = [...new Set(sv.adjust.map(r => r.kc))], fresh = kcs.filter(k => !adj[k]);
-  return `<div class="card sri-send"><div class="ch"><h3>${ic('alert')}${kcs.length} item${kcs.length === 1 ? '' : 's'} at 0 or less in the stockroom</h3><span class="go" data-act="sri-send-close">Dismiss</span></div>` +
-    `<p class="lbl">The report puts ${kcs.length === 1 ? 'it' : 'them'} in a stockroom location though the system says the store has none. ${fresh.length ? `Send ${fresh.length === kcs.length ? (kcs.length === 1 ? 'it' : 'them') : `the ${fresh.length} not already there`} to today's Adjustments to count and correct.` : 'All of them are on today’s Adjustments already.'}</p>` +
-    (fresh.length ? `<div class="sri-acts"><button class="btn primary" data-act="sri-send"${st.busy ? ' disabled' : ''}>${ic('m-adjust')}Send ${fresh.length} to Adjustments</button><a class="btn" data-go="adjust">Open Adjustments</a></div>` : `<div class="sri-acts"><a class="btn" data-go="adjust">Open Adjustments</a></div>`) + '</div>';
+// The report's items at 0 or less in a stockroom bay go to the day's
+// Adjustments: offered as soon as the report is read (one click, whatever
+// the catalogue makes of the codes) and added by themselves when it is
+// saved. They used to wait for the save and then a second confirm, so a
+// report that could not be saved yet never reached Adjustments.
+function adjustRows(ctx, items) {
+  const adj = ctx.store.get('adjustments')?.[todayKey()] || {}, seen = new Set();
+  return flagsOf(items, ctnOf).adjust.filter(r => !adj[r.kc] && !seen.has(r.kc) && seen.add(r.kc));
+}
+async function sendAdjust(ctx, rows) {
+  let n = 0, failed = 0;
+  for (const r of rows) {
+    try { await ctx.store.dispatch({ type: 'adjustment.set', entity: { keycode: r.kc, date: todayKey() }, payload: { qty: Number(r.soh), location: r.loc, name: nameOf(r.kc) || '', source: 'report' } }); n++; }
+    catch { failed++; }
+  }
+  return { n, failed };
+}
+function adjustOffer(ctx, items) {
+  const all = new Set(flagsOf(items, ctnOf).adjust.map(r => r.kc)).size; if (!all) return '';
+  const fresh = adjustRows(ctx, items).length;
+  return `<div class="sri-acts sri-adj">${fresh ? `<button class="btn primary sm" data-act="sri-adjust"${st.busy ? ' disabled' : ''}>${ic('m-adjust')}Send ${fresh} to Adjustments</button><span class="cs-dim">${fresh === all ? 'or save the snapshot: it adds them too' : `${all - fresh} already on today's list`}</span>`
+    : `<span class="cs-dim">${ic('check')}All ${all} at 0 or less are on today's Adjustments</span>`}<a class="go" data-go="adjust">Open Adjustments</a></div>`;
+}
+// After a save: what went to Adjustments.
+function sendCard() {
+  const sv = st.saved; if (!sv?.sent && !sv?.already) return '';
+  return `<div class="card sri-send"><div class="ch"><h3>${ic('m-adjust')}${sv.sent ? `${sv.sent} item${sv.sent === 1 ? '' : 's'} at 0 or less sent to today's Adjustments` : 'Today\'s Adjustments already hold this report\'s items at 0 or less'}</h3><span class="go" data-act="sri-send-close">Dismiss</span></div>` +
+    `<p class="lbl">The report puts ${sv.sent + sv.already === 1 ? 'it' : 'them'} in a stockroom location though the system says the store has none.${sv.already && sv.sent ? ` ${sv.already} ${sv.already === 1 ? 'was' : 'were'} on the list already.` : ''}${sv.failed ? ` ${sv.failed} could not be added.` : ''}</p>` +
+    `<div class="sri-acts"><a class="btn" data-go="adjust">${ic('m-adjust')}Open Adjustments</a></div></div>`;
 }
 
 function classesCard(ctx, data) {
@@ -115,7 +136,7 @@ export default {
     if (st.parsed) ensureNames(ctx, [...new Set(Object.values(st.parsed.items).map(r => r.kc))], () => ctx.rerender());
     if (data?.history && st.filter !== 'all') ensureNames(ctx, Object.values(data.history).filter(h => classify(h, profileOf(h.kc)).cls === st.filter).slice(0, 300).map(h => h.kc), () => ctx.rerender());
     const head = vh('Stock intelligence', sub(`${n} snapshot${n === 1 ? '' : 's'}`, n ? `latest ${esc(Object.keys(idx).sort().at(-1))}` : 'none yet', 'STUCK · GHOST · FROZEN · DEEP'), `<button class="btn" data-view="daylist">${ic('m-daylist')}Day list</button>`, 'chart');
-    return head + `<div class="sri-grid"><div>${sendCard(ctx)}${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${lookupCard(ctx, data)}${snapsCard(data)}<div class="card"><div class="ch"><h3>How the classes work</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} SOH has not moved for three snapshots although stock arrived: count it.</li><li>${clsBadge('ghost')} The system says zero but stock arrived: count it.</li><li>${clsBadge('frozen', 3)} Flat for three or more snapshots with nothing arriving: count it.</li><li>${clsBadge('deep')} Flat, but two cartons or more on hand: a spot-check.</li><li>${clsBadge('new')} Under three snapshots: not enough history yet.</li><li><span class="sri-badge recount">RECOUNT</span> Re-cartoned within the last four trucks: count, do not spot-check.</li></ul></div></div></div>`;
+    return head + `<div class="sri-grid"><div>${sendCard()}${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${lookupCard(ctx, data)}${snapsCard(data)}<div class="card"><div class="ch"><h3>How the classes work</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} SOH has not moved for three snapshots although stock arrived: count it.</li><li>${clsBadge('ghost')} The system says zero but stock arrived: count it.</li><li>${clsBadge('frozen', 3)} Flat for three or more snapshots with nothing arriving: count it.</li><li>${clsBadge('deep')} Flat, but two cartons or more on hand: a spot-check.</li><li>${clsBadge('new')} Under three snapshots: not enough history yet.</li><li><span class="sri-badge recount">RECOUNT</span> Re-cartoned within the last four trucks: count, do not spot-check.</li></ul></div></div></div>`;
   },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
@@ -130,26 +151,27 @@ export default {
         st.busy = true; ctx.rerender();
         try {
           const merge = a.dataset.merge === '1', r = await ctx.api(`/v1/store/${ctx.storeNo}/soh`, { method: 'POST', body: { date: todayKey(), ...(merge ? { merge: true } : {}), rows: items.map(x => ({ kc: x.kc, loc: x.loc, soh: x.soh, price: x.price, ...(nameOf(x.kc) ? { name: nameOf(x.kc) } : {}) })) }, timeoutMs: 60000 });
-          toast(r.updatedLocs ? `${r.updatedLocs} locations updated · today holds ${r.rows} rows` : `Snapshot saved · ${r.week} · ${r.rows} rows`);
-          st.saved = { date: r.date, adjust: flagsOf(items, ctnOf).adjust }; st.parsed = null; st.keep = false;
+          // Saving the report is the manager's say-so: its items at 0 or less go to today's Adjustments.
+          const all = new Set(flagsOf(items, ctnOf).adjust.map(x => x.kc)).size, sent = await sendAdjust(ctx, adjustRows(ctx, items));
+          toast(`${r.updatedLocs ? `${r.updatedLocs} locations updated · today holds ${r.rows} rows` : `Snapshot saved · ${r.week} · ${r.rows} rows`}${sent.n ? ` · ${sent.n} sent to Adjustments` : ''}`);
+          st.saved = { date: r.date, sent: sent.n, already: all - sent.n - sent.failed, failed: sent.failed }; st.parsed = null; st.keep = false;
         }
         catch (err) { toast(err.message, 'bad'); }
         st.busy = false; ctx.rerender();
       }
       else if (act === 'sri-send-close') { st.saved = null; ctx.rerender(); }
-      else if (act === 'sri-send') {
-        const adj = ctx.store.get('adjustments')?.[todayKey()] || {}, seen = new Set(), rows = (st.saved?.adjust || []).filter(r => !adj[r.kc] && !seen.has(r.kc) && seen.add(r.kc));
-        if (!rows.length || !confirm(`Send ${rows.length} item${rows.length === 1 ? '' : 's'} at 0 or less to today's Adjustments?`)) return;
-        st.busy = true; ctx.rerender(); let n = 0;
-        try { for (const r of rows) { await ctx.store.dispatch({ type: 'adjustment.set', entity: { keycode: r.kc, date: todayKey() }, payload: { qty: Number(r.soh), location: r.loc, name: nameOf(r.kc) || '', source: 'report' } }); n++; } toast(`${n} sent to Adjustments`); st.saved = null; }
-        catch (err) { toast(`${n} sent; then: ${err.message}`, 'bad'); }
+      else if (act === 'sri-adjust') {
+        const rows = adjustRows(ctx, Object.values(st.parsed?.items || {})); if (!rows.length) return;
+        st.busy = true; ctx.rerender();
+        const r = await sendAdjust(ctx, rows);
         st.busy = false; ctx.rerender();
+        toast(`${r.n} sent to today's Adjustments${r.failed ? ` · ${r.failed} could not be added` : ''}`, r.failed ? 'bad' : '', { label: 'Open', run: () => ctx.go('adjust') });
       }
       else if (act === 'sri-remove') { if (!confirm(`Remove the snapshot for ${a.dataset.date}? The classes are worked out again without it.`)) return; try { await ctx.api(`/v1/store/${ctx.storeNo}/soh/${a.dataset.date}`, { method: 'DELETE' }); toast('Snapshot removed'); } catch (err) { toast(err.message, 'bad'); } }
     });
     root.addEventListener('change', e => { if (e.target.matches('[data-field="keep"]')) { st.keep = e.target.checked; ctx.rerender(); } });
     let typing = null;
     root.addEventListener('input', e => { if (e.target.matches('[data-field="sri-q"]')) { st.q = e.target.value; clearTimeout(typing); typing = setTimeout(() => { const v = st.q; ctx.rerender(); const i = document.querySelector('#content [data-field="sri-q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 180); } else if (e.target.matches('[data-field="report"]')) st.text = e.target.value; else if (e.target.matches('[data-field="sri-loc"]')) { st.loc = e.target.value; clearTimeout(typing); typing = setTimeout(() => { const v = st.loc; ctx.rerender(); const i = document.querySelector('#content [data-field="sri-loc"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); } });
-    return [ctx.store.on('soh', () => ctx.rerender()), ctx.store.on('adjustments', () => { if (st.saved) ctx.rerender(); })];
+    return [ctx.store.on('soh', () => ctx.rerender()), ctx.store.on('adjustments', () => { if (st.saved || st.parsed) ctx.rerender(); })];
   },
 };

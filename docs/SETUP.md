@@ -6,7 +6,10 @@ The full walkthrough lives in the "Conduit Setup Guide" doc. Short form:
 2. **Secrets**: `TOKEN_SECRET` = `openssl rand -base64 48`; `OWNER_KEY` = a long passphrase from your password manager.
 3. **GitHub**: Settings › Secrets and variables › Actions → add the four. Actions › deploy › Run workflow, env `staging`, tick `set_secrets`.
 4. **Check**: `https://conduit-staging.<sub>.workers.dev/v1/health` → `{"ok":true,...}`.
-5. **Netlify**: Add new site › Import from GitHub › this repo. Build command empty, publish directory `.`. Give the site a name-neutral name.
+5. **Netlify**: Add new site › Import from GitHub › this repo. Build command empty, publish directory `.`. Give the site a name-neutral name. Then make the site follow the worker, so a new app never reaches devices before the worker that understands it:
+   - Deploys › **Lock to stop auto publishing** (Netlify keeps building each commit but publishes only when asked).
+   - User settings › Applications › **New access token** → GitHub secret `NETLIFY_AUTH_TOKEN`; Site configuration › Site details › **Site ID** → `NETLIFY_SITE_ID`.
+   - On each merge the deploy workflow now deploys the worker, waits until `/v1/health` reports that commit's `build`, then publishes Netlify's build of the same commit. Without the two secrets it warns and Netlify publishes on its own, as before.
 6. **Subdomain**: if it is not `zephyrus-np750`, change the URL in `js/config.js` and push.
 7. **Register the store** (owner): open the Netlify site, choose "Owner sign-in", enter the owner key, then Register a store. The console generates the PIN and codes and shows them once. The same thing from a terminal:
    ```bash

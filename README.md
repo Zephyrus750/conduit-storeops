@@ -70,7 +70,11 @@ From a laptop instead: `npx wrangler login`, then the same two `secret put`
 commands and `npm run deploy:staging`.
 
 **Shell (Netlify).** Import this repository as a new site: publish directory
-`.`, no build command (netlify.toml already says so). The shell talks to the
+`.`, no build command (netlify.toml already says so). Lock auto publishing
+and add `NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID` as repository secrets
+(docs/SETUP.md step 5): the deploy workflow then publishes each commit's
+site only after the worker reports that commit's `build` on `/v1/health`, so
+a new app never reaches devices before the worker that understands it. The shell talks to the
 staging worker by default (`js/config.js`); open it once with
 `?worker=<url>` to point a device at another worker on `WORKER_ALLOWED` in
 the same file (any other origin is ignored, so a link cannot send a store's

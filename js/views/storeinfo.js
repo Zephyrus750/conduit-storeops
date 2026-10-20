@@ -87,8 +87,10 @@ export default {
         if (act === 'add') { adding = true; repaint(); root.querySelector('[name="store"]')?.focus(); }
         else if (act === 'add-cancel') { adding = false; repaint(); }
         else if (act === 'switch') {
-          const n = ctx.store.status?.queued || 0;
-          if (n && !confirm(`${n} change${n === 1 ? '' : 's'} for ${ctx.storeNo} are still waiting to sync. They send when you switch back.\n\nSwitch to ${a.dataset.store}?`)) return;
+          // Send what can go first: switching drops the area codes.
+          try { await ctx.store.flush(); } catch {}
+          const n = ctx.store.status?.queued || 0, area = ctx.store.pending.some(e => e.area !== 'store');
+          if (n && !confirm(`${n} change${n === 1 ? '' : 's'} for ${ctx.storeNo} ${n === 1 ? 'is' : 'are'} still waiting to send. ${n === 1 ? 'It sends' : 'They send'} when you switch back${area ? ' (Stockroom and Back dock changes once their code is entered again)' : ''}.\n\nSwitch to ${a.dataset.store}?`)) return;
           await ctx.session.switchTo(a.dataset.store); location.reload();
         }
         else if (act === 'forget') { if (confirm(`Sign this device out of store ${a.dataset.store}?`)) { await ctx.session.forget(a.dataset.store); parked = await ctx.session.parked(); repaint(); } }
@@ -97,6 +99,7 @@ export default {
     root.addEventListener('submit', async e => {
       if (!e.target.matches('[data-form="add"]')) return; e.preventDefault();
       const f = new FormData(e.target);
+      try { await ctx.store.flush(); } catch {}
       try { await ctx.session.signInAnother({ store: String(f.get('store')).trim(), pin: String(f.get('pin')) }); adding = false; location.reload(); }
       catch (err) { toast(err.status === 403 ? 'That PIN is not right for that store.' : err.status === 404 ? 'No store with that number.' : err.message, 'bad'); }
     });

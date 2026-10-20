@@ -557,10 +557,11 @@ async function applyToMap(ctx, no, list) {
   try { [info, src] = await Promise.all([ctx.admin.api(`/v1/store/${no}/map`), ctx.admin.api(`/v1/store/${no}/map/latest/source`)]); }
   catch (e) { return e.status === 404 ? toast(`Store ${no}'s map was published from drawings only, with no editor source to change. Open it in the map editor, make the change and publish from there; that also makes Apply to map work next time.`, 'bad') : fail(e); }
   const doc = JSON.parse(JSON.stringify(src)), done = [], missed = [];
-  for (const x of list) (applyEdit(doc, x) ? done : missed).push(x);
-  if (!done.length) return toast(`No shelf on the published map matches ${missed.length === 1 ? 'that suggestion' : 'those suggestions'}: make ${missed.length === 1 ? 'it' : 'them'} in the map editor`, 'bad');
+  let shelves = 0;
+  for (const x of list) { const n = applyEdit(doc, x); shelves += n; (n ? done : missed).push(x); }
+  if (!done.length) return toast(`No single shelf on the published map matches ${missed.length === 1 ? 'that suggestion' : 'those suggestions'} (the name is missing, or shared and the suggestion has no position): make ${missed.length === 1 ? 'it' : 'them'} in the map editor`, 'bad');
   let version = bump(info.version);
-  if (!confirm(`Apply ${done.length} change${done.length === 1 ? '' : 's'} to store ${no}'s map and publish it as version ${version}?${missed.length ? `\n\n${missed.length} could not be matched and stay waiting.` : ''}\n\nEvery device gets the new map within a minute. Open the map editor from Conduit again before editing there.`)) return;
+  if (!confirm(`Apply ${done.length} suggestion${done.length === 1 ? '' : 's'} (${shelves} shel${shelves === 1 ? 'f' : 'ves'} renamed or named) to store ${no}'s map and publish it as version ${version}?${missed.length ? `\n\n${missed.length} could not be matched to one shelf and stay waiting.` : ''}\n\nEvery device gets the new map within a minute. Open the map editor from Conduit again before editing there.`)) return;
   const name = ctx.admin.stores.find(r => String(r.no) === String(no))?.name;
   for (let tries = 0; ; tries++) {
     try { await ctx.admin.api(`/v1/store/${no}/map`, { method: 'POST', body: publishBody(doc, { version, name }) }); break; }

@@ -17,7 +17,9 @@ import { importDV } from './import-dv.js';
 const r = new Router();
 
 // ── health ────────────────────────────────────────────────────────────────
-r.get('/v1/health', (_req, env) => json({ ok: true, version: VERSION, env: env.ENVIRONMENT || 'dev' }));
+// build: the commit CI deployed (wrangler --var BUILD), so the deploy can
+// check the worker answering is the one it just sent.
+r.get('/v1/health', (_req, env) => json({ ok: true, version: VERSION, build: env.BUILD || null, env: env.ENVIRONMENT || 'dev' }));
 
 // ── auth ──────────────────────────────────────────────────────────────────
 r.post('/v1/auth/signin', async (req, env) => {
@@ -48,7 +50,7 @@ r.post('/v1/auth/signin', async (req, env) => {
   }
   // The store PIN, or a manager's code in its place (every area at once).
   const res = await registry(env, 'POST', '/signin', { store: String(b.store || ''), pin: b.pin, managerCode: b.managerCode != null && b.pin == null ? String(b.managerCode) : undefined, device, ip: clientIp(req) });
-  const { refresh, roleExpires } = await registry(env, 'POST', '/refresh/issue', { store: res.store, device, roles: res.roles, owner: false, elevated: res.elevated ? Date.now() : null });
+  const { refresh, roleExpires } = await registry(env, 'POST', '/refresh/issue', { store: res.store, device, roles: res.roles, owner: false, elevated: res.elevated ? Date.now() : null, epoch: res.epoch || 0 });
   const claims = makeClaims({ store: res.store, roles: res.roles, caps: res.caps, device, epoch: res.epoch, ttl: roleTtl(env, roleExpires) });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, store: res.store, name: res.name, roles: res.roles, caps: res.caps, status: res.status });
 });
@@ -59,7 +61,7 @@ r.post('/v1/auth/unlock', async (req, env, ctx) => {
   const b = await readJson(req);
   const { role, epoch } = await registry(env, 'POST', '/unlock', { store: c.store, code: b.code, device: c.device, ip: clientIp(req), epoch: c.epoch || 0 });
   const roles = c.roles.includes(role) ? c.roles : [...c.roles, role];
-  const { refresh, roleExpires } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false, elevated: Date.now() });
+  const { refresh, roleExpires } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false, elevated: Date.now(), epoch });
   const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, epoch, ttl: roleTtl(env, roleExpires) });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, roles });
 });
@@ -73,7 +75,7 @@ r.post('/v1/auth/lock', async (req, env) => {
   const b = await readJson(req);
   if (b.refresh) await registry(env, 'POST', '/refresh/revoke', { refresh: String(b.refresh) });
   const roles = ['floor'];
-  const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false });
+  const { refresh } = await registry(env, 'POST', '/refresh/issue', { store: c.store, device: c.device, roles, owner: false, epoch: c.epoch || 0 });
   const claims = makeClaims({ store: c.store, roles, caps: c.caps, device: c.device, epoch: c.epoch || 0, ttl: ttl(env) });
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh, expires: claims.exp, roles });
 });
@@ -283,6 +285,7 @@ export default {
     const url = new URL(request.url);
     const m = r.match(request.method, url.pathname);
     if (!m) return fail(404, 'not_found', `no route for ${request.method} ${url.pathname}`);
+    if (m.bad) return fail(400, 'invalid_request', m.bad);
     try {
       return await m.handler(request, env, ctx, m.params);
     } catch (e) {
@@ -347,6 +350,9 @@ async function ownerStoreCall(req, env, no, path, search = '') {
   return forward(req, env, no, path, search, { ...c, store: no, caps, roles: ['manager'] });
 }
 function forward(req, env, no, path, search, claims) {
+  // The store object routes on the path as built here: it must reach the
+  // object exactly as written (no dot segments resolved on the way).
+  if (new URL('https://store' + path).pathname !== path) throw new HttpError(400, 'invalid_request', 'not a valid store path');
   const stub = env.STORE.get(env.STORE.idFromName(String(no)));
   const headers = new Headers(req.headers);
   headers.set('X-Conduit-Claims', JSON.stringify(claims));
