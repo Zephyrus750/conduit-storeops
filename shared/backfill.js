@@ -48,7 +48,13 @@ export function disputes(codes) {
 // Read as Stock intelligence reads it, so both agree on every line.
 export function parseReportSoh(text) {
   const out = {};
-  for (const r of Object.values(parseReport(text).items)) out[r.kc] = r.soh;
+  for (const [kc, r] of Object.entries(parseReportLines(text))) out[kc] = r.soh;
+  return out;
+}
+// Each item's SOH, price and description (what Adjustments shows), by keycode.
+export function parseReportLines(text) {
+  const out = {};
+  for (const r of Object.values(parseReport(text).items)) out[r.kc] = { soh: r.soh, price: r.price, desc: r.desc || '' };
   return out;
 }
 

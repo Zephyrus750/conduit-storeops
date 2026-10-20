@@ -299,7 +299,10 @@ export const stockroomReducers = {
     // an earlier one (a review at the bay) recorded.
     const cur = day[kc], counted = Number.isFinite(p.counted) ? Math.max(0, Math.round(p.counted)) : (cur?.counted ?? null);
     const source = ['report', 'review', 'phone', 'desk', 'screen', 'import'].includes(p.source) ? p.source : cur?.source;
-    day[kc] = { qty: -Math.abs(p.qty), ...(counted != null ? { counted } : {}), name: p.name || cur?.name || '', location: p.location === undefined || (p.location === '' && cur?.location) ? cur?.location || '' : loc, confirmed: p.confirmed === undefined ? !!cur?.confirmed : !!p.confirmed || !!cur?.confirmed, addedAt: cur?.addedAt || e.at, ...(source ? { source } : {}), ...(cur?.done ? { done: cur.done } : {}) };
+    // The report's price for the item (Adjustments values the write-off with
+    // it); a later flag without one keeps the earlier price.
+    const price = Number.isFinite(p.price) && p.price >= 0 && p.price <= 100000 ? Math.round(p.price * 100) / 100 : cur?.price;
+    day[kc] = { qty: -Math.abs(p.qty), ...(counted != null ? { counted } : {}), name: p.name || cur?.name || '', location: p.location === undefined || (p.location === '' && cur?.location) ? cur?.location || '' : loc, confirmed: p.confirmed === undefined ? !!cur?.confirmed : !!p.confirmed || !!cur?.confirmed, addedAt: cur?.addedAt || e.at, ...(source ? { source } : {}), ...(price != null ? { price } : {}), ...(cur?.done ? { done: cur.done } : {}) };
     return null;
   },
   // Ticked off once the stock is adjusted in the system (or put back).

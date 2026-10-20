@@ -13,7 +13,7 @@
 // phone that loses wifi mid-bay keeps its scans in the outbox.
 
 import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, msteps, mlast, mrows, mbig, mghost, mfoot, camButton } from '../../ui.js';
-import { phoneCode, disputes, parseReportByLocation, parseReportSoh, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, freshLabel, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
+import { phoneCode, disputes, parseReportByLocation, parseReportLines, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, freshLabel, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { printSheet, code as pcode, tick, table, section, signoff } from '../../print.js';
@@ -157,13 +157,13 @@ function sohTag(kc) { const q = st.report?.soh?.[kc]; return q == null ? '' : ` 
 // The pasted report's items at 0 or less (its SOH column) go to today's
 // Adjustments at the bay the report lists them in, as Stock intelligence
 // does when its report is saved; items already on the list are left alone.
-async function reportToAdjust(ctx, byLoc, soh) {
+async function reportToAdjust(ctx, byLoc, lines) {
   const day = todayKey(), have = ctx.store.get('adjustments')?.[day] || {}, at = {};
   for (const [bay, codes] of Object.entries(byLoc)) for (const kc of codes) at[kc] ||= bay;
   let n = 0;
-  for (const [kc, q] of Object.entries(soh)) {
-    if (!(q <= 0) || have[kc]) continue;
-    if (await send(ctx, 'adjustment.set', { keycode: kc, date: day }, { qty: Math.round(q), location: at[kc] || '', confirmed: false, name: nameOf(kc) || '', source: 'report' })) n++;
+  for (const [kc, r] of Object.entries(lines)) {
+    if (!(r.soh <= 0) || have[kc]) continue;
+    if (await send(ctx, 'adjustment.set', { keycode: kc, date: day }, { qty: Math.round(r.soh), location: at[kc] || '', confirmed: false, name: nameOf(kc) || r.desc || '', ...(Number.isFinite(r.price) ? { price: r.price } : {}), source: 'report' })) n++;
   }
   return n;
 }
@@ -289,9 +289,9 @@ async function onClick(e, ctx, root, repaint) {
     const text = root.querySelector('[data-field="paste"]')?.value || '';
     const byLoc = parseReportByLocation(text); const n = Object.keys(byLoc).length;
     if (!n) return toast('No location lines found. Each line needs a bay number and a keycode.', 'bad');
-    const prev = st.report?.byLoc || {}, soh = parseReportSoh(text);
+    const prev = st.report?.byLoc || {}, lines = parseReportLines(text), soh = Object.fromEntries(Object.entries(lines).map(([kc, r]) => [kc, r.soh]));
     await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh } });
-    const sent = await reportToAdjust(ctx, byLoc, soh);
+    const sent = await reportToAdjust(ctx, byLoc, lines);
     st.paste = false; toast(`Report pasted: ${n} bay${n === 1 ? '' : 's'}, ${Object.values(byLoc).reduce((x, l) => x + l.length, 0)} codes${sent ? ` · ${sent} at 0 or less sent to Adjustments` : ''}`, '', sent ? { label: 'Open', run: () => ctx.go('adjust') } : null); ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender();
   }
   else if (act === 'bay-paste') { st.bayPaste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="baypaste"]')?.focus(), 30); }

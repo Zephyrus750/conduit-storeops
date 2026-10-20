@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseReport, sohBand, isoWeek, historyOf, classify, checksFor, splitWalkers } from '../../shared/stockintel.js';
+import { parseReport, sohBand, isoWeek, historyOf, classify, checksFor, splitWalkers, shrinkValue } from '../../shared/stockintel.js';
 
 const REPORT = `STORE : 1241 Busselton                       Page 1
 LOCATION KEYCODE APN DESCRIPTION COLOUR STATUS PRICE SOH
@@ -81,4 +81,16 @@ test('a keycode in two bays keeps both; one store-wide SOH a snapshot; checks go
   const kept = keepDates(days);
   assert.ok(days.slice(-14).every(d => kept.includes(d)) && !kept.includes('2026-09-02') && kept.includes('2026-09-06'), 'Sunday 6 Sep ends its week');
   assert.deepEqual(weeklyDates(days, 2), ['2026-10-04', '2026-10-10']);
+});
+
+test('a report line keeps its description and price; shrink is the units below zero at that price', () => {
+  const r = parseReport(`LOCATION KEYCODE APN DESCRIPTION COLOUR STATUS PRICE SOH
+7012 43166022 9300633001234 BATH TOWEL 5PK WHITE 0 12.00 -3
+7012 43199310 PAPER PLATES 20 PK 0 5.00 14
+7014 43117659 RUG GREY -2`).items;
+  assert.deepEqual([r['43166022|7012'].desc, r['43166022|7012'].price], ['BATH TOWEL 5PK WHITE', 12], 'the STATUS 0 before the price is not part of it');
+  assert.equal(r['43199310|7012'].desc, 'PAPER PLATES 20 PK', 'a number inside the description stays');
+  assert.deepEqual([r['43117659|7014'].desc, r['43117659|7014'].price, r['43117659|7014'].soh], ['RUG GREY', null, -2], 'no price: the SOH at the end is not part of it');
+  assert.equal(shrinkValue(-3, 12), 36); assert.equal(shrinkValue(-3, 4.99), 14.97);
+  assert.equal(shrinkValue(0, 12), 0, 'nothing below zero, nothing written off'); assert.equal(shrinkValue(-2, null), 0); assert.equal(shrinkValue(5, 12), 0);
 });

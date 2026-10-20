@@ -89,7 +89,7 @@ function adjustRows(ctx, items) {
 async function sendAdjust(ctx, rows) {
   let n = 0, failed = 0;
   for (const r of rows) {
-    try { await ctx.store.dispatch({ type: 'adjustment.set', entity: { keycode: r.kc, date: todayKey() }, payload: { qty: Number(r.soh), location: r.loc, name: nameOf(r.kc) || '', source: 'report' } }); n++; }
+    try { await ctx.store.dispatch({ type: 'adjustment.set', entity: { keycode: r.kc, date: todayKey() }, payload: { qty: Number(r.soh), location: r.loc, name: nameOf(r.kc) || r.desc || '', ...(Number.isFinite(r.price) ? { price: r.price } : {}), source: 'report' } }); n++; }
     catch { failed++; }
   }
   return { n, failed };
