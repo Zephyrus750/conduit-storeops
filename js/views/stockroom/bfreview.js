@@ -13,7 +13,7 @@
 // phone that loses wifi mid-bay keeps its scans in the outbox.
 
 import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, msteps, mlast, mrows, mbig, mghost, mfoot, camButton } from '../../ui.js';
-import { phoneCode, disputes, parseReportByLocation, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, freshLabel, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
+import { phoneCode, disputes, parseReportByLocation, parseReportSoh, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, freshLabel, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { printSheet, code as pcode, tick, table, section, signoff } from '../../print.js';
@@ -146,19 +146,34 @@ async function syncReport(ctx) {
   try {
     const doc = await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report?date=${todayKey()}`);
     if (st.reportFor !== k) return changed;
-    st.report = { at: doc.at, byLoc: doc.byLoc || {}, range: doc.range ?? null, delta: doc.delta || {}, bayAt: doc.bayAt || {}, rev: meta.rev };
+    st.report = { at: doc.at, byLoc: doc.byLoc || {}, range: doc.range ?? null, delta: doc.delta || {}, bayAt: doc.bayAt || {}, soh: doc.soh || {}, rev: meta.rev };
     await ctx.storage.set(k, st.report); return true;
   } catch { return changed; }
 }
 // Save the report here and send it to the store; offline it waits (unsent)
 // and goes with the next load.
+// The report's SOH for a code, beside its name in the review (red at 0 or less).
+function sohTag(kc) { const q = st.report?.soh?.[kc]; return q == null ? '' : ` <span class="rsoh${q <= 0 ? ' neg' : ''}" title="SOH on today's report">SOH ${esc(q)}</span>`; }
+// The pasted report's items at 0 or less (its SOH column) go to today's
+// Adjustments at the bay the report lists them in, as Stock intelligence
+// does when its report is saved; items already on the list are left alone.
+async function reportToAdjust(ctx, byLoc, soh) {
+  const day = todayKey(), have = ctx.store.get('adjustments')?.[day] || {}, at = {};
+  for (const [bay, codes] of Object.entries(byLoc)) for (const kc of codes) at[kc] ||= bay;
+  let n = 0;
+  for (const [kc, q] of Object.entries(soh)) {
+    if (!(q <= 0) || have[kc]) continue;
+    if (await send(ctx, 'adjustment.set', { keycode: kc, date: day }, { qty: Math.round(q), location: at[kc] || '', confirmed: false, name: nameOf(kc) || '', source: 'report' })) n++;
+  }
+  return n;
+}
 async function saveReport(ctx, report) {
   st.report = report; await ctx.storage.set(reportKey(ctx), report);
   if (!(await pushReport(ctx, report))) toast('Saved on this computer. It reaches the store’s other devices once the connection is back.', 'warn');
 }
 async function pushReport(ctx, r) {
   try {
-    await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report`, { method: 'POST', body: { date: todayKey(), report: { at: r.at, byLoc: r.byLoc, range: r.range ?? null, delta: r.delta || {}, bayAt: r.bayAt || {} } }, timeoutMs: 60000 });
+    await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report`, { method: 'POST', body: { date: todayKey(), report: { at: r.at, byLoc: r.byLoc, range: r.range ?? null, delta: r.delta || {}, bayAt: r.bayAt || {}, soh: r.soh || {} } }, timeoutMs: 60000 });
     if (r.unsent) { delete r.unsent; await ctx.storage.set(reportKey(ctx), r); }
     return true;
   } catch { if (!r.unsent) { r.unsent = true; await ctx.storage.set(reportKey(ctx), r); } return false; }
@@ -209,7 +224,7 @@ function middle(ctx, m) {
     (s.status === 'pending' ? `<button class="btn ready" data-act="ready" title="Mark ready: writes these metrics to History and frees the bay (Enter)">${ic('check')}Ready</button>` : s.status === 'corrected' ? `<button class="btn submitb" data-act="submit">${ic('checks')}Submit</button><button class="btn" data-act="reopen">${ic('refresh')}Reopen</button>` : `<button class="btn" data-act="unfinalise" title="Back to Ready: it was not finalised on the PDT after all">${ic('refresh')}Unfinalise</button><button class="btn" data-act="reopen" title="Back into review">Reopen</button>`) +
     `<span class="ico bin" title="Delete this bay" data-act="delete">${ic('trash')}</span></div>`;
   const ctl = `<div class="smid-ctl"><span class="pills"><button class="${st.view === 'list' ? 'on' : ''}" data-act="view" data-v="list">List</button><button class="${st.view === 'detail' ? 'on' : ''}" data-act="view" data-v="detail">Detail</button><button class="${st.view === 'codes' ? 'on' : ''}" data-act="view" data-v="codes" title="Each code to add or remove as a barcode, to scan into the PDT">Barcodes</button><button class="${st.view === 'focus' ? 'on' : ''}" data-act="view" data-v="focus" title="One code at a time, keyboard first (F)">Focus</button></span><button class="btn sm" data-act="print-sheet" title="Print the To add / To remove worksheet">${ic('print')}Worksheet</button><button class="btn sm" data-act="copy-all" title="Copy every code to add or remove, one a line">${ic('file')}Copy all</button><span class="cpill match">${c.match} match</span><span class="cpill add">${c.add + c.scanned} add</span><span class="cpill del">${c.delete} delete</span>${ro ? `<span class="cpill lock">${ic('lock')}read only</span>` : ''}${!sys ? `<span class="cpill lock">${ic('alert')}no report for this bay</span>` : ''}</div>`;
-  const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="Copy">${esc(r.code)}</span><span class="nm">${nameHtml(r.code)}${depthChip(r.code)}${r.incorrect ? ' <span class="inctag">✕ incorrect</span>' : ''}</span>${ro ? '' : `<span class="acts"><span title="Flag for SOH adjustment" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? 'Clear incorrect' : 'Mark incorrect'}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="Remove this code" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
+  const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="Copy">${esc(r.code)}</span><span class="nm">${nameHtml(r.code)}${sohTag(r.code)}${depthChip(r.code)}${r.incorrect ? ' <span class="inctag">✕ incorrect</span>' : ''}</span>${ro ? '' : `<span class="acts"><span title="Flag for SOH adjustment" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? 'Clear incorrect' : 'Mark incorrect'}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="Remove this code" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
   const adds = rows.filter(r => r.status === 'add' || r.status === 'scanned'), dels = rows.filter(r => r.status === 'delete'), matches = rows.filter(r => r.status === 'match');
   // K2B's scan columns: every code to add or remove as a barcode the reviewer
   // scans straight into the PDT, with its name to check against.
@@ -274,9 +289,10 @@ async function onClick(e, ctx, root, repaint) {
     const text = root.querySelector('[data-field="paste"]')?.value || '';
     const byLoc = parseReportByLocation(text); const n = Object.keys(byLoc).length;
     if (!n) return toast('No location lines found. Each line needs a bay number and a keycode.', 'bad');
-    const prev = st.report?.byLoc || {};
-    await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {} });
-    st.paste = false; toast(`Report pasted: ${n} bays, ${Object.values(byLoc).reduce((x, l) => x + l.length, 0)} codes`); ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender();
+    const prev = st.report?.byLoc || {}, soh = parseReportSoh(text);
+    await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh } });
+    const sent = await reportToAdjust(ctx, byLoc, soh);
+    st.paste = false; toast(`Report pasted: ${n} bays, ${Object.values(byLoc).reduce((x, l) => x + l.length, 0)} codes${sent ? ` · ${sent} at 0 or less sent to Adjustments` : ''}`, '', sent ? { label: 'Open', run: () => ctx.go('adjust') } : null); ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender();
   }
   else if (act === 'bay-paste') { st.bayPaste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="baypaste"]')?.focus(), 30); }
   else if (act === 'bay-paste-close') { st.bayPaste = false; ctx.rerender(); }
@@ -332,8 +348,8 @@ async function onClick(e, ctx, root, repaint) {
     // As K2B: the SOH comes from the report first. One already entered today
     // is offered (and kept on Cancel), never overwritten with 0.
     const s = cur(); if (!s) return; const kc = a.dataset.code;
-    const had = (ctx.store.get('adjustments') || {})[date]?.[kc];
-    const ans = prompt(`SOH for ${kc} on the report (0 or below)${had ? `\nAlready flagged today at ${had.qty}.` : ''}`, had ? String(had.qty) : '0');
+    const had = (ctx.store.get('adjustments') || {})[date]?.[kc], rep = st.report?.soh?.[kc];
+    const ans = prompt(`SOH for ${kc} on the report (0 or below)${had ? `\nAlready flagged today at ${had.qty}.` : rep != null ? `\nThe report says ${rep}.` : ''}`, had ? String(had.qty) : rep != null && rep <= 0 ? String(rep) : '0');
     if (ans === null) return;
     const qty = Number(String(ans).trim().replace(/[^\d.-]/g, ''));
     if (!Number.isFinite(qty) || String(ans).trim() === '') return toast('Type the SOH from the report, like -3 or 0', 'bad');

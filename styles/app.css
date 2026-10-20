@@ -2491,3 +2491,6 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .sri-adj { margin-top: 2px; }
 .sri-adj .go { font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .sri-adj .cs-dim svg.i { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+/* Backfill review: the report's SOH beside a code. */
+.rsoh { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 6px; font-size: 11px; font-weight: 700; line-height: 18px; background: var(--chip); color: var(--chip-ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rsoh.neg { background: color-mix(in srgb, var(--red) 14%, var(--panel)); color: var(--red); }

@@ -475,7 +475,14 @@ export class StoreObject extends DurableObject {
       byLoc[bay] = list.map(String); codes += list.length;
     }
     const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-    const at = Number(r.at) || Date.now(), doc = JSON.stringify({ date, at, byLoc, range: r.range ?? null, delta: obj(r.delta), bayAt: obj(r.bayAt) });
+    // The report's SOH column, by keycode (the review offers it when a code
+    // is flagged, and items at 0 or less go to Adjustments).
+    const soh = {};
+    for (const [kc, v] of Object.entries(obj(r.soh))) {
+      if (!/^\d{6,13}$/.test(kc) || !Number.isFinite(Number(v))) throw new HttpError(400, 'invalid_request', `soh ${String(kc).slice(0, 13)}: a keycode and a number`);
+      soh[kc] = Math.round(Number(v));
+    }
+    const at = Number(r.at) || Date.now(), doc = JSON.stringify({ date, at, byLoc, range: r.range ?? null, delta: obj(r.delta), bayAt: obj(r.bayAt), soh });
     if (doc.length > REPORT_MAX) throw new HttpError(413, 'payload_too_large', 'the report is over 1.9 MB');
     const by = claims.device || (claims.owner ? 'owner' : ''), bays = Object.keys(byLoc).length;
     const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'backfill.report.publish', entity: { date }, payload: { at, bays, codes }, at: new Date().toISOString(), v: 1 };

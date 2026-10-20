@@ -6,6 +6,8 @@
 //   Delete = in the system report but not scanned → remove from system
 //   Match  = in both
 
+import { parseReport } from './stockintel.js';
+
 export function parseKeycodes(text) {
   const out = [], seen = new Set();
   for (const tok of String(text || '').split(/[^0-9]+/)) if (/^\d{6,13}$/.test(tok) && !seen.has(tok)) { seen.add(tok); out.push(tok); }
@@ -41,6 +43,15 @@ export function disputes(codes) {
 // LOCATION · KEYCODE · APN · …: the first 6–8-digit token is the keycode
 // (12–13-digit APNs are skipped) and the location is a leading 2–5-digit
 // token or a "Location:" header line.
+// The report's SOH column (the last number on each item's line), by
+// keycode: the store-wide figure, the same on every bay that lists it.
+// Read as Stock intelligence reads it, so both agree on every line.
+export function parseReportSoh(text) {
+  const out = {};
+  for (const r of Object.values(parseReport(text).items)) out[r.kc] = r.soh;
+  return out;
+}
+
 export function parseReportByLocation(text) {
   const out = {}; let cur = null;
   for (const raw of String(text || '').split(/\r?\n/)) {
