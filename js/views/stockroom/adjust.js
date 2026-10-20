@@ -11,10 +11,10 @@ import { parseKeycodes } from '../../../shared/backfill.js';
 import { csvLines } from '../../../shared/records.js';
 import { printSheet, code, tick, table, section } from '../../print.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
-import { todayKey, ensureNames, productHtml, kcCopy, nameOf, priceOf, send, loadProfiles, depthChip, ghostChip } from './common.js';
+import { todayKey, ensureNames, productHtml, kcCopy, nameOf, priceOf, send, loadProfiles, depthChip, ghostChip, SR_GROUPS, deptGroup, deptLabel, deptBadge } from './common.js';
 import { shrinkValue } from '../../../shared/stockintel.js';
 
-const st = { filter: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '' };
+const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '' };
 const NONE = '\u0000none', OTHER = '\u0000other';
 const SOURCE = { report: 'Morning report', review: 'Backfill review', phone: 'Phone', desk: 'Typed', screen: 'Screen scan', import: 'K2B' };
 function model(ctx) {
@@ -23,8 +23,12 @@ function model(ctx) {
   const items = Object.entries(day).map(([kc, it]) => ({ kc, ...it, dept: deptOf(it) })).sort((a, b) => (!!a.done - !!b.done) || (a.qty - b.qty) || a.kc.localeCompare(b.kc));
   const days = Object.entries(all).sort((a, b) => a[0].localeCompare(b[0])).slice(-14);
   const depts = [...new Set(items.map(i => i.dept))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-  const inDept = st.dept === 'all' ? items : items.filter(i => i.dept === st.dept);
-  return { date, today: date === todayKey(), items, inDept, depts, ranges, confirmed: inDept.filter(i => i.confirmed), unplaced: inDept.filter(i => !i.location), done: items.filter(i => i.done), days, past: Object.keys(all).sort().reverse(), shrink: shrinkOf(inDept) };
+  // Main department (Home, Clothing, Kids, Other), then one of its
+  // sub-departments; items with no department (no bay, or a bay outside the
+  // ranges) are a group of their own.
+  const inGroup = st.group === 'all' ? items : items.filter(i => groupOf(i.dept) === st.group);
+  const inDept = st.dept === 'all' ? inGroup : inGroup.filter(i => i.dept === st.dept);
+  return { date, today: date === todayKey(), items, inGroup, inDept, depts, ranges, confirmed: inDept.filter(i => i.confirmed), unplaced: inDept.filter(i => !i.location), done: items.filter(i => i.done), days, past: Object.keys(all).sort().reverse(), shrink: shrinkOf(inDept) };
 }
 // An item's price: the report's when it carried one, else kmart.com.au's
 // from the catalogue; null when neither knows.
@@ -45,19 +49,32 @@ function shrinkLine(m) {
   const sh = m.shrink; if (!sh.total && !sh.unpriced) return '';
   return `<div class="adj-shrinkline">${ic('dollar')}<span><b>${money(sh.total)}</b> potential shrink if the items below zero are adjusted to zero${sh.open !== sh.total ? ` · <b>${money(sh.open)}</b> still to adjust` : ''}${sh.unpriced ? ` · ${sh.unpriced} without a price` : ''}</span></div>`;
 }
-const deptName = d => d === NONE ? 'No location' : d === OTHER ? 'Other bays' : String(d).toUpperCase();
+const deptName = d => d === NONE ? 'No location' : d === OTHER ? 'Bays outside the ranges' : deptLabel(d);
+const groupOf = d => d === NONE || d === OTHER ? 'none' : deptGroup(d);
+const GROUPS = [...SR_GROUPS, ['none', 'No department']];
+// The filter: main departments first, then the chosen one's sub-departments,
+// each with how many items are still to adjust.
+function deptFilter(m) {
+  if (!m.items.length) return '';
+  if (!m.ranges.length) return '<div class="cs-dim adj-depts">Enter the stockroom bay ranges in Settings › Store (or set a bay’s department in Backfill review) to group this list by department.</div>';
+  const open = list => list.filter(i => !i.done).length;
+  const groups = GROUPS.filter(([g]) => m.items.some(i => groupOf(i.dept) === g));
+  const subs = st.group === 'all' ? [] : m.depts.filter(d => groupOf(d) === st.group);
+  return `<div class="pills adj-depts adj-groups"><button class="${st.group === 'all' ? 'on' : ''}" data-act="group" data-v="all">All departments <b>${open(m.items)}</b></button>${groups.map(([g, gl]) => `<button class="${st.group === g ? 'on' : ''}" data-act="group" data-v="${g}">${gl} <b>${open(m.items.filter(i => groupOf(i.dept) === g))}</b></button>`).join('')}</div>` +
+    (subs.length > 1 || (subs.length === 1 && st.group === 'none') ? `<div class="pills adj-depts adj-subs"><button class="${st.dept === 'all' ? 'on' : ''}" data-act="dept" data-v="all">All of ${esc(GROUPS.find(x => x[0] === st.group)?.[1] || '')}</button>${subs.map(d => `<button class="${st.dept === d ? 'on' : ''}" data-act="dept" data-v="${esc(d)}">${esc(deptName(d))} <b>${open(m.items.filter(i => i.dept === d))}</b></button>`).join('')}</div>` : '');
+}
 export default {
   id: 'adjust', title: 'Adjustments', icon: 'm-adjust', area: 'stockroom',
   desktop(ctx) {
     const m = model(ctx);
     const list = st.filter === 'confirmed' ? m.confirmed : st.filter === 'unplaced' ? m.unplaced : st.filter === 'open' ? m.inDept.filter(i => !i.done) : m.inDept;
-    const deptPills = m.depts.length > 1 ? `<div class="pills adj-depts"><button class="${st.dept === 'all' ? 'on' : ''}" data-act="dept" data-v="all">All departments</button>${m.depts.map(d => `<button class="${st.dept === d ? 'on' : ''}" data-act="dept" data-v="${esc(d)}">${esc(deptName(d))} ${m.items.filter(i => i.dept === d && !i.done).length}</button>`).join('')}</div>` : (m.items.length && !m.ranges.length ? '<div class="cs-dim adj-depts">Enter the stockroom bay ranges in Settings › Store to split this list by department.</div>' : '');
+    const deptPills = deptFilter(m);
     const dayPick = `<select class="ad-in" data-field="day" aria-label="Day">${[...new Set([todayKey(), ...m.past])].sort().reverse().map(d => `<option value="${esc(d)}"${d === m.date ? ' selected' : ''}>${d === todayKey() ? 'Today' : esc(d)} · ${Object.keys(ctx.store.get('adjustments')[d] || {}).length}</option>`).join('')}</select>`;
     const max = Math.max(1, ...m.days.map(([, d]) => Object.keys(d).length));
     return vh('Adjustments', sub('Below-zero SOH evidence', esc(m.date), `${m.items.length} item${m.items.length === 1 ? '' : 's'}${m.today ? ' today' : ''} · ${m.done.length} adjusted${m.shrink.total ? ` · ${money(m.shrink.total)} potential shrink` : ''}`), `${dayPick}<button class="btn" data-act="screen" title="Read a below-zero SOH report off the screen">${ic('expand')}Screen scan</button><button class="btn" data-act="print">${ic('print')}Print list</button><button class="btn" data-act="export">${ic('file')}Copy for the office</button>`, 'm-adjust') +
       `<div class="grid2"><div class="card adj"><div class="ch"><h3>${m.today ? 'Today’s list' : `List for ${esc(m.date)}`}</h3><span class="cs-dim">most negative first</span><span class="pills" style="margin-left:auto"><button class="${st.filter === 'all' ? 'on' : ''}" data-act="filter" data-v="all">All ${m.inDept.length}</button><button class="${st.filter === 'open' ? 'on' : ''}" data-act="filter" data-v="open">To adjust ${m.inDept.filter(i => !i.done).length}</button><button class="${st.filter === 'confirmed' ? 'on' : ''}" data-act="filter" data-v="confirmed">Confirmed ${m.confirmed.length}</button><button class="${st.filter === 'unplaced' ? 'on' : ''}" data-act="filter" data-v="unplaced">Unplaced ${m.unplaced.length}</button></span></div>` +
-      deptPills + shrinkLine(m) + `<div class="adj-hd adj-cols"><span>SOH</span><span>Keycode</span><span>Description</span><span class="n">Price</span><span class="n" title="Units below zero × price: written off when adjusted to zero">Shrink</span><span>Where</span><span>Added</span><span>Source</span><span></span></div>` +
-      (list.map(it => { const pr = priceFor(it), loss = pr ? shrinkValue(it.qty, pr.v) : 0; return `<div class="adj-row adj-cols${it.done ? ' done' : ''}"><span class="adj-qty${it.qty === 0 ? ' zero' : ''}">${it.qty}</span><span class="adj-kc">${kcCopy(it.kc)}</span><span class="adj-desc">${productHtml(it.kc, it.name)}<span class="adj-chips">${ghostChip(it.kc, it.qty)}${depthChip(it.kc)}</span></span><span class="adj-price n"${pr ? ` title="Price from ${pr.from}"` : ''}>${pr ? money(pr.v) : '<span class="cs-dim">—</span>'}</span><span class="adj-shrink n${loss ? ' loss' : ''}">${loss ? money(loss) : it.qty < 0 && !pr ? '<span class="cs-dim" title="No price for this item yet">?</span>' : '<span class="cs-dim">—</span>'}</span><span class="adj-where">${it.location ? `<span class="adj-loc${it.confirmed ? ' ok' : ''}">${esc(it.location)}${it.confirmed ? ' ✓' : ''}</span>` : '<span class="cs-dim">no location</span>'}</span><span class="cs-dim">${fmtTime(it.addedAt)}</span><span class="cs-dim">${it.done ? `<button class="adj-done on" data-act="undone" data-kc="${esc(it.kc)}" title="Adjusted ${esc(fmtTime(it.done.at))}: tap to put it back">✓ Adjusted</button>` : `<button class="adj-done" data-act="done" data-kc="${esc(it.kc)}" title="Adjusted in the system: tick it off">Mark adjusted</button>`}<br>${esc(SOURCE[it.source] || (it.confirmed ? 'Backfill review' : it.counted != null ? 'Phone' : 'Typed'))}${it.counted != null ? ` · ${it.counted} found` : ''}</span><span class="adj-x" title="Remove from today’s list" data-act="remove" data-kc="${esc(it.kc)}">${ic('x')}</span></div>`; }).join('') || '<div class="cs-dim" style="padding:14px 2px">Nothing recorded today. Flag a code from Backfill review, or add one on the right.</div>') +
+      deptPills + shrinkLine(m) + `<div class="adj-hd adj-cols"><span>SOH</span><span>Keycode</span><span>Description</span><span>Department</span><span class="n">Price</span><span class="n" title="Units below zero × price: written off when adjusted to zero">Shrink</span><span>Where</span><span>Added</span><span>Source</span><span></span></div>` +
+      (list.map(it => { const pr = priceFor(it), loss = pr ? shrinkValue(it.qty, pr.v) : 0; return `<div class="adj-row adj-cols${it.done ? ' done' : ''}"><span class="adj-qty${it.qty === 0 ? ' zero' : ''}">${it.qty}</span><span class="adj-kc">${kcCopy(it.kc)}</span><span class="adj-desc">${productHtml(it.kc, it.name)}<span class="adj-chips">${ghostChip(it.kc, it.qty)}${depthChip(it.kc)}</span></span><span class="adj-dept">${it.dept === NONE || it.dept === OTHER ? '<span class="cs-dim">—</span>' : deptBadge(it.dept)}</span><span class="adj-price n"${pr ? ` title="Price from ${pr.from}"` : ''}>${pr ? money(pr.v) : '<span class="cs-dim">—</span>'}</span><span class="adj-shrink n${loss ? ' loss' : ''}">${loss ? money(loss) : it.qty < 0 && !pr ? '<span class="cs-dim" title="No price for this item yet">?</span>' : '<span class="cs-dim">—</span>'}</span><span class="adj-where">${it.location ? `<span class="adj-loc${it.confirmed ? ' ok' : ''}">${esc(it.location)}${it.confirmed ? ' ✓' : ''}</span>` : '<span class="cs-dim">no location</span>'}</span><span class="cs-dim">${fmtTime(it.addedAt)}</span><span class="cs-dim">${it.done ? `<button class="adj-done on" data-act="undone" data-kc="${esc(it.kc)}" title="Adjusted ${esc(fmtTime(it.done.at))}: tap to put it back">✓ Adjusted</button>` : `<button class="adj-done" data-act="done" data-kc="${esc(it.kc)}" title="Adjusted in the system: tick it off">Mark adjusted</button>`}<br>${esc(SOURCE[it.source] || (it.confirmed ? 'Backfill review' : it.counted != null ? 'Phone' : 'Typed'))}${it.counted != null ? ` · ${it.counted} found` : ''}</span><span class="adj-x" title="Remove from today’s list" data-act="remove" data-kc="${esc(it.kc)}">${ic('x')}</span></div>`; }).join('') || '<div class="cs-dim" style="padding:14px 2px">Nothing recorded today. Flag a code from Backfill review, or add one on the right.</div>') +
       `<div class="cs-dim" style="padding:10px 2px 0">A ✓ location means the item was confirmed present when that bay was backfilled.</div></div>` +
       `<div class="sidecol"><div class="card"><div class="ch"><h3>Tick off by scanning</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="tick" placeholder="Scan a keycode once it is adjusted" inputmode="numeric" autocomplete="off"></div><div class="cs-dim">${m.done.length} of ${m.items.length} adjusted${m.today ? ' today' : ''}. A scanner's Enter ticks it off.</div></div></div>` +
       `<div class="card"><div class="ch"><h3>Add an item</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="kc" placeholder="Keycode" inputmode="numeric" autocomplete="off"></div><div class="adj-form2"><input class="ad-in" data-field="qty" placeholder="SOH (report)" aria-label="SOH from the report" inputmode="numeric"><input class="ad-in mono" data-field="loc" placeholder="Location (optional)"></div><button class="btn primary" style="justify-content:center" data-act="add">${ic('plus')}${m.today ? 'Add to today' : `Add to ${esc(m.date)}`}</button><div class="cs-dim">Stored as below zero either way. The name fills in from the catalogue.</div></div></div>` +
@@ -69,7 +86,7 @@ export default {
     ensureNames(ctx, model(ctx).items.map(i => i.kc), repaint);
     loadProfiles(ctx, repaint);
     root.addEventListener('click', e => onClick(e, ctx, root, repaint));
-    root.addEventListener('change', e => { if (e.target.matches('[data-field="day"]')) { st.date = e.target.value === todayKey() ? null : e.target.value; st.dept = 'all'; ctx.rerender(); } });
+    root.addEventListener('change', e => { if (e.target.matches('[data-field="day"]')) { st.date = e.target.value === todayKey() ? null : e.target.value; st.group = 'all'; st.dept = 'all'; ctx.rerender(); } });
     root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.matches('[data-field="tick"]')) { e.preventDefault(); tickOff(ctx, e.target); return; } if (e.target.matches('[data-field="kc"],[data-field="qty"],[data-field="loc"]')) { e.preventDefault(); root.querySelector('[data-act="add"]')?.click(); } if (e.target.matches('[data-field="mkc"]')) { e.preventDefault(); st.mKc = parseKeycodes(e.target.value)[0] || ''; if (!st.mKc) toast('That is not a keycode', 'bad'); else ensureNames(ctx, [st.mKc], repaint); repaint(); } });
     return [ctx.store.on('adjustments', () => { ensureNames(ctx, model(ctx).items.map(i => i.kc), repaint); repaint(); })];
   },
@@ -78,6 +95,7 @@ async function onClick(e, ctx, root, repaint) {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act, m = model(ctx);
   if (act === 'filter') { st.filter = a.dataset.v; ctx.rerender(); }
+  else if (act === 'group') { st.group = a.dataset.v; st.dept = 'all'; ctx.rerender(); }
   else if (act === 'dept') { st.dept = a.dataset.v; ctx.rerender(); }
   else if (act === 'done' || act === 'undone') await send(ctx, 'adjustment.done', { keycode: a.dataset.kc, date: m.date }, act === 'undone' ? { undo: true } : {});
   else if (act === 'remove') await send(ctx, 'adjustment.remove', { keycode: a.dataset.kc, date: m.date });
@@ -89,7 +107,7 @@ async function onClick(e, ctx, root, repaint) {
     toast(`${ok} added to today's adjustments${dup ? ` · ${dup} already listed` : ''}`);
   } });
   else if (act === 'print') printAdjustments(ctx, { ...m, items: m.inDept.filter(i => !i.done) });   // what is still to adjust, in the department shown
-  else if (act === 'export') { const text = csvLines(['keycode', 'description', 'soh', 'price', 'shrink', 'location', 'confirmed', 'added', 'adjusted'], m.inDept.map(i => { const pr = priceFor(i); return [i.kc, nameOf(i.kc) || i.name || '', i.qty, pr ? pr.v.toFixed(2) : '', pr ? shrinkValue(i.qty, pr.v).toFixed(2) : '', i.location, i.confirmed ? 'yes' : '', i.addedAt, i.done?.at || '']; })); try { await navigator.clipboard.writeText(text); toast(`${m.inDept.length} rows copied as CSV`); } catch { toast('Copy failed', 'bad'); } }
+  else if (act === 'export') { const text = csvLines(['keycode', 'description', 'department', 'soh', 'price', 'shrink', 'location', 'confirmed', 'added', 'adjusted'], m.inDept.map(i => { const pr = priceFor(i); return [i.kc, nameOf(i.kc) || i.name || '', i.dept === NONE || i.dept === OTHER ? '' : deptLabel(i.dept), i.qty, pr ? pr.v.toFixed(2) : '', pr ? shrinkValue(i.qty, pr.v).toFixed(2) : '', i.location, i.confirmed ? 'yes' : '', i.addedAt, i.done?.at || '']; })); try { await navigator.clipboard.writeText(text); toast(`${m.inDept.length} rows copied as CSV`); } catch { toast('Copy failed', 'bad'); } }
   else if (act === 'm-qty') { st.mQty = Math.max(0, st.mQty + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-soh') { st.mSoh = Math.min(0, st.mSoh + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-flag') { if (!st.mKc) return; const r = await send(ctx, 'adjustment.set', { keycode: st.mKc, date: m.date }, { qty: st.mSoh, counted: st.mQty, location: '', confirmed: false, name: nameOf(st.mKc) || '', source: 'phone' }); if (r) { toast(`${st.mKc} flagged`); st.mKc = ''; st.mSoh = 0; st.mQty = 1; repaint(); } }
@@ -127,8 +145,9 @@ function printAdjustments(ctx, m) {
     const g = !it.location ? '\u0000none' : (ranges.length && deptForBay(ranges, it.location)) || '\u0000other';
     if (!groups.has(g)) groups.set(g, []); groups.get(g).push(it);
   }
-  const order = [...groups.keys()].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-  const title = g => g === '\u0000none' ? 'No location' : g === '\u0000other' ? (ranges.length ? 'Bays outside the department ranges' : 'Confirmed at a bay') : `Department ${g}`;
+  const rank = g => g.startsWith('\u0000') ? 9 : SR_GROUPS.findIndex(([k]) => k === deptGroup(g));   // Home, Clothing, Kids, Other, then the rest
+  const order = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'en', { numeric: true }));
+  const title = g => g === '\u0000none' ? 'No location' : g === '\u0000other' ? (ranges.length ? 'Bays outside the department ranges' : 'Confirmed at a bay') : deptLabel(g);
   printSheet({
     title: `SOH adjustments · ${m.date}`, subtitle: `${m.items.length} item${m.items.length === 1 ? '' : 's'} below zero${sh.open ? ` · ${money(sh.open)} potential shrink` : ''} · ✓ confirmed at the bay${ranges.length ? ' · by department' : ''}`,
     body: order.map(g => section(`${esc(title(g))} (${groups.get(g).length})`, tbl(groups.get(g)))).join('') || section('Nothing below zero', ''),

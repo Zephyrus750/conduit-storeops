@@ -129,6 +129,7 @@ export const CATALOGUE = {
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
   'store.settings.set':  T('store', M, []),
+  'bay.dept.set':        T('store', S, ['bay'], { dept: 'string' }),            // one stockroom bay's department ('' clears it): a pin in settings.deptRanges
   'team.message.set':  T('store', M, [], { text: 'string' }),                   // the store's team message; '' clears it; payload.until YYYY-MM-DD
   'team.briefing.set': T('store', M, ['date'], { text: 'string' }),             // the day's briefing; '' clears it
   'store.areas.set':   T('store', M, [], { on: 'array' }),                     // worker only: the areas the store is entitled to, as the owner set them

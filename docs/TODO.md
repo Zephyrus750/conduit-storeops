@@ -56,7 +56,7 @@ brackets below).
    are wanted (16; today English only), and the `P` suffix once its meaning
    is known (1; today part of the code).
 2. **Importer gaps** (only if the legacy data matters):
-   - K2B: the department map, the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH and its desk's SOH snapshots (not on the worker). History codes import right since October.
+   - K2B: the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH and its desk's SOH snapshots (not on the worker). History codes import right since October; the department map imports since 20 October.
    - DV: anything still missing once a real store is imported.
 
 ## Planned: the manager phone login (showcased 2026-10-12)

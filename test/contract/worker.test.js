@@ -21,6 +21,7 @@ function legacy(u, req) {
   const store = u.searchParams.get('store'), pin = req.headers.get('X-K2B-Pin');
   if (store !== 'BUS247') return Response.json({ found: false, error: 'Unknown store code' }, { status: 404 });
   if (u.searchParams.get('storeop') === 'info') return Response.json({ found: true, code: 'BUS247', name: 'Busselton', storeNumber: '1241' });
+  if (u.searchParams.get('storeop') === 'deptmap') return Response.json({ ranges: [{ from: 7000, to: 7099, dept: 'h1' }, { from: 7057, to: 7057, dept: 'h2' }, { from: 7100, to: 7199, dept: 'K2' }, { from: 9, to: 1, dept: 'bad' }], version: 3 });   // public, like info
   if (pin !== '2468') return Response.json({ error: 'Wrong PIN' }, { status: 403 });
   const sub = u.searchParams.get('sub');
   if (sub === 'history') return Response.json({ items: [
@@ -344,7 +345,7 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
 
   const dry = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468', dry: true }, ownerToken);
   assert.equal(dry.status, 200); assert.equal(dry.body.dry, true); assert.equal(dry.body.legacy.name, 'Busselton');
-  assert.deepEqual(dry.body.counts, { history: 2, today: 2, requested: 1, negsoh: 1, events: 13 });
+  assert.deepEqual(dry.body.counts, { depts: 3, history: 2, today: 2, requested: 1, negsoh: 1, events: 14 });
   assert.ok(dry.body.warnings.some(w => /7012:2026-09-17: 1 codes were not keycodes/.test(w)), dry.body.warnings.join('|'));
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'phone-imp' })).body.token;
   const reader = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, dev)).body.token;
@@ -357,7 +358,9 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
   await new Promise(r => setTimeout(r, 1500));
 
   const run = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468' }, ownerToken);
-  assert.equal(run.status, 200); assert.equal(run.body.applied, 13); assert.equal(run.body.duplicates, 0); assert.deepEqual(run.body.rejected, []);
+assert.equal(run.status, 200); assert.equal(run.body.applied, 14); assert.equal(run.body.duplicates, 0); assert.deepEqual(run.body.rejected, []);
+  const st = (await api('GET', '/v1/store/1241/snapshot', undefined, reader)).body.state;
+  assert.deepEqual(st.settings.deptRanges, [{ from: 7000, to: 7099, dept: 'h1' }, { from: 7057, to: 7057, dept: 'h2' }, { from: 7100, to: 7199, dept: 'k2' }], 'the bays’ departments come across as K2B had them');
   const s = (await api('GET', '/v1/store/1241/snapshot?areas=stockroom', undefined, reader)).body.state;
   const h = s.backfill.subs['7012:2026-09-17'];
   assert.equal(h.status, 'submitted'); assert.deepEqual(h.metrics, { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 }); assert.deepEqual(Object.keys(h.codes).sort(), ['43166022', '43199310']);
@@ -368,9 +371,9 @@ test('K2B importer: dry run counts, the import lands as events, a second run is 
   assert.deepEqual(s.adjustments['2026-09-18']['43302210'], { qty: -6, name: 'Paper plates 20 pk', location: '7014', confirmed: true, addedAt: new Date(T + 240000).toISOString().replace(/\.\d{3}Z$/, '+00:00'), source: 'import' });
 
   const again = await api('POST', '/v1/admin/stores/1241/import', { code: 'BUS247', pin: '2468' }, ownerToken);
-  assert.equal(again.body.applied, 0); assert.equal(again.body.duplicates, 13, 'the import is idempotent');
+  assert.equal(again.body.applied, 0); assert.equal(again.body.duplicates, 14, 'the import is idempotent');
   const acts = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions;
-  assert.equal(acts[0].type, 'store.import'); assert.equal(acts[0].detail.applied, 0); assert.equal(acts[1].detail.applied, 13);
+  assert.equal(acts[0].type, 'store.import'); assert.equal(acts[0].detail.applied, 0); assert.equal(acts[1].detail.applied, 14);
 
   const flip = await api('POST', '/v1/admin/stores/1241/flip', { area: 'stockroom', state: 'live' }, ownerToken);
   assert.equal(flip.status, 200); assert.equal(flip.body.areas.stockroom, 'live');

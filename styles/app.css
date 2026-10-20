@@ -1975,7 +1975,7 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 
 /* Adjustments: departments, and ticking an item off once adjusted. */
 .adj-depts { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
-.adj-row.done > :not(:nth-child(8)) { opacity: .45; }
+.adj-row.done > :not(:nth-child(9)) { opacity: .45; }
 .adj-row.done .adj-qty { text-decoration: line-through; }
 .adj-done { border: 1px solid var(--line); background: var(--panel); color: var(--ink2); border-radius: 7px; padding: 2px 8px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .adj-done:hover { border-color: var(--accent); color: var(--accent-ink); }
@@ -2497,7 +2497,7 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 
 /* Adjustments: keycode and description in their own columns, the price and
    the potential shrink (units below zero × price), and the list's total. */
-.adj-hd.adj-cols, .adj-row.adj-cols { grid-template-columns: 60px 96px minmax(0, 1.7fr) 74px 82px minmax(0, .9fr) minmax(0, .8fr) minmax(0, 1fr) 28px; }
+.adj-hd.adj-cols, .adj-row.adj-cols { grid-template-columns: 60px 96px minmax(0, 1.6fr) minmax(0, 1fr) 74px 82px minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1fr) 28px; }
 .adj-cols .n { text-align: right; font-variant-numeric: tabular-nums; }
 .adj-kc { font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
 .adj-desc { min-width: 0; overflow-wrap: anywhere; }
@@ -2507,4 +2507,20 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .adj-shrinkline svg.i { color: var(--red); flex: none; }
 .adj-shrinkline b { color: var(--ink); }
 .adj-shrinkline.mv { margin: 0 16px 12px; }
-@container shell (max-width: 1500px) { .adj-hd.adj-cols > :nth-child(7), .adj-row.adj-cols > :nth-child(7) { display: none; } .adj-hd.adj-cols, .adj-row.adj-cols { grid-template-columns: 56px 90px minmax(0, 1.6fr) 70px 78px minmax(0, .9fr) minmax(0, 1fr) 28px; } }
+@container shell (max-width: 1500px) { .adj-hd.adj-cols > :nth-child(8), .adj-row.adj-cols > :nth-child(8) { display: none; } .adj-hd.adj-cols, .adj-row.adj-cols { grid-template-columns: 56px 90px minmax(0, 1.5fr) minmax(0, 1fr) 70px 78px minmax(0, .8fr) minmax(0, 1fr) 28px; } }
+
+/* Stockroom departments: a badge with its name ("K2 Toys"); the main
+   department filter over its sub-departments in Adjustments; the bay's
+   department picker in Backfill review. */
+.srdept { display: inline-flex; align-items: center; gap: 6px; min-width: 0; vertical-align: middle; }
+.srdept .dep { flex: none; }
+.srdept .nm { min-width: 0; font-size: 12.5px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slc .tp .srdept { margin-left: 6px; }
+.adj-dept { min-width: 0; }
+.adj-dept .srdept { display: flex; max-width: 100%; }
+.adj-groups { margin-bottom: 6px; }
+.adj-groups b, .adj-subs b { font-weight: 700; opacity: .7; margin-left: 2px; font-variant-numeric: tabular-nums; }
+.adj-subs { margin: 0 0 10px; padding-left: 10px; border-left: 2px solid var(--line); }
+.bdept { display: inline-flex; align-items: center; gap: 6px; margin: 0 6px; padding: 3px 4px 3px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); max-width: 260px; }
+.bdept .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1px solid var(--line); }
+.bdept select { border: 0; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; min-width: 0; max-width: 220px; cursor: pointer; }
