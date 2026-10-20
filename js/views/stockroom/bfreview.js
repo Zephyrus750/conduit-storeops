@@ -292,7 +292,7 @@ async function onClick(e, ctx, root, repaint) {
     const prev = st.report?.byLoc || {}, soh = parseReportSoh(text);
     await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh } });
     const sent = await reportToAdjust(ctx, byLoc, soh);
-    st.paste = false; toast(`Report pasted: ${n} bays, ${Object.values(byLoc).reduce((x, l) => x + l.length, 0)} codes${sent ? ` · ${sent} at 0 or less sent to Adjustments` : ''}`, '', sent ? { label: 'Open', run: () => ctx.go('adjust') } : null); ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender();
+    st.paste = false; toast(`Report pasted: ${n} bay${n === 1 ? '' : 's'}, ${Object.values(byLoc).reduce((x, l) => x + l.length, 0)} codes${sent ? ` · ${sent} at 0 or less sent to Adjustments` : ''}`, '', sent ? { label: 'Open', run: () => ctx.go('adjust') } : null); ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender();
   }
   else if (act === 'bay-paste') { st.bayPaste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="baypaste"]')?.focus(), 30); }
   else if (act === 'bay-paste-close') { st.bayPaste = false; ctx.rerender(); }

@@ -19,12 +19,15 @@ let pendingPaint = null;
 const paintSoon = repaint => { clearTimeout(pendingPaint); pendingPaint = setTimeout(() => { try { repaint(); } catch {} }, 30); };
 export const isItemBarcode = kc => /^\d{13}$/.test(String(kc));
 export function nameOf(kc) { const n = names.get(String(kc)); return n ? n.name : n === null ? null : ''; }
+// "Did you mean": the one-digit near misses of a code the catalogue does
+// not know (a tap copies one); empty while unknown or none.
+export function nearHtml(kc) { const dm = near.get(String(kc)); return `${dm?.length ? ` <span class="nm-near">Did you mean ${dm.slice(0, 2).map(x => `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? `${x.name}: tap to copy` : 'Tap to copy')}">${esc(x.keycode)}</b>`).join(' or ')}?</span>` : ''}`; }
 export function nameHtml(kc, missing = 'Unverified · not in the catalogue') {
   kc = String(kc);
   if (isItemBarcode(kc)) return '<span class="nm-apn" title="That is an item barcode (APN), not a keycode">Item barcode · not a keycode</span>';
   const n = names.get(kc);
   if (n === undefined) return '<span class="cs-dim">…</span>';
-  if (n === null) { const dm = near.get(kc); return `<span class="warn nm-unv" title="Not found in the catalogue: double-check this code">⚠ ${esc(missing)}</span>${dm?.length ? ` <span class="nm-near">Did you mean ${dm.slice(0, 2).map(x => `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? `${x.name}: tap to copy` : 'Tap to copy')}">${esc(x.keycode)}</b>`).join(' or ')}?</span>` : ''}`; }
+  if (n === null) return `<span class="warn nm-unv" title="Not found in the catalogue: double-check this code">⚠ ${esc(missing)}</span>${nearHtml(kc)}`;
   return n.url ? `<a class="nm-ok" ${goAttrs(kc)} title="Open the product page on kmart.com.au">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`;
 }
 // Keycodes and product names (K2B's review, Decant Visualiser's klink): a
@@ -43,6 +46,14 @@ export function itemName(kc, fallback = '') {
   if (n) return `<a class="nm-ok" ${goAttrs(kc)} title="Open the product page on kmart.com.au"><span class="nm-tick">✓</span>${esc(n.name)} ↗</a>`;
   if (n === null) return `<a class="nm-go" ${goAttrs(kc)} title="Not in the catalogue (not sold online, or a retired code): search kmart.com.au">${esc(fallback || kc)}</a> <small class="nm-off">not online</small>`;
   return `<a class="nm-go" ${goAttrs(kc)} title="Open the product page on kmart.com.au">${esc(fallback || kc)}</a>`;
+}
+// A list row's product (Adjustments): the verified name linking to its
+// page on kmart.com.au; else the name the row carried (or the code) linking
+// to the site's search, marked not online, with any "Did you mean".
+export function productHtml(kc, fallback = '') {
+  const n = names.get(String(kc));
+  if (n === undefined && !fallback) return '<span class="cs-dim">…</span>';
+  return itemName(kc, fallback || 'Search kmart.com.au') + (n === null ? nearHtml(kc) : '');
 }
 // One listener for the whole app, in the capture phase so a row's own tap
 // (open, toggle, select) never fires under a copy or a product link.
