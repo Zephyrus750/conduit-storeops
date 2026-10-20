@@ -215,6 +215,16 @@ export const storeReducers = {
     s.settings = { ...next, at: e.at, by: e.actor?.device || null };
     return null;
   },
+  // The whole department map, saved from the Departments editor with the
+  // Stockroom or manager code (K2B's builder): replaces the ranges and pins.
+  'dept.ranges.set'(s, e) {
+    const n = SETTING.deptRanges(e.payload.ranges);
+    if (typeof n === 'string') return reject('invalid_event', n);
+    const cur = s.settings || settingsState(), next = n.v.length ? n.v : null;
+    if (same(next, cur.deptRanges ?? null)) return reject('invalid_event', 'the departments are unchanged');
+    s.settings = { ...cur, deptRanges: next, at: e.at, by: e.actor?.device || null };
+    return null;
+  },
   // One stockroom bay's department, set from Backfill review with the
   // Stockroom code: a pin for that bay number in the department ranges
   // (the narrowest range wins, so it beats the range around it), replacing
@@ -229,7 +239,7 @@ export const storeReducers = {
     if ((pin?.dept || '') === dept) return reject('invalid_event', dept ? `bay ${n} is already ${dept.toUpperCase()}` : `bay ${n} has no department of its own`);
     const next = ranges.filter(r => r !== pin);
     if (dept) next.push({ from: n, to: n, dept });
-    if (next.length > 200) return reject('invalid_event', 'at most 200 department ranges: merge some in Settings › Store');
+    if (next.length > 200) return reject('invalid_event', 'at most 200 department ranges: merge some in Departments');
     s.settings = { ...cur, deptRanges: next.length ? next.sort((a, b) => a.from - b.from || a.to - b.to) : null, at: e.at, by: e.actor?.device || null };
     return null;
   },

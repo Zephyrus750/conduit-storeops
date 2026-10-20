@@ -117,7 +117,7 @@ function storeBody(ctx) {
     row('Time zone', 'The store’s day, week and cycle, and the end-of-day backfill rollover, follow this clock.', sel('tz', zones.map(z => [z[0], z[1]]), cfg.tz, 'Time zone')) +
     row('Dock grid', `Pallet bays on the back dock: rows (A, B, C…) by bays per row. Trucks created afterwards use it. Default ${SETTINGS_DEFAULTS.dockGrid.rows} × ${SETTINGS_DEFAULTS.dockGrid.cols}.`, `<span class="stg-pair">${sel('rows', range(1, 8), cfg.dockGrid.rows, 'Dock rows')}<span>×</span>${sel('cols', range(1, 12), cfg.dockGrid.cols, 'Bays per row')}</span>`) +
     row('Minutes per carton', `The dock’s standard rate for a pallet’s estimated decant time, for trucks created afterwards. Default ${SETTINGS_DEFAULTS.minsPerCarton}.`, `<input class="stg-in stg-num mono" data-field="mpc" type="number" inputmode="decimal" min="0.05" max="10" step="0.05" value="${cfg.minsPerCarton}" aria-label="Minutes per carton"${dis}>`) +
-    row('Stockroom departments', 'Bay ranges to department, one a line, e.g. “7001-7040 h1”, or one bay, “7057 h2”. History and Adjustments group bays by these; the narrowest range wins. One bay can also be set from Backfill review.', `<textarea class="stg-in stg-ranges mono" data-field="ranges" rows="4" aria-label="Stockroom department ranges"${dis}>${esc(cfg.deptRanges.map(r => r.from === r.to ? `${r.from} ${r.dept}` : `${r.from}-${r.to} ${r.dept}`).join('\n'))}</textarea>`) +
+    (ctx.isMobile ? '' : row('Stockroom departments', `Which stockroom bays belong to each department${cfg.deptRanges.length ? ` (${cfg.deptRanges.length} set)` : ''}. Backfill review, History and Adjustments group by them. Set with the Stockroom or manager code.`, (ctx.session.current?.caps || []).includes('stockroom') ? `<span class="btn sm" data-go="srdepts">${ic('tag')}${cfg.deptRanges.length ? 'Edit departments' : 'Set departments'}</span>` : '<span class="cs-dim">The Stockroom is not on for this store</span>')) +
     row('Idle re-lock', 'A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.', sel('lock', AUTO_LOCK_CHOICES.map(n => [n, n ? `${n} min` : 'Never']), cfg.autoLockMins, 'Idle re-lock')) +
     (edit ? `<div class="stg-actions"><span class="btn sm primary" data-act="save-store">${ic('check')}Save store settings</span></div>` : '') + '</div>';
   return settings + fieldCard(ctx);
@@ -138,10 +138,7 @@ function refreshBody(ctx) {
 }
 async function saveStore(ctx, root) {
   const cfg = settingsOf(ctx.store.get('settings')), v = f => $(`[data-field="${f}"]`, root)?.value;
-  const lines = String(v('ranges') || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean), deptRanges = [];
-  for (const l of lines) { const mm = /^(\d{1,6})(?:\s*[-–]\s*(\d{1,6}))?\s+([a-z0-9]{1,12})$/i.exec(l); if (mm && !mm[2]) mm[2] = mm[1]; if (!mm || Number(mm[1]) > Number(mm[2])) return toast(`“${l}” is not a range: write it like 7001-7040 h1, or 7057 h2 for one bay`, 'bad'); deptRanges.push({ from: Number(mm[1]), to: Number(mm[2]), dept: mm[3].toLowerCase() }); }
-  deptRanges.sort((a, b) => a.from - b.from || a.to - b.to);
-  const next = { tz: v('tz'), dockGrid: { rows: Number(v('rows')), cols: Number(v('cols')) }, minsPerCarton: Number(v('mpc')), autoLockMins: Number(v('lock')), deptRanges };
+  const next = { tz: v('tz'), dockGrid: { rows: Number(v('rows')), cols: Number(v('cols')) }, minsPerCarton: Number(v('mpc')), autoLockMins: Number(v('lock')) };
   const payload = {};
   for (const k of Object.keys(next)) if (JSON.stringify(next[k]) !== JSON.stringify(cfg[k])) payload[k] = next[k];
   if (!Object.keys(payload).length) return toast('Nothing changed');

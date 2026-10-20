@@ -40,7 +40,7 @@ export function storeKpis(state, { today, caps = [], now = Date.now(), bytes = 0
 
   // Set-up: what the store still needs.
   if (has('floor') && !state.map?.version) warn('bad', 'No map published: the Floor tools have nothing to show.');
-  if (has('stockroom') && !(settingsOf(state).deptRanges || []).length) warn('warn', 'No stockroom bay ranges: History and Trends cannot group by department (Settings › Store).');
+  if (has('stockroom') && !(settingsOf(state).deptRanges || []).length) warn('warn', 'No stockroom bay ranges: History and Trends cannot group by department (Backfill review › Departments).');
   if (has('backdock') && !Object.keys(state.dock?.manifests || {}).length) warn('warn', 'No manifest published yet.');
   if (has('backdock') && dock && open.length > 1) warn('warn', `${open.length} trucks open at once.`);
   if (!devs.length) warn('warn', 'No device has signed in yet.');

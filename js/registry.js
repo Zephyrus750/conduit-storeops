@@ -25,6 +25,7 @@ import daylist from './views/stockroom/daylist.js';
 import srhistory from './views/stockroom/srhistory.js';
 import srhome from './views/stockroom/srhome.js';
 import srloc from './views/stockroom/srloc.js';
+import srdepts from './views/stockroom/depts.js';
 import srintel from './views/stockroom/intel.js';
 import srtrends from './views/stockroom/srtrends.js';
 import codelist from './views/stockroom/codelist.js';
@@ -38,7 +39,7 @@ import { dockscreen, teamboard } from './views/backdock/screens.js';
 import wallboard from './views/backdock/wallboard.js';
 import danalytics from './views/backdock/danalytics.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, inventory, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, inventory, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
 // Rail sections and the phone tab strip per workspace. Rows without a view
 // yet are inert and say so.

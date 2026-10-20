@@ -127,7 +127,7 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
   }
 
   // 4. the bays' departments (K2B's deptmap): Conduit's stockroom ranges
-  // (Settings › Store), so Adjustments, History and the review group bays
+  // (Backfill review › Departments), so Adjustments, History and the review group bays
   // as K2B did. Logged only when they differ from what was imported before.
   let depts = 0;
   try {
@@ -137,8 +137,8 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
     // The id comes from the ranges alone: importing the same ranges again is
     // a duplicate, so it never undoes changes made in Conduit since.
     if (ranges.length) { depts = ranges.length; events.push({ id: await importId(`deptmap:${JSON.stringify(ranges)}`, 0), store: String(no), area: 'store', type: 'store.settings.set', entity: {}, payload: { deptRanges: ranges }, at: iso(now()), v: 1 }); }
-    else warnings.push('K2B has no department ranges for this store: set them in Settings › Store or Backfill review');
-  } catch (e) { warnings.push(`the department ranges could not be read from K2B (${e.message}): set them in Settings › Store`); }
+    else warnings.push('K2B has no department ranges for this store: set them in Backfill review › Departments');
+  } catch (e) { warnings.push(`the department ranges could not be read from K2B (${e.message}): set them in Backfill review › Departments`); }
 
   if (noSubmitTime) warnings.push(`${noSubmitTime} earlier bay${noSubmitTime === 1 ? ' had' : 's had'} no submit time in K2B and imported as submitted at ${noSubmitTime === 1 ? 'its' : 'their'} ready time`);
   if (keyedFlags) warnings.push(`${keyedFlags} code${keyedFlags === 1 ? ' was' : 's were'} ticked "keyed into the PDT" in K2B; Conduit has no per-code PDT tick, so the ticks were not carried over`);

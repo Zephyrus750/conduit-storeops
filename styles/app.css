@@ -831,7 +831,6 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .hist-grp { display: flex; justify-content: space-between; padding: 10px 6px 4px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); border-bottom: 1px solid var(--line); }
 .hist-row.req { opacity: .8; }
 .hist-acts { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-.stg-ranges { height: auto; min-height: 90px; padding: 8px 10px; width: 220px; resize: vertical; }
 /* History tools wrap under the title in a narrow archive card */
 .hist-tools { flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 100%; }
 .hist-tools .pills { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -2517,6 +2516,7 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .srdept .nm { min-width: 0; font-size: 12.5px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slc .tp .srdept { margin-left: 6px; }
 .adj-dept { min-width: 0; }
+.adj-depts .lnk { padding: 0; font: inherit; font-weight: 600; color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
 .adj-dept .srdept { display: flex; max-width: 100%; }
 .adj-groups { margin-bottom: 6px; }
 .adj-groups b, .adj-subs b { font-weight: 700; opacity: .7; margin-left: 2px; font-variant-numeric: tabular-nums; }
@@ -2524,3 +2524,33 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .bdept { display: inline-flex; align-items: center; gap: 6px; margin: 0 6px; padding: 3px 4px 3px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); max-width: 260px; }
 .bdept .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1px solid var(--line); }
 .bdept select { border: 0; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; min-width: 0; max-width: 220px; cursor: pointer; }
+
+/* Departments (K2B's builder): one card per department under its main
+   department, the bays as chips (a single bay dashed: it beats ranges), and
+   a from–to box. The unsaved bar stays in view while the cards scroll. */
+.dpt-help { color: var(--dim); font-size: 13px; max-width: 92ch; margin: 0 0 14px; line-height: 1.5; }
+.dpt-state { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--green-ink); padding: 0 6px; }
+.dpt-state.dirty { color: var(--amber-ink); }
+.dpt-state .i { width: 15px; height: 15px; }
+.dpt-bar { position: sticky; top: 0; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--accent-line); background: var(--panel); box-shadow: 0 6px 18px rgba(15, 23, 42, .08); }
+.dpt-bar > span { flex: 1 1 260px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.dpt-bar > span .i { color: var(--amber-ink); flex: none; }
+.dpt-group { margin: 0 0 18px; }
+.dpt-gh { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 0 0 8px; }
+.dpt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, max(270px, calc((100% - 30px) / 4))), 1fr)); gap: 10px; }   /* four a row at most: one main department a row */
+.dpt-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-left: 4px solid var(--dc); border-radius: 12px; background: var(--panel); }
+.dpt-h { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dpt-h b { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dpt-h small { margin-left: auto; flex: none; color: var(--dim); font-size: 11.5px; }
+.dpt-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 26px; align-items: center; }
+.dpt-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 3px 2px 9px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); font: 600 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.dpt-chip.pin { border-style: dashed; border-color: var(--dc, var(--dim)); background: transparent; }
+.dpt-chip button { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--dim); }
+.dpt-chip button:hover, .dpt-chip button:focus-visible { background: var(--line); color: var(--ink); }
+.dpt-chip button .i { width: 12px; height: 12px; }
+.dpt-none { font-size: 12.5px; color: var(--dim); }
+.dpt-add { display: flex; align-items: center; gap: 6px; }
+.dpt-add .ad-in { padding: 6px 8px; font-size: 13px; flex: 1 1 0; }
+.dpt-add > span { color: var(--dim); }
+.dpt-add .btn { flex: none; }
+.dpt-pastecard { margin-bottom: 14px; }

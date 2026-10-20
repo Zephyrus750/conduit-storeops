@@ -56,7 +56,7 @@ const GROUPS = [...SR_GROUPS, ['none', 'No department']];
 // each with how many items are still to adjust.
 function deptFilter(m) {
   if (!m.items.length) return '';
-  if (!m.ranges.length) return '<div class="cs-dim adj-depts">Enter the stockroom bay ranges in Settings › Store (or set a bay’s department in Backfill review) to group this list by department.</div>';
+  if (!m.ranges.length) return '<div class="cs-dim adj-depts">Set which bays belong to which department (<button type="button" class="lnk" data-go="srdepts">Departments</button>) to group this list by department.</div>';
   const open = list => list.filter(i => !i.done).length;
   const groups = GROUPS.filter(([g]) => m.items.some(i => groupOf(i.dept) === g));
   const subs = st.group === 'all' ? [] : m.depts.filter(d => groupOf(d) === st.group);
@@ -133,7 +133,7 @@ function mobile(ctx) {
 
 // The SOH list for the office (K2B's printNegsoh): most negative first, each
 // keycode as a barcode, the SOH, where it was confirmed, and a tick. One
-// section per department (the stockroom's bay ranges, Settings › Store),
+// section per department (the stockroom's bay ranges, from Departments),
 // so each department's lead takes their own; then any bay outside the
 // ranges, then items with no location.
 function printAdjustments(ctx, m) {
