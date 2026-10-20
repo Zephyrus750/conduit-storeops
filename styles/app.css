@@ -1974,7 +1974,7 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 
 /* Adjustments: departments, and ticking an item off once adjusted. */
 .adj-depts { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
-.adj-row.done > :not(:nth-child(9)) { opacity: .45; }
+.adj-row.done > :not(:nth-child(10)) { opacity: .45; }
 .adj-row.done .adj-qty { text-decoration: line-through; }
 .adj-done { border: 1px solid var(--line); background: var(--panel); color: var(--ink2); border-radius: 7px; padding: 2px 8px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .adj-done:hover { border-color: var(--accent); color: var(--accent-ink); }
@@ -2496,7 +2496,23 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 
 /* Adjustments: keycode and description in their own columns, the price and
    the potential shrink (units below zero × price), and the list's total. */
-.adj-hd.adj-cols, .adj-row.adj-cols { grid-template-columns: 60px 96px minmax(0, 1.6fr) minmax(0, 1fr) 74px 82px minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1fr) 28px; }
+/* The list sizes itself by its own card (the store PC's wide layout is
+   scaled to the screen, so the shell's width says little here): all eleven
+   columns when there is room, then without Added, then without Price (it
+   stays in the figures' tooltips) and with the department as its badge. */
+.card.adj { container: adjlist / inline-size; }
+.adj-hdept .short { display: none; }
+.adj-hd.adj-cols, .adj-row.adj-cols { grid-template-columns: 60px 96px minmax(0, 1.6fr) minmax(0, 1fr) 74px 82px 98px minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1fr) 28px; }
+@container adjlist (max-width: 1180px) {
+  .adj-hd.adj-cols > :nth-child(9), .adj-row.adj-cols > :nth-child(9) { display: none; }
+  .adj-hd.adj-cols, .adj-row.adj-cols { gap: 10px; grid-template-columns: 56px 88px minmax(0, 1.6fr) minmax(0, 1fr) 70px 78px 92px 64px minmax(0, .9fr) 24px; }
+}
+@container adjlist (max-width: 860px) {
+  .adj-hd.adj-cols > :nth-child(5), .adj-row.adj-cols > :nth-child(5) { display: none; }
+  .adj-dept .srdept .nm { display: none; }
+  .adj-hdept .long { display: none; } .adj-hdept .short { display: inline; }
+  .adj-hd.adj-cols, .adj-row.adj-cols { gap: 8px; grid-template-columns: 52px 84px minmax(0, 1fr) 40px 74px 88px 62px 92px 22px; }
+}
 .adj-cols .n { text-align: right; font-variant-numeric: tabular-nums; }
 .adj-kc { font-weight: 700; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
 .adj-desc { min-width: 0; overflow-wrap: anywhere; }
@@ -2505,8 +2521,14 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .adj-shrinkline { display: flex; gap: 8px; align-items: center; margin: 4px 0 10px; padding: 9px 12px; border-radius: 10px; background: color-mix(in srgb, var(--red) 8%, var(--panel)); border: 1px solid color-mix(in srgb, var(--red) 25%, var(--line)); font-size: 13px; color: var(--ink2); }
 .adj-shrinkline svg.i { color: var(--red); flex: none; }
 .adj-shrinkline b { color: var(--ink); }
-.adj-shrinkline.mv { margin: 0 16px 12px; }
-@container shell (max-width: 1500px) { .adj-hd.adj-cols > :nth-child(8), .adj-row.adj-cols > :nth-child(8) { display: none; } .adj-hd.adj-cols, .adj-row.adj-cols { grid-template-columns: 56px 90px minmax(0, 1.5fr) minmax(0, 1fr) 70px 78px minmax(0, .8fr) minmax(0, 1fr) 28px; } }
+/* The two shrink figures side by side: to zero (red), to one carton (accent). */
+.adj-shrinks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 8px; margin: 4px 0 10px; }
+.adj-shrinks .adj-shrinkline { margin: 0; }
+.adj-shrinks.mv { margin: 0 16px 12px; gap: 6px; }
+.adj-shrinkline.ctn { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
+.adj-shrinkline.ctn svg.i { color: var(--accent); }
+.adj-ctn small, .adj-shrink small { display: block; font-size: 11px; font-weight: 500; color: var(--dim); white-space: nowrap; }
+.loss1 { color: var(--accent-ink); font-weight: 700; }
 
 /* Stockroom departments: a badge with its name ("K2 Toys"); the main
    department filter over its sub-departments in Adjustments; the bay's

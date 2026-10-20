@@ -6,6 +6,8 @@
 //   parseReport(text, into?)          report rows by keycode and location: { loc, kc, soh, price, apns, brand }
 //   sohBand(soh, ctn)                 'r' (≤ 0), 'a' (under two cartons), 'g'
 //   flagOf(soh, ctn), flagsOf(rows)   'adjust' (≤ 0 in a stockroom bay), 'pull' (under two cartons), or none
+//   shrinkValue(qty, price)           potential shrink when below zero is adjusted to zero
+//   cartonShrink(qty, ctn, price)     the same when 0 or less is adjusted up to one carton
 //   isoWeek(day)                      '2026-W41'
 //   historyOf(snaps)                  keycode → { loc, locs, name, price, w: [soh…], dates: […] }, oldest first
 //   keepDates(dates)                  the snapshot dates kept: the last 14 days, then the last of each week
@@ -87,6 +89,15 @@ export const PULL_CARTONS = 2;
 export function shrinkValue(qty, price) {
   const q = Number(qty), p = Number(price);
   return q < 0 && p > 0 ? Math.round(-q * p * 100) / 100 : 0;
+}
+// Shrink to one carton: an item at 0 or less that is adjusted up to one
+// carton (its units a carton, from the manifests) writes the units to reach
+// zero and the carton on top off at its price: (carton − SOH) × price.
+// 0 when the SOH is above zero, or the carton size or the price is unknown.
+export const cartonUnits = (qty, ctn) => { const q = Number(qty), c = Number(ctn); return q <= 0 && c > 0 ? c - q : 0; };
+export function cartonShrink(qty, ctn, price) {
+  const u = cartonUnits(qty, ctn), p = Number(price);
+  return u && p > 0 ? Math.round(u * p * 100) / 100 : 0;
 }
 export function flagOf(soh, ctn) {
   if (!(Number.isFinite(soh))) return null;

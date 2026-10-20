@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseReport, sohBand, isoWeek, historyOf, classify, checksFor, splitWalkers, shrinkValue } from '../../shared/stockintel.js';
+import { parseReport, sohBand, isoWeek, historyOf, classify, checksFor, splitWalkers, shrinkValue, cartonShrink, cartonUnits } from '../../shared/stockintel.js';
 
 const REPORT = `STORE : 1241 Busselton                       Page 1
 LOCATION KEYCODE APN DESCRIPTION COLOUR STATUS PRICE SOH
@@ -93,4 +93,13 @@ test('a report line keeps its description and price; shrink is the units below z
   assert.deepEqual([r['43117659|7014'].desc, r['43117659|7014'].price, r['43117659|7014'].soh], ['RUG GREY', null, -2], 'no price: the SOH at the end is not part of it');
   assert.equal(shrinkValue(-3, 12), 36); assert.equal(shrinkValue(-3, 4.99), 14.97);
   assert.equal(shrinkValue(0, 12), 0, 'nothing below zero, nothing written off'); assert.equal(shrinkValue(-2, null), 0); assert.equal(shrinkValue(5, 12), 0);
+});
+
+test('shrink to one carton: the units to reach zero and one carton on top, at the price', () => {
+  assert.equal(cartonUnits(-3, 6), 9, '3 to reach zero + 6'); assert.equal(cartonShrink(-3, 6, 12), 108);
+  assert.equal(cartonUnits(0, 2), 2, 'on zero: a whole carton'); assert.equal(cartonShrink(0, 2, 29), 58);
+  assert.equal(cartonShrink(-1, 4, 4.99), 24.95);
+  assert.equal(cartonShrink(-4, null, 8), 0, 'no carton size'); assert.equal(cartonUnits(-4, 0), 0);
+  assert.equal(cartonShrink(-6, 24, null), 0, 'no price'); assert.equal(cartonUnits(-6, 24), 30);
+  assert.equal(cartonShrink(3, 6, 12), 0, 'above zero: not on the list');
 });

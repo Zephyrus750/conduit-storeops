@@ -139,6 +139,7 @@ export function cartonOf(kc) {
   const l = lastArrival[String(kc)]; return l?.ctn ? { ctn: l.ctn, basis: 'delivery', last: l } : null;
 }
 export const ctnOf = kc => cartonOf(kc)?.ctn || null;
+export const profilesReady = () => profiles !== null;   // false until the first load lands
 export function depthChip(kc, now = Date.now()) {
   const p = profileOf(kc);
   if (!p?.ctn) { const l = lastArrival[String(kc)]; return l?.ctn ? `<span class="ctn-chip single" title="From the latest delivery (${esc(l.date)}: ${l.units} units in ${l.cartons} cartons); it firms up once three trucks agree">▤ ${l.ctn}/ctn · latest delivery</span>` : ''; }

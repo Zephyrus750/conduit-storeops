@@ -11,8 +11,8 @@ import { parseKeycodes } from '../../../shared/backfill.js';
 import { csvLines } from '../../../shared/records.js';
 import { printSheet, code, tick, table, section } from '../../print.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
-import { todayKey, ensureNames, productHtml, kcCopy, nameOf, priceOf, send, loadProfiles, depthChip, ghostChip, SR_GROUPS, deptGroup, deptLabel, deptBadge } from './common.js';
-import { shrinkValue } from '../../../shared/stockintel.js';
+import { todayKey, ensureNames, productHtml, kcCopy, nameOf, priceOf, send, loadProfiles, depthChip, ghostChip, cartonOf, profilesReady, SR_GROUPS, deptGroup, deptLabel, deptBadge } from './common.js';
+import { shrinkValue, cartonShrink, cartonUnits } from '../../../shared/stockintel.js';
 
 const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '' };
 const NONE = '\u0000none', OTHER = '\u0000other';
@@ -37,17 +37,41 @@ function priceFor(it) {
   const p = priceOf(it.kc); return Number.isFinite(p) ? { v: p, from: 'kmart.com.au' } : null;
 }
 const money = v => v.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' });
-// Potential shrink: what adjusting the items below zero to zero writes off
-// (units below zero × price); still to adjust, and items with no price.
+// Potential shrink to zero: what adjusting the items below zero to zero
+// writes off (units below zero × price). To one carton: what adjusting
+// everything at zero or below up to one carton writes off ((carton − SOH)
+// × price, the carton size from the manifests). Each with what is still to
+// adjust; items with no price, or no carton size yet, are counted apart.
 function shrinkOf(items) {
-  let total = 0, open = 0, unpriced = 0;
-  for (const it of items) { if (!(it.qty < 0)) continue; const p = priceFor(it); if (!p) { unpriced++; continue; } const v = shrinkValue(it.qty, p.v); total += v; if (!it.done) open += v; }
-  return { total: Math.round(total * 100) / 100, open: Math.round(open * 100) / 100, unpriced };
+  const r = { total: 0, open: 0, unpriced: 0, carton: 0, cartonOpen: 0, noSize: 0, cartonUnpriced: 0, sizes: profilesReady() };
+  for (const it of items) {
+    if (it.qty > 0) continue;
+    const p = priceFor(it), ctn = cartonOf(it.kc)?.ctn;
+    if (!p) { if (it.qty < 0) r.unpriced++; r.cartonUnpriced++; continue; }
+    const v = shrinkValue(it.qty, p.v); r.total += v; if (!it.done) r.open += v;
+    if (!ctn) { r.noSize++; continue; }
+    const c = cartonShrink(it.qty, ctn, p.v); r.carton += c; if (!it.done) r.cartonOpen += c;
+  }
+  for (const k of ['total', 'open', 'carton', 'cartonOpen']) r[k] = Math.round(r[k] * 100) / 100;
+  return r;
 }
-// The list's potential shrink, over the department shown.
+// The list's two shrink figures, over the department shown.
 function shrinkLine(m) {
-  const sh = m.shrink; if (!sh.total && !sh.unpriced) return '';
-  return `<div class="adj-shrinkline">${ic('dollar')}<span><b>${money(sh.total)}</b> potential shrink if the items below zero are adjusted to zero${sh.open !== sh.total ? ` · <b>${money(sh.open)}</b> still to adjust` : ''}${sh.unpriced ? ` · ${sh.unpriced} without a price` : ''}</span></div>`;
+  const sh = m.shrink, lines = [];
+  if (sh.total || sh.unpriced) lines.push(`<div class="adj-shrinkline">${ic('dollar')}<span><b>${money(sh.total)}</b> potential shrink if the items below zero are adjusted to zero${sh.open !== sh.total ? ` · <b>${money(sh.open)}</b> still to adjust` : ''}${sh.unpriced ? ` · ${sh.unpriced} without a price` : ''}</span></div>`);
+  if (!sh.sizes && m.inDept.length) lines.push(`<div class="adj-shrinkline ctn">${ic('box')}<span>To one carton: reading the carton sizes from the manifests…</span></div>`);
+  else if (sh.carton || sh.noSize) lines.push(`<div class="adj-shrinkline ctn">${ic('box')}<span><b>${money(sh.carton)}</b> to one carton if everything at zero or below is adjusted up to one carton${sh.cartonOpen !== sh.carton ? ` · <b>${money(sh.cartonOpen)}</b> still to adjust` : ''}${sh.noSize ? ` · ${sh.noSize} without a carton size` : ''}${sh.cartonUnpriced ? ` · ${sh.cartonUnpriced} without a price` : ''}</span></div>`);
+  return lines.length ? `<div class="adj-shrinks">${lines.join('')}</div>` : '';
+}
+// An item's to-one-carton value, or null when its price or carton size is unknown.
+const toCarton = it => { const pr = priceFor(it), c = cartonOf(it.kc); return pr && c && it.qty <= 0 ? cartonShrink(it.qty, c.ctn, pr.v) : null; };
+// One item's to-one-carton cell, with the units it adds.
+function cartonCell(it, pr) {
+  if (it.qty > 0) return '<span class="cs-dim">—</span>';
+  const c = cartonOf(it.kc);
+  if (!c) return `<span class="cs-dim" title="No carton size yet: it has not been on a manifest">${profilesReady() ? 'no size' : '…'}</span>`;
+  const units = cartonUnits(it.qty, c.ctn), how = `${it.qty < 0 ? `${-it.qty} to reach zero + ` : ''}${c.ctn} a carton (${c.basis === 'profile' ? 'the carton profile' : 'the latest delivery'})`;
+  return pr ? `<b class="loss1" title="${esc(how)} × ${money(pr.v)}">${money(cartonShrink(it.qty, c.ctn, pr.v))}</b><small>+${units} units</small>` : `<span class="cs-dim" title="${esc(how)}; no price for this item yet">?</span><small>+${units} units</small>`;
 }
 const deptName = d => d === NONE ? 'No location' : d === OTHER ? 'Bays outside the ranges' : deptLabel(d);
 const groupOf = d => d === NONE || d === OTHER ? 'none' : deptGroup(d);
@@ -71,10 +95,10 @@ export default {
     const deptPills = deptFilter(m);
     const dayPick = `<select class="ad-in" data-field="day" aria-label="Day">${[...new Set([todayKey(), ...m.past])].sort().reverse().map(d => `<option value="${esc(d)}"${d === m.date ? ' selected' : ''}>${d === todayKey() ? 'Today' : esc(d)} · ${Object.keys(ctx.store.get('adjustments')[d] || {}).length}</option>`).join('')}</select>`;
     const max = Math.max(1, ...m.days.map(([, d]) => Object.keys(d).length));
-    return vh('Adjustments', sub('Below-zero SOH evidence', esc(m.date), `${m.items.length} item${m.items.length === 1 ? '' : 's'}${m.today ? ' today' : ''} · ${m.done.length} adjusted${m.shrink.total ? ` · ${money(m.shrink.total)} potential shrink` : ''}`), `${dayPick}<button class="btn" data-act="screen" title="Read a below-zero SOH report off the screen">${ic('expand')}Screen scan</button><button class="btn" data-act="print">${ic('print')}Print list</button><button class="btn" data-act="export">${ic('file')}Copy for the office</button>`, 'm-adjust') +
+    return vh('Adjustments', sub('Below-zero SOH evidence', esc(m.date), `${m.items.length} item${m.items.length === 1 ? '' : 's'}${m.today ? ' today' : ''} · ${m.done.length} adjusted${m.shrink.total ? ` · ${money(m.shrink.total)} potential shrink` : ''}${m.shrink.carton ? ` · ${money(m.shrink.carton)} to one carton` : ''}`), `${dayPick}<button class="btn" data-act="screen" title="Read a below-zero SOH report off the screen">${ic('expand')}Screen scan</button><button class="btn" data-act="print">${ic('print')}Print list</button><button class="btn" data-act="export">${ic('file')}Copy for the office</button>`, 'm-adjust') +
       `<div class="grid2"><div class="card adj"><div class="ch"><h3>${m.today ? 'Today’s list' : `List for ${esc(m.date)}`}</h3><span class="cs-dim">most negative first</span><span class="pills" style="margin-left:auto"><button class="${st.filter === 'all' ? 'on' : ''}" data-act="filter" data-v="all">All ${m.inDept.length}</button><button class="${st.filter === 'open' ? 'on' : ''}" data-act="filter" data-v="open">To adjust ${m.inDept.filter(i => !i.done).length}</button><button class="${st.filter === 'confirmed' ? 'on' : ''}" data-act="filter" data-v="confirmed">Confirmed ${m.confirmed.length}</button><button class="${st.filter === 'unplaced' ? 'on' : ''}" data-act="filter" data-v="unplaced">Unplaced ${m.unplaced.length}</button></span></div>` +
-      deptPills + shrinkLine(m) + `<div class="adj-hd adj-cols"><span>SOH</span><span>Keycode</span><span>Description</span><span>Department</span><span class="n">Price</span><span class="n" title="Units below zero × price: written off when adjusted to zero">Shrink</span><span>Where</span><span>Added</span><span>Source</span><span></span></div>` +
-      (list.map(it => { const pr = priceFor(it), loss = pr ? shrinkValue(it.qty, pr.v) : 0; return `<div class="adj-row adj-cols${it.done ? ' done' : ''}"><span class="adj-qty${it.qty === 0 ? ' zero' : ''}">${it.qty}</span><span class="adj-kc">${kcCopy(it.kc)}</span><span class="adj-desc">${productHtml(it.kc, it.name)}<span class="adj-chips">${ghostChip(it.kc, it.qty)}${depthChip(it.kc)}</span></span><span class="adj-dept">${it.dept === NONE || it.dept === OTHER ? '<span class="cs-dim">—</span>' : deptBadge(it.dept)}</span><span class="adj-price n"${pr ? ` title="Price from ${pr.from}"` : ''}>${pr ? money(pr.v) : '<span class="cs-dim">—</span>'}</span><span class="adj-shrink n${loss ? ' loss' : ''}">${loss ? money(loss) : it.qty < 0 && !pr ? '<span class="cs-dim" title="No price for this item yet">?</span>' : '<span class="cs-dim">—</span>'}</span><span class="adj-where">${it.location ? `<span class="adj-loc${it.confirmed ? ' ok' : ''}">${esc(it.location)}${it.confirmed ? ' ✓' : ''}</span>` : '<span class="cs-dim">no location</span>'}</span><span class="cs-dim">${fmtTime(it.addedAt)}</span><span class="cs-dim">${it.done ? `<button class="adj-done on" data-act="undone" data-kc="${esc(it.kc)}" title="Adjusted ${esc(fmtTime(it.done.at))}: tap to put it back">✓ Adjusted</button>` : `<button class="adj-done" data-act="done" data-kc="${esc(it.kc)}" title="Adjusted in the system: tick it off">Mark adjusted</button>`}<br>${esc(SOURCE[it.source] || (it.confirmed ? 'Backfill review' : it.counted != null ? 'Phone' : 'Typed'))}${it.counted != null ? ` · ${it.counted} found` : ''}</span><span class="adj-x" title="Remove from today’s list" data-act="remove" data-kc="${esc(it.kc)}">${ic('x')}</span></div>`; }).join('') || '<div class="cs-dim" style="padding:14px 2px">Nothing recorded today. Flag a code from Backfill review, or add one on the right.</div>') +
+      deptPills + shrinkLine(m) + `<div class="adj-hd adj-cols"><span>SOH</span><span>Keycode</span><span>Description</span><span class="adj-hdept"><span class="long">Department</span><span class="short">Dept</span></span><span class="n">Price</span><span class="n" title="Units below zero × price: written off when adjusted to zero">To zero</span><span class="n" title="(One carton − SOH) × price: written off when adjusted up to one carton. The carton size comes from the manifests.">To one carton</span><span>Where</span><span>Added</span><span>Source</span><span></span></div>` +
+      (list.map(it => { const pr = priceFor(it), loss = pr ? shrinkValue(it.qty, pr.v) : 0; return `<div class="adj-row adj-cols${it.done ? ' done' : ''}"><span class="adj-qty${it.qty === 0 ? ' zero' : ''}">${it.qty}</span><span class="adj-kc">${kcCopy(it.kc)}</span><span class="adj-desc">${productHtml(it.kc, it.name)}<span class="adj-chips">${ghostChip(it.kc, it.qty)}${depthChip(it.kc)}</span></span><span class="adj-dept">${it.dept === NONE || it.dept === OTHER ? '<span class="cs-dim">—</span>' : deptBadge(it.dept)}</span><span class="adj-price n"${pr ? ` title="Price from ${pr.from}"` : ''}>${pr ? money(pr.v) : '<span class="cs-dim">—</span>'}</span><span class="adj-shrink n${loss ? ' loss' : ''}"${pr && loss ? ` title="${-it.qty} below zero × ${money(pr.v)}"` : ''}>${loss ? `${money(loss)}<small>${-it.qty} unit${it.qty === -1 ? '' : 's'}</small>` : it.qty < 0 && !pr ? '<span class="cs-dim" title="No price for this item yet">?</span>' : '<span class="cs-dim">—</span>'}</span><span class="adj-ctn n">${cartonCell(it, pr)}</span><span class="adj-where">${it.location ? `<span class="adj-loc${it.confirmed ? ' ok' : ''}">${esc(it.location)}${it.confirmed ? ' ✓' : ''}</span>` : '<span class="cs-dim">no location</span>'}</span><span class="cs-dim">${fmtTime(it.addedAt)}</span><span class="cs-dim">${it.done ? `<button class="adj-done on" data-act="undone" data-kc="${esc(it.kc)}" title="Adjusted ${esc(fmtTime(it.done.at))}: tap to put it back">✓ Adjusted</button>` : `<button class="adj-done" data-act="done" data-kc="${esc(it.kc)}" title="Adjusted in the system: tick it off">Mark adjusted</button>`}<br>${esc(SOURCE[it.source] || (it.confirmed ? 'Backfill review' : it.counted != null ? 'Phone' : 'Typed'))}${it.counted != null ? ` · ${it.counted} found` : ''}</span><span class="adj-x" title="Remove from today’s list" data-act="remove" data-kc="${esc(it.kc)}">${ic('x')}</span></div>`; }).join('') || '<div class="cs-dim" style="padding:14px 2px">Nothing recorded today. Flag a code from Backfill review, or add one on the right.</div>') +
       `<div class="cs-dim" style="padding:10px 2px 0">A ✓ location means the item was confirmed present when that bay was backfilled.</div></div>` +
       `<div class="sidecol"><div class="card"><div class="ch"><h3>Tick off by scanning</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="tick" placeholder="Scan a keycode once it is adjusted" inputmode="numeric" autocomplete="off"></div><div class="cs-dim">${m.done.length} of ${m.items.length} adjusted${m.today ? ' today' : ''}. A scanner's Enter ticks it off.</div></div></div>` +
       `<div class="card"><div class="ch"><h3>Add an item</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="kc" placeholder="Keycode" inputmode="numeric" autocomplete="off"></div><div class="adj-form2"><input class="ad-in" data-field="qty" placeholder="SOH (report)" aria-label="SOH from the report" inputmode="numeric"><input class="ad-in mono" data-field="loc" placeholder="Location (optional)"></div><button class="btn primary" style="justify-content:center" data-act="add">${ic('plus')}${m.today ? 'Add to today' : `Add to ${esc(m.date)}`}</button><div class="cs-dim">Stored as below zero either way. The name fills in from the catalogue.</div></div></div>` +
@@ -107,7 +131,7 @@ async function onClick(e, ctx, root, repaint) {
     toast(`${ok} added to today's adjustments${dup ? ` · ${dup} already listed` : ''}`);
   } });
   else if (act === 'print') printAdjustments(ctx, { ...m, items: m.inDept.filter(i => !i.done) });   // what is still to adjust, in the department shown
-  else if (act === 'export') { const text = csvLines(['keycode', 'description', 'department', 'soh', 'price', 'shrink', 'location', 'confirmed', 'added', 'adjusted'], m.inDept.map(i => { const pr = priceFor(i); return [i.kc, nameOf(i.kc) || i.name || '', i.dept === NONE || i.dept === OTHER ? '' : deptLabel(i.dept), i.qty, pr ? pr.v.toFixed(2) : '', pr ? shrinkValue(i.qty, pr.v).toFixed(2) : '', i.location, i.confirmed ? 'yes' : '', i.addedAt, i.done?.at || '']; })); try { await navigator.clipboard.writeText(text); toast(`${m.inDept.length} rows copied as CSV`); } catch { toast('Copy failed', 'bad'); } }
+  else if (act === 'export') { const text = csvLines(['keycode', 'description', 'department', 'soh', 'price', 'shrink', 'carton', 'shrink_to_one_carton', 'location', 'confirmed', 'added', 'adjusted'], m.inDept.map(i => { const pr = priceFor(i); return [i.kc, nameOf(i.kc) || i.name || '', i.dept === NONE || i.dept === OTHER ? '' : deptLabel(i.dept), i.qty, pr ? pr.v.toFixed(2) : '', pr ? shrinkValue(i.qty, pr.v).toFixed(2) : '', cartonOf(i.kc)?.ctn ?? '', toCarton(i)?.toFixed(2) ?? '', i.location, i.confirmed ? 'yes' : '', i.addedAt, i.done?.at || '']; })); try { await navigator.clipboard.writeText(text); toast(`${m.inDept.length} rows copied as CSV`); } catch { toast('Copy failed', 'bad'); } }
   else if (act === 'm-qty') { st.mQty = Math.max(0, st.mQty + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-soh') { st.mSoh = Math.min(0, st.mSoh + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-flag') { if (!st.mKc) return; const r = await send(ctx, 'adjustment.set', { keycode: st.mKc, date: m.date }, { qty: st.mSoh, counted: st.mQty, location: '', confirmed: false, name: nameOf(st.mKc) || '', source: 'phone' }); if (r) { toast(`${st.mKc} flagged`); st.mKc = ''; st.mSoh = 0; st.mQty = 1; repaint(); } }
@@ -125,10 +149,10 @@ async function tickOff(ctx, input) {
 }
 function mobile(ctx) {
   const m = model(ctx);
-  return mhead('Adjust SOH', 'Stock is here but the system says no') + (m.shrink.total ? `<div class="adj-shrinkline mv">${ic('dollar')}<span><b>${money(m.shrink.total)}</b> potential shrink today${m.shrink.unpriced ? ` · ${m.shrink.unpriced} without a price` : ''}</span></div>` : '') +
+  return mhead('Adjust SOH', 'Stock is here but the system says no') + (m.shrink.total || m.shrink.carton ? `<div class="adj-shrinks mv">${m.shrink.total ? `<div class="adj-shrinkline">${ic('dollar')}<span><b>${money(m.shrink.total)}</b> potential shrink today${m.shrink.unpriced ? ` · ${m.shrink.unpriced} without a price` : ''}</span></div>` : ''}${m.shrink.carton ? `<div class="adj-shrinkline ctn">${ic('box')}<span><b>${money(m.shrink.carton)}</b> to one carton${m.shrink.noSize ? ` · ${m.shrink.noSize} without a carton size` : ''}</span></div>` : ''}</div>` : '') +
     mscan('Scan the product', `<input data-field="mkc" inputmode="numeric" autocomplete="off" placeholder="Keycode or item barcode" value="${esc(st.mKc)}" enterkeyhint="done">`, 'Then enter the SOH the PDT shows and count the shelf') +
     (st.mKc ? `<div class="mv-last"><small>Scanned</small><b>${kcCopy(st.mKc)}</b><span>${productHtml(st.mKc)}</span></div><div class="mv-stepper"><button data-act="m-soh" data-d="-1" aria-label="Lower system SOH">−</button><div><b>${st.mSoh}</b><small>system SOH (PDT)</small></div><button data-act="m-soh" data-d="1" aria-label="Raise system SOH">+</button></div><div class="mv-stepper"><button data-act="m-qty" data-d="-1" aria-label="One fewer found">−</button><div><b>${st.mQty}</b><small>found on the shelf</small></div><button data-act="m-qty" data-d="1" aria-label="One more found">+</button></div>` + mfoot(mbig('Flag for adjustment', '', 'sort', ' data-act="m-flag"') + mghost('Not this one', ' data-act="m-clear"')) : '') +
-    (m.items.length ? `<div class="mv-sub">Today · ${m.items.length}</div><div class="mv-rows">${m.items.slice(0, 6).map(i => `<div class="mv-row"><span class="a">${i.qty}</span><span class="b">${kcCopy(i.kc)} ${productHtml(i.kc, i.name)}</span><span class="c">${i.location ? esc(i.location) : ''}</span></div>`).join('')}</div>` : '');
+    (m.items.length ? `<div class="mv-sub">Today · ${m.items.length}</div><div class="mv-rows">${m.items.slice(0, 6).map(i => `<div class="mv-row"><span class="a">${i.qty}</span><span class="b">${kcCopy(i.kc)} ${productHtml(i.kc, i.name)}</span><span class="c">${[i.location ? esc(i.location) : '', toCarton(i) != null ? `<b class="loss1">${money(toCarton(i))}</b>` : ''].filter(Boolean).join(' · ')}</span></div>`).join('')}</div>` : '');
 }
 
 // The SOH list for the office (K2B's printNegsoh): most negative first, each
@@ -149,7 +173,7 @@ function printAdjustments(ctx, m) {
   const order = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'en', { numeric: true }));
   const title = g => g === '\u0000none' ? 'No location' : g === '\u0000other' ? (ranges.length ? 'Bays outside the department ranges' : 'Confirmed at a bay') : deptLabel(g);
   printSheet({
-    title: `SOH adjustments · ${m.date}`, subtitle: `${m.items.length} item${m.items.length === 1 ? '' : 's'} below zero${sh.open ? ` · ${money(sh.open)} potential shrink` : ''} · ✓ confirmed at the bay${ranges.length ? ' · by department' : ''}`,
+    title: `SOH adjustments · ${m.date}`, subtitle: `${m.items.length} item${m.items.length === 1 ? '' : 's'} below zero${sh.open ? ` · ${money(sh.open)} potential shrink` : ''}${sh.cartonOpen ? ` · ${money(sh.cartonOpen)} to one carton` : ''} · ✓ confirmed at the bay${ranges.length ? ' · by department' : ''}`,
     body: order.map(g => section(`${esc(title(g))} (${groups.get(g).length})`, tbl(groups.get(g)))).join('') || section('Nothing below zero', ''),
   });
 }
