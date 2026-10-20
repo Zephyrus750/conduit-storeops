@@ -32,14 +32,20 @@ function rowToRecord(line, ctxLoc) {
   for (let i = 0; i < t.length; i++) { const x = t[i]; if (KC_RE.test(x) && (x.match(/\d/g) || []).length >= x.length - 2 && /^\d{6,8}$/.test(fix(x))) { ki = i; break; } }
   if (ki < 0) return null;
   const kc = fix(t[ki]), loc = ki > 0 && /^\d{2,5}$/.test(t[ki - 1]) ? t[ki - 1] : ctxLoc;
-  let soh = null, price = null; const apns = [];
+  let soh = null, price = null; const apns = [], words = [];
   for (const x of t.slice(ki + 1)) {
     if (/^\d{12,13}$/.test(x)) { if (!apns.includes(x)) apns.push(x); }
     else if (/^\d+[.,]\d{2}$/.test(x)) { price = Number(x.replace(',', '.')); soh = null; }   // SOH is the last column, after the price: a STATUS 0 before it is not the SOH
-    else if (SOH_RE.test(x) && (price !== null || /\d/.test(x))) soh = Number(fix(x));   // after the price an OCR'd O is a 0
+    else if (SOH_RE.test(x) && (price !== null || /\d/.test(x))) { soh = Number(fix(x)); if (price === null) words.push(x); }   // after the price an OCR'd O is a 0
+    else if (price === null) words.push(x);
   }
   if (soh === null || !loc || !Number.isFinite(soh)) return null;
-  return { loc: String(Number(loc)), kc, soh, price, apns, brand: '' };
+  // The description (with its colour): the words between the keycode and
+  // the price, less the STATUS digit before the price (and, on a line with
+  // no price, the SOH at the end).
+  if (price === null) words.pop();
+  while (words.length && /^\d$/.test(words.at(-1))) words.pop();
+  return { loc: String(Number(loc)), kc, soh, price, apns, brand: '', desc: words.join(' ').slice(0, 80) };
 }
 
 // Rows merge by keycode and location: an item stocked in two bays keeps
@@ -56,7 +62,7 @@ export function parseReport(text, into = {}) {
     if (r) {
       rows++;
       const cur = out[rowKey(r)];
-      if (cur) { cur.soh = r.soh; if (r.price != null) cur.price = r.price; for (const a of r.apns) if (!cur.apns.includes(a)) cur.apns.push(a); last = cur; }
+      if (cur) { cur.soh = r.soh; if (r.price != null) cur.price = r.price; if (r.desc && !cur.desc) cur.desc = r.desc; for (const a of r.apns) if (!cur.apns.includes(a)) cur.apns.push(a); last = cur; }
       else { out[rowKey(r)] = r; last = r; }
       continue;
     }
@@ -75,6 +81,13 @@ export const sohBand = (soh, ctn) => soh <= 0 ? 'r' : ctn && soh < INTEL.deepMul
 // but under two cartons' worth has most likely run out on the floor, the
 // rest being the carton out the back: pull it.
 export const PULL_CARTONS = 2;
+// Potential shrink: an item the system puts below zero and that is
+// adjusted to zero (or to what was counted) writes those units off at its
+// price. 0 when the SOH is not below zero or there is no price.
+export function shrinkValue(qty, price) {
+  const q = Number(qty), p = Number(price);
+  return q < 0 && p > 0 ? Math.round(-q * p * 100) / 100 : 0;
+}
 export function flagOf(soh, ctn) {
   if (!(Number.isFinite(soh))) return null;
   if (soh <= 0) return 'adjust';

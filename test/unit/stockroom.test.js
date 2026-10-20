@@ -201,3 +201,13 @@ test('adjustments: a later flag keeps the bay a review confirmed; ticked off onc
   assert.equal(s.adjustments[d]['43307685'].done, undefined);
   assert.equal(apply(s, ev('adjustment.done', { keycode: '99999999', date: d }))?.code, 'not_found');
 });
+
+test('an adjustment keeps the report’s price; a later flag without one keeps it, a nonsense one is ignored', () => {
+  const s = initialState(), d = '2026-09-07';
+  assert.equal(apply(s, ev('adjustment.set', { keycode: '43166022', date: d }, { qty: -3, price: 12.004, name: 'BATH TOWEL 5PK WHITE', source: 'report' })), null);
+  assert.equal(s.adjustments[d]['43166022'].price, 12);
+  assert.equal(apply(s, ev('adjustment.set', { keycode: '43166022', date: d }, { qty: -3, location: '7012', confirmed: true, source: 'review' })), null);
+  assert.equal(s.adjustments[d]['43166022'].price, 12, 'kept');
+  assert.equal(apply(s, ev('adjustment.set', { keycode: '43199310', date: d }, { qty: -1, price: -5 })), null);
+  assert.equal(s.adjustments[d]['43199310'].price, undefined, 'a negative price is not a price');
+});

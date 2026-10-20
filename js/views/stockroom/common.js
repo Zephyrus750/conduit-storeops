@@ -19,6 +19,8 @@ let pendingPaint = null;
 const paintSoon = repaint => { clearTimeout(pendingPaint); pendingPaint = setTimeout(() => { try { repaint(); } catch {} }, 30); };
 export const isItemBarcode = kc => /^\d{13}$/.test(String(kc));
 export function nameOf(kc) { const n = names.get(String(kc)); return n ? n.name : n === null ? null : ''; }
+// The catalogue's price for a code (kmart.com.au), or null.
+export function priceOf(kc) { return names.get(String(kc))?.price ?? null; }
 // "Did you mean": the one-digit near misses of a code the catalogue does
 // not know (a tap copies one); empty while unknown or none.
 export function nearHtml(kc) { const dm = near.get(String(kc)); return `${dm?.length ? ` <span class="nm-near">Did you mean ${dm.slice(0, 2).map(x => `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? `${x.name}: tap to copy` : 'Tap to copy')}">${esc(x.keycode)}</b>`).join(' or ')}?</span>` : ''}`; }
@@ -69,7 +71,7 @@ export function installProductLinks(catalogue) {
     e.preventDefault();
     const w = window.open('about:blank', '_blank');
     const send = u => { if (w && !w.closed) { try { w.opener = null; } catch {} w.location.replace(u); } else window.open(u, '_blank', 'noopener'); };
-    catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || 'Verified product', url: it.url || null } : null); send(urlOf(kc)); }).catch(() => send(searchUrl(kc)));
+    catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || 'Verified product', url: it.url || null, price: Number.isFinite(it.price) ? it.price : null } : null); send(urlOf(kc)); }).catch(() => send(searchUrl(kc)));
   }, true);
 }
 async function copyCode(kc, el) {
@@ -87,7 +89,7 @@ export function ensureNames(ctx, codes, repaint) {
   const want = [...new Set(codes.map(String))].filter(kc => !names.has(kc) && /^\d{6,12}$/.test(kc));
   if (!want.length) return;
   for (const kc of want) names.set(kc, undefined);
-  Promise.all(want.map(kc => ctx.catalogue.lookup(kc).then(it => names.set(kc, it ? { name: it.name || 'Verified product', url: it.url || null } : null)).catch(() => names.set(kc, null))))
+  Promise.all(want.map(kc => ctx.catalogue.lookup(kc).then(it => names.set(kc, it ? { name: it.name || 'Verified product', url: it.url || null, price: Number.isFinite(it.price) ? it.price : null } : null)).catch(() => names.set(kc, null))))
     .then(() => {
       paintSoon(repaint);
       // Unverified codes ask for their one-digit near misses.
