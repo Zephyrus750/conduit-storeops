@@ -2487,3 +2487,7 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .sy-acts { display: flex; gap: 8px; margin-top: 14px; }
 .sy-acts .btn { flex: 1; justify-content: center; }
 .sy-sheet { padding-bottom: 20px; }
+/* Stock intelligence: the report's items at 0 or less, offered for Adjustments as soon as it is read. */
+.sri-adj { margin-top: 2px; }
+.sri-adj .go { font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.sri-adj .cs-dim svg.i { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }

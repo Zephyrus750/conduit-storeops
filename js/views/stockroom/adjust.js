@@ -1,6 +1,6 @@
 // Adjustments: the below-zero SOH evidence list, per day, most negative
 // first; the office works it top-down. Items arrive from the morning's
-// report (sent from Stock intelligence once a manager confirms), flagged
+// report (Stock intelligence: sent once it is read, or when it is saved), flagged
 // from Backfill review (confirmed at a bay) or the phone, or typed here;
 // kept per day in the log. Each is ticked off (scanned or tapped) once it
 // is adjusted in the system; the list filters by department.
