@@ -691,21 +691,22 @@ const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life:
 // The phone's bar is typed into directly: a compact list drops under it.
 const msBar = search.bar($('#msearch'), () => !admin && !!store);
 
-// Voice search on the phone (ShelfSearcher's, decision 28): the microphone in
-// the search bar and in the palette. A spoken shelf, run or bay on the map
-// opens it on the map, as ShelfSearcher did; anything else (a keycode, a
-// department, a mishearing) opens the palette with what was heard.
+// Voice search (ShelfSearcher's, decision 28): the microphone in the search
+// bar and in the palette, on the phone and on a PC with a microphone (the
+// store PCs have them). A spoken shelf, run or bay on the map opens it on
+// the map, as ShelfSearcher did; anything else (a keycode, a department, a
+// mishearing) opens the palette with what was heard.
 let listening = null;
-const showVoice = () => { const on = voiceSupported() && isMobile(); for (const b of $$('[data-voice]')) b.hidden = !on; };
-showVoice(); window.addEventListener('resize', showVoice);
+const showVoice = () => { const on = voiceSupported(); for (const b of $$('[data-voice]')) b.hidden = !on; };
+showVoice();
 document.addEventListener('click', e => {
   const btn = e.target.closest?.('[data-voice]'); if (!btn) return;
   e.preventDefault(); e.stopPropagation();
   if (listening) { listening.stop(); haptic('tap'); return; }
   if (!store || admin) return toast('Voice search works once a store is signed in');
   const input = btn.parentElement.querySelector('input'), was = input?.placeholder || '';
-  const fromBar = !!btn.closest('#msearch'); let again = null;   // what the bar searches when nothing on the map matched
-  btn.classList.add('listening'); btn.setAttribute('aria-label', 'Stop listening'); if (input) { input.placeholder = 'Listening… say a shelf, like A16 S2'; if (fromBar) input.value = ''; }
+  const fromBar = !!btn.closest('#msearch'), inBar = fromBar || !!btn.closest('#hsearch'); let again = null;   // what the phone's bar searches when nothing on the map matched
+  btn.classList.add('listening'); btn.setAttribute('aria-label', 'Stop listening'); if (input) { input.placeholder = 'Listening… say a shelf, like A16 S2'; if (inBar) input.value = ''; }
   haptic('select');
   listening = listenOnce({
     onHeard: t => { if (input) input.value = t; },
@@ -718,7 +719,7 @@ document.addEventListener('click', e => {
       } else { haptic('error'); if (fromBar) again = r.query || r.heard; else search.open(r.query || r.heard); }
     },
     onError: msg => toast(msg, 'bad'),
-    onEnd: () => { listening = null; btn.classList.remove('listening'); btn.setAttribute('aria-label', 'Search by voice'); if (input) { input.placeholder = was; if (fromBar) input.value = ''; } if (again != null) msBar.show(again); },
+    onEnd: () => { listening = null; btn.classList.remove('listening'); btn.setAttribute('aria-label', 'Search by voice'); if (input) { input.placeholder = was; if (inBar) input.value = ''; } if (again != null) msBar.show(again); },
   });
 }, true);
 let lastMobile = isMobile();

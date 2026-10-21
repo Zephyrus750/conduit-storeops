@@ -339,8 +339,9 @@ then the whole run; departments and micro-departments by code or name;
 recent searches when the bar is empty), and one tap shows the result on the
 map.
 
-**Voice search** (phones; decision 28). The microphone in the phone's
-search bar and in the palette listens for one shelf, run, bay or keycode,
+**Voice search** (phones and store PCs; decision 28). The microphone in
+the search bar (the phone's, and the PC's top bar) and in the palette
+listens for one shelf, run, bay or keycode,
 as ShelfSearcher's did: the browser's recogniser in US English, its top
 guess, spaces removed and number words made digits. Each guess is then
 checked against the published map (`shelfForLocation`): the top guess wins
@@ -348,10 +349,14 @@ whenever it is a real shelf, so what worked in ShelfSearcher still does;
 otherwise the recogniser's other guesses and the usual mishearings ("be 22",
 "queue 15", "for" for 4) are tried, but only a real shelf is taken. A shelf
 opens on the map; anything else opens the palette with what was heard. The
-phone's pick list has voice add (say codes, "done" to stop). The reading is
+phone's pick list has voice add (say codes, "done" to stop). Runs named by
+digits alone are heard as they are said: "zero four side two", "oh four side
+two" and "four side two" are 04 S2, and digits said one at a time are one
+number ("seven zero one two" is the bay 7012). The reading is
 `shared/voice.js` (unit-tested), the listening `js/voice.js`. Voice needs a
 connection (the recogniser runs in the browser maker's service) and the
-microphone allowed for the site.
+microphone allowed for the site; the button is hidden where the browser has
+no recogniser (Firefox).
 
 ## Event envelope
 

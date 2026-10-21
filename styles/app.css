@@ -1667,7 +1667,18 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .voicebtn.listening { animation: none; } }
 .search:has(.voicebtn:not([hidden])) input { padding-right: 44px; }
 .pal .in { position: relative; }
-.pal .in:has(.voicebtn:not([hidden])) .okind { margin-right: 40px; }
+/* In the palette the microphone sits in the row, after the kind chip and before Esc or Cancel. */
+.pal .in .voicebtn { position: static; transform: none; flex: none; order: 1; cursor: pointer; }
+.pal .in .voicebtn:hover:not(.listening) { background: var(--chip); color: var(--ink); }
+.pal .in .esc, .pal .in .ocancel { order: 2; }
+/* The desk's top search bar: the microphone at the end, Ctrl K before it. */
+#hsearch .voicebtn { right: 3px; width: 32px; height: 32px; cursor: pointer; }
+#hsearch .voicebtn:hover { background: var(--chip); color: var(--ink); }
+#hsearch .voicebtn.listening:hover { background: var(--red, #DC2626); color: #fff; }
+#hsearch:has(.voicebtn:not([hidden])) .kbd { right: 42px; }
+#hsearch:has(.voicebtn:not([hidden])) input { padding-right: 100px; }
+.frame.bars-tint .top #hsearch .voicebtn:not(.listening), .frame.rail-tint.bars-strong .top #hsearch .voicebtn:not(.listening) { color: var(--accent-ink); }
+.frame.bars-strong:not(.rail-tint) .top #hsearch .voicebtn:not(.listening) { color: rgba(255,255,255,.85); }
 .rt-top .tools button.listening { background: var(--red, #DC2626); border-color: var(--red, #DC2626); color: #fff; animation: voicepulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .rt-top .tools button.listening { animation: none; } }
 /* Dock tablet: the crew runs the decant from the dock screen (DV's pallet sheet and person picker) */
@@ -1893,8 +1904,6 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .ophone-try { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 4px 4px; font-size: 12.5px; color: var(--dim); }
 .ophone-try b { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-right: 2px; }
 .ophone-try button { border: 1px solid var(--line); background: var(--panel); color: var(--ink2); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; }
-.omni.phone .voicebtn { position: static; transform: none; flex: none; }
-.omni.phone .in:has(.voicebtn:not([hidden])) .okind { margin-right: 0; }
 .onote { display: flex; align-items: flex-start; gap: 10px; margin: 12px 4px 4px; padding: 12px; border-radius: 12px; background: var(--ground); border: 1px solid var(--line); font-size: 13px; color: var(--dim); line-height: 1.4; }
 .onote svg.i { flex: none; width: 20px; height: 20px; color: var(--faint); margin-top: 1px; }
 .onote b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 2px; }

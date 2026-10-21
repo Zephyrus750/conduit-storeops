@@ -25,7 +25,7 @@
 //   spokenStops(guesses, lookup)    → { codes, bad, heard } the stops one utterance names, map-checked
 //   STOP_WORDS                      → "done", "stop", … end a dictation
 
-const ONES = { ZERO: 0, ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6, SEVEN: 7, EIGHT: 8, NINE: 9 };
+const ONES = { ZERO: 0, NOUGHT: 0, ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6, SEVEN: 7, EIGHT: 8, NINE: 9 };
 const TEENS = { TEN: 10, ELEVEN: 11, TWELVE: 12, THIRTEEN: 13, FOURTEEN: 14, FIFTEEN: 15, SIXTEEN: 16, SEVENTEEN: 17, EIGHTEEN: 18, NINETEEN: 19 };
 const TENS = { TWENTY: 20, THIRTY: 30, FORTY: 40, FOURTY: 40, FIFTY: 50, SIXTY: 60, SEVENTY: 70, EIGHTY: 80, NINETY: 90 };
 const SCALE = { HUNDRED: 100, THOUSAND: 1000 };
@@ -98,8 +98,16 @@ export function misheard(text) {
   // Number sounds once a code has started ("A for" → A4, "B to" → B2).
   const numbered = lettered.map((w, i) => (NUMBER_SOUND[w] && i > 0 ? NUMBER_SOUND[w] : w));
   add(numbered);
-  // "A16" heard as "816": a leading eight is often the letter A.
-  for (const c of [...out]) if (/^8\d/.test(c)) out.add('A' + c.slice(1));
+  // "Oh" before a number is a zero: "oh four side two" is the run 04.
+  add(numbered.map((w, i) => ((w === 'OH' || w === 'O') && numberish(numbered[i + 1]) ? 'ZERO' : w)));
+  for (const c of [...out]) {
+    // "A16" heard as "816": a leading eight is often the letter A.
+    if (/^8\d/.test(c)) out.add('A' + c.slice(1));
+    // Runs named by digits alone are written with two ("04"): "four side
+    // two" is 04 S2, and "oh four" glued into one word is 04 too.
+    if (/^\d(?:[SEP]\d+)?$/.test(c)) out.add('0' + c);
+    const oh = /^OH?(\d.*)$/.exec(c); if (oh) out.add('0' + oh[1]);
+  }
   return [...out];
 }
 
@@ -120,18 +128,23 @@ export function resolveSpoken(guesses, lookup) {
 }
 
 // Every shelf code in one utterance, for adding stops by voice: letters
-// then digits with an optional S/E/P section, or a bay of three or more
-// digits (ShelfSearcher's pick-list rule), read the fixed way.
+// then digits with an optional S/E/P section (ShelfSearcher's pick-list
+// rule), a run named by digits alone ("04", "04 S2"), or a bay of three or
+// more digits, read the fixed way.
 export function spokenCodes(text) {
   const ws = sections(numbers(words(text)));
   const out = [];
+  const digit = w => /^\d$/.test(w || '');
   // Rejoin a letter, its digits and any section the recogniser spaced out.
+  // Digits said one at a time are one number: "zero four" is 04, "seven
+  // zero one two" the bay 7012, "A one six" A16.
   for (let i = 0; i < ws.length; i++) {
     let w = ws[i];
     if (/^[A-Z]{1,2}$/.test(w) && /^\d+$/.test(ws[i + 1] || '')) { w += ws[++i]; }
-    if (/^[A-Z]+\d+$/.test(w) && /^[SEP]$/.test(ws[i + 1] || '') && /^\d$/.test(ws[i + 2] || '')) { w += ws[i + 1] + ws[i + 2]; i += 2; }
-    else if (/^[A-Z]+\d+$/.test(w) && /^[SEP]\d$/.test(ws[i + 1] || '')) { w += ws[++i]; }
-    for (const m of w.matchAll(/[A-Z]+\d+(?:[SEP]\d)?|\d{3,}/g)) { const c = m[0].replace(/([A-Z])0+(?=\d)/g, '$1'); if (!out.includes(c)) out.push(c); }
+    if (/^[A-Z]{0,2}\d$/.test(w)) while (digit(ws[i + 1])) w += ws[++i];
+    if (/^[A-Z]*\d+$/.test(w) && /^[SEP]$/.test(ws[i + 1] || '') && digit(ws[i + 2])) { w += ws[i + 1] + ws[i + 2]; i += 2; }
+    else if (/^[A-Z]*\d+$/.test(w) && /^[SEP]\d$/.test(ws[i + 1] || '')) { w += ws[++i]; }
+    for (const m of w.matchAll(/[A-Z]+\d+(?:[SEP]\d)?|\d+[SEP]\d|\d{2,}/g)) { const c = m[0].replace(/([A-Z])0+(?=\d)/g, '$1'); if (!out.includes(c)) out.push(c); }
   }
   return out;
 }
@@ -149,7 +162,7 @@ export function spokenStops(guesses, lookup) {
     const codes = spokenCodes(g), found = [], bad = [];
     for (let i = 0; i < codes.length; i++) {
       const c = codes[i], side = (codes[i + 1] || '').match(/^[A-Z]?([SEP]\d)$/);
-      if (side && /^[A-Z]+\d+$/.test(c)) { const hit = lookup(c + side[1]); if (hit) { if (!found.includes(hit)) found.push(hit); i++; continue; } }
+      if (side && /^[A-Z]*\d+$/.test(c)) { const hit = lookup(c + side[1]); if (hit) { if (!found.includes(hit)) found.push(hit); i++; continue; } }
       // One code in the phrase: the whole phrase's mishearings, as search tries them.
       const hit = lookup(c) || resolveSpoken([codes.length === 1 ? g : c], lookup).code;
       if (hit) { if (!found.includes(hit)) found.push(hit); } else bad.push(c);
