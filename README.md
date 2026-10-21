@@ -349,7 +349,8 @@ whenever it is a real shelf, so what worked in ShelfSearcher still does;
 otherwise the recogniser's other guesses and the usual mishearings ("be 22",
 "queue 15", "for" for 4) are tried, but only a real shelf is taken. A shelf
 opens on the map; anything else opens the palette with what was heard. The
-phone's pick list has voice add (say codes, "done" to stop). Runs named by
+pick list has voice add on the phone and the PC ("Say it": say codes, "done"
+to stop). Runs named by
 digits alone are heard as they are said: "zero four side two", "oh four side
 two" and "four side two" are 04 S2, and digits said one at a time are one
 number ("seven zero one two" is the bay 7012). The reading is

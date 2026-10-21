@@ -1679,6 +1679,10 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 #hsearch:has(.voicebtn:not([hidden])) input { padding-right: 100px; }
 .frame.bars-tint .top #hsearch .voicebtn:not(.listening), .frame.rail-tint.bars-strong .top #hsearch .voicebtn:not(.listening) { color: var(--accent-ink); }
 .frame.bars-strong:not(.rail-tint) .top #hsearch .voicebtn:not(.listening) { color: rgba(255,255,255,.85); }
+/* The desk pick list's Say it, red while it listens. */
+.msh-add .pk-say { flex: none; }
+.msh-add .pk-say.listening { background: var(--red, #DC2626); border-color: var(--red, #DC2626); color: #fff; animation: voicepulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .msh-add .pk-say.listening { animation: none; } }
 .rt-top .tools button.listening { background: var(--red, #DC2626); border-color: var(--red, #DC2626); color: #fff; animation: voicepulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .rt-top .tools button.listening { animation: none; } }
 /* Dock tablet: the crew runs the decant from the dock screen (DV's pallet sheet and person picker) */
