@@ -26,6 +26,7 @@ http.createServer((req, res) => {
   const send = (o, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
   if (u.searchParams.get('store') !== 'BUS247') return send({ found: false, error: 'Unknown store code' }, 404);
   if (u.searchParams.get('storeop') === 'info') return send({ found: true, code: 'BUS247', name: 'Busselton (K2B)', storeNumber: '1241' });
+  if (u.searchParams.get('storeop') === 'deptmap') return send({ ranges: [{ from: 7000, to: 7019, dept: 'h1' }, { from: 7020, to: 7039, dept: 'h2' }, { from: 7040, to: 7059, dept: 'k2' }, { from: 7060, to: 7079, dept: 'c1' }] });
   if (pin !== '2468') return send({ error: 'Wrong PIN' }, 403);
   const sub = u.searchParams.get('sub');
   if (sub === 'history') return send({ items: [{ location: '7012', date: '2026-09-17', submittedAt: T - 86400000, readyAt: T - 86000000, submittedDoneAt: T - 85000000, metrics: { expected: 11, scanned: 10, match: 10, accuracy: 91, incorrect: 0 }, codes: ['43166022', '43199310'] }, { location: '7004', date: '2026-09-16', submittedAt: T - 2 * 86400000, readyAt: T - 2 * 86400000 + 3600000, submittedDoneAt: T - 2 * 86400000 + 7200000, metrics: { expected: 9, scanned: 9, match: 9, accuracy: 100, incorrect: 0 }, codes: ['42345501', '43006311'] }], total: 2, offset: 0, hasMore: false });

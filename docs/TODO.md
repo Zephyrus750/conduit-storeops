@@ -56,7 +56,7 @@ brackets below).
    are wanted (16; today English only), and the `P` suffix once its meaning
    is known (1; today part of the code).
 2. **Importer gaps** (only if the legacy data matters):
-   - K2B: the department map, the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH and its desk's SOH snapshots (not on the worker). History codes import right since October.
+   - K2B: the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH and its desk's SOH snapshots (not on the worker). History codes import right since October; the department map imports since 20 October.
    - DV: anything still missing once a real store is imported.
 
 ## Planned: the manager phone login (showcased 2026-10-12)
@@ -89,7 +89,7 @@ manager code alone signs a manager in.)
 - Set `CF_ACCOUNT_ID` (variable) and `BROWSER_TOKEN` (secret) for product details, then run the first catalogue build from the console.
 - In the map editor's Store Info, fill in Busselton's assembly point, address, hours and holidays, then republish (3).
 - Give each floor's walk paths a `stairs` node so pick lists can cross floors (4).
-- Enter the stockroom bay ranges in Settings › Store; the console flags every store without them.
+- Set each store's stockroom departments (Backfill review › Departments, or Import from K2B for a K2B store); the console flags every store without them.
 - Set `RETAIL_ANCHOR` in `shared/time.js` once the real retail calendar is known (5).
 - Set the map's scale in the editor (Set Scale) and republish, so shelf sizes and pick-list distances show in metres (27).
 - Add the store's price checks and department zoom boxes in the editor if you want them on the map; none of the shipped maps has any.

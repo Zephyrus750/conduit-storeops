@@ -1,11 +1,27 @@
 // Shared bits for the Stockroom views: ring colours, today's key, product
 // names from the catalogue with a repaint when they arrive.
-import { esc, today } from '../../ui.js';
+import { esc, today, DEPTS_DEFAULT, DEPT_COLOUR } from '../../ui.js';
 
 export const RING = { 'new-lines': ['New lines', '#7C3AED'], overstock: ['Overstock', '#2563EB'], 'cant-work': ['Can’t work', '#DC2626'], 'online-picks': ['Online picks', '#16A34A'] };
 export const ring = (r, on) => `<i class="ring${on ? ' on' : ''}" style="--rc:${RING[r]?.[1] || '#6B7280'}" title="${RING[r]?.[0] || r}"></i>`;
 export const STATUS = { pending: ['Needs review', 'warn'], corrected: ['Ready', 'good'], submitted: ['Submitted', 'good'] };
 export const todayKey = () => today();
+
+// Stockroom departments (K2B's list): the sub-departments a bay belongs
+// to, under their main department. Names are the company-wide ones; the
+// colour is the store map's when it has one.
+export const SR_DEPTS = DEPTS_DEFAULT.filter(d => d.id !== 'stockroom');
+export const SR_GROUPS = [['home', 'Home'], ['clothing', 'Clothing'], ['kids', 'Kids'], ['other', 'Other']];
+const srDept = id => SR_DEPTS.find(d => d.id === id);
+export const deptLabel = id => { const d = srDept(id); return d ? `${d.id.toUpperCase()} ${d.name}` : String(id || '').toUpperCase(); };
+export const deptGroup = id => srDept(id)?.group || 'other';
+export const deptColour = id => DEPT_COLOUR[id] || srDept(id)?.color || '#64748B';
+// A department as a badge with its name ("K2 Toys"), or '' for none.
+export function deptBadge(id, { short = false } = {}) {
+  if (!id) return '';
+  const d = srDept(id);
+  return `<span class="srdept" title="${esc(deptLabel(id))}"><span class="dep" style="background:${deptColour(id)}">${esc(String(id).toUpperCase())}</span>${short || !d ? '' : `<span class="nm">${esc(d.name)}</span>`}</span>`;
+}
 export const ageOf = iso => { if (!iso) return '—'; const h = (Date.now() - new Date(iso)) / 3600000; return h < 1 ? `${Math.max(1, Math.round(h * 60))}m` : h < 48 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`; };
 
 // Product names: ask the catalogue once per code; call repaint when new
@@ -123,6 +139,7 @@ export function cartonOf(kc) {
   const l = lastArrival[String(kc)]; return l?.ctn ? { ctn: l.ctn, basis: 'delivery', last: l } : null;
 }
 export const ctnOf = kc => cartonOf(kc)?.ctn || null;
+export const profilesReady = () => profiles !== null;   // false until the first load lands
 export function depthChip(kc, now = Date.now()) {
   const p = profileOf(kc);
   if (!p?.ctn) { const l = lastArrival[String(kc)]; return l?.ctn ? `<span class="ctn-chip single" title="From the latest delivery (${esc(l.date)}: ${l.units} units in ${l.cartons} cartons); it firms up once three trucks agree">▤ ${l.ctn}/ctn · latest delivery</span>` : ''; }

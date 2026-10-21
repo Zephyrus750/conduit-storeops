@@ -15,7 +15,8 @@
 //   ?sub=list&store=CODE                        { items:[{ location, date, status, … }], today, requested:[…] }
 //   ?sub=get&store=CODE&location=&date=         { found, submission:{ location, date, submittedAt, updatedAt, status, codes:[{code,scanned}], incorrectCodes?, metrics?, autoSubmitted?, submittedDoneAt? } }
 //   ?sub=negsohlist&store=CODE                  { items:[{ keycode, qty, name, location, confirmed, addedAt }], date }
-// All but info take the PIN in X-K2B-Pin. Timestamps are epoch ms.
+//   ?storeop=deptmap&store=CODE                 { ranges:[{ from, to, dept }] }   bay number ranges → department
+// All but info and deptmap take the PIN in X-K2B-Pin. Timestamps are epoch ms.
 
 import { HttpError } from './http.js';
 import { upstream } from './upstream.js';
@@ -125,10 +126,24 @@ export async function importK2B(env, { no, code, pin, dry = false, apply, fetchI
     await push(`neg:${kc}:${neg.date || today}`, it.addedAt || dayMs, 'adjustment.set', 'stockroom', { keycode: kc, date: String(neg.date || today).slice(0, 10) }, { source: 'import', qty: Math.abs(Number(it.qty) || 0), name: String(it.name || '').slice(0, 120), location: it.location || '', confirmed: !!it.confirmed });
   }
 
+  // 4. the bays' departments (K2B's deptmap): Conduit's stockroom ranges
+  // (Backfill review › Departments), so Adjustments, History and the review group bays
+  // as K2B did. Logged only when they differ from what was imported before.
+  let depts = 0;
+  try {
+    const dm = await call('storeop=deptmap', false);
+    const ranges = (Array.isArray(dm.ranges) ? dm.ranges : []).map(r => ({ from: Number(r?.from), to: Number(r?.to), dept: String(r?.dept ?? '').trim().toLowerCase() }))
+      .filter(r => Number.isInteger(r.from) && Number.isInteger(r.to) && r.from >= 0 && r.from <= r.to && r.to <= 999999 && /^[a-z0-9]{1,12}$/.test(r.dept)).slice(0, 200);
+    // The id comes from the ranges alone: importing the same ranges again is
+    // a duplicate, so it never undoes changes made in Conduit since.
+    if (ranges.length) { depts = ranges.length; events.push({ id: await importId(`deptmap:${JSON.stringify(ranges)}`, 0), store: String(no), area: 'store', type: 'store.settings.set', entity: {}, payload: { deptRanges: ranges }, at: iso(now()), v: 1 }); }
+    else warnings.push('K2B has no department ranges for this store: set them in Backfill review › Departments');
+  } catch (e) { warnings.push(`the department ranges could not be read from K2B (${e.message}): set them in Backfill review › Departments`); }
+
   if (noSubmitTime) warnings.push(`${noSubmitTime} earlier bay${noSubmitTime === 1 ? ' had' : 's had'} no submit time in K2B and imported as submitted at ${noSubmitTime === 1 ? 'its' : 'their'} ready time`);
   if (keyedFlags) warnings.push(`${keyedFlags} code${keyedFlags === 1 ? ' was' : 's were'} ticked "keyed into the PDT" in K2B; Conduit has no per-code PDT tick, so the ticks were not carried over`);
   warnings.push('SOH snapshots live on the K2B desk (its browser storage), not on the worker: paste the latest SOH report into Stock intelligence to start the classes');
-  const summary = { source: 'k2b', code: storeCode, legacy: { name: info.name || null, storeNumber: info.storeNumber || null }, counts: { history: history.length, today: todayN, requested: (list.requested || []).length, negsoh: (neg.items || []).length, events: events.length }, warnings, dry, applied: 0, duplicates: 0, rejected: [] };
+  const summary = { source: 'k2b', code: storeCode, legacy: { name: info.name || null, storeNumber: info.storeNumber || null }, counts: { depts, history: history.length, today: todayN, requested: (list.requested || []).length, negsoh: (neg.items || []).length, events: events.length }, warnings, dry, applied: 0, duplicates: 0, rejected: [] };
   if (dry || !apply) return summary;
   for (let i = 0; i < events.length; i += 400) {
     const results = await apply(events.slice(i, i + 400));

@@ -20,7 +20,8 @@ import { printSheet, code as pcode, tick, table, section, signoff } from '../../
 import { addDays } from '../../../shared/time.js';
 import { openScreenScan } from '../../screenscan.js';
 import { CLAIM_TTL_MS } from '../../../shared/reducers/stockroom.js';
-import { STATUS, todayKey, ensureNames, nameHtml, nameOf, send, copyText, loadProfiles, depthChip } from './common.js';
+import { STATUS, todayKey, ensureNames, nameHtml, nameOf, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge } from './common.js';
+import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 
 // Desk state. report: the pasted SIM report { at, byLoc, range, delta, bayAt }
 // (delta: what changed per bay since the previous paste; bayAt: when one
@@ -48,7 +49,7 @@ export default {
     mineUse(ctx.storeNo);
     const m = model(ctx);
     if (!st.sel || (!m.subs.some(s => key(s) === st.sel) && !m.requested.some(b => 'req:' + b === st.sel))) st.sel = m.pending[0] ? key(m.pending[0]) : m.ready[0] ? key(m.ready[0]) : null;
-    const head = vh('Backfill review', sub('Today’s board', `${m.pending.length} to review · ${m.requested.length} requested · ${m.ready.length} ready · ${m.submitted.length} submitted`), `${freshChip()}${st.report?.range ? `<span class="rs-range" title="The bays the pasted report covers">covers <b>${esc(st.report.range.from)}–${esc(st.report.range.to)}</b></span>` : ''}<button class="btn" data-act="paste">${ic('clip')}Paste whole report</button><button class="btn" data-act="req-paste" title="Paste or clear today's requested list">${ic('listcheck')}Requested list</button><button class="ibtn" data-act="help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>`, 'm-bfreview');
+    const head = vh('Backfill review', sub('Today’s board', `${m.pending.length} to review · ${m.requested.length} requested · ${m.ready.length} ready · ${m.submitted.length} submitted`), `${freshChip()}${st.report?.range ? `<span class="rs-range" title="The bays the pasted report covers">covers <b>${esc(st.report.range.from)}–${esc(st.report.range.to)}</b></span>` : ''}<button class="btn" data-act="paste">${ic('clip')}Paste whole report</button><button class="btn" data-act="req-paste" title="Paste or clear today's requested list">${ic('listcheck')}Requested list</button><button class="btn" data-go="srdepts" title="Which bays belong to which department, for the whole store">${ic('tag')}Departments</button><button class="ibtn" data-act="help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>`, 'm-bfreview');
     const reqd = new Set(ctx.store.get('backfill').requested[m.date] || []), band = st.report ? freshBand((Date.now() - st.report.at) / 60000) : 'r';
     // REQ: on today's requested list. PRE: in the pasted report but not
     // requested (banked ahead). The diff mark: the report covers the bay and
@@ -56,7 +57,8 @@ export default {
     const tags = s => (reqd.has(s.bay) ? '<span class="rq-tag req" title="On today’s requested list">REQ</span>' : m.sys?.[s.bay] ? '<span class="rq-tag pre" title="In the paste but not on today’s plan: banked ahead">PRE</span>' : '') + (s.status === 'pending' && m.sys?.[s.bay] && band !== 'r' ? `<span class="rq-cmp" title="Report loaded for this bay: opens straight to compare">${ic('sort')}</span>` : '') +
       (s.status === 'pending' && s.lateScans ? `<span class="rq-tag late" title="Back in review: ${s.lateScans} scan${s.lateScans === 1 ? '' : 's'} landed after it was readied">LATE</span>` : '') +
       (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) ? '<span class="rq-tag scan" title="The phone has not sent this bay to review yet">SCANNING</span>' : '');
-    const slc = (s, c, extra = '') => `<button class="slc${st.sel === key(s) ? ' sel' : ''}${extra}" data-act="sel" data-sel="${esc(key(s))}"><div class="sl"><div class="tp"><span class="loc">${esc(s.bay)}</span>${tags(s)}${heldElsewhere(ctx, m, s.bay) ? `<span class="lock" title="Being reviewed on another device">${ic('lock')}</span>` : ''}</div><div class="meta"><b title="scanned / expected">${c.scannedCount}/${c.expected}</b> scanned · ${s.updatedAt ? fmtTime(s.updatedAt) : ''}</div></div><div class="sr">${c.pct == null ? `<span class="pc" style="color:var(--dim)">—</span><span class="dc">no report</span>` : `<span class="pc" style="color:${pcol(c.pct)}">${c.pct}%</span><span class="dc">${c.add ? `<b class="a">+${c.add}</b> ` : ''}${c.delete ? `<b class="d">−${c.delete}</b>` : ''}${!c.add && !c.delete ? 'clean' : ''}</span>`}</div></button>`;
+    const ranges = settingsOf(ctx.store.get()).deptRanges || [];
+    const slc = (s, c, extra = '') => `<button class="slc${st.sel === key(s) ? ' sel' : ''}${extra}" data-act="sel" data-sel="${esc(key(s))}"><div class="sl"><div class="tp"><span class="loc">${esc(s.bay)}</span>${deptBadge(deptForBay(ranges, s.bay), { short: true })}${tags(s)}${heldElsewhere(ctx, m, s.bay) ? `<span class="lock" title="Being reviewed on another device">${ic('lock')}</span>` : ''}</div><div class="meta"><b title="scanned / expected">${c.scannedCount}/${c.expected}</b> scanned · ${s.updatedAt ? fmtTime(s.updatedAt) : ''}</div></div><div class="sr">${c.pct == null ? `<span class="pc" style="color:var(--dim)">—</span><span class="dc">no report</span>` : `<span class="pc" style="color:${pcol(c.pct)}">${c.pct}%</span><span class="dc">${c.add ? `<b class="a">+${c.add}</b> ` : ''}${c.delete ? `<b class="d">−${c.delete}</b>` : ''}${!c.add && !c.delete ? 'clean' : ''}</span>`}</div></button>`;
     const left = `<div class="srail left"><div class="srail-t">Review<span class="ct amber">${m.pending.length}</span><span class="tb"><select class="sortb" data-act="sort" title="Sort">${Object.entries(SORTS).map(([k, l]) => `<option value="${k}" ${st.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></span></div><div class="srail-list">` +
       m.pending.map(s => slc(s, s.c)).join('') +
       m.requested.map(b => `<button class="slc wait${st.sel === 'req:' + b ? ' sel' : ''}" data-act="sel" data-sel="req:${esc(b)}"><div class="sl"><div class="tp"><span class="loc">${esc(b)}</span></div><div class="meta">requested · not scanned yet${m.sys && !m.sys[b] ? ' · <span class="rq-tag miss" title="On today’s plan but not in this report">MISSING</span>' : ''}</div></div><div class="sr"><span class="pc wait">${ic('clock')}</span></div></button>`).join('') +
@@ -82,7 +84,15 @@ export default {
     });
     const onKey = e => deskKey(e, ctx);
     if (!ctx.isMobile) document.addEventListener('keydown', onKey);
-    root.addEventListener('change', e => { if (e.target.matches('[data-act="sort"]')) { st.sort = e.target.value; ctx.rerender(); } });
+    root.addEventListener('change', async e => {
+      if (e.target.matches('[data-act="sort"]')) { st.sort = e.target.value; ctx.rerender(); }
+      // A bay's department, changed here (the Stockroom code is enough): a pin that beats its range.
+      else if (e.target.matches('[data-field="bdept"]')) {
+        const bay = e.target.dataset.bay, dept = e.target.value;
+        if (await send(ctx, 'bay.dept.set', { bay }, { dept })) { const now = deptForBay(settingsOf(ctx.store.get()).deptRanges || [], bay); toast(now ? `${bay} is ${deptLabel(now)}${dept ? '' : ' (its bay range)'}` : `${bay} has no department`); }
+        else ctx.rerender();
+      }
+    });
     root.addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
       if (e.target.matches('[data-field="addloc"]')) { e.preventDefault(); addLocation(ctx, e.target.value, false); e.target.value = ''; }
@@ -95,7 +105,7 @@ export default {
     const renew = setInterval(() => claimNow(ctx, true), CLAIM_TTL_MS / 4);
     const onHide = () => { if (document.visibilityState === 'hidden') releaseClaim(ctx); else if (st.sel && !st.claimed) select(ctx, st.sel); };
     document.addEventListener('visibilitychange', onHide);
-    return [ctx.store.on('backfill', () => { ensureNames(ctx, allCodes(ctx), repaint); repaint(); loadReport(ctx).then(c => { if (c) { ensureNames(ctx, allCodes(ctx), repaint); repaint(); } }); }), () => document.removeEventListener('keydown', onKey),
+    return [ctx.store.on('settings', () => ctx.rerender()), ctx.store.on('backfill', () => { ensureNames(ctx, allCodes(ctx), repaint); repaint(); loadReport(ctx).then(c => { if (c) { ensureNames(ctx, allCodes(ctx), repaint); repaint(); } }); }), () => document.removeEventListener('keydown', onKey),
       () => { clearInterval(renew); document.removeEventListener('visibilitychange', onHide); clearTimeout(releaseSoon); releaseSoon = setTimeout(() => releaseClaim(ctx), 1500); }];
   },
 };
@@ -152,6 +162,17 @@ async function syncReport(ctx) {
 }
 // Save the report here and send it to the store; offline it waits (unsent)
 // and goes with the next load.
+// A bay's department: its own pin if it has one, else the bay range it
+// falls in. The picker changes it here (bay.dept.set); "use the bay range"
+// takes the pin out. Ranges as a whole are set in Settings › Store.
+function deptPick(ctx, bay) {
+  const m = /\d{3,6}/.exec(String(bay)); if (!m) return '';
+  const ranges = settingsOf(ctx.store.get()).deptRanges || [], n = Number(m[0]);
+  const pin = ranges.find(r => r.from === n && r.to === n), fromRange = deptForBay(ranges.filter(r => r !== pin), bay), cur = pin?.dept || fromRange || '';
+  const none = pin ? `Use the bay range (${fromRange ? deptLabel(fromRange) : 'none'})` : fromRange ? `${deptLabel(fromRange)} · bay range` : 'No department yet';
+  return `<label class="bdept" title="The department bay ${esc(bay)} belongs to: Adjustments and History group by it"><span class="dot" style="background:${cur ? deptColour(cur) : 'transparent'}"></span><select data-field="bdept" data-bay="${esc(bay)}" aria-label="Department for bay ${esc(bay)}"><option value="">${esc(none)}</option>` +
+    SR_GROUPS.map(([g, gl]) => `<optgroup label="${gl}">${SR_DEPTS.filter(d => d.group === g).map(d => `<option value="${d.id}"${pin?.dept === d.id ? ' selected' : ''}>${esc(deptLabel(d.id))}</option>`).join('')}</optgroup>`).join('') + `</select></label>`;
+}
 // The report's SOH for a code, beside its name in the review (red at 0 or less).
 function sohTag(kc) { const q = st.report?.soh?.[kc]; return q == null ? '' : ` <span class="rsoh${q <= 0 ? ' neg' : ''}" title="SOH on today's report">SOH ${esc(q)}</span>`; }
 // The pasted report's items at 0 or less (its SOH column) go to today's
@@ -211,7 +232,7 @@ function middle(ctx, m) {
   if (!st.sel) return `<div class="bf-empty"><span class="ic">${ic('m-bfreview')}</span><b>Nothing on the board yet</b><small>Phones send bays here as they scan. Request a bay on the left to put it on the day list.</small></div>`;
   if (st.sel.startsWith('req:')) {
     const bay = st.sel.slice(4), sys = m.sys?.[bay] || null;
-    return `<div class="smid-h"><span class="bigloc">${esc(bay)}</span><span class="bc" title="Bay ${esc(bay)}: scan into the PDT">${barcodeSvg(bay, { module: 1.3, height: 30, text: false })}</span><span class="status req">${ic('clock')}Requested</span>${pin(bay)}<span class="hm"><span><b>${sys ? sys.length : '—'}</b>expected</span><span><b>0</b>scanned</span></span><span class="sp"></span><button class="btn" data-act="cancel-req" data-bay="${esc(bay)}">${ic('x')}Cancel request</button></div>` +
+    return `<div class="smid-h"><span class="bigloc">${esc(bay)}</span>${deptPick(ctx, bay)}<span class="bc" title="Bay ${esc(bay)}: scan into the PDT">${barcodeSvg(bay, { module: 1.3, height: 30, text: false })}</span><span class="status req">${ic('clock')}Requested</span>${pin(bay)}<span class="hm"><span><b>${sys ? sys.length : '—'}</b>expected</span><span><b>0</b>scanned</span></span><span class="sp"></span><button class="btn" data-act="cancel-req" data-bay="${esc(bay)}">${ic('x')}Cancel request</button></div>` +
       `<div class="reqgrid"><div class="reqcard">${ic('phone')}<b>Waiting for the floor</b><p>Send someone to <b>${esc(bay)}</b> with a phone: the first scan turns this into a review${sys ? ' and compares it against the pasted report on the spot' : ''}.</p><a class="btn" data-go="daylist">${ic('listcheck')}Day list</a></div>` +
       `<div class="reqlist"><div class="scol-t">${sys ? 'In the report' : 'No report covers this bay'}<span class="ct">${sys ? sys.length : 0}</span></div>${(sys || []).map(c => `<div class="reqrow"><span class="kc">${esc(c)}</span><span class="nm">${nameHtml(c)}</span></div>`).join('')}</div></div>`;
   }
@@ -219,7 +240,7 @@ function middle(ctx, m) {
   const sys = m.sys ? m.sys[s.bay] || null : null, rows = reviewRows(s, sys), c = compareCounts(s, sys);
   const ro = s.status === 'submitted';
   const stat = STATUS[s.status];
-  const head = `<div class="smid-h"><span class="bigloc">${esc(s.bay)}</span>${ro ? '' : `<span class="ico" title="Correct this bay number" data-act="rename">${ic('edit')}</span>`}<span class="bc" title="Bay ${esc(s.bay)}: scan into the PDT">${barcodeSvg(s.bay, { module: 1.3, height: 30, text: false })}</span><span class="status ${stat[1]}">${ro ? ic('check') : ''}${stat[0]}</span>${ro ? `<span class="cs-dim subat">at ${fmtTime(s.submittedDoneAt)}${s.autoSubmitted ? ' · auto' : ''}</span>` : ''}<span class="hm"><span><b>${c.expected}</b>expected</span><span><b>${c.scannedCount}</b>scanned</span><span><b class="c-green">${c.match}</b>match</span><span><b style="color:${pcol(c.pct)}">${c.pct == null ? '—' : c.pct + '%'}</b>accuracy</span><span><b class="${c.incorrect ? 'c-red' : ''}">${c.incorrect}</b>incorrect</span></span><span class="sp"></span>` +
+  const head = `<div class="smid-h"><span class="bigloc">${esc(s.bay)}</span>${ro ? '' : `<span class="ico" title="Correct this bay number" data-act="rename">${ic('edit')}</span>`}${deptPick(ctx, s.bay)}<span class="bc" title="Bay ${esc(s.bay)}: scan into the PDT">${barcodeSvg(s.bay, { module: 1.3, height: 30, text: false })}</span><span class="status ${stat[1]}">${ro ? ic('check') : ''}${stat[0]}</span>${ro ? `<span class="cs-dim subat">at ${fmtTime(s.submittedDoneAt)}${s.autoSubmitted ? ' · auto' : ''}</span>` : ''}<span class="hm"><span><b>${c.expected}</b>expected</span><span><b>${c.scannedCount}</b>scanned</span><span><b class="c-green">${c.match}</b>match</span><span><b style="color:${pcol(c.pct)}">${c.pct == null ? '—' : c.pct + '%'}</b>accuracy</span><span><b class="${c.incorrect ? 'c-red' : ''}">${c.incorrect}</b>incorrect</span></span><span class="sp"></span>` +
     (ro ? '' : `<button class="btn" data-act="bay-paste" title="Paste this bay's inventory list from SIM">${ic('clip')}${sys ? 'Re-check' : 'Paste list'}</button><button class="btn" data-act="bay-screen" title="Read this bay's list off the SIM screen">${ic('expand')}Screen scan</button>`) + pin(s.bay) +
     (s.status === 'pending' ? `<button class="btn ready" data-act="ready" title="Mark ready: writes these metrics to History and frees the bay (Enter)">${ic('check')}Ready</button>` : s.status === 'corrected' ? `<button class="btn submitb" data-act="submit">${ic('checks')}Submit</button><button class="btn" data-act="reopen">${ic('refresh')}Reopen</button>` : `<button class="btn" data-act="unfinalise" title="Back to Ready: it was not finalised on the PDT after all">${ic('refresh')}Unfinalise</button><button class="btn" data-act="reopen" title="Back into review">Reopen</button>`) +
     `<span class="ico bin" title="Delete this bay" data-act="delete">${ic('trash')}</span></div>`;

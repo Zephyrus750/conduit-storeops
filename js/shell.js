@@ -540,9 +540,14 @@ function show(id, arg) {
     content.classList.toggle('mv', useMobile);
     content.innerHTML = html;
   }
-  scopeListeners(content, viewOff.signal);
+  // The title bar (Settings › Display) lifts the view's header, its title
+  // and its buttons, into the top bar. It stays the view's: the listeners
+  // the view puts on its element reach it, and its lookups find it.
+  const hs = $('#hdrslot'); hs.innerHTML = '';
+  const lifted = !useMobile && frame.classList.contains('hdr-title') ? content.querySelector('.vh') : null;
+  if (lifted) hs.appendChild(lifted);
+  scopeListeners(content, viewOff.signal, lifted ? [hs] : []);
   if (!(useMobile && mountStrip(view))) content.classList.remove('sheet-open');
-  const hs = $('#hdrslot'); hs.innerHTML = ''; if (!useMobile && frame.classList.contains('hdr-title')) { const vh0 = content.querySelector('.vh'); if (vh0) hs.appendChild(vh0); }
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   if (keep) restorePlace(content, keep); else content.scrollTop = 0;
   team?.repaint();

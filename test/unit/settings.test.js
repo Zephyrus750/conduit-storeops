@@ -93,3 +93,45 @@ test('feedback.send: kept with its view and version, kinds checked, newest 200 k
   for (let i = 0; i < 205; i++) apply(s, ev('n' + i, { kind: 'idea', text: 'more ' + i }));
   assert.equal(s.feedback.length, 200); assert.equal(s.feedback.at(-1).text, 'more 204');
 });
+
+test('one bay’s department: a pin that beats its range, changed or cleared from Backfill review with the Stockroom code', async () => {
+  const { deptForBay } = await import('../../shared/reducers/store.js');
+  const s = initialState();
+  const set = (bay, dept, role = 'stockroom') => apply(s, { ...ev('bay.dept.set', { bay }, { dept }), actor: { role, device: 'SR1', owner: false } });
+  assert.deepEqual(CATALOGUE['bay.dept.set'].roles, ['stockroom']);
+  assert.equal(apply(s, ev('store.settings.set', {}, { deptRanges: [{ from: 7000, to: 7099, dept: 'h1' }] })), null);
+  assert.equal(set('7057', 'h2'), null);
+  assert.equal(deptForBay(s.settings.deptRanges, '7057'), 'h2', 'the pin wins over 7000–7099');
+  assert.equal(deptForBay(s.settings.deptRanges, '7056'), 'h1');
+  assert.equal(set('7057', 'K2'), null, 'changed');
+  assert.deepEqual(s.settings.deptRanges, [{ from: 7000, to: 7099, dept: 'h1' }, { from: 7057, to: 7057, dept: 'k2' }], 'one pin a bay, lower-case');
+  assert.equal(set('7057', 'k2')?.code, 'invalid_event', 'no change is not logged');
+  assert.equal(set('7057', ''), null, 'cleared');
+  assert.equal(deptForBay(s.settings.deptRanges, '7057'), 'h1', 'back to its range');
+  assert.equal(set('7057', '')?.code, 'invalid_event');
+  assert.equal(set('BULK', 'h1')?.code, 'invalid_event', 'a bay needs its number');
+  assert.equal(set('7210', 'k 2')?.code, 'invalid_event');
+  assert.equal(set('7210', 'c1'), null, 'a bay with no range yet');
+  assert.equal(deptForBay(s.settings.deptRanges, '7210'), 'c1');
+});
+
+test('the whole department map from the Departments editor: replaced in one change, checked first, cleared to none', async () => {
+  const { deptForBay } = await import('../../shared/reducers/store.js');
+  const s = initialState();
+  const save = (ranges, role = 'stockroom') => apply(s, { ...ev('dept.ranges.set', {}, { ranges }), actor: { role, device: 'SR1', owner: false } });
+  assert.deepEqual(CATALOGUE['dept.ranges.set'].roles, ['stockroom']);
+  assert.equal(validateEvent(ev('dept.ranges.set', {}, { ranges: 'h1' })).code, 'invalid_event', 'a list');
+  assert.equal(save([{ from: 7100, to: 7199, dept: 'K2' }, { from: 7000, to: 7099, dept: 'h1' }, { from: 7057, to: 7057, dept: 'h2' }]), null);
+  assert.deepEqual(s.settings.deptRanges, [{ from: 7000, to: 7099, dept: 'h1' }, { from: 7057, to: 7057, dept: 'h2' }, { from: 7100, to: 7199, dept: 'k2' }], 'sorted, lower-case');
+  assert.equal(deptForBay(s.settings.deptRanges, '7057'), 'h2');
+  assert.equal(s.settings.by, 'SR1');
+  const before = JSON.stringify(s.settings);
+  assert.equal(save([{ from: 7000, to: 7099, dept: 'h1' }, { from: 7057, to: 7057, dept: 'h2' }, { from: 7100, to: 7199, dept: 'k2' }])?.code, 'invalid_event', 'unchanged is not logged');
+  assert.equal(save([{ from: 7000, to: 7099, dept: 'h1' }, { from: 7200, to: 7150, dept: 'c1' }])?.code, 'invalid_event', 'a range backwards');
+  assert.equal(save([{ from: 7000, to: 7099, dept: 'h 1' }])?.code, 'invalid_event', 'a bad code');
+  assert.equal(save(Array.from({ length: 201 }, (_, i) => ({ from: i, to: i, dept: 'h1' })))?.code, 'invalid_event', 'at most 200');
+  assert.equal(JSON.stringify(s.settings), before, 'a refused save changes nothing');
+  assert.equal(save([]), null, 'cleared');
+  assert.equal(s.settings.deptRanges, null);
+  assert.equal(save([])?.code, 'invalid_event', 'already none');
+});
