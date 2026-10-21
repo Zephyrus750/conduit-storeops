@@ -155,9 +155,18 @@ const needsHelp = el => !(NATIVE.has(el.tagName) || (el.tagName === 'A' && el.ha
 // Every listener added to `el` from now on ends when `signal` aborts: an
 // element that outlives one view (the phone's map, kept between map modes)
 // drops that view's listeners when the next view mounts.
-export function scopeListeners(el, signal) {
-  el.addEventListener = (type, fn, opts) => EventTarget.prototype.addEventListener.call(el, type, fn,
-    opts == null || typeof opts === 'boolean' ? { capture: !!opts, signal } : { ...opts, signal: opts.signal && AbortSignal.any ? AbortSignal.any([opts.signal, signal]) : signal });
+// `also`: elements that belong to the view though they sit elsewhere (the
+// title bar lifts a view's header into the top bar): its listeners go on
+// them too, and its lookups find what is in them.
+export function scopeListeners(el, signal, also = []) {
+  el.addEventListener = (type, fn, opts) => {
+    const o = opts == null || typeof opts === 'boolean' ? { capture: !!opts, signal } : { ...opts, signal: opts.signal && AbortSignal.any ? AbortSignal.any([opts.signal, signal]) : signal };
+    for (const t of [el, ...also]) EventTarget.prototype.addEventListener.call(t, type, fn, o);
+  };
+  if (!also.length) return;
+  const one = el.querySelector.bind(el), all = el.querySelectorAll.bind(el);
+  el.querySelector = sel => one(sel) ?? also.reduce((f, a) => f ?? a.querySelector(sel), null);
+  el.querySelectorAll = sel => [...all(sel), ...also.flatMap(a => [...a.querySelectorAll(sel)])];
 }
 export function enhanceControls(root = document) {
   const els = root.matches?.(ACTIONABLE) ? [root, ...root.querySelectorAll(ACTIONABLE)] : root.querySelectorAll(ACTIONABLE);
