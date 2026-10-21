@@ -160,6 +160,31 @@ export function spokenStops(guesses, lookup) {
   }
   return best ? { codes: best.codes, bad: best.bad, heard: best.heard } : { codes: [], bad: [], heard: gs[0] || '' };
 }
+// The stops a typed or pasted list names (the pick list's Add), checked
+// against the map like spoken ones. One code per word, a side or end written
+// apart from its run joined to it whatever the run is called: "A16 S1",
+// "04 S2" (a run named by digits alone) and "A16 - S1" are one shelf each,
+// and "A16 S1 S2" is two shelves of A16. A side the run does not have
+// ("A16 S9") is reported as written, never widened to the whole run.
+//   lookup(code) → the canonical code when the map has it, else null
+export function typedStops(text, lookup) {
+  const ws = String(text || '').toUpperCase().split(/[\s,;]+/).filter(w => w && !/^[-–]+$/.test(w));
+  const codes = [], bad = [], add = c => { if (!codes.includes(c)) codes.push(c); };
+  const side = w => /^[SE]\d+$/.test(w);
+  let run = null;   // the run the last word named, for a side that follows it
+  for (let i = 0; i < ws.length; i++) {
+    const w = ws[i], next = ws[i + 1] || '';
+    if (side(next)) {
+      const hit = lookup(w + next);
+      if (hit) { add(hit); run = w; i++; continue; }
+      if (lookup(w)) { bad.push(`${w} ${next}`); run = w; i++; continue; }
+    }
+    if (side(w) && run) { const hit = lookup(run + w); if (hit) { add(hit); continue; } }
+    const hit = lookup(w);
+    if (hit) { add(hit); run = side(w) ? run : w; } else { bad.push(w); run = null; }
+  }
+  return { codes, bad };
+}
 // "C4S1" is a shelf of the run "C4".
 export const ofRun = (shelf, run) => shelf.length > run.length && shelf.startsWith(run) && /^[SEP]\d$/.test(shelf.slice(run.length));
 

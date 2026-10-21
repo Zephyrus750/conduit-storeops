@@ -4,7 +4,7 @@
 import { $, ic, esc, vh, sub, dep, DEPT_NAME, toast } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, canonCode, setStrip, sx } from '../map.js';
 import { voiceSupported, dictate } from '../voice.js';
-import { spokenCodes, spokenStops, ofRun, STOP_WORDS } from '../../shared/voice.js';
+import { spokenCodes, spokenStops, typedStops, ofRun, STOP_WORDS } from '../../shared/voice.js';
 import { haptic } from '../device.js';
 
 // Voice add on the phone (ShelfSearcher's): say shelf codes, "done" to stop.
@@ -26,6 +26,8 @@ export default {
   mount(ctx, root) {
     const map = mountMap($('#mapstage', root), { cls: 'pk', onSelect: info => { if (info.kind !== 'shelf') return; const m = model(ctx); if (m.items.some(i => canonCode(i.code) === info.code)) return; save(ctx, [...m.items, { code: info.code, completed: false }]); } });
     bindMapChrome(root, map);
+    // A typed, pasted or spoken code as the map names it, or null (groupsFor through map.groups).
+    const lookup = c => (map.groups(c).length ? canonCode(c) : null);
     const paint = () => {
       const m = model(ctx);
       const marks = {}; for (const i of m.items) marks[i.code] = i.completed ? 'done' : 'stop';
@@ -46,7 +48,7 @@ export default {
       else if (act === 'remove') await save(ctx, m.items.filter(i => i.code !== code));
       else if (act === 'clear') { const n = m.items.length; if (n && confirm(`Clear all ${n} stop${n === 1 ? '' : 's'} from the pick list?`)) await save(ctx, []); }
       else if (act === 'pick-next') { const n = walked(map, m).find(i => !i.completed); if (n) await save(ctx, m.items.map(i => i === n ? { ...i, completed: true } : i)); }
-      else if (act === 'add') { const inp = $('[data-field="add"]', root); const codes = [...new Set(inp.value.toUpperCase().replace(/([A-Z]+\d+)\s*[- ]\s*([SE]\d+)/g, '$1$2').split(/[\s,;]+/).map(canonCode).filter(Boolean))]; const bad = codes.filter(c => !map.groups(c).length); if (bad.length) toast(`Not in this store: ${bad.join(', ')}`, 'bad'); const ok = codes.filter(c => map.groups(c).length && !m.items.some(i => i.code === c)); if (ok.length) await save(ctx, [...m.items, ...ok.map(code => ({ code, completed: false }))]); inp.value = ''; }
+      else if (act === 'add') { const inp = $('[data-field="add"]', root); const { codes, bad } = typedStops(inp.value, lookup); if (bad.length) toast(`Not in this store: ${bad.join(', ')}`, 'bad'); const ok = codes.filter(c => !m.items.some(i => i.code === c)); if (ok.length) await save(ctx, [...m.items, ...ok.map(code => ({ code, completed: false }))]); inp.value = ''; }
       else if (act === 'plan') { const order = map.planOrder(m.items.map(i => i.code)); const by = Object.fromEntries(m.items.map(i => [i.code, i])); await save(ctx, order.map(c => by[c])); setRouteView(false); toast('List reordered by the shortest walk'); }
       else if (act === 'route-on' || act === 'route-off') { setRouteView(act === 'route-on'); paint(); }
       else if (act === 'zoom') { map.zoomTo(code); map.select(code); map.ping(code); }
@@ -77,7 +79,6 @@ export default {
       // after its shelf is ignored, so a phrase heard in pieces adds one stop.
       let recent = null;
       const say = (msg, bad) => toast(msg, bad ? 'bad' : '', null, 'voice');
-      const lookup = c => (map.groups(c).length ? canonCode(c) : null);
       dictation = dictate({
         onUtterance: guesses => {
           const text = guesses[0];

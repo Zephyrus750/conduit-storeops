@@ -76,3 +76,17 @@ test('pick list stops: checked against the map, a split side rejoined, the shelf
   assert.deepEqual(spokenStops(['', 'hello'], look), { codes: [], bad: [], heard: 'hello' });
   assert.ok(ofRun('C4S1', 'C4') && ofRun('A16E2', 'A16') && !ofRun('C41', 'C4') && !ofRun('C4', 'C4'));
 });
+
+test('pick list paste: a side written apart joins its run, numbers-only runs too; a missing side is not widened', async () => {
+  const { typedStops } = await import('../../shared/voice.js');
+  const STOPS = new Set(['A16', 'A16S1', 'A16S2', '04', '04S2', '05', 'B7S2']);
+  const canon = c => c.toUpperCase().replace(/[\s\-_.]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1');
+  const look = c => (STOPS.has(canon(c)) ? canon(c) : null);
+  assert.deepEqual(typedStops('04 S2', look), { codes: ['04S2'], bad: [] }, 'the Busselton case: a run named 04');
+  assert.deepEqual(typedStops('A16 S1\nB7-S2, 04S2', look).codes, ['A16S1', 'B7S2', '04S2']);
+  assert.deepEqual(typedStops('A16 - S1; 05', look).codes, ['A16S1', '05']);
+  assert.deepEqual(typedStops('A16 S1 S2', look).codes, ['A16S1', 'A16S2'], 'two sides of one run');
+  assert.deepEqual(typedStops('A16 S9 04', look), { codes: ['04'], bad: ['A16 S9'] }, 'a side the run lacks is reported, not widened to A16');
+  assert.deepEqual(typedStops('Z99 A16 A16', look), { codes: ['A16'], bad: ['Z99'] });
+  assert.deepEqual(typedStops('', look), { codes: [], bad: [] });
+});
