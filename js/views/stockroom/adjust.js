@@ -13,8 +13,9 @@ import { printSheet, code, tick, table, section } from '../../print.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { todayKey, ensureNames, productHtml, kcCopy, nameOf, priceOf, send, loadProfiles, depthChip, ghostChip, cartonOf, profilesReady, SR_GROUPS, deptGroup, deptLabel, deptBadge } from './common.js';
 import { shrinkValue, cartonShrink, cartonUnits } from '../../../shared/stockintel.js';
+import { gs1Parse } from '../../../shared/gs1.js';
 
-const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '' };
+const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '', mPair: null };
 const NONE = '\u0000none', OTHER = '\u0000other';
 const SOURCE = { report: 'Morning report', review: 'Backfill review', phone: 'Phone', desk: 'Typed', screen: 'Screen scan', import: 'K2B' };
 function model(ctx) {
@@ -111,7 +112,7 @@ export default {
     loadProfiles(ctx, repaint);
     root.addEventListener('click', e => onClick(e, ctx, root, repaint));
     root.addEventListener('change', e => { if (e.target.matches('[data-field="day"]')) { st.date = e.target.value === todayKey() ? null : e.target.value; st.group = 'all'; st.dept = 'all'; ctx.rerender(); } });
-    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.matches('[data-field="tick"]')) { e.preventDefault(); tickOff(ctx, e.target); return; } if (e.target.matches('[data-field="kc"],[data-field="qty"],[data-field="loc"]')) { e.preventDefault(); root.querySelector('[data-act="add"]')?.click(); } if (e.target.matches('[data-field="mkc"]')) { e.preventDefault(); st.mKc = parseKeycodes(e.target.value)[0] || ''; if (!st.mKc) toast('That is not a keycode', 'bad'); else ensureNames(ctx, [st.mKc], repaint); repaint(); } });
+    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.matches('[data-field="tick"]')) { e.preventDefault(); tickOff(ctx, e.target); return; } if (e.target.matches('[data-field="kc"],[data-field="qty"],[data-field="loc"]')) { e.preventDefault(); root.querySelector('[data-act="add"]')?.click(); } if (e.target.matches('[data-field="mkc"]')) { e.preventDefault(); takeCode(ctx, e.target.value, repaint); } if (e.target.matches('[data-field="mpairkc"]')) { e.preventDefault(); pairCode(ctx, e.target.value, repaint); } });
     return [ctx.store.on('adjustments', () => { ensureNames(ctx, model(ctx).items.map(i => i.kc), repaint); repaint(); })];
   },
 };
@@ -123,7 +124,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'dept') { st.dept = a.dataset.v; ctx.rerender(); }
   else if (act === 'done' || act === 'undone') await send(ctx, 'adjustment.done', { keycode: a.dataset.kc, date: m.date }, act === 'undone' ? { undo: true } : {});
   else if (act === 'remove') await send(ctx, 'adjustment.remove', { keycode: a.dataset.kc, date: m.date });
-  else if (act === 'add') { const kc = parseKeycodes(root.querySelector('[data-field="kc"]')?.value)[0]; const qty = Number(root.querySelector('[data-field="qty"]')?.value) || 0; const loc = root.querySelector('[data-field="loc"]')?.value.trim() || ''; if (!kc) return toast('Keycode needed', 'bad'); const r = await send(ctx, 'adjustment.set', { keycode: kc, date: m.date }, { qty, location: loc, confirmed: false, name: nameOf(kc) || '', source: 'desk' }); if (r) { for (const f of ['kc', 'qty', 'loc']) { const i = root.querySelector(`[data-field="${f}"]`); if (i) i.value = ''; } root.querySelector('[data-field="kc"]')?.focus(); } }
+  else if (act === 'add') { const raw = root.querySelector('[data-field="kc"]')?.value || '', g = barcodeOf(raw), kc = g ? ctx.store.get('apnPairs')?.[g]?.kc : keycodeOf(raw); if (g && !kc) return toast('That is an item barcode: type the keycode from the shelf label', 'bad'); const qty = Number(root.querySelector('[data-field="qty"]')?.value) || 0; const loc = root.querySelector('[data-field="loc"]')?.value.trim() || ''; if (!kc) return toast('Keycode needed', 'bad'); const r = await send(ctx, 'adjustment.set', { keycode: kc, date: m.date }, { qty, location: loc, confirmed: false, name: nameOf(kc) || '', source: 'desk' }); if (r) { for (const f of ['kc', 'qty', 'loc']) { const i = root.querySelector(`[data-field="${f}"]`); if (i) i.value = ''; } root.querySelector('[data-field="kc"]')?.focus(); } }
   else if (act === 'screen') openScreenScan(ctx, { mode: 'soh', onUse: async ({ codes, locs }) => {
     // Each code read off the report becomes a below-zero item (SOH 0: the report lists stock at zero or less), at the location it was read at.
     const have = new Set(model(ctx).items.map(i => i.kc)); let ok = 0, dup = 0;
@@ -135,7 +136,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-qty') { st.mQty = Math.max(0, st.mQty + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-soh') { st.mSoh = Math.min(0, st.mSoh + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-flag') { if (!st.mKc) return; const r = await send(ctx, 'adjustment.set', { keycode: st.mKc, date: m.date }, { qty: st.mSoh, counted: st.mQty, location: '', confirmed: false, name: nameOf(st.mKc) || '', source: 'phone' }); if (r) { toast(`${st.mKc} flagged`); st.mKc = ''; st.mSoh = 0; st.mQty = 1; repaint(); } }
-  else if (act === 'm-clear') { st.mKc = ''; repaint(); }
+  else if (act === 'm-clear') { st.mKc = ''; st.mPair = null; repaint(); }
 }
 // A scanned keycode is ticked off the list being shown.
 async function tickOff(ctx, input) {
@@ -147,10 +148,29 @@ async function tickOff(ctx, input) {
   if (await send(ctx, 'adjustment.done', { keycode: kc, date: m.date })) toast(`${kc} adjusted ✓`);
   document.querySelector('#content [data-field="tick"]')?.focus();
 }
+// A scanned item barcode is not a keycode: the store's pair for it (learned
+// in Cages or here) gives the keycode, or the phone asks for it once and
+// remembers the pair for everyone (cage.pair).
+const barcodeOf = raw => { const v = String(raw || '').trim(); const g = v.replace(/\D/g, '').length >= 12 || v.startsWith('(') ? gs1Parse(v) : null; return g?.gtin || null; };
+const keycodeOf = raw => parseKeycodes(raw).find(k => k.length <= 8) || '';
+function takeCode(ctx, raw, repaint) {
+  const g = barcodeOf(raw);
+  if (g) { const kc = ctx.store.get('apnPairs')?.[g]?.kc; st.mKc = kc || ''; st.mPair = kc ? null : g; }
+  else { st.mKc = keycodeOf(raw); st.mPair = null; if (!st.mKc) toast('That is not a keycode', 'bad'); }
+  if (st.mKc) ensureNames(ctx, [st.mKc], repaint);
+  repaint();
+  if (st.mPair) setTimeout(() => document.querySelector('[data-field="mpairkc"]')?.focus(), 30);
+}
+async function pairCode(ctx, raw, repaint) {
+  const kc = keycodeOf(raw); if (!kc) return toast('Scan or type the keycode on the shelf label or carton', 'bad');
+  const apn = st.mPair; st.mPair = null; st.mKc = kc; ensureNames(ctx, [kc], repaint); repaint();
+  if (apn && await send(ctx, 'cage.pair', { apn }, { keycode: kc })) toast(`${apn} paired with ${kc}: next time it needs no keycode`);
+}
 function mobile(ctx) {
   const m = model(ctx);
   return mhead('Adjust SOH', 'Stock is here but the system says no') + (m.shrink.total || m.shrink.carton ? `<div class="adj-shrinks mv">${m.shrink.total ? `<div class="adj-shrinkline">${ic('dollar')}<span><b>${money(m.shrink.total)}</b> potential shrink today${m.shrink.unpriced ? ` · ${m.shrink.unpriced} without a price` : ''}</span></div>` : ''}${m.shrink.carton ? `<div class="adj-shrinkline ctn">${ic('box')}<span><b>${money(m.shrink.carton)}</b> to one carton${m.shrink.noSize ? ` · ${m.shrink.noSize} without a carton size` : ''}</span></div>` : ''}</div>` : '') +
     mscan('Scan the product', `<input data-field="mkc" inputmode="numeric" autocomplete="off" placeholder="Keycode or item barcode" value="${esc(st.mKc)}" enterkeyhint="done">`, 'Then enter the SOH the PDT shows and count the shelf') +
+    (st.mPair ? `<div class="mv-last"><small>Item barcode ${esc(st.mPair)}</small><b>Which keycode is it?</b><span>Scan or type the keycode on the shelf label or carton, once: the store remembers it.</span></div>` + mscan('Keycode', `<input data-field="mpairkc" inputmode="numeric" autocomplete="off" placeholder="Keycode" enterkeyhint="done">`, 'From the shelf label or the carton') + mfoot(mghost('Not this one', ' data-act="m-clear"')) : '') +
     (st.mKc ? `<div class="mv-last"><small>Scanned</small><b>${kcCopy(st.mKc)}</b><span>${productHtml(st.mKc)}</span></div><div class="mv-stepper"><button data-act="m-soh" data-d="-1" aria-label="Lower system SOH">−</button><div><b>${st.mSoh}</b><small>system SOH (PDT)</small></div><button data-act="m-soh" data-d="1" aria-label="Raise system SOH">+</button></div><div class="mv-stepper"><button data-act="m-qty" data-d="-1" aria-label="One fewer found">−</button><div><b>${st.mQty}</b><small>found on the shelf</small></div><button data-act="m-qty" data-d="1" aria-label="One more found">+</button></div>` + mfoot(mbig('Flag for adjustment', '', 'sort', ' data-act="m-flag"') + mghost('Not this one', ' data-act="m-clear"')) : '') +
     (m.items.length ? `<div class="mv-sub">Today · ${m.items.length}</div><div class="mv-rows">${m.items.slice(0, 6).map(i => `<div class="mv-row"><span class="a">${i.qty}</span><span class="b">${kcCopy(i.kc)} ${productHtml(i.kc, i.name)}</span><span class="c">${[i.location ? esc(i.location) : '', toCarton(i) != null ? `<b class="loss1">${money(toCarton(i))}</b>` : ''].filter(Boolean).join(' · ')}</span></div>`).join('')}</div>` : '');
 }

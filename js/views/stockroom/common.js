@@ -160,6 +160,24 @@ export async function send(ctx, type, entity, payload = {}) {
 }
 export const allProfiles = () => profiles || {};
 
+// Backfill records older than the live state: retention moves finished bays
+// to the worker's archive after 60 days (decision 29). History and Trends
+// add them from the history route, read once an hour; until the first read
+// lands (or offline) they show the live state and say so.
+let arch = { store: null, recs: null, at: 0, loading: null, failed: false };
+const archRec = r => ({ bay: r.bay, date: r.date, status: r.status, readyAt: r.readyAt || null, submittedDoneAt: r.submittedAt || null, metrics: { expected: r.expected, scanned: r.scanned, match: r.match, accuracy: r.accuracy, incorrect: r.incorrect }, codes: {}, incorrect: [], trimmed: true, codeCount: r.codes || 0, autoSubmitted: !!r.auto, archived: true });
+export function loadArchive(ctx, repaint) {
+  if (arch.store !== ctx.storeNo) arch = { store: ctx.storeNo, recs: null, at: 0, loading: null, failed: false };
+  const a = arch; if (a.loading || Date.now() - a.at < 3600000) return;
+  a.loading = (async () => { const rows = []; for (let offset = 0; ; offset += 500) { const r = await ctx.api(`/v1/store/${ctx.storeNo}/history/backfill?only=archive&offset=${offset}&limit=500`); rows.push(...(r?.rows || [])); if (!r?.rows?.length || offset + 500 >= r.total) return rows; } })()
+    .then(rows => { a.recs = rows.map(archRec); a.failed = false; a.at = Date.now(); paintSoon(repaint); })
+    .catch(() => { a.failed = true; a.at = Date.now() - 3540000; paintSoon(repaint); })   // try again in a minute
+    .finally(() => { a.loading = null; });
+}
+// The archived records the live subs no longer hold, and the load state.
+export const archivedRecs = subs => (arch.recs || []).filter(r => !subs[`${r.bay}:${r.date}`]);
+export const archiveState = () => arch.recs ? 'ready' : arch.failed ? 'failed' : 'loading';
+
 // "Did you mean" chips work wherever a product name is shown (review,
 // cages, adjustments, history, Quick Scan): a tap copies the likely code.
 if (typeof document !== 'undefined') document.addEventListener('click', e => {

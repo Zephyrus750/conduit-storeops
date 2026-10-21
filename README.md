@@ -115,7 +115,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/admin/service` | owner | live: the console's Service page: worker version, bindings and secrets as set or not (never their values), the catalogue build, each store object (events, live data size, last event, nightly run, next alarm, sockets, photos) and the last 100 errors recorded |
 | `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
-| `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
+| `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV; `only=archive` pages just the rows retention moved out of the live state |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
 | `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }], merge? }`, ≤ 20,000 rows, one row a keycode a location; a re-save that day replaces it, or with `merge: true` replaces only the locations it holds and carries its store-wide SOH into the rest); logs `soh.publish`; every day is kept for 14 days, then the last of each week for 26 weeks |
@@ -215,8 +215,9 @@ The Stockroom workspace is the first ported module with live users
 already in the log:
 
 - **Backfill review** (`bfreview`): the desk. Phones scan bays; the desk
-  pastes the SIM report (kept on the device under `simreport:<store>:<date>`,
-  never sent to the worker, as K2B did), compares every bay (add / delete /
+  pastes the SIM report (kept on the device under `simreport:<store>:<date>`
+  and saved to the worker, `POST /v1/store/:no/backfill/report`, so the
+  store's other desks and phones read the same one), compares every bay (add / delete /
   match, `shared/backfill.js`), marks codes incorrect, flags a code to
   Adjustments, requests bays for the day list, marks Ready (the system-only
   codes are written as `scanned:false` so the worker's metrics match the
@@ -497,3 +498,10 @@ finish guard, as Decant Visualiser's dock tablet. Landing, removing, editing
 and finalising stay in Receiving, which on the phone also has Team & plan
 (roles, breaks, the huddle, the plan) and Complete decant (keep the
 unfinished pallets as rollover, or clear the dock).
+
+**Dock screens sign in as a screen.** A wall or a tablet on the dock signs
+in with the PC sign-in's **Dock screen** choice: the store PIN and the Back
+dock crew code, never the manager code (a manager or Stockroom code there is
+refused and leaves no session). It holds the Floor and Back dock roles only,
+opens on the Dock screen, shows no What's New pop-up and is exempt from the
+idle re-lock; the crew code still lasts a shift (12 hours), like any code.

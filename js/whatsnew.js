@@ -17,7 +17,7 @@ export const RELEASES = [
     ['users', 'The decant plan on the Team Board', 'Up next follows each person’s queue, and the Wallboard timeline shows planned pallets and breaks.', 'teamboard'],
     ['print', 'Print the map', 'The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.', 'printmap', 'desk'],
     ['search', 'Search the store’s records', 'Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.', null, 'desk'],
-    ['search', 'Search the store’s records', 'Search finds consolidations and cages as well as shelves.', null, 'phone'],
+    ['search', 'Find a shelf as you type', 'The search bar finds a shelf, a run, a bay or a department as you type.', null, 'phone'],
     ['mic', 'Voice search', 'Tap the microphone in the search bar and say a shelf, like “A16 S2”.', null, 'phone'],
   ] },
 ];

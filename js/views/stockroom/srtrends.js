@@ -2,10 +2,11 @@
 // accurate it is, from the bays marked ready or submitted. Tiles, the
 // weekday × time-of-day heatmap, each department's weekly pattern with its
 // peak day, day and time bars, accuracy per day against the 93% goal, and
-// every department and location with its accuracy and cadence.
+// every department and location with its accuracy and cadence. "All time"
+// adds the bays retention archived after 60 days (decision 29).
 
 import { ic, esc, vh, sub, mhead, DEPT_NAME, dep } from '../../ui.js';
-import { todayKey } from './common.js';
+import { todayKey, loadArchive, archivedRecs, archiveState } from './common.js';
 import { visitsOf, trendsOf, BANDS, DAYS, GOAL } from '../../../shared/trends.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 
@@ -33,9 +34,11 @@ const bars = (rows, max) => rows.map(([label, n, note]) => `<div class="tr-bar">
 
 function page(ctx) {
   const today = todayKey(), cfg = settingsOf(ctx.store.get('settings')), ranges = cfg.deptRanges;
-  const v = visitsOf(ctx.store.get('backfill').subs, { today, days: st.days, tz: cfg.tz, deptFor: b => deptForBay(ranges, b) }), t = trendsOf(v, today);
+  const live = ctx.store.get('backfill').subs, subs = st.days ? live : { ...live, ...Object.fromEntries(archivedRecs(live).map(r => [`${r.bay}:${r.date}`, r])) };
+  const v = visitsOf(subs, { today, days: st.days, tz: cfg.tz, deptFor: b => deptForBay(ranges, b) }), t = trendsOf(v, today);
+  const note = st.days ? '' : { ready: '', loading: ' · reading the archive…', failed: ' · last 60 days only (archive offline)' }[archiveState()];
   const seg = `<div class="seg">${WINDOWS.map(([d, l]) => `<button class="${st.days === d ? 'on' : ''}" data-act="tr-win" data-d="${d}">${l}</button>`).join('')}</div>`;
-  const head = vh('Trends', sub('Backfill', `${t.visits} visit${t.visits === 1 ? '' : 's'}`, WINDOWS.find(w => w[0] === st.days)[1]), seg, 'chart');
+  const head = vh('Trends', sub('Backfill', `${t.visits} visit${t.visits === 1 ? '' : 's'}`, WINDOWS.find(w => w[0] === st.days)[1] + note), seg, 'chart');
   if (!t.visits) return head + `<div class="card" style="padding:24px"><b>No ready bays in this window</b><p class="lbl">Trends fill in as bays are marked ready or submitted at Backfill review.</p></div>`;
   const tiles = `<div class="wb-kpis tr-tiles"><div class="wb-kpi"><span>Locations done</span><b>${t.visits}</b><small>${t.activeDays} active days · ${t.perDay}/day</small></div><div class="wb-kpi ${accCls(t.avgAcc) === 'good' ? 'good' : accCls(t.avgAcc) === 'bad' ? 'bad' : 'warn'}"><span>Average accuracy</span><b>${t.avgAcc ?? '—'}<small>%</small></b><small>goal ${GOAL}%</small></div><div class="wb-kpi"><span>Trend</span><b>${arrow(t.trend)}</b><small>newer half against older</small></div><div class="wb-kpi"><span>Busiest day</span><b>${t.busiest == null ? '—' : DAYS[t.busiest]}</b><small>${t.busiest == null ? '' : `${t.byWd[t.busiest]} visits`}</small></div></div>`;
   const hmax = Math.max(1, ...t.heat.flat());
@@ -57,6 +60,7 @@ export default {
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) { return page(ctx); },
   mount(ctx, root) {
+    if (!st.days) loadArchive(ctx, () => ctx.rerender());
     root.addEventListener('click', e => { const a = e.target.closest('[data-act="tr-win"]'); if (!a) return; st.days = Number(a.dataset.d); try { localStorage.setItem(KEY, String(st.days)); } catch {} ctx.rerender(); });
     return [ctx.store.on('backfill', () => ctx.rerender()), ctx.store.on('settings', () => ctx.rerender())];
   },

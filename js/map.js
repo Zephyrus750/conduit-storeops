@@ -522,7 +522,18 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     segments() { return $$('.shelf-group[data-shelf]:not([data-inactive])', svg).filter(g => g.getAttribute('data-shelf')); },
     mark(id, value) { for (const g of api.groups(id)) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
     markSegment(segId, value) { for (const g of api.segments()) if (segmentId(g) === segId) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
-    setMarks(map) { for (const g of api.segments()) g.removeAttribute('data-mark'); for (const [id, v] of Object.entries(map || {})) { if (id.includes(' ')) api.markSegment(id, v); else api.mark(id, v); } },
+    // One pass over the shelves (audit 19 Oct P5: a search of the whole map
+    // per marked id froze phones on a busy week); a run's id ("A16", from an
+    // older device) marks each of its shelves. An attribute is written only
+    // when it changes, so an unchanged shelf is not restyled.
+    setMarks(map) {
+      const m = map || {}, byRun = new Map();
+      for (const [id, v] of Object.entries(m)) if (!id.includes(' ')) for (const g of api.groups(id)) byRun.set(g, v);
+      for (const g of api.segments()) {
+        const id = segmentId(g), next = (id.includes(' ') ? m[id] : undefined) ?? byRun.get(g) ?? null;
+        if (next !== g.getAttribute('data-mark')) { if (next) g.setAttribute('data-mark', next); else g.removeAttribute('data-mark'); }
+      }
+    },
     select(id) {
       for (const g of $$('.shelf-group[data-sel]', svg)) g.removeAttribute('data-sel');
       for (const g of api.groups(id)) g.setAttribute('data-sel', '1');

@@ -80,17 +80,22 @@ export default {
       sel = { key: next, shelf: next, unnamed: false, floor: map.floorId() || null, dept: (g?.getAttribute('data-dept') || '').toLowerCase() }; if (g) map.zoomTo(next, 400);
       paint(true);
     };
+    // One send at a time: a second tap while the first is still going used
+    // to read the same unsent checks and send each of them twice.
+    let sending = false;
     const send = async () => {
+      if (sending) return;
       const d = read(ctx.storeNo), list = pending(d); if (!list.length) return toast('Nothing to send yet');
+      sending = true; const btn = root.querySelector('[data-act="fm-send"]'); if (btn) btn.disabled = true;
       let ok = 0;
-      for (const c of list) {
+      try { for (const c of list) {
         const id = newId();
         try {
           await ctx.store.dispatch({ type: 'map.edit.suggest', entity: { edit: id }, payload: { kind: c.kind, shelf: c.shelf || '', ...(c.to ? { to: c.to } : {}), ...(c.note ? { note: c.note } : {}), ...(c.floor ? { floor: c.floor } : {}), ...(c.pos ? { pos: c.pos } : {}), ...(c.near ? { near: c.near } : {}), src: 'field' } });
           c.sent = id; d.sent.unshift({ id, kind: c.kind, shelf: c.shelf || '', to: c.to || '', note: c.note || '', near: c.near || '', at: new Date().toISOString() }); ok++;
+          d.sent = d.sent.slice(0, 60); write(ctx.storeNo, d);   // kept as it goes: a reload mid-send does not send it again
         } catch (e) { toast(e.message, 'bad'); break; }
-      }
-      d.sent = d.sent.slice(0, 60); write(ctx.storeNo, d);
+      } } finally { sending = false; }
       if (ok) { haptic('success'); toast(`Sent ${ok} to the owner`); }
       paint();
     };

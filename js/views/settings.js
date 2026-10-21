@@ -124,7 +124,7 @@ function storeBody(ctx) {
 }
 function fieldCard(ctx) {
   const edit = canEdit(ctx);
-  return `<div class="stg-card"><div class="stg-h">Field Mode</div>${row('Capture shelf codes', edit ? 'Walk the floor with a phone, scan each shelf’s label and add a comment, then export the file for the map editor. Captures stay on this device.' : 'A manager code opens Field Mode.', `<span class="btn sm${edit ? '' : ' disabled'}"${edit ? ' data-go="fieldmode"' : ''}>${ic('m-map')}Open</span>`)}</div>`;
+  return `<div class="stg-card"><div class="stg-h">Field Mode</div>${row('Capture shelf codes', edit ? 'Walk the floor with a phone and scan each shelf’s label: a match marks it checked, a different label becomes a rename, a comment becomes a note. Send passes them to the owner’s queue; until then they wait on this device.' : 'A manager code opens Field Mode.', `<span class="btn sm${edit ? '' : ' disabled'}"${edit ? ' data-go="fieldmode"' : ''}>${ic('m-map')}Open</span>`)}</div>`;
 }
 // Location refresh: the focus departments for this week and the next three,
 // each named by its retail week too.

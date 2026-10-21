@@ -4,7 +4,7 @@
 // the decant: start, pause, done, halts). Ported from Vector's
 // backdock-receiving and backdock-decant over the backdock reducers.
 
-import { $, $$, ic, esc, vh, sub, toast, mhead, fmtDate, camButton } from '../../ui.js';
+import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton } from '../../ui.js';
 import { PTYPES, PT_LETTER, PT_NAME, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
 import { previewManifest } from './mpreview.js';
 import { printAudit } from './audit.js';
@@ -28,7 +28,7 @@ function model(ctx) {
 function truckCard(t, on) {
   const pr = progress(t), team = t.team || [], run = running(t), man = t.manifest;
   const stl = t.status === 'live' ? 'Live' : t.status === 'staged' ? 'Staged' : t.status;
-  return `<div class="trk${on ? ' on' : ''}" data-act="pick" data-id="${esc(t.id)}"><div class="trk-h"><b>Truck ${esc(truckNo(t.id))}</b><span class="tst ${esc(t.status)}">${esc(stl)}</span><span class="cs-dim">${t.status === 'live' ? `landed ${fmtHM(t.landedAt)}${t.goalAt ? ' · goal ' + fmtHM(t.goalAt) : ''}` : 'staged · goes live when a pallet lands'}</span></div><div class="trk-3">` +
+  return `<div class="trk${on ? ' on' : ''}" data-act="pick" data-id="${esc(t.id)}"><div class="trk-h"><b>Truck ${esc(truckNo(t.id))}</b><span class="tst ${esc(t.status)}">${esc(stl)}</span><span class="cs-dim">${t.status === 'live' ? `landed ${fmtHM(t.landedAt)}${t.goalAt ? ' · goal ' + fmtHM(t.goalAt) : ''}` : 'staged · press Start receiving to land pallets'}</span></div><div class="trk-3">` +
     `<div class="trk-c${man ? '' : ' warn'}"><small>${ic('file')}Manifest</small><b>${man ? esc(man.manNo) : 'Not attached'}</b><span>${man ? `${man.consols.length} consols · ${man.consols.reduce((n, c) => n + c.cartons, 0)}c` : 'lands with Manifests'}</span></div>` +
     `<div class="trk-c"><small>${ic('truck')}Truck</small><b>${t.status === 'live' ? `${pr.count} pallet${pr.count === 1 ? '' : 's'}` : 'Not landed'}</b><span>${t.status === 'live' ? `${pr.count - pr.doneCount} to go` : 'from the planner'}</span></div>` +
     `<div class="trk-c"><small>${ic('users')}Decant</small><b>${t.status === 'live' && pr.total ? `${pr.done} / ${pr.total} · ${pr.pct}%` : team.length ? 'Team staged' : 'No team yet'}</b><div class="dk-team">${team.map(m => `<span class="dk-tc${run[m.pid] ? ' on' : ''}"><span class="av">${esc(who(m))}</span>${run[m.pid] ? `<b>${esc(run[m.pid])}</b>` : ''}</span>`).join('')}</div></div></div></div>`;
@@ -179,7 +179,7 @@ function mobile(ctx) {
   const chips = `<div class="bdk-tchips">${m.open.map(x => `<button class="bdk-tchip${x.id === st.truck ? ' on' : ''}" data-act="pick" data-id="${esc(x.id)}">Truck ${esc(truckNo(x.id))}<i>${esc(x.status)}</i></button>`).join('')}<button class="bdk-tchip add" data-act="newtruck">+ New truck</button></div>`;
   if (!t) return mhead('Receiving', 'No truck on the dock') + chips + `<div class="mv-note">${ic('truck')}Tap <b>New truck</b> when the first pallet comes off.</div>` + heldCard(m.dock);
   const run = st.view === 'run';
-  const head = mhead(`Truck ${esc(truckNo(t.id))}`, t.status === 'live' ? `landed ${fmtHM(t.landedAt)}${t.goalAt ? ' · goal ' + fmtHM(t.goalAt) : ''}` : 'staged · land a pallet to go live');
+  const head = mhead(`Truck ${esc(truckNo(t.id))}`, t.status === 'live' ? `landed ${fmtHM(t.landedAt)}${t.goalAt ? ' · goal ' + fmtHM(t.goalAt) : ''}` : 'staged · Start receiving to land pallets');
   const toggle = `<div class="bdk-vt"><button class="${run ? '' : 'on'}" data-act="view" data-mode="receive">Receive</button><button class="${run ? 'on' : ''}" data-act="view" data-mode="run">Run</button></div>`;
   const prog = `<div class="bdk-prog"><div class="nums"><b>${pr.done}</b><span>/ ${pr.total} ctn decanted</span></div><div class="bar"><i style="width:${pr.pct}%"></i></div><div class="sub">${pr.count} pallet${pr.count === 1 ? '' : 's'} landed · ${pr.active} decanting${t.status !== 'live' ? ` · <b>${esc(t.status)}</b>` : ''}</div></div>`;
   const runbar = run ? (m.halt ? `<div class="bdk-runbar"><div class="bdk-runtile warn" style="flex:1"><small>${esc(holdName(m.halt))}</small><b>since ${fmtHM(m.halt.start)}</b></div><button class="bdk-runtile" data-act="haltend"><small>Decant</small><b>▶ Resume</b></button></div>`
@@ -189,7 +189,9 @@ function mobile(ctx) {
   const strip = run ? (team.length ? `<div class="bdk-strip">${team.map(mm => { const br = onBreak(t, mm.pid); return `<button class="bdk-fchip${st.arm === mm.pid ? ' armed' : ''}${br ? ' brk' : ''}" data-act="${br || (mm.role || 'cutter') !== 'cutter' ? 'more' : 'arm'}" data-pid="${esc(mm.pid)}"${br ? ' title="On a break: open Team & plan to bring them back"' : ''}><i class="${m.run[mm.pid] ? 'a' : ''}"></i><b>${esc(who(mm))}</b><span>${br ? 'on a break' : m.run[mm.pid] ? '▶ ' + esc(m.run[mm.pid]) : (mm.role || 'cutter') !== 'cutter' ? esc(ROLE_NAME[mm.role] || mm.role).toLowerCase() : 'free'}</span></button>`; }).join('')}</div>` : `<div class="mv-note">${ic('users')}No crew on this truck yet. Add the team from <b>Team &amp; plan</b>.</div>`) : '';
   const sel = st.sel ? (t.pallets[st.sel] ? palletPanel(t, t.pallets[st.sel], false) : landPanel(st.sel)) : '';
   const tools = `<div class="ps-tools"><button class="btn sm${ss.open ? ' primary' : ''}" data-act="ps-open">${ic('search')}Search</button><button class="btn sm${ss.info ? ' primary' : ''}" data-act="ps-info">${ic('packages')}Manifest${t.manifest ? ' ' + esc(t.manifest.manNo) : ''}</button><button class="btn sm${st.more ? ' primary' : ''}" data-act="more" aria-expanded="${st.more}">${ic('users')}Team &amp; plan</button></div>`;
-  return head + clockNote(ctx) + chips + (needsTake5(t) && (t.team || []).length ? take5Card(t) : '') + toggle + tools + (st.more ? moreSheet(m, t) : '') + searchSheet(ctx, t) + infoSheet(t) + prog + runbar + `<div class="bdk">${dockGrid(t, false)}</div>` + strip + sel;
+  // A staged truck (imported from Decant Visualiser, or a planner slot) goes live here too.
+  const golive = t.status === 'staged' ? `<div class="mv-foot">${mbig(`Start receiving T${truckNo(t.id)}`, '', 'truck', ' data-act="golive"')}</div>` : '';
+  return head + clockNote(ctx) + chips + golive + (needsTake5(t) && (t.team || []).length ? take5Card(t) : '') + toggle + tools + (st.more ? moreSheet(m, t) : '') + searchSheet(ctx, t) + infoSheet(t) + prog + runbar + `<div class="bdk">${dockGrid(t, false)}</div>` + strip + sel;
 }
 // The facilitator on the phone (DV's More and person sheets): the team with
 // roles and breaks, the opening huddle, the plan with auto-balance and

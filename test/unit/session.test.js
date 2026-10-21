@@ -61,3 +61,26 @@ test('session: a refresh that fails for a passing reason keeps the session; only
   await assert.rejects(s.refresh(), /not valid/);
   assert.equal(s.current, null); assert.equal(out, 1);
 });
+
+test('session: a dock screen holds the Floor and Back dock roles only; a manager or Stockroom code signs it straight out', async () => {
+  let role = 'dock'; const calls = [];
+  const transport = { async request(path, { body } = {}) {
+    calls.push(path);
+    if (path === '/v1/auth/signin') return { token: 't', refresh: 'r', expires: 9e9, store: body.store, name: 'S', roles: ['floor'], caps: ['floor', 'backdock'] };
+    if (path === '/v1/auth/unlock') return { token: 'tu', refresh: 'ru', expires: 9e9, roles: ['floor', role] };
+    if (path === '/v1/auth/refresh') return { token: 'tr', refresh: 'rr', expires: 9e9, roles: ['floor', 'dock'], caps: [] };
+    return {};
+  } };
+  const storage = memoryStorage(), s = createSession({ transport, storage });
+  await s.load();
+  await s.signInScreen({ store: '1241', pin: '111111', code: 'DK' });
+  assert.deepEqual([s.current.roles, s.current.screen], [['floor', 'dock'], true]);
+  await s.refresh();
+  assert.equal(s.current.screen, true, 'a refresh keeps it a screen');
+  assert.equal((await storage.get('suite_session')).screen, true, 'and so does the next start');
+  for (role of ['manager', 'stockroom']) {
+    calls.length = 0;
+    await assert.rejects(s.signInScreen({ store: '1241', pin: '111111', code: 'X' }), /Back dock crew code/);
+    assert.equal(s.current, null); assert.ok(calls.includes('/v1/auth/signout'), `a ${role} code leaves no session behind`);
+  }
+});

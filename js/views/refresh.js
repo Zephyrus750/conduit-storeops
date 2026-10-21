@@ -27,19 +27,25 @@ function model(ctx) {
   const marks = r.weeks[week] || {};
   const focus = r.focus[week] || [];
   // done: every mark this week; counted: what the X/100 counts (focus only).
-  return { week, marks, focus, plan: r.plan, sync: ctx.store.status || { state: 'offline', queued: 0 }, done: Object.keys(marks).length, counted: focusDone(marks, focus, (seg, mk) => mk.dept || segDept[seg]) };
+  return { week, marks, focus, plan: r.plan, done: Object.keys(marks).length, counted: focusDone(marks, focus, (seg, mk) => mk.dept || segDept[seg]) };
 }
-function marksFor(map, m) {
-  const out = {};
-  for (const g of map.segments()) {
-    const id = segmentId(g), d = (g.getAttribute('data-dept') || '').toLowerCase();
-    if (markKeysFor(m.marks, { full: id, id: g.getAttribute('data-shelf') }).length) out[id] = 'done'; else if (m.focus.includes(d)) out[id] = 'focus';
-  }
+// The map's shelves, read once per screen (audit 19 Oct P5: every paint used
+// to compare every mark with every shelf): id, department, and its own and
+// its run's canonical codes.
+let shelfIndex = [];
+const indexShelves = map => { shelfIndex = map.segments().map(g => { const id = segmentId(g); return { id, dept: (g.getAttribute('data-dept') || '').toLowerCase(), full: canonCode(id), run: canonCode(g.getAttribute('data-shelf')) }; }); };
+// This week's marks as canonical codes, once per paint; a shelf is done when
+// its own code is marked, or its run's as an older device marked it.
+const markSet = marks => new Set(Object.keys(marks).map(canonCode));
+const isDone = (set, x) => set.has(x.full) || set.has(x.run);
+function marksFor(m) {
+  const out = {}, set = markSet(m.marks);
+  for (const x of shelfIndex) { if (isDone(set, x)) out[x.id] = 'done'; else if (m.focus.includes(x.dept)) out[x.id] = 'focus'; }
   return out;
 }
-function focusCounts(map, m) {
-  const by = {}; const tot = {};
-  for (const g of map.segments()) { const d = (g.getAttribute('data-dept') || '').toLowerCase(); tot[d] = (tot[d] || 0) + 1; if (markKeysFor(m.marks, { full: segmentId(g), id: g.getAttribute('data-shelf') }).length) by[d] = (by[d] || 0) + 1; }
+function focusCounts(m) {
+  const by = {}, tot = {}, set = markSet(m.marks);
+  for (const x of shelfIndex) { tot[x.dept] = (tot[x.dept] || 0) + 1; if (isDone(set, x)) by[x.dept] = (by[x.dept] || 0) + 1; }
   return m.focus.map(d => ({ d, done: by[d] || 0, total: tot[d] || 0 }));
 }
 // This week by day and department (ShelfSearcher's history chart): stacked
@@ -136,10 +142,10 @@ export default {
       return tipLine('', 'minus', 'Not in focus this week') + plan;
     } });
     bindMapChrome(root, map);
-    segDept = {}; for (const g of map.segments()) segDept[segmentId(g)] = (g.getAttribute('data-dept') || '').toLowerCase();
+    indexShelves(map); segDept = Object.fromEntries(shelfIndex.map(x => [x.id, x.dept]));
     const paint = () => keepScanFocus(root, () => {
       const m = model(ctx);
-      map.setMarks(marksFor(map, m)); applyPlan(map, m.plan, m.marks, mode === 'plan'); map.svg.classList.toggle('rfplan', mode === 'plan'); map.svg.toggleAttribute('data-focus', m.focus.length > 0);
+      map.setMarks(marksFor(m)); applyPlan(map, m.plan, m.marks, mode === 'plan'); map.svg.classList.toggle('rfplan', mode === 'plan'); map.svg.toggleAttribute('data-focus', m.focus.length > 0);
       const side = $('#rfside', root); if (side) side.innerHTML = sidebar(map, m);
       const mob = $('#rfmob', root); if (mob) mob.innerHTML = mobileBar(map, m);
       const sc = $('#rfscan', root); if (sc) sc.innerHTML = scanOpen && mode !== 'plan' ? scanSheet() : '';
@@ -182,12 +188,12 @@ export default {
         else if (act === 'zoom-dept') { map.filterDept(a.getAttribute('data-dept')); }
       } catch (err) { toast(err.message, 'bad'); }
     });
-    return [ctx.store.on('refresh', paint), ctx.store.on('status', paint)];
+    return [ctx.store.on('refresh', paint)];   // the sync pill shows sync state: a status change no longer repaints the map (P5)
   },
 };
 
 function sidebar(map, m) {
-  const fc = focusCounts(map, m);
+  const fc = focusCounts(m);
   return `<div class="pcard"><div class="rfcount">${ic('asterisk')}<div class="n">${m.counted}<small> / ${TARGET}</small></div><div class="fx">Focus this week<div class="chips">${fc.map(f => `<span class="chip" data-act="zoom-dept" data-dept="${esc(f.d)}"><span class="sw" style="background:${DEPT_COLOUR[f.d]}"></span>${esc(f.d.toUpperCase())} ${f.done}/${f.total}</span>`).join('')}<span class="chip" style="color:var(--accent-ink)" data-act="mode" data-mode="focus">Choose…</span></div></div></div>${prog(m.done / TARGET * 100)}${shelfScanField('Scan or type a shelf label to mark it')}` +
     (mode === 'focus' ? `<div class="chips" style="margin-top:10px">${FOCUS_DEPTS.map(d => `<span class="chip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}"><span class="sw" style="background:${DEPT_COLOUR[d]}"></span>${d.toUpperCase()}</span>`).join('')}<span class="chip" data-act="mode" data-mode="refresh">Done</span></div>` : '') + `</div>` +
     `<div class="pcard"><div class="pt3">This week’s scanning</div><div class="rfchart">${dayBars(m)}</div></div>` +
@@ -210,7 +216,7 @@ function scanSheet() {
 // scan and the Refresh/Plan toggle, each focus department with its own bar,
 // and the shelves refreshed this week by department (a tap finds one).
 function mobileBar(map, m) {
-  const fc = focusCounts(map, m), left = 7 - (new Date().getDay() + 6) % 7;
+  const fc = focusCounts(m), left = 7 - (new Date().getDay() + 6) % 7;
   const head = `<div class="sx-h">${ic('m-refresh')}Location refresh<span class="n">${m.counted} / ${TARGET}</span></div><div class="sx-sub">This week · ${retailPeriod(new Date())} · ${left} day${left === 1 ? '' : 's'} left</div><div style="margin-top:8px">${sx.bar(m.counted, TARGET)}</div>`;
   // The toggle keeps its place: in Plan the colours take the scan button's spot.
   const row = `<div class="rf-row">${mode === 'plan' ? `<div class="rf-pal" role="group" aria-label="Plan colour">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="Erase" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<button class="rf-scanbtn" data-act="scan-open" aria-label="Scan or type a shelf">${ic('barcode')}<span>Scan or type</span></button>`}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">Refresh</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">Plan</button></div></div>`;

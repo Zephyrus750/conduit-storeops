@@ -221,6 +221,7 @@ function dashTop(ctx) {
 
 export default {
   id: 'dashboard', title: 'Dashboard', icon: 'm-dashboard',
+  deskOnly: true,   // a phone's Home is the store map (or its area's home); a link here goes there
   desktop(ctx) {
     return `<div id="dashTop">${dashTop(ctx)}</div>`;
   },

@@ -19,7 +19,7 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
 
   const emit = (k, v) => { for (const f of listeners[k]) { try { f(v); } catch (e) { console.error(e); } } };
   const save = async () => { if (cur) await storage.set('suite_session', cur); else await storage.del('suite_session'); emit('change', snapshot()); };
-  const snapshot = () => cur ? { store: cur.store, name: cur.name, roles: cur.roles, caps: cur.caps, owner: !!cur.owner, actas: !!cur.actas, expires: cur.expires, device } : null;
+  const snapshot = () => cur ? { store: cur.store, name: cur.name, roles: cur.roles, caps: cur.caps, owner: !!cur.owner, actas: !!cur.actas, screen: !!cur.screen, expires: cur.expires, device } : null;
 
   async function load() {
     device = await storage.get('suite_device');
@@ -35,6 +35,20 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     const r = await transport.request('/v1/auth/signin', { method: 'POST', body });
     cur = { token: r.token, refresh: r.refresh, expires: r.expires, store: r.store, name: r.name, roles: r.roles, caps: r.caps, owner: false };
     await save(); return snapshot();
+  }
+  // A dock screen (a wall or a tablet on the dock): the store PIN, then the
+  // Back dock crew code. It holds the Floor and Back dock roles only, never
+  // a manager's, and the shell skips its idle re-lock (nobody touches a wall
+  // screen). The code still lasts a shift, like any crew code.
+  async function signInScreen({ store, pin, code }) {
+    await signIn({ store, pin });
+    let s;
+    try { s = await unlock(code); } catch (e) { await signOut(); throw e; }
+    if (!s.roles.includes('dock') || s.roles.some(r => r !== 'floor' && r !== 'dock')) {
+      await signOut();
+      throw new TransportError(400, 'invalid_request', 'A dock screen signs in with the Back dock crew code, not a manager or Stockroom code.');
+    }
+    cur = { ...cur, screen: true }; await save(); return snapshot();
   }
   async function signInOwner({ ownerKey }) {
     // owner_trust: this device has signed in as the owner before, so its
@@ -156,5 +170,5 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
   function unauthorised() { cur = null; save(); emit('signin-required', { reason: 'unauthorised' }); }
   function on(k, f) { listeners[k].add(f); return () => listeners[k].delete(f); }
 
-  return { load, signIn, signInOwner, signInAnother, switchTo, forget, parked, actAs, endActAs, unlock, lock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
+  return { load, signIn, signInScreen, signInOwner, signInAnother, switchTo, forget, parked, actAs, endActAs, unlock, lock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
 }

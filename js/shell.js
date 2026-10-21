@@ -125,7 +125,7 @@ async function enter() {
   }
   admin = null; frame.classList.remove('adm'); applyPrefs(frame); capsSig = (client.session.current?.caps || []).join(',');
   // After an update, What's New once (a device on its first run gets the walkthrough instead).
-  { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }
+  { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas && !s.screen) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }   // nobody reads a pop-up on a wall screen
   team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current), desk: () => !isMobile() });
   store.on('status', paintStatus); store.on('reject', r => toast(refusalText(r), 'bad')); store.on('hold', onHold);
   // Another device sent a kind of change this app does not know: a newer
@@ -147,6 +147,7 @@ async function enter() {
   actasBar(s.actas ? s : null);
   hideCover();
   if (openPendingLink(s)) return;
+  if (s.screen && hasArea(client.session, 'backdock')) { setWs('backdock'); return show('dockscreen'); }
   if (!isMobile()) return show('dashboard');
   // The phone goes back to the area it was last used in when this device can
   // still open it; otherwise it asks where you are working.
@@ -185,7 +186,7 @@ for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) document.add
 setInterval(idleCheck, 20_000);
 async function idleCheck() {
   const cur = client.session.current;
-  if (locking || !store || !lockMins || !cur || cur.owner || !(cur.roles || []).some(r => r !== 'floor')) return;
+  if (locking || !store || !lockMins || !cur || cur.owner || cur.screen || !(cur.roles || []).some(r => r !== 'floor')) return;   // a dock screen is never touched
   if (Date.now() - idleSince < lockMins * 60_000) return;
   locking = true;
   try {
@@ -260,12 +261,17 @@ async function showSignin({ error, owner } = {}) {
   try { stores = (await client.transport.request('/v1/stores')).stores; } catch (e) { error = error || (WORKER ? `Cannot reach the worker at ${WORKER}` : 'No worker configured: open with ?worker=https://…'); }
   const options = stores.map(s => `<option value="${esc(s.no)}">${esc(s.no)} ${esc(s.name)}${s.region ? ' · ' + esc(s.region) : ''}</option>`).join('');
   // On a phone: team member or manager, the choice remembered on this
-  // device. A PC is only ever signed in by a manager (the store's manager
-  // code opens every area), so the desktop form asks for the code alone; the
-  // store PIN comes back there only when the worker predates manager sign-in.
-  let asManager = !mobile; if (mobile) try { asManager = localStorage.getItem('signin_as') === 'manager'; } catch {}
+  // device. A PC is signed in by a manager (the store's manager code opens
+  // every area) or as a dock screen: a wall or a tablet on the dock, with the
+  // store PIN and the Back dock code, so it never holds a manager's rights.
+  // The store PIN alone comes back on a PC only when the worker predates
+  // manager sign-in.
+  let as = 'team'; try { as = localStorage.getItem('signin_as') || 'team'; } catch {}
+  if (mobile && as === 'screen') as = 'team'; if (!mobile && as !== 'screen') as = 'manager';
+  let asManager = as === 'manager', asScreen = as === 'screen';
+  const segs = mobile ? [['team', 'Team member'], ['manager', 'Manager']] : [['manager', 'Manager'], ['screen', 'Dock screen']];
   const form = `<form class="si-form" id="siForm"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>Welcome back</h2><div class="si-sub">${mobile ? 'Sign in to your store.' : 'Manager sign-in.'}</div>` +
-    (mobile ? `<div class="si-seg" role="group" aria-label="Sign in as"><button type="button" data-as="team" aria-pressed="${!asManager}">Team member</button><button type="button" data-as="manager" aria-pressed="${asManager}">Manager</button></div>` : '') +
+    `<div class="si-seg" role="group" aria-label="Sign in as">${segs.map(([k, l]) => `<button type="button" data-as="${k}" aria-pressed="${k === as}">${l}</button>`).join('')}</div>` +
     `<label for="siStore">Store</label><select class="si-field" id="siStore" name="store" required>${options || '<option value="">No stores registered</option>'}</select>` +
     `<div class="si-cred"></div>` +
     `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit"></button>` +
@@ -274,32 +280,34 @@ async function showSignin({ error, owner } = {}) {
   if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? "Sign in to open the work order." : `Sign in to open shelf ${pendingLink.shelf}.`); }
   const cred = () => {
     const f = $('#siForm', el);
-    for (const b of f.querySelectorAll('[data-as]')) b.setAttribute('aria-pressed', String((b.dataset.as === 'manager') === asManager));
+    for (const b of f.querySelectorAll('[data-as]')) b.setAttribute('aria-pressed', String(b.dataset.as === as));
     f.classList.toggle('as-manager', asManager);
+    const pinField = `<label for="siCode">Store PIN</label><input class="si-pin" id="siCode" name="pin" inputmode="numeric" autocomplete="off" placeholder="••••" required>`;
     $('.si-cred', f).innerHTML = asManager
       ? `<label for="siCode">Manager code</label><input class="si-pin si-code" id="siCode" name="mcode" type="password" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MG-······" required>`
-      : `<label for="siCode">Store PIN</label><input class="si-pin" id="siCode" name="pin" inputmode="numeric" autocomplete="off" placeholder="••••" required>`;
-    $('.si-cta', f).innerHTML = `${mobile ? (asManager ? 'Enter as manager' : 'Enter store') : 'Sign in'}${ic('arrow')}`;
-    if (!mobile) $('.si-sub', f).textContent = asManager ? 'Manager sign-in.' : 'Store PIN sign-in.';
+      : asScreen ? pinField + `<label for="siDock">Back dock code</label><input class="si-pin si-code" id="siDock" name="dcode" type="password" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="DK-····" required>`
+      : pinField;
+    $('.si-cta', f).innerHTML = `${mobile ? (asManager ? 'Enter as manager' : 'Enter store') : asScreen ? 'Start the dock screen' : 'Sign in'}${ic('arrow')}`;
+    if (!mobile) $('.si-sub', f).textContent = asManager ? 'Manager sign-in.' : asScreen ? 'A wall or tablet on the dock: Back dock boards only, no manager rights, no idle lock.' : 'Store PIN sign-in.';
   };
   cred();
   if (!mobile) try { $('#siCode', el).focus(); } catch {}
   $('#siForm', el).addEventListener('click', e => {
     const b = e.target.closest('[data-as]'); if (!b) return;
-    asManager = b.dataset.as === 'manager'; if (mobile) try { localStorage.setItem('signin_as', asManager ? 'manager' : 'team'); } catch {}
+    as = b.dataset.as; asManager = as === 'manager'; asScreen = as === 'screen'; try { localStorage.setItem('signin_as', as); } catch {}
     $('#siErr', el).textContent = ''; cred(); try { $('.si-cred input', el).focus(); } catch {}
   });
   $('#siForm', el).addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target); const btn = e.target.querySelector('.si-cta'); btn.disabled = true;
-    try { await client.session.signIn(asManager ? { store: f.get('store'), managerCode: f.get('mcode') } : { store: f.get('store'), pin: f.get('pin') }); await enter(); }
+    try { await (asScreen ? client.session.signInScreen({ store: f.get('store'), pin: f.get('pin'), code: f.get('dcode') }) : client.session.signIn(asManager ? { store: f.get('store'), managerCode: f.get('mcode') } : { store: f.get('store'), pin: f.get('pin') })); await enter(); }
     catch (err) {
       // A worker from before manager sign-in answers "wrong PIN" to a code:
       // the store PIN gets the device in, and the manager code then goes in
       // at the Stockroom or Back dock gate.
       const old = asManager && err.code === 'unauthorised' && /PIN/.test(err.message || '');
-      $('#siErr', el).innerHTML = old ? (mobile ? 'Manager sign-in needs the latest worker. Sign in as Team member with the store PIN for now, then enter the manager code at Stockroom or Back dock.' : 'Manager sign-in needs the latest worker. <a class="si-usepin" role="button" tabindex="0">Sign in with the store PIN</a>, then enter the manager code at Stockroom or Back dock.') : esc(friendly(err, asManager ? 'Wrong manager code.' : 'Wrong PIN.'));
-      const usePin = () => { asManager = false; $('#siErr', el).textContent = ''; cred(); try { $('#siCode', el).focus(); } catch {} };
+      $('#siErr', el).innerHTML = old ? (mobile ? 'Manager sign-in needs the latest worker. Sign in as Team member with the store PIN for now, then enter the manager code at Stockroom or Back dock.' : 'Manager sign-in needs the latest worker. <a class="si-usepin" role="button" tabindex="0">Sign in with the store PIN</a>, then enter the manager code at Stockroom or Back dock.') : esc(friendly(err, asManager ? 'Wrong manager code.' : asScreen && !/PIN/.test(err.message || '') ? 'Wrong Back dock code.' : 'Wrong PIN.'));
+      const usePin = () => { as = 'team'; asManager = false; $('#siErr', el).textContent = ''; cred(); try { $('#siCode', el).focus(); } catch {} };
       $('.si-usepin', el)?.addEventListener('click', usePin);
       $('.si-usepin', el)?.addEventListener('keydown', k => { if (k.key === 'Enter' || k.key === ' ') { k.preventDefault(); usePin(); } });
       btn.disabled = false;
@@ -315,7 +323,7 @@ async function showContinue(s) {
   const mobile = isMobile(), name = s.name || `Store ${s.store}`;
   let last = 'floor'; try { last = localStorage.getItem('last_workspace') || 'floor'; } catch {}
   let ready = false; try { ready = await client.storage.has(`snap:${s.store}`); } catch {}
-  const area = (s.roles || []).includes('manager') ? 'Manager' : { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock' }[last] || 'Floor';
+  const area = s.screen ? 'Dock screen' : (s.roles || []).includes('manager') ? 'Manager' : { floor: 'Floor', stockroom: 'Stockroom', backdock: 'Back dock' }[last] || 'Floor';
   const link = pendingLink && pendingLink.store === s.store ? (pendingLink.issue ? ' and open the work order' : ` and open shelf ${pendingLink.shelf}`) : '';
   const form = `<form class="si-form" id="siCont"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>Welcome back</h2><div class="si-sub">${link ? `This ${mobile ? 'device' : 'PC'} is signed in. Continue${esc(link)}.` : `This ${mobile ? 'device' : 'PC'} is signed in.`}</div>` +
     `<div class="si-store"><span class="si-sav">${esc(s.store)}</span><div><b>${esc(name)}</b><small>Store ${esc(s.store)} · ${area}</small></div>${ready ? `<span class="si-ready">${ic('check')}Ready</span>` : ''}</div>` +
