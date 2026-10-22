@@ -5,6 +5,7 @@
 
 import { ic, esc, toast, dep, DEPT_NAME } from './ui.js';
 import { qrSvg } from '../shared/qr.js';
+import { tx } from './i18n.js';
 
 export const shelfLink = (storeNo, shelf) => `${location.origin}${location.pathname}?store=${encodeURIComponent(storeNo)}&shelf=${encodeURIComponent(shelf)}`;
 // A maintenance issue (the work order's QR code): ?store=1241&issue=m… opens it in Maintenance.
@@ -14,19 +15,19 @@ export function openShare({ storeNo, storeName, shelf, dept }) {
   document.getElementById('sharesheet')?.remove();
   const url = shelfLink(storeNo, shelf), qr = qrSvg(url, { cell: 5 });
   const el = document.createElement('div');
-  el.id = 'sharesheet'; el.className = 'sharesheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', `Share shelf ${shelf}`);
-  el.innerHTML = `<div class="sh-card"><div class="sh-h"><b>Share ${esc(shelf)}</b><button class="ibtn" data-sh="close" aria-label="Close">${ic('x')}</button></div>` +
+  el.id = 'sharesheet'; el.className = 'sharesheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', tx('Share shelf {shelf}', { shelf }));
+  el.innerHTML = `<div class="sh-card"><div class="sh-h"><b>${tx('Share {shelf}', { shelf: esc(shelf) })}</b><button class="ibtn" data-sh="close" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
     `<div class="sh-where">${dept ? dep(dept) + `<span>${esc(DEPT_NAME[dept] || dept)}</span>` : ''}<span class="cs-dim">${esc(storeName || '')} #${esc(storeNo)}</span></div>` +
-    `<div class="sh-qr">${qr || '<p class="lbl">This link is too long for a QR code.</p>'}</div><p class="lbl">Scan with another phone to open the map on this shelf. Signed-in devices of this store open it straight away.</p>` +
-    `<div class="sh-url mono">${esc(url)}</div><div class="sh-acts"><button class="btn primary sm" data-sh="copy">${ic('file')}Copy link</button>${navigator.share ? `<button class="btn sm" data-sh="share">${ic('arrow')}Share…</button>` : ''}</div></div>`;
+    `<div class="sh-qr">${qr || `<p class="lbl">${tx('This link is too long for a QR code.')}</p>`}</div><p class="lbl">${tx('Scan with another phone to open the map on this shelf. Signed-in devices of this store open it straight away.')}</p>` +
+    `<div class="sh-url mono">${esc(url)}</div><div class="sh-acts"><button class="btn primary sm" data-sh="copy">${ic('file')}${tx('Copy link')}</button>${navigator.share ? `<button class="btn sm" data-sh="share">${ic('arrow')}${tx('Share…')}</button>` : ''}</div></div>`;
   const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   el.addEventListener('click', async e => {
     if (e.target === el) return close();
     const a = e.target.closest('[data-sh]'); if (!a) return;
     if (a.dataset.sh === 'close') close();
-    else if (a.dataset.sh === 'copy') { try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { const t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); toast('Link copied'); } catch { toast('Copy failed: select the link and copy it', 'bad'); } t.remove(); } }
-    else if (a.dataset.sh === 'share') { try { await navigator.share({ title: `Shelf ${shelf} · store ${storeNo}`, text: `Shelf ${shelf} at store ${storeNo}`, url }); } catch {} }
+    else if (a.dataset.sh === 'copy') { try { await navigator.clipboard.writeText(url); toast(tx('Link copied')); } catch { const t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); toast(tx('Link copied')); } catch { toast(tx('Copy failed: select the link and copy it'), 'bad'); } t.remove(); } }
+    else if (a.dataset.sh === 'share') { try { await navigator.share({ title: tx('Shelf {shelf} · store {store}', { shelf, store: storeNo }), text: tx('Shelf {shelf} at store {store}', { shelf, store: storeNo }), url }); } catch {} }
   });
   document.addEventListener('keydown', onKey);
   document.body.appendChild(el);

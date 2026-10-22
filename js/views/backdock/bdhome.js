@@ -1,5 +1,6 @@
 // The phone's Back dock home: the truck on the dock and what to do next.
 import { ic, esc, mhead, mtile } from '../../ui.js';
+import { tx } from '../../i18n.js';
 import { openTrucks, progress, truckNo, fmtHM, running, who, todayKey } from './common.js';
 import { decantBoard } from './plan.js';
 // Who is on this phone: a D-number picked from the truck's crew, kept on
@@ -10,7 +11,7 @@ function meOf(no) { try { const x = JSON.parse(localStorage.getItem(meKey(no)) |
 function setMe(no, pid) { try { if (pid) localStorage.setItem(meKey(no), JSON.stringify({ pid, day: todayKey() })); else localStorage.removeItem(meKey(no)); } catch {} }
 
 export default {
-  id: 'bdhome', title: 'Back dock', icon: 'truck', area: 'backdock',
+  id: 'bdhome', title: tx('Back dock'), icon: 'truck', area: 'backdock',
   // Phone only: wider screens open the dock board (the shell follows desktopView).
   desktopView: 'receiving',
   desktop() { return ''; },
@@ -18,10 +19,10 @@ export default {
     const dock = ctx.store.get('dock'), open = openTrucks(dock), t = open.find(x => x.status === 'live') || open[0];
     const pr = t ? progress(t) : null, run = t ? running(t) : {}, me = meOf(ctx.storeNo), team = t?.team || [];
     const mine = me ? run[me] || null : null;
-    const pick = team.length ? `<div class="mv-sub">Who’s on this phone?</div><div class="bdk-strip bdk-me">${team.map(m => `<button class="bdk-fchip${m.pid === me ? ' armed' : ''}" data-act="dock-me" data-pid="${esc(m.pid)}" aria-pressed="${m.pid === me}">${esc(who(m))}</button>`).join('')}${me ? '<button class="bdk-fchip" data-act="dock-me" data-pid="">Not me</button>' : ''}</div>` : '';
-    return mhead('Back dock', t ? `Truck ${truckNo(t.id)} · ${t.status === 'live' ? `landed ${fmtHM(t.landedAt)}` : 'staged'}${t.goalAt ? ' · goal ' + fmtHM(t.goalAt) : ''}` : 'No truck on the dock', '') +
-      (t ? `<div class="mv-tally"><b>${pr.done}</b><i><u style="width:${pr.pct}%"></u></i><span>${pr.total} cartons · ${pr.pct}%</span></div>` : '') +
-      `<div class="mv-tiles">${mtile('parking', 'Land a pallet', 'Bay · type · cartons', '', 'receiving', 'hot')}${mtile('box', mine ? `My pallet · ${esc(mine)}` : 'Run the decant', mine ? `${esc(me)} · decanting now` : me ? `${esc(me)} · not on a pallet` : 'Start, pause and finish pallets', pr ? `${pr.active} live` : '', 'receiving')}${mtile('users', 'Team', t && t.team?.length ? t.team.map(m => `${who(m)}${run[m.pid] ? ' ' + run[m.pid] : ''}`).join(' · ') : 'No team on this truck yet', '', 'receiving')}</div>` +
+    const pick = team.length ? `<div class="mv-sub">${tx('Who’s on this phone?')}</div><div class="bdk-strip bdk-me">${team.map(m => `<button class="bdk-fchip${m.pid === me ? ' armed' : ''}" data-act="dock-me" data-pid="${esc(m.pid)}" aria-pressed="${m.pid === me}">${esc(who(m))}</button>`).join('')}${me ? `<button class="bdk-fchip" data-act="dock-me" data-pid="">${tx('Not me')}</button>` : ''}</div>` : '';
+    return mhead(tx('Back dock'), t ? `${tx('Truck {n}', { n: truckNo(t.id) })} · ${t.status === 'live' ? tx('landed {time}', { time: fmtHM(t.landedAt) }) : tx('staged')}${t.goalAt ? ' · ' + tx('goal {time}', { time: fmtHM(t.goalAt) }) : ''}` : tx('No truck on the dock'), '') +
+      (t ? `<div class="mv-tally"><b>${pr.done}</b><i><u style="width:${pr.pct}%"></u></i><span>${tx('{n} cartons · {pct}%', { n: pr.total, pct: pr.pct })}</span></div>` : '') +
+      `<div class="mv-tiles">${mtile('parking', tx('Land a pallet'), tx('Bay · type · cartons'), '', 'receiving', 'hot')}${mtile('box', mine ? tx('My pallet · {ref}', { ref: esc(mine) }) : tx('Run the decant'), mine ? tx('{pid} · decanting now', { pid: esc(me) }) : me ? tx('{pid} · not on a pallet', { pid: esc(me) }) : tx('Start, pause and finish pallets'), pr ? tx('{n} live', { n: pr.active }) : '', 'receiving')}${mtile('users', tx('Team'), t && t.team?.length ? t.team.map(m => `${who(m)}${run[m.pid] ? ' ' + run[m.pid] : ''}`).join(' · ') : tx('No team on this truck yet'), '', 'receiving')}</div>` +
       pick + decantBoard(dock, ctx.store.get('plan'), todayKey());
   },
   mount(ctx, root) {

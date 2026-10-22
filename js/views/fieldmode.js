@@ -17,6 +17,7 @@
 import { $, ic, esc, vh, sub, mhead, toast, today, fmtTime } from '../ui.js';
 import { mountMap, mvMap, bindMapChrome, segmentId, canonCode, hasMap, setStrip, sx } from '../map.js';
 import { haptic } from '../device.js';
+import { tx, txn } from '../i18n.js';
 
 const KEY = no => `fieldcapture:${no}`;
 // { caps: key → capture, sent: [{ id, kind, shelf, to, note, at }] }; an
@@ -27,25 +28,25 @@ const read = no => {
   const caps = {}; for (const [k, c] of Object.entries(v)) caps[k] = c.kind ? c : { key: k, kind: c.differs ? 'rename' : c.comment ? 'flag' : 'ok', shelf: k, to: c.differs ? c.code : '', note: c.comment || '', floor: c.floor || null, at: c.at };
   return { caps, sent: [] };
 };
-const write = (no, v) => { try { localStorage.setItem(KEY(no), JSON.stringify(v)); return true; } catch { toast('This device’s storage is full: send or export the captures, then clear them', 'bad'); return false; } };
+const write = (no, v) => { try { localStorage.setItem(KEY(no), JSON.stringify(v)); return true; } catch { toast(tx('This device’s storage is full: send or export the captures, then clear them'), 'bad'); return false; } };
 const isManager = ctx => (ctx.session.current?.roles || []).includes('manager');
 const newId = () => 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const pending = d => Object.values(d.caps).filter(c => c.kind !== 'ok' && !c.sent);
-const what = c => c.kind === 'rename' ? `Rename ${esc(c.shelf)} → ${esc(c.to)}` : c.kind === 'name' ? `Name a new shelf → ${esc(c.to)}` : `Note on ${esc(c.shelf)}`;
-const detail = c => c.kind === 'name' ? [c.near ? `beside ${esc(c.near)}` : '', c.note ? `“${esc(c.note)}”` : ''].filter(Boolean).join(' · ') : c.kind === 'rename' ? (c.note ? `“${esc(c.note)}”` : `label reads ${esc(c.to)}`) : `“${esc(c.note)}”`;
+const what = c => c.kind === 'rename' ? tx('Rename {shelf} → {to}', { shelf: esc(c.shelf), to: esc(c.to) }) : c.kind === 'name' ? tx('Name a new shelf → {to}', { to: esc(c.to) }) : tx('Note on {shelf}', { shelf: esc(c.shelf) });
+const detail = c => c.kind === 'name' ? [c.near ? tx('beside {shelf}', { shelf: esc(c.near) }) : '', c.note ? `“${esc(c.note)}”` : ''].filter(Boolean).join(' · ') : c.kind === 'rename' ? (c.note ? `“${esc(c.note)}”` : tx('label reads {code}', { code: esc(c.to) })) : `“${esc(c.note)}”`;
 const unnamedKey = (floor, pos) => `@${floor || ''}:${pos.x},${pos.y}`;
 let sel = null;   // { key, shelf, unnamed, floor, pos, near, dept }
 
 export default {
-  id: 'fieldmode', title: 'Field Mode', icon: 'm-map',
+  id: 'fieldmode', title: tx('Field Mode'), icon: 'm-map',
   desktop(ctx) {
-    if (!isManager(ctx)) return vh('Field Mode', 'Needs the manager code', '', 'm-map') + `<div class="card"><p class="lbl">Field Mode checks shelves against their labels for the map. Enter the manager code on this device to use it.</p></div>`;
-    return vh('Field Mode', sub('Check shelves against their labels', 'kept on this device until sent to the owner'), `<button class="btn" data-go="settings">${ic('x')}Exit</button>`, 'm-map') +
-      `<div class="mapview fmview"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="mapleg"><span><i style="background:#F1F5F9;border:1.5px dashed #94A3B8"></i>Not checked</span><span><i style="background:#16A34A"></i>Checked</span><span><i style="background:#E0F2FE;border:1.5px dashed #0EA5E9"></i>No name on the map</span></div></div><div class="card fm-panel fm-desk" id="fmpanel"></div></div>`;
+    if (!isManager(ctx)) return vh(tx('Field Mode'), tx('Needs the manager code'), '', 'm-map') + `<div class="card"><p class="lbl">${tx('Field Mode checks shelves against their labels for the map. Enter the manager code on this device to use it.')}</p></div>`;
+    return vh(tx('Field Mode'), sub(tx('Check shelves against their labels'), tx('kept on this device until sent to the owner')), `<button class="btn" data-go="settings">${ic('x')}${tx('leave::Exit')}</button>`, 'm-map') +
+      `<div class="mapview fmview"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="mapleg"><span><i style="background:#F1F5F9;border:1.5px dashed #94A3B8"></i>${tx('Not checked')}</span><span><i style="background:#16A34A"></i>${tx('Checked')}</span><span><i style="background:#E0F2FE;border:1.5px dashed #0EA5E9"></i>${tx('No name on the map')}</span></div></div><div class="card fm-panel fm-desk" id="fmpanel"></div></div>`;
   },
   mobile(ctx) {
-    if (!isManager(ctx)) return mhead('Field Mode', 'Needs the manager code') + `<div class="mv-note">${ic('lock')}Enter the manager code on this device to check shelves.</div>`;
-    return mvMap({ badge: `<span>Field Mode</span>` }) + `<div class="mv-sel mode fm-mob" id="fmpanel"></div>`;
+    if (!isManager(ctx)) return mhead(tx('Field Mode'), tx('Needs the manager code')) + `<div class="mv-note">${ic('lock')}${tx('Enter the manager code on this device to check shelves.')}</div>`;
+    return mvMap({ badge: `<span>${tx('Field Mode')}</span>` }) + `<div class="mv-sel mode fm-mob" id="fmpanel"></div>`;
   },
   mount(ctx, root) {
     if (!isManager(ctx) || !hasMap()) return [];
@@ -75,7 +76,7 @@ export default {
     const nextOpen = () => {
       const d = read(ctx.storeNo), ids = [...new Set(onFloor().filter(g => g.getAttribute('data-shelf')).map(segmentId))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       const from = sel && !sel.unnamed ? ids.indexOf(sel.key) : -1, next = [...ids.slice(from + 1), ...ids.slice(0, from + 1)].find(id => !d.caps[id]);
-      if (!next) { toast('Every named shelf on this floor is checked', 'good'); sel = null; return paint(); }
+      if (!next) { toast(tx('Every named shelf on this floor is checked'), 'good'); sel = null; return paint(); }
       const g = map.segments().find(x => segmentId(x) === next);
       sel = { key: next, shelf: next, unnamed: false, floor: map.floorId() || null, dept: (g?.getAttribute('data-dept') || '').toLowerCase() }; if (g) map.zoomTo(next, 400);
       paint(true);
@@ -85,7 +86,7 @@ export default {
     let sending = false;
     const send = async () => {
       if (sending) return;
-      const d = read(ctx.storeNo), list = pending(d); if (!list.length) return toast('Nothing to send yet');
+      const d = read(ctx.storeNo), list = pending(d); if (!list.length) return toast(tx('Nothing to send yet'));
       sending = true; const btn = root.querySelector('[data-act="fm-send"]'); if (btn) btn.disabled = true;
       let ok = 0;
       try { for (const c of list) {
@@ -96,14 +97,14 @@ export default {
           d.sent = d.sent.slice(0, 60); write(ctx.storeNo, d);   // kept as it goes: a reload mid-send does not send it again
         } catch (e) { toast(e.message, 'bad'); break; }
       } } finally { sending = false; }
-      if (ok) { haptic('success'); toast(`Sent ${ok} to the owner`); }
+      if (ok) { haptic('success'); toast(tx('Sent {n} to the owner', { n: ok })); }
       paint();
     };
     root.addEventListener('submit', e => {
       const f = e.target.closest('[data-form="fm"]'); if (!f || !sel) return; e.preventDefault();
       const fd = new FormData(f), code = String(fd.get('code') || '').trim().toUpperCase().slice(0, 40), note = String(fd.get('comment') || '').trim().slice(0, 300);
-      if (sel.unnamed && !code) return toast('Scan or type the name on its label', 'bad');
-      if (!code && !note) return toast('Scan or type the label first', 'bad');
+      if (sel.unnamed && !code) return toast(tx('Scan or type the name on its label'), 'bad');
+      if (!code && !note) return toast(tx('Scan or type the label first'), 'bad');
       const d = read(ctx.storeNo), was = d.caps[sel.key];
       const kind = sel.unnamed ? 'name' : code && canonCode(code) !== canonCode(sel.shelf) ? 'rename' : note ? 'flag' : 'ok';
       // A change after sending is a new suggestion; the sent one keeps its place in Sent.
@@ -121,14 +122,14 @@ export default {
       else if (act === 'fm-send') await send();
       else if (act === 'fm-drop') { const d = read(ctx.storeNo); delete d.caps[a.dataset.key]; write(ctx.storeNo, d); paint(); }
       else if (act === 'fm-clear' && sel) { const d = read(ctx.storeNo); delete d.caps[sel.key]; write(ctx.storeNo, d); paint(true); }
-      else if (act === 'fm-wipe') { if (confirm('Clear every check on this device? Anything not sent yet is lost; what was sent stays in the owner’s queue.')) { write(ctx.storeNo, { caps: {}, sent: [] }); sel = null; paint(); } }
+      else if (act === 'fm-wipe') { if (confirm(tx('Clear every check on this device? Anything not sent yet is lost; what was sent stays in the owner’s queue.'))) { write(ctx.storeNo, { caps: {}, sent: [] }); sel = null; paint(); } }
       else if (act === 'fm-export') {
         const d = read(ctx.storeNo), caps = {};
         for (const c of Object.values(d.caps)) if (c.kind !== 'name') caps[c.shelf] = { shelf: c.shelf.split(' ')[0], sub: c.shelf.split(' ').slice(1).join(' '), floor: c.floor, code: c.to || c.shelf, comment: c.note || '', at: c.at, ...(c.kind === 'rename' ? { differs: true } : {}) };
         const doc = { kind: 'field-capture', version: 1, storeNumber: ctx.storeNo, storeName: ctx.storeName, capturedAt: new Date().toISOString(), count: Object.keys(caps).length, captures: caps };
         const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })), link = document.createElement('a');
         link.href = url; link.download = `field-${ctx.storeNo}-${today()}.json`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
-        toast(`Exported ${doc.count} check${doc.count === 1 ? '' : 's'}`);
+        toast(txn(doc.count, 'Exported {n} check', 'Exported {n} checks'));
       }
     });
     map.stage.addEventListener('mapfloor', () => { sel = null; paint(); });
@@ -142,28 +143,28 @@ export default {
       if (sel) {
         const c = d.caps[sel.key], code = c ? (c.to || (sel.unnamed ? '' : sel.shelf)) : '';
         return `<form class="sx fmx-form" data-form="fm">` +
-          (sel.unnamed ? `<div class="sx-h">${ic('plus')}New shelf<span class="n">Not on the map</span></div><div class="sx-sub">This shelf has no name on the map${sel.near ? ` · beside ${esc(sel.near)}` : ''}</div>`
-            : `<div class="sx-h">${ic('m-map')}${esc(sel.shelf)}<span class="n">${c ? 'Checked' : 'On the map'}</span></div>`) +
-          sx.sec(sel.unnamed ? 'Name on its label' : 'The label reads', `<div class="fmx-scan"><input class="sx-in" data-field="fmcode" name="code" value="${esc(code)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${sel.unnamed ? 'Scan or type its label' : esc(sel.shelf)}" enterkeyhint="next"><button type="button" data-camera="fmcode" aria-label="Scan with the camera">${ic('barcode')}</button></div>`) +
+          (sel.unnamed ? `<div class="sx-h">${ic('plus')}${tx('New shelf')}<span class="n">${tx('Not on the map')}</span></div><div class="sx-sub">${sel.near ? tx('This shelf has no name on the map · beside {shelf}', { shelf: esc(sel.near) }) : tx('This shelf has no name on the map')}</div>`
+            : `<div class="sx-h">${ic('m-map')}${esc(sel.shelf)}<span class="n">${c ? tx('Checked') : tx('On the map')}</span></div>`) +
+          sx.sec(sel.unnamed ? tx('Name on its label') : tx('The label reads'), `<div class="fmx-scan"><input class="sx-in" data-field="fmcode" name="code" value="${esc(code)}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${sel.unnamed ? tx('Scan or type its label') : esc(sel.shelf)}" enterkeyhint="next"><button type="button" data-camera="fmcode" aria-label="${tx('Scan with the camera')}">${ic('barcode')}</button></div>`) +
           `<div class="fm-hint">${hintFor(sel, code)}</div>` +
-          sx.sec('Comment', `<input class="sx-in" name="comment" maxlength="300" value="${esc(c?.note || '')}" placeholder="Anything the owner should know">`, 'optional') +
-          `<div class="sx-acts"><button class="sx-btn sx-pri" type="submit" data-save="stay">${ic('check')}Save</button><button class="sx-btn" type="submit" data-save="next">${ic('arrow')}Save &amp; next</button><button class="sx-btn" type="button" data-act="fm-back">${ic('x')}${c ? 'Close' : 'Skip'}</button>${c ? `<button class="sx-btn" type="button" data-act="fm-clear">${ic('trash')}Clear</button>` : ''}</div></form>`;
+          sx.sec(tx('Comment'), `<input class="sx-in" name="comment" maxlength="300" value="${esc(c?.note || '')}" placeholder="${tx('Anything the owner should know')}">`, tx('optional')) +
+          `<div class="sx-acts"><button class="sx-btn sx-pri" type="submit" data-save="stay">${ic('check')}${tx('Save')}</button><button class="sx-btn" type="submit" data-save="next">${ic('arrow')}${tx('Save &amp; next')}</button><button class="sx-btn" type="button" data-act="fm-back">${ic('x')}${c ? tx('Close') : tx('Skip')}</button>${c ? `<button class="sx-btn" type="button" data-act="fm-clear">${ic('trash')}${tx('Clear')}</button>` : ''}</div></form>`;
       }
       const row = (icon, title, subl, tag, tone, extra = '') => `<div class="sx-r">${ic(icon)}<div class="k"><b>${title}</b>${subl ? `<span>${subl}</span>` : ''}</div>${tag ? `<span class="fmx-tag ${tone}">${tag}</span>` : ''}${extra}</div>`;
       const icon = c => c.kind === 'rename' ? 'edit' : c.kind === 'name' ? 'plus' : 'alert';
-      const wait = waiting.map(c => row(icon(c), what(c), detail(c), '', '', `<button class="rt-x" type="button" data-act="fm-drop" data-key="${esc(c.key || c.shelf)}" aria-label="Remove">${ic('x')}</button>`));
-      const sent = d.sent.slice(0, 12).map(x => { const e = edits[x.id], st = !e ? ['Sent', ''] : e.status === 'accepted' ? [/^on the map/i.test(e.reply || '') ? 'On the map' : 'Accepted', 'ok'] : e.status === 'declined' ? ['Declined', 'no'] : ['Waiting', 'wait'];
-        return row(e?.status === 'accepted' ? 'check' : e?.status === 'declined' ? 'x' : icon(x), what(x), [`sent ${esc(fmtTime(x.at))}`, e?.reply && e.status === 'declined' ? `“${esc(e.reply)}”` : ''].filter(Boolean).join(' · '), st[0], st[1]); });
-      return `<div class="sx"><div class="sx-h">${ic('m-map')}Field Mode<span class="n">${waiting.length ? `${waiting.length} to send` : 'Nothing to send'}</span></div>` +
-        `<div class="sx-sub">${checked} of ${named.length} named shelves on this floor checked · tap a shelf; a shelf outlined in blue has no name on the map</div>` +
-        (waiting.length ? sx.sec('Waiting to send', `<div class="sx-rows">${wait.join('')}</div>`, 'kept on this device until sent') : '') +
-        `<div class="sx-acts">${waiting.length ? `<button class="sx-btn sx-pri" type="button" data-act="fm-send">${ic('arrow')}Send ${waiting.length} to the owner</button>` : ''}<button class="sx-btn${waiting.length ? '' : ' sx-pri'}" type="button" data-act="fm-next">${ic('arrow')}First unchecked</button>${Object.keys(d.caps).length ? `<button class="sx-btn" type="button" data-act="fm-export">${ic('file')}Export a file</button><button class="sx-btn" type="button" data-act="fm-wipe">${ic('trash')}Clear all</button>` : ''}</div>` +
-        (sent.length ? sx.sec('Sent', `<div class="sx-rows">${sent.join('')}</div>`, 'the owner reviews these') : '') + `</div>`;
+      const wait = waiting.map(c => row(icon(c), what(c), detail(c), '', '', `<button class="rt-x" type="button" data-act="fm-drop" data-key="${esc(c.key || c.shelf)}" aria-label="${tx('Remove')}">${ic('x')}</button>`));
+      const sent = d.sent.slice(0, 12).map(x => { const e = edits[x.id], st = !e ? [tx('Sent'), ''] : e.status === 'accepted' ? [/^on the map/i.test(e.reply || '') ? tx('On the map') : tx('Accepted'), 'ok'] : e.status === 'declined' ? [tx('Declined'), 'no'] : [tx('Waiting'), 'wait'];
+        return row(e?.status === 'accepted' ? 'check' : e?.status === 'declined' ? 'x' : icon(x), what(x), [tx('sent {time}', { time: esc(fmtTime(x.at)) }), e?.reply && e.status === 'declined' ? `“${esc(e.reply)}”` : ''].filter(Boolean).join(' · '), st[0], st[1]); });
+      return `<div class="sx"><div class="sx-h">${ic('m-map')}${tx('Field Mode')}<span class="n">${waiting.length ? tx('{n} to send', { n: waiting.length }) : tx('Nothing to send')}</span></div>` +
+        `<div class="sx-sub">${tx('{n} of {total} named shelves on this floor checked · tap a shelf; a shelf outlined in blue has no name on the map', { n: checked, total: named.length })}</div>` +
+        (waiting.length ? sx.sec(tx('Waiting to send'), `<div class="sx-rows">${wait.join('')}</div>`, tx('kept on this device until sent')) : '') +
+        `<div class="sx-acts">${waiting.length ? `<button class="sx-btn sx-pri" type="button" data-act="fm-send">${ic('arrow')}${tx('Send {n} to the owner', { n: waiting.length })}</button>` : ''}<button class="sx-btn${waiting.length ? '' : ' sx-pri'}" type="button" data-act="fm-next">${ic('arrow')}${tx('First unchecked')}</button>${Object.keys(d.caps).length ? `<button class="sx-btn" type="button" data-act="fm-export">${ic('file')}${tx('Export a file')}</button><button class="sx-btn" type="button" data-act="fm-wipe">${ic('trash')}${tx('Clear all')}</button>` : ''}</div>` +
+        (sent.length ? sx.sec(tx('Sent'), `<div class="sx-rows">${sent.join('')}</div>`, tx('the owner reviews these')) : '') + `</div>`;
     }
     function strip(d) {
       const n = pending(d).length;
-      if (sel) return `${ic(sel.unnamed ? 'plus' : 'm-map')}<b>${sel.unnamed ? 'New shelf' : esc(sel.shelf)}</b><span class="s">${sel.unnamed ? 'name it from its label' : 'check its label'}</span><button class="act" type="button" data-act="fm-back">${ic('x')}Close</button>`;
-      return `${ic('m-map')}<b>Field Mode</b>${n ? `<span class="n">${n}</span><span class="s">to send</span><button class="act go" type="button" data-act="fm-send">${ic('arrow')}Send</button>` : `<span class="s">tap a shelf</span><button class="act" type="button" data-act="fm-next">${ic('arrow')}Next</button>`}`;
+      if (sel) return `${ic(sel.unnamed ? 'plus' : 'm-map')}<b>${sel.unnamed ? tx('New shelf') : esc(sel.shelf)}</b><span class="s">${sel.unnamed ? tx('name it from its label') : tx('check its label')}</span><button class="act" type="button" data-act="fm-back">${ic('x')}${tx('Close')}</button>`;
+      return `${ic('m-map')}<b>${tx('Field Mode')}</b>${n ? `<span class="n">${n}</span><span class="s">${tx('to send')}</span><button class="act go" type="button" data-act="fm-send">${ic('arrow')}${tx('Send')}</button>` : `<span class="s">${tx('tap a shelf')}</span><button class="act" type="button" data-act="fm-next">${ic('arrow')}${tx('Next')}</button>`}`;
     }
   },
 };
@@ -171,7 +172,7 @@ export default {
 // What Save will do with what the label reads.
 function hintFor(sel, value) {
   const code = String(value || '').trim().toUpperCase();
-  if (sel.unnamed) return code ? `<div class="fmx-diff">${ic('plus')}<div>Sends a suggestion to <b>name this shelf ${esc(code)}</b>. The owner applies it to the map.</div></div>` : '';
-  if (!code || canonCode(code) === canonCode(sel.shelf)) return code ? `<div class="fmx-diff ok">${ic('check')}<div>Matches the map. Save marks it checked; a comment goes to the owner as a note.</div></div>` : '';
-  return `<div class="fmx-diff">${ic('edit')}<div>Different from the map: sends a suggestion to <b>rename ${esc(sel.shelf)} to ${esc(code)}</b>.</div></div>`;
+  if (sel.unnamed) return code ? `<div class="fmx-diff">${ic('plus')}<div>${tx('Sends a suggestion to <b>name this shelf {code}</b>. The owner applies it to the map.', { code: esc(code) })}</div></div>` : '';
+  if (!code || canonCode(code) === canonCode(sel.shelf)) return code ? `<div class="fmx-diff ok">${ic('check')}<div>${tx('Matches the map. Save marks it checked; a comment goes to the owner as a note.')}</div></div>` : '';
+  return `<div class="fmx-diff">${ic('edit')}<div>${tx('Different from the map: sends a suggestion to <b>rename {shelf} to {code}</b>.', { shelf: esc(sel.shelf), code: esc(code) })}</div></div>`;
 }

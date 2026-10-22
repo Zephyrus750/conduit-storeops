@@ -106,3 +106,15 @@ test('runs named by digits alone, spoken: "zero four side two", "oh four", "four
   assert.deepEqual(spokenStops(['zero four', 'zero four'], look).codes, ['04'], 'the run itself, when that is what was said');
   assert.ok(ofRun('04S2', '04'));
 });
+
+test('permanent ends (P1, P2): typed, pasted and spoken like a side or an end', async () => {
+  const { typedStops } = await import('../../shared/voice.js');
+  const MAP = new Set(['A16', 'A16S1', 'A16P1', '16', '16P2']);
+  const look = c => (MAP.has(c) ? c : null);
+  assert.deepEqual(typedStops('A16 P1, 16 P2', look).codes, ['A16P1', '16P2']);
+  assert.deepEqual(typedStops('A16 S1 P1', look).codes, ['A16S1', 'A16P1'], 'a side and the permanent end of one run');
+  assert.equal(spokenToCode('A sixteen permanent end one'), 'A16P1');
+  assert.deepEqual(spokenStops(['A sixteen P one'], look).codes, ['A16P1']);
+  assert.equal(resolveSpoken(['sixteen permanent end two'], look).code, '16P2');
+  assert.ok(ofRun('A16P1', 'A16'));
+});

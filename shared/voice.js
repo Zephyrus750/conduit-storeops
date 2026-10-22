@@ -31,9 +31,10 @@ const TENS = { TWENTY: 20, THIRTY: 30, FORTY: 40, FOURTY: 40, FIFTY: 50, SIXTY: 
 const SCALE = { HUNDRED: 100, THOUSAND: 1000 };
 const isNum = w => w in ONES || w in TEENS || w in TENS || w in SCALE;
 // "side two" is S2 and "end one" E1, as the shelves are labelled.
-const SECTION = { SIDE: 'S', SECTION: 'S', END: 'E' };
+const SECTION = { SIDE: 'S', SECTION: 'S', END: 'E', PERMANENT: 'P' };
 
-const words = text => String(text || '').toUpperCase().replace(/[‐-―-]/g, ' ').replace(/[^A-Z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
+// "Permanent end one" is P1 (a permanent end), said as one word here.
+const words = text => String(text || '').toUpperCase().replace(/\bPERMANENT\s+END\b/g, 'PERMANENT').replace(/[‐-―-]/g, ' ').replace(/[^A-Z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
 
 // Number words to digits. A run of words with "hundred" or "thousand" is one
 // number ("seven thousand and two" → 7002); otherwise each word is its own
@@ -183,7 +184,7 @@ export function spokenStops(guesses, lookup) {
 export function typedStops(text, lookup) {
   const ws = String(text || '').toUpperCase().split(/[\s,;]+/).filter(w => w && !/^[-–]+$/.test(w));
   const codes = [], bad = [], add = c => { if (!codes.includes(c)) codes.push(c); };
-  const side = w => /^[SE]\d+$/.test(w);
+  const side = w => /^[SEP]\d+$/.test(w);
   let run = null;   // the run the last word named, for a side that follows it
   for (let i = 0; i < ws.length; i++) {
     const w = ws[i], next = ws[i + 1] || '';

@@ -1,18 +1,26 @@
 // Shared bits for the Back dock views: pallet types and colours, halt
 // reasons, truck ids, progress. Reads the dock projection the backdock
 // reducers keep (dock.trucks, dock.history, dock.manifests, plan.days).
+// The labels are in the device's language (js/i18n.js); the keys stay English.
 
-export const PTYPES = [['chep', 'Chep tubs', '#2953D6'], ['loscam', 'Load pallets', '#B3261E'], ['bulk', 'Bulk', '#69787F']];
+import { tx } from '../../i18n.js';
+
+export const PTYPES = [['chep', tx('Chep tubs'), '#2953D6'], ['loscam', tx('Load pallets'), '#B3261E'], ['bulk', tx('Bulk'), '#69787F']];
 export const PT_LETTER = { chep: 'c', loscam: 'l', bulk: 'b' };
 export const PT_NAME = Object.fromEntries(PTYPES.map(p => [p[0], p[1]]));
 export const PT_COLOUR = Object.fromEntries(PTYPES.map(p => [p[0], p[2]]));
-export const HALT_NAME = { hcage: 'Cages out', nostock: 'No stock', equip: 'Equipment', safety: 'Safety', waiting: 'Waiting', other: 'Other' };
+export const HALT_NAME = { hcage: tx('Cages out'), nostock: tx('No stock'), equip: tx('Equipment'), safety: tx('Safety'), waiting: tx('Waiting'), other: tx('Other') };
 // Hold-up kinds (DV): a halt is downtime; a huddle, a transition and a team
 // break are planned pauses. All of them stop the decant clock.
-export const KIND_NAME = { halt: 'Halt', huddle: 'Huddle', transition: 'Transition', break: 'Team break' };
-export const TRANS_NAME = { cages: 'Cages', tables: 'Tables', tubs: 'Tubs', moving: 'Moving stock', changeover: 'Changeover', other: 'Other' };
-export const ROLE_NAME = { cutter: 'Cutter', runner: 'Runner', cleaner: 'Cleaner' };
-export function holdName(h) { const k = h?.kind || 'halt'; return k === 'halt' ? HALT_NAME[h.reason] || 'Halt' : k === 'transition' ? `Transition · ${TRANS_NAME[h.reason] || h.reason}` : KIND_NAME[k]; }
+export const KIND_NAME = { halt: tx('Halt'), huddle: tx('Huddle'), transition: tx('Transition'), break: tx('Team break') };
+export const TRANS_NAME = { cages: tx('Cages'), tables: tx('Tables'), tubs: tx('Tubs'), moving: tx('Moving stock'), changeover: tx('Changeover'), other: tx('Other') };
+export const ROLE_NAME = { cutter: tx('Cutter'), runner: tx('Runner'), cleaner: tx('Cleaner') };
+export function holdName(h) { const k = h?.kind || 'halt'; return k === 'halt' ? HALT_NAME[h.reason] || KIND_NAME.halt : k === 'transition' ? `${KIND_NAME.transition} · ${TRANS_NAME[h.reason] || h.reason}` : KIND_NAME[k]; }
+// A pallet's and a truck's status as shown (the stored values stay English),
+// and how a late link was made.
+export const PALLET_STATE = { landed: tx('landed'), assigned: tx('assigned'), active: tx('active'), paused: tx('paused'), done: tx('done') };
+export const TRUCK_STATE = { live: tx('live'), staged: tx('staged'), closed: tx('closed') };
+export const LINK_BASIS = { manual: tx('manual'), scan: tx('scan'), cartons: tx('cartons'), time: tx('time') };
 export const STD_MINS_PER_CARTON = 0.5;
 
 export const todayKey = () => today();
@@ -56,7 +64,7 @@ export function pace(t, p, now = Date.now()) {
   if (p.status !== 'active' && p.status !== 'paused') return '';
   return w > exp ? 'over' : w > exp * 0.8 ? 'near' : 'on';
 }
-export const fmtMins = m => { m = Math.max(0, Math.round(m)); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; };
+export const fmtMins = m => { m = Math.max(0, Math.round(m)); return m >= 60 ? tx('{h}h {m}m', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') }) : tx('{m}m', { m }); };
 export const fmtClock = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 // Forecast finish (DV's fEstClear): each person's run (what they are on,
 // then their queue) from their rostered start, and every unstarted pallet
@@ -106,7 +114,7 @@ export function loadXLSX() {
   if (xlsxLoading) return xlsxLoading;
   xlsxLoading = new Promise((resolve, reject) => {
     const sc = document.createElement('script'); sc.src = 'vendor/xlsx/xlsx.full.min.js';   // self-hosted: works offline, no third-party script
-    sc.onload = () => resolve(window.XLSX); sc.onerror = () => { xlsxLoading = null; reject(new Error('the spreadsheet reader did not load. Check the connection and try again')); };
+    sc.onload = () => resolve(window.XLSX); sc.onerror = () => { xlsxLoading = null; reject(new Error(tx('the spreadsheet reader did not load. Check the connection and try again'))); };
     document.head.appendChild(sc);
   });
   return xlsxLoading;
@@ -116,14 +124,14 @@ export async function readManifestFile(file) {
   const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array', cellDates: false, raw: true });
   const sheets = wb.SheetNames.map(name => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null }) }));
   const parsed = parseManifestSheets(sheets);
-  if (!parsed.consols.length) throw new Error(parsed.diag || 'no consolidations found in that file');
+  if (!parsed.consols.length) throw new Error(parsed.diag ? tx(parsed.diag) : tx('no consolidations found in that file'));   // the diagnoses are shared/manifest.js's (test/unit/i18n-keys/dock1.json)
   return parsed;
 }
 // Publish a read report under its manifest number (the preview asks for one
 // when the report carries none: js/views/backdock/mpreview.js).
 export async function publishParsed(ctx, parsed, { filename = '', manNo } = {}) {
   const no = String(manNo || parsed.manNo || '').trim();
-  if (!/^[\w-]{1,20}$/.test(no)) throw new Error('a manifest needs a number: 1 to 20 letters, digits or dashes');
+  if (!/^[\w-]{1,20}$/.test(no)) throw new Error(tx('a manifest needs a number: 1 to 20 letters, digits or dashes'));
   const doc = manifestDoc(parsed, { filename, by: ctx.session.current?.device || '', manNo: no });
   const r = await ctx.api(`/v1/store/${ctx.storeNo}/manifest`, { method: 'POST', body: doc, timeoutMs: 60000 });
   return { ...r, doc };

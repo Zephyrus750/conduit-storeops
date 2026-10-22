@@ -203,6 +203,12 @@ posts SKIP_WAITING, then the page reloads once on the new release. The
 precache is the shell alone: maps, snapshots and the outbox live in
 IndexedDB, and every worker call passes through uncached. Bundled fallback
 maps (`maps/*.svg`) serve network-first from a cache that survives releases.
+The translations (`js/i18n/`, about 100 KB compressed a language) are left out
+of the precache so an English device never downloads six dictionaries: a
+device fetches its own language on first use into the release cache, a new
+release fetches again the languages the old one held, and they count towards
+the build id. A device switched to a new language while offline stays in
+English until it is back online.
 
 After changing any shell file run `npm run sw` and commit `sw-precache.js`;
 the unit suite fails when it is stale. Netlify serves `sw.js` and the
@@ -465,8 +471,25 @@ background from the accent and ground tokens; the sign-in is one card on it,
 manager code only on a PC (the store PIN returns there only when the worker
 predates manager sign-in) and Team member or Manager on a phone. Inter, the
 face the tokens name, ships in `styles/fonts/` (variable weight, OFL) and is
-precached with the shell. `js/device.js` holds haptics
+precached with the shell, with its Vietnamese subset as a second face that
+loads only for Vietnamese letters. `js/device.js` holds haptics
 and the phone portrait lock.
+
+### Languages
+
+Every screen, on the PCs and the phones, comes in ShelfSearcher's seven
+languages: English, Deutsch, Français, Filipino, Tiếng Việt, Español and
+Italiano. Each device picks its own (Settings › Display, or the language
+list under the sign-in card) and reloads in it; dates follow the language
+through `Intl`. Interface text goes through `tx()` / `txn()` in
+`js/i18n.js`, keyed by the English text; each language's dictionary is
+`js/i18n/<code>.js`, one chunk per area, and loads before anything renders.
+`npm test` fails when a key lacks a translation, a translation's
+`{placeholders}` or markup differ from the English, or a dictionary keeps a
+key nothing uses. Data stays as the store wrote it: shelf, bay and product
+codes, product, store and department names, D-numbers, report codes (SOH,
+PULL, GHOST…), anything a person typed, and the owner's map editor
+(`docs/I18N.md`, with the glossary each language keeps to).
 
 ## Where things stand
 

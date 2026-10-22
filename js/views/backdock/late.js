@@ -7,6 +7,7 @@
 // records how each link was made.
 
 import { esc, toast } from '../../ui.js';
+import { tx, txn } from '../../i18n.js';
 import { pallets, truckNo } from './common.js';
 import { segWorkedMs } from '../../../shared/reducers/backdock.js';
 
@@ -44,12 +45,12 @@ function plan(t, rates) {
 
 export function linkSheet(t, rates) {
   if (st.truck !== t.id) { st.truck = t.id; st.picks = {}; }
-  const { auto, decide } = plan(t, rates), fm = m => `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, '0')}m`;
-  return `<div class="card ll"><div class="ch"><h3>Link manifest to landed pallets</h3><span class="go" data-act="ll-close">Close</span></div>` +
-    `<p class="lbl">${unlinked(t).length} pallet${unlinked(t).length === 1 ? '' : 's'} landed without a match · ${(t.manifest?.consols || []).length} consols on manifest ${esc(t.manifest?.manNo || '')}. Links are recorded as linked late, with how each match was made.</p>` +
-    (auto.length ? `<div class="pt3">Matched automatically · ${auto.length} pallet${auto.length === 1 ? '' : 's'}</div><div class="list">${auto.map(a => `<div class="li"><span class="loc">${esc(a.ref)}</span><span class="nm">→ ${a.ids.map(esc).join(' + ')} <small class="cs-dim">(${a.basis === 'scan' ? 'scanned code' : 'carton count'})</small></span></div>`).join('')}</div>` : '') +
-    (decide.length ? `<div class="pt3">Needs a decision · pick the consol (ranked by carton fit)</div><div class="list">${decide.map(d => `<div class="li ll-row"><span class="loc">${esc(d.p.ref)}</span><span class="nm">${d.n == null ? 'no count' : `${d.est ? '≈' : ''}${d.n} ctn${d.est ? ` est. from ${fm(d.mins)} worked` : ''}`}${d.people.length ? ' · ' + d.people.map(esc).join(', ') : ''}</span><select class="bdr-in" data-ll="${esc(d.p.ref)}"><option value="">— leave unlinked —</option>${d.cands.map(c => `<option value="${esc(c.id)}"${(st.picks[d.p.ref] ?? d.pre) === c.id ? ' selected' : ''}>${esc(c.id)} — ${c.cartons} ctn ${c.d === 0 ? '(exact)' : c.d < 1e9 ? `(±${c.d})` : ''} · ${esc(c.dept || '')}</option>`).join('')}</select></div>`).join('')}</div>` : '') +
-    (!auto.length && !decide.length ? '<p class="lbl">Every landed pallet is already linked.</p>' : `<div class="acts2" style="display:flex;gap:8px;margin-top:10px"><button class="btn primary sm" data-act="ll-apply">Apply links</button><button class="btn sm" data-act="ll-close">Cancel</button></div>`) + '</div>';
+  const { auto, decide } = plan(t, rates), fm = m => tx('{h}h {m}m', { h: Math.floor(m / 60), m: String(Math.round(m % 60)).padStart(2, '0') }), nUn = unlinked(t).length;
+  return `<div class="card ll"><div class="ch"><h3>${tx('Link manifest to landed pallets')}</h3><span class="go" data-act="ll-close">${tx('Close')}</span></div>` +
+    `<p class="lbl">${txn(nUn, '{n} pallet landed without a match · {c} consols on manifest {no}. Links are recorded as linked late, with how each match was made.', '{n} pallets landed without a match · {c} consols on manifest {no}. Links are recorded as linked late, with how each match was made.', { c: (t.manifest?.consols || []).length, no: esc(t.manifest?.manNo || '') })}</p>` +
+    (auto.length ? `<div class="pt3">${tx('Matched automatically')} · ${txn(auto.length, '{n} pallet', '{n} pallets')}</div><div class="list">${auto.map(a => `<div class="li"><span class="loc">${esc(a.ref)}</span><span class="nm">→ ${a.ids.map(esc).join(' + ')} <small class="cs-dim">(${a.basis === 'scan' ? tx('scanned code') : tx('carton count')})</small></span></div>`).join('')}</div>` : '') +
+    (decide.length ? `<div class="pt3">${tx('Needs a decision · pick the consol (ranked by carton fit)')}</div><div class="list">${decide.map(d => `<div class="li ll-row"><span class="loc">${esc(d.p.ref)}</span><span class="nm">${d.n == null ? tx('no count') : d.est ? tx('≈{n} ctn est. from {time} worked', { n: d.n, time: fm(d.mins) }) : tx('{n} ctn', { n: d.n })}${d.people.length ? ' · ' + d.people.map(esc).join(', ') : ''}</span><select class="bdr-in" data-ll="${esc(d.p.ref)}"><option value="">${tx('— leave unlinked —')}</option>${d.cands.map(c => `<option value="${esc(c.id)}"${(st.picks[d.p.ref] ?? d.pre) === c.id ? ' selected' : ''}>${esc(c.id)} — ${tx('{n} ctn', { n: c.cartons })} ${c.d === 0 ? tx('(exact)') : c.d < 1e9 ? `(±${c.d})` : ''} · ${esc(c.dept || '')}</option>`).join('')}</select></div>`).join('')}</div>` : '') +
+    (!auto.length && !decide.length ? `<p class="lbl">${tx('Every landed pallet is already linked.')}</p>` : `<div class="acts2" style="display:flex;gap:8px;margin-top:10px"><button class="btn primary sm" data-act="ll-apply">${tx('Apply links')}</button><button class="btn sm" data-act="ll-close">${tx('Cancel')}</button></div>`) + '</div>';
 }
 export const linkPick = (ref, id) => { st.picks[ref] = id; };
 export async function applyLinks(ctx, t, rates) {
@@ -61,8 +62,8 @@ export async function applyLinks(ctx, t, rates) {
     const c = d.cands.find(x => x.id === id), basis = d.n == null ? 'manual' : c?.d === 0 && !d.est ? 'cartons' : d.est ? 'time' : 'manual';
     links.push({ bay: d.p.ref, consolIds: [id], basis });
   }
-  if (!links.length) return toast('Nothing picked to link');
+  if (!links.length) return toast(tx('Nothing picked to link'));
   await ctx.store.dispatch({ type: 'manifest.linkLate', entity: { truck: t.id }, payload: { links } });
   st.picks = {};
-  toast(`${links.length} pallet${links.length === 1 ? '' : 's'} linked to the manifest on Truck ${truckNo(t.id)}${dupes ? ` · ${dupes} skipped (consol picked twice)` : ''}`);
+  toast(txn(links.length, '{n} pallet linked to the manifest on Truck {t}', '{n} pallets linked to the manifest on Truck {t}', { t: truckNo(t.id) }) + (dupes ? ' · ' + tx('{n} skipped (consol picked twice)', { n: dupes }) : ''));
 }

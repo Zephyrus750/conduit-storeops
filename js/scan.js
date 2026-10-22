@@ -17,18 +17,19 @@
 
 import { ic, esc, toast } from './ui.js';
 import { prefs } from './prefs.js';
+import { tx } from './i18n.js';
 
 const FORMATS = ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39', 'itf', 'qr_code', 'data_matrix'];
 const REPEAT_MS = 2500, TICK_MS = 180;
 let current = null;
 
-export function openScanner({ title = 'Scan', hint = '', continuous = false, onCode } = {}) {
+export function openScanner({ title = tx('Scan'), hint = '', continuous = false, onCode } = {}) {
   current?.close();
   const el = document.createElement('div'); el.id = 'scanner'; el.className = 'scanner';
   el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', title);
-  el.innerHTML = `<div class="sc-top"><b>${esc(title)}</b><button type="button" class="sc-btn" data-sc="torch" hidden aria-label="Torch">${ic('bolt')}</button><button type="button" class="sc-btn" data-sc="close" aria-label="Close the scanner">${ic('x')}</button></div>` +
-    `<div class="sc-view"><video playsinline muted></video><div class="sc-frame"></div><div class="sc-msg" role="status">${esc(hint || 'Point the camera at the barcode')}</div></div>` +
-    `<form class="sc-type"><input inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="Or type the code" aria-label="Type the code"><button type="submit" class="sc-btn">${ic('arrow')}</button></form>` +
+  el.innerHTML = `<div class="sc-top"><b>${esc(title)}</b><button type="button" class="sc-btn" data-sc="torch" hidden aria-label="${tx('Torch')}">${ic('bolt')}</button><button type="button" class="sc-btn" data-sc="close" aria-label="${tx('Close the scanner')}">${ic('x')}</button></div>` +
+    `<div class="sc-view"><video playsinline muted></video><div class="sc-frame"></div><div class="sc-msg" role="status">${esc(hint || tx('Point the camera at the barcode'))}</div></div>` +
+    `<form class="sc-type"><input inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="${tx('Or type the code')}" aria-label="${tx('Type the code')}"><button type="submit" class="sc-btn">${ic('arrow')}</button></form>` +
     (continuous ? `<div class="sc-tally" aria-live="polite"></div>` : '');
   document.body.appendChild(el);
   const video = el.querySelector('video'), msg = el.querySelector('.sc-msg'), tally = el.querySelector('.sc-tally'), torchBtn = el.querySelector('[data-sc="torch"]');
@@ -40,13 +41,13 @@ export function openScanner({ title = 'Scan', hint = '', continuous = false, onC
     const now = Date.now(); if (code === last.code && now - last.at < REPEAT_MS) return;
     last = { code, at: now }; count += 1;
     feedback(); el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit');
-    if (tally) tally.innerHTML = `<b>${count}</b> scanned · last <span class="mono">${esc(code)}</span>`;
+    if (tally) tally.innerHTML = tx('<b>{n}</b> scanned · last <span class="mono">{code}</span>', { n: count, code: esc(code) });
     try { onCode?.(code); } catch (e) { toast(e.message, 'bad'); }
     if (!continuous) close();
   };
 
   async function start() {
-    if (!navigator.mediaDevices?.getUserMedia) { say('No camera here: type the code, or use the PDT trigger.'); return; }
+    if (!navigator.mediaDevices?.getUserMedia) { say(tx('No camera here: type the code, or use the PDT trigger.')); return; }
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
       if (closed) return stop();
@@ -59,7 +60,7 @@ export function openScanner({ title = 'Scan', hint = '', continuous = false, onC
       } else zx = await zxing();
       loop();
     } catch (e) {
-      say(e?.name === 'NotAllowedError' ? 'Camera access was refused. Allow it in the browser settings, or type the code.' : 'The camera did not start. Type the code, or use the PDT trigger.');
+      say(e?.name === 'NotAllowedError' ? tx('Camera access was refused. Allow it in the browser settings, or type the code.') : tx('The camera did not start. Type the code, or use the PDT trigger.'));
     }
   }
   function loop() {
@@ -138,7 +139,7 @@ export function installCameraButtons(root = document) {
     e.preventDefault();
     const scope = b.closest('#content') || document, field = b.dataset.camera;
     openScanner({
-      title: b.getAttribute('title') || 'Scan', continuous: b.hasAttribute('data-camera-continuous'),
+      title: b.getAttribute('title') || tx('Scan'), continuous: b.hasAttribute('data-camera-continuous'),
       onCode: code => {
         const input = scope.querySelector(`[data-field="${CSS.escape(field)}"]`); if (!input) return;
         input.value = code; input.dispatchEvent(new Event('input', { bubbles: true }));

@@ -36,6 +36,10 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
 - `styles/shell.css` and `tokens.css` are generated (`npm run css`) from the
   showcase in vector-suite; put app-only rules in `styles/app.css`.
 - Rendering is innerHTML; every value from another device goes through `esc()`.
+- Every word a person reads goes through `tx()` / `txn()` (`js/i18n.js`) with
+  its six translations in `js/i18n/<lang>/<area>.js`; the key is the English,
+  one sentence per key, values in `{placeholders}`. Data, codes and the
+  editor stay English. Conventions and the glossary: `docs/I18N.md`.
 - The map is `js/map.js`: mount, pan/zoom, select, marks, pins, routes.
 - Phone map modes end in the strip (`mountStrip` in `js/shell.js`): a view
   paints it with `setStrip(root, html)` and builds its sheet (the `.mv-sel`
@@ -86,6 +90,7 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
 - `sw.js` installs the whole shell as one release cache and serves it cache-first; updates apply only on the person's "Update now" (never `skipWaiting` on install).
 - After any change under index.html, js/, client/, shared/, styles/, icons/ run `npm run sw` and commit `sw-precache.js`; `npm test` fails when it is stale.
 - Maps, snapshots and the outbox are IndexedDB data, not app files; the worker API is never cached.
+- The translations (`js/i18n/`) are not precached: a device fetches its own language on first use and `sw.js` carries it into the next release. They still count towards the build id.
 
 ## Map performance rules (learned on the 1,157-shelf Busselton map)
 

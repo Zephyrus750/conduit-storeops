@@ -1,6 +1,7 @@
 # Open decisions and the test pass (kept 2026-10-05, updated 2026-10-09)
 
 Every call below is still open unless its row says **Decided**. On
+2026-10-22 1 (the `P` suffix) and 16 (languages) were answered and built. On
 2026-10-09 the suggested defaults were taken for 19, 20, 30, 31 and 32, and
 28 was answered "port it". What is left to build, and which of these
 each piece waits on, is in `docs/TODO.md`. Each one says what Conduit does today (the
@@ -13,7 +14,7 @@ differs from the default.
 
 | # | Decision | What Conduit does today | Where | How to test |
 |---|---|---|---|---|
-| 1 | What the `P` suffix on shelf codes means | Treated as part of the code; no legacy app handled it | `js/map.js` `canonCode`, `groupsFor` | Scan or type a P-suffixed label on Refresh or Stocktake and see which shelf it finds |
+| 1 | What the `P` suffix on shelf codes means | **Decided 2026-10-22, built:** a permanent end, an end whose set-up rarely changes; some stores label it `16P1` where others say `16E1`. `P1`/`P2` work as `E1`/`E2` do everywhere: typed, scanned, spoken ("16 permanent 1"), searched, sorted after the ends, and drawn in the editor (Permanent ends tags) | `js/map.js` `splitCanon`, `shared/voice.js`, `editor/editor.js` | Type or scan `16P1` on Refresh or Stocktake and see the shelf |
 | 2 | Where the map editor lives (`MAP_EDITOR_URL`) | **Settled 2026-10-09:** it ships with Conduit at `editor/editor.html`, owner only, publishing straight to the worker | — | Open it from the owner console's Map editor button |
 | 3 | Busselton's assembly point, address, hours, holidays | Blank in the export | Map editor › Store Info, then republish | Emergency › Nearest exit shows the assembly banner; the store chip shows details |
 | 4 | Stairs nodes for cross-floor routes | Busselton's walk paths have none, so a pick list cannot cross floors | Map editor walk paths, `stairs` node type | A pick list with stops on Ground and BOH routes via the stairs |
@@ -38,7 +39,7 @@ differs from the default.
 | # | Decision | What Conduit does today | Where |
 |---|---|---|---|
 | 15 | Scan-only phone mode (K2B's "skip sign-in") | Not built: every device signs in | — |
-| 16 | The seven-language UI from ShelfSearcher | Not built: English only | — |
+| 16 | The seven-language UI from ShelfSearcher | **Decided 2026-10-22, built:** English, German, French, Filipino, Vietnamese, Spanish and Italian on every screen of the PCs and phones, chosen per device (Settings › Display, or the sign-in card). Data, codes and the map editor stay English (`docs/I18N.md`) | `js/i18n.js`, `js/i18n/` |
 | 17 | K2B's app hub (`registry=apps`), feature flags, beta rings | Not built | — |
 
 ## Access and the owner console (added 2026-10-08)

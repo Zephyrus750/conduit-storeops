@@ -1,0 +1,18 @@
+[
+  "Team briefed",
+  "Everyone knows the plan, their role and their start time.",
+  "Team safety",
+  "Fit for work, PPE on, anything to flag is raised.",
+  "Equipment safe",
+  "Box cutters, cages and work tables checked and ready.",
+  "Area clear",
+  "Dock clear of spills, obstructions and trip hazards.",
+  "Goal agreed",
+  "Target finish set and shared with the team.",
+  "no cutters on the team: set roles first",
+  "the “Consolidation” column is formatted as a number, so Excel has rounded the long codes and dropped digits. Set that column’s format to Text (or re-export), then upload again",
+  "no “Consolidation” column found. Is this a Manifest Report export? A plain sheet with Consol and Cartons columns also works",
+  "No consolidations were read.",
+  "Read as a plain sheet of consolidations and cartons: there are no keycodes, so the explorer’s products and the carton profiles stay empty.",
+  "The report has no manifest number: enter one below."
+]

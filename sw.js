@@ -26,7 +26,20 @@ const MAP_CACHE = 'suite-maps-v1';
    waits until the app posts SKIP_WAITING after the person accepts the
    update, or until every tab is closed. */
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
+  event.waitUntil(caches.open(CACHE_NAME).then(async cache => {
+    await cache.addAll(ASSETS);
+    // The languages this device has used (js/i18n/, not in the precache):
+    // the new release's copies, so a switched-over device stays in its
+    // language offline. Best effort: a miss loads on first use instead.
+    try {
+      const paths = new Set();
+      for (const k of await caches.keys()) {
+        if (!k.startsWith('suite-app-') || k === CACHE_NAME) continue;
+        for (const r of await (await caches.open(k)).keys()) { const p = new URL(r.url).pathname; if (p.includes('/js/i18n/')) paths.add(p); }
+      }
+      await Promise.all([...paths].map(p => fetch(p, { cache: 'no-cache' }).then(res => (res.ok ? cache.put(p, res) : null)).catch(() => {})));
+    } catch {}
+  }));
 });
 
 /* Activate: drop every other release cache; the map cache survives. */
