@@ -24,6 +24,9 @@ body { font-family: var(--body); color: var(--ink); }
 .si-err { min-height: 18px; color: var(--red); font-size: 13px; margin: 6px 0; }
 .si-panel.si-centre { width: min(500px, 92%); }
 .signin .si-panel { z-index: 2; }
+/* The boot screen (index.html) paints before js/prefs.js sets the store's
+   Lagoon accent, so it carries Lagoon itself rather than flash orange. */
+.signin.boot { --accent: #0E7CA8; --accent-ink: #0B6183; }
 #toasts { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; pointer-events: none; }
 .toast { background: var(--ink); color: var(--panel); padding: 10px 14px; border-radius: 10px; font-size: 13.5px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); transition: .25s; max-width: 90vw; }
 .toast.show { opacity: 1; transform: none; }

@@ -476,7 +476,12 @@ shelf tips and cards show the fixture, location range, shared names and, when
 the map has a scale, the size in metres. `js/lowpoly.js` draws the sign-in
 background from the accent and ground tokens; the sign-in is one card on it,
 manager code only on a PC (the store PIN returns there only when the worker
-predates manager sign-in) and Team member or Manager on a phone. Inter, the
+predates manager sign-in) and Team member or Manager on a phone. `index.html`
+paints a boot screen (the mark and a loading bar) until the app shows its
+first screen, so the empty signed-in frame never shows while the scripts
+load; the sign-in card then opens at once with the stores the device saw
+last (`store_list`) and refreshes the list behind it, rather than waiting
+on a worker that is waking up. Inter, the
 face the tokens name, ships in `styles/fonts/` (variable weight, OFL) and is
 precached with the shell, with its Vietnamese subset as a second face that
 loads only for Vietnamese letters. `js/device.js` holds haptics

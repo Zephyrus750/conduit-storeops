@@ -1,5 +1,6 @@
 // German · the shell: rail, header, sign-in, sync, updates, team strip, scanning, shared UI helpers. Keys are the English text (js/i18n.js).
 export default {
+  "Loading stores…": "Filialen werden geladen…",
   "Manager code needed": "Manager-Code nötig",
   "That link asked for a worker this app does not trust; it was ignored.": "Dieser Link verlangte einen Server, dem diese App nicht vertraut; er wurde ignoriert.",
   "Floor": "Verkaufsfläche",
