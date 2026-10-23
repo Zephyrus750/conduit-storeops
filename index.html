@@ -63,6 +63,10 @@
     </div>
     <nav class="m-tabs" id="mstrip"></nav>
   </div>
+  <!-- The boot screen, from the first paint until the app shows its first
+       screen (the sign-in, Continue or the store loading), so the empty
+       signed-in frame never shows while the scripts load. -->
+  <div id="cover" class="signin loading boot"><div class="ld-center"><div class="ld-brand"><svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#111827"/><path d="M21.94 21.94A8.4 8.4 0 0 1 10.94 22.71" fill="none" stroke="#7DD3FC" stroke-width="5.4"/><path d="M9.66 21.51A8.4 8.4 0 0 1 9.66 10.49" fill="none" stroke="#22A6D6" stroke-width="5.4"/><path d="M10.94 9.29A8.4 8.4 0 0 1 21.94 10.06" fill="none" stroke="#0E7CA8" stroke-width="5.4"/></svg><span class="ld-word">Con<b>duit</b></span></div><div class="ld-bar"><i></i></div></div></div>
 </div>
 <script type="module" src="js/shell.js"></script>
 </body>

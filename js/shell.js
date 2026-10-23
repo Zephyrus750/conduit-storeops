@@ -297,9 +297,12 @@ function showLoading() {
 async function showSignin({ error, owner } = {}) {
   if (owner) return showOwnerSignin(error);
   const mobile = isMobile();
-  let stores = [];
-  try { stores = (await client.transport.request('/v1/stores')).stores; } catch (e) { error = error || (WORKER ? tx('Cannot reach the worker at {url}', { url: WORKER }) : tx('No worker configured: open with ?worker=https://…')); }
-  const options = stores.map(s => `<option value="${esc(s.no)}">${esc(s.no)} ${esc(s.name)}${s.region ? ' · ' + esc(s.region) : ''}</option>`).join('');
+  // The card shows at once with the stores this device saw last time
+  // (store_list), and the list is fetched behind it: a worker waking up can
+  // take seconds to answer, and the card used to wait for it.
+  let stores = []; try { stores = JSON.parse(localStorage.getItem('store_list') || '[]'); } catch {}
+  const optionsFor = list => list.map(s => `<option value="${esc(s.no)}">${esc(s.no)} ${esc(s.name)}${s.region ? ' · ' + esc(s.region) : ''}</option>`).join('');
+  const options = optionsFor(stores);
   // On a phone: team member or manager, the choice remembered on this
   // device. A PC is signed in by a manager (the store's manager code opens
   // every area) or as a dock screen: a wall or a tablet on the dock, with the
@@ -312,12 +315,25 @@ async function showSignin({ error, owner } = {}) {
   const segs = mobile ? [['team', tx('Team member')], ['manager', tx('Manager')]] : [['manager', tx('Manager')], ['screen', tx('Dock screen')]];
   const form = `<form class="si-form" id="siForm"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>${tx('Welcome back')}</h2><div class="si-sub">${mobile ? tx('Sign in to your store.') : tx('Manager sign-in.')}</div>` +
     `<div class="si-seg" role="group" aria-label="${tx('Sign in as')}">${segs.map(([k, l]) => `<button type="button" data-as="${k}" aria-pressed="${k === as}">${l}</button>`).join('')}</div>` +
-    `<label for="siStore">${tx('Store')}</label><select class="si-field" id="siStore" name="store" required>${options || `<option value="">${tx('No stores registered')}</option>`}</select>` +
+    `<label for="siStore">${tx('Store')}</label><select class="si-field" id="siStore" name="store" required>${options || `<option value="">${tx('Loading stores…')}</option>`}</select>` +
     `<div class="si-cred"></div>` +
     `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit"></button>` +
     `<div class="si-foot"><span>${tx('Works offline')}</span><a class="si-owner-link" data-shell-act="owner-signin">${tx('Owner sign-in')}</a>${langSelect(`class="si-lang" id="siLang" aria-label="${tx('Language')}"`)}<span class="ver">${VERSION}</span></div></form>`;
   const el = cover(polyBackground() + siCard(form)); signinTitle();
-  if (pendingLink && stores.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? tx('Sign in to open the work order.') : tx('Sign in to open shelf {shelf}.', { shelf: pendingLink.shelf })); }
+  const linkTo = list => { if (pendingLink && list.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? tx('Sign in to open the work order.') : tx('Sign in to open shelf {shelf}.', { shelf: pendingLink.shelf })); } };
+  linkTo(stores);
+  client.transport.request('/v1/stores').then(r => {
+    const list = r.stores || []; try { localStorage.setItem('store_list', JSON.stringify(list)); } catch {}
+    const sel = el.isConnected && $('#siStore', el); if (!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = optionsFor(list) || `<option value="">${tx('No stores registered')}</option>`;
+    if (list.some(x => String(x.no) === keep)) sel.value = keep;
+    linkTo(list);
+  }).catch(() => {
+    if (!el.isConnected) return;
+    const msg = $('#siErr', el); if (msg && (!msg.textContent || msg.textContent === WORKER_NOTE)) msg.textContent = WORKER ? tx('Cannot reach the worker at {url}', { url: WORKER }) : tx('No worker configured: open with ?worker=https://…');
+    if (!stores.length) $('#siStore', el).innerHTML = `<option value="">${tx('No stores registered')}</option>`;
+  });
   const cred = () => {
     const f = $('#siForm', el);
     for (const b of f.querySelectorAll('[data-as]')) b.setAttribute('aria-pressed', String(b.dataset.as === as));
