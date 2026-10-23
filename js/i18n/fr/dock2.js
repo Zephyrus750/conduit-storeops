@@ -687,4 +687,12 @@ export default {
   "The off-site master list (.xlsx)": "La liste principale hors site (.xlsx)",
   "Import the master list": "Importer la liste principale",
   "{n} received": "reçues : {n}",
+  "The pallet grid with a clock on every pallet being decanted, the hold-up banner and the crew. The crew runs the decant from it.": "La grille des palettes avec un chrono sur chaque palette en déconditionnement, le bandeau des interruptions et l’équipe. L’équipe pilote le déconditionnement depuis cet écran.",
+  "The dock tablet, or a wall PC on the dock.": "La tablette du quai, ou un PC mural sur le quai.",
+  "The goal, the forecast finish, and who is decanting what right now and who is next.": "L’objectif, la fin prévue, qui déconditionne quoi en ce moment et qui est le suivant.",
+  "A wall PC the team can see.": "Un PC mural visible par l’équipe.",
+  "Progress, pace and hold-ups for the truck on the dock, and the plan for the day.": "L’avancement, le rythme et les interruptions du camion à quai, et le plan de la journée.",
+  "The back office, or a wall PC.": "Le bureau, ou un PC mural.",
+  "The dock boards are switched off for this store.": "Les tableaux du quai sont désactivés pour ce magasin.",
+  "Each board is also in Receiving and Results, with more detail. To set up a wall PC or the dock tablet, sign in on it as Dock screen: it opens straight on its board and never locks.": "Chaque tableau se trouve aussi dans Réception et Résultats, plus en détail. Pour installer un PC mural ou la tablette du quai, connectez-vous dessus en tant qu’Écran du quai : il s’ouvre directement sur son tableau et ne se verrouille jamais.",
 };

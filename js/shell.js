@@ -22,7 +22,7 @@ import { takeDeepLink } from './share.js';
 import { installLog } from './diag.js';
 installLog();
 import { updates, initUpdates } from './updates.js';
-import { VIEWS, RAIL, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
+import { VIEWS, RAIL, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { toolForView, toolOff } from '../shared/tools.js';
 import { ensureArea, ensureManager, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
@@ -432,6 +432,15 @@ const RDESC = {
   rhistory: tx('Every decanted truck: clear time, where the time went, manifest reconciliation and crew credit.'),
   profiles: tx('Units per carton by keycode, built from the manifests the store has published.'),
   settings: tx('Updates, account, appearance, storage, departments, feedback and help.'),
+  // The rail's grouped rows (Version A).
+  floorchecks: tx('The shelf-by-shelf checks on the floor: refresh, labels and stocktake.'),
+  safety: tx('Exits, equipment and service dates, and the faults logged on the map.'),
+  backfill: tx('Today’s board against the morning report, the walk order, and how it went.'),
+  accuracy: tx('Stock below zero to adjust, stock that is not moving, and quick scans.'),
+  plan: tx('The week’s trucks, their manifests and other loads, carton sizes, and pallets held off-site.'),
+  results: tx('Finished trucks, how the dock is trending, and what arrived.'),
+  screens: tx('Full-screen boards for the wall PCs and the dock tablet.'),
+  help: tx('The handbook page for each screen, the walkthrough and what is new.'),
   admin: tx('Every registered store: health, areas live or on legacy, devices and the last event.'),
   adminstore: tx('This store’s console: overview, events, devices, access, map and migration.'),
   adminreg: tx('Register a store: number, name, region, PIN, crew codes and which areas it may use.'),
@@ -440,9 +449,9 @@ const RDESC = {
 let rtip = null;
 function railTip(b, show) {
   if (!show) { if (rtip) rtip.classList.remove('on'); return; }
-  const v = b.getAttribute('data-view'), fr = $('.frame'); if (!fr) return;
-  const name = b.dataset.no ? `${b.dataset.no} ${b.textContent.replace(b.dataset.no, '').trim()}` : (VIEWS[v]?.title || b.textContent.trim());
-  const d = RDESC[v] || ''; if (!d) return railTip(b, false);
+  const v = b.getAttribute('data-view'), g = b.dataset.group, fr = $('.frame'); if (!fr) return;
+  const name = b.dataset.no ? `${b.dataset.no} ${b.textContent.replace(b.dataset.no, '').trim()}` : g && GROUPS[g].tabs.length > 1 ? GROUPS[g].label : (VIEWS[v]?.title || b.textContent.trim());
+  const d = (g && GROUPS[g].tabs.length > 1 ? RDESC[g] : RDESC[v]) || RDESC[g] || ''; if (!d) return railTip(b, false);
   if (!rtip || rtip.parentNode !== fr) { if (rtip) rtip.remove(); rtip = document.createElement('div'); rtip.className = 'rtip'; fr.appendChild(rtip); }
   rtip.innerHTML = `<b>${esc(name)}</b><span>${esc(d)}</span>`;
   const r = b.getBoundingClientRect(), fb = fr.getBoundingClientRect(), sc = fb.width / fr.offsetWidth || 1;
@@ -458,10 +467,30 @@ const offView = id => toolOff(offList(), toolForView(id));
 let toolsSig = null;
 function buildRail() {
   toolsSig = offList().join();
-  const rows = v => `<button class="rrow" data-view="${v.id}">${ic(v.icon)}<span class="rl">${v.rail || v.title}</span>${BADGED.includes(v.id) ? `<span class="badge" data-badge="${v.id}" hidden></span>` : ''}</button>`;
-  // An area the store does not have (or the owner just switched off) is not on the rail at all.
-  const caps = client.session.current?.caps || [], outside = v => v?.area && v.area !== 'floor' && v.area !== 'store' && !caps.includes(v.area);
-  $('#railscroll').innerHTML = RAIL.filter(sec => !sec.rows.length || sec.rows.some(r => typeof r !== 'string' || !outside(VIEWS[r]))).map(sec => `<div class="rsec">${sec.sec}</div>` + sec.rows.map(r => typeof r === 'string' ? (offView(r) || outside(VIEWS[r]) ? '' : rows(VIEWS[r])) : `<button class="rrow soon" disabled title="${tx('Arrives with the {section} port', { section: sec.sec })}">${ic(r[2])}<span class="rl">${r[1]}</span><span class="badge soon">${tx('Soon')}</span></button>`).join('')).join('');
+  const rows = ids => ids.map(g => { const tabs = railTabs(g); return tabs.length ? railRow(g, tabs) : ''; }).join('');
+  $('#railscroll').innerHTML = RAIL.map(sec => { const html = rows(sec.rows); return html ? `<div class="rsec">${sec.sec}</div>${html}` : ''; }).join('');
+  $('#railfoot').innerHTML = rows(RAIL_FOOT);
+  markRail();
+}
+// A row's tabs this store and device can open: the tool switched on, the
+// area entitled (the area's code is asked for when the screen opens).
+function railTabs(g) {
+  const caps = client.session.current?.caps || [], outside = v => v.area && v.area !== 'floor' && v.area !== 'store' && !caps.includes(v.area);
+  return GROUPS[g].tabs.filter(([v]) => VIEWS[v] && !offView(v) && !outside(VIEWS[v])).map(([v, label]) => [v, label || VIEWS[v].rail || VIEWS[v].title]);
+}
+// The tab a row opens: the one used last on this device, else the first.
+let lastTabs = {}; try { lastTabs = JSON.parse(localStorage.getItem('rail_tabs') || '{}') || {}; } catch {}
+const rowTarget = (g, tabs) => tabs.some(t => t[0] === lastTabs[g]) ? lastTabs[g] : tabs[0][0];
+function railRow(g, tabs) {
+  const G = GROUPS[g], one = G.tabs.length === 1, badged = tabs.map(t => t[0]).find(v => BADGED.includes(v));
+  return `<button class="rrow" data-view="${rowTarget(g, tabs)}" data-group="${g}">${ic(G.icon)}<span class="rl">${one ? tabs[0][1] : G.label}</span>${badged ? `<span class="badge" data-badge="${badged}" hidden></span>` : ''}</button>`;
+}
+// Above a grouped screen on a PC: its row's other screens, as tabs.
+function groupTabs(id) {
+  const g = GROUP_OF[id]; if (!g) return '';
+  const tabs = railTabs(g); if (tabs.length < 2 || !tabs.some(t => t[0] === id)) return '';
+  lastTabs[g] = id; try { localStorage.setItem('rail_tabs', JSON.stringify(lastTabs)); } catch {}
+  return `<nav class="gtabs" role="tablist" aria-label="${esc(GROUPS[g].label)}">${tabs.map(([v, label]) => `<button type="button" role="tab" class="gtab${v === id ? ' on' : ''}" aria-selected="${v === id}" data-view="${v}">${ic(VIEWS[v].icon)}<span>${label}</span>${BADGED.includes(v) ? `<span class="badge" data-badge="${v}" hidden></span>` : ''}</button>`).join('')}</nav>`;
 }
 // Rail badges (the showcase's): Backfill review carries today's locations
 // waiting for review; Cages, in red, the open cages not seen for a week.
@@ -528,7 +557,11 @@ document.addEventListener('click', async e => {
 function deskOnly(v) { return typeof v.deskOnly === 'function' ? !!v.deskOnly(client.session.current) : !!v.deskOnly; }
 function markRail() {
   const id = current, no = currentArg?.no == null ? null : String(currentArg.no);
-  for (const b of $$('.rrow[data-view]')) b.classList.toggle('on', b.getAttribute('data-view') === id && (!b.dataset.no || b.dataset.no === no));
+  for (const b of $$('.rrow[data-view]')) {
+    const g = b.dataset.group;
+    if (g) { b.classList.toggle('on', GROUP_OF[id] === g); const tabs = railTabs(g); if (tabs.length) b.setAttribute('data-view', rowTarget(g, tabs)); continue; }
+    b.classList.toggle('on', b.getAttribute('data-view') === id && (!b.dataset.no || b.dataset.no === no));
+  }
   for (const b of $$('#mstrip button')) b.classList.toggle('on', b.getAttribute('data-view') === id || (b.getAttribute('data-view') === 'mhome' && id === 'map') || (b.getAttribute('data-view') === 'admin' && id === 'adminstore'));
 }
 
@@ -603,7 +636,7 @@ function show(id, arg) {
     parkMap();
     const fresh = content.cloneNode(false); content.replaceWith(fresh); content = fresh;
     content.classList.toggle('mv', useMobile);
-    content.innerHTML = html;
+    content.innerHTML = (store && !useMobile ? groupTabs(view.id) : '') + html;
   }
   // The title bar (Settings › Display) lifts the view's header, its title
   // and its buttons, into the top bar. It stays the view's: the listeners
@@ -616,7 +649,7 @@ function show(id, arg) {
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   if (keep) restorePlace(content, keep); else content.scrollTop = 0;
   team?.repaint();
-  markRail();
+  markRail(); if (store && !useMobile) paintBadges();
   // A sheet closes when the view changes; a repaint of the same view (a
   // store update) leaves it open, so the launcher survives sign-in.
   if (prev !== view.id) $('#msheet')?.classList.remove('open');
@@ -744,7 +777,7 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>${tx('Updating…')}</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => RAIL.flatMap(sec => sec.rows.filter(r => typeof r === 'string' && !offView(r)).map(r => VIEWS[r])).concat([VIEWS.dashboard, VIEWS.planner, VIEWS.settings]).filter(v => !(isMobile() && deskOnly(v))), phone: () => isMobile() });
+const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [VIEWS.dashboard, ...[...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
 // The phone's bar is typed into directly: a compact list drops under it.
 const msBar = search.bar($('#msearch'), () => !admin && !!store);
 

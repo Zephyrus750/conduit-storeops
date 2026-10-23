@@ -8,6 +8,7 @@ import { openShare } from '../share.js';
 import { openScanner } from '../scan.js';
 import { voiceSupported } from '../voice.js';
 import { MICRO, microCode, microName } from '../data/micros.js';
+import { toolOff } from '../../shared/tools.js';
 import { tx, txn } from '../i18n.js';
 
 let selected = null, pcSel = null;
@@ -112,7 +113,9 @@ function pcCard(p, phone) {
 export default {
   id: 'map', title: tx('Store map'), icon: 'm-map',
   desktop(ctx) {
-    return vh(tx('Store map'), sub(tx('FOH · Ground'), `${esc(ctx.storeNo)} ${esc(ctx.storeName)}`), `<button class="btn" data-zoom="fit">${ic('map')}${tx('Fit')}</button>`, 'm-map') +
+    // Print map and Suggest edits open from here (the Version A rail has no rows for them).
+    const edits = !toolOff(ctx.store.get('tools')?.off, 'mapedits');
+    return vh(tx('Store map'), sub(tx('FOH · Ground'), `${esc(ctx.storeNo)} ${esc(ctx.storeName)}`), `<button class="btn" data-go="printmap">${ic('print')}${tx('Print map')}</button>${edits ? `<button class="btn" data-go="mapedits">${ic('edit')}${tx('Suggest edits')}</button>` : ''}<button class="btn" data-zoom="fit">${ic('map')}${tx('Fit')}</button>`, 'm-map') +
       `<div class="mapview"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx(tx('Store map'), ctx.storeNo)}<span><i style="background:transparent;border:2px solid #D24E0E"></i>${tx('Selected')} <b id="mapcrumb" style="color:var(--ink)">${selected ? esc(selected) : '—'}</b></span><span><i style="background:#CBD0D8"></i>${tx('Department colours from the key')}</span><span style="color:var(--faint)">${tx('Scroll to zoom · drag to pan · click a shelf')}</span></div></div>` +
       `<div id="selhost">${''}</div></div>`;

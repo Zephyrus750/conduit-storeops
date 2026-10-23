@@ -17,6 +17,7 @@ export const RELEASES = [
     ['lock', tx('Bays open on another desk'), tx('A bay being reviewed elsewhere shows a banner with Take over. A desk that walks away lets go after 20 minutes.'), 'bfreview', 'desk'],
     ['users', tx('The decant plan on the Team Board'), tx('Up next follows each person’s queue, and the Wallboard timeline shows planned pallets and breaks.'), 'teamboard'],
     ['print', tx('Print the map'), tx('The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.'), 'printmap', 'desk'],
+    ['sidebar', tx('A shorter rail'), tx('The rail has a few rows for each area. Floor checks, Safety & upkeep, Backfill, Stock accuracy, Receiving, Plan and Results each hold several screens, as tabs at the top. Print map and Suggest edits are buttons on the Store map; the dock boards are under Screens.'), null, 'desk'],
     ['search', tx('Search the store’s records'), tx('Search finds manifests, consolidations, cages, other loads and off-site pallets as well as shelves.'), null, 'desk'],
     ['m-inventory', tx('Off-site pallets at the Back dock'), tx('The Inventory hub moved to the Back dock: Off-site pallets (on the phone too), other loads in Manifests with their departments on the map, and what arrived each week in Analytics.'), 'offsite', 'desk'],
     ['m-inventory', tx('Off-site pallets on the phone'), tx('In the Back dock’s More menu: mark a pallet received, change its callback date or add one.'), 'offsite', 'phone'],

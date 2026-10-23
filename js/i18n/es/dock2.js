@@ -687,4 +687,12 @@ export default {
   "The off-site master list (.xlsx)": "La lista maestra fuera de tienda (.xlsx)",
   "Import the master list": "Importar la lista maestra",
   "{n} received": "recibidos: {n}",
+  "The pallet grid with a clock on every pallet being decanted, the hold-up banner and the crew. The crew runs the decant from it.": "La cuadrícula de palés con un reloj en cada palé que se está desembalando, el aviso de paradas y el equipo. El equipo dirige el desembalaje desde ella.",
+  "The dock tablet, or a wall PC on the dock.": "La tableta del muelle, o un PC de pared en el muelle.",
+  "The goal, the forecast finish, and who is decanting what right now and who is next.": "El objetivo, la hora prevista de fin, quién desembala qué ahora mismo y quién va después.",
+  "A wall PC the team can see.": "Un PC de pared que el equipo pueda ver.",
+  "Progress, pace and hold-ups for the truck on the dock, and the plan for the day.": "Avance, ritmo y paradas del camión en el muelle, y el plan del día.",
+  "The back office, or a wall PC.": "La oficina, o un PC de pared.",
+  "The dock boards are switched off for this store.": "Los tableros del muelle están desactivados para esta tienda.",
+  "Each board is also in Receiving and Results, with more detail. To set up a wall PC or the dock tablet, sign in on it as Dock screen: it opens straight on its board and never locks.": "Cada tablero está también en Recepción y Resultados, con más detalle. Para preparar un PC de pared o la tableta del muelle, inicia sesión en él como Pantalla del muelle: abre directamente su tablero y nunca se bloquea.",
 };

@@ -687,4 +687,12 @@ export default {
   "The off-site master list (.xlsx)": "L’elenco principale fuori sede (.xlsx)",
   "Import the master list": "Importa l’elenco principale",
   "{n} received": "ricevuti: {n}",
+  "The pallet grid with a clock on every pallet being decanted, the hold-up banner and the crew. The crew runs the decant from it.": "La griglia dei pallet con un orologio su ogni pallet in spacchettamento, il banner delle interruzioni e la squadra. La squadra gestisce lo spacchettamento da qui.",
+  "The dock tablet, or a wall PC on the dock.": "Il tablet del ricevimento, o un PC a parete in zona ricevimento.",
+  "The goal, the forecast finish, and who is decanting what right now and who is next.": "L’obiettivo, la fine prevista, chi sta spacchettando cosa in questo momento e chi è il prossimo.",
+  "A wall PC the team can see.": "Un PC a parete visibile alla squadra.",
+  "Progress, pace and hold-ups for the truck on the dock, and the plan for the day.": "Avanzamento, ritmo e interruzioni del camion al ricevimento, e il piano della giornata.",
+  "The back office, or a wall PC.": "L’ufficio, o un PC a parete.",
+  "The dock boards are switched off for this store.": "I tabelloni del ricevimento sono disattivati per questo negozio.",
+  "Each board is also in Receiving and Results, with more detail. To set up a wall PC or the dock tablet, sign in on it as Dock screen: it opens straight on its board and never locks.": "Ogni tabellone si trova anche in Ricevimento e Risultati, con più dettagli. Per preparare un PC a parete o il tablet del ricevimento, accedi come Schermo ricevimento: si apre direttamente sul suo tabellone e non si blocca mai.",
 };

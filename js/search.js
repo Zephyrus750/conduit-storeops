@@ -10,7 +10,7 @@
 
 import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
-import { VIEWS, RAIL } from './registry.js';
+import { VIEWS } from './registry.js';
 import { findRecords } from '../shared/finder.js';
 import { RING } from './views/stockroom/common.js';
 import { SUBS, MICRO, microId, microCode, microName } from './data/micros.js';

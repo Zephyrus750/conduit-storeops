@@ -687,4 +687,12 @@ export default {
   "The off-site master list (.xlsx)": "Die Auslagerungs-Stammliste (.xlsx)",
   "Import the master list": "Stammliste importieren",
   "{n} received": "{n} erhalten",
+  "The pallet grid with a clock on every pallet being decanted, the hold-up banner and the crew. The crew runs the decant from it.": "Das Palettenraster mit einer Uhr an jeder Palette, die ausgepackt wird, dem Hinweis auf Unterbrechungen und dem Team. Das Team steuert das Auspacken von dort.",
+  "The dock tablet, or a wall PC on the dock.": "Das Tablet der Warenannahme oder ein Wand-PC dort.",
+  "The goal, the forecast finish, and who is decanting what right now and who is next.": "Das Ziel, das voraussichtliche Ende und wer gerade was auspackt und wer als Nächstes dran ist.",
+  "A wall PC the team can see.": "Ein Wand-PC, den das Team sehen kann.",
+  "Progress, pace and hold-ups for the truck on the dock, and the plan for the day.": "Fortschritt, Tempo und Unterbrechungen für den LKW an der Rampe und der Plan für den Tag.",
+  "The back office, or a wall PC.": "Das Büro oder ein Wand-PC.",
+  "The dock boards are switched off for this store.": "Die Tafeln der Warenannahme sind für diese Filiale ausgeschaltet.",
+  "Each board is also in Receiving and Results, with more detail. To set up a wall PC or the dock tablet, sign in on it as Dock screen: it opens straight on its board and never locks.": "Jede Tafel steht mit mehr Einzelheiten auch unter Wareneingang und Ergebnisse. Um einen Wand-PC oder das Tablet einzurichten, melden Sie sich dort als Annahme-Bildschirm an: Er öffnet direkt seine Tafel und sperrt nie.",
 };

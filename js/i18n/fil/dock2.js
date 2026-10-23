@@ -687,4 +687,12 @@ export default {
   "The off-site master list (.xlsx)": "Ang off-site master list (.xlsx)",
   "Import the master list": "I-import ang master list",
   "{n} received": "{n} natanggap",
+  "The pallet grid with a clock on every pallet being decanted, the hold-up banner and the crew. The crew runs the decant from it.": "Ang grid ng mga pallet na may orasan sa bawat pallet na dine-decant, ang banner ng hold-up at ang crew. Dito pinapatakbo ng crew ang decant.",
+  "The dock tablet, or a wall PC on the dock.": "Ang tablet ng dock, o isang wall PC sa dock.",
+  "The goal, the forecast finish, and who is decanting what right now and who is next.": "Ang goal, ang tantiyang tapos, at kung sino ang nagde-decant ng ano ngayon at sino ang susunod.",
+  "A wall PC the team can see.": "Isang wall PC na nakikita ng team.",
+  "Progress, pace and hold-ups for the truck on the dock, and the plan for the day.": "Progreso, bilis at mga hold-up para sa truck sa dock, at ang plano para sa araw.",
+  "The back office, or a wall PC.": "Ang back office, o isang wall PC.",
+  "The dock boards are switched off for this store.": "Naka-off ang mga board ng dock para sa tindahang ito.",
+  "Each board is also in Receiving and Results, with more detail. To set up a wall PC or the dock tablet, sign in on it as Dock screen: it opens straight on its board and never locks.": "Nasa Receiving at Mga resulta din ang bawat board, mas detalyado. Para i-set up ang wall PC o ang tablet ng dock, mag-sign in dito bilang Dock screen: diretso itong bubukas sa board nito at hindi kailanman nagla-lock.",
 };

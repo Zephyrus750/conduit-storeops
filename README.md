@@ -416,6 +416,16 @@ code rather than the other way round. `js/registry.js` is the one view registry:
 a view is `{ id, title, icon, desktop(ctx), mobile?(ctx), mount?(ctx, root) }`
 and renders into the content region; it owns no chrome and no stylesheet.
 
+The desktop rail is Version A of the rail showcase (23 Oct 2026): Dashboard,
+then Floor (Store map, Floor checks, Pick list, Safety & upkeep), Stockroom
+(Backfill, Stock accuracy, Cages) and Back dock (Receiving, Plan, Results),
+and Screens, Settings and Help in the foot. `GROUPS` in `js/registry.js` maps
+each row to its screens: a row with several shows them as tabs above the one
+open (the shell adds them; the screens are unchanged) and opens the one used
+last on that device (`rail_tabs`). Print map and Suggest edits open from the
+Store map's buttons. A row whose screens are all switched off, or outside the
+store's areas, is not on the rail. The phone's strip and More are unchanged.
+
 The colour scheme is fixed for every store device (managers share PCs):
 charcoal rail and phone bars with the Lagoon accent, set in `js/prefs.js`.
 The owner console keeps charcoal with Signal orange. Display size and the
