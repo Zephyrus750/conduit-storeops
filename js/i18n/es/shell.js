@@ -328,7 +328,6 @@ export default {
   "Location refresh": "Repaso de ubicaciones",
   "Label integrity": "Control de etiquetas",
   "Suggest map edits and Field Mode": "Sugerir cambios en el mapa y Modo campo",
-  "Inventory and pallet hub": "Existencias y centro de palés",
   "Backfill review and history": "Revisión de reposición e historial",
   "Adjustments": "Ajustes",
   "Stock intelligence": "Análisis de existencias",
@@ -339,4 +338,6 @@ export default {
   "Carton profiles": "Perfiles de cajas",
   "Receiving history": "Historial de recepción",
   "Wallboard and analytics": "Panel mural y análisis",
+  "Callbacks and returns": "Retornos pendientes y recibidos",
+  "Off-site pallets and other loads": "Palés fuera de tienda y otras cargas",
 };

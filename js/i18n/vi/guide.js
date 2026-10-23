@@ -301,7 +301,6 @@ export default {
   "Print the map": "In sơ đồ",
   "The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.": "Trình soạn bản in, sổ tay theo ngành hàng, sơ đồ thoát hiểm và phiếu công việc bảo trì có mã QR.",
   "Search the store’s records": "Tìm trong hồ sơ của cửa hàng",
-  "Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.": "Tìm kiếm tìm được bảng kê hàng, lô hàng gộp, lồng hàng, lô tồn kho và pallet ở ngoài cửa hàng, cùng với kệ.",
   "Find a shelf as you type": "Tìm kệ ngay khi gõ",
   "The search bar finds a shelf, a run, a bay or a department as you type.": "Thanh tìm kiếm tìm kệ, dãy kệ, vị trí kho hoặc ngành hàng ngay khi bạn gõ.",
   "Voice search": "Tìm bằng giọng nói",
@@ -321,4 +320,9 @@ export default {
   "Product names": "Tên sản phẩm",
   "Pasted inventory reports": "Báo cáo tồn kho đã dán",
   "Session and device": "Phiên và thiết bị",
+  "Search finds manifests, consolidations, cages, other loads and off-site pallets as well as shelves.": "Tìm kiếm tìm được bảng kê hàng, lô hàng gộp, lồng hàng, chuyến hàng khác và pallet ở ngoài cửa hàng, cùng với kệ.",
+  "Off-site pallets at the Back dock": "Pallet ngoài cửa hàng ở Khu nhận hàng",
+  "The Inventory hub moved to the Back dock: Off-site pallets (on the phone too), other loads in Manifests with their departments on the map, and what arrived each week in Analytics.": "Tồn kho đã chuyển sang Khu nhận hàng: Pallet ngoài cửa hàng (cả trên điện thoại), chuyến hàng khác trong Bảng kê hàng cùng ngành hàng trên sơ đồ, và hàng đã đến mỗi tuần trong Phân tích.",
+  "Off-site pallets on the phone": "Pallet ngoài cửa hàng trên điện thoại",
+  "In the Back dock’s More menu: mark a pallet received, change its callback date or add one.": "Trong menu Thêm của Khu nhận hàng: đánh dấu pallet đã nhận, đổi ngày gọi về hoặc thêm pallet.",
 };

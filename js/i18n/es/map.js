@@ -123,7 +123,6 @@ export default {
   "at {place}": "en {place}",
   "not parked": "sin ubicación",
   "{n} of this keycode": "{n} de este keycode",
-  "Inventory loads": "Cargas de existencias",
   "Load {label}": "Carga {label}",
   "on pallet {pallets}": "en el palé {pallets}",
   "Off-site pallets": "Palés fuera de la tienda",
@@ -434,4 +433,5 @@ export default {
   "Compactor": "Compactadora",
   "Kiosk": "Quiosco",
   "Trolley bay": "Zona de carros",
+  "Other loads": "Otras cargas",
 };

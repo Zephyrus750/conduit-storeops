@@ -914,11 +914,16 @@ test('sockets end with their token: an expired socket gets no more events and is
 
 test('a state over the row limit is never saved as a snapshot, writes go on, and the store rebuilds from the log', async () => {
   assert.equal((await reg2('2099')).status, 201);
-  const dev = (await api('POST', '/v1/auth/signin', { store: '2099', pin: '135790', device: 'ph-99' })).body.token;
+  const floor = (await api('POST', '/v1/auth/signin', { store: '2099', pin: '135790', device: 'ph-99' })).body.token;
+  const dev = (await api('POST', '/v1/auth/unlock', { code: 'DK-2099' }, floor)).body.token;
   const stub = await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('2099')));
-  const load = n => ({ id: ulid(), store: '2099', area: 'floor', type: 'inventory.load.add', entity: { load: `L${n}` }, at: at(), v: 1,
+  // Loads are Back dock events; the first comes from a device on a release
+  // from before the move, which still names the Floor.
+  const load = n => ({ id: ulid(), store: '2099', area: n === 1 ? 'floor' : 'backdock', type: 'inventory.load.add', entity: { load: `L${n}` }, at: at(), v: 1,
     payload: { label: `Load ${n}`, pallets: Array.from({ length: 30 }, (_, p) => ({ pid: `P${n}-${p}`, items: Array.from({ length: 100 }, (_, i) => ({ k: String(10000000 + i), d: 'd'.repeat(60), q: 1, dept: '021' })) })) } });
+  assert.equal((await api('POST', '/v1/store/2099/events', { events: [load(1)] }, floor)).body.results[0].code, 'unauthorised', 'the store PIN alone cannot add a load');
   for (let n = 1; n <= 3; n++) assert.equal((await api('POST', '/v1/store/2099/events', { events: [load(n)] }, dev)).body.results[0].ok, true);
+  assert.equal((await api('GET', '/v1/store/2099/changes?since=0', undefined, dev)).body.events.find(e => e.entity.load === 'L1').area, 'backdock', 'logged under its area now');
   const small = await stub.snapshotIfDue(true);
   assert.equal(small.saved, true);
   for (let n = 4; n <= 7; n++) assert.equal((await api('POST', '/v1/store/2099/events', { events: [load(n)] }, dev)).body.results[0].ok, true);

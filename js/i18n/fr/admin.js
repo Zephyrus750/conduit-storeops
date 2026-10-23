@@ -498,7 +498,6 @@ export default {
   "Maintenance": "Maintenance",
   "Stocktake": "Inventaire",
   "Suggest map edits and Field Mode": "Propositions de modifications du plan et mode terrain",
-  "Inventory and pallet hub": "Stocks et hub palettes",
   "Backfill review and history": "Revue du réassort et historique",
   "Cages": "Cages",
   "Adjustments": "Ajustements",

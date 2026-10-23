@@ -506,4 +506,5 @@ export default {
   "Fire alarm call point": "Feuermelder",
   "Serviced": "Gewartet",
   "Schedule set": "Intervall festgelegt",
+  "On the map": "Auf dem Plan",
 };

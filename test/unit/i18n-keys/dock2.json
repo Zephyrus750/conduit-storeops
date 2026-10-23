@@ -2,5 +2,13 @@
   "Last truck",
   "7 days",
   "14 days",
-  "30 days"
+  "30 days",
+  "Pallet ID",
+  "Keycode",
+  "Description",
+  "Quantity",
+  "Department",
+  "kept the first 400 pallets",
+  "choose the Pallet ID and Keycode columns",
+  "no rows had both a pallet and a keycode"
 ]

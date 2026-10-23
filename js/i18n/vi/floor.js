@@ -506,4 +506,5 @@ export default {
   "Fire alarm call point": "Nút báo cháy",
   "Serviced": "Đã bảo dưỡng",
   "Schedule set": "Đã đặt lịch",
+  "On the map": "Trên sơ đồ",
 };

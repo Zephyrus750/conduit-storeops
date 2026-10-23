@@ -498,7 +498,6 @@ export default {
   "Maintenance": "Manutenzione",
   "Stocktake": "Inventario",
   "Suggest map edits and Field Mode": "Suggerisci modifiche alla mappa e Modalità campo",
-  "Inventory and pallet hub": "Giacenze e hub pallet",
   "Backfill review and history": "Verifica rifornimento e cronologia",
   "Cages": "Gabbie",
   "Adjustments": "Rettifiche",

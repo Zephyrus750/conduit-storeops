@@ -498,7 +498,6 @@ export default {
   "Maintenance": "Bảo trì",
   "Stocktake": "Kiểm kê",
   "Suggest map edits and Field Mode": "Đề xuất sửa sơ đồ và Chế độ thực địa",
-  "Inventory and pallet hub": "Tồn kho và trung tâm pallet",
   "Backfill review and history": "Duyệt bổ sung hàng và lịch sử",
   "Cages": "Lồng hàng",
   "Adjustments": "Điều chỉnh",

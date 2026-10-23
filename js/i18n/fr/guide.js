@@ -301,7 +301,6 @@ export default {
   "Print the map": "Imprimer le plan",
   "The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.": "Le compositeur d’impression, un livret par rayon, le plan d’évacuation et les bons de maintenance avec QR code.",
   "Search the store’s records": "Rechercher dans les dossiers du magasin",
-  "Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.": "La recherche trouve les manifestes, les consolidations, les cages, les chargements de stocks et les palettes hors site, en plus des étagères.",
   "Find a shelf as you type": "Trouver une étagère en tapant",
   "The search bar finds a shelf, a run, a bay or a department as you type.": "La barre de recherche trouve une étagère, une rangée, un emplacement ou un rayon pendant que vous tapez.",
   "Voice search": "Recherche vocale",
@@ -321,4 +320,9 @@ export default {
   "Product names": "Noms des produits",
   "Pasted inventory reports": "Rapports de stocks collés",
   "Session and device": "Session et appareil",
+  "Search finds manifests, consolidations, cages, other loads and off-site pallets as well as shelves.": "La recherche trouve les manifestes, les consolidations, les cages, les autres chargements et les palettes hors site, en plus des étagères.",
+  "Off-site pallets at the Back dock": "Les palettes hors site au quai de réception",
+  "The Inventory hub moved to the Back dock: Off-site pallets (on the phone too), other loads in Manifests with their departments on the map, and what arrived each week in Analytics.": "Stocks a rejoint le quai de réception : Palettes hors site (aussi sur le téléphone), les autres chargements dans Manifestes avec leurs rayons sur le plan, et ce qui est arrivé chaque semaine dans Analyses.",
+  "Off-site pallets on the phone": "Les palettes hors site sur le téléphone",
+  "In the Back dock’s More menu: mark a pallet received, change its callback date or add one.": "Dans le menu Plus du quai de réception : marquer une palette reçue, changer sa date de rappel ou en ajouter une.",
 };

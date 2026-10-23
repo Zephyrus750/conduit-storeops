@@ -1,6 +1,6 @@
 // The search palette (the showcase's omni): one input that understands a
 // keycode, a shelf, a department or a tool name, and the store's own
-// records: manifests, consolidations, cages, inventory loads and off-site
+// records: manifests, consolidations, cages, other loads and off-site
 // pallets (shared/finder.js). Keycodes go to the catalogue
 // On a phone it is streamlined: shelves, departments and micro-departments
 // only, no keyboard hints, no records, and no product codes for now.
@@ -38,7 +38,7 @@ const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
 const tNo = id => String(id || '').replace(/^\d{4}-\d{2}-\d{2}-T/, '');
 // Where a consolidation's pallet stands (shared/finder.js and the dock's
-// pallet states), and an inventory load's state, in words.
+// pallet states), and another load's state, in words.
 const WHERE = { landed: tx('landed'), assigned: tx('assigned'), active: tx('active'), paused: tx('paused'), done: tx('done'), 'not landed': tx('not landed'), 'scanned, not on the manifest': tx('scanned, not on the manifest'), 'scanned, no manifest yet': tx('scanned, no manifest yet'), 'held for the next truck': tx('held for the next truck'), incoming: tx('incoming'), received: tx('received'), offsite: tx('offsite') };
 const where = v => WHERE[v] || v;
 // A cage's ring colour by name (js/views/stockroom/common.js).
@@ -51,15 +51,15 @@ function recordsHtml(r, Q) {
     : orow('d', 'packages', tx('Consolidation <span class="mono">{id}</span>', { id: esc(c.id) }) + (c.cartons ? ' · ' + tx('{n} ctn', { n: c.cartons }) : ''), [c.manNo ? tx('Manifest {no}', { no: esc(c.manNo) }) : '', c.closed ? tx('Truck {truck} (finalised)', { truck: esc(tNo(c.truck)) }) : tx('Truck {truck}', { truck: esc(tNo(c.truck)) }), c.bay ? tx('on <b>{bay}</b>, {status}', { bay: esc(c.bay), status: esc(where(c.status)) }) : esc(where(c.status)), c.dept ? tx('dept {dept}', { dept: esc(c.dept) }) : ''].filter(Boolean).join(' · '), tx('Open'), c.closed ? `data-view="rhistory"` : `data-view="receiving" data-truck="${esc(c.truck)}"${c.bay ? ` data-bay="${esc(c.bay)}"` : ''}`)).join('');
   if (r.manifests.length) out += grp(tx('Manifests'), r.manifests.length) + r.manifests.map(m => orow('d', 'file', tx('Manifest {no}', { no: hi(m.manNo, Q) }), [txn(m.consols, '{n} consol', '{n} consols'), txn(m.cartons, '{n} carton', '{n} cartons'), m.despatch ? tx('despatch {date}', { date: esc(m.despatch) }) : '', m.truck ? tx('on Truck {truck}', { truck: esc(tNo(m.truck)) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="manifests" data-man="${esc(m.manNo)}"`)).join('');
   if (r.cages.length) out += grp(tx('Cages'), r.cages.length) + r.cages.map(c => orow('s', 'm-cages', tx('Cage {id}', { id: hi(c.id, Q) }), [esc(ringName(c.ring)), c.location ? tx('at {place}', { place: esc(c.location) }) : tx('not parked'), txn(c.lines, '{n} line', '{n} lines'), c.has ? `<b>${tx('{n} of this keycode', { n: c.has })}</b>` : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="cages" data-cage="${esc(c.id)}"`)).join('');
-  if (r.loads.length) out += grp(tx('Inventory loads'), r.loads.length) + r.loads.map(l => orow('', 'box', tx('Load {label}', { label: hi(l.label, Q) }), [esc(where(l.status)), txn(l.pallets, '{n} pallet', '{n} pallets'), l.has.length ? tx('on pallet {pallets}', { pallets: esc(l.has.slice(0, 3).join(', ')) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="inventory" data-load="${esc(l.id)}"`)).join('');
-  if (r.offsite.length) out += grp(tx('Off-site pallets'), r.offsite.length) + r.offsite.map(o => orow('', 'truck', tx('Off-site pallet {pid}', { pid: hi(String(o.pid), Q) }), [o.title ? esc(o.title) : tx('no description'), o.has ? `<b>${tx('{n} of this keycode', { n: o.has })}</b>` : '', o.rec ? tx('back') : o.cb ? tx('callback {date}', { date: esc(o.cb) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="inventory" data-pid="${esc(o.pid)}"`)).join('');
+  if (r.loads.length) out += grp(tx('Other loads'), r.loads.length) + r.loads.map(l => orow('', 'box', tx('Load {label}', { label: hi(l.label, Q) }), [esc(where(l.status)), txn(l.pallets, '{n} pallet', '{n} pallets'), l.has.length ? tx('on pallet {pallets}', { pallets: esc(l.has.slice(0, 3).join(', ')) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="manifests" data-load="${esc(l.id)}"`)).join('');
+  if (r.offsite.length) out += grp(tx('Off-site pallets'), r.offsite.length) + r.offsite.map(o => orow('', 'truck', tx('Off-site pallet {pid}', { pid: hi(String(o.pid), Q) }), [o.title ? esc(o.title) : tx('no description'), o.has ? `<b>${tx('{n} of this keycode', { n: o.has })}</b>` : '', o.rec ? tx('back') : o.cb ? tx('callback {date}', { date: esc(o.cb) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="offsite" data-pid="${esc(o.pid)}"`)).join('');
   return out;
 }
 const ARG_KEYS = ['select', 'dept', 'micro', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay'];
 
 export function initSearch({ client, frame, go, tools = () => [], life = () => null, data = () => null, phone = () => false }) {
-  // On a phone, the records that open desk-only views (manifests, inventory) are left out.
-  const found = Q => { const r = findRecords(data(), Q); if (phone()) { r.manifests = []; r.loads = []; r.offsite = []; } return r; };
+  // On a phone, the records that open desk-only views (manifests, other loads) are left out.
+  const found = Q => { const r = findRecords(data(), Q); if (phone()) { r.manifests = []; r.loads = []; } return r; };
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
   el.innerHTML = `<div class="pal" role="dialog" aria-label="${tx('Search')}"><div class="in">${ic('search')}<input id="oq" placeholder="${tx('Search a keycode, a shelf like A16 S2, a manifest, a consolidation, a cage, a load or a tool…')}" autocomplete="off" inputmode="search"><button class="voicebtn" type="button" data-voice hidden aria-label="${tx('Search by voice')}" title="${tx('Search by voice')}">${ic('mic')}</button><span class="okind" id="okind">${tx('Type to search')}</span><span class="esc">Esc</span><button class="ocancel" type="button" data-ocancel>${tx('Cancel')}</button></div><div class="cols"><div class="body" id="obody"></div><div class="prev" id="oprev" hidden></div></div><div class="ofoot"><span><kbd>↑</kbd> <kbd>↓</kbd> ${tx('move')}</span><span><kbd>Enter</kbd> <span id="oenter">${tx('open')}</span></span><span><kbd>Esc</kbd> ${tx('close')}</span></div></div>`;
   frame.appendChild(el);

@@ -56,10 +56,10 @@ differs from the default.
 
 | # | Decision | What Conduit does today | Where | How to test |
 |---|---|---|---|---|
-| 23 | Where the inventory hub keeps its data | The off-site register and loads are store events, shared by every desk (legacy kept loads on one device). The clearance watch's prices stay on each device | `shared/reducers/floor.js` `inventory.*`, `js/views/inventory.js` | Import the off-site list on one PC, open Inventory on another |
+| 23 | Where the inventory hub keeps its data | The off-site register and loads are store events, shared by every desk (legacy kept loads on one device). The clearance watch's prices stay on each device | `shared/reducers/floor.js` `inventory.*`, `js/views/backdock/offsite.js` | Import the off-site list on one PC, open Off-site pallets on another |
 | 24 | Field Mode's export format | `{ kind: 'field-capture', version: 1, … }`. Legacy wrote `shelfsearcher-field-capture`, which names the product (rule 7). The map editor has to accept the new kind | `js/views/fieldmode.js` | Export from a phone, import in the editor |
 | 25 | The portrait lock | Phones (short side under 600 px) lock to portrait in the installed app; tablets and the dock screen rotate. Settings › Scanner and feedback › Rotation turns it off per phone | `js/device.js` | Install on a phone and turn it; then a tablet |
-| 26 | Heat with no shelves assigned | A department with no Label-integrity shelves spreads over its whole sub-department; legacy painted nothing for it | `js/views/inventory.js` `paintMap` | Inventory › a load › Whole load heat, before and after assigning shelves |
+| 26 | Heat with no shelves assigned | A department with no Label-integrity shelves spreads over its whole sub-department; legacy painted nothing for it | `js/views/backdock/loads.js` `paintMap` | Manifests › a load › Whole load heat, before and after assigning shelves |
 | 27 | The map scale | Shelf sizes and pick-list metres show only when the editor's Set Scale is saved (`metresPerUnit`); no shipped map has one, and nothing is guessed | `js/map.js` `shelfDetail` | Set the scale, republish, open a shelf card |
 
 ## From the October audit (added 2026-10-08)
@@ -96,7 +96,7 @@ reports and real devices can show:
    - Switch a tool off with a store device signed in and watch it go.
    - Export the registry CSV and open it in Excel.
 9. **Manifest upload preview:** a real DC `.xls`, including a report saved for the wrong store.
-10. **Inventory:** the real off-site master list (.xlsx), a real manifest as a load, heat on the map, and the clearance watch once product details are switched on.
+10. **Off-site pallets and loads:** the real off-site master list (.xlsx), a real manifest's Departments on the map, a CSV load with heat on the map, and the clearance watch once product details are switched on.
 11. **Map chrome:** double-tap, pinch and flick on the TC52x; Ctrl + / − / 0 on the PC; the symbols key; the price-check size cycle; tory lines on the BOH floor.
 12. **Field Mode** on a phone with the manager code: capture a few shelves, export the file.
 13. **The TC52x** with the browser's address bar showing (360×584): the map, Refresh, Labels, Emergency, Backfill scan and Land a pallet.

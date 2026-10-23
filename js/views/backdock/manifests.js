@@ -6,17 +6,23 @@
 // department-group rollup, and its consols, products and departments, each
 // searchable and sortable, with a square per consol showing whether it has
 // landed. Publish a report here or at Receiving; attach one to a truck.
+// Other loads (any sheet of pallets and keycodes, the old Inventory hub's
+// loads) list below the manifests. A manifest's departments, or a load's,
+// paint on the store map: one department, or the whole of it as heat.
 
-import { ic, esc, vh, sub, toast, dep, mhead, ago, fmtDate } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, dep, mhead, ago, fmtDate, today } from '../../ui.js';
+import { mountMap, bindMapChrome, hasMap } from '../../map.js';
 import { ensureNames, nameOf, kcCopy, itemName } from '../stockroom/common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
 import { previewManifest } from './mpreview.js';
+import { inv, loadsOf, send, statusPill, loadUnits, loadDetail, loadHeat, mapCard, paintMap, showPaint, paintNotes, stageFile, stagePanel, saveStage, stageChange } from './loads.js';
 import { manifestIndex, microDept, microChip, microName, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
 import { retailPeriod } from '../../../shared/time.js';
+import { toolOff } from '../../../shared/tools.js';
 import { tx, txn } from '../../i18n.js';
 
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
-const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {} };
+const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {}, load: null, paint: null, stage: null };
 const chip = microChip;
 // Home, Clothing, Kids and Flex are department names: they stay as the store writes them.
 const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'Kids', '#F59E0B'], ['flex', 'Flex', '#64748B']];
@@ -27,6 +33,9 @@ const mondayOf = day => { const d = new Date(day + 'T00:00:00'); d.setDate(d.get
 const units = c => (c.items || []).reduce((n, i) => n + (Number(i.q) || 0), 0);
 // An item's cartons: logged on the line, else its share of the consol's cartons by units.
 export const itemCartons = (c, it) => it.c || (units(c) ? c.cartons * (Number(it.q) || 0) / units(c) : 0);
+
+// A manifest's cartons by department, as heat on the map.
+const manifestHeat = doc => { const m = {}; for (const c of doc.consols) for (const it of c.items || []) { const k = String(it.dept || '???'); m[k] = (m[k] || 0) + itemCartons(c, it); } return { mode: 'heat', label: doc.manNo, units: Object.entries(m).map(([k, v]) => [k, Math.round(v)]) }; };
 
 // Every manifest the dock knows, one entry each, with where it stands.
 function entries(ctx) {
@@ -106,7 +115,7 @@ function explorer(ctx, e, doc) {
   const list = sorted(rows(doc, landed)), cols = COLS[st.tab];
   const th = cols.map(([label, key]) => key ? `<th data-act="sort" data-k="${key}" class="${st.sort === key ? 'on' : ''}">${label}${st.sort === key ? (st.dir > 0 ? ' ▲' : ' ▼') : ''}</th>` : `<th>${label}</th>`).join('');
     const body = st.tab === 'products' ? list.slice(0, 200).map(r => `<tr><td class="mono">${kcCopy(r.k)}</td><td>${itemName(r.k, r.d)}</td><td>${chip(r.dept)}</td><td class="n">${r.units}</td><td class="n">${r.cartons}</td><td class="n">${r.consols.length}</td><td>${r.consols.slice(0, 6).map(id => sq(landed[id])).join('')}</td></tr>`).join('')
-    : st.tab === 'depts' ? list.map(r => `<tr><td>${chip(r.dept)} <span class="mfx-dn"><small class="cs-dim mono">${esc(r.dept)}</small> ${esc(r.name || tx('Unknown department'))}</span></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
+    : st.tab === 'depts' ? list.map(r => `<tr class="mfx-paint${st.paint?.mode === 'dept' && st.paint.code === r.dept ? ' on' : ''}" data-act="paint" data-code="${esc(r.dept)}"><td>${chip(r.dept)} <span class="mfx-dn"><small class="cs-dim mono">${esc(r.dept)}</small> ${esc(r.name || tx('Unknown department'))}</span></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
     : list.slice(0, 120).map(c => {
       const open = !!st.expanded[c.id] || (st.q && list.length <= 3), items = c.items || [];
       return `<tr class="mfx-c" data-act="toggle" data-id="${esc(c.id)}"><td>${sq(c.state)}</td><td class="mono" title="${tx('Consolidation {no}', { no: esc(c.cons || '') })}">${esc(c.id)}${early[c.id] ? ` <span class="status warn" title="${tx('Landed on Truck {no} before this manifest arrived', { no: esc(truckNo(early[c.id].t)) })}">${tx('LANDED {date}', { date: esc(fmtDate(early[c.id].d)) })}</span>` : ''}</td><td>${(c.mix || []).slice(0, 4).map(x => chip(x[0])).join('')}</td><td class="n">${c.cartons}</td><td class="n">${c.units}</td><td class="n">${c.keycodes}</td></tr>` +
@@ -121,9 +130,9 @@ function explorer(ctx, e, doc) {
   return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>${tx('despatch <b>{date}</b>', { date: esc(doc.despatch || '—') })}</span><span>${tx('DC <b>{no}</b>', { no: esc(doc.dcNo || '—') })}</span>${attachedTo ? `<span>${tx('Truck <b>{no}</b> · {n}/{total} landed', { no: esc(truckNo(attachedTo)), n: nLanded, total: doc.consols.length })}</span>` : ''}</span></div>` +
     `<div class="ps-facts mfx-stats">${stat(tx('Consols'), doc.consols.length)}${stat(tx('Cartons'), cartons.toLocaleString())}${stat(tx('Keycodes'), keycodes.toLocaleString())}${stat(tx('Units'), allUnits.toLocaleString())}${stat(tx('Est. work'), tx('{h}h {m}m', { h: Math.floor(work / 60), m: String(work % 60).padStart(2, '0') }), tip, tx('{mpc} min/ctn · one person', { mpc }))}</div>` + roll +
     `<div class="mfd-acts">${attachedTo ? `<span class="status good">${tx('On Truck {no}', { no: esc(truckNo(attachedTo)) })}</span>` : trucks.length ? `<select class="ad-in" data-field="truck">${trucks.map(t => `<option value="${esc(t.id)}">${tx('Truck {no} · {status}', { no: esc(truckNo(t.id)), status: esc(TRUCK_ST[t.status] || t.status) })}</option>`).join('')}</select><button class="btn primary sm" data-act="attach">${ic('truck')}${tx('Attach to truck')}</button>` : `<span class="cs-dim">${tx('No truck on the board to attach to')}</span>`}<button class="btn sm" data-act="remove" style="margin-left:auto">${ic('trash')}${tx('Remove')}</button></div>` +
-    `<div class="mfx-bar"><div class="seg">${[['consols', tx('Consols')], ['products', tx('Products')], ['depts', tx('Departments')]].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="${tx('find consol, keycode, product, dept…')}" aria-label="${tx('Search this manifest')}"></div><span class="mfd-hit">${st.tab === 'depts' ? txn(list.length, '{n} department', '{n} departments') : st.tab === 'products' ? txn(list.length, '{n} product', '{n} products') : txn(list.length, '{n} consol', '{n} consols')}</span></div>` +
+    `<div class="mfx-bar"><div class="seg">${[['consols', tx('Consols')], ['products', tx('Products')], ['depts', tx('Departments')]].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="${tx('find consol, keycode, product, dept…')}" aria-label="${tx('Search this manifest')}"></div>${st.tab === 'depts' ? `<button class="btn sm${st.paint?.mode === 'heat' ? ' on' : ''}" data-act="heat">${ic('layers')}${tx('Whole load heat')}</button>` : ''}<span class="mfd-hit">${st.tab === 'depts' ? txn(list.length, '{n} department', '{n} departments') : st.tab === 'products' ? txn(list.length, '{n} product', '{n} products') : txn(list.length, '{n} consol', '{n} consols')}</span></div>` +
     `<div class="mfx-legend">${['landed', 'active', 'done', 'carried', 'none'].map(s => `${sq(s)}${SQ_NAME[s]}`).join('')}</div>` +
-    `<div class="mfx-scroll"><table class="mfx-t"><thead><tr>${th}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="cs-dim">${tx('Nothing matches.')}</td></tr>`}</tbody></table></div>${more ? `<div class="cs-dim" style="margin-top:8px">${more}</div>` : ''}</div>`;
+    `<div class="mfx-scroll"><table class="mfx-t"><thead><tr>${th}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="cs-dim">${tx('Nothing matches.')}</td></tr>`}</tbody></table></div>${more ? `<div class="cs-dim" style="margin-top:8px">${more}</div>` : ''}${st.tab === 'depts' ? paintNotes(ctx, list.map(r => r.dept)) : ''}</div>`;
 }
 
 function detail(ctx, list) {
@@ -131,29 +140,39 @@ function detail(ctx, list) {
   if (st.error) return `<div class="card mfd"><div class="ch"><h3>${esc(st.open)}</h3></div><p class="lbl">${esc(st.error)}</p></div>`;
   const doc = st.docFor === st.open ? st.doc : null;
   if (!doc) return `<div class="card mfd"><div class="ch"><h3>${esc(st.open)}</h3></div><div class="ohint">${tx('Loading the report…')}</div></div>`;
-  return explorer(ctx, list.find(x => x.manNo === st.open), doc);
+  return `<div class="mfx-col">${explorer(ctx, list.find(x => x.manNo === st.open), doc)}${st.tab === 'depts' ? mapCard(st.paint, hasMap()) : ''}</div>`;
 }
+// Another load: its status, departments and pallets, and the map.
+const loadPane = (ctx, l) => `<div class="mfx-col">${loadDetail(ctx, l, st.paint)}${mapCard(st.paint, hasMap())}</div>`;
 
 export default {
   id: 'manifests', title: tx('Manifests'), icon: 'm-manifests', area: 'backdock',
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
-    const list = entries(ctx);
+    // Other loads belong to the off-site tool: switched off, they leave Manifests too.
+    const loadsOn = !toolOff(ctx.store.get('tools')?.off, 'inventory');
+    const list = entries(ctx), loads = loadsOn ? loadsOf(ctx) : [], open = loadsOn && st.load && inv(ctx).loads[st.load];
+    if (st.load && !open) st.load = null;
     if (st.open && !list.some(x => x.manNo === st.open)) st.open = null;
-    if (!st.open && list.length) st.open = list[0].manNo;
-    const head = vh(tx('Manifests'), sub(tx('Manifest explorer'), txn(list.length, '{n} manifest', '{n} manifests'), tx('by week')), `<label class="btn primary" style="cursor:pointer"><input type="file" accept=".xls,.xlsx,.csv" data-field="file" style="display:none">${ic('file')}${tx('Publish a manifest')}</label>`, 'm-manifests');
+    if (!st.open && !st.load && list.length) st.open = list[0].manNo;
+    const head = vh(tx('Manifests'), sub(tx('Manifest explorer'), txn(list.length, '{n} manifest', '{n} manifests'), loads.length ? txn(loads.length, '{n} other load', '{n} other loads') : '', tx('by week')), (loadsOn ? `<label class="btn" style="cursor:pointer" title="${tx('A sheet of pallets and keycodes that is not a DC manifest')}"><input type="file" accept=".xls,.xlsx,.csv" data-field="loadfile" style="display:none">${ic('plus')}${tx('Add a load')}</label>` : '') + `<label class="btn primary" style="cursor:pointer"><input type="file" accept=".xls,.xlsx,.csv" data-field="file" style="display:none">${ic('file')}${tx('Publish a manifest')}</label>`, 'm-manifests');
     let wk = null;
     const rowsHtml = list.map(x => {
       const w = x.day ? mondayOf(x.day) : '', hd = w !== wk ? `<div class="pt3 mfx-wk">${w ? tx('Week of {date} · {period}', { date: esc(fmtDate(w)), period: retailPeriod(w) }) : tx('Undated')}</div>` : ''; wk = w;
       const [label, cls] = STATUS[x.status];
       return hd + `<div class="mfl-row${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}"><span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b><span class="status ${cls}">${label}</span></span><small>${x.day ? esc(fmtDate(x.day)) : ''}${x.truck ? ` · ${tx('Truck {no}', { no: esc(truckNo(x.truck)) })}` : ''}${x.despatch ? ` · ${tx('despatch {date}', { date: esc(x.despatch) })}` : ''}</small></span><span class="mfl-facts"><span>${tx('<b>{cartons}</b> ctn · <b>{consols}</b> consols', { cartons: x.totalCartons ?? '–', consols: x.consols ?? '–' })}</span><span class="cs-dim">${x.publishedAt ? ago(x.publishedAt) : ''}</span></span>${ic('chev')}</div>`;
     }).join('');
-    const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">${tx("Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.")}</div>`}</div>`;
-    return head + `<div class="mgrid">${side}${detail(ctx, list)}</div>`;
+    const loadRows = loads.length ? `<div class="pt3 mfx-wk">${tx('Other loads')}</div>` + loads.map(l => `<div class="mfl-row${l.id === st.load ? ' on' : ''}" data-act="open-load" data-id="${esc(l.id)}"><span class="mfl-main"><span class="mfl-top"><b>${esc(l.label)}</b>${statusPill(l.status)}</span><small>${esc(fmtDate(l.recvDate || l.date))}</small></span><span class="mfl-facts"><span>${txn(l.pallets.length, '<b>{n}</b> pallet', '<b>{n}</b> pallets')}</span><span class="cs-dim">${txn(loadUnits(l), '<b>{n}</b> unit', '<b>{n}</b> units', { n: loadUnits(l).toLocaleString('en-AU') })}</span></span>${ic('chev')}</div>`).join('') : '';
+    const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">${tx("Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.")}</div>`}${loadRows}</div>`;
+    return head + stagePanel(ctx, st.stage) + `<div class="mgrid">${side}${open ? loadPane(ctx, open) : detail(ctx, list)}</div>`;
   },
   mount(ctx, root) {
     // From search: open that manifest (and filter to a consolidation).
-    if (ctx.arg?.man && ctx.arg !== usedArg && ctx.store.get('dock').manifests?.[ctx.arg.man]) { usedArg = ctx.arg; st.open = ctx.arg.man; if (ctx.arg.q) st.q = ctx.arg.q; setTimeout(() => ctx.rerender(), 0); }
+    if (ctx.arg?.man && ctx.arg !== usedArg && ctx.store.get('dock').manifests?.[ctx.arg.man]) { usedArg = ctx.arg; st.open = ctx.arg.man; st.load = null; st.paint = null; if (ctx.arg.q) st.q = ctx.arg.q; setTimeout(() => ctx.rerender(), 0); }
+    // From search, the dashboard or Off-site pallets: another load.
+    if (ctx.arg?.load && ctx.arg !== usedArg && inv(ctx).loads[ctx.arg.load]) { usedArg = ctx.arg; st.load = ctx.arg.load; st.open = null; st.paint = null; setTimeout(() => ctx.rerender(), 0); }
+    let map = null; const stage = $('#mapstage', root);
+    if (stage) { map = mountMap(stage, { badges: true }); bindMapChrome(root, map); paintMap(ctx, map, st.paint); }
     const load = () => {
       if (!st.open || st.docFor === st.open) return;
       st.docFor = st.open; st.doc = null; st.error = null; st.q = ''; st.expanded = {}; st.group = null;
@@ -172,23 +191,40 @@ export default {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
       try {
-        if (act === 'open') { st.open = a.dataset.man; ctx.rerender(); }
+        if (act === 'open') { st.open = a.dataset.man; st.load = null; st.paint = null; ctx.rerender(); }
+        else if (act === 'open-load') { st.load = a.dataset.id; st.paint = null; ctx.rerender(); }
         else if (act === 'toggle') { st.expanded[a.dataset.id] = !st.expanded[a.dataset.id]; ctx.rerender(); }
-        else if (act === 'tab') { st.tab = a.dataset.tab; st.sort = null; ctx.rerender(); }
+        else if (act === 'tab') { st.tab = a.dataset.tab; st.sort = null; st.paint = null; ctx.rerender(); }
+        else if (act === 'paint') { st.paint = st.paint?.mode === 'dept' && st.paint.code === a.dataset.code ? null : { mode: 'dept', code: a.dataset.code }; showPaint(ctx, root, map, st.paint); }
+        else if (act === 'heat') { const l = st.load && inv(ctx).loads[st.load], doc = st.docFor === st.open ? st.doc : null; st.paint = st.paint?.mode === 'heat' ? null : l ? loadHeat(l) : doc ? manifestHeat(doc) : null; showPaint(ctx, root, map, st.paint); }
+        else if (act === 'unpaint') { st.paint = null; showPaint(ctx, root, map, null); }
+        else if (act === 'load-status') { await send(ctx, 'inventory.load.status', { load: st.load }, { status: a.dataset.s, ...(a.dataset.s === 'received' ? { recvDate: today() } : {}) }); }
+        else if (act === 'load-remove') { const l = inv(ctx).loads[st.load]; if (!l || !confirm(tx('Remove {load}? The event log keeps a record.', { load: l.label }))) return; await send(ctx, 'inventory.load.remove', { load: l.id }); st.load = null; st.paint = null; toast(tx('Load removed')); ctx.rerender(); }
+        else if (act === 'stage-cancel') { st.stage = null; ctx.rerender(); }
+        else if (act === 'stage-save') { const s = st.stage; if (!s) return; a.disabled = true; const r = await saveStage(ctx, s); st.stage = null; if (r.kind === 'offsite') return ctx.go('offsite'); st.load = r.id; st.open = null; st.paint = null; ctx.rerender(); }
         else if (act === 'sort') { if (st.sort === a.dataset.k) st.dir = -st.dir; else { st.sort = a.dataset.k; st.dir = -1; } ctx.rerender(); }
         else if (act === 'group') { st.group = st.group === a.dataset.g ? null : a.dataset.g; ctx.rerender(); }
         else if (act === 'attach') { const truck = root.querySelector('[data-field="truck"]')?.value; if (!truck) return; a.disabled = true; await attachManifest(ctx, truck, st.open); toast(tx('{man} attached to Truck {no}', { man: st.open, no: truckNo(truck) })); }
         else if (act === 'remove') { if (!confirm(tx('Remove manifest {man} from the library? Trucks it is attached to keep their copy.', { man: st.open }))) return; await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(st.open)}`, { method: 'DELETE' }); st.open = null; st.docFor = null; toast(tx('Manifest removed')); }
       } catch (err) { toast(err.message, 'bad'); ctx.rerender(); }
     });
-    root.addEventListener('change', async e => {
-      if (!e.target.matches('[data-field="file"]')) return;
-      const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
-      try { const r = await previewManifest(ctx, f); if (!r) return; st.open = r.manNo; st.docFor = null; toast(tx('Manifest {man} published · {consols} consols, {cartons} cartons', { man: r.manNo, consols: r.consols, cartons: r.totalCartons })); ctx.rerender(); }
+    const publish = async f => {
+      try { const r = await previewManifest(ctx, f); if (!r) return; st.open = r.manNo; st.docFor = null; st.load = null; st.paint = null; toast(tx('Manifest {man} published · {consols} consols, {cartons} cartons', { man: r.manNo, consols: r.consols, cartons: r.totalCartons })); ctx.rerender(); }
       catch (err) { toast(tx('Could not publish {file}: {error}', { file: f.name, error: err.message }), 'bad'); }
+    };
+    root.addEventListener('change', async e => {
+      if (st.stage && (e.target.closest('[data-col]') || e.target.closest('[data-stage]'))) { if (stageChange(st.stage, e.target)) ctx.rerender(); return; }
+      const field = e.target.dataset.field; if (field !== 'file' && field !== 'loadfile') return;
+      const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
+      if (field === 'file') return publish(f);
+      // Add a load: a DC manifest goes to the library like any other; the
+      // off-site master list or any other sheet waits for a look first.
+      const s = await stageFile(f); if (!s) return;
+      if (s.kind === 'load') return publish(f);
+      st.stage = s; ctx.rerender();
     });
     let typing = null;
     root.addEventListener('input', e => { if (e.target.matches('[data-field="q"]')) { st.q = e.target.value; clearTimeout(typing); typing = setTimeout(() => { const v = st.q; ctx.rerender(); const i = document.querySelector('#content [data-field="q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 180); } });
-    return [ctx.store.on('dock', () => ctx.rerender()), ctx.store.on('plan', () => ctx.rerender())];
+    return [ctx.store.on('dock', () => ctx.rerender()), ctx.store.on('plan', () => ctx.rerender()), ctx.store.on('inventory', () => { if (!st.stage && !root.querySelector('input:focus, select:focus')) ctx.rerender(); })];
   },
 };

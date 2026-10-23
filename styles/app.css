@@ -1078,7 +1078,10 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .ll .ll-row select { flex: 0 1 360px; min-width: 220px; width: auto; }
 /* The explorer needs the room: the list goes above it below 1400px of shell. */
 /* The manifest list is a picker: narrower than the shell's 440px so the explorer gets the room. */
-.mgrid:has(.mfx) { grid-template-columns: 340px minmax(0, 1fr); }
+.mgrid:has(.mfx-col) { grid-template-columns: 340px minmax(0, 1fr); }
+/* A manifest or another load with the map under it (Departments tab, loads). */
+.mfx-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mfx-t tr.mfx-paint { cursor: pointer; } .mfx-t tr.mfx-paint:hover td { background: var(--hover); } .mfx-t tr.mfx-paint.on td { background: var(--accent-soft); }
 .mfx-stats small { font-size: 11px; color: var(--dim); margin-top: 1px; }
 .mfx-stats > div[title] { cursor: help; }
 .mfx-dn { margin-left: 4px; }
@@ -1091,7 +1094,7 @@ a.nm-go { color: inherit; text-decoration: none; }
 a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .nm-tick { color: #16A34A; font-weight: 700; margin-right: 4px; }
 .nm-off { color: var(--dim); font-size: 11px; }
-@container shell (max-width: 1400px) { .mgrid:has(.mfx) { grid-template-columns: 1fr; } .mgrid:has(.mfx) .mfl { max-height: 260px; overflow: auto; } }
+@container shell (max-width: 1400px) { .mgrid:has(.mfx-col) { grid-template-columns: 1fr; } .mgrid:has(.mfx-col) .mfl { max-height: 260px; overflow: auto; } }
 @container shell (max-width: 760px) { .mfx-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* Dock phone search, manifest info, pallet contents */
@@ -1212,6 +1215,10 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .da-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 12px; align-items: start; }
 .da-grid > div { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .da-grid .card { margin: 0; }
+.da-more { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.da-more .card { margin: 0; }
+.da-arrived .ch { flex-wrap: wrap; } .da-arrived .ch .seg { margin-left: auto; }
+.da-arrived .inv-kpis { margin-bottom: 4px; }
 .da-t tr.low td { background: rgba(245,158,11,.08); }
 .da-spark path { fill: none; stroke: #2563EB; stroke-width: 1.6; }
 .da-bar { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 5px 0; }
@@ -1518,7 +1525,7 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .pcnote b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
 .mv-sel .who2.pcw svg { flex: none; }
 
-/* ── Inventory and pallet hub (js/views/inventory.js) ────────────────── */
+/* ── Off-site pallets and loads (js/views/backdock/offsite.js, loads.js) ── */
 .inv-tabs { margin: 4px 0 12px; }
 .inv-body > .card + .card { margin-top: 12px; }
 .inv-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1532,7 +1539,7 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .inv-row .what b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inv-row .what small, .inv-row .tags small, .inv-row .cb small { color: var(--dim); font-size: 11.5px; }
 .inv-row .prods { display: flex; flex-wrap: wrap; gap: 4px; }
-.inv-row .prods i { font-style: normal; font-family: ui-monospace, Menlo, monospace; font-size: 11px; background: var(--chip); color: var(--chip-ink); border-radius: 5px; padding: 1px 6px; }
+.inv-row .prods i, .ofp-m .prods i { font-style: normal; font-family: ui-monospace, Menlo, monospace; font-size: 11px; background: var(--chip); color: var(--chip-ink); border-radius: 5px; padding: 1px 6px; }
 .inv-row .tags { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
 .inv-row .cb { display: flex; flex-direction: column; gap: 2px; }
 .inv-row .cb label { display: flex; flex-direction: column; gap: 2px; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
@@ -1542,6 +1549,27 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .inv-row .acts { text-align: right; }
 .inv-pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--chip-ink); }
 .inv-pill.fx { background: #FFEDD5; color: #9A3412; }
+.inv-pill.clr, .inv-pill.late { background: #FEE2E2; color: #991B1B; }
+.inv-prow .pid.go { color: var(--accent-ink); cursor: pointer; }
+/* The phone's register: one card a pallet, callback and Received on its foot. */
+.ofp-mob { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.ofp-pills { align-self: flex-start; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.ofp-pills button { white-space: nowrap; }
+.ofp-m { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.ofp-m.late { border-color: #FCA5A5; } .ofp-m.rec { opacity: .75; }
+.ofp-m.hl { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ofp-m .t { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.ofp-m .t .pid { font-family: ui-monospace, Menlo, monospace; font-weight: 800; color: var(--ink); }
+.ofp-m .t span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink2); font-size: 14px; }
+.ofp-m .prods { display: flex; flex-wrap: wrap; gap: 4px; }
+.ofp-m .tags { display: flex; flex-wrap: wrap; gap: 4px; } .ofp-m .tags:empty { display: none; }
+.ofp-m .f { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.ofp-m .f label { display: flex; flex-direction: column; gap: 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+.ofp-m .f input { font: inherit; font-size: 15px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); }
+.ofp-m.late .f input { border-color: #DC2626; color: #B91C1C; }
+.ofp-m .f small { color: var(--dim); font-size: 13px; }
+.ofp-mob .inv-add { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 12px; }
+.ofp-mob .inv-add input:not([type="date"]) { flex: 1 1 100%; min-width: 0; }
 .inv-st { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
 .inv-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; padding: 10px 4px; border-top: 1px solid var(--line-soft); }
 .inv-add input, .inv-form input, .inv-form select, .inv-map-cols select { font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); }
@@ -1595,6 +1623,7 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .inv-ev > b:first-child { font-size: 11.5px; } .inv-ev.clr > b:first-child { color: #B91C1C; } .inv-ev.drop > b:first-child { color: #B45309; }
 @container shell (max-width: 1400px) { .inv-detail { grid-template-columns: minmax(0, 1fr); } .inv-row { grid-template-columns: 70px minmax(0, 1fr) 160px 120px; } .inv-row .tags { display: none; } }
 @container shell (max-width: 1100px) { .inv-loads, .inv-tgrid { grid-template-columns: minmax(0, 1fr); } .inv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .inv-row { grid-template-columns: 64px minmax(0, 1fr); } .inv-row .cb, .inv-row .acts { grid-column: 2; text-align: left; } .inv-ev { grid-template-columns: 90px minmax(0, 1fr); } }
+@container shell (max-width: 1100px) { .inv-body .card > .ch { flex-wrap: wrap; } .inv-body .card > .ch h3 { flex-basis: 100%; } .inv-row .cb input { max-width: 240px; } }
 .map.real.inv-heat .shelf-badges, .map.real.inv-paint .shelf-badges { opacity: .35; }
 
 /* ── Dashboard, Floor P2: Today at, logistics, the combined map ──────── */

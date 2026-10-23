@@ -123,7 +123,6 @@ export default {
   "at {place}": "nasa {place}",
   "not parked": "wala pang puwesto",
   "{n} of this keycode": "{n} ng keycode na ito",
-  "Inventory loads": "Mga inventory load",
   "Load {label}": "Load {label}",
   "on pallet {pallets}": "nasa pallet {pallets}",
   "Off-site pallets": "Mga off-site pallet",
@@ -434,4 +433,5 @@ export default {
   "Compactor": "Compactor",
   "Kiosk": "Kiosk",
   "Trolley bay": "Trolley bay",
+  "Other loads": "Iba pang load",
 };

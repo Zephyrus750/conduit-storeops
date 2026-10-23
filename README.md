@@ -344,7 +344,7 @@ device library (`client/catalogue.js`) batches lookups and keeps hits for a
 week. The shell's search palette (Ctrl K and the header)
 understands a keycode, a shelf such as A16 S2, a department and a tool, and
 the store's records (`shared/finder.js`): manifests, consolidation labels
-(the truck and bay a consol is on), cages, inventory loads and off-site
+(the truck and bay a consol is on), cages, other loads and off-site
 pallets, each opening its view on the item. On a phone the search bar is
 typed into directly, as ShelfSearcher's was: a compact list of up to six
 rows drops under it (a run such as A16 lists its shelves S1, S2, E1, E2 and
@@ -422,12 +422,22 @@ The owner console keeps charcoal with Signal orange. Display size and the
 collapsed rail are the only per-device appearance settings.
 
 Floor views live on real data: Store map, Pick list, Location refresh, Label
-integrity, Emergency, Maintenance, Stocktake, Inventory (off-site register,
-loads, heat on the map, trends, clearance watch), plus Dashboard (with the
+integrity, Emergency, Maintenance, Stocktake, plus Dashboard (with the
 Today at and logistics cards), Settings, Help (the tour) and Field Mode (a
 manager checks each shelf against its label, names shelves the map has none
 for, and sends the differences to the owner as suggested map edits with
 `src: 'field'`; the export still writes a `field-capture/1` file).
+
+The Inventory hub moved to the Back dock (23 Oct 2026): Off-site pallets
+(`js/views/backdock/offsite.js`: the register by callback date, received,
+the off-site master list import and the clearance watch, on the phone too),
+other loads in Manifests (any sheet of pallets and keycodes, with a column
+mapper) where a manifest's or a load's departments paint on the map, and
+What arrived in Analytics (cartons a week by department, from finished
+trucks). The `inventory.*` events and the `inventory` projection moved with
+it to the Back dock area (the dock code or a manager); a device on an older
+release still sends them as Floor, and the worker accepts that (`wasArea` in
+`shared/catalogue.js`) and logs them as Back dock.
 
 The owner's queue (console › Maps, and a store's Map tab) holds Suggest map
 edits and Field Mode alike. **Apply to map** writes a rename or a name that
@@ -510,9 +520,9 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 
 | Area | Reducers | Ported from |
 | --- | --- | --- |
-| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list, inventory (off-site register: set, add, update; loads: add, status, remove) | ShelfSearcher refresh, label-integrity, stocktake, maintenance, em-service and inventory modes |
+| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list | ShelfSearcher refresh, label-integrity, stocktake, maintenance and em-service modes |
 | Stockroom | cages with ring colours, backfill submissions (pending, corrected, submitted; requested list; claims; rename), negative-SOH adjustments, day list | K2B review, adjust and scan modules |
-| Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits, pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4 and days confirmed without trucks (`plan.noTrucks`: the morning checklist reads them as done; planning a truck or one arriving clears it) (a staged manifest is a reference: number, counts and consol ids; the device that starts the truck attaches the report from the library), history rows on finalise | Decant Visualiser receiving, manifests, planner, history |
+| Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits, pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4 and days confirmed without trucks (`plan.noTrucks`: the morning checklist reads them as done; planning a truck or one arriving clears it) (a staged manifest is a reference: number, counts and consol ids; the device that starts the truck attaches the report from the library), history rows on finalise; off-site pallets and other loads (`inventory.*`: register set, add, update; loads add, status, remove; Floor events until 23 Oct 2026) | Decant Visualiser receiving, manifests, planner, history; ShelfSearcher inventory mode |
 | Store | map publish, roster rotation marker, settings, tools, map edit suggestions, feedback (device presence is a projection written directly from the socket `hb` frame or `POST /hb`, not an event) | |
 
 A catalogued type without a reducer would be rejected `not_implemented`; the

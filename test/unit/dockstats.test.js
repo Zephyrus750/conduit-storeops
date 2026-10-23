@@ -41,3 +41,24 @@ test('the live truck: pace points, rate per person against the norm, insights', 
   const text = insights(t, at, { rates: { D1: { eligible: true, rate28d: 100 } } }).map(x => x.text).join(' | ');
   assert.match(text, /D1 is 64% under/); assert.match(text, /A2 is 10 min over/);
 });
+
+test('arrivalsByWeek: cartons a week by department from finished trucks, gap weeks zero, a trend once four weeks are active', async () => {
+  const { arrivalsByWeek } = await import('../../shared/dockstats.js');
+  const row = (date, depts, cartons) => ({ id: `${date}-T1`, date, cartons, byDept: Object.entries(depts).map(([dept, c]) => ({ dept, cartons: c, pallets: 1 })) });
+  const history = [
+    row('2026-09-28', { 101: 100, 205: 50 }, 150), row('2026-10-01', { 101: 20 }, 40),   // the same week; the second truck's manifest named only 20 of 40
+    row('2026-10-12', { '205/101': 120 }, 120), row('2026-10-19', { 101: 200 }, 200), row('2026-10-22', { 312: 10 }, 10),
+    row('2026-06-01', { 101: 999 }, 999),   // before the window
+  ];
+  const r = arrivalsByWeek(history, { weeks: 4, today: '2026-10-22' });
+  assert.deepEqual(r.weeks.map(w => w.wk), ['2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19']);
+  assert.deepEqual(r.weeks.map(w => w.cartons), [190, 0, 120, 210], 'a truck counts its whole cartons even when the manifest named fewer');
+  assert.deepEqual(r.weeks[0].depts, { 101: 120, 205: 50 });
+  assert.deepEqual(r.weeks[2].depts, { 205: 120 }, 'a mixed consol counts to its biggest department');
+  assert.deepEqual(r.depts[0], ['101', 320]);
+  assert.equal(r.callouts.trucks, 5); assert.equal(r.callouts.busiest, '2026-10-19');
+  assert.equal(r.callouts.trend, null, 'three active weeks: no trend yet');
+  const all = arrivalsByWeek(history, { weeks: 'all', today: '2026-10-22' });
+  assert.equal(all.weeks[0].wk, '2026-06-01'); assert.ok(all.callouts.trend != null);
+  assert.deepEqual(arrivalsByWeek([], { weeks: 4, today: '2026-10-22' }).callouts.trucks, 0);
+});
