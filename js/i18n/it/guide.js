@@ -122,7 +122,7 @@ export default {
   "Set departments": "Imposta reparti",
   "The Stockroom is not on for this store": "Il magazzino non è attivo per questo negozio",
   "Idle re-lock": "Blocco per inattività",
-  "A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.": "Un dispositivo inattivo per questo tempo perde i codici Magazzino, Ricevimento merci e responsabile. L’area vendita resta aperta con il PIN del negozio.",
+  "A device left idle this long drops its Stockroom, Back dock and manager codes. A phone keeps the Floor open; a PC asks for the manager code again.": "Un dispositivo inattivo per questo tempo perde i codici di Magazzino, Ricevimento merci e responsabile. Un telefono tiene aperta l’area vendita; un PC chiede di nuovo il codice responsabile.",
   "{n} min": "{n} min",
   "Never": "Mai",
   "Save store settings": "Salva impostazioni del negozio",

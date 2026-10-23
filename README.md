@@ -146,7 +146,14 @@ store keeps 2468 with it set to 4). An events body is at most 8 MB and one
 event's payload 2 MB; a device's `at` must be within 10 minutes ahead and 30
 days behind the worker's clock or the event is refused as `clock_skew`.
 An area or manager code lasts a shift (`ROLE_TTL_SECONDS`, 12 h); after that
-the device keeps the Floor and asks for the code again. The WebSocket carries
+the device keeps the Floor and asks for the code again. A manager's role
+also goes on the idle re-lock and when another store is opened on the device.
+A PC, which signs in with the manager code alone, then shows a Manager code
+card at once (the shift ended, it sat idle, or another store was opened) and
+carries on as before once the code is typed; a phone signed in as a manager
+shows the same card and may carry on as a team member. The shell renews a
+token in its last minute, so the card shows when the role goes, not at the
+next write, and the idle re-lock counts input in any of the app's tabs. The WebSocket carries
 its token as the second subprotocol (`conduit, <token>`), never in the URL.
 
 ## Catalogue

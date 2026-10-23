@@ -1,5 +1,6 @@
 // Filipino · the shell: rail, header, sign-in, sync, updates, team strip, scanning, shared UI helpers. Keys are the English text (js/i18n.js).
 export default {
+  "Manager code needed": "Kailangan ang manager code",
   "That link asked for a worker this app does not trust; it was ignored.": "Humingi ang link na ito ng server na hindi pinagkakatiwalaan ng app; hindi ito pinansin.",
   "Floor": "Floor",
   "Signing in to <b>{host}</b>": "Nagsa-sign in sa <b>{host}</b>",

@@ -122,7 +122,7 @@ export default {
   "Set departments": "Abteilungen festlegen",
   "The Stockroom is not on for this store": "Das Lager ist für diese Filiale nicht aktiviert",
   "Idle re-lock": "Sperre bei Inaktivität",
-  "A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.": "Ein Gerät, das so lange unbenutzt bleibt, verliert seine Codes für Lager, Warenannahme und Manager. Die Verkaufsfläche bleibt mit der Filial-PIN offen.",
+  "A device left idle this long drops its Stockroom, Back dock and manager codes. A phone keeps the Floor open; a PC asks for the manager code again.": "Ein so lange unbenutztes Gerät verliert seine Codes für Lager, Warenannahme und Manager. Ein Telefon behält die Verkaufsfläche; ein PC fragt erneut nach dem Manager-Code.",
   "{n} min": "{n} Min.",
   "Never": "Nie",
   "Save store settings": "Filialeinstellungen speichern",

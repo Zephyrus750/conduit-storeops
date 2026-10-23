@@ -122,7 +122,7 @@ export default {
   "Set departments": "Đặt ngành hàng",
   "The Stockroom is not on for this store": "Kho chưa được bật cho cửa hàng này",
   "Idle re-lock": "Tự khóa lại khi không dùng",
-  "A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.": "Thiết bị không dùng trong khoảng thời gian này sẽ mất mã Kho, Khu nhận hàng và mã quản lý. Khu bán hàng vẫn mở bằng mã PIN cửa hàng.",
+  "A device left idle this long drops its Stockroom, Back dock and manager codes. A phone keeps the Floor open; a PC asks for the manager code again.": "Thiết bị không dùng trong khoảng thời gian này sẽ mất mã Kho, Khu nhận hàng và mã quản lý. Điện thoại vẫn mở Khu bán hàng; máy tính sẽ hỏi lại mã quản lý.",
   "{n} min": "{n} phút",
   "Never": "Không bao giờ",
   "Save store settings": "Lưu cài đặt cửa hàng",

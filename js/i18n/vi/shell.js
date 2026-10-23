@@ -1,5 +1,6 @@
 // Vietnamese · the shell: rail, header, sign-in, sync, updates, team strip, scanning, shared UI helpers. Keys are the English text (js/i18n.js).
 export default {
+  "Manager code needed": "Cần mã quản lý",
   "That link asked for a worker this app does not trust; it was ignored.": "Liên kết này yêu cầu một máy chủ mà ứng dụng không tin cậy; đã bỏ qua.",
   "Floor": "Khu bán hàng",
   "Signing in to <b>{host}</b>": "Đang đăng nhập vào <b>{host}</b>",

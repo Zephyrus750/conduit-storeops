@@ -1,5 +1,12 @@
 // French · language picker, sign-in card extras, the area code sheet. Keys are the English text (js/i18n.js).
 export default {
+  "A manager sign-in lasts one shift (12 hours). Enter the manager code to carry on.": "Une connexion responsable dure un service (12 heures). Saisissez le code responsable pour continuer.",
+  "Locked after {n} min idle. Enter the manager code to carry on.": "Verrouillé après {n} min d’inactivité. Saisissez le code responsable pour continuer.",
+  "Another store was opened on this device, so this one kept only the Floor. Enter the manager code to carry on.": "Un autre magasin a été ouvert sur cet appareil ; celui-ci ne garde que la surface de vente. Saisissez le code responsable pour continuer.",
+  "The manager sign-in on this PC has ended. Enter the manager code to carry on.": "La connexion responsable de ce PC a pris fin. Saisissez le code responsable pour continuer.",
+  "Carry on as manager": "Continuer en tant que responsable",
+  "Carry on as a team member": "Continuer en tant qu’équipier",
+  "That is a crew code, not the manager code.": "C’est un code d’équipe, pas le code responsable.",
   "Stockroom": "Réserve",
   "Back dock": "Quai de réception",
   "{area} code": "Code {area}",

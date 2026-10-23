@@ -84,3 +84,30 @@ test('session: a dock screen holds the Floor and Back dock roles only; a manager
     assert.equal(s.current, null); assert.ok(calls.includes('/v1/auth/signout'), `a ${role} code leaves no session behind`);
   }
 });
+
+test('session: a manager sign-in remembers it; the role going at a refresh, the idle lock or a store switch says why; the code clears it', async () => {
+  let refreshRoles = ['floor', 'manager'];
+  const transport = { calls: [], async request(path, { body } = {}) {
+    if (path === '/v1/auth/signin') return { token: 't', refresh: 'r' + body.store, expires: 9e9, store: body.store, name: 'S', roles: body.managerCode ? ['floor', 'manager'] : ['floor'], caps: [] };
+    if (path === '/v1/auth/refresh') return { token: 't2', refresh: 'r2', expires: 9e9, roles: refreshRoles, caps: [] };
+    if (path === '/v1/auth/unlock') return { token: 'tu', refresh: 'ru', expires: 9e9, roles: body.code === 'MGR' ? ['floor', 'manager'] : ['floor', 'stockroom'] };
+    if (path === '/v1/auth/lock') return { token: 'tl', refresh: 'rl', expires: 9e9, roles: ['floor'] };
+    return {};
+  } };
+  const s = createSession({ transport, storage: memoryStorage() });
+  await s.load();
+  await s.signIn({ store: '1241', managerCode: 'MGR' });
+  assert.equal(s.current.asManager, true); assert.equal(s.current.lapsed, null);
+  await s.refresh(); assert.equal(s.current.lapsed, null, 'a refresh inside the shift keeps the role');
+  refreshRoles = ['floor'];
+  await s.refresh();
+  assert.deepEqual(s.current.roles, ['floor']); assert.equal(s.current.lapsed, 'shift'); assert.equal(s.current.asManager, true);
+  await s.unlock('SR'); assert.equal(s.current.lapsed, 'shift', 'a crew code does not bring the manager back');
+  await s.unlock('MGR'); assert.equal(s.current.lapsed, null); assert.ok(s.current.roles.includes('manager'));
+  await s.lock(); assert.equal(s.current.lapsed, 'idle');
+  await s.unlock('MGR'); await s.signInAnother({ store: '2033', pin: '222222' });
+  await s.switchTo('1241'); assert.equal(s.current.lapsed, 'switch', 'the parked store gave up the manager role');
+  await s.dropManager(); assert.equal(s.current.lapsed, null); assert.equal(s.current.asManager, false);
+  // A PIN sign-in never counts as a manager's.
+  await s.signOut(); await s.signIn({ store: '1241', pin: '111111' }); assert.equal(s.current.asManager, false);
+});

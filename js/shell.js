@@ -24,7 +24,7 @@ installLog();
 import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { toolForView, toolOff } from '../shared/tools.js';
-import { ensureArea, hasArea } from './unlock.js';
+import { ensureArea, ensureManager, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
@@ -78,11 +78,14 @@ const paintFootDate = () => { $('#footDate').textContent = `${fmtLong()} · ${re
 paintFootDate(); setInterval(paintFootDate, 60_000);
 $('#footVer').textContent = 'Conduit ' + VERSION;
 // The token's areas changed (the owner switched one, and the device renewed):
-// the rail follows, and a view in an area that went away goes home.
-let capsSig = null;
+// the rail follows, and a view in an area that went away goes home. Its roles
+// changed (a code entered, a shift over, the idle lock): the rail follows,
+// and a manager whose role went is asked for the code again (managerCheck).
+let capsSig = null, rolesSig = null;
 client.session.on('change', snap => {
-  const sig = (snap?.caps || []).join(',');
-  if (capsSig === null || !store || admin) { capsSig = sig; return; }
+  const sig = (snap?.caps || []).join(','), rsig = (snap?.roles || []).join(',');
+  if (capsSig === null || !store || admin) { capsSig = sig; rolesSig = rsig; return; }
+  if (rsig !== rolesSig) { rolesSig = rsig; if (sig === capsSig) { buildRail(); paintBadges(); } managerCheck(); }
   if (sig === capsSig) return;
   const gone = capsSig.split(',').filter(a => a && !sig.split(',').includes(a)); capsSig = sig;
   buildRail(); paintBadges();
@@ -130,7 +133,7 @@ async function enter() {
     if (s.actas) { await client.session.endActAs(); await enterAdmin(); toast(tx('Cannot open {store}: {error}', { store: s.store, error: e.message }), 'bad'); return; }
     hideCover(); showSignin({ error: e.message }); return;
   }
-  admin = null; frame.classList.remove('adm'); applyPrefs(frame); capsSig = (client.session.current?.caps || []).join(',');
+  admin = null; frame.classList.remove('adm'); applyPrefs(frame); capsSig = (client.session.current?.caps || []).join(','); rolesSig = (client.session.current?.roles || []).join(',');
   // After an update, What's New once (a device on its first run gets the walkthrough instead).
   { let fresh = true; try { fresh = !JSON.parse(localStorage.getItem('walkthrough_seen') || '{}').floor; } catch {} if (!s.owner && !s.actas && !s.screen) setTimeout(() => whatsNewOnce(show, { firstRun: fresh }), 900); }   // nobody reads a pop-up on a wall screen
   team?.off(); team = mountTeam({ store, session: client.session, host: $('#teambar'), today, storeNo: s.store, isHome: () => ['dashboard', 'map', 'srhome', 'bdhome'].includes(current), desk: () => !isMobile() });
@@ -153,6 +156,7 @@ async function enter() {
   buildRail(); paintBadges(); setWs('floor');
   actasBar(s.actas ? s : null);
   hideCover();
+  managerCheck();
   if (openPendingLink(s)) return;
   if (s.screen && hasArea(client.session, 'backdock')) { setWs('backdock'); return show('dockscreen'); }
   if (!isMobile()) return show('dashboard');
@@ -187,25 +191,54 @@ function onMapProjection(m) {
 // Store settings: the zone every day, week and cycle follows, and the idle
 // re-lock. A device idle for autoLockMins gives up its area and manager codes
 // (the worker revokes them) and the open workspace asks for its code again.
-let lockMins = 0, idleSince = Date.now(), locking = false;
+// Input in any of the app's tabs counts (last_input): a tab nobody looks at
+// must not lock the session out from under the one in use.
+let lockMins = 0, idleSince = Date.now(), sharedAt = 0, locking = false;
 function applySettings(x) { const cfg = settingsOf(x); setStoreTz(cfg.tz); lockMins = cfg.autoLockMins; }
-for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) document.addEventListener(ev, () => { idleSince = Date.now(); }, { capture: true, passive: true });
-setInterval(idleCheck, 20_000);
+for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) document.addEventListener(ev, () => {
+  idleSince = Date.now();
+  if (idleSince - sharedAt > 5000) { sharedAt = idleSince; try { localStorage.setItem('last_input', String(idleSince)); } catch {} }
+}, { capture: true, passive: true });
+setInterval(() => { shiftCheck(); idleCheck(); }, 20_000);
+// A manager's role ends with the shift even while nothing is being sent: a
+// token about to run out is renewed now, so a role that went shows its card
+// (managerCheck) when it goes, not at the next write or the next morning.
+function shiftCheck() {
+  const cur = client.session.current;
+  if (store && cur && !cur.owner && !cur.actas && cur.expires * 1000 - Date.now() < 60_000) client.session.token().catch(() => {});
+}
 async function idleCheck() {
   const cur = client.session.current;
   if (locking || !store || !lockMins || !cur || cur.owner || cur.screen || !(cur.roles || []).some(r => r !== 'floor')) return;   // a dock screen is never touched
-  if (Date.now() - idleSince < lockMins * 60_000) return;
+  let seen = idleSince; try { seen = Math.max(seen, Number(localStorage.getItem('last_input')) || 0); } catch {}
+  if (Date.now() - seen < lockMins * 60_000) return;
   locking = true;
   try {
     try { await store.flush(); } catch {}
     await client.session.lock();
     // Area changes that could not send yet wait for their code (the outbox keeps them).
     const left = store.pending.filter(e => e.area !== 'store').length;
-    toast(tx("Locked after {n} min idle. The store PIN's floor session stays open.", { n: lockMins }) + (left ? ' ' + txn(left, '{n} Stockroom or Back dock change will send once the code is entered again.', '{n} Stockroom or Back dock changes will send once the code is entered again.') : ''));
+    if (!$('#mgrLock')) toast(tx("Locked after {n} min idle. The store PIN's floor session stays open.", { n: lockMins }) + (left ? ' ' + txn(left, '{n} Stockroom or Back dock change will send once the code is entered again.', '{n} Stockroom or Back dock changes will send once the code is entered again.') : ''));
     const area = VIEWS[current]?.area;
     if (area && area !== 'floor' && area !== 'admin') { setWs('floor'); show('mhome'); } else if (current) show(current, currentArg);
   } catch { /* offline: tried again on the next check */ }
   finally { locking = false; }
+}
+// A manager's role went from this device (the 12-hour shift ended, the idle
+// lock, another store opened here): a PC asks for the manager code at once,
+// since it has no other way in, and a phone signed in as a manager asks too
+// (it may carry on as a team member). The store stays open underneath.
+function managerCheck() {
+  const s = client.session.current, mobile = isMobile();
+  if (!store || admin || !s || s.owner || s.actas || s.screen || (s.roles || []).includes('manager')) return;
+  if (mobile && !s.lapsed) return;   // a team member's phone never asks
+  ensureManager({ session: client.session, frame, mobile, lockMins, onSignOut: signOut }).then(ok => {
+    if (!store) return;
+    buildRail(); paintBadges();
+    const area = VIEWS[current]?.area;
+    if (!ok && area && area !== 'floor' && area !== 'store' && area !== 'admin' && !hasArea(client.session, area)) { setWs('floor'); show(mobile ? HOME.floor : 'dashboard'); }
+    else if (current) show(current, currentArg);
+  });
 }
 function closeStore() { team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); applyPrefs(frame); actasBar(null); resetAdmin(); }
@@ -330,7 +363,8 @@ async function showContinue(s) {
   const mobile = isMobile(), name = s.name || tx('Store {no}', { no: s.store });
   let last = 'floor'; try { last = localStorage.getItem('last_workspace') || 'floor'; } catch {}
   let ready = false; try { ready = await client.storage.has(`snap:${s.store}`); } catch {}
-  const area = s.screen ? tx('Dock screen') : (s.roles || []).includes('manager') ? tx('Manager') : areaName(last);
+  const lapsed = !s.screen && !(s.roles || []).includes('manager') && (s.lapsed || !mobile);
+  const area = s.screen ? tx('Dock screen') : (s.roles || []).includes('manager') ? tx('Manager') : lapsed ? tx('Manager code needed') : areaName(last);
   const link = pendingLink && pendingLink.store === s.store ? (pendingLink.issue ? tx('Continue and open the work order.') : tx('Continue and open shelf {shelf}.', { shelf: esc(pendingLink.shelf) })) : '';
   const form = `<form class="si-form" id="siCont"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>${tx('Welcome back')}</h2><div class="si-sub">${mobile ? tx('This device is signed in.') : tx('This PC is signed in.')}${link ? ' ' + link : ''}</div>` +
     `<div class="si-store"><span class="si-sav">${esc(s.store)}</span><div><b>${esc(name)}</b><small>${tx('Store {no}', { no: esc(s.store) })} · ${area}</small></div>${ready ? `<span class="si-ready">${ic('check')}${tx('Ready')}</span>` : ''}</div>` +

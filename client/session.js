@@ -5,6 +5,12 @@
 //
 // Events: 'change' (session state changed), 'signin-required' (a refresh
 // failed or the worker said unauthorised; the shell shows the sign-in).
+//
+// A manager's role lasts one shift (the worker's ROLE_TTL, 12 h) and goes
+// on the idle re-lock or when another store is opened here. The session
+// keeps `asManager` (signed in or unlocked with the manager code) and
+// `lapsed` ('shift', 'idle' or 'switch') so the shell can ask for the code
+// again and say why, rather than leaving a manager on the Floor alone.
 
 import { TransportError } from './transport.js';
 
@@ -19,7 +25,10 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
 
   const emit = (k, v) => { for (const f of listeners[k]) { try { f(v); } catch (e) { console.error(e); } } };
   const save = async () => { if (cur) await storage.set('suite_session', cur); else await storage.del('suite_session'); emit('change', snapshot()); };
-  const snapshot = () => cur ? { store: cur.store, name: cur.name, roles: cur.roles, caps: cur.caps, owner: !!cur.owner, actas: !!cur.actas, screen: !!cur.screen, expires: cur.expires, device } : null;
+  const snapshot = () => cur ? { store: cur.store, name: cur.name, roles: cur.roles, caps: cur.caps, owner: !!cur.owner, actas: !!cur.actas, screen: !!cur.screen, asManager: !!cur.asManager, lapsed: cur.lapsed || null, expires: cur.expires, device } : null;
+  const isManager = roles => (roles || []).includes('manager');
+  // The manager role went (shift over, idle lock, store switch): say why.
+  const lapse = (before, after, why) => (isManager(before) && !isManager(after) ? { lapsed: why } : {});
 
   async function load() {
     device = await storage.get('suite_device');
@@ -33,7 +42,7 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
   async function signIn({ store, pin, managerCode }) {
     const body = managerCode != null ? { store: String(store), managerCode: String(managerCode), device } : { store: String(store), pin: String(pin), device };
     const r = await transport.request('/v1/auth/signin', { method: 'POST', body });
-    cur = { token: r.token, refresh: r.refresh, expires: r.expires, store: r.store, name: r.name, roles: r.roles, caps: r.caps, owner: false };
+    cur = { token: r.token, refresh: r.refresh, expires: r.expires, store: r.store, name: r.name, roles: r.roles, caps: r.caps, owner: false, asManager: isManager(r.roles) };
     await save(); return snapshot();
   }
   // A dock screen (a wall or a tablet on the dock): the store PIN, then the
@@ -61,15 +70,15 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
   }
   async function unlock(code) {
     const r = await transport.request('/v1/auth/unlock', { method: 'POST', body: { code: String(code) }, token: await token() });
-    cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles };
+    cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles, ...(isManager(r.roles) ? { asManager: true, lapsed: null } : {}) };
     await save(); return snapshot();
   }
   // Idle re-lock: back to the store PIN's floor session (the worker revokes
   // the refresh token that carried the codes).
-  async function lock() {
+  async function lock(why = 'idle') {
     if (!cur || cur.owner || !(cur.roles || []).some(r => r !== 'floor')) return snapshot();
     const r = await transport.request('/v1/auth/lock', { method: 'POST', body: { refresh: cur.refresh }, token: await token() });
-    cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles };
+    cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles, ...lapse(cur.roles, r.roles, why) };
     await save(); return snapshot();
   }
   // Owner acting as a store: a short store-scoped token (manager role, actor
@@ -101,7 +110,7 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
         }
         used = cur.refresh;
         const r = await transport.request('/v1/auth/refresh', { method: 'POST', body: { refresh: cur.refresh } });
-        cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles, caps: r.caps, owner: !!r.owner };
+        cur = { ...cur, token: r.token, refresh: r.refresh, expires: r.expires, roles: r.roles, caps: r.caps, owner: !!r.owner, ...lapse(cur.roles, r.roles, 'shift') };
         await save(); return snapshot();
       } catch (e) {
         // Only an answer that says the session is gone signs the device out.
@@ -135,7 +144,7 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
   const parkedAll = async () => (await storage.get('suite_parked')) || {};
   async function park() {
     if (!cur || cur.owner) return;
-    if ((cur.roles || []).some(r => r !== 'floor')) { try { await lock(); } catch {} }
+    if ((cur.roles || []).some(r => r !== 'floor')) { try { await lock('switch'); } catch {} }
     const p = await parkedAll(); p[cur.store] = cur; await storage.set('suite_parked', p);
   }
   async function signInAnother({ store, pin }) {
@@ -167,8 +176,10 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     cur = null; await save(); await storage.del('suite_parked');
     for (const refresh of refreshes) { try { await transport.request('/v1/auth/signout', { method: 'POST', body: { refresh } }); } catch {} }
   }
+  // A phone that carries on as a team member once the manager role went.
+  async function dropManager() { if (cur && (cur.asManager || cur.lapsed)) { cur = { ...cur, asManager: false, lapsed: null }; await save(); } return snapshot(); }
   function unauthorised() { cur = null; save(); emit('signin-required', { reason: 'unauthorised' }); }
   function on(k, f) { listeners[k].add(f); return () => listeners[k].delete(f); }
 
-  return { load, signIn, signInScreen, signInOwner, signInAnother, switchTo, forget, parked, actAs, endActAs, unlock, lock, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
+  return { load, signIn, signInScreen, signInOwner, signInAnother, switchTo, forget, parked, actAs, endActAs, unlock, lock, dropManager, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
 }

@@ -122,7 +122,7 @@ export default {
   "Set departments": "Définir les rayons",
   "The Stockroom is not on for this store": "La réserve n’est pas activée pour ce magasin",
   "Idle re-lock": "Reverrouillage après inactivité",
-  "A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.": "Un appareil inactif pendant cette durée perd ses codes Réserve, Quai de réception et responsable. La surface de vente reste ouverte avec le PIN du magasin.",
+  "A device left idle this long drops its Stockroom, Back dock and manager codes. A phone keeps the Floor open; a PC asks for the manager code again.": "Un appareil inactif aussi longtemps perd ses codes Réserve, Quai de réception et responsable. Un téléphone garde la surface de vente ; un PC redemande le code responsable.",
   "{n} min": "{n} min",
   "Never": "Jamais",
   "Save store settings": "Enregistrer les paramètres du magasin",

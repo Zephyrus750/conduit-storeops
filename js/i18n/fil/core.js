@@ -1,5 +1,12 @@
 // Filipino · language picker, sign-in card extras, the area code sheet. Keys are the English text (js/i18n.js).
 export default {
+  "A manager sign-in lasts one shift (12 hours). Enter the manager code to carry on.": "Isang shift (12 oras) lang ang manager sign-in. Ilagay ang manager code para magpatuloy.",
+  "Locked after {n} min idle. Enter the manager code to carry on.": "Na-lock matapos ang {n} min na walang galaw. Ilagay ang manager code para magpatuloy.",
+  "Another store was opened on this device, so this one kept only the Floor. Enter the manager code to carry on.": "May ibang tindahang binuksan sa device na ito, kaya Floor na lang ang bukas dito. Ilagay ang manager code para magpatuloy.",
+  "The manager sign-in on this PC has ended. Enter the manager code to carry on.": "Tapos na ang manager sign-in sa PC na ito. Ilagay ang manager code para magpatuloy.",
+  "Carry on as manager": "Magpatuloy bilang manager",
+  "Carry on as a team member": "Magpatuloy bilang team member",
+  "That is a crew code, not the manager code.": "Crew code iyan, hindi ang manager code.",
   "Stockroom": "Stockroom",
   "Back dock": "Back dock",
   "{area} code": "Code ng {area}",

@@ -122,7 +122,7 @@ export default {
   "Set departments": "Definir departamentos",
   "The Stockroom is not on for this store": "El almacén no está activado en esta tienda",
   "Idle re-lock": "Rebloqueo por inactividad",
-  "A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.": "Un dispositivo inactivo durante este tiempo pierde sus códigos de almacén, muelle de carga y gerente. La sala de ventas sigue abierta con el PIN de la tienda.",
+  "A device left idle this long drops its Stockroom, Back dock and manager codes. A phone keeps the Floor open; a PC asks for the manager code again.": "Un dispositivo inactivo este tiempo pierde sus códigos de Almacén, Muelle de carga y gerente. Un teléfono mantiene abierta la sala de ventas; un PC vuelve a pedir el código de gerente.",
   "{n} min": "{n} min",
   "Never": "Nunca",
   "Save store settings": "Guardar ajustes de la tienda",

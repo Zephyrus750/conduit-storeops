@@ -122,7 +122,7 @@ export default {
   "Set departments": "I-set ang mga department",
   "The Stockroom is not on for this store": "Hindi naka-on ang Stockroom para sa tindahang ito",
   "Idle re-lock": "Re-lock kapag idle",
-  "A device left idle this long drops its Stockroom, Back dock and manager codes. The Floor stays open on the store PIN.": "Ang device na naka-idle nang ganito katagal ay mawawalan ng Stockroom, Back dock at manager code nito. Bukas pa rin ang Floor gamit ang Store PIN.",
+  "A device left idle this long drops its Stockroom, Back dock and manager codes. A phone keeps the Floor open; a PC asks for the manager code again.": "Ang device na hindi nagamit nang ganito katagal ay mawawalan ng Stockroom, Back dock at manager code. Bukas pa rin ang Floor sa phone; hihingin ulit ng PC ang manager code.",
   "{n} min": "{n} min",
   "Never": "Hindi kailanman",
   "Save store settings": "I-save ang settings ng tindahan",
