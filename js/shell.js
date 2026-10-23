@@ -22,7 +22,7 @@ import { takeDeepLink } from './share.js';
 import { installLog } from './diag.js';
 installLog();
 import { updates, initUpdates } from './updates.js';
-import { VIEWS, RAIL, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
+import { VIEWS, RAIL, RAIL_TOP, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { toolForView, toolOff } from '../shared/tools.js';
 import { ensureArea, ensureManager, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
@@ -412,7 +412,8 @@ const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><r
 // What each rail row does, shown beside it on hover (the showcase's rail
 // tips; Vector's rail had the same).
 const RDESC = {
-  dashboard: tx('Today’s numbers across the three areas, the operations register and the dock at a glance.'),
+  dashboard: tx('Today’s numbers across the three areas, the morning setup, the operations register and the dock at a glance.'),
+  inputs: tx('Everything the store brings in: the morning and midday reports, DC manifests, the SOH report, loads and the off-site list.'),
   map: tx('The live store map: shelves, bays, departments and what sits on each shelf.'),
   picklist: tx('Items to fetch for the floor, routed as the shortest walk from the front doors.'),
   refresh: tx('Scan shelves against this week’s focus departments and track the weekly target.'),
@@ -469,6 +470,7 @@ function buildRail() {
   toolsSig = offList().join();
   const rows = ids => ids.map(g => { const tabs = railTabs(g); return tabs.length ? railRow(g, tabs) : ''; }).join('');
   $('#railscroll').innerHTML = RAIL.map(sec => { const html = rows(sec.rows); return html ? `<div class="rsec">${sec.sec}</div>${html}` : ''; }).join('');
+  $('#railtop').innerHTML = rows(RAIL_TOP);
   $('#railfoot').innerHTML = rows(RAIL_FOOT);
   markRail();
 }
@@ -496,12 +498,14 @@ function groupTabs(id) {
 // waiting for review; Cages, in red, the open cages not seen for a week.
 // Each reads its area's projection, which is empty until the device holds
 // that area's code, so a badge stays hidden without it.
-const BADGED = ['bfreview', 'cages'];
+const BADGED = ['inputs', 'bfreview', 'cages'];
 function paintBadges() {
   if (!store) return;
   const day = today(), bf = store.get('backfill'), cages = store.get('cages') || {};
-  const n = { bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length };
-  for (const el of $$('[data-badge]')) { const v = n[el.dataset.badge] || 0; el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v); el.classList.toggle('red', el.dataset.badge === 'cages'); el.title = el.dataset.badge === 'cages' ? txn(v, '{n} cage not seen this week', '{n} cages not seen this week') : txn(v, '{n} location to review today', '{n} locations to review today'); }
+  // The morning report is due until any desk has pasted today's (a store with a Stockroom, its code on this device).
+  const caps = client.session.current?.caps || [], morningDue = caps.includes('stockroom') && hasArea(client.session, 'stockroom') && !offView('bfreview') && bf?.report?.date !== day;
+  const n = { inputs: morningDue ? 1 : 0, bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length };
+  for (const el of $$('[data-badge]')) { const v = n[el.dataset.badge] || 0; el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v); el.classList.toggle('red', el.dataset.badge === 'cages'); el.title = el.dataset.badge === 'inputs' ? tx('The morning report is not pasted yet') : el.dataset.badge === 'cages' ? txn(v, '{n} cage not seen this week', '{n} cages not seen this week') : txn(v, '{n} location to review today', '{n} locations to review today'); }
 }
 function setWs(w) {
   ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
@@ -779,7 +783,7 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>${tx('Updating…')}</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [VIEWS.dashboard, ...[...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
+const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [...[...RAIL_TOP, ...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
 // The phone's bar is typed into directly: a compact list drops under it.
 const msBar = search.bar($('#msearch'), () => !admin && !!store);
 

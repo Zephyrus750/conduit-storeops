@@ -78,7 +78,6 @@ export default {
   "Too many attempts. Try again in {n} min.": "Troppi tentativi. Riprova tra {n} min.",
   "That store is not registered.": "Quel negozio non è registrato.",
   "The worker has no owner key set yet.": "Il server non ha ancora una chiave titolare.",
-  "Today’s numbers across the three areas, the operations register and the dock at a glance.": "I numeri di oggi delle tre aree, il registro operativo e il ricevimento a colpo d’occhio.",
   "The live store map: shelves, bays, departments and what sits on each shelf.": "La mappa del negozio in tempo reale: scaffali, ubicazioni, reparti e cosa c’è su ogni scaffale.",
   "Items to fetch for the floor, routed as the shortest walk from the front doors.": "Articoli da prendere per l’area vendita, ordinati come il percorso più breve dall’ingresso.",
   "Scan shelves against this week’s focus departments and track the weekly target.": "Scansiona gli scaffali dei reparti in evidenza questa settimana e segui l’obiettivo settimanale.",
@@ -354,4 +353,8 @@ export default {
   "marks what only managers see": "segna ciò che vedono solo i responsabili",
   "Managers only": "Solo per i responsabili",
   "Managers only: team members don’t see this": "Solo per i responsabili: i membri del team non lo vedono",
+  "Today’s numbers across the three areas, the morning setup, the operations register and the dock at a glance.": "I numeri di oggi delle tre aree, la preparazione del mattino, il registro operativo e il ricevimento a colpo d’occhio.",
+  "Everything the store brings in: the morning and midday reports, DC manifests, the SOH report, loads and the off-site list.": "Tutto ciò che il negozio carica: i report del mattino e di mezzogiorno, i manifesti del DC, il report SOH, i carichi e l’elenco fuori sede.",
+  "The morning report is not pasted yet": "Il report del mattino non è ancora incollato",
+  "Reports & files": "Report e file",
 };

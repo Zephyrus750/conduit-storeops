@@ -78,7 +78,6 @@ export default {
   "Too many attempts. Try again in {n} min.": "Masyadong maraming subok. Subukan ulit pagkalipas ng {n} min.",
   "That store is not registered.": "Hindi nakarehistro ang tindahang iyon.",
   "The worker has no owner key set yet.": "Wala pang owner key ang server.",
-  "Today’s numbers across the three areas, the operations register and the dock at a glance.": "Ang mga numero ngayong araw sa tatlong area, ang operations register at ang dock sa isang tingin.",
   "The live store map: shelves, bays, departments and what sits on each shelf.": "Ang live na mapa ng tindahan: mga shelf, bay, department at kung ano ang nasa bawat shelf.",
   "Items to fetch for the floor, routed as the shortest walk from the front doors.": "Mga item na kukunin para sa floor, nakaayos bilang pinakamaikling lakad mula sa harapang pinto.",
   "Scan shelves against this week’s focus departments and track the weekly target.": "I-scan ang mga shelf para sa mga focus department ngayong linggo at bantayan ang weekly target.",
@@ -354,4 +353,8 @@ export default {
   "marks what only managers see": "tanda ng nakikita lang ng mga manager",
   "Managers only": "Para sa mga manager lang",
   "Managers only: team members don’t see this": "Para sa mga manager lang: hindi ito nakikita ng mga team member",
+  "Today’s numbers across the three areas, the morning setup, the operations register and the dock at a glance.": "Ang mga numero ngayong araw sa tatlong area, ang morning setup, ang operations register at ang dock sa isang tingin.",
+  "Everything the store brings in: the morning and midday reports, DC manifests, the SOH report, loads and the off-site list.": "Lahat ng ipinapasok ng tindahan: ang morning at midday report, mga DC manifest, ang SOH report, mga load at ang off-site list.",
+  "The morning report is not pasted yet": "Hindi pa na-paste ang morning report",
+  "Reports & files": "Mga report at file",
 };

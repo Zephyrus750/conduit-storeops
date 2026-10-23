@@ -78,7 +78,6 @@ export default {
   "Too many attempts. Try again in {n} min.": "Zu viele Versuche. In {n} Min. erneut versuchen.",
   "That store is not registered.": "Diese Filiale ist nicht registriert.",
   "The worker has no owner key set yet.": "Auf dem Server ist noch kein Inhaber-Schlüssel eingerichtet.",
-  "Today’s numbers across the three areas, the operations register and the dock at a glance.": "Die Zahlen von heute aus allen drei Bereichen, das Betriebsregister und die Warenannahme auf einen Blick.",
   "The live store map: shelves, bays, departments and what sits on each shelf.": "Der Live-Filialplan: Regale, Lagerplätze, Abteilungen und was in jedem Regal liegt.",
   "Items to fetch for the floor, routed as the shortest walk from the front doors.": "Artikel für die Verkaufsfläche, als kürzester Laufweg ab dem Eingang geordnet.",
   "Scan shelves against this week’s focus departments and track the weekly target.": "Regale der Schwerpunkt-Abteilungen dieser Woche scannen und das Wochenziel verfolgen.",
@@ -354,4 +353,8 @@ export default {
   "marks what only managers see": "kennzeichnet, was nur Manager sehen",
   "Managers only": "Nur für Manager",
   "Managers only: team members don’t see this": "Nur für Manager: Teammitglieder sehen das nicht",
+  "Today’s numbers across the three areas, the morning setup, the operations register and the dock at a glance.": "Die heutigen Zahlen der drei Bereiche, die Morgenvorbereitung, die Betriebsübersicht und die Warenannahme auf einen Blick.",
+  "Everything the store brings in: the morning and midday reports, DC manifests, the SOH report, loads and the off-site list.": "Alles, was die Filiale einliest: Morgen- und Mittagsbericht, DC-Lieferscheine, SOH-Bericht, Lieferungen und die Auslagerungsliste.",
+  "The morning report is not pasted yet": "Der Morgenbericht ist noch nicht eingefügt",
+  "Reports & files": "Berichte & Dateien",
 };

@@ -200,6 +200,17 @@ async function pushReport(ctx, r) {
     return true;
   } catch { if (!r.unsent) { r.unsent = true; await ctx.storage.set(reportKey(ctx), r); } return false; }
 }
+// The whole SIM report, pasted here or in Reports & files: added to today's
+// (a later paste updates the bays it lists), sent to the store, and its
+// items at 0 or less go to Adjustments. Null when no location line is found.
+export async function pasteReport(ctx, text) {
+  const byLoc = parseReportByLocation(text), n = Object.keys(byLoc).length; if (!n) return null;
+  await loadReport(ctx);
+  const prev = st.report?.byLoc || {}, lines = parseReportLines(text), soh = Object.fromEntries(Object.entries(lines).map(([kc, r]) => [kc, r.soh]));
+  await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh } });
+  const sent = await reportToAdjust(ctx, byLoc, lines);
+  return { bays: n, codes: Object.values(byLoc).reduce((x, l) => x + l.length, 0), sent };
+}
 function pasteSheet() {
   return `<div class="card" style="margin-bottom:14px"><div class="ch"><h3>${tx('Paste the whole SIM report')}</h3><span class="cs-dim">${tx('one paste, every bay pre-compared')}</span><span class="btn sm" style="margin-left:auto" data-act="paste-close">${ic('x')}${tx('Close')}</span></div><textarea class="ad-in" data-field="paste" rows="7" placeholder="${tx('Location · keycode · … one line per code, or “Location: 7012” headers. Copy the report from SIM and paste it here.')}"></textarea><div class="acts" style="margin-top:10px"><button class="btn primary" data-act="paste-save">${ic('check')}${tx('Use this report')}</button><span class="cs-dim" id="pasteCount"></span></div></div>`;
 }
@@ -309,13 +320,9 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'paste') { st.paste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="paste"]')?.focus(), 30); }
   else if (act === 'paste-close') { st.paste = false; ctx.rerender(); }
   else if (act === 'paste-save') {
-    const text = root.querySelector('[data-field="paste"]')?.value || '';
-    const byLoc = parseReportByLocation(text); const n = Object.keys(byLoc).length;
-    if (!n) return toast(tx('No location lines found. Each line needs a bay number and a keycode.'), 'bad');
-    const prev = st.report?.byLoc || {}, lines = parseReportLines(text), soh = Object.fromEntries(Object.entries(lines).map(([kc, r]) => [kc, r.soh]));
-    await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh } });
-    const sent = await reportToAdjust(ctx, byLoc, lines);
-    const codes = Object.values(byLoc).reduce((x, l) => x + l.length, 0);
+    const r = await pasteReport(ctx, root.querySelector('[data-field="paste"]')?.value || '');
+    if (!r) return toast(tx('No location lines found. Each line needs a bay number and a keycode.'), 'bad');
+    const { bays: n, codes, sent } = r;
     st.paste = false; toast(`${txn(n, 'Report pasted: {n} bay, {codes} codes', 'Report pasted: {n} bays, {codes} codes', { codes })}${sent ? ` · ${tx('{n} at 0 or less sent to Adjustments', { n: sent })}` : ''}`, '', sent ? { label: tx('Open'), run: () => ctx.go('adjust') } : null); ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender();
   }
   else if (act === 'bay-paste') { st.bayPaste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="baypaste"]')?.focus(), 30); }

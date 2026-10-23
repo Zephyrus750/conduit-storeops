@@ -417,8 +417,8 @@ code rather than the other way round. `js/registry.js` is the one view registry:
 a view is `{ id, title, icon, desktop(ctx), mobile?(ctx), mount?(ctx, root) }`
 and renders into the content region; it owns no chrome and no stylesheet.
 
-The desktop rail is Version A of the rail showcase (23 Oct 2026): Dashboard,
-then Floor (Store map, Floor checks, Pick list, Safety & upkeep), Stockroom
+The desktop rail is Version A of the rail showcase (23 Oct 2026): Today (the
+dashboard) and Reports & files, then Floor (Store map, Floor checks, Pick list, Safety & upkeep), Stockroom
 (Backfill, Stock accuracy, Cages) and Back dock (Receiving, Plan, Results),
 and Screens, Settings and Help in the foot. `GROUPS` in `js/registry.js` maps
 each row to its screens: a row with several shows them as tabs above the one
@@ -426,6 +426,18 @@ open (the shell adds them; the screens are unchanged) and opens the one used
 last on that device (`rail_tabs`). Print map and Suggest edits open from the
 Store map's buttons. A row whose screens are all switched off, or outside the
 store's areas, is not on the rail. The phone's strip and More are unchanged.
+
+Reports & files (`js/views/inputs.js`) is where everything the store brings
+in arrives: one box takes a paste or a file and says what it found before
+anything is saved, and a list says what is due today (the morning SIM report
+is required, the midday one optional), what each feeds and where it comes
+from. Each kind is saved by the screen it feeds, through that screen's code:
+the SIM report through Backfill review's `pasteReport`, the SOH report in
+Stock intelligence (opened with the paste read), a DC manifest through the
+publish preview, the off-site list and other loads through `loads.js`. Its
+rail row shows 1 while today's morning report is missing. Today's morning
+setup marks the morning report Required and the midday one Optional (it never
+holds the list back) and both open Reports & files.
 
 The colour scheme is fixed for every store device (managers share PCs):
 charcoal rail and phone bars with the Lagoon accent, set in `js/prefs.js`.

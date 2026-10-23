@@ -3,6 +3,7 @@
 // the shell's content region through this and own no chrome of their own.
 
 import dashboard from './views/dashboard.js';
+import inputs from './views/inputs.js';
 import map from './views/map.js';
 import picklist from './views/picklist.js';
 import refresh from './views/refresh.js';
@@ -41,16 +42,18 @@ import offsite from './views/backdock/offsite.js';
 import screens from './views/backdock/screenlist.js';
 import { tx } from './i18n.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
-// The desktop rail (Version A, 23 Oct 2026): Dashboard on top, then a few
-// rows per area, then the foot. A row is one screen or a group of screens
+// The desktop rail (Version A, 23 Oct 2026): Today and Reports & files on
+// top, then a few rows per area, then the foot. A row is one screen or a group of screens
 // shown as tabs above whichever is open; the row opens the one used last
 // (the first at the start). A tab's label is the screen's own name unless
 // the group gives a shorter one. `also`: screens the row stands for with no
 // tab of their own (Print map and Suggest edits open from the Store map).
 const G = (label, icon, tabs, also = []) => ({ label, icon, tabs: tabs.map(t => typeof t === 'string' ? [t, null] : t), also });
 export const GROUPS = {
+  today: G(tx('Today'), 'm-dashboard', [['dashboard', tx('Today')]]),
+  inputs: G(tx('Reports & files'), 'file', ['inputs']),
   map: G(tx('Store map'), 'm-map', ['map'], ['printmap', 'mapedits', 'fieldmode']),
   floorchecks: G(tx('Floor checks'), 'listcheck', ['refresh', 'labelint', 'stocktake']),
   picklist: G(tx('Pick list'), 'm-picklist', ['picklist']),
@@ -70,6 +73,7 @@ export const RAIL = [
   { sec: tx('Stockroom'), rows: ['backfill', 'accuracy', 'cages'] },
   { sec: tx('Back dock'), rows: ['receiving', 'plan', 'results'] },
 ];
+export const RAIL_TOP = ['today', 'inputs'];
 export const RAIL_FOOT = ['screens', 'settings', 'help'];
 // The row a screen belongs to, by view id.
 export const GROUP_OF = Object.fromEntries(Object.entries(GROUPS).flatMap(([g, x]) => [...x.tabs.map(t => [t[0], g]), ...x.also.map(v => [v, g])]));

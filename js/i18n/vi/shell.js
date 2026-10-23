@@ -78,7 +78,6 @@ export default {
   "Too many attempts. Try again in {n} min.": "Thử quá nhiều lần. Hãy thử lại sau {n} phút.",
   "That store is not registered.": "Cửa hàng đó chưa được đăng ký.",
   "The worker has no owner key set yet.": "Máy chủ chưa có khóa chủ sở hữu.",
-  "Today’s numbers across the three areas, the operations register and the dock at a glance.": "Số liệu hôm nay của ba khu vực, sổ vận hành và khu nhận hàng trong nháy mắt.",
   "The live store map: shelves, bays, departments and what sits on each shelf.": "Sơ đồ cửa hàng trực tiếp: kệ, vị trí kho, ngành hàng và hàng trên từng kệ.",
   "Items to fetch for the floor, routed as the shortest walk from the front doors.": "Hàng cần lấy cho khu bán hàng, sắp theo lối đi ngắn nhất từ cửa chính.",
   "Scan shelves against this week’s focus departments and track the weekly target.": "Quét kệ theo các ngành hàng trọng tâm tuần này và theo dõi chỉ tiêu tuần.",
@@ -354,4 +353,8 @@ export default {
   "marks what only managers see": "đánh dấu những gì chỉ quản lý thấy",
   "Managers only": "Chỉ dành cho quản lý",
   "Managers only: team members don’t see this": "Chỉ dành cho quản lý: thành viên trong tổ không thấy mục này",
+  "Today’s numbers across the three areas, the morning setup, the operations register and the dock at a glance.": "Số liệu hôm nay của ba khu, phần chuẩn bị buổi sáng, sổ vận hành và khu nhận hàng trong một màn hình.",
+  "Everything the store brings in: the morning and midday reports, DC manifests, the SOH report, loads and the off-site list.": "Mọi thứ cửa hàng nhập vào: báo cáo buổi sáng và buổi trưa, bảng kê hàng DC, báo cáo SOH, chuyến hàng và danh sách hàng ngoài cửa hàng.",
+  "The morning report is not pasted yet": "Chưa dán báo cáo buổi sáng",
+  "Reports & files": "Báo cáo & tệp",
 };
