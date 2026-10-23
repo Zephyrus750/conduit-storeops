@@ -8,6 +8,7 @@ import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute
 import { markerGlyph, locationRange, markerSymbol, MARKER_NAMES, LANDMARK_NAMES, markerType } from '../shared/maprender.js';
 import { prefs, setPref } from './prefs.js';
 import { haptic } from './device.js';
+import { tx, txn } from './i18n.js';
 
 let floors = [], mapMeta = null;
 // The shell sets the map from the published document (client.maps.get) or
@@ -31,7 +32,7 @@ export function parseFloors(doc) {
   for (const [i, f] of (doc.floors || []).entries()) {
     const m = /^\s*<svg\b([^>]*)>([\s\S]*)<\/svg>\s*$/i.exec(f.svg || ''); if (!m) continue;
     const vb = (/viewBox="([^"]+)"/.exec(m[1]) || [])[1] || '0 0 100 100';
-    let name = String(f.name || f.id || `Floor ${i + 1}`); if (seen[name]) name += ' ' + (++seen[name]); else seen[name] = 1;
+    let name = String(f.name || f.id || tx('Floor {n}', { n: i + 1 })); if (seen[name]) name += ' ' + (++seen[name]); else seen[name] = 1;
     out.push({ id: String(f.id || 'f' + i), name, type: f.type === 'boh' ? 'boh' : 'foh', level: Number(f.level) || 0, vb, inner: m[2], paths: pathsOf(f), graph: undefined });
   }
   return out.sort((a, b) => (a.type === b.type ? 0 : a.type === 'foh' ? -1 : 1) || a.level - b.level);
@@ -77,10 +78,10 @@ export async function loadMap(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`map ${res.status}`);
   const text = await res.text();
-  floors = parseFloors({ floors: [{ id: 'ground', name: 'Ground', type: 'foh', svg: text }] }); mapMeta = { version: 'bundled', floors: mapFloors(), departments: [] };
+  floors = parseFloors({ floors: [{ id: 'ground', name: tx('Ground'), type: 'foh', svg: text }] }); mapMeta = { version: 'bundled', floors: mapFloors(), departments: [] };
   return text;
 }
-const PLACEHOLDER = '<svg class="map real placeholder" viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="1200" height="700" fill="none"/><text x="600" y="330" text-anchor="middle" font-size="36" font-weight="700" fill="#9CA3AF">No map published for this store yet</text><text x="600" y="380" text-anchor="middle" font-size="22" fill="#9CA3AF">The owner publishes one from the admin console, Map tab</text></svg>';
+const PLACEHOLDER = '<svg class="map real placeholder" viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="1200" height="700" fill="none"/><text x="600" y="330" text-anchor="middle" font-size="36" font-weight="700" fill="#9CA3AF">' + tx('No map published for this store yet') + '</text><text x="600" y="380" text-anchor="middle" font-size="22" fill="#9CA3AF">' + tx('The owner publishes one from the admin console, Map tab') + '</text></svg>';
 
 // Shelf segment id as the refresh mode keys it: "A11 S1" (data-full), uppercased.
 export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttribute('data-shelf') + ' ' + (g.getAttribute('data-subname') || '')).trim()).toUpperCase(); }
@@ -90,14 +91,16 @@ export function segmentId(g) { return (g.getAttribute('data-full') || (g.getAttr
 // after a letter is dropped: the label and the map meet in one form.
 export function canonCode(code) { return String(code || '').toUpperCase().replace(/[\s\-_.]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1'); }
 // The groups a code points at: a run name first (a run can itself be
-// called "S1"), then a run plus a shelf suffix (S1, S2, E1, E2). Any place
+// called "S1"), then a run plus a shelf suffix (S1, S2, E1, E2, or P1, P2
+// for a permanent end). Any place
 // that takes a typed or scanned location goes through here, so a shelf is
 // never quietly widened to its whole run.
 // Split a canonical code into its run name and shelf suffix (S1, S2, E1,
-// E2), or an empty suffix for a whole run. The one place that decides where
+// E2, P1, P2: a P is a permanent end, set up for a fixed display), or an
+// empty suffix for a whole run. The one place that decides where
 // a run's name ends and a shelf's suffix begins, so search and find never
 // diverge from it.
-export function splitCanon(code) { const C = canonCode(code); const m = /^(.+?)([SE]\d+)$/.exec(C); return m ? { shelf: m[1], sub: m[2] } : { shelf: C, sub: '' }; }
+export function splitCanon(code) { const C = canonCode(code); const m = /^(.+?)([SEP]\d+)$/.exec(C); return m ? { shelf: m[1], sub: m[2] } : { shelf: C, sub: '' }; }
 export function groupsFor(root, code) {
   const C = canonCode(code); if (!C) return [];
   const all = $$('.shelf-group[data-shelf]:not([data-inactive])', root).filter(g => g.getAttribute('data-shelf'));
@@ -112,7 +115,7 @@ export function groupsFor(root, code) {
 // A typed or wedge-scanned shelf label (Refresh, Stocktake): a USB or
 // Bluetooth scanner types the code and presses Enter, which lands here like
 // a tap on that shelf; the camera button feeds the same field.
-export function shelfScanField(placeholder = 'Scan or type a shelf label') {
+export function shelfScanField(placeholder = tx('Scan or type a shelf label')) {
   return `<div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}">${camButton('shelfscan', true)}</div>`;
 }
 // Words for where a shelf sits, the same on the card, the phone panel, the
@@ -122,23 +125,23 @@ export function shelfScanField(placeholder = 'Scan or type a shelf label') {
 // shelf, "shelves S1, S2, E1, E2" for a run. A run whose shelves carry no
 // S/E names falls back to its count.
 export function runText(name, sub, subs, count = subs.length) {
-  if (count <= 1) return 'single shelf';
+  if (count <= 1) return tx('single shelf');
   const all = sortSubs(subs), own = canonCode(sub);
-  if (own) { const others = all.filter(x => x !== own); return others.length ? `in run ${name} with ${others.join(', ')}` : `in run ${name} · ${count} shelves`; }
-  return all.length > 1 ? `shelves ${all.join(', ')}` : `run of ${count} shelves`;
+  if (own) { const others = all.filter(x => x !== own); return others.length ? tx('in run {run} with {shelves}', { run: name, shelves: others.join(', ') }) : tx('in run {run} · {n} shelves', { run: name, n: count }); }
+  return all.length > 1 ? tx('shelves {list}', { list: all.join(', ') }) : tx('run of {n} shelves', { n: count });
 }
 // The S/E names of a run's shelves, sides before ends, in number order.
 export function runSubs(api, name) { return sortSubs(api.groups(name).map(g => g.getAttribute('data-subname'))); }
 function sortSubs(subs) {
-  const rank = x => (x[0] === 'S' ? 0 : x[0] === 'E' ? 1 : 2);
+  const rank = x => (x[0] === 'S' ? 0 : x[0] === 'E' ? 1 : x[0] === 'P' ? 2 : 3);
   return [...new Set(subs.map(canonCode).filter(Boolean))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
 }
 // The one shelf a scanned or typed label names, or why not: a run's name
 // ("A16") covers several shelves, and a scan never quietly picks one of them.
 export function oneShelf(root, code) {
-  const gs = groupsFor(root, code); if (!gs.length) return { error: `${code} is not a shelf on this map` };
+  const gs = groupsFor(root, code); if (!gs.length) return { error: tx('{code} is not a shelf on this map', { code }) };
   const ids = [...new Set(gs.map(segmentId))];
-  if (ids.length > 1) return { error: `${String(code).toUpperCase()} is a run of ${ids.length} shelves: scan the shelf's own label (${ids.slice(0, 3).join(', ')}${ids.length > 3 ? '…' : ''})` };
+  if (ids.length > 1) return { error: tx("{code} is a run of {n} shelves: scan the shelf's own label ({list})", { code: String(code).toUpperCase(), n: ids.length, list: ids.slice(0, 3).join(', ') + (ids.length > 3 ? '…' : '') }) };
   return { g: gs[0] };
 }
 export function bindShelfScan(root, map, onShelf, onError) {
@@ -165,18 +168,18 @@ export function splitCode(root, code) { const gs = groupsFor(root, code); if (!g
 // suffix, name, Side/End, its run, direction, then a status line
 // from the segment's mark. A view passes `tip(info, g)` to say what its mark
 // means ('Refreshed Tue 09:12'); without it the mark's generic label shows.
-const MARK_LINE = { done: ['g', 'check', 'Done'], checked: ['b', 'check', 'Checked'], wrong: ['r', 'alert', 'Wrong label found'], focus: ['o', 'asterisk', 'Focus department'], stop: ['o', 'route', 'On the route'], counting: ['y', 'clock', 'Counting'], counted: ['g', 'check', 'Counted'], verified: ['b', 'checks', 'Verified'], due: ['r', 'clock', 'Due'], plana: ['o', 'edit', 'Planned'], planb: ['o', 'edit', 'Planned'], planc: ['o', 'edit', 'Planned'] };
+const MARK_LINE = { done: ['g', 'check', tx('Done')], checked: ['b', 'check', tx('Checked')], wrong: ['r', 'alert', tx('Wrong label found')], focus: ['o', 'asterisk', tx('Focus department')], stop: ['o', 'route', tx('On the route')], counting: ['y', 'clock', tx('Counting')], counted: ['g', 'check', tx('Counted')], verified: ['b', 'checks', tx('Verified')], due: ['r', 'clock', tx('Due')], plana: ['o', 'edit', tx('Planned')], planb: ['o', 'edit', tx('Planned')], planc: ['o', 'edit', tx('Planned')] };
 export function tipLine(cls, icon, text) { return `<span class="mx ${cls}">${ic(icon)}${esc(text)}</span>`; }
 function tipHtml(api, g, tip) {
   const info = api.shelfInfo(g);
   const r = g.querySelector('.shelf'); const horiz = r && (+r.getAttribute('width') >= +r.getAttribute('height'));
-  const side = /^S/i.test(info.sub) ? 'Side' : /^E/i.test(info.sub) ? 'End' : (info.sub || '—');
+  const side = /^S/i.test(info.sub) ? tx('Side') : /^E/i.test(info.sub) ? tx('End') : /^P/i.test(info.sub) ? tx('Permanent end') : (info.sub || '—');
   const mark = g.getAttribute('data-mark') || '';
   let mx = tip ? tip({ ...info, mark }, g) : undefined;
   if (mx === undefined) { const m = MARK_LINE[mark]; mx = m ? tipLine(m[0], m[1], m[2]) : ''; }
   const d = shelfDetail(api, info.code);   // this shelf's own locations and size, not the whole run's
   return `<div class="md"><span class="dep" style="background:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
-    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}Locations ${esc(d.range)}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, runSubs(api, info.id), info.segments))}${d.modules ? ` · ${d.modules} module${d.modules === 1 ? '' : 's'}` : ''}</span><span>${ic('orient')}${horiz ? 'Horizontal' : 'Vertical'}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}Also ${d.shared.map(x => esc(x)).join(', ')}</span>` : ''}${mx || ''}</div>`;
+    `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}${tx('Locations {range}', { range: esc(d.range) })}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, runSubs(api, info.id), info.segments))}${d.modules ? ' · ' + txn(d.modules, '{n} module', '{n} modules') : ''}</span><span>${ic('orient')}${horiz ? tx('Horizontal') : tx('Vertical')}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}${tx('Also {list}', { list: d.shared.map(x => esc(x)).join(', ') })}</span>` : ''}${mx || ''}</div>`;
 }
 // Tooltips for what is not a shelf: an emergency sign, a price check or
 // order screen, a landmark (ShelfSearcher's desktop hover tips).
@@ -185,25 +188,28 @@ function markerTip(el) {
   const locLine = loc ? `<span>${dc ? `<i class="dchip" style="background:${esc(dc)}">${esc(badge)}</i>` : ic('m-map')}${esc(loc)}</span>` : '';
   if (el.classList.contains('price-check-marker')) {
     const order = ga('data-variant') === 'order';
-    return `<div class="md mk">${markerSymbol(order ? 'order' : 'pc', 30)}</div><div class="mr"><b>${esc(ga('data-label') || (order ? 'Order screen' : 'Price check'))}</b>${locLine}<span>${ic(order ? 'bag' : 'barcode')}${order ? 'Order screen' : 'Price check'}</span>${ga('data-detail') ? `<span class="nt">${esc(clip(ga('data-detail')))}</span>` : ''}</div>`;
+    return `<div class="md mk">${markerSymbol(order ? 'order' : 'pc', 30)}</div><div class="mr"><b>${esc(ga('data-label') || (order ? tx('Order screen') : tx('Price check')))}</b>${locLine}<span>${ic(order ? 'bag' : 'barcode')}${order ? tx('Order screen') : tx('Price check')}</span>${ga('data-detail') ? `<span class="nt">${esc(clip(ga('data-detail')))}</span>` : ''}</div>`;
   }
   if (el.classList.contains('emergency-marker')) {
     const type = markerType(ga('data-equip-type')), note = ga('data-detail') || ga('data-method');
-    return `<div class="md mk">${markerSymbol(type, 30)}</div><div class="mr"><b>${esc(MARKER_NAMES[type] || type)}</b>${ga('data-label') ? `<span>${esc(ga('data-label'))}</span>` : ''}${locLine}<span class="nt">${note ? esc(clip(note)) : 'Click for details'}</span></div>`;
+    return `<div class="md mk">${markerSymbol(type, 30)}</div><div class="mr"><b>${esc(MARKER_NAMES[type] ? tx(MARKER_NAMES[type]) : type)}</b>${ga('data-label') ? `<span>${esc(ga('data-label'))}</span>` : ''}${locLine}<span class="nt">${note ? esc(clip(note)) : tx('Click for details')}</span></div>`;
   }
   const label = ga('data-label') || [...el.querySelectorAll('.landmark-label')].map(t => t.textContent).join(' '), icon = ga('data-icon');
-  return `<div class="md mk">${icon && LANDMARK_NAMES[icon] ? markerSymbol('lm:' + icon, 28) : ic('m-map')}</div><div class="mr"><b>${esc(label || LANDMARK_NAMES[icon] || 'Landmark')}</b><span>${esc(icon && LANDMARK_NAMES[icon] && label ? LANDMARK_NAMES[icon] : 'Landmark')}</span></div>`;
+  return `<div class="md mk">${icon && LANDMARK_NAMES[icon] ? markerSymbol('lm:' + icon, 28) : ic('m-map')}</div><div class="mr"><b>${esc(label || (LANDMARK_NAMES[icon] ? lmName(icon) : tx('Landmark')))}</b><span>${esc(icon && LANDMARK_NAMES[icon] && label ? lmName(icon) : tx('Landmark'))}</span></div>`;
 }
 const clip = t => t.length > 60 ? t.slice(0, 57) + '…' : t;
+// A landmark's name in words. The editor's "Storage" is a room, so it reads
+// "Storage room" here (plain "Storage" is the device's storage in Settings).
+const lmName = k => (k === 'storage' ? tx('Storage room') : tx(LANDMARK_NAMES[k]));
 
 // Fixture names (the editor's fixture field, else the shelf's suffix: S side,
 // E or P end), and what a shelf is in the real world when the map is
 // calibrated (metresPerUnit, the editor's Set Scale).
-const FIXTURE = { side: 'Side', end: 'End', deck: 'Deck', bunk: 'Bunk', table: 'Table', sixway: 'Six-way' };
+const FIXTURE = { side: tx('Side'), end: tx('End'), deck: tx('Deck'), bunk: tx('Bunk'), table: tx('Table'), sixway: tx('Six-way') };
 export function fixtureOf(g) {
   const f = g.getAttribute('data-fixture'); if (f) return FIXTURE[f] || f;
   const sn = (g.getAttribute('data-subname') || '').toUpperCase();
-  return /^S\d/.test(sn) ? 'Side' : /^[EP]\d/.test(sn) ? 'End' : g.querySelector('circle.shelf') ? 'Six-way' : '';
+  return /^S\d/.test(sn) ? tx('Side') : /^[EP]\d/.test(sn) ? tx('End') : g.querySelector('circle.shelf') ? tx('Six-way') : '';
 }
 // A shelf's facts for the card and the tip: its fixture, its location range
 // ("7001-03"), the shelves it shares a name with (sharedName shelves of a
@@ -228,8 +234,8 @@ export function shelfDetail(api, id) {
   const mpu = mapMeta?.metresPerUnit;
   if (mpu) {
     const bs = gs.map(box).filter(Boolean), m = v => (v * mpu).toFixed(1);
-    if (bs.length && bs.every(b => b.round)) out.size = `${m(bs[0].w)} m across`;
-    else if (bs.length) { const long = bs.reduce((n, b) => n + Math.max(b.w, b.h), 0), deep = Math.max(...bs.map(b => Math.min(b.w, b.h))); out.size = `≈ ${m(long)} m long · ${m(deep)} m deep`; }
+    if (bs.length && bs.every(b => b.round)) out.size = tx('{w} m across', { w: m(bs[0].w) });
+    else if (bs.length) { const long = bs.reduce((n, b) => n + Math.max(b.w, b.h), 0), deep = Math.max(...bs.map(b => Math.min(b.w, b.h))); out.size = tx('≈ {long} m long · {deep} m deep', { long: m(long), deep: m(deep) }); }
   }
   return out;
 }
@@ -239,21 +245,21 @@ export function shelfDetail(api, id) {
 // how many there are. Read once per map from the floors' markup.
 let symCache = null;
 export function mapSymbols() {
-  if (symCache?.v === mapMeta?.version && symCache.n === floors.length) return symCache.list;
+  if (symCache && symCache.v === mapMeta?.version && symCache.n === floors.length) return symCache.list;
   const all = floors.map(f => f.inner).join(''), count = re => (all.match(re) || []).length, list = [];
   const types = {}; for (const m of all.matchAll(/class="emergency-marker" data-equip-type="([^"]+)"/g)) { const t = markerType(m[1]); types[t] = (types[t] || 0) + 1; }
-  for (const [t, n] of Object.entries(types)) list.push({ kind: t, name: MARKER_NAMES[t] || t, n, group: 'Emergency' });
+  for (const [t, n] of Object.entries(types)) list.push({ kind: t, name: MARKER_NAMES[t] ? tx(MARKER_NAMES[t]) : t, n, group: 'Emergency' });
   const pc = count(/class="price-check-marker" data-variant="pc"/g), ord = count(/class="price-check-marker" data-variant="order"/g);
-  if (pc) list.push({ kind: 'pc', name: 'Price check', n: pc, group: 'Store' }); if (ord) list.push({ kind: 'order', name: 'Order screen', n: ord, group: 'Store' });
+  if (pc) list.push({ kind: 'pc', name: tx('Price check'), n: pc, group: 'Store' }); if (ord) list.push({ kind: 'order', name: tx('Order screen'), n: ord, group: 'Store' });
   const lms = {}; for (const m of all.matchAll(/class="landmark-group"[^>]*data-icon="([^"]+)"/g)) if (LANDMARK_NAMES[m[1]]) lms[m[1]] = (lms[m[1]] || 0) + 1;
-  for (const [k, n] of Object.entries(lms)) list.push({ kind: 'lm:' + k, name: LANDMARK_NAMES[k], n, group: 'Store' });
-  const tory = count(/class="tory-line-path"/g); if (tory) list.push({ kind: 'tory', name: 'Tory line (back of house)', n: tory, group: 'Store' });
+  for (const [k, n] of Object.entries(lms)) list.push({ kind: 'lm:' + k, name: lmName(k), n, group: 'Store' });
+  const tory = count(/class="tory-line-path"/g); if (tory) list.push({ kind: 'tory', name: tx('Tory line (back of house)'), n: tory, group: 'Store' });
   symCache = { v: mapMeta?.version, n: floors.length, list };
   return list;
 }
 export function symbolsHtml(list = mapSymbols()) {
-  if (!list.length) return '<p class="lbl">This map has no symbols yet.</p>';
-  return ['Emergency', 'Store'].map(gp => { const rows = list.filter(x => x.group === gp); return rows.length ? `<div class="keygrp">${gp}</div><div class="symgrid">${rows.map(x => `<div class="symrow">${markerSymbol(x.kind, 22)}<span>${esc(x.name)}</span><small>${x.n}</small></div>`).join('')}</div>` : ''; }).join('');
+  if (!list.length) return `<p class="lbl">${tx('This map has no symbols yet.')}</p>`;
+  return ['Emergency', 'Store'].map(gp => { const rows = list.filter(x => x.group === gp); return rows.length ? `<div class="keygrp">${gp === 'Emergency' ? tx('Emergency') : tx('Store')}</div><div class="symgrid">${rows.map(x => `<div class="symrow">${markerSymbol(x.kind, 22)}<span>${esc(x.name)}</span><small>${x.n}</small></div>`).join('')}</div>` : ''; }).join('');
 }
 
 // Badges: one per run on a sales floor, drawn over the whole run so the
@@ -522,7 +528,18 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     segments() { return $$('.shelf-group[data-shelf]:not([data-inactive])', svg).filter(g => g.getAttribute('data-shelf')); },
     mark(id, value) { for (const g of api.groups(id)) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
     markSegment(segId, value) { for (const g of api.segments()) if (segmentId(g) === segId) { if (value) g.setAttribute('data-mark', value); else g.removeAttribute('data-mark'); } },
-    setMarks(map) { for (const g of api.segments()) g.removeAttribute('data-mark'); for (const [id, v] of Object.entries(map || {})) { if (id.includes(' ')) api.markSegment(id, v); else api.mark(id, v); } },
+    // One pass over the shelves (audit 19 Oct P5: a search of the whole map
+    // per marked id froze phones on a busy week); a run's id ("A16", from an
+    // older device) marks each of its shelves. An attribute is written only
+    // when it changes, so an unchanged shelf is not restyled.
+    setMarks(map) {
+      const m = map || {}, byRun = new Map();
+      for (const [id, v] of Object.entries(m)) if (!id.includes(' ')) for (const g of api.groups(id)) byRun.set(g, v);
+      for (const g of api.segments()) {
+        const id = segmentId(g), next = (id.includes(' ') ? m[id] : undefined) ?? byRun.get(g) ?? null;
+        if (next !== g.getAttribute('data-mark')) { if (next) g.setAttribute('data-mark', next); else g.removeAttribute('data-mark'); }
+      }
+    },
     select(id) {
       for (const g of $$('.shelf-group[data-sel]', svg)) g.removeAttribute('data-sel');
       for (const g of api.groups(id)) g.setAttribute('data-sel', '1');
@@ -909,21 +926,21 @@ function nearestNeighbour(codes, pts) {
 
 // The bar above a desktop map: find, department chips, zoom, key.
 export function mapbar() {
-  const chips = [['All', 'grid', '']];
+  const chips = [[tx('All'), 'grid', '']];
   for (const [label, icon, ids] of DEPT_GROUPS) { if (label === 'Other') for (const id of ids) chips.push([DEPT_NAME[id] || id, { checkouts: 'bag', flex: 'flame', stockroom: 'box' }[id] || 'tag', id]); else chips.push([label, icon, label.toLowerCase()]); }
-  const fls = mapFloors(), floorSeg = fls.length > 1 ? `<div class="seg2 floorseg" data-floorseg>${fls.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}" title="${f.type === 'boh' ? 'Back of house' : 'Sales floor'}">${esc(f.name)}</button>`).join('')}</div>` : '';
-  return `<div class="mapbar"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="Find a shelf or bay…" aria-label="Find a shelf, bay or product on the map" data-mapfind></div>` +
+  const fls = mapFloors(), floorSeg = fls.length > 1 ? `<div class="seg2 floorseg" data-floorseg>${fls.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}" title="${f.type === 'boh' ? tx('Back of house') : tx('Sales floor')}">${esc(f.name)}</button>`).join('')}</div>` : '';
+  return `<div class="mapbar"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="${tx('Find a shelf or bay…')}" aria-label="${tx('Find a shelf, bay or product on the map')}" data-mapfind></div>` +
     `<div class="legchips">${chips.map((c, i) => `<span class="chip${i === 0 ? ' on' : ''}" data-mapgroup="${c[2]}">${ic(c[1])}${c[0]}</span>`).join('')}</div>${floorSeg}` +
-    `<div class="zoom" style="margin-left:auto;display:flex;gap:6px">${extraTools()}<span class="ibtn" data-zoom="out">${ic('minus')}</span><i class="mv-mdiv"></i><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="Fit">${ic('map')}</span>` +
-    `<span class="keywrap"><span class="ibtn" data-key="1" title="Department key">${ic('layers')}</span><div class="keypop"><h4>Department key</h4>${DEPT_GROUPS.map(gp => `<div class="keygrp">${ic(gp[1])}${gp[0]}</div><div class="keygrid">${gp[2].map(d => `<div class="keyrow"><i style="background:${DEPT_COLOUR[d]}"></i><b>${d.toUpperCase()}</b><span>${DEPT_NAME[d]}</span></div>`).join('')}</div>`).join('')}${mapSymbols().length ? `<h4 class="symh">Map symbols</h4>${symbolsHtml()}` : ''}</div></span></div></div><div class="mapbar mapsub" data-subchips hidden></div>`;
+    `<div class="zoom" style="margin-left:auto;display:flex;gap:6px">${extraTools()}<span class="ibtn" data-zoom="out">${ic('minus')}</span><i class="mv-mdiv"></i><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}">${ic('map')}</span>` +
+    `<span class="keywrap"><span class="ibtn" data-key="1" title="${tx('Department key')}">${ic('layers')}</span><div class="keypop"><h4>${tx('Department key')}</h4>${DEPT_GROUPS.map(gp => `<div class="keygrp">${ic(gp[1])}${gp[0] === 'Other' ? tx('Other') : gp[0]}</div><div class="keygrid">${gp[2].map(d => `<div class="keyrow"><i style="background:${DEPT_COLOUR[d]}"></i><b>${d.toUpperCase()}</b><span>${DEPT_NAME[d]}</span></div>`).join('')}</div>`).join('')}${mapSymbols().length ? `<h4 class="symh">${tx('Map symbols')}</h4>${symbolsHtml()}` : ''}</div></span></div></div><div class="mapbar mapsub" data-subchips hidden></div>`;
 }
 // Price-check size (small, large, hidden) when the map has any, and the
 // tory-line switch, shown only while a back-of-house floor with lines is up.
 function extraTools() {
   const syms = mapSymbols(), pc = syms.some(x => x.kind === 'pc' || x.kind === 'order'), tory = syms.some(x => x.kind === 'tory');
-  return (pc ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="Price checks: normal, large or hidden">${ic('tag')}</span>` : '') + (tory ? `<span class="ibtn torybtn" data-tory hidden title="Show the tory lines">${ic('route')}</span>` : '');
+  return (pc ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : '') + (tory ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Show the tory lines')}">${ic('route')}</span>` : '');
 }
-export function crumbx(ctx, storeNo, storeName) { const f = mapFloors()[0]; return `<span class="crumbx">${ic('map')}<span data-crumbfloor>${f ? `${f.type.toUpperCase()} · ${esc(f.name)}` : 'FOH · Ground'}</span> <b>${esc(storeNo)}</b>${ctx ? ' › ' + ctx : ''}<span data-crumbdept></span></span>`; }
+export function crumbx(ctx, storeNo, storeName) { const f = mapFloors()[0]; return `<span class="crumbx">${ic('map')}<span data-crumbfloor>${f ? `${f.type.toUpperCase()} · ${esc(f.name)}` : tx('FOH · Ground')}</span> <b>${esc(storeNo)}</b>${ctx ? ' › ' + ctx : ''}<span data-crumbdept></span></span>`; }
 // The strip the shell adds under a phone map mode: the mode's summary and
 // its main action, painted by the view (unchanged markup is left alone, so a
 // repaint never steals focus or restarts a tap).
@@ -941,7 +958,7 @@ export const sx = {
 };
 export function mvMap(o = {}) {
   const fls = mapFloors();
-  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="Scan">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="Next level">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="Tory lines">${ic('route')}</span>` : ''}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="Price checks: normal, large or hidden" aria-label="Price checks: normal, large or hidden">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="Zoom in" aria-label="Zoom in">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="Zoom out" aria-label="Zoom out">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="Fit" aria-label="Fit the map">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="${tx('Scan')}">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="${tx('Next level')}">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Tory lines')}">${ic('route')}</span>` : ''}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}" aria-label="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="${tx('Zoom in')}" aria-label="${tx('Zoom in')}">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="${tx('Zoom out')}" aria-label="${tx('Zoom out')}">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}" aria-label="${tx('Fit the map')}">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
 }
 
 // Wire zoom buttons and group chips on a mounted view.
@@ -949,12 +966,12 @@ export function bindMapChrome(root, map) {
   root.addEventListener('click', e => {
     const z = e.target.closest('[data-zoom]');
     if (z) { const k = z.getAttribute('data-zoom'); if (k === 'in') map.zoomBy(1 / 1.3, null, null, 300); else if (k === 'out') map.zoomBy(1.3, null, null, 300); else map.fit(400); return; }
-    const pcb = e.target.closest('[data-pcmode]'); if (pcb) { const next = { small: 'large', large: 'off', off: 'small' }[prefs().priceChecks || 'small']; setPref('priceChecks', next); map.priceChecks(next); haptic('select'); for (const b of $$('[data-pcmode]', root)) b.setAttribute('data-pcmode', next); toast(`Price checks: ${{ small: 'normal', large: 'large', off: 'hidden' }[next]}`); return; }
-    const tb = e.target.closest('[data-tory]'); if (tb) { const on = map.tory(); tb.classList.toggle('on', on); toast(on ? 'Tory lines shown' : 'Tory lines hidden'); return; }
+    const pcb = e.target.closest('[data-pcmode]'); if (pcb) { const next = { small: 'large', large: 'off', off: 'small' }[prefs().priceChecks || 'small']; setPref('priceChecks', next); map.priceChecks(next); haptic('select'); for (const b of $$('[data-pcmode]', root)) b.setAttribute('data-pcmode', next); toast({ small: tx('Price checks: normal'), large: tx('Price checks: large'), off: tx('Price checks: hidden') }[next]); return; }
+    const tb = e.target.closest('[data-tory]'); if (tb) { const on = map.tory(); tb.classList.toggle('on', on); toast(on ? tx('Tory lines shown') : tx('Tory lines hidden')); return; }
     const key = e.target.closest('[data-key]'); if (key) { key.parentNode.classList.toggle('open'); return; }
     const fb = e.target.closest('[data-mapfloor]');
     if (fb) {
-      if (fb.classList.contains('crumb-jump')) { map.floor(fb.getAttribute('data-mapfloor')); const on = root.querySelector('[data-mapdept].on') || root.querySelector('[data-mapgroup].on'); if (on) { const d = on.getAttribute('data-mapdept'), g = on.getAttribute('data-mapgroup'); const codes = d ? [d] : g ? (DEPT_GROUPS.find(x => x[0].toLowerCase() === g)?.[2] || [g]) : []; const info = map.zoomDeptOn(codes, fb.getAttribute('data-mapfloor')); readout(`› ${d ? (DEPT_GROUPS.find(x => x[2].includes(d)) ? esc(DEPT_GROUPS.find(x => x[2].includes(d))[0]) + ' › ' : '') + dep(d) + ' ' + esc(DEPT_NAME[d] || d) : esc(on.textContent.trim())} · ${info?.shelves || 0} shelves${elsewhere(info)}`); } return; }
+      if (fb.classList.contains('crumb-jump')) { map.floor(fb.getAttribute('data-mapfloor')); const on = root.querySelector('[data-mapdept].on') || root.querySelector('[data-mapgroup].on'); if (on) { const d = on.getAttribute('data-mapdept'), g = on.getAttribute('data-mapgroup'); const codes = d ? [d] : g ? (DEPT_GROUPS.find(x => x[0].toLowerCase() === g)?.[2] || [g]) : []; const info = map.zoomDeptOn(codes, fb.getAttribute('data-mapfloor')); readout(`› ${d ? (DEPT_GROUPS.find(x => x[2].includes(d)) ? esc(DEPT_GROUPS.find(x => x[2].includes(d))[0]) + ' › ' : '') + dep(d) + ' ' + esc(DEPT_NAME[d] || d) : esc(on.textContent.trim())} · ${txn(info?.shelves || 0, '{n} shelf', '{n} shelves')}${elsewhere(info)}`); } return; }
       map.zoomDept([]); map.floor(fb.getAttribute('data-mapfloor')); for (const c of $$('[data-mapgroup]', root)) c.classList.toggle('on', !c.getAttribute('data-mapgroup')); subchips(null); readout(''); return;
     }
     const fn = e.target.closest('[data-mapfloor-next]');
@@ -967,7 +984,7 @@ export function bindMapChrome(root, map) {
       const codes = !g ? null : (group?.[2] || [g]);
       const info = map.zoomDept(codes || []);
       subchips(group && group[2].length > 1 ? group : null);
-      readout(!codes ? '' : `› ${group ? esc(group[0]) : dep(codes[0]) + ' ' + esc(DEPT_NAME[codes[0]] || codes[0])} · ${info?.shelves || 0} shelves${elsewhere(info)}`);
+      readout(!codes ? '' : `› ${group ? esc(group[0]) : dep(codes[0]) + ' ' + esc(DEPT_NAME[codes[0]] || codes[0])} · ${txn(info?.shelves || 0, '{n} shelf', '{n} shelves')}${elsewhere(info)}`);
       return;
     }
     const sub = e.target.closest('[data-mapdept]');
@@ -976,12 +993,12 @@ export function bindMapChrome(root, map) {
       for (const c of $$('[data-mapdept]', root)) c.classList.toggle('on', c === sub);
       const info = map.zoomDept([d]);
       const grp = DEPT_GROUPS.find(x => x[2].includes(d));
-      readout(`› ${grp ? esc(grp[0]) + ' › ' : ''}${dep(d)} ${esc(DEPT_NAME[d] || d)} · ${info?.shelves || 0} shelves${elsewhere(info)}`);
+      readout(`› ${grp ? esc(grp[0]) + ' › ' : ''}${dep(d)} ${esc(DEPT_NAME[d] || d)} · ${txn(info?.shelves || 0, '{n} shelf', '{n} shelves')}${elsewhere(info)}`);
     }
   });
   // A department that also lives on another level says so, and the level
   // name jumps there (ShelfSearcher's floor-jump badge).
-  const elsewhere = info => { const others = (info?.floors || []).filter(f => f.id !== map.floorId()); return others.length ? ` · also on ${others.map(f => `<span class="crumb-jump" data-mapfloor="${esc(f.id)}">${esc(f.name)}</span> (${f.shelves})`).join(', ')}` : ''; };
+  const elsewhere = info => { const others = (info?.floors || []).filter(f => f.id !== map.floorId()); return others.length ? ' · ' + tx('also on {floors}', { floors: others.map(f => `<span class="crumb-jump" data-mapfloor="${esc(f.id)}">${esc(f.name)}</span> (${f.shelves})`).join(', ') }) : ''; };
   // Sub-department chips under the bar once a group is chosen, the floor
   // switch following the map, and the crumb saying where the map is.
   const subchips = group => { const host = root.querySelector('[data-subchips]'); if (!host) return; host.hidden = !group; host.innerHTML = group ? `<div class="legchips">${group[2].map(d => `<span class="chip" data-mapdept="${esc(d)}"><i style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b>${esc(DEPT_NAME[d] || d)}</span>`).join('')}</div>` : ''; };
@@ -1020,7 +1037,7 @@ function mapFind(root, input, map) {
   const norm = q => canonCode(q.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
   const suggest = q => {
     let Q = norm(q); if (!Q) return [];
-    if (/^[A-Z]+\d+[SE]$/.test(Q)) Q = Q.slice(0, -1);           // "B21S" while typing B21 S1
+    if (/^[A-Z]+\d+[SEP]$/.test(Q)) Q = Q.slice(0, -1);           // "B21S" while typing B21 S1
     const exact = [], starts = [], contains = [];
     for (const s of index()) { const n = s.name; if (n === Q) exact.push(s); else if (n.startsWith(Q)) starts.push(s); else if (n.includes(Q) || s.sections.some(x => (n + x).startsWith(Q)) || s.locations.some(l => l.includes(Q))) contains.push(s); }
     const ql = q.trim().toLowerCase();
@@ -1030,13 +1047,13 @@ function mapFind(root, input, map) {
   const recent = () => { try { return JSON.parse(localStorage.getItem(KEY()) || '[]'); } catch { return []; } };
   const remember = name => { try { localStorage.setItem(KEY(), JSON.stringify([name, ...recent().filter(x => x !== name)].slice(0, 6))); } catch {} };
   const row = (it, i) => it.kind === 'shelf'
-    ? `<div class="row" data-i="${i}"><i class="dot" style="background:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length > 1 ? ` · run of ${it.sections.length} shelves` : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
-    : `<div class="row" data-i="${i}"><i class="dot" style="background:${it.dept ? DEPT_COLOUR[it.dept] || '#64748B' : 'var(--ink)'}"></i><b class="code">${esc(it.kind === 'group' ? it.label : it.name)}</b><span class="dn">${it.kind === 'group' ? `${it.ids.length} departments` : esc(it.label)}</span><span class="kind">Department</span></div>`;
-  const show = (list, header) => { items = list; focus = -1; if (!list.length) return hide(); ac.innerHTML = (header ? `<div class="hdr">${header}<span data-clear>Clear</span></div>` : '') + list.map(row).join(''); ac.classList.add('on'); };
+    ? `<div class="row" data-i="${i}"><i class="dot" style="background:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length > 1 ? ' · ' + tx('run of {n} shelves', { n: it.sections.length }) : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
+    : `<div class="row" data-i="${i}"><i class="dot" style="background:${it.dept ? DEPT_COLOUR[it.dept] || '#64748B' : 'var(--ink)'}"></i><b class="code">${esc(it.kind === 'group' ? it.label : it.name)}</b><span class="dn">${it.kind === 'group' ? txn(it.ids.length, '{n} department', '{n} departments') : esc(it.label)}</span><span class="kind">${tx('Department')}</span></div>`;
+  const show = (list, header) => { items = list; focus = -1; if (!list.length) return hide(); ac.innerHTML = (header ? `<div class="hdr">${header}<span data-clear>${tx('Clear')}</span></div>` : '') + list.map(row).join(''); ac.classList.add('on'); };
   const hide = () => { ac.classList.remove('on'); ac.innerHTML = ''; items = []; focus = -1; };
   const matchGroups = q => {                         // groups the typed text points at
     let Q = norm(q); if (!Q) return [];
-    if (/^[A-Z]+\d+[SE]$/.test(Q)) Q = Q.slice(0, -1);
+    if (/^[A-Z]+\d+[SEP]$/.test(Q)) Q = Q.slice(0, -1);
     const exact = map.groups(Q); if (exact.length) return exact;
     return Q.length >= 2 ? map.segments().filter(g => { const n = (g.getAttribute('data-shelf') || '').toUpperCase(); return n.startsWith(Q) || (g.getAttribute('data-locations') || '').toUpperCase().includes(Q); }) : [];
   };
@@ -1058,7 +1075,7 @@ function mapFind(root, input, map) {
     state('not-found');
   };
   input.addEventListener('input', () => { clearTimeout(timer); const q = input.value; state(''); timer = setTimeout(() => { show(suggest(q)); map.highlight(q.trim() ? matchGroups(q) : null); if (!q.trim()) map.highlight(null); }, 60); });
-  input.addEventListener('focus', () => { clearTimeout(blurTimer); if (!input.value.trim()) { const r = recent(); if (r.length) show(r.map(name => index().find(s => s.name === name) || { kind: 'shelf', name, dept: '', sections: [], locations: [] }), 'Recent'); } });
+  input.addEventListener('focus', () => { clearTimeout(blurTimer); if (!input.value.trim()) { const r = recent(); if (r.length) show(r.map(name => index().find(s => s.name === name) || { kind: 'shelf', name, dept: '', sections: [], locations: [] }), tx('Recent')); } });
   input.addEventListener('blur', () => { blurTimer = setTimeout(hide, 150); });
   input.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!items.length) return; e.preventDefault(); focus = (focus + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; for (const r of ac.querySelectorAll('.row')) r.classList.toggle('focused', +r.dataset.i === focus); return; }

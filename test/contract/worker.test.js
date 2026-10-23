@@ -505,6 +505,14 @@ test('manifests: publish the report, list it through the projection, read it, at
   assert.equal(prof.status, 200); assert.equal(prof.body.schema, 'carton-profiles/1'); assert.equal(prof.body.trucks_sampled, 1);
   assert.deepEqual(prof.body.gates, { min_trucks: 3, min_consistency: 0.7, min_units_per_ctn: 3 });
   assert.deepEqual(prof.body.profiles, {}, 'one manifest is under the three-truck gate');
+  assert.equal(prof.body.last['43307685'].ctn, 6, 'the latest delivery still gives a carton size');
+  // The profiles are kept between requests and follow every publish and removal (audit P7).
+  for (const [man, d] of [['7031483', '12/09/2026'], ['7031484', '19/09/2026']]) assert.equal((await api('POST', '/v1/store/1241/manifest', { ...doc, manNo: man, despatch: d }, unlocked)).status, 201);
+  const three = await api('GET', '/v1/store/1241/profiles', undefined, unlocked);
+  assert.equal(three.body.trucks_sampled, 3); assert.equal(three.body.profiles['43307685'].ctn, 6, 'three trucks agree: a profile');
+  assert.equal((await api('DELETE', '/v1/store/1241/manifest/7031484', undefined, unlocked)).status, 200);
+  const two = await api('GET', '/v1/store/1241/profiles', undefined, unlocked);
+  assert.equal(two.body.trucks_sampled, 2); assert.equal(two.body.profiles['43307685'], undefined, 'back under the gate once a manifest is removed');
   assert.equal((await api('POST', '/v1/store/1241/events', { events: [ev('truck.finalise', { truck }, {})] }, dev)).body.results[0].code, 'unauthorised', 'finalising a truck takes the dock code');
   const running = await api('POST', '/v1/store/1241/events', { events: [ev('pallet.start', { truck, bay: 'A1' }, { pid: 'D1' }), ev('truck.finalise', { truck }, {})] }, unlocked);
   assert.equal(running.body.results[1].code, 'pallets_running', 'a running pallet holds the truck open');
@@ -849,6 +857,8 @@ test('retention: a bay older than 60 days leaves the live state at the nightly r
   const h = (await api('GET', '/v1/store/2066/history/backfill', undefined, sr)).body;
   assert.deepEqual(h.rows.map(x => x.bay), ['7014', '7012'], 'live first, then the archive');
   assert.equal(h.rows[1].codes, 2); assert.equal(h.rows[1].accuracy, h.rows[0].accuracy, 'the archived row is the row History showed');
+  const ar = (await api('GET', '/v1/store/2066/history/backfill?only=archive', undefined, sr)).body;
+  assert.deepEqual([ar.total, ar.rows.map(x => x.bay)], [1, ['7012']], 'only=archive leaves out what the device already holds');
   const csv = await (await mf.dispatchFetch('http://conduit.test/v1/store/2066/export/backfill', { headers: { Authorization: `Bearer ${sr}` } })).text();
   assert.match(csv, /2026-07-01,7012/);
   const k = (await api('GET', '/v1/admin/stores/2066/kpis', undefined, ownerToken)).body;

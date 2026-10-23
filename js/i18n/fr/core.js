@@ -1,0 +1,21 @@
+// French · language picker, sign-in card extras, the area code sheet. Keys are the English text (js/i18n.js).
+export default {
+  "A manager sign-in lasts one shift (12 hours). Enter the manager code to carry on.": "Une connexion responsable dure un service (12 heures). Saisissez le code responsable pour continuer.",
+  "Locked after {n} min idle. Enter the manager code to carry on.": "Verrouillé après {n} min d’inactivité. Saisissez le code responsable pour continuer.",
+  "Another store was opened on this device, so this one kept only the Floor. Enter the manager code to carry on.": "Un autre magasin a été ouvert sur cet appareil ; celui-ci ne garde que la surface de vente. Saisissez le code responsable pour continuer.",
+  "The manager sign-in on this PC has ended. Enter the manager code to carry on.": "La connexion responsable de ce PC a pris fin. Saisissez le code responsable pour continuer.",
+  "Carry on as manager": "Continuer en tant que responsable",
+  "Carry on as a team member": "Continuer en tant qu’équipier",
+  "That is a crew code, not the manager code.": "C’est un code d’équipe, pas le code responsable.",
+  "Stockroom": "Réserve",
+  "Back dock": "Quai de réception",
+  "{area} code": "Code {area}",
+  "The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.": "Le code d’équipe {area} ouvre cet espace sur cet appareil jusqu’à sa déconnexion. Un code responsable ouvre ici tous les espaces ; les responsables peuvent aussi se connecter en tant que Responsable pour passer cette étape.",
+  "Code": "Code",
+  "Open {area}": "Ouvrir {area}",
+  "Not now": "Plus tard",
+  "Too many attempts. Try again later.": "Trop de tentatives. Réessayez plus tard.",
+  "Wrong code.": "Code incorrect.",
+  "Language": "Langue",
+  "Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.": "Tous les écrans de cet appareil, dans l’une des sept langues. Les noms d’étagères, de produits et de rayons restent tels que le magasin les écrit.",
+};

@@ -82,6 +82,8 @@ const state = {
 const SNAP_THRESHOLD = 10;
 const SUBNAMES_SIDES = ['S1', 'S2'];
 const SUBNAMES_ENDS = ['E1', 'E2'];
+// A permanent end (P1, P2): an end set up for a fixed display that rarely changes.
+const SUBNAMES_PERMANENT = ['P1', 'P2'];
 
 // Store default departments for reset
 const DEFAULT_DEPARTMENTS = JSON.parse(JSON.stringify(state.departments));
@@ -2984,6 +2986,8 @@ function updateSelectionPanel() {
     SUBNAMES_SIDES.forEach(sn => tagContainer.appendChild(makeTag(sn)));
     tagContainer.appendChild(makeLabel('Ends'));
     SUBNAMES_ENDS.forEach(sn => tagContainer.appendChild(makeTag(sn)));
+    tagContainer.appendChild(makeLabel('Permanent ends'));
+    SUBNAMES_PERMANENT.forEach(sn => tagContainer.appendChild(makeTag(sn)));
   }
 
   // Size display

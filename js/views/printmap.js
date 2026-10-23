@@ -14,6 +14,7 @@ import { $, ic, esc, vh, sub, toast, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId
 import { mountMap, mapFloors, mapInfo, hasMap, segmentId } from '../map.js';
 import { printSheet } from '../print.js';
 import { issuePin } from './maintenance.js';
+import { tx, txn, locale } from '../i18n.js';
 
 const KEY = 'print_composer';
 const DEF = { floor: 'current', dept: '', hide: false, labels: true, badges: true, colours: 'full', pc: true, tory: true, lm: true, emerg: false, maint: false, route: false, rfdone: false, rfplan: false, st: false, legend: true, paper: 'A4', orient: 'landscape', book: 'dept' };
@@ -37,32 +38,32 @@ const chk = (field, label) => `<label class="pm-chk"><input type="checkbox" data
 
 function panel() {
   const fls = mapFloors();
-  const floors = `<div class="card pm-card"><div class="ch"><h3>Floors</h3></div>${seg('floor', [['current', 'Current'], ...fls.map(f => [f.id, esc(f.name)]), ...(fls.length > 1 ? [['all', 'Every floor']] : [])])}<p class="lbl">${o.floor === 'all' ? 'Each floor prints on its own page.' : 'Prints the floor shown.'}</p></div>`;
+  const floors = `<div class="card pm-card"><div class="ch"><h3>${tx('Floors')}</h3></div>${seg('floor', [['current', tx('Current')], ...fls.map(f => [f.id, esc(f.name)]), ...(fls.length > 1 ? [['all', tx('Every floor')]] : [])])}<p class="lbl">${o.floor === 'all' ? tx('Each floor prints on its own page.') : tx('Prints the floor shown.')}</p></div>`;
   const groups = DEPT_GROUPS.filter(g => g[0] !== 'Other');
   const sel = o.dept && !DEPT_GROUPS.some(g => g[0].toLowerCase() === o.dept) ? DEPT_GROUPS.find(g => g[2].includes(o.dept))?.[0].toLowerCase() : o.dept;
   const subs = sel ? (DEPT_GROUPS.find(g => g[0].toLowerCase() === sel)?.[2] || []) : [];
-  const areaCard = `<div class="card pm-card"><div class="ch"><h3>Area</h3></div><div class="seg pm-seg"><button class="${!o.dept ? 'on' : ''}" data-pm="dept" data-v="">All</button>${groups.map(([l, icon]) => `<button class="${sel === l.toLowerCase() ? 'on' : ''}" data-pm="dept" data-v="${l.toLowerCase()}">${ic(icon)}${l}</button>`).join('')}</div>` +
-    (subs.length ? `<div class="pm-sublab">Sub-dept</div><div class="seg pm-seg"><button class="${o.dept === sel ? 'on' : ''}" data-pm="dept" data-v="${sel}">All</button>${subs.map(id => `<button class="${o.dept === id ? 'on' : ''}" data-pm="dept" data-v="${id}"><i class="pm-sw" style="background:${DEPT_COLOUR[id] || '#999'}"></i>${id.toUpperCase()}</button>`).join('')}</div>` : '') +
-    (o.dept ? chk('hide', 'Hide other departments') : '') + `</div>`;
-  const layers = `<div class="card pm-card"><div class="ch"><h3>Layers</h3></div>${chk('labels', 'Shelf names')}${chk('badges', 'Shelf badges')}<div class="pm-row"><span>Department colours</span>${seg('colours', [['full', 'Full'], ['outline', 'Outline']])}</div>${chk('pc', 'Price checks')}${chk('tory', 'Tory lines')}${chk('lm', 'Landmarks')}</div>`;
-  const modes = `<div class="card pm-card"><div class="ch"><h3>Mode details</h3></div>${chk('route', 'Pick route (this device’s pick list)')}${chk('rfdone', 'Refresh — completed shelves')}${chk('rfplan', 'Refresh — plan colours')}${chk('st', 'Stocktake states')}${chk('emerg', 'Emergency markers')}${chk('maint', 'Maintenance issues')}</div>`;
-  const out = `<div class="card pm-card"><div class="ch"><h3>Output</h3></div><div class="pm-row"><span>Paper</span>${seg('paper', [['A4', 'A4'], ['A3', 'A3']])}${seg('orient', [['landscape', 'Landscape'], ['portrait', 'Portrait']])}</div>` +
-    `<div class="pm-row"><span>Frame</span><span class="pm-zoom"><button class="btn sm" data-pmz="out" aria-label="Zoom out">−</button><button class="btn sm" data-pmz="in" aria-label="Zoom in">+</button><button class="btn sm" data-pmz="fit">Fit</button></span></div>${chk('legend', 'Legend strip (key of what’s shown)')}` +
-    `<p class="lbl">The paper (plus the title strip) is exactly what prints. Frame it with the zoom controls or the mouse.</p><button class="btn primary" data-act="pm-print">${ic('print')}Print · Save as PDF</button>` +
-    `<div class="pm-row pm-book"><span>Booklet</span>${seg('book', [['dept', 'Departments'], ['sub', 'Sub-departments']])}</div><button class="btn" data-act="pm-book">${ic('file')}Print department booklet · one page per ${o.book === 'sub' ? 'sub-dept' : 'dept'}</button></div>`;
+  const areaCard = `<div class="card pm-card"><div class="ch"><h3>${tx('Area')}</h3></div><div class="seg pm-seg"><button class="${!o.dept ? 'on' : ''}" data-pm="dept" data-v="">${tx('All')}</button>${groups.map(([l, icon]) => `<button class="${sel === l.toLowerCase() ? 'on' : ''}" data-pm="dept" data-v="${l.toLowerCase()}">${ic(icon)}${l}</button>`).join('')}</div>` +
+    (subs.length ? `<div class="pm-sublab">${tx('Sub-dept')}</div><div class="seg pm-seg"><button class="${o.dept === sel ? 'on' : ''}" data-pm="dept" data-v="${sel}">${tx('All')}</button>${subs.map(id => `<button class="${o.dept === id ? 'on' : ''}" data-pm="dept" data-v="${id}"><i class="pm-sw" style="background:${DEPT_COLOUR[id] || '#999'}"></i>${id.toUpperCase()}</button>`).join('')}</div>` : '') +
+    (o.dept ? chk('hide', tx('Hide other departments')) : '') + `</div>`;
+  const layers = `<div class="card pm-card"><div class="ch"><h3>${tx('Layers')}</h3></div>${chk('labels', tx('Shelf names'))}${chk('badges', tx('Shelf badges'))}<div class="pm-row"><span>${tx('Department colours')}</span>${seg('colours', [['full', tx('Full')], ['outline', tx('Outline')]])}</div>${chk('pc', tx('Price checks'))}${chk('tory', tx('Tory lines'))}${chk('lm', tx('Landmarks'))}</div>`;
+  const modes = `<div class="card pm-card"><div class="ch"><h3>${tx('Mode details')}</h3></div>${chk('route', tx('Pick route (this device’s pick list)'))}${chk('rfdone', tx('Refresh — completed shelves'))}${chk('rfplan', tx('Refresh — plan colours'))}${chk('st', tx('Stocktake states'))}${chk('emerg', tx('Emergency markers'))}${chk('maint', tx('Maintenance issues'))}</div>`;
+  const out = `<div class="card pm-card"><div class="ch"><h3>${tx('Output')}</h3></div><div class="pm-row"><span>${tx('Paper')}</span>${seg('paper', [['A4', 'A4'], ['A3', 'A3']])}${seg('orient', [['landscape', tx('Landscape')], ['portrait', tx('Portrait')]])}</div>` +
+    `<div class="pm-row"><span>${tx('Frame')}</span><span class="pm-zoom"><button class="btn sm" data-pmz="out" aria-label="${tx('Zoom out')}">−</button><button class="btn sm" data-pmz="in" aria-label="${tx('Zoom in')}">+</button><button class="btn sm" data-pmz="fit">${tx('Fit')}</button></span></div>${chk('legend', tx('Legend strip (key of what’s shown)'))}` +
+    `<p class="lbl">${tx('The paper (plus the title strip) is exactly what prints. Frame it with the zoom controls or the mouse.')}</p><button class="btn primary" data-act="pm-print">${ic('print')}${tx('Print · Save as PDF')}</button>` +
+    `<div class="pm-row pm-book"><span>${tx('Booklet')}</span>${seg('book', [['dept', tx('Departments')], ['sub', tx('Sub-departments')]])}</div><button class="btn" data-act="pm-book">${ic('file')}${o.book === 'sub' ? tx('Print department booklet · one page per sub-dept') : tx('Print department booklet · one page per dept')}</button></div>`;
   return floors + areaCard + layers + modes + out;
 }
 function titleStrip(ctx, scope) {
-  return `<div class="pm-title"><b>${esc(ctx.storeName || 'Store')} <span>${esc(ctx.storeNo || '')}</span></b><span>${esc(scope)}</span><span>${esc(new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>`;
+  return `<div class="pm-title"><b>${esc(ctx.storeName || tx('Store'))} <span>${esc(ctx.storeNo || '')}</span></b><span>${esc(scope)}</span><span>${esc(new Date().toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>`;
 }
 function legend(map) {
   if (!o.legend) return '';
   const fid = map.floorId(), here = new Set(map.segments().filter(g => g.closest('.mfl')?.getAttribute('data-fid') === fid && (!g.hasAttribute('data-dim') || !o.hide)).map(g => (g.getAttribute('data-dept') || '').toLowerCase()));
   const focus = codesOf(o.dept), depts = DEPT_GROUPS.flatMap(g => g[2]).filter(d => here.has(d) && (!focus.length || focus.includes(d)));   // an area's key names its departments
-  const extra = [o.rfdone && ['Refreshed', '#16A34A'], o.rfplan && ['Plan colour', '#6B7280'], o.st && ['Counting', '#EAB308'], o.st && ['Counted', '#16A34A'], o.st && ['Verified', '#2563EB'], o.route && ['Pick route', '#D24E0E'], o.emerg && ['Emergency markers', '#DC2626'], o.maint && ['Maintenance issues', '#6F4527']].filter(Boolean);
-  return `<div class="pm-legend"><b>Key</b>${depts.map(d => `<span><i style="background:${DEPT_COLOUR[d] || '#999'}"></i>${esc(d.toUpperCase())} ${esc(DEPT_NAME[d] || '')}</span>`).join('')}${extra.length ? '<em></em>' + extra.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('') : ''}</div>`;
+  const extra = [o.rfdone && [tx('Refreshed'), '#16A34A'], o.rfplan && [tx('Plan colour'), '#6B7280'], o.st && [tx('Counting'), '#EAB308'], o.st && [tx('Counted'), '#16A34A'], o.st && [tx('Verified'), '#2563EB'], o.route && [tx('Pick route'), '#D24E0E'], o.emerg && [tx('Emergency markers'), '#DC2626'], o.maint && [tx('Maintenance issues'), '#6F4527']].filter(Boolean);
+  return `<div class="pm-legend"><b>${tx('Key')}</b>${depts.map(d => `<span><i style="background:${DEPT_COLOUR[d] || '#999'}"></i>${esc(d.toUpperCase())} ${esc(DEPT_NAME[d] || '')}</span>`).join('')}${extra.length ? '<em></em>' + extra.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('') : ''}</div>`;
 }
-const scopeText = map => { const f = mapFloors().find(x => x.id === map.floorId()); return [f ? `${f.type === 'boh' ? 'BOH' : 'FOH'} · ${f.name}` : 'Floor', o.dept ? deptLabel(o.dept) : ''].filter(Boolean).join(' · '); };
+const scopeText = map => { const f = mapFloors().find(x => x.id === map.floorId()); return [f ? `${f.type === 'boh' ? 'BOH' : 'FOH'} · ${f.name}` : tx('Floor'), o.dept ? deptLabel(o.dept) : ''].filter(Boolean).join(' · '); };
 
 // The modes' marks, as the composer's checkboxes ask.
 function decorate(ctx, map) {
@@ -100,12 +101,12 @@ function page(ctx, map, scope, ar) {
 }
 
 export default {
-  id: 'printmap', title: 'Print map', icon: 'print',
+  id: 'printmap', title: tx('Print map'), icon: 'print',
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
-    if (!hasMap()) return vh('Print map', sub('No map published yet'), '', 'print') + `<div class="card"><p class="lbl">The owner publishes the store's map from the console. Then the composer prints it.</p></div>`;
+    if (!hasMap()) return vh(tx('Print map'), sub(tx('No map published yet')), '', 'print') + `<div class="card"><p class="lbl">${tx("The owner publishes the store's map from the console. Then the composer prints it.")}</p></div>`;
     const ar = area();
-    return vh('Print map', sub(`${o.paper} ${o.orient}`, mapInfo()?.version ? `map ${esc(mapInfo().version)}` : ''), `<button class="btn primary" data-act="pm-print">${ic('print')}Print · Save as PDF</button>`, 'print') +
+    return vh(tx('Print map'), sub(o.orient === 'portrait' ? tx('{paper} portrait', { paper: o.paper }) : tx('{paper} landscape', { paper: o.paper }), mapInfo()?.version ? tx('map {version}', { version: esc(mapInfo().version) }) : ''), `<button class="btn primary" data-act="pm-print">${ic('print')}${tx('Print · Save as PDF')}</button>`, 'print') +
       `<div class="pm-wrap"><div class="pm-room"><div class="pm-paper" style="aspect-ratio:${ar.w} / ${ar.h}"><div id="pmtitle"></div><div class="pm-stage" id="pmstage" style="flex:${ar.mapH} 1 0"></div><div id="pmlegend"></div></div></div><div class="sidecol pm-side" id="pmside">${panel()}</div></div>`;
   },
   mount(ctx, root) {
@@ -135,12 +136,12 @@ export default {
 function paperOpts() { return { page: `${o.paper} ${o.orient}`, bare: true }; }
 function printNow(ctx, map) {
   const ar = area();
-  if (o.floor !== 'all') return printSheet({ title: 'Store map', body: `<div class="pm-print">${page(ctx, map, scopeText(map), ar)}</div>`, ...paperOpts() });
+  if (o.floor !== 'all') return printSheet({ title: tx('Store map'), body: `<div class="pm-print">${page(ctx, map, scopeText(map), ar)}</div>`, ...paperOpts() });
   // Every floor, each framed whole (or on the chosen area), one page each.
   const back = { floor: map.floorId(), vb: map.vb() }, pages = [];
   for (const f of map.floors()) { map.floor(f.id); decorate(ctx, map); frame(map); pages.push(page(ctx, map, scopeText(map), ar)); }
   map.floor(back.floor); decorate(ctx, map); map.setVb(back.vb);
-  printSheet({ title: 'Store map', body: `<div class="pm-print">${pages.join('')}</div>`, ...paperOpts() });
+  printSheet({ title: tx('Store map'), body: `<div class="pm-print">${pages.join('')}</div>`, ...paperOpts() });
 }
 // The department booklet: one page per department with shelves, framed on
 // them (others faint), in the composer's layers.
@@ -153,7 +154,7 @@ function printBooklet(ctx, map) {
     pages.push(page(ctx, map, `${info.floor || ''} · ${d.label}`, ar));
   }
   o.dept = back.dept; map.zoomDeptOn([]); map.floor(back.floor); decorate(ctx, map); frame(map); map.setVb(back.vb);
-  if (!pages.length) return toast('No department has shelves on the map', 'bad');
-  printSheet({ title: 'Department booklet', body: `<div class="pm-print">${pages.join('')}</div>`, ...paperOpts() });
-  toast(`${pages.length} page${pages.length === 1 ? '' : 's'}, one per ${o.book === 'sub' ? 'sub-department' : 'department'}`);
+  if (!pages.length) return toast(tx('No department has shelves on the map'), 'bad');
+  printSheet({ title: tx('Department booklet'), body: `<div class="pm-print">${pages.join('')}</div>`, ...paperOpts() });
+  toast(o.book === 'sub' ? txn(pages.length, '{n} page, one per sub-department', '{n} pages, one per sub-department') : txn(pages.length, '{n} page, one per department', '{n} pages, one per department'));
 }

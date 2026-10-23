@@ -4,6 +4,7 @@
 
 import { storeDay, storeParts, DEFAULT_TZ } from '../shared/time.js';
 import { haptic } from './device.js';
+import { tx, lang, locale } from './i18n.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -24,13 +25,13 @@ export function mbig(label, cls, icon, attrs) { return `<button class="mv-big ${
 export function mghost(label, attrs) { return `<button class="mv-ghost"${attrs || ''}>${label}</button>`; }
 export function mfoot(inner) { return `<div class="mv-foot">${inner}</div>`; }
 export function msteps(n, labels) { return `<div class="mv-steps">${labels.map((l, i) => `<span class="${i + 1 < n ? 'done' : i + 1 === n ? 'cur' : ''}"><i>${i + 1 < n ? ic('check') : i + 1}</i>${l}</span>`).join('')}</div>`; }
-export function mlast(code, name, meta) { return `<div class="mv-last"><small>Last scanned</small><b>${code}</b><span>${name}</span>${meta ? `<em>${meta}</em>` : ''}</div>`; }
+export function mlast(code, name, meta) { return `<div class="mv-last"><small>${tx('Last scanned')}</small><b>${code}</b><span>${name}</span>${meta ? `<em>${meta}</em>` : ''}</div>`; }
 // A scan prompt with a typed field: hardware scanners type into it and press Enter; the camera arrives later.
 // A phone scan block. The input's data-field also names the camera button
 // beside it (js/scan.js opens the camera for it; each read presses Enter).
 const CONTINUOUS_FIELDS = new Set(['mscan', 'msweep', 'pscan', 'mreadd', 'shelfscan']);
 export function camButton(field, continuous = CONTINUOUS_FIELDS.has(field)) {
-  return `<button type="button" class="mv-cam" data-camera="${esc(field)}"${continuous ? ' data-camera-continuous' : ''} aria-label="Scan with the camera" title="Scan with the camera">${ic('camera')}</button>`;
+  return `<button type="button" class="mv-cam" data-camera="${esc(field)}"${continuous ? ' data-camera-continuous' : ''} aria-label="${tx('Scan with the camera')}" title="${tx('Scan with the camera')}">${ic('camera')}</button>`;
 }
 export function mscan(cap, field, hint, btn) {
   const f = (/data-field="([^"]+)"/.exec(field) || [])[1];
@@ -120,14 +121,17 @@ export function daysLeftInCycle(len = 'monthly', d = new Date()) {
   const dow = (new Date(Date.UTC(y, m - 1, dd)).getUTCDay() + 6) % 7;
   return (len === 'weekly' ? 6 : 13 - (Number(weekId(d).slice(-2)) % 2 ? 0 : 7)) - dow;
 }
+// Dates read in the device's language (js/i18n.js); English keeps its own forms.
+const fmtCache = new Map();
+const intl = opts => { const k = JSON.stringify(opts); if (!fmtCache.has(k)) fmtCache.set(k, new Intl.DateTimeFormat(locale(), opts)); return fmtCache.get(k); };
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // A weekday names the last six days only; anything older carries its date.
-export function fmtTime(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; return Math.abs(Date.now() - d) < 6 * 86400000 ? `${DAYS[d.getDay()]} ${hm}` : `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''} ${hm}`; }
-export function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso); if (isNaN(d)) return ''; return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''}`; }
-export function fmtLong(d = new Date()) { return `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()]} ${d.getDate()} ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][d.getMonth()]} ${d.getFullYear()}`; }
-export function ago(iso) { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return 'just now'; if (m < 60) return `${m} min ago`; const h = Math.round(m / 60); if (h < 24) return `${h} h ago`; return `${Math.round(h / 24)}d ago`; }
-export function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning!' : h < 17 ? 'Good afternoon!' : 'Good evening!'; }
+export function fmtTime(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; if (lang() !== 'en') return Math.abs(Date.now() - d) < 6 * 86400000 ? `${intl({ weekday: 'short' }).format(d)} ${hm}` : `${intl({ day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(d)} ${hm}`; return Math.abs(Date.now() - d) < 6 * 86400000 ? `${DAYS[d.getDay()]} ${hm}` : `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''} ${hm}`; }
+export function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso); if (isNaN(d)) return ''; if (lang() !== 'en') return intl({ day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(d); return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''}`; }
+export function fmtLong(d = new Date()) { if (lang() !== 'en') return intl({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d); return `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()]} ${d.getDate()} ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][d.getMonth()]} ${d.getFullYear()}`; }
+export function ago(iso) { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return tx('just now'); if (m < 60) return tx('{n} min ago', { n: m }); const h = Math.round(m / 60); if (h < 24) return tx('{n} h ago', { n: h }); return tx('{n}d ago', { n: Math.round(h / 24) }); }
+export function greeting() { const h = new Date().getHours(); return h < 12 ? tx('Good morning!') : h < 17 ? tx('Good afternoon!') : tx('Good evening!'); }
 
 // Tiny toast for rejections and confirmations.
 // action: { label, run } adds a button (Undo), and the toast stays a little longer.

@@ -1,0 +1,21 @@
+// Spanish · language picker, sign-in card extras, the area code sheet. Keys are the English text (js/i18n.js).
+export default {
+  "A manager sign-in lasts one shift (12 hours). Enter the manager code to carry on.": "Un inicio de sesión de gerente dura un turno (12 horas). Introduce el código de gerente para seguir.",
+  "Locked after {n} min idle. Enter the manager code to carry on.": "Bloqueado tras {n} min sin actividad. Introduce el código de gerente para seguir.",
+  "Another store was opened on this device, so this one kept only the Floor. Enter the manager code to carry on.": "Se abrió otra tienda en este dispositivo, así que esta solo conserva la sala de ventas. Introduce el código de gerente para seguir.",
+  "The manager sign-in on this PC has ended. Enter the manager code to carry on.": "El inicio de sesión de gerente de este PC ha terminado. Introduce el código de gerente para seguir.",
+  "Carry on as manager": "Seguir como gerente",
+  "Carry on as a team member": "Seguir como miembro del equipo",
+  "That is a crew code, not the manager code.": "Ese es un código de equipo, no el código de gerente.",
+  "Stockroom": "Almacén",
+  "Back dock": "Muelle de carga",
+  "{area} code": "Código de {area}",
+  "The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.": "El código de equipo de {area} abre esta área en este dispositivo hasta que se cierre la sesión. Un código de gerente abre aquí todas las áreas; los gerentes también pueden iniciar sesión como Gerente para saltarse este paso.",
+  "Code": "Código",
+  "Open {area}": "Abrir {area}",
+  "Not now": "Ahora no",
+  "Too many attempts. Try again later.": "Demasiados intentos. Inténtalo más tarde.",
+  "Wrong code.": "Código incorrecto.",
+  "Language": "Idioma",
+  "Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.": "Todas las pantallas de este dispositivo, en uno de siete idiomas. Los nombres de estanterías, productos y departamentos se mantienen como los escribe la tienda.",
+};

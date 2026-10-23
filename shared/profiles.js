@@ -22,21 +22,30 @@ const isoDate = s => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || 
 // the last 10 weeks'.
 export const PROFILE_GATES = { minTrucks: 3, minConsistency: 0.7, minUnitsPerCtn: 3 };
 export const CTN_WINDOW_WEEKS = 26, ARRIVAL_WINDOW_WEEKS = 10, PACK_CHANGE_MIN_TRUCKS = 3;
-export function buildProfiles(docs, { store = '', now = new Date() } = {}) {
-  const per = {};
-  const arrivalsOf = docs.map(d => ({ manNo: d.manNo, date: isoDate(d.despatch) || isoDate(d.publishedAt || d.at) || null, doc: d })).filter(a => a.date).sort((a, b) => a.date.localeCompare(b.date));
-  for (const a of arrivalsOf) {
-    const byKc = {};
-    for (const c of a.doc.consols || []) {
-      const kcs = new Set((c.items || []).map(it => String(it.k || '').replace(/\D/g, '')).filter(k => /^\d{7,9}$/.test(k)));
-      for (const it of c.items || []) {
-        const kc = String(it.k || '').replace(/\D/g, ''); if (!/^\d{7,9}$/.test(kc)) continue;
-        const r = (byKc[kc] ||= { units: 0, cartons: 0 }); r.units += Number(it.q) || 0;
-        r.cartons += Number(it.c) > 0 ? Number(it.c) : (Number(c.cartons) || 0) / Math.max(1, kcs.size);
-      }
+// One manifest's arrivals, keycode by keycode: what the worker keeps when a
+// manifest is published, so profiles never re-read the whole documents
+// (audit 19 Oct P7). null when the manifest has no date to place it.
+export function arrivalsOf(doc) {
+  const date = isoDate(doc?.despatch) || isoDate(doc?.publishedAt || doc?.at) || null; if (!date) return null;
+  const byKc = {};
+  for (const c of doc.consols || []) {
+    const kcs = new Set((c.items || []).map(it => String(it.k || '').replace(/\D/g, '')).filter(k => /^\d{7,9}$/.test(k)));
+    for (const it of c.items || []) {
+      const kc = String(it.k || '').replace(/\D/g, ''); if (!/^\d{7,9}$/.test(kc)) continue;
+      const r = (byKc[kc] ||= { units: 0, cartons: 0 }); r.units += Number(it.q) || 0;
+      r.cartons += Number(it.c) > 0 ? Number(it.c) : (Number(c.cartons) || 0) / Math.max(1, kcs.size);
     }
-    for (const [kc, r] of Object.entries(byKc)) { if (!(r.units > 0) || !(r.cartons > 0)) continue; const ctn = Math.round(r.units / r.cartons); if (!(ctn > 0)) continue; (per[kc] ||= []).push({ date: a.date, units: r.units, cartons: Math.round(r.cartons * 10) / 10, ctn, manNo: a.manNo }); }
   }
+  const lines = {};
+  for (const [kc, r] of Object.entries(byKc)) { if (!(r.units > 0) || !(r.cartons > 0)) continue; const ctn = Math.round(r.units / r.cartons); if (!(ctn > 0)) continue; lines[kc] = { units: r.units, cartons: Math.round(r.cartons * 10) / 10, ctn }; }
+  return { manNo: String(doc.manNo || ''), date, lines };
+}
+export function buildProfiles(docs, opts = {}) { return profilesFrom(docs.map(arrivalsOf).filter(Boolean), opts); }
+// The profiles from manifests' arrivals (arrivalsOf).
+export function profilesFrom(arrivals, { store = '', now = new Date() } = {}) {
+  const per = {};
+  const arrivalsOf = [...arrivals].sort((a, b) => a.date.localeCompare(b.date) || a.manNo.localeCompare(b.manNo));
+  for (const a of arrivalsOf) for (const [kc, x] of Object.entries(a.lines)) (per[kc] ||= []).push({ date: a.date, units: x.units, cartons: x.cartons, ctn: x.ctn, manNo: a.manNo });
   const nowMs = now.getTime(), since = w => new Date(nowMs - w * 7 * 86400000).toISOString().slice(0, 10);
   // Every keycode's latest arrival, gated or not: a first or second
   // delivery still tells the stockroom how many come in a carton.

@@ -1,26 +1,29 @@
-// Voice: the phone's microphone through the browser's speech recogniser
-// (Chrome and Edge on Android, Safari on iOS). What a guess means is
-// shared/voice.js; this only listens.
+// Voice: the microphone through the browser's speech recogniser (Chrome and
+// Edge on Android and on the store PCs, Safari on iOS; not Firefox, where the
+// button stays hidden). What a guess means is shared/voice.js; this only
+// listens.
 //
 // Set as ShelfSearcher set it: US English, one utterance, an 8-second
 // safety stop. Two additions that change no result: the recogniser is
 // asked for its top five guesses (the map check picks among them), and
 // the words show in the search bar while they are being heard.
 // The recogniser sends the audio to the browser maker's service, so it
-// needs a connection; an offline phone is told so.
+// needs a connection; an offline device is told so.
+
+import { tx } from './i18n.js';
 
 const SR = () => window.SpeechRecognition || window.webkitSpeechRecognition;
 export const voiceSupported = () => !!SR();
 
 const ERRORS = {
-  'not-allowed': 'The microphone is blocked for this app. Allow it in the browser’s site settings.',
-  'service-not-allowed': 'Voice search is switched off in this browser.',
-  'audio-capture': 'No microphone was found on this device.',
-  network: 'Voice search needs a connection.',
-  'no-speech': 'Didn’t hear anything. Tap the microphone and say a shelf, like “A16 S2”.',
-  'language-not-supported': 'This browser cannot recognise English speech.',
+  'not-allowed': tx('The microphone is blocked for this app. Allow it in the browser’s site settings.'),
+  'service-not-allowed': tx('Voice search is switched off in this browser.'),
+  'audio-capture': tx('No microphone was found on this device.'),
+  network: tx('Voice search needs a connection.'),
+  'no-speech': tx('Didn’t hear anything. Press the microphone and say a shelf, like “A16 S2”.'),
+  'language-not-supported': tx('This browser cannot recognise English speech.'),
 };
-export const voiceError = code => ERRORS[code] || 'Voice search stopped. Try again.';
+export const voiceError = code => ERRORS[code] || tx('Voice search stopped. Try again.');
 
 function recogniser({ continuous, interim = true }) {
   const r = new (SR())();
@@ -31,7 +34,7 @@ function recogniser({ continuous, interim = true }) {
 // One utterance. onHeard(text) while speaking; onGuesses([text…]) once,
 // top guess first; onError(message); onEnd() always, last.
 export function listenOnce({ onHeard, onGuesses, onError, onEnd }) {
-  if (!voiceSupported()) { onError?.('Voice search is not supported in this browser. Use Chrome, Edge or Safari.'); onEnd?.(); return { stop() {} }; }
+  if (!voiceSupported()) { onError?.(tx('Voice search is not supported in this browser. Use Chrome, Edge or Safari.')); onEnd?.(); return { stop() {} }; }
   if (navigator.onLine === false) { onError?.(ERRORS.network); onEnd?.(); return { stop() {} }; }
   const r = recogniser({ continuous: false });
   let done = false, ended = false;
@@ -60,7 +63,7 @@ export function listenOnce({ onHeard, onGuesses, onError, onEnd }) {
 // became a stop or an error. Empty phrases and a phrase repeated within two
 // seconds are dropped.
 export function dictate({ onUtterance, onError, onEnd }) {
-  if (!voiceSupported()) { onError?.('Voice is not supported in this browser.'); onEnd?.('error'); return { stop() {} }; }
+  if (!voiceSupported()) { onError?.(tx('Voice is not supported in this browser.')); onEnd?.('error'); return { stop() {} }; }
   if (navigator.onLine === false) { onError?.(ERRORS.network); onEnd?.('error'); return { stop() {} }; }
   let r = null, active = true, silence = null, last = { text: '', at: 0 };
   const end = reason => { if (!active) return; active = false; clearTimeout(silence); try { r?.abort(); } catch {} onEnd?.(reason); };

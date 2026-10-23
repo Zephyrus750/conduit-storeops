@@ -115,7 +115,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/admin/service` | owner | live: the console's Service page: worker version, bindings and secrets as set or not (never their values), the catalogue build, each store object (events, live data size, last event, nightly run, next alarm, sockets, photos) and the last 100 errors recorded |
 | `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
-| `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV |
+| `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV; `only=archive` pages just the rows retention moved out of the live state |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
 | `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }], merge? }`, ≤ 20,000 rows, one row a keycode a location; a re-save that day replaces it, or with `merge: true` replaces only the locations it holds and carries its store-wide SOH into the rest); logs `soh.publish`; every day is kept for 14 days, then the last of each week for 26 weeks |
@@ -146,7 +146,14 @@ store keeps 2468 with it set to 4). An events body is at most 8 MB and one
 event's payload 2 MB; a device's `at` must be within 10 minutes ahead and 30
 days behind the worker's clock or the event is refused as `clock_skew`.
 An area or manager code lasts a shift (`ROLE_TTL_SECONDS`, 12 h); after that
-the device keeps the Floor and asks for the code again. The WebSocket carries
+the device keeps the Floor and asks for the code again. A manager's role
+also goes on the idle re-lock and when another store is opened on the device.
+A PC, which signs in with the manager code alone, then shows a Manager code
+card at once (the shift ended, it sat idle, or another store was opened) and
+carries on as before once the code is typed; a phone signed in as a manager
+shows the same card and may carry on as a team member. The shell renews a
+token in its last minute, so the card shows when the role goes, not at the
+next write, and the idle re-lock counts input in any of the app's tabs. The WebSocket carries
 its token as the second subprotocol (`conduit, <token>`), never in the URL.
 
 ## Catalogue
@@ -203,6 +210,12 @@ posts SKIP_WAITING, then the page reloads once on the new release. The
 precache is the shell alone: maps, snapshots and the outbox live in
 IndexedDB, and every worker call passes through uncached. Bundled fallback
 maps (`maps/*.svg`) serve network-first from a cache that survives releases.
+The translations (`js/i18n/`, about 100 KB compressed a language) are left out
+of the precache so an English device never downloads six dictionaries: a
+device fetches its own language on first use into the release cache, a new
+release fetches again the languages the old one held, and they count towards
+the build id. A device switched to a new language while offline stays in
+English until it is back online.
 
 After changing any shell file run `npm run sw` and commit `sw-precache.js`;
 the unit suite fails when it is stale. Netlify serves `sw.js` and the
@@ -215,8 +228,9 @@ The Stockroom workspace is the first ported module with live users
 already in the log:
 
 - **Backfill review** (`bfreview`): the desk. Phones scan bays; the desk
-  pastes the SIM report (kept on the device under `simreport:<store>:<date>`,
-  never sent to the worker, as K2B did), compares every bay (add / delete /
+  pastes the SIM report (kept on the device under `simreport:<store>:<date>`
+  and saved to the worker, `POST /v1/store/:no/backfill/report`, so the
+  store's other desks and phones read the same one), compares every bay (add / delete /
   match, `shared/backfill.js`), marks codes incorrect, flags a code to
   Adjustments, requests bays for the day list, marks Ready (the system-only
   codes are written as `scanned:false` so the worker's metrics match the
@@ -338,8 +352,9 @@ then the whole run; departments and micro-departments by code or name;
 recent searches when the bar is empty), and one tap shows the result on the
 map.
 
-**Voice search** (phones; decision 28). The microphone in the phone's
-search bar and in the palette listens for one shelf, run, bay or keycode,
+**Voice search** (phones and store PCs; decision 28). The microphone in
+the search bar (the phone's, and the PC's top bar) and in the palette
+listens for one shelf, run, bay or keycode,
 as ShelfSearcher's did: the browser's recogniser in US English, its top
 guess, spaces removed and number words made digits. Each guess is then
 checked against the published map (`shelfForLocation`): the top guess wins
@@ -347,10 +362,15 @@ whenever it is a real shelf, so what worked in ShelfSearcher still does;
 otherwise the recogniser's other guesses and the usual mishearings ("be 22",
 "queue 15", "for" for 4) are tried, but only a real shelf is taken. A shelf
 opens on the map; anything else opens the palette with what was heard. The
-phone's pick list has voice add (say codes, "done" to stop). The reading is
+pick list has voice add on the phone and the PC ("Say it": say codes, "done"
+to stop). Runs named by
+digits alone are heard as they are said: "zero four side two", "oh four side
+two" and "four side two" are 04 S2, and digits said one at a time are one
+number ("seven zero one two" is the bay 7012). The reading is
 `shared/voice.js` (unit-tested), the listening `js/voice.js`. Voice needs a
 connection (the recogniser runs in the browser maker's service) and the
-microphone allowed for the site.
+microphone allowed for the site; the button is hidden where the browser has
+no recogniser (Firefox).
 
 ## Event envelope
 
@@ -458,8 +478,25 @@ background from the accent and ground tokens; the sign-in is one card on it,
 manager code only on a PC (the store PIN returns there only when the worker
 predates manager sign-in) and Team member or Manager on a phone. Inter, the
 face the tokens name, ships in `styles/fonts/` (variable weight, OFL) and is
-precached with the shell. `js/device.js` holds haptics
+precached with the shell, with its Vietnamese subset as a second face that
+loads only for Vietnamese letters. `js/device.js` holds haptics
 and the phone portrait lock.
+
+### Languages
+
+Every screen, on the PCs and the phones, comes in ShelfSearcher's seven
+languages: English, Deutsch, Français, Filipino, Tiếng Việt, Español and
+Italiano. Each device picks its own (Settings › Display, or the language
+list under the sign-in card) and reloads in it; dates follow the language
+through `Intl`. Interface text goes through `tx()` / `txn()` in
+`js/i18n.js`, keyed by the English text; each language's dictionary is
+`js/i18n/<code>.js`, one chunk per area, and loads before anything renders.
+`npm test` fails when a key lacks a translation, a translation's
+`{placeholders}` or markup differ from the English, or a dictionary keeps a
+key nothing uses. Data stays as the store wrote it: shelf, bay and product
+codes, product, store and department names, D-numbers, report codes (SOH,
+PULL, GHOST…), anything a person typed, and the owner's map editor
+(`docs/I18N.md`, with the glossary each language keeps to).
 
 ## Where things stand
 
@@ -497,3 +534,10 @@ finish guard, as Decant Visualiser's dock tablet. Landing, removing, editing
 and finalising stay in Receiving, which on the phone also has Team & plan
 (roles, breaks, the huddle, the plan) and Complete decant (keep the
 unfinished pallets as rollover, or clear the dock).
+
+**Dock screens sign in as a screen.** A wall or a tablet on the dock signs
+in with the PC sign-in's **Dock screen** choice: the store PIN and the Back
+dock crew code, never the manager code (a manager or Stockroom code there is
+refused and leaves no session). It holds the Floor and Back dock roles only,
+opens on the Dock screen, shows no What's New pop-up and is exempt from the
+idle re-lock; the crew code still lasts a shift (12 hours), like any code.

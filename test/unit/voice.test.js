@@ -76,3 +76,45 @@ test('pick list stops: checked against the map, a split side rejoined, the shelf
   assert.deepEqual(spokenStops(['', 'hello'], look), { codes: [], bad: [], heard: 'hello' });
   assert.ok(ofRun('C4S1', 'C4') && ofRun('A16E2', 'A16') && !ofRun('C41', 'C4') && !ofRun('C4', 'C4'));
 });
+
+test('pick list paste: a side written apart joins its run, numbers-only runs too; a missing side is not widened', async () => {
+  const { typedStops } = await import('../../shared/voice.js');
+  const STOPS = new Set(['A16', 'A16S1', 'A16S2', '04', '04S2', '05', 'B7S2']);
+  const canon = c => c.toUpperCase().replace(/[\s\-_.]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1');
+  const look = c => (STOPS.has(canon(c)) ? canon(c) : null);
+  assert.deepEqual(typedStops('04 S2', look), { codes: ['04S2'], bad: [] }, 'the Busselton case: a run named 04');
+  assert.deepEqual(typedStops('A16 S1\nB7-S2, 04S2', look).codes, ['A16S1', 'B7S2', '04S2']);
+  assert.deepEqual(typedStops('A16 - S1; 05', look).codes, ['A16S1', '05']);
+  assert.deepEqual(typedStops('A16 S1 S2', look).codes, ['A16S1', 'A16S2'], 'two sides of one run');
+  assert.deepEqual(typedStops('A16 S9 04', look), { codes: ['04'], bad: ['A16 S9'] }, 'a side the run lacks is reported, not widened to A16');
+  assert.deepEqual(typedStops('Z99 A16 A16', look), { codes: ['A16'], bad: ['Z99'] });
+  assert.deepEqual(typedStops('', look), { codes: [], bad: [] });
+});
+
+test('runs named by digits alone, spoken: "zero four side two", "oh four", "four side two" are 04 S2; digits said one by one are one number', () => {
+  const MAP = new Set(['04', '04S2', '05E1', 'A16S1', 'A16S2', 'B22', '7012']);
+  const look = c => (MAP.has(c) ? c : null);
+  assert.deepEqual(spokenCodes('zero four side two'), ['04S2']);
+  assert.deepEqual(spokenCodes('nought five end one'), ['05E1']);
+  assert.deepEqual(spokenCodes('seven zero one two'), ['7012'], 'a bay said digit by digit');
+  assert.deepEqual(spokenCodes('A one six side two'), ['A16S2']);
+  assert.deepEqual(spokenCodes('A 16 S 2, 7002'), ['A16S2', '7002'], 'a side keeps its own digit');
+  for (const said of ['zero four side two', '04 side 2', 'oh four side two', 'four side two'])
+    assert.equal(resolveSpoken([said], look).code, '04S2', `search: ${said}`);
+  assert.deepEqual(spokenStops(['oh four side two and B twenty two'], look).codes, ['04S2', 'B22'], 'pick list: several stops');
+  assert.deepEqual(spokenStops(['A sixteen side one, zero four side two'], look).codes, ['A16S1', '04S2']);
+  assert.deepEqual(spokenStops(['zero four', 'zero four'], look).codes, ['04'], 'the run itself, when that is what was said');
+  assert.ok(ofRun('04S2', '04'));
+});
+
+test('permanent ends (P1, P2): typed, pasted and spoken like a side or an end', async () => {
+  const { typedStops } = await import('../../shared/voice.js');
+  const MAP = new Set(['A16', 'A16S1', 'A16P1', '16', '16P2']);
+  const look = c => (MAP.has(c) ? c : null);
+  assert.deepEqual(typedStops('A16 P1, 16 P2', look).codes, ['A16P1', '16P2']);
+  assert.deepEqual(typedStops('A16 S1 P1', look).codes, ['A16S1', 'A16P1'], 'a side and the permanent end of one run');
+  assert.equal(spokenToCode('A sixteen permanent end one'), 'A16P1');
+  assert.deepEqual(spokenStops(['A sixteen P one'], look).codes, ['A16P1']);
+  assert.equal(resolveSpoken(['sixteen permanent end two'], look).code, '16P2');
+  assert.ok(ofRun('A16P1', 'A16'));
+});

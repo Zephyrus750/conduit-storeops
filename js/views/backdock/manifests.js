@@ -13,13 +13,16 @@ import { settingsOf } from '../../../shared/reducers/store.js';
 import { previewManifest } from './mpreview.js';
 import { manifestIndex, microDept, microChip, microName, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
 import { retailPeriod } from '../../../shared/time.js';
+import { tx, txn } from '../../i18n.js';
 
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {} };
 const chip = microChip;
+// Home, Clothing, Kids and Flex are department names: they stay as the store writes them.
 const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'Kids', '#F59E0B'], ['flex', 'Flex', '#64748B']];
 const groupOf = code => { const d = microDept(code); return !d ? '?' : d === 'flex' ? 'flex' : d[0]; };
-const STATUS = { done: ['Done', 'good'], live: ['Decanting', 'warn'], staged: ['Receiving', ''], planned: ['Planned', ''], library: ['Published', ''] };
+const STATUS = { done: [tx('Done'), 'good'], live: [tx('Decanting'), 'warn'], staged: [tx('Receiving'), ''], planned: [tx('Planned'), ''], library: [tx('Published'), ''] };
+const TRUCK_ST = { staged: tx('staged'), live: tx('live'), closed: tx('closed') };
 const mondayOf = day => { const d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const units = c => (c.items || []).reduce((n, i) => n + (Number(i.q) || 0), 0);
 // An item's cartons: logged on the line, else its share of the consol's cartons by units.
@@ -49,7 +52,7 @@ function landedMap(ctx, e) {
   for (const p of Object.values(t.pallets || {})) for (const id of p.consolIds || []) out[id] = p.carriedFrom ? 'carried' : p.status === 'done' ? 'done' : p.status === 'active' ? 'active' : 'landed';
   return out;
 }
-const SQ_NAME = { landed: 'landed', active: 'decanting', done: 'decanted', carried: 'carried over', none: 'not landed' };
+const SQ_NAME = { landed: tx('landed'), active: tx('decanting'), done: tx('decanted'), carried: tx('carried over'), none: tx('not landed') };
 const sq = s => `<i class="mfx-sq ${s || 'none'}" title="${SQ_NAME[s || 'none']}"></i>`;
 
 function rows(doc, landed) {
@@ -82,9 +85,9 @@ function rows(doc, landed) {
   return list;
 }
 const COLS = {
-  consols: [['', null], ['Consol', 'id'], ['Departments', null], ['Cartons', 'cartons'], ['Units', 'units'], ['Keycodes', 'keycodes']],
-  products: [['Keycode', 'k'], ['Product', 'name'], ['Dept', 'dept'], ['Units', 'units'], ['Cartons', 'cartons'], ['Consols', 'n'], ['Landed', 'landed']],
-  depts: [['Department', 'dept'], ['Cartons', 'cartons'], ['Units', 'units'], ['Keycodes', 'keycodes'], ['Consols', 'consols'], ['Landed', 'pct']],
+  consols: [['', null], [tx('Consol'), 'id'], [tx('Departments'), null], [tx('Cartons'), 'cartons'], [tx('Units'), 'units'], [tx('Keycodes'), 'keycodes']],
+  products: [[tx('Keycode'), 'k'], [tx('Product'), 'name'], [tx('Dept'), 'dept'], [tx('Units'), 'units'], [tx('Cartons'), 'cartons'], [tx('Consols'), 'n'], [tx('Landed'), 'landed']],
+  depts: [[tx('Department'), 'dept'], [tx('Cartons'), 'cartons'], [tx('Units'), 'units'], [tx('Keycodes'), 'keycodes'], [tx('Consols'), 'consols'], [tx('Landed'), 'pct']],
 };
 function sorted(list) {
   const k = st.sort; if (!k) return list;
@@ -98,50 +101,54 @@ function explorer(ctx, e, doc) {
   const trucks = openTrucks(ctx.store.get('dock')), attachedTo = e?.truck, nLanded = doc.consols.filter(c => landed[c.id]).length;
   // The department-group rollup: cartons by Home / Clothing / Kids / Flex.
   const gc = {}; for (const c of doc.consols) for (const it of c.items || []) { const g = groupOf(it.dept); gc[g] = (gc[g] || 0) + itemCartons(c, it); }
-  const gs = [...GROUPS, ['?', 'Unknown', '#94A3B8']].filter(g => gc[g[0]] > 0), gt = Object.values(gc).reduce((a, b) => a + b, 0) || 1;
-  const roll = `<div class="mfx-roll">${gs.map(g => `<button class="mfx-seg${st.group === g[0] ? ' on' : ''}${st.group && st.group !== g[0] ? ' dim' : ''}" data-act="group" data-g="${g[0]}" style="flex:${gc[g[0]]};background:${g[2]}" title="${g[1]}: ${Math.round(gc[g[0]])} cartons">${gc[g[0]] / gt > 0.08 ? `${g[1]} ${Math.round(gc[g[0]] / gt * 100)}%` : ''}</button>`).join('')}</div>${st.group ? `<div class="cs-dim" style="margin:-4px 0 8px">Showing ${esc(GROUPS.find(g => g[0] === st.group)?.[1] || 'Unknown')} only · <span class="go" data-act="group" data-g="${esc(st.group)}">show all</span></div>` : ''}`;
+  const gs = [...GROUPS, ['?', tx('Unknown'), '#94A3B8']].filter(g => gc[g[0]] > 0), gt = Object.values(gc).reduce((a, b) => a + b, 0) || 1;
+  const roll = `<div class="mfx-roll">${gs.map(g => `<button class="mfx-seg${st.group === g[0] ? ' on' : ''}${st.group && st.group !== g[0] ? ' dim' : ''}" data-act="group" data-g="${g[0]}" style="flex:${gc[g[0]]};background:${g[2]}" title="${g[1]}: ${tx('{n} cartons', { n: Math.round(gc[g[0]]) })}">${gc[g[0]] / gt > 0.08 ? `${g[1]} ${Math.round(gc[g[0]] / gt * 100)}%` : ''}</button>`).join('')}</div>${st.group ? `<div class="cs-dim" style="margin:-4px 0 8px">${tx('Showing {group} only', { group: esc(GROUPS.find(g => g[0] === st.group)?.[1] || tx('Unknown')) })} · <span class="go" data-act="group" data-g="${esc(st.group)}">${tx('show all')}</span></div>` : ''}`;
   const list = sorted(rows(doc, landed)), cols = COLS[st.tab];
   const th = cols.map(([label, key]) => key ? `<th data-act="sort" data-k="${key}" class="${st.sort === key ? 'on' : ''}">${label}${st.sort === key ? (st.dir > 0 ? ' ▲' : ' ▼') : ''}</th>` : `<th>${label}</th>`).join('');
     const body = st.tab === 'products' ? list.slice(0, 200).map(r => `<tr><td class="mono">${kcCopy(r.k)}</td><td>${itemName(r.k, r.d)}</td><td>${chip(r.dept)}</td><td class="n">${r.units}</td><td class="n">${r.cartons}</td><td class="n">${r.consols.length}</td><td>${r.consols.slice(0, 6).map(id => sq(landed[id])).join('')}</td></tr>`).join('')
-    : st.tab === 'depts' ? list.map(r => `<tr><td>${chip(r.dept)} <span class="mfx-dn"><small class="cs-dim mono">${esc(r.dept)}</small> ${esc(r.name || 'Unknown department')}</span></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
+    : st.tab === 'depts' ? list.map(r => `<tr><td>${chip(r.dept)} <span class="mfx-dn"><small class="cs-dim mono">${esc(r.dept)}</small> ${esc(r.name || tx('Unknown department'))}</span></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
     : list.slice(0, 120).map(c => {
       const open = !!st.expanded[c.id] || (st.q && list.length <= 3), items = c.items || [];
-      return `<tr class="mfx-c" data-act="toggle" data-id="${esc(c.id)}"><td>${sq(c.state)}</td><td class="mono" title="Consolidation ${esc(c.cons || '')}">${esc(c.id)}${early[c.id] ? ` <span class="status warn" title="Landed on Truck ${esc(truckNo(early[c.id].t))} before this manifest arrived">LANDED ${esc(fmtDate(early[c.id].d))}</span>` : ''}</td><td>${(c.mix || []).slice(0, 4).map(x => chip(x[0])).join('')}</td><td class="n">${c.cartons}</td><td class="n">${c.units}</td><td class="n">${c.keycodes}</td></tr>` +
-        (open ? `<tr class="mfx-items"><td></td><td colspan="5">${items.slice(0, 40).map(it => `<div class="mfc-it${st.q && String(it.k).startsWith(st.q.trim()) ? ' hit' : ''}"><span class="kc">${kcCopy(it.k)}</span><span class="nm">${itemName(it.k, it.d || '')}</span>${it.dept ? chip(it.dept) : ''}<span class="ct">~${Math.round(itemCartons(c, it) * 10) / 10} ctn · ${it.q} units</span></div>`).join('')}${items.length > 40 ? `<div class="cs-dim">${items.length - 40} more lines</div>` : ''}</td></tr>` : '');
+      return `<tr class="mfx-c" data-act="toggle" data-id="${esc(c.id)}"><td>${sq(c.state)}</td><td class="mono" title="${tx('Consolidation {no}', { no: esc(c.cons || '') })}">${esc(c.id)}${early[c.id] ? ` <span class="status warn" title="${tx('Landed on Truck {no} before this manifest arrived', { no: esc(truckNo(early[c.id].t)) })}">${tx('LANDED {date}', { date: esc(fmtDate(early[c.id].d)) })}</span>` : ''}</td><td>${(c.mix || []).slice(0, 4).map(x => chip(x[0])).join('')}</td><td class="n">${c.cartons}</td><td class="n">${c.units}</td><td class="n">${c.keycodes}</td></tr>` +
+        (open ? `<tr class="mfx-items"><td></td><td colspan="5">${items.slice(0, 40).map(it => `<div class="mfc-it${st.q && String(it.k).startsWith(st.q.trim()) ? ' hit' : ''}"><span class="kc">${kcCopy(it.k)}</span><span class="nm">${itemName(it.k, it.d || '')}</span>${it.dept ? chip(it.dept) : ''}<span class="ct">${tx('~{cartons} ctn · {units} units', { cartons: Math.round(itemCartons(c, it) * 10) / 10, units: it.q })}</span></div>`).join('')}${items.length > 40 ? `<div class="cs-dim">${tx('{n} more lines', { n: items.length - 40 })}</div>` : ''}</td></tr>` : '');
     }).join('');
-  const more = st.tab === 'products' && list.length > 200 ? `${list.length - 200} more products: search to narrow` : st.tab === 'consols' && list.length > 120 ? `${list.length - 120} more consols: search to narrow` : '';
+  const more = st.tab === 'products' && list.length > 200 ? tx('{n} more products: search to narrow', { n: list.length - 200 }) : st.tab === 'consols' && list.length > 120 ? tx('{n} more consols: search to narrow', { n: list.length - 120 }) : '';
   const stat = (k, v, tip, note) => `<div${tip ? ` title="${esc(tip)}"` : ''}><span>${k}</span><b>${v}</b>${note ? `<small>${esc(note)}</small>` : ''}</div>`;
-  return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>despatch <b>${esc(doc.despatch || '—')}</b></span><span>DC <b>${esc(doc.dcNo || '—')}</b></span>${attachedTo ? `<span>Truck <b>${esc(truckNo(attachedTo))}</b> · ${nLanded}/${doc.consols.length} landed</span>` : ''}</span></div>` +
-    `<div class="ps-facts mfx-stats">${stat('Consols', doc.consols.length)}${stat('Cartons', cartons.toLocaleString())}${stat('Keycodes', keycodes.toLocaleString())}${stat('Units', allUnits.toLocaleString())}${stat('Est. work', `${Math.floor(work / 60)}h ${String(work % 60).padStart(2, '0')}m`, `${cartons.toLocaleString()} cartons × ${mpc} min a carton = ${work.toLocaleString()} minutes of decanting for one person (Minutes per carton in Settings › Store settings${e?.truck ? ', as this truck took it' : ''}). Split it across the team: four people ≈ ${Math.floor(work / 4 / 60)}h ${String(Math.round(work / 4) % 60).padStart(2, '0')}m.`, `${mpc} min/ctn · one person`)}</div>` + roll +
-    `<div class="mfd-acts">${attachedTo ? `<span class="status good">On Truck ${esc(truckNo(attachedTo))}</span>` : trucks.length ? `<select class="ad-in" data-field="truck">${trucks.map(t => `<option value="${esc(t.id)}">Truck ${esc(truckNo(t.id))} · ${esc(t.status)}</option>`).join('')}</select><button class="btn primary sm" data-act="attach">${ic('truck')}Attach to truck</button>` : '<span class="cs-dim">No truck on the board to attach to</span>'}<button class="btn sm" data-act="remove" style="margin-left:auto">${ic('trash')}Remove</button></div>` +
-    `<div class="mfx-bar"><div class="seg">${[['consols', 'Consols'], ['products', 'Products'], ['depts', 'Departments']].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="find consol, keycode, product, dept…" aria-label="Search this manifest"></div><span class="mfd-hit">${list.length} ${st.tab === 'depts' ? 'departments' : st.tab}</span></div>` +
+  const share = tx('{h}h {m}m', { h: Math.floor(work / 4 / 60), m: String(Math.round(work / 4) % 60).padStart(2, '0') });
+  const tip = e?.truck
+    ? tx('{cartons} cartons × {mpc} min a carton = {work} minutes of decanting for one person (Minutes per carton in Settings › Store settings, as this truck took it). Split it across the team: four people ≈ {share}.', { cartons: cartons.toLocaleString(), mpc, work: work.toLocaleString(), share })
+    : tx('{cartons} cartons × {mpc} min a carton = {work} minutes of decanting for one person (Minutes per carton in Settings › Store settings). Split it across the team: four people ≈ {share}.', { cartons: cartons.toLocaleString(), mpc, work: work.toLocaleString(), share });
+  return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>${tx('despatch <b>{date}</b>', { date: esc(doc.despatch || '—') })}</span><span>${tx('DC <b>{no}</b>', { no: esc(doc.dcNo || '—') })}</span>${attachedTo ? `<span>${tx('Truck <b>{no}</b> · {n}/{total} landed', { no: esc(truckNo(attachedTo)), n: nLanded, total: doc.consols.length })}</span>` : ''}</span></div>` +
+    `<div class="ps-facts mfx-stats">${stat(tx('Consols'), doc.consols.length)}${stat(tx('Cartons'), cartons.toLocaleString())}${stat(tx('Keycodes'), keycodes.toLocaleString())}${stat(tx('Units'), allUnits.toLocaleString())}${stat(tx('Est. work'), tx('{h}h {m}m', { h: Math.floor(work / 60), m: String(work % 60).padStart(2, '0') }), tip, tx('{mpc} min/ctn · one person', { mpc }))}</div>` + roll +
+    `<div class="mfd-acts">${attachedTo ? `<span class="status good">${tx('On Truck {no}', { no: esc(truckNo(attachedTo)) })}</span>` : trucks.length ? `<select class="ad-in" data-field="truck">${trucks.map(t => `<option value="${esc(t.id)}">${tx('Truck {no} · {status}', { no: esc(truckNo(t.id)), status: esc(TRUCK_ST[t.status] || t.status) })}</option>`).join('')}</select><button class="btn primary sm" data-act="attach">${ic('truck')}${tx('Attach to truck')}</button>` : `<span class="cs-dim">${tx('No truck on the board to attach to')}</span>`}<button class="btn sm" data-act="remove" style="margin-left:auto">${ic('trash')}${tx('Remove')}</button></div>` +
+    `<div class="mfx-bar"><div class="seg">${[['consols', tx('Consols')], ['products', tx('Products')], ['depts', tx('Departments')]].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="${tx('find consol, keycode, product, dept…')}" aria-label="${tx('Search this manifest')}"></div><span class="mfd-hit">${st.tab === 'depts' ? txn(list.length, '{n} department', '{n} departments') : st.tab === 'products' ? txn(list.length, '{n} product', '{n} products') : txn(list.length, '{n} consol', '{n} consols')}</span></div>` +
     `<div class="mfx-legend">${['landed', 'active', 'done', 'carried', 'none'].map(s => `${sq(s)}${SQ_NAME[s]}`).join('')}</div>` +
-    `<div class="mfx-scroll"><table class="mfx-t"><thead><tr>${th}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="cs-dim">Nothing matches.</td></tr>`}</tbody></table></div>${more ? `<div class="cs-dim" style="margin-top:8px">${more}</div>` : ''}</div>`;
+    `<div class="mfx-scroll"><table class="mfx-t"><thead><tr>${th}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="cs-dim">${tx('Nothing matches.')}</td></tr>`}</tbody></table></div>${more ? `<div class="cs-dim" style="margin-top:8px">${more}</div>` : ''}</div>`;
 }
 
 function detail(ctx, list) {
-  if (!st.open) return `<div class="card mfd"><div class="ch"><h3>Pick a manifest</h3></div><p class="lbl">Open one from the list to explore its consols, products and departments, or publish today's report.</p></div>`;
+  if (!st.open) return `<div class="card mfd"><div class="ch"><h3>${tx('Pick a manifest')}</h3></div><p class="lbl">${tx("Open one from the list to explore its consols, products and departments, or publish today's report.")}</p></div>`;
   if (st.error) return `<div class="card mfd"><div class="ch"><h3>${esc(st.open)}</h3></div><p class="lbl">${esc(st.error)}</p></div>`;
   const doc = st.docFor === st.open ? st.doc : null;
-  if (!doc) return `<div class="card mfd"><div class="ch"><h3>${esc(st.open)}</h3></div><div class="ohint">Loading the report…</div></div>`;
+  if (!doc) return `<div class="card mfd"><div class="ch"><h3>${esc(st.open)}</h3></div><div class="ohint">${tx('Loading the report…')}</div></div>`;
   return explorer(ctx, list.find(x => x.manNo === st.open), doc);
 }
 
 export default {
-  id: 'manifests', title: 'Manifests', icon: 'm-manifests', area: 'backdock',
+  id: 'manifests', title: tx('Manifests'), icon: 'm-manifests', area: 'backdock',
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
     const list = entries(ctx);
     if (st.open && !list.some(x => x.manNo === st.open)) st.open = null;
     if (!st.open && list.length) st.open = list[0].manNo;
-    const head = vh('Manifests', sub('Manifest explorer', `${list.length} manifest${list.length === 1 ? '' : 's'}`, 'by week'), `<label class="btn primary" style="cursor:pointer"><input type="file" accept=".xls,.xlsx,.csv" data-field="file" style="display:none">${ic('file')}Publish a manifest</label>`, 'm-manifests');
+    const head = vh(tx('Manifests'), sub(tx('Manifest explorer'), txn(list.length, '{n} manifest', '{n} manifests'), tx('by week')), `<label class="btn primary" style="cursor:pointer"><input type="file" accept=".xls,.xlsx,.csv" data-field="file" style="display:none">${ic('file')}${tx('Publish a manifest')}</label>`, 'm-manifests');
     let wk = null;
     const rowsHtml = list.map(x => {
-      const w = x.day ? mondayOf(x.day) : '', hd = w !== wk ? `<div class="pt3 mfx-wk">${w ? `Week of ${esc(fmtDate(w))} · ${retailPeriod(w)}` : 'Undated'}</div>` : ''; wk = w;
+      const w = x.day ? mondayOf(x.day) : '', hd = w !== wk ? `<div class="pt3 mfx-wk">${w ? tx('Week of {date} · {period}', { date: esc(fmtDate(w)), period: retailPeriod(w) }) : tx('Undated')}</div>` : ''; wk = w;
       const [label, cls] = STATUS[x.status];
-      return hd + `<div class="mfl-row${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}"><span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b><span class="status ${cls}">${label}</span></span><small>${x.day ? esc(fmtDate(x.day)) : ''}${x.truck ? ` · Truck ${esc(truckNo(x.truck))}` : ''}${x.despatch ? ` · despatch ${esc(x.despatch)}` : ''}</small></span><span class="mfl-facts"><span><b>${x.totalCartons ?? '–'}</b> ctn · <b>${x.consols ?? '–'}</b> consols</span><span class="cs-dim">${x.publishedAt ? ago(x.publishedAt) : ''}</span></span>${ic('chev')}</div>`;
+      return hd + `<div class="mfl-row${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}"><span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b><span class="status ${cls}">${label}</span></span><small>${x.day ? esc(fmtDate(x.day)) : ''}${x.truck ? ` · ${tx('Truck {no}', { no: esc(truckNo(x.truck)) })}` : ''}${x.despatch ? ` · ${tx('despatch {date}', { date: esc(x.despatch) })}` : ''}</small></span><span class="mfl-facts"><span>${tx('<b>{cartons}</b> ctn · <b>{consols}</b> consols', { cartons: x.totalCartons ?? '–', consols: x.consols ?? '–' })}</span><span class="cs-dim">${x.publishedAt ? ago(x.publishedAt) : ''}</span></span>${ic('chev')}</div>`;
     }).join('');
-    const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.</div>`}</div>`;
+    const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">${tx("Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.")}</div>`}</div>`;
     return head + `<div class="mgrid">${side}${detail(ctx, list)}</div>`;
   },
   mount(ctx, root) {
@@ -150,7 +157,7 @@ export default {
     const load = () => {
       if (!st.open || st.docFor === st.open) return;
       st.docFor = st.open; st.doc = null; st.error = null; st.q = ''; st.expanded = {}; st.group = null;
-      ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(st.open)}`).then(doc => { st.doc = doc; ctx.rerender(); }).catch(e => { st.error = e.status === 404 ? 'This report has left the library; only its history row remains.' : e.message; ctx.rerender(); });
+      ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(st.open)}`).then(doc => { st.doc = doc; ctx.rerender(); }).catch(e => { st.error = e.status === 404 ? tx('This report has left the library; only its history row remains.') : e.message; ctx.rerender(); });
     };
     load();
     const doc = st.docFor === st.open ? st.doc : null;
@@ -170,15 +177,15 @@ export default {
         else if (act === 'tab') { st.tab = a.dataset.tab; st.sort = null; ctx.rerender(); }
         else if (act === 'sort') { if (st.sort === a.dataset.k) st.dir = -st.dir; else { st.sort = a.dataset.k; st.dir = -1; } ctx.rerender(); }
         else if (act === 'group') { st.group = st.group === a.dataset.g ? null : a.dataset.g; ctx.rerender(); }
-        else if (act === 'attach') { const truck = root.querySelector('[data-field="truck"]')?.value; if (!truck) return; a.disabled = true; await attachManifest(ctx, truck, st.open); toast(`${st.open} attached to Truck ${truckNo(truck)}`); }
-        else if (act === 'remove') { if (!confirm(`Remove manifest ${st.open} from the library? Trucks it is attached to keep their copy.`)) return; await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(st.open)}`, { method: 'DELETE' }); st.open = null; st.docFor = null; toast('Manifest removed'); }
+        else if (act === 'attach') { const truck = root.querySelector('[data-field="truck"]')?.value; if (!truck) return; a.disabled = true; await attachManifest(ctx, truck, st.open); toast(tx('{man} attached to Truck {no}', { man: st.open, no: truckNo(truck) })); }
+        else if (act === 'remove') { if (!confirm(tx('Remove manifest {man} from the library? Trucks it is attached to keep their copy.', { man: st.open }))) return; await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(st.open)}`, { method: 'DELETE' }); st.open = null; st.docFor = null; toast(tx('Manifest removed')); }
       } catch (err) { toast(err.message, 'bad'); ctx.rerender(); }
     });
     root.addEventListener('change', async e => {
       if (!e.target.matches('[data-field="file"]')) return;
       const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
-      try { const r = await previewManifest(ctx, f); if (!r) return; st.open = r.manNo; st.docFor = null; toast(`Manifest ${r.manNo} published · ${r.consols} consols, ${r.totalCartons} cartons`); ctx.rerender(); }
-      catch (err) { toast(`Could not publish ${f.name}: ${err.message}`, 'bad'); }
+      try { const r = await previewManifest(ctx, f); if (!r) return; st.open = r.manNo; st.docFor = null; toast(tx('Manifest {man} published · {consols} consols, {cartons} cartons', { man: r.manNo, consols: r.consols, cartons: r.totalCartons })); ctx.rerender(); }
+      catch (err) { toast(tx('Could not publish {file}: {error}', { file: f.name, error: err.message }), 'bad'); }
     });
     let typing = null;
     root.addEventListener('input', e => { if (e.target.matches('[data-field="q"]')) { st.q = e.target.value; clearTimeout(typing); typing = setTimeout(() => { const v = st.q; ctx.rerender(); const i = document.querySelector('#content [data-field="q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 180); } });

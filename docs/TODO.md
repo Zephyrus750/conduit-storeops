@@ -1,7 +1,7 @@
 # What's left (kept 2026-10-08, updated 2026-10-09)
 
 Done so far: every P0 and P1 list, the Back dock, Stockroom and Floor P2
-lists (Floor except the languages and the `P` suffix), the manifest upload
+lists (the languages and the `P` suffix since 22 October), the manifest upload
 preview, the owner-console access items (per-tool switches, console numbers,
 Fleet, registry filter and export), the 360×640 layout and the sign-in
 background. The audit
@@ -52,10 +52,7 @@ brackets below).
 
 ## Next to build
 
-1. **Floor leftovers, both waiting on you:** the seven languages if they
-   are wanted (16; today English only), and the `P` suffix once its meaning
-   is known (1; today part of the code).
-2. **Importer gaps** (only if the legacy data matters):
+1. **Importer gaps** (only if the legacy data matters):
    - K2B: the announcement, screen-scan presets, the back-of-house map, earlier days' negative SOH and its desk's SOH snapshots (not on the worker). History codes import right since October; the department map imports since 20 October.
    - DV: anything still missing once a real store is imported.
 

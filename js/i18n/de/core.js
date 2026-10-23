@@ -1,0 +1,21 @@
+// German · language picker, sign-in card extras, the area code sheet. Keys are the English text (js/i18n.js).
+export default {
+  "A manager sign-in lasts one shift (12 hours). Enter the manager code to carry on.": "Eine Manager-Anmeldung gilt eine Schicht (12 Stunden). Geben Sie den Manager-Code ein, um weiterzuarbeiten.",
+  "Locked after {n} min idle. Enter the manager code to carry on.": "Nach {n} Min. ohne Eingabe gesperrt. Geben Sie den Manager-Code ein, um weiterzuarbeiten.",
+  "Another store was opened on this device, so this one kept only the Floor. Enter the manager code to carry on.": "Auf diesem Gerät wurde eine andere Filiale geöffnet, daher ist hier nur die Verkaufsfläche offen. Geben Sie den Manager-Code ein, um weiterzuarbeiten.",
+  "The manager sign-in on this PC has ended. Enter the manager code to carry on.": "Die Manager-Anmeldung an diesem PC ist abgelaufen. Geben Sie den Manager-Code ein, um weiterzuarbeiten.",
+  "Carry on as manager": "Als Manager weiterarbeiten",
+  "Carry on as a team member": "Als Teammitglied weiterarbeiten",
+  "That is a crew code, not the manager code.": "Das ist ein Teamcode, nicht der Manager-Code.",
+  "Stockroom": "Lager",
+  "Back dock": "Warenannahme",
+  "{area} code": "Code für {area}",
+  "The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.": "Der Teamcode für {area} öffnet diesen Bereich auf diesem Gerät, bis es abgemeldet wird. Ein Manager-Code öffnet hier alle Bereiche; Manager können sich auch als Manager anmelden und diesen Schritt überspringen.",
+  "Code": "Code",
+  "Open {area}": "{area} öffnen",
+  "Not now": "Nicht jetzt",
+  "Too many attempts. Try again later.": "Zu viele Versuche. Bitte später erneut versuchen.",
+  "Wrong code.": "Falscher Code.",
+  "Language": "Sprache",
+  "Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.": "Alle Bildschirme auf diesem Gerät in einer von sieben Sprachen. Regal-, Produkt- und Abteilungsnamen bleiben so, wie die Filiale sie schreibt.",
+};

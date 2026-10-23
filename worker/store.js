@@ -32,7 +32,7 @@ import { primaryRole } from '../shared/roles.js';
 import { HttpError, json, fail, CORS, readJson, reportError } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
-import { buildProfiles } from '../shared/profiles.js';
+import { arrivalsOf, profilesFrom } from '../shared/profiles.js';
 import { isoWeek, weeklyDates } from '../shared/stockintel.js';
 import { toolForEvent, toolOff } from '../shared/tools.js';
 import { storeKpis } from '../shared/kpis.js';
@@ -79,6 +79,7 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS map_sources (version TEXT PRIMARY KEY, doc TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS manifest_arrivals (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS simreport (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -177,7 +178,7 @@ export class StoreObject extends DurableObject {
           if (sohDay) { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
           if (url.pathname === '/manifest' && request.method === 'POST') return this.needTool('manifests') || this.publishManifest(await readJson(request, MANIFEST_MAX), claims);
           if (url.pathname === '/profiles') { const dk = needArea(claims, 'backdock'), sr = needArea(claims, 'stockroom'); if (dk && sr) return dk;   // carton depths serve the dock and the stockroom (K2B read them)
-           const docs = this.sql.exec('SELECT doc, at FROM manifests').toArray().map(r => ({ ...JSON.parse(r.doc), at: r.at })); return json(buildProfiles(docs, { store: this.storeNo })); }
+           return json(this.profiles()); }
           const man = url.pathname.match(/^\/manifest\/([\w-]{1,20})$/);
           if (man) { const no = needArea(claims, 'backdock'); if (no) return no; return request.method === 'DELETE' ? this.removeManifest(man[1], claims) : this.manifestDoc(man[1]); }
           const life = url.pathname.match(/^\/life\/(\d{6,13})$/);
@@ -187,7 +188,9 @@ export class StoreObject extends DurableObject {
             if (!HISTORY_KINDS.includes(hist[2])) return fail(400, 'invalid_request', `kind must be one of ${HISTORY_KINDS.join(', ')}`);
             const no = needArea(claims, HISTORY_AREA[hist[2]]); if (no) return no;
             const live = historyRows(this.state, hist[2]), have = new Set(live.map(r => rowKey(hist[2], r)));
-            const rows = [...live, ...this.archived(hist[2]).filter(r => !have.has(rowKey(hist[2], r)))];   // the live state, then what retention archived
+            const archived = this.archived(hist[2]).filter(r => !have.has(rowKey(hist[2], r)));
+            // ?only=archive: what retention moved out of the live state (a device already holds the rest)
+            const rows = url.searchParams.get('only') === 'archive' ? archived : [...live, ...archived];   // the live state, then what retention archived
             if (hist[1] === 'export') return new Response(toCsv(rows), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${this.storeNo}-${hist[2]}.csv"`, ...CORS } });
             const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));
             return json({ kind: hist[2], total: rows.length, offset, limit, rows: rows.slice(offset, offset + limit) });
@@ -433,6 +436,7 @@ export class StoreObject extends DurableObject {
     if (text.length > MANIFEST_MAX) throw new HttpError(413, 'payload_too_large', `manifest is over ${MANIFEST_MAX / 1_000_000} MB`);
     const at = new Date().toISOString(), by = claims.device || (claims.owner ? 'owner' : '');
     this.sql.exec('INSERT OR REPLACE INTO manifests (manNo, doc, at, by) VALUES (?, ?, ?, ?)', manNo, text, at, by);
+    this.keepArrivals(manNo, arrivalsOf({ ...doc, at }));
     const totalCartons = doc.consols.reduce((n, c) => n + (Number(c.cartons) || 0), 0), keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size;
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.publish', entity: { manNo }, payload: { dcNo: doc.dcNo || '', despatch: doc.despatch || '', filename: String(doc.filename || '').slice(0, 80), consols: doc.consols.length, totalCartons, keycodes }, at, v: 1 };
     const [r] = this.submit([ev], claims, { internal: true });
@@ -454,7 +458,26 @@ export class StoreObject extends DurableObject {
     const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
+    this.sql.exec('DELETE FROM manifest_arrivals WHERE manNo = ?', manNo); this.profilesCache = null;
     return json({ ok: true, manNo });
+  }
+
+  // Carton profiles come from each manifest's arrivals, kept when it is
+  // published, and are built once a day or when a manifest comes or goes
+  // (audit 19 Oct P7: every request used to parse every manifest ever
+  // published). A manifest from before arrivals were kept gets them once.
+  keepArrivals(manNo, a) {
+    this.sql.exec('INSERT OR REPLACE INTO manifest_arrivals (manNo, doc) VALUES (?, ?)', manNo, JSON.stringify(a || { manNo, date: null, lines: {} }));
+    this.profilesCache = null;
+  }
+  profiles() {
+    const day = new Date().toISOString().slice(0, 10);
+    if (this.profilesCache?.day === day) return this.profilesCache.doc;
+    for (const r of this.sql.exec('SELECT m.manNo, m.doc, m.at FROM manifests m LEFT JOIN manifest_arrivals a ON a.manNo = m.manNo WHERE a.manNo IS NULL').toArray()) this.keepArrivals(r.manNo, arrivalsOf({ ...JSON.parse(r.doc), at: r.at }));
+    const arrivals = this.sql.exec('SELECT doc FROM manifest_arrivals').toArray().map(r => JSON.parse(r.doc)).filter(a => a.date);
+    const doc = profilesFrom(arrivals, { store: this.storeNo });
+    this.profilesCache = { day, doc };
+    return doc;
   }
 
   needTool(id) { return toolOff(this.state.tools?.off, id) ? fail(403, 'tool_off', 'that tool is switched off for this store') : null; }

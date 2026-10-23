@@ -9,6 +9,7 @@
 import { $, ic, esc, vh, sub, toast, ago } from '../../ui.js';
 import { SR_DEPTS, SR_GROUPS, deptLabel, deptColour, send } from './common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
+import { tx, txn } from '../../i18n.js';
 
 const st = { store: null, draft: null, paste: false, text: '' };
 const order = (a, b) => a.from - b.from || a.to - b.to || a.dept.localeCompare(b.dept);
@@ -17,7 +18,6 @@ const current = ctx => st.draft || saved(ctx);
 const same = (a, b) => JSON.stringify([...a].sort(order)) === JSON.stringify([...b].sort(order));
 const span = r => r.from === r.to ? String(r.from) : `${r.from}–${r.to}`;
 const KNOWN = new Set(SR_DEPTS.map(d => d.id));
-const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 // The draft goes back to null once it matches what is saved, so live changes show again.
 const setDraft = (ctx, list) => { st.draft = same(list, saved(ctx)) ? null : list; };
 
@@ -33,43 +33,43 @@ export function parseDeptLines(text) {
 }
 // A bay has one pin: a new pin for it replaces the old; the same range twice is kept once.
 function addTo(list, r) {
-  if (list.some(x => x.from === r.from && x.to === r.to && x.dept === r.dept)) return { list, note: `${span(r)} is already ${r.dept.toUpperCase()}` };
+  if (list.some(x => x.from === r.from && x.to === r.to && x.dept === r.dept)) return { list, note: tx('{bays} is already {dept}', { bays: span(r), dept: r.dept.toUpperCase() }) };
   const old = r.from === r.to ? list.find(x => x.from === r.from && x.to === r.to) : null;
-  return { list: [...list.filter(x => x !== old), r].sort(order), note: old ? `${r.from} moved from ${old.dept.toUpperCase()} to ${r.dept.toUpperCase()}` : '' };
+  return { list: [...list.filter(x => x !== old), r].sort(order), note: old ? tx('{bay} moved from {from} to {to}', { bay: r.from, from: old.dept.toUpperCase(), to: r.dept.toUpperCase() }) : '' };
 }
 
 function card(d, list) {
   const mine = list.map((r, i) => ({ r, i })).filter(x => x.r.dept === d.id);
   const pins = mine.filter(x => x.r.from === x.r.to).length;
-  return `<div class="dpt-card" style="--dc:${deptColour(d.id)}"><div class="dpt-h"><span class="dep" style="background:${deptColour(d.id)}">${esc(d.id.toUpperCase())}</span><b>${esc(d.name)}</b><small>${[mine.length - pins ? plural(mine.length - pins, 'range') : '', pins ? plural(pins, 'single bay') : ''].filter(Boolean).join(' · ')}</small></div>` +
-    `<div class="dpt-chips">${mine.length ? mine.map(({ r, i }) => `<span class="dpt-chip${r.from === r.to ? ' pin' : ''}" title="${r.from === r.to ? 'One bay: beats any range around it' : `Bays ${r.from} to ${r.to}`}">${esc(span(r))}<button type="button" data-act="dpt-x" data-i="${i}" aria-label="Remove ${esc(span(r))} from ${esc(d.id.toUpperCase())}">${ic('x')}</button></span>`).join('') : '<span class="dpt-none">No bays yet</span>'}</div>` +
-    `<div class="dpt-add"><input class="ad-in mono" data-field="dpt-from" data-dept="${d.id}" inputmode="numeric" autocomplete="off" placeholder="From" aria-label="${esc(deptLabel(d.id))}: from bay"><span>–</span><input class="ad-in mono" data-field="dpt-to" data-dept="${d.id}" inputmode="numeric" autocomplete="off" placeholder="To" title="Leave empty for one bay" aria-label="${esc(deptLabel(d.id))}: to bay, empty for one bay"><button type="button" class="btn sm" data-act="dpt-add" data-dept="${d.id}">${ic('plus')}Add</button></div></div>`;
+  return `<div class="dpt-card" style="--dc:${deptColour(d.id)}"><div class="dpt-h"><span class="dep" style="background:${deptColour(d.id)}">${esc(d.id.toUpperCase())}</span><b>${esc(d.name)}</b><small>${[mine.length - pins ? txn(mine.length - pins, '{n} range', '{n} ranges') : '', pins ? txn(pins, '{n} single bay', '{n} single bays') : ''].filter(Boolean).join(' · ')}</small></div>` +
+    `<div class="dpt-chips">${mine.length ? mine.map(({ r, i }) => `<span class="dpt-chip${r.from === r.to ? ' pin' : ''}" title="${r.from === r.to ? tx('One bay: beats any range around it') : tx('Bays {from} to {to}', { from: r.from, to: r.to })}">${esc(span(r))}<button type="button" data-act="dpt-x" data-i="${i}" aria-label="${tx('Remove {bays} from {dept}', { bays: esc(span(r)), dept: esc(d.id.toUpperCase()) })}">${ic('x')}</button></span>`).join('') : `<span class="dpt-none">${tx('No bays yet')}</span>`}</div>` +
+    `<div class="dpt-add"><input class="ad-in mono" data-field="dpt-from" data-dept="${d.id}" inputmode="numeric" autocomplete="off" placeholder="${tx('bay range::From')}" aria-label="${tx('{dept}: from bay', { dept: esc(deptLabel(d.id)) })}"><span>–</span><input class="ad-in mono" data-field="dpt-to" data-dept="${d.id}" inputmode="numeric" autocomplete="off" placeholder="${tx('bay range::To')}" title="${tx('Leave empty for one bay')}" aria-label="${tx('{dept}: to bay, empty for one bay', { dept: esc(deptLabel(d.id)) })}"><button type="button" class="btn sm" data-act="dpt-add" data-dept="${d.id}">${ic('plus')}${tx('Add')}</button></div></div>`;
 }
 
 function body(ctx) {
   if (st.store !== ctx.storeNo) Object.assign(st, { store: ctx.storeNo, draft: null, paste: false, text: '' });
   const list = current(ctx), raw = ctx.store.get('settings'), dirty = !!st.draft;
   const pins = list.filter(r => r.from === r.to).length, odd = list.map((r, i) => ({ r, i })).filter(x => !KNOWN.has(x.r.dept));
-  const head = vh('Departments', sub('Stockroom bays by department', list.length ? `${plural(list.length - pins, 'range')} · ${plural(pins, 'single bay')}` : 'none set yet', !dirty && raw?.at ? `saved ${esc(ago(raw.at))}` : ''),
-    `<button class="btn" data-act="dpt-paste">${ic('clip')}Paste a list</button>` + (dirty ? '<span class="dpt-state dirty">Not saved yet</span>' : `<span class="dpt-state">${ic('check')}Saved</span>`), 'tag');
-  const help = '<p class="dpt-help">Departments and their colours are the same in every store: add the stockroom bay numbers that belong to each one, a <b>from–to</b> range, or one bay with <b>To</b> left empty. One bay beats any range around it, so an odd bay in another department’s run is one entry. You can set a department before the team reaches it. Saved for the whole store; Backfill review, History and Adjustments group by it.</p>';
-  const paste = st.paste ? `<div class="card dpt-pastecard"><div class="ch"><h3>Paste a list</h3><span class="go" data-act="dpt-paste">Close</span></div><textarea class="sri-ta mono" data-field="dpt-text" rows="6" placeholder="One a line:\n7001-7040 h1\n7057 h2">${esc(st.text)}</textarea><div class="sri-acts">${pasteActs()}</div></div>` : '';
+  const head = vh(tx('Departments'), sub(tx('Stockroom bays by department'), list.length ? `${txn(list.length - pins, '{n} range', '{n} ranges')} · ${txn(pins, '{n} single bay', '{n} single bays')}` : tx('none set yet'), !dirty && raw?.at ? tx('saved {ago}', { ago: esc(ago(raw.at)) }) : ''),
+    `<button class="btn" data-act="dpt-paste">${ic('clip')}${tx('Paste a list')}</button>` + (dirty ? `<span class="dpt-state dirty">${tx('Not saved yet')}</span>` : `<span class="dpt-state">${ic('check')}${tx('Saved')}</span>`), 'tag');
+  const help = `<p class="dpt-help">${tx('Departments and their colours are the same in every store: add the stockroom bay numbers that belong to each one, a <b>from–to</b> range, or one bay with <b>To</b> left empty. One bay beats any range around it, so an odd bay in another department’s run is one entry. You can set a department before the team reaches it. Saved for the whole store; Backfill review, History and Adjustments group by it.')}</p>`;
+  const paste = st.paste ? `<div class="card dpt-pastecard"><div class="ch"><h3>${tx('Paste a list')}</h3><span class="go" data-act="dpt-paste">${tx('Close')}</span></div><textarea class="sri-ta mono" data-field="dpt-text" rows="6" placeholder="${tx('One a line:\n7001-7040 h1\n7057 h2')}">${esc(st.text)}</textarea><div class="sri-acts">${pasteActs()}</div></div>` : '';
   const groups = SR_GROUPS.map(([g, gl]) => { const ds = SR_DEPTS.filter(d => d.group === g); return `<section class="dpt-group"><h3 class="dpt-gh">${esc(gl)}</h3><div class="dpt-grid">${ds.map(d => card(d, list)).join('')}</div></section>`; }).join('');
-  const oddCard = odd.length ? `<section class="dpt-group"><h3 class="dpt-gh">Not a department here</h3><p class="dpt-help">These codes came from another app and match no department. Remove them, then add the bays under the right one.</p><div class="dpt-chips">${odd.map(({ r, i }) => `<span class="dpt-chip">${esc(span(r))} ${esc(r.dept.toUpperCase())}<button type="button" data-act="dpt-x" data-i="${i}" aria-label="Remove ${esc(span(r))}">${ic('x')}</button></span>`).join('')}</div></section>` : '';
-  const bar = dirty ? `<div class="dpt-bar"><span>${ic('alert')}Changes not saved yet: the rest of the store still sees the saved departments.</span><button class="btn" data-act="dpt-discard">Discard</button><button class="btn primary" data-act="dpt-save">${ic('check')}Save for the store</button></div>` : '';
+  const oddCard = odd.length ? `<section class="dpt-group"><h3 class="dpt-gh">${tx('Not a department here')}</h3><p class="dpt-help">${tx('These codes came from another app and match no department. Remove them, then add the bays under the right one.')}</p><div class="dpt-chips">${odd.map(({ r, i }) => `<span class="dpt-chip">${esc(span(r))} ${esc(r.dept.toUpperCase())}<button type="button" data-act="dpt-x" data-i="${i}" aria-label="${tx('Remove {bays}', { bays: esc(span(r)) })}">${ic('x')}</button></span>`).join('')}</div></section>` : '';
+  const bar = dirty ? `<div class="dpt-bar"><span>${ic('alert')}${tx('Changes not saved yet: the rest of the store still sees the saved departments.')}</span><button class="btn" data-act="dpt-discard">${tx('Discard')}</button><button class="btn primary" data-act="dpt-save">${ic('check')}${tx('Save for the store')}</button></div>` : '';
   return head + help + paste + bar + groups + oddCard;
 }
 
 function pasteActs() {
   const { ranges, bad } = parseDeptLines(st.text), off = ranges.length ? '' : ' disabled';
-  return `<span><b>${ranges.length}</b> ${ranges.length === 1 ? 'line' : 'lines'} read${bad.length ? ` · <span class="warn">${plural(bad.length, 'line')} not read: ${esc(bad.slice(0, 3).join(', '))}${bad.length > 3 ? '…' : ''}</span>` : ''}</span><button class="btn primary sm" data-act="dpt-paste-add"${off}>Add these</button><button class="btn sm" data-act="dpt-paste-replace"${off}>Replace all with these</button>`;
+  return `<span>${txn(ranges.length, '<b>{n}</b> line read', '<b>{n}</b> lines read')}${bad.length ? ` · <span class="warn">${txn(bad.length, '{n} line not read: {list}', '{n} lines not read: {list}', { list: esc(bad.slice(0, 3).join(', ')) + (bad.length > 3 ? '…' : '') })}</span>` : ''}</span><button class="btn primary sm" data-act="dpt-paste-add"${off}>${tx('Add these')}</button><button class="btn sm" data-act="dpt-paste-replace"${off}>${tx('Replace all with these')}</button>`;
 }
 
 function addOne(ctx, root, dept) {
   const f = $(`[data-field="dpt-from"][data-dept="${dept}"]`, root), t = $(`[data-field="dpt-to"][data-dept="${dept}"]`, root);
   const a = String(f?.value || '').trim(), b = String(t?.value || '').trim();
-  if (!/^\d{1,6}$/.test(a)) { toast('Type a bay number, like 7001 (add “To” only for a range)', 'bad'); f?.focus(); return; }
-  if (b && !/^\d{1,6}$/.test(b)) { toast('“To” is a bay number too; leave it empty for one bay', 'bad'); t?.focus(); return; }
+  if (!/^\d{1,6}$/.test(a)) { toast(tx('Type a bay number, like 7001 (add “To” only for a range)'), 'bad'); f?.focus(); return; }
+  if (b && !/^\d{1,6}$/.test(b)) { toast(tx('“To” is a bay number too; leave it empty for one bay'), 'bad'); t?.focus(); return; }
   let from = Number(a), to = b ? Number(b) : from; if (from > to) [from, to] = [to, from];
   const cur = current(ctx), { list, note } = addTo(cur, { from, to, dept });
   if (list === cur) { toast(note); return; }
@@ -80,14 +80,14 @@ function addOne(ctx, root, dept) {
 
 async function save(ctx) {
   const ranges = st.draft; if (!ranges) return;
-  if (ranges.length > 200) return toast('At most 200 ranges: merge some neighbouring bays into one range', 'bad');
+  if (ranges.length > 200) return toast(tx('At most 200 ranges: merge some neighbouring bays into one range'), 'bad');
   const ok = await send(ctx, 'dept.ranges.set', {}, { ranges });
   if (!ok) return;
-  st.draft = null; toast(`Departments saved for the store: ${plural(ranges.length, 'entry', 'entries')}`); ctx.rerender();
+  st.draft = null; toast(txn(ranges.length, 'Departments saved for the store: {n} entry', 'Departments saved for the store: {n} entries')); ctx.rerender();
 }
 
 export default {
-  id: 'srdepts', title: 'Departments', icon: 'tag', area: 'stockroom', deskOnly: true,
+  id: 'srdepts', title: tx('Departments'), icon: 'tag', area: 'stockroom', deskOnly: true,
   desktop(ctx) { return `<div class="dpt">${body(ctx)}</div>`; },
   mobile() { return ''; },
   mount(ctx, root) {
@@ -102,11 +102,11 @@ export default {
       else if (act === 'dpt-paste-add' || act === 'dpt-paste-replace') {
         const { ranges, bad } = parseDeptLines(st.text);
         if (!ranges.length) return;
-        if (act === 'dpt-paste-replace' && current(ctx).length && !confirm(`Replace all ${current(ctx).length} entries with these ${ranges.length}? Nothing is saved until you press Save.`)) return;
+        if (act === 'dpt-paste-replace' && current(ctx).length && !confirm(tx('Replace all {n} entries with these {m}? Nothing is saved until you press Save.', { n: current(ctx).length, m: ranges.length }))) return;
         let list = act === 'dpt-paste-replace' ? [] : current(ctx);
         for (const r of ranges) list = addTo(list, r).list;
         setDraft(ctx, list); st.paste = false; st.text = '';
-        toast(`${plural(ranges.length, 'line')} added${bad.length ? `; ${bad.length} not read` : ''}. Save to share them with the store.`); ctx.rerender();
+        toast(bad.length ? txn(ranges.length, '{n} line added; {bad} not read. Save to share them with the store.', '{n} lines added; {bad} not read. Save to share them with the store.', { bad: bad.length }) : txn(ranges.length, '{n} line added. Save to share them with the store.', '{n} lines added. Save to share them with the store.')); ctx.rerender();
       }
     });
     root.addEventListener('keydown', e => {

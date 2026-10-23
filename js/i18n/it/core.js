@@ -1,0 +1,21 @@
+// Italian · language picker, sign-in card extras, the area code sheet. Keys are the English text (js/i18n.js).
+export default {
+  "A manager sign-in lasts one shift (12 hours). Enter the manager code to carry on.": "Un accesso da responsabile dura un turno (12 ore). Inserisci il codice responsabile per continuare.",
+  "Locked after {n} min idle. Enter the manager code to carry on.": "Bloccato dopo {n} min di inattività. Inserisci il codice responsabile per continuare.",
+  "Another store was opened on this device, so this one kept only the Floor. Enter the manager code to carry on.": "Su questo dispositivo è stato aperto un altro negozio, quindi qui resta aperta solo l’area vendita. Inserisci il codice responsabile per continuare.",
+  "The manager sign-in on this PC has ended. Enter the manager code to carry on.": "L’accesso da responsabile su questo PC è terminato. Inserisci il codice responsabile per continuare.",
+  "Carry on as manager": "Continua come responsabile",
+  "Carry on as a team member": "Continua come collaboratore",
+  "That is a crew code, not the manager code.": "Questo è un codice di squadra, non il codice responsabile.",
+  "Stockroom": "Magazzino",
+  "Back dock": "Ricevimento merci",
+  "{area} code": "Codice {area}",
+  "The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.": "Il codice di squadra di {area} apre quest’area su questo dispositivo finché non si esce. Un codice responsabile qui apre tutte le aree; i responsabili possono anche accedere come Responsabile per saltare questo passaggio.",
+  "Code": "Codice",
+  "Open {area}": "Apri {area}",
+  "Not now": "Non ora",
+  "Too many attempts. Try again later.": "Troppi tentativi. Riprova più tardi.",
+  "Wrong code.": "Codice errato.",
+  "Language": "Lingua",
+  "Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.": "Tutte le schermate di questo dispositivo, in una di sette lingue. I nomi di scaffali, prodotti e reparti restano come li scrive il negozio.",
+};

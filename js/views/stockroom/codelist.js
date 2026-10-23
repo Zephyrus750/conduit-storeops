@@ -11,6 +11,7 @@ import { ensureNames, nameHtml, copyText } from './common.js';
 import { extractCodes } from '../../../shared/screenscan.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { openScreenScan } from '../../screenscan.js';
+import { tx, txn } from '../../i18n.js';
 
 // Per store (a device signed in to two stores keeps two lists); a list kept
 // under the old shared key moves to the first store that opens it.
@@ -22,7 +23,7 @@ function useStore(no) {
 }
 const st = { view: 'grid', at: 0, paste: false, text: '' };
 function load() { try { const v = JSON.parse(localStorage.getItem(KEY()) || 'null'); return Array.isArray(v?.codes) ? v.codes.filter(x => x && /^\d{6,13}$/.test(x.c)) : []; } catch { return []; } }
-function save(list) { try { localStorage.setItem(KEY(), JSON.stringify({ codes: list, at: new Date().toISOString() })); } catch { toast('This device would not keep the list (storage is blocked)', 'bad'); } }
+function save(list) { try { localStorage.setItem(KEY(), JSON.stringify({ codes: list, at: new Date().toISOString() })); } catch { toast(tx('This device would not keep the list (storage is blocked)'), 'bad'); } }
 function add(codes, replace = false) {
   const list = replace ? [] : load(), have = new Set(list.map(x => x.c)); let n = 0;
   for (const c of codes) if (/^\d{6,13}$/.test(c) && !have.has(c)) { list.push({ c, done: false }); have.add(c); n++; }
@@ -33,43 +34,43 @@ function focusCard(list) {
   if (!list.length) return '';
   st.at = Math.max(0, Math.min(list.length - 1, st.at));
   const x = list[st.at];
-  return `<div class="card cl-focus${x.done ? ' done' : ''}" tabindex="0" data-focus><div class="cl-pos">${st.at + 1} / ${list.length}${x.done ? ' · <span class="status good">done</span>' : ''}</div><div class="cl-big">${barcodeSvg(x.c, { module: 3, height: 110 })}</div><div class="cl-name">${nameHtml(x.c)}</div>` +
-    `<div class="cl-nav"><button class="btn" data-act="cl-prev"${st.at ? '' : ' disabled'}>← Prev</button><button class="btn primary" data-act="cl-next">${x.done ? 'Next →' : '✓ Done & next'}</button><button class="btn" data-act="cl-rm" data-i="${st.at}">${ic('trash')}Remove</button></div><p class="lbl">Space or Enter: done and next · ← →: move · Backspace: remove</p></div>`;
+  return `<div class="card cl-focus${x.done ? ' done' : ''}" tabindex="0" data-focus><div class="cl-pos">${st.at + 1} / ${list.length}${x.done ? ` · <span class="status good">${tx('done')}</span>` : ''}</div><div class="cl-big">${barcodeSvg(x.c, { module: 3, height: 110 })}</div><div class="cl-name">${nameHtml(x.c)}</div>` +
+    `<div class="cl-nav"><button class="btn" data-act="cl-prev"${st.at ? '' : ' disabled'}>${tx('← Prev')}</button><button class="btn primary" data-act="cl-next">${x.done ? tx('Next →') : tx('✓ Done & next')}</button><button class="btn" data-act="cl-rm" data-i="${st.at}">${ic('trash')}${tx('Remove')}</button></div><p class="lbl">${tx('Space or Enter: done and next · ← →: move · Backspace: remove')}</p></div>`;
 }
 function grid(list) {
-  return list.length ? `<div class="cl-grid">${list.map((x, i) => `<div class="cl-cell${x.done ? ' done' : ''}" data-act="cl-open" data-i="${i}" title="Open one by one from here">${barcodeSvg(x.c, { module: 1.6, height: 52 })}<div class="cl-nm">${nameHtml(x.c)}</div><button class="ibtn cl-x" data-act="cl-rm" data-i="${i}" aria-label="Remove ${esc(x.c)}">${ic('x')}</button></div>`).join('')}</div>` : '';
+  return list.length ? `<div class="cl-grid">${list.map((x, i) => `<div class="cl-cell${x.done ? ' done' : ''}" data-act="cl-open" data-i="${i}" title="${tx('Open one by one from here')}">${barcodeSvg(x.c, { module: 1.6, height: 52 })}<div class="cl-nm">${nameHtml(x.c)}</div><button class="ibtn cl-x" data-act="cl-rm" data-i="${i}" aria-label="${tx('Remove {code}', { code: esc(x.c) })}">${ic('x')}</button></div>`).join('')}</div>` : '';
 }
-const empty = `<div class="card" style="padding:24px"><b>No codes yet</b><p class="lbl">Paste a report, read one off the screen, or scan and type codes. Nothing here touches backfill: it just turns codes into barcodes to scan into the PDT.</p></div>`;
+const empty = `<div class="card" style="padding:24px"><b>${tx('No codes yet')}</b><p class="lbl">${tx('Paste a report, read one off the screen, or scan and type codes. Nothing here touches backfill: it just turns codes into barcodes to scan into the PDT.')}</p></div>`;
 
 export default {
-  id: 'codelist', title: 'Barcode list', icon: 'barcode', area: 'stockroom',
+  id: 'codelist', title: tx('Barcode list'), icon: 'barcode', area: 'stockroom',
   desktop(ctx) {
     useStore(ctx.storeNo);
     const list = load(), done = list.filter(x => x.done).length;
     ensureNames(ctx, list.map(x => x.c), () => ctx.rerender());
-    const head = vh('Barcode list', sub('Scratch list on this device', `${list.length} code${list.length === 1 ? '' : 's'}`, done ? `${done} done` : ''),
-      `<div class="seg"><button class="${st.view === 'grid' ? 'on' : ''}" data-act="cl-view" data-v="grid">Grid</button><button class="${st.view === 'one' ? 'on' : ''}" data-act="cl-view" data-v="one">One by one</button></div><button class="btn" data-act="cl-paste">${ic('clip')}Paste a report</button><button class="btn" data-act="cl-screen">${ic('expand')}Screen scan</button>${list.length ? `<button class="btn" data-act="cl-copy">${ic('checks')}Copy all</button><button class="btn" data-act="cl-clear">${ic('trash')}Clear</button>` : ''}`, 'barcode');
-    const typeRow = `<div class="cl-add"><input class="ad-in mono" data-field="cl-code" inputmode="numeric" placeholder="Scan or type a keycode" autocomplete="off">${camButton('cl-code', true)}<button class="btn sm" data-act="cl-add">${ic('plus')}Add</button></div>`;
-    const paste = st.paste ? (() => { const r = extractCodes(st.text); return `<div class="card"><div class="ch"><h3>Paste any report</h3><span class="go" data-act="cl-paste">Close</span></div><textarea class="sri-ta" data-field="cl-text" placeholder="Paste the report text: keycodes are picked out, prices, quantities and APNs are left out">${esc(st.text)}</textarea><div class="sri-acts"><b>${r.codes.length}</b> code${r.codes.length === 1 ? '' : 's'} detected${r.dups ? ` · ${r.dups} duplicate${r.dups === 1 ? '' : 's'} removed` : ''}<button class="btn primary sm" data-act="cl-make"${r.codes.length ? '' : ' disabled'}>Make the list</button>${list.length ? `<button class="btn sm" data-act="cl-append"${r.codes.length ? '' : ' disabled'}>Add to the list</button>` : ''}</div></div>`; })() : '';
+    const head = vh(tx('Barcode list'), sub(tx('Scratch list on this device'), txn(list.length, '{n} code', '{n} codes'), done ? tx('{n} done', { n: done }) : ''),
+      `<div class="seg"><button class="${st.view === 'grid' ? 'on' : ''}" data-act="cl-view" data-v="grid">${tx('Grid')}</button><button class="${st.view === 'one' ? 'on' : ''}" data-act="cl-view" data-v="one">${tx('One by one')}</button></div><button class="btn" data-act="cl-paste">${ic('clip')}${tx('Paste a report')}</button><button class="btn" data-act="cl-screen">${ic('expand')}${tx('Screen scan')}</button>${list.length ? `<button class="btn" data-act="cl-copy">${ic('checks')}${tx('Copy all')}</button><button class="btn" data-act="cl-clear">${ic('trash')}${tx('Clear')}</button>` : ''}`, 'barcode');
+    const typeRow = `<div class="cl-add"><input class="ad-in mono" data-field="cl-code" inputmode="numeric" placeholder="${tx('Scan or type a keycode')}" autocomplete="off">${camButton('cl-code', true)}<button class="btn sm" data-act="cl-add">${ic('plus')}${tx('Add')}</button></div>`;
+    const paste = st.paste ? (() => { const r = extractCodes(st.text), n = r.codes.length; return `<div class="card"><div class="ch"><h3>${tx('Paste any report')}</h3><span class="go" data-act="cl-paste">${tx('Close')}</span></div><textarea class="sri-ta" data-field="cl-text" placeholder="${tx('Paste the report text: keycodes are picked out, prices, quantities and APNs are left out')}">${esc(st.text)}</textarea><div class="sri-acts">${txn(n, '<b>{n}</b> code detected', '<b>{n}</b> codes detected')}${r.dups ? ` · ${txn(r.dups, '{n} duplicate removed', '{n} duplicates removed')}` : ''}<button class="btn primary sm" data-act="cl-make"${r.codes.length ? '' : ' disabled'}>${tx('Make the list')}</button>${list.length ? `<button class="btn sm" data-act="cl-append"${r.codes.length ? '' : ' disabled'}>${tx('Add to the list')}</button>` : ''}</div></div>`; })() : '';
     return head + paste + typeRow + (list.length ? (st.view === 'one' ? focusCard(list) : grid(list)) : empty);
   },
   mobile(ctx) { useStore(ctx.storeNo); return `<div id="clmob">${mobile(ctx)}</div>`; },
   mount(ctx, root) {
     const repaint = () => { if (ctx.isMobile) { const h = $('#clmob', root); if (h) h.innerHTML = mobile(ctx); } else ctx.rerender(); };
-    const addTyped = () => { const i = root.querySelector('[data-field="cl-code"]'), v = (i?.value || '').replace(/\D/g, ''); if (!/^\d{6,13}$/.test(v)) { toast('A keycode is 6 to 8 digits (an APN 13)', 'bad'); return; } const n = add([v]); toast(n ? `${v} added` : `${v} is already on the list`); repaint(); setTimeout(() => document.querySelector('#content [data-field="cl-code"]')?.focus(), 0); };
+    const addTyped = () => { const i = root.querySelector('[data-field="cl-code"]'), v = (i?.value || '').replace(/\D/g, ''); if (!/^\d{6,13}$/.test(v)) { toast(tx('A keycode is 6 to 8 digits (an APN 13)'), 'bad'); return; } const n = add([v]); toast(n ? tx('{code} added', { code: v }) : tx('{code} is already on the list', { code: v })); repaint(); setTimeout(() => document.querySelector('#content [data-field="cl-code"]')?.focus(), 0); };
     const step = d => { const list = load(); st.at = Math.max(0, Math.min(list.length - 1, st.at + d)); repaint(); setTimeout(() => document.querySelector('#content [data-focus]')?.focus(), 0); };
-    const doneNext = () => { const list = load(); if (!list.length) return; list[st.at].done = true; save(list); if (st.at < list.length - 1) st.at++; else toast('That was the last code'); repaint(); setTimeout(() => document.querySelector('#content [data-focus]')?.focus(), 0); };
+    const doneNext = () => { const list = load(); if (!list.length) return; list[st.at].done = true; save(list); if (st.at < list.length - 1) st.at++; else toast(tx('That was the last code')); repaint(); setTimeout(() => document.querySelector('#content [data-focus]')?.focus(), 0); };
     const remove = i => { const list = load(); list.splice(i, 1); save(list); st.at = Math.min(st.at, Math.max(0, list.length - 1)); repaint(); setTimeout(() => document.querySelector('#content [data-focus]')?.focus(), 0); };
     root.addEventListener('click', e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
       if (act === 'cl-view') { st.view = a.dataset.v; repaint(); }
       else if (act === 'cl-paste') { st.paste = !st.paste; repaint(); }
-      else if (act === 'cl-make' || act === 'cl-append') { const r = extractCodes(st.text); const n = add(r.codes, act === 'cl-make'); toast(`${n} code${n === 1 ? '' : 's'} on the list`); st.paste = false; st.text = ''; st.at = 0; repaint(); }
-      else if (act === 'cl-screen') openScreenScan(ctx, { mode: 'list', onUse: ({ codes }) => { const n = add(codes); toast(`${n} code${n === 1 ? '' : 's'} added from the screen`); repaint(); } });
+      else if (act === 'cl-make' || act === 'cl-append') { const r = extractCodes(st.text); const n = add(r.codes, act === 'cl-make'); toast(txn(n, '{n} code on the list', '{n} codes on the list')); st.paste = false; st.text = ''; st.at = 0; repaint(); }
+      else if (act === 'cl-screen') openScreenScan(ctx, { mode: 'list', onUse: ({ codes }) => { const n = add(codes); toast(txn(n, '{n} code added from the screen', '{n} codes added from the screen')); repaint(); } });
       else if (act === 'cl-add') addTyped();
-      else if (act === 'cl-copy') copyText(load().map(x => x.c).join('\n'), `${load().length} codes`);
-      else if (act === 'cl-clear') { if (confirm('Clear the whole list on this device?')) { save([]); st.at = 0; repaint(); } }
+      else if (act === 'cl-copy') { const list = load(); copyText(list.map(x => x.c).join('\n'), txn(list.length, '{n} code', '{n} codes')); }
+      else if (act === 'cl-clear') { if (confirm(tx('Clear the whole list on this device?'))) { save([]); st.at = 0; repaint(); } }
       else if (act === 'cl-rm') { e.stopPropagation(); remove(Number(a.dataset.i)); }
       else if (act === 'cl-open') { st.at = Number(a.dataset.i); st.view = 'one'; repaint(); setTimeout(() => document.querySelector('#content [data-focus]')?.focus(), 0); }
       else if (act === 'cl-prev') step(-1);
@@ -94,8 +95,8 @@ export default {
 function mobile(ctx) {
   const list = load();
   ensureNames(ctx, list.map(x => x.c), () => { const h = document.querySelector('#clmob'); if (h) h.innerHTML = mobile(ctx); });
-  return mhead('Quick Scan', `${list.length} code${list.length === 1 ? '' : 's'} · ${list.filter(x => x.done).length} done`) +
-    `<div class="cl-add m"><input class="ad-in mono" data-field="cl-code" inputmode="numeric" placeholder="Scan or type a keycode" autocomplete="off">${camButton('cl-code', true)}<button class="btn sm" data-act="cl-add">${ic('plus')}</button></div>` +
-    (list.length ? `<div class="cl-mlist">${list.map((x, i) => `<div class="cl-mrow${x.done ? ' done' : ''}"><div class="cl-mbc">${barcodeSvg(x.c, { module: 1.8, height: 56 })}</div><div class="cl-mnm">${nameHtml(x.c)}</div><div class="cl-macts"><button class="sri-tick${x.done ? ' on' : ''}" data-act="cl-toggle" data-i="${i}" aria-pressed="${x.done}" title="Done">✓</button><button class="ibtn" data-act="cl-rm" data-i="${i}" aria-label="Remove">${ic('x')}</button></div></div>`).join('')}</div><div class="cl-mfoot"><button class="btn sm" data-act="cl-copy">${ic('checks')}Copy all</button><button class="btn sm" data-act="cl-clear">${ic('trash')}Clear</button></div>`
-      : `<div class="mv-note">${ic('barcode')}Scan or type codes to build a list. Each shows as a barcode the PDT can read off this screen.</div>`);
+  return mhead(tx('Quick Scan'), `${txn(list.length, '{n} code', '{n} codes')} · ${tx('{n} done', { n: list.filter(x => x.done).length })}`) +
+    `<div class="cl-add m"><input class="ad-in mono" data-field="cl-code" inputmode="numeric" placeholder="${tx('Scan or type a keycode')}" autocomplete="off">${camButton('cl-code', true)}<button class="btn sm" data-act="cl-add">${ic('plus')}</button></div>` +
+    (list.length ? `<div class="cl-mlist">${list.map((x, i) => `<div class="cl-mrow${x.done ? ' done' : ''}"><div class="cl-mbc">${barcodeSvg(x.c, { module: 1.8, height: 56 })}</div><div class="cl-mnm">${nameHtml(x.c)}</div><div class="cl-macts"><button class="sri-tick${x.done ? ' on' : ''}" data-act="cl-toggle" data-i="${i}" aria-pressed="${x.done}" title="${tx('Done')}">✓</button><button class="ibtn" data-act="cl-rm" data-i="${i}" aria-label="${tx('Remove')}">${ic('x')}</button></div></div>`).join('')}</div><div class="cl-mfoot"><button class="btn sm" data-act="cl-copy">${ic('checks')}${tx('Copy all')}</button><button class="btn sm" data-act="cl-clear">${ic('trash')}${tx('Clear')}</button></div>`
+      : `<div class="mv-note">${ic('barcode')}${tx('Scan or type codes to build a list. Each shows as a barcode the PDT can read off this screen.')}</div>`);
 }

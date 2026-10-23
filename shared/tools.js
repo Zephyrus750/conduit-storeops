@@ -18,10 +18,10 @@ export const TOOLS = [
   T('picklist', 'floor', 'Pick list', ['picklist'], ['picklist.']),
   T('refresh', 'floor', 'Location refresh', ['refresh'], ['refresh.']),
   T('labels', 'floor', 'Label integrity', ['labelint'], ['label.']),
-  T('emergency', 'floor', 'Emergency', ['emergency']),
-  T('maintenance', 'floor', 'Maintenance', ['maintenance'], ['issue.', 'asset.']),
+  T('emergency', 'floor', 'Emergency', ['emergency'], ['asset.']),   // equipment servicing lives on the Emergency screen
+  T('maintenance', 'floor', 'Maintenance', ['maintenance'], ['issue.']),
   T('stocktake', 'floor', 'Stocktake', ['stocktake'], ['stocktake.']),
-  T('mapedits', 'floor', 'Suggest map edits', ['mapedits'], ['map.edit.suggest']),
+  T('mapedits', 'floor', 'Suggest map edits and Field Mode', ['mapedits', 'fieldmode'], ['map.edit.suggest']),   // Field Mode sends its checks as suggestions
   T('inventory', 'floor', 'Inventory and pallet hub', ['inventory'], ['inventory.']),
   T('backfill', 'stockroom', 'Backfill review and history', ['bfreview', 'srhistory'], ['submission.']),
   T('cages', 'stockroom', 'Cages', ['cages'], ['cage.']),

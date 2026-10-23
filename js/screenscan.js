@@ -18,10 +18,11 @@ import { ic, esc, toast } from './ui.js';
 import { otsu, wordsToRows, ingest, filtered, locVerdict, matchPreset } from '../shared/screenscan.js';
 import { parseReport, byLoc } from '../shared/stockintel.js';
 import { csvLines } from '../shared/records.js';
+import { tx, txn } from './i18n.js';
 
 const BASE = () => new URL('vendor/tesseract/', location.href).href;
 let tessLoading = null, tess = null, tessMode = null;
-function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('the OCR engine did not load: check the connection')); document.head.appendChild(s); }); }
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error(tx('the OCR engine did not load: check the connection'))); document.head.appendChild(s); }); }
 async function ocr() {
   if (tess) return tess;
   tessLoading ||= (async () => {
@@ -36,17 +37,17 @@ const KIND = mode => (mode === 'rows' ? 'rows' : 'codes');
 const REGION_KEY = kind => `screenscan_region_${kind}`;
 const remembered = kind => { try { return JSON.parse(localStorage.getItem(REGION_KEY(kind)) || 'null'); } catch { return null; } };
 const remember = (kind, r) => { try { localStorage.setItem(REGION_KEY(kind), JSON.stringify(r)); } catch {} };
-const TITLES = { compare: 'Screen scan · compare a bay', soh: 'Screen scan · SOH adjustments', rows: 'Screen scan · SOH report', list: 'Screen scan · barcode list' };
+const TITLES = { compare: tx('Screen scan · compare a bay'), soh: tx('Screen scan · SOH adjustments'), rows: tx('Screen scan · SOH report'), list: tx('Screen scan · barcode list') };
 
 export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse } = {}) {
-  if (!navigator.mediaDevices?.getDisplayMedia) { toast('Screen sharing is not available in this browser: paste the report instead', 'bad'); return; }
+  if (!navigator.mediaDevices?.getDisplayMedia) { toast(tx('Screen sharing is not available in this browser: paste the report instead'), 'bad'); return; }
   document.getElementById('sscan')?.remove();
   const kind = KIND(mode), el = document.createElement('div'); el.id = 'sscan'; el.className = 'sscan'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', title || TITLES[mode]);
-  el.innerHTML = `<div class="ss-card"><div class="ss-top"><b>${esc(title || TITLES[mode])}</b>${expected ? `<span class="ss-exp">Reviewing <b class="mono">${esc(expected)}</b></span>` : ''}<span class="ss-locb" hidden></span><button class="ibtn" data-ss="close" aria-label="Close">${ic('x')}</button></div>` +
-    `<div class="ss-body"><div class="ss-left"><div class="ss-stage"><video muted playsinline></video><div class="ss-box" hidden><i class="h tl"></i><i class="h br"></i></div><div class="ss-empty">${ic('expand')}<b>Share the window with the report</b><span>Then draw a box over the ${kind === 'rows' ? 'whole report rows (location to SOH)' : 'LOCATION and KEYCODE columns'}.</span><button class="btn primary" data-ss="share">Share a screen</button></div></div>` +
-    `<div class="ss-ctl"><button class="btn sm" data-ss="test" disabled>Test read</button><button class="btn sm primary" data-ss="go" disabled>Start reading</button><button class="btn sm" data-ss="preset" disabled title="Every desk sharing a screen this size starts with this box">Save as store preset</button><button class="btn sm" data-ss="reshare" hidden>Share another window</button><span class="ss-peek" hidden><canvas></canvas><small>what the OCR sees</small></span></div>` +
-    `<div class="ss-status" role="status">Drag across the shared screen to draw the box. Zoom the report up for bigger digits.</div></div>` +
-    `<div class="ss-right"><div class="ss-count"><b>0</b><span>${kind === 'rows' ? 'rows' : 'codes'}</span></div><div class="ss-flags"></div><div class="ss-list"></div><div class="ss-acts"></div></div></div></div>`;
+  el.innerHTML = `<div class="ss-card"><div class="ss-top"><b>${esc(title || TITLES[mode])}</b>${expected ? `<span class="ss-exp">${tx('Reviewing {bay}', { bay: `<b class="mono">${esc(expected)}</b>` })}</span>` : ''}<span class="ss-locb" hidden></span><button class="ibtn" data-ss="close" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
+    `<div class="ss-body"><div class="ss-left"><div class="ss-stage"><video muted playsinline></video><div class="ss-box" hidden><i class="h tl"></i><i class="h br"></i></div><div class="ss-empty">${ic('expand')}<b>${tx('Share the window with the report')}</b><span>${kind === 'rows' ? tx('Then draw a box over the whole report rows (location to SOH).') : tx('Then draw a box over the LOCATION and KEYCODE columns.')}</span><button class="btn primary" data-ss="share">${tx('Share a screen')}</button></div></div>` +
+    `<div class="ss-ctl"><button class="btn sm" data-ss="test" disabled>${tx('Test read')}</button><button class="btn sm primary" data-ss="go" disabled>${tx('Start reading')}</button><button class="btn sm" data-ss="preset" disabled title="${tx('Every desk sharing a screen this size starts with this box')}">${tx('Save as store preset')}</button><button class="btn sm" data-ss="reshare" hidden>${tx('Share another window')}</button><span class="ss-peek" hidden><canvas></canvas><small>${tx('what the OCR sees')}</small></span></div>` +
+    `<div class="ss-status" role="status">${tx('Drag across the shared screen to draw the box. Zoom the report up for bigger digits.')}</div></div>` +
+    `<div class="ss-right"><div class="ss-count"><b>0</b><span>${kind === 'rows' ? tx('rows') : tx('codes')}</span></div><div class="ss-flags"></div><div class="ss-list"></div><div class="ss-acts"></div></div></div></div>`;
   document.body.appendChild(el);
   const $ = s => el.querySelector(s), video = $('video'), stage = $('.ss-stage'), box = $('.ss-box'), status = t => { $('.ss-status').textContent = t; };
   let stream = null, region = null, capturing = false, busy = false, timer = null, prevSig = null, settled = false, lastRead = 0, showAll = false, closed = false;
@@ -62,15 +63,15 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
       stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'never', width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
       video.srcObject = stream; await video.play().catch(() => {});
       await new Promise(r => (video.videoWidth ? r() : video.addEventListener('loadedmetadata', r, { once: true })));
-      stream.getVideoTracks()[0]?.addEventListener('ended', () => { stopCapture(); status('Sharing stopped. Share the window again to carry on.'); $('.ss-empty').hidden = false; });
+      stream.getVideoTracks()[0]?.addEventListener('ended', () => { stopCapture(); status(tx('Sharing stopped. Share the window again to carry on.')); $('.ss-empty').hidden = false; });
       $('.ss-empty').hidden = true; $('[data-ss="reshare"]').hidden = false;
       const size = `${video.videoWidth}x${video.videoHeight}`, presets = Object.fromEntries(Object.entries(ctx.store.get('scanPresets') || {}).filter(([k]) => k.startsWith(kind + ':')).map(([k, v]) => [k.slice(kind.length + 1), v]));
       const p = matchPreset(presets, video.videoWidth, video.videoHeight), mine = remembered(kind);
-      if (p) setRegion({ x: p.x, y: p.y, w: p.w, h: p.h }, `The store preset for ${size} is applied. Test read, then start and scroll slowly.`);
-      else if (mine && mine.size === size) setRegion({ x: mine.x, y: mine.y, w: mine.w, h: mine.h }, 'Your last box for this size is applied. Redraw it if the report moved.');
-      else status(`Sharing ${size}. Drag across the report to draw the box.`);
+      if (p) setRegion({ x: p.x, y: p.y, w: p.w, h: p.h }, tx('The store preset for {size} is applied. Test read, then start and scroll slowly.', { size }));
+      else if (mine && mine.size === size) setRegion({ x: mine.x, y: mine.y, w: mine.w, h: mine.h }, tx('Your last box for this size is applied. Redraw it if the report moved.'));
+      else status(tx('Sharing {size}. Drag across the report to draw the box.', { size }));
       ocr().catch(e => status(e.message));            // warm the engine while the box is drawn
-    } catch (e) { status(e?.name === 'NotAllowedError' ? 'Sharing was cancelled.' : `Could not share the screen: ${e.message}`); }
+    } catch (e) { status(e?.name === 'NotAllowedError' ? tx('Sharing was cancelled.') : tx('Could not share the screen: {error}', { error: e.message })); }
   }
 
   // Draw a box by dragging; drag inside it to move it; the corner handles resize.
@@ -93,7 +94,7 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
     else { const x2 = drag.r.x + drag.r.w, y2 = drag.r.y + drag.r.h; r = { x: Math.min(px, x2 - 0.01), y: Math.min(py, y2 - 0.01), w: x2 - Math.min(px, x2 - 0.01), h: y2 - Math.min(py, y2 - 0.01) }; }
     region = r; place();
   });
-  stage.addEventListener('pointerup', () => { if (!drag) return; drag = null; if (region && region.w > 0.01 && region.h > 0.01) { setRegion(region, 'Box set. Test read to check it, then start and scroll slowly.'); prevSig = null; } else setRegion(null); });
+  stage.addEventListener('pointerup', () => { if (!drag) return; drag = null; if (region && region.w > 0.01 && region.h > 0.01) { setRegion(region, tx('Box set. Test read to check it, then start and scroll slowly.')); prevSig = null; } else setRegion(null); });
   const onKey = e => {
     if (e.key === 'Escape') { close(); return; }
     if (!region || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) || e.target.closest('input,textarea')) return;
@@ -136,31 +137,32 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
   async function tick() {
     if (!capturing || busy || !region) return;
     const sig = signature(); let diff = 0; if (prevSig) for (let i = 0; i < 576; i++) diff += Math.abs(sig[i] - prevSig[i]); prevSig = sig;
-    if (diff / 576 > 4) { settled = false; status('Moving… pause a moment on each screenful.'); return; }
+    if (diff / 576 > 4) { settled = false; status(tx('Moving… pause a moment on each screenful.')); return; }
     if (settled && Date.now() - lastRead < 4000) return;
     busy = true;
-    try { const added = take(await readFrame()); settled = true; lastRead = Date.now(); status(added ? `Reading · +${added} this frame. Scroll on slowly.` : 'Reading · nothing new in this frame. Scroll on, or redraw the box if digits are clipped.'); render(); }
-    catch (e) { status(`OCR hiccup: ${e.message}. Still reading.`); }
+    try { const added = take(await readFrame()); settled = true; lastRead = Date.now(); status(added ? tx('Reading · +{n} this frame. Scroll on slowly.', { n: added }) : tx('Reading · nothing new in this frame. Scroll on, or redraw the box if digits are clipped.')); render(); }
+    catch (e) { status(tx('OCR hiccup: {error}. Still reading.', { error: e.message })); }
     busy = false;
   }
-  function startCapture() { capturing = true; settled = false; prevSig = null; $('[data-ss="go"]').textContent = 'Stop reading'; status('Reading. Scroll the report slowly from top to bottom.'); timer = setInterval(tick, 500); }
-  function stopCapture() { capturing = false; clearInterval(timer); timer = null; const b = $('[data-ss="go"]'); if (b) b.textContent = Object.keys(tally.codes).length || Object.keys(items).length ? 'Read more' : 'Start reading'; }
+  function startCapture() { capturing = true; settled = false; prevSig = null; $('[data-ss="go"]').textContent = tx('Stop reading'); status(tx('Reading. Scroll the report slowly from top to bottom.')); timer = setInterval(tick, 500); }
+  function stopCapture() { capturing = false; clearInterval(timer); timer = null; const b = $('[data-ss="go"]'); if (b) b.textContent = Object.keys(tally.codes).length || Object.keys(items).length ? tx('Read more') : tx('Start reading'); }
 
   function render() {
     const lv = locVerdict(kind === 'rows' ? Object.fromEntries(Object.values(items).map(r => [r.loc, 2])) : tally.locs, expected), lb = $('.ss-locb');
-    lb.hidden = !(lv.state === 'match' || lv.state === 'mismatch'); lb.className = `ss-locb ${lv.state === 'match' ? 'ok' : 'bad'}`; lb.textContent = lv.state === 'match' ? `✓ Loc ${lv.seen}` : lv.state === 'mismatch' ? `⚠ Loc ${lv.seen} ≠ ${lv.expected}` : '';
+    lb.hidden = !(lv.state === 'match' || lv.state === 'mismatch'); lb.className = `ss-locb ${lv.state === 'match' ? 'ok' : 'bad'}`; lb.textContent = lv.state === 'match' ? tx('✓ Loc {loc}', { loc: lv.seen }) : lv.state === 'mismatch' ? tx('⚠ Loc {seen} ≠ {expected}', { seen: lv.seen, expected: lv.expected }) : '';
     if (kind === 'rows') {
       const rows = Object.values(items).sort((a, b) => byLoc(a.loc, b.loc) || a.kc.localeCompare(b.kc));
-      $('.ss-count b').textContent = rows.length; $('.ss-flags').textContent = rows.length ? `${new Set(rows.map(r => r.loc)).size} locations · rows merge by keycode, so overlapping frames are harmless` : '';
-      $('.ss-list').innerHTML = rows.length ? `<table class="wb-t"><thead><tr><th>Loc</th><th>Keycode</th><th class="n">SOH</th><th class="n">Price</th></tr></thead><tbody>${rows.slice(0, 400).map(r => `<tr><td class="mono">${esc(r.loc)}</td><td class="mono">${esc(r.kc)}</td><td class="n">${r.soh}</td><td class="n">${r.price ?? ''}</td></tr>`).join('')}</tbody></table>` : '<p class="lbl">Rows appear here as frames are read.</p>';
+      const nLocs = new Set(rows.map(r => r.loc)).size;
+      $('.ss-count b').textContent = rows.length; $('.ss-flags').textContent = rows.length ? txn(nLocs, '{n} location · rows merge by keycode, so overlapping frames are harmless', '{n} locations · rows merge by keycode, so overlapping frames are harmless') : '';
+      $('.ss-list').innerHTML = rows.length ? `<table class="wb-t"><thead><tr><th>${tx('Loc')}</th><th>${tx('Keycode')}</th><th class="n">SOH</th><th class="n">${tx('Price')}</th></tr></thead><tbody>${rows.slice(0, 400).map(r => `<tr><td class="mono">${esc(r.loc)}</td><td class="mono">${esc(r.kc)}</td><td class="n">${r.soh}</td><td class="n">${r.price ?? ''}</td></tr>`).join('')}</tbody></table>` : `<p class="lbl">${tx('Rows appear here as frames are read.')}</p>`;
     } else {
       const all = Object.keys(tally.codes), codes = filtered(tally, showAll), hidden = all.length - codes.length;
       $('.ss-count b').textContent = codes.length;
-      $('.ss-flags').innerHTML = `${lv.state === 'match' ? `<span class="status good">✓ Location ${esc(lv.seen)} verified</span> ` : lv.state === 'mismatch' ? `<span class="status bad">⚠ The report reads location ${esc(lv.seen)}: you are reviewing ${esc(lv.expected)}</span> ` : ''}${showAll ? `all ${all.length} raw reads` : `${codes.length} keycodes${hidden ? ` · ${hidden} noise reads filtered` : ''}`} <button class="go" data-ss="all">${showAll ? 'Show filtered' : 'Show all reads'}</button>`;
-      $('.ss-list').innerHTML = codes.map(c => `<button class="ss-chip${c.length !== 8 ? ' odd' : ''}" data-ss="rm" data-code="${esc(c)}" title="Read ${tally.codes[c].count} times · click to remove if wrong"><span class="mono">${esc(c)}</span><small>${tally.codes[c].count}×</small></button>`).join('') || '<p class="lbl">Codes appear here as frames are read.</p>';
+      $('.ss-flags').innerHTML = `${lv.state === 'match' ? `<span class="status good">${tx('✓ Location {loc} verified', { loc: esc(lv.seen) })}</span> ` : lv.state === 'mismatch' ? `<span class="status bad">${tx('⚠ The report reads location {seen}: you are reviewing {expected}', { seen: esc(lv.seen), expected: esc(lv.expected) })}</span> ` : ''}${showAll ? tx('all {n} raw reads', { n: all.length }) : `${tx('{n} keycodes', { n: codes.length })}${hidden ? ` · ${tx('{n} noise reads filtered', { n: hidden })}` : ''}`} <button class="go" data-ss="all">${showAll ? tx('Show filtered') : tx('Show all reads')}</button>`;
+      $('.ss-list').innerHTML = codes.map(c => `<button class="ss-chip${c.length !== 8 ? ' odd' : ''}" data-ss="rm" data-code="${esc(c)}" title="${txn(tally.codes[c].count, 'Read {n} time · click to remove if wrong', 'Read {n} times · click to remove if wrong')}"><span class="mono">${esc(c)}</span><small>${tally.codes[c].count}×</small></button>`).join('') || `<p class="lbl">${tx('Codes appear here as frames are read.')}</p>`;
     }
-    const n = Number($('.ss-count b').textContent), use = { compare: `Use ${n} codes for ${expected || 'the bay'}`, soh: `Add ${n} to SOH adjustments`, rows: `Add ${n} rows to the SOH report`, list: `Make a barcode list of ${n}` }[mode];
-    $('.ss-acts').innerHTML = `<button class="btn primary" data-ss="use"${n ? '' : ' disabled'}>${esc(use)}</button><button class="btn sm" data-ss="csv"${n ? '' : ' disabled'}>${ic('file')}CSV</button><button class="btn sm" data-ss="xls"${n ? '' : ' disabled'}>${ic('file')}Excel</button><button class="btn sm" data-ss="reset"${n ? '' : ' disabled'}>Clear</button>`;
+    const n = Number($('.ss-count b').textContent), use = { compare: expected ? tx('Use {n} codes for {bay}', { n, bay: expected }) : tx('Use {n} codes for the bay', { n }), soh: tx('Add {n} to SOH adjustments', { n }), rows: tx('Add {n} rows to the SOH report', { n }), list: tx('Make a barcode list of {n}', { n }) }[mode];
+    $('.ss-acts').innerHTML = `<button class="btn primary" data-ss="use"${n ? '' : ' disabled'}>${esc(use)}</button><button class="btn sm" data-ss="csv"${n ? '' : ' disabled'}>${ic('file')}CSV</button><button class="btn sm" data-ss="xls"${n ? '' : ' disabled'}>${ic('file')}Excel</button><button class="btn sm" data-ss="reset"${n ? '' : ' disabled'}>${tx('Clear')}</button>`;
   }
   function exportAs(fmt) {
     const rows = kind === 'rows' ? Object.values(items).map(r => [r.loc, r.kc, r.soh, r.price ?? '']) : filtered(tally, showAll).map(c => [c, tally.codes[c].loc || '', tally.codes[c].count]);
@@ -174,7 +176,7 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
       blob = new Blob(['﻿<html><head><meta charset="utf-8"></head><body><table border="1"><tr>' + head.map(h => `<th>${esc(h)}</th>`).join('') + '</tr>' + rows.map(r => `<tr>${r.map((v, i) => td(v, i < 2)).join('')}</tr>`).join('') + '</table></body></html>'], { type: 'application/vnd.ms-excel;charset=utf-8' });
     } else blob = new Blob(['﻿' + csvLines(head, rows)], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${name}.${fmt}`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    toast(`Exported ${rows.length} ${kind === 'rows' ? 'rows' : 'codes'}`);
+    toast(kind === 'rows' ? tx('Exported {n} rows', { n: rows.length }) : tx('Exported {n} codes', { n: rows.length }));
   }
   function close() { closed = true; stopCapture(); stream?.getTracks().forEach(t => t.stop()); document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); el.remove(); }
 
@@ -183,16 +185,16 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
     const a = b.dataset.ss;
     if (a === 'close') close();
     else if (a === 'share' || a === 'reshare') { stopCapture(); stream?.getTracks().forEach(t => t.stop()); await share(); }
-    else if (a === 'test') { if (busy) return; busy = true; status('Test read…'); try { const lines = await readFrame(), t = { codes: {}, locs: {} }; if (kind === 'rows') { const r = parseReport(lines.join('\n')); status(r.rows ? `Test read: ${r.rows} rows, e.g. ${Object.values(r.items).slice(0, 2).map(x => `${x.loc} ${x.kc} SOH ${x.soh}`).join(' · ')}` : `Test read found no full rows: widen the box to take in the SOH column. Saw: ${lines.slice(0, 2).join(' | ').slice(0, 90)}`); } else { ingest(t, lines); const c = filtered(t); status(c.length ? `Test read: ${c.length} codes, e.g. ${c.slice(0, 4).join(', ')}` : `Test read found no clean codes: zoom the report bigger, or redraw the box over the two columns. Saw: ${lines.slice(0, 2).join(' | ').slice(0, 90)}`); } } catch (err) { status(err.message); } busy = false; }
+    else if (a === 'test') { if (busy) return; busy = true; status(tx('Test read…')); try { const lines = await readFrame(), t = { codes: {}, locs: {} }; if (kind === 'rows') { const r = parseReport(lines.join('\n')); status(r.rows ? tx('Test read: {n} rows, e.g. {sample}', { n: r.rows, sample: Object.values(r.items).slice(0, 2).map(x => `${x.loc} ${x.kc} SOH ${x.soh}`).join(' · ') }) : tx('Test read found no full rows: widen the box to take in the SOH column. Saw: {seen}', { seen: lines.slice(0, 2).join(' | ').slice(0, 90) })); } else { ingest(t, lines); const c = filtered(t); status(c.length ? tx('Test read: {n} codes, e.g. {sample}', { n: c.length, sample: c.slice(0, 4).join(', ') }) : tx('Test read found no clean codes: zoom the report bigger, or redraw the box over the two columns. Saw: {seen}', { seen: lines.slice(0, 2).join(' | ').slice(0, 90) })); } } catch (err) { status(err.message); } busy = false; }
     else if (a === 'go') capturing ? stopCapture() : startCapture();
-    else if (a === 'preset') { const size = `${video.videoWidth}x${video.videoHeight}`; try { await ctx.store.dispatch({ type: 'scan.preset', entity: { size }, payload: { kind, ...region } }); status(`✓ Saved as the store preset for ${size}: it applies for every desk sharing a screen this size.`); } catch (err) { status(err.message); } }
+    else if (a === 'preset') { const size = `${video.videoWidth}x${video.videoHeight}`; try { await ctx.store.dispatch({ type: 'scan.preset', entity: { size }, payload: { kind, ...region } }); status(tx('✓ Saved as the store preset for {size}: it applies for every desk sharing a screen this size.', { size })); } catch (err) { status(err.message); } }
     else if (a === 'all') { showAll = !showAll; render(); }
     else if (a === 'rm') { delete tally.codes[b.dataset.code]; render(); }
-    else if (a === 'reset') { if (!confirm('Clear everything read so far?')) return; for (const k of Object.keys(tally.codes)) delete tally.codes[k]; for (const k of Object.keys(tally.locs)) delete tally.locs[k]; for (const k of Object.keys(items)) delete items[k]; render(); }
+    else if (a === 'reset') { if (!confirm(tx('Clear everything read so far?'))) return; for (const k of Object.keys(tally.codes)) delete tally.codes[k]; for (const k of Object.keys(tally.locs)) delete tally.locs[k]; for (const k of Object.keys(items)) delete items[k]; render(); }
     else if (a === 'csv' || a === 'xls') exportAs(a);
     else if (a === 'use') {
       const lv = locVerdict(tally.locs, expected);
-      if (mode === 'compare' && lv.state === 'mismatch' && !confirm(`⚠ LOCATION MISMATCH\n\nThe captured report reads location ${lv.seen}, but you are reviewing ${lv.expected}. This usually means the wrong report is open.\n\nUse these codes anyway?`)) return;
+      if (mode === 'compare' && lv.state === 'mismatch' && !confirm(`${tx('⚠ LOCATION MISMATCH')}\n\n${tx('The captured report reads location {seen}, but you are reviewing {expected}. This usually means the wrong report is open.', { seen: lv.seen, expected: lv.expected })}\n\n${tx('Use these codes anyway?')}`)) return;
       const codes = filtered(tally, showAll), out = kind === 'rows' ? { items: { ...items } } : { codes, locs: Object.fromEntries(codes.map(c => [c, tally.codes[c].loc || ''])) };
       close(); onUse?.(out);
     }

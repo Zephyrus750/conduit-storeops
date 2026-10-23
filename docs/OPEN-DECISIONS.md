@@ -1,6 +1,7 @@
 # Open decisions and the test pass (kept 2026-10-05, updated 2026-10-09)
 
 Every call below is still open unless its row says **Decided**. On
+2026-10-22 1 (the `P` suffix) and 16 (languages) were answered and built. On
 2026-10-09 the suggested defaults were taken for 19, 20, 30, 31 and 32, and
 28 was answered "port it". What is left to build, and which of these
 each piece waits on, is in `docs/TODO.md`. Each one says what Conduit does today (the
@@ -13,7 +14,7 @@ differs from the default.
 
 | # | Decision | What Conduit does today | Where | How to test |
 |---|---|---|---|---|
-| 1 | What the `P` suffix on shelf codes means | Treated as part of the code; no legacy app handled it | `js/map.js` `canonCode`, `groupsFor` | Scan or type a P-suffixed label on Refresh or Stocktake and see which shelf it finds |
+| 1 | What the `P` suffix on shelf codes means | **Decided 2026-10-22, built:** a permanent end, an end whose set-up rarely changes; some stores label it `16P1` where others say `16E1`. `P1`/`P2` work as `E1`/`E2` do everywhere: typed, scanned, spoken ("16 permanent 1"), searched, sorted after the ends, and drawn in the editor (Permanent ends tags) | `js/map.js` `splitCanon`, `shared/voice.js`, `editor/editor.js` | Type or scan `16P1` on Refresh or Stocktake and see the shelf |
 | 2 | Where the map editor lives (`MAP_EDITOR_URL`) | **Settled 2026-10-09:** it ships with Conduit at `editor/editor.html`, owner only, publishing straight to the worker | — | Open it from the owner console's Map editor button |
 | 3 | Busselton's assembly point, address, hours, holidays | Blank in the export | Map editor › Store Info, then republish | Emergency › Nearest exit shows the assembly banner; the store chip shows details |
 | 4 | Stairs nodes for cross-floor routes | Busselton's walk paths have none, so a pick list cannot cross floors | Map editor walk paths, `stairs` node type | A pick list with stops on Ground and BOH routes via the stairs |
@@ -38,14 +39,14 @@ differs from the default.
 | # | Decision | What Conduit does today | Where |
 |---|---|---|---|
 | 15 | Scan-only phone mode (K2B's "skip sign-in") | Not built: every device signs in | — |
-| 16 | The seven-language UI from ShelfSearcher | Not built: English only | — |
+| 16 | The seven-language UI from ShelfSearcher | **Decided 2026-10-22, built:** English, German, French, Filipino, Vietnamese, Spanish and Italian on every screen of the PCs and phones, chosen per device (Settings › Display, or the sign-in card). Data, codes and the map editor stay English (`docs/I18N.md`) | `js/i18n.js`, `js/i18n/` |
 | 17 | K2B's app hub (`registry=apps`), feature flags, beta rings | Not built | — |
 
 ## Access and the owner console (added 2026-10-08)
 
 | # | Decision | What Conduit does today | Where | How to test |
 |---|---|---|---|---|
-| 18 | How fine the tool switches are | 20 tools. Receiving, Team Board and Dock screen are one tool; Wallboard and Analytics are one; Backfill review and its History are one. The store map, Settings, Store details and the workspace homes cannot be switched off | `shared/tools.js` | Console › a store › Access: switch one off, watch a signed-in store device lose it within seconds |
+| 18 | How fine the tool switches are | 21 tools. Receiving, Team Board and Dock screen are one tool; Wallboard and Analytics are one; Backfill review and its History are one. The store map, Settings, Store details and the workspace homes cannot be switched off | `shared/tools.js` | Console › a store › Access: switch one off, watch a signed-in store device lose it within seconds |
 | 19 | Switching a whole area off |  **Decided 2026-10-09 (default), built:** it applies at once, like tools: the console logs `store.areas.set` into the store and devices follow in under a second  | `worker/registry.js`, `worker/index.js` | Turn an area off and see how long a signed-in device keeps it |
 | 20 | Who may publish a team message |  **Decided 2026-10-09 (default), built:** managers and the owner (`team.message.set`, `team.briefing.set`)  | — | — |
 | 21 | What the console flags as set-up | No map; no stockroom bay ranges; no manifest yet; two trucks open; no device ever or none in 24 hours; device errors; changes stuck in outboxes; bays auto-closed yesterday (shown as information) | `shared/kpis.js` | Console Overview's Set-up column and a store's Overview |
@@ -65,7 +66,7 @@ differs from the default.
 
 | # | Decision | What Conduit does today | Suggested | Where |
 |---|---|---|---|---|
-| 28 | Voice search and pick-list dictation (ShelfSearcher had both) |  **Decided 2026-10-09: ported.** Voice search on the phone (the microphone in the search bar and the palette) and voice add in the phone's pick list, ShelfSearcher's recipe checked against the map (`shared/voice.js`). Needs a connection and the microphone allowed (`Permissions-Policy` now `microphone=(self)`)  | Drop for now; the floor scans | `js/search.js`, `js/views/picklist.js` |
+| 28 | Voice search and pick-list dictation (ShelfSearcher had both) |  **Decided 2026-10-09: ported.** Voice search on the phone and, since 21 Oct, on store PCs with a microphone (the microphone in the search bar and the palette) and voice add in the pick list (the phone's, and since 21 Oct the PC's), ShelfSearcher's recipe checked against the map (`shared/voice.js`). Needs a connection and the microphone allowed (`Permissions-Policy` now `microphone=(self)`)  | Drop for now; the floor scans | `js/search.js`, `js/views/picklist.js` |
 | 29 | How long closed trucks, backfill bays and inventory loads stay in the live state | The suggestion, applied as the default (nightly `store.retain`); History reads the worker's archive for older rows | Full detail 14 days, summary rows 60 days, older on the worker only | `shared/retain.js` (`KEEP_DETAIL_DAYS`, `KEEP_DAYS`) |
 | 30 | Finalise with pallets left |  **Decided 2026-10-09 (default), built:** Complete decant offers "Keep as rollover & close" or "Clear the dock & close", as DV did  | Offer hold or clear the dock, as DV did | `js/views/backdock/receiving.js` |
 | 31 | Whose clock times dock work |  **Decided 2026-10-09 (default), built:** every event is stamped on the worker's clock: the worker sends its time, each device corrects by the measured offset (kept for offline use), and Receiving warns when a device's clock is a minute or more out  | Stamp on the worker | `worker/store.js`, `shared/reducers/backdock.js` |
