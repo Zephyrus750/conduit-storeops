@@ -13,6 +13,7 @@
 //   picklists device → { items: [ { code, completed } ], at }
 //   inventory offsite pid → { pid, sent, time, desc, title, products[{kc,q}], req, cb, rec, note, at },
 //             offsiteAt, offsiteSrc; loads id → { id, label, date, status, recvDate, src, pallets[{pid, items[{k,d,q,dept}]}], at, by }
+//             (Back dock events and projection since 23 Oct 2026; the reducers stay here)
 
 import { reject, badList, earlier } from './util.js';
 // A department code (h1, k4, flex, checkouts) and a micro-department id
@@ -298,7 +299,7 @@ export const floorReducers = {
     return null;
   },
 
-  // ── Inventory hub ────────────────────────────────────────────────────
+  // ── Off-site pallets and other loads (the Inventory hub) ──────────────
   // The off-site master list replaces the register whole, as ShelfSearcher's
   // upload did; single pallets are added, called back and received by hand.
   'inventory.offsite.set'(s, e) {

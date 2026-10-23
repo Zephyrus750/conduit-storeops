@@ -123,7 +123,6 @@ export default {
   "at {place}": "tại {place}",
   "not parked": "chưa có chỗ đặt",
   "{n} of this keycode": "{n} của keycode này",
-  "Inventory loads": "Lô tồn kho",
   "Load {label}": "Lô {label}",
   "on pallet {pallets}": "trên pallet {pallets}",
   "Off-site pallets": "Pallet ngoài cửa hàng",
@@ -434,4 +433,5 @@ export default {
   "Compactor": "Máy nén rác",
   "Kiosk": "Ki-ốt",
   "Trolley bay": "Chỗ để xe đẩy",
+  "Other loads": "Chuyến hàng khác",
 };

@@ -301,7 +301,6 @@ export default {
   "Print the map": "Stampa la mappa",
   "The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.": "Il compositore di stampa, un libretto per reparto, la mappa di evacuazione e gli ordini di lavoro di manutenzione con codice QR.",
   "Search the store’s records": "Cerca nei registri del negozio",
-  "Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.": "La ricerca trova manifesti, consolidamenti, gabbie, carichi di giacenze e pallet fuori sede, oltre agli scaffali.",
   "Find a shelf as you type": "Trova uno scaffale mentre scrivi",
   "The search bar finds a shelf, a run, a bay or a department as you type.": "La barra di ricerca trova uno scaffale, una fila, un’ubicazione o un reparto mentre scrivi.",
   "Voice search": "Ricerca vocale",
@@ -321,4 +320,9 @@ export default {
   "Product names": "Nomi dei prodotti",
   "Pasted inventory reports": "Report di giacenze incollati",
   "Session and device": "Sessione e dispositivo",
+  "Search finds manifests, consolidations, cages, other loads and off-site pallets as well as shelves.": "La ricerca trova manifesti, consolidamenti, gabbie, altri carichi e pallet fuori sede, oltre agli scaffali.",
+  "Off-site pallets at the Back dock": "Pallet fuori sede nel Ricevimento merci",
+  "The Inventory hub moved to the Back dock: Off-site pallets (on the phone too), other loads in Manifests with their departments on the map, and what arrived each week in Analytics.": "Giacenze è passato al Ricevimento merci: Pallet fuori sede (anche sul telefono), altri carichi in Manifesti con i loro reparti sulla mappa, e cosa è arrivato ogni settimana in Analisi.",
+  "Off-site pallets on the phone": "Pallet fuori sede sul telefono",
+  "In the Back dock’s More menu: mark a pallet received, change its callback date or add one.": "Nel menu Altro del Ricevimento merci: segna un pallet come ricevuto, cambia la data di richiamo o aggiungine uno.",
 };

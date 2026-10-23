@@ -301,7 +301,6 @@ export default {
   "Print the map": "Plan drucken",
   "The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.": "Der Druck-Editor, ein Abteilungsheft, der Evakuierungsplan und Wartungsaufträge mit QR-Code.",
   "Search the store’s records": "Filialdaten durchsuchen",
-  "Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.": "Die Suche findet neben Regalen auch Lieferscheine, Sammelsendungen, Gitterboxen, Bestandsladungen und ausgelagerte Paletten.",
   "Find a shelf as you type": "Regal beim Tippen finden",
   "The search bar finds a shelf, a run, a bay or a department as you type.": "Die Suchleiste findet beim Tippen ein Regal, eine Regalreihe, einen Lagerplatz oder eine Abteilung.",
   "Voice search": "Sprachsuche",
@@ -321,4 +320,9 @@ export default {
   "Product names": "Produktnamen",
   "Pasted inventory reports": "Eingefügte Bestandsberichte",
   "Session and device": "Sitzung und Gerät",
+  "Search finds manifests, consolidations, cages, other loads and off-site pallets as well as shelves.": "Die Suche findet neben Regalen auch Lieferscheine, Sammelsendungen, Gitterboxen, weitere Lieferungen und ausgelagerte Paletten.",
+  "Off-site pallets at the Back dock": "Ausgelagerte Paletten in der Warenannahme",
+  "The Inventory hub moved to the Back dock: Off-site pallets (on the phone too), other loads in Manifests with their departments on the map, and what arrived each week in Analytics.": "Der Bestand ist in die Warenannahme umgezogen: Ausgelagerte Paletten (auch auf dem Handy), weitere Lieferungen unter Lieferscheine mit ihren Abteilungen auf dem Plan, und was jede Woche angekommen ist, unter Analyse.",
+  "Off-site pallets on the phone": "Ausgelagerte Paletten auf dem Handy",
+  "In the Back dock’s More menu: mark a pallet received, change its callback date or add one.": "Im Menü Mehr der Warenannahme: eine Palette als erhalten markieren, ihr Rückrufdatum ändern oder eine hinzufügen.",
 };

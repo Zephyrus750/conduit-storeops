@@ -506,4 +506,5 @@ export default {
   "Fire alarm call point": "Déclencheur manuel d’alarme",
   "Serviced": "Entretenu",
   "Schedule set": "Échéancier défini",
+  "On the map": "Sur le plan",
 };

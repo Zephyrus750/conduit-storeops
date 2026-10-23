@@ -301,7 +301,6 @@ export default {
   "Print the map": "Imprimir el mapa",
   "The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.": "El compositor de impresión, un cuadernillo por departamento, el mapa de evacuación y las órdenes de trabajo de mantenimiento con código QR.",
   "Search the store’s records": "Buscar en los registros de la tienda",
-  "Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.": "La búsqueda encuentra manifiestos, consolidados, jaulas, cargas de existencias y palés fuera de la tienda, además de estanterías.",
   "Find a shelf as you type": "Encuentra una estantería mientras escribes",
   "The search bar finds a shelf, a run, a bay or a department as you type.": "La barra de búsqueda encuentra una estantería, una fila, una ubicación o un departamento mientras escribes.",
   "Voice search": "Búsqueda por voz",
@@ -321,4 +320,9 @@ export default {
   "Product names": "Nombres de productos",
   "Pasted inventory reports": "Informes de existencias pegados",
   "Session and device": "Sesión y dispositivo",
+  "Search finds manifests, consolidations, cages, other loads and off-site pallets as well as shelves.": "La búsqueda encuentra manifiestos, consolidados, jaulas, otras cargas y palés fuera de la tienda, además de estanterías.",
+  "Off-site pallets at the Back dock": "Palés fuera de tienda en el Muelle de carga",
+  "The Inventory hub moved to the Back dock: Off-site pallets (on the phone too), other loads in Manifests with their departments on the map, and what arrived each week in Analytics.": "Existencias se ha trasladado al Muelle de carga: Palés fuera de tienda (también en el teléfono), otras cargas en Manifiestos con sus departamentos en el mapa, y lo que llegó cada semana en Análisis.",
+  "Off-site pallets on the phone": "Palés fuera de tienda en el teléfono",
+  "In the Back dock’s More menu: mark a pallet received, change its callback date or add one.": "En el menú Más del Muelle de carga: marca un palé como recibido, cambia su fecha de retorno o añade uno.",
 };

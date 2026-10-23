@@ -301,7 +301,6 @@ export default {
   "Print the map": "I-print ang mapa",
   "The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.": "Ang print composer, isang department booklet, ang evacuation map at mga maintenance work order na may QR code.",
   "Search the store’s records": "Hanapin sa mga record ng tindahan",
-  "Search finds manifests, consolidations, cages, inventory loads and off-site pallets as well as shelves.": "Hinahanap ng search ang mga manifest, consolidation, cage, inventory load at off-site pallet, pati mga shelf.",
   "Find a shelf as you type": "Hanapin ang shelf habang nagta-type",
   "The search bar finds a shelf, a run, a bay or a department as you type.": "Hinahanap ng search bar ang shelf, run, bay o department habang nagta-type ka.",
   "Voice search": "Voice search",
@@ -321,4 +320,9 @@ export default {
   "Product names": "Mga pangalan ng produkto",
   "Pasted inventory reports": "Mga na-paste na inventory report",
   "Session and device": "Session at device",
+  "Search finds manifests, consolidations, cages, other loads and off-site pallets as well as shelves.": "Hinahanap ng search ang mga manifest, consolidation, cage, iba pang load at off-site pallet, pati mga shelf.",
+  "Off-site pallets at the Back dock": "Mga off-site na pallet sa Back dock",
+  "The Inventory hub moved to the Back dock: Off-site pallets (on the phone too), other loads in Manifests with their departments on the map, and what arrived each week in Analytics.": "Lumipat sa Back dock ang Inventory hub: Mga off-site na pallet (sa phone din), iba pang load sa Mga manifest kasama ang mga department nila sa mapa, at ang mga dumating kada linggo sa Analytics.",
+  "Off-site pallets on the phone": "Mga off-site na pallet sa phone",
+  "In the Back dock’s More menu: mark a pallet received, change its callback date or add one.": "Sa Iba pa na menu ng Back dock: markahang natanggap ang pallet, palitan ang callback date nito, o magdagdag ng isa.",
 };

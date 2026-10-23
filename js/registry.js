@@ -11,7 +11,6 @@ import emergency from './views/emergency.js';
 import maintenance from './views/maintenance.js';
 import mapedits from './views/mapedits.js';
 import stocktake from './views/stocktake.js';
-import inventory from './views/inventory.js';
 import printmap from './views/printmap.js';
 import help from './views/help.js';
 import fieldmode from './views/fieldmode.js';
@@ -38,15 +37,16 @@ import profiles from './views/backdock/profiles.js';
 import { dockscreen, teamboard } from './views/backdock/screens.js';
 import wallboard from './views/backdock/wallboard.js';
 import danalytics from './views/backdock/danalytics.js';
+import offsite from './views/backdock/offsite.js';
 import { tx } from './i18n.js';
 
-export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, inventory, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, ...ADMIN_VIEWS].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, ...ADMIN_VIEWS].map(v => [v.id, v]));
 
 // Rail sections and the phone tab strip per workspace. Rows without a view
 // yet are inert and say so.
 export const RAIL = [
-  { sec: tx('Store'), rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake', 'inventory', 'printmap', 'mapedits'] },
-  { sec: tx('Back dock'), rows: ['receiving', 'teamboard', 'dockscreen', 'wallboard', 'rhistory', 'danalytics', 'manifests', 'profiles'] },
+  { sec: tx('Store'), rows: ['map', 'picklist', 'refresh', 'labelint', 'emergency', 'maintenance', 'stocktake', 'printmap', 'mapedits'] },
+  { sec: tx('Back dock'), rows: ['receiving', 'teamboard', 'dockscreen', 'wallboard', 'rhistory', 'danalytics', 'manifests', 'offsite', 'profiles'] },
   { sec: tx('Stockroom'), rows: ['bfreview', 'cages', 'adjust', 'daylist', 'srintel', 'srtrends', 'codelist', 'srhistory'] },
 ];
 export const STRIP = {
@@ -66,6 +66,6 @@ export const ADMIN_RAIL = [['admin', 'grid', tx('Overview')], ['adminmaps', 'm-m
 export const MORE = {
   floor: [['stocktake', 'm-stocktake', tx('Stocktake'), tx('Count shelves in a session')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['mapedits', 'edit', tx('Suggest map edits'), tx('A wrong name or a missing shelf')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
   stockroom: [['daylist', 'm-daylist', tx('Day list'), tx('What to backfill next')], ['codelist', 'barcode', tx('Quick Scan'), tx('Scan codes into a list')], ['srhistory', 'm-srhistory', tx('History'), tx('Today’s sent bays')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
-  backdock: [['rhistory', 'm-rhistory', tx('History'), tx('Finished trucks')], ['dockscreen', 'grid', tx('Dock screen'), tx('The big screen at the dock')], ['wallboard', 'chart', tx('Wallboard'), tx('Progress for the team')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
+  backdock: [['rhistory', 'm-rhistory', tx('History'), tx('Finished trucks')], ['offsite', 'm-inventory', tx('Off-site pallets'), tx('Callbacks and returns')], ['dockscreen', 'grid', tx('Dock screen'), tx('The big screen at the dock')], ['wallboard', 'chart', tx('Wallboard'), tx('Progress for the team')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
 };
 export const MORE_STORE = ['storeinfo', 'help', 'settings'];

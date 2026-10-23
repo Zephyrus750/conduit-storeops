@@ -328,7 +328,6 @@ export default {
   "Location refresh": "Location refresh",
   "Label integrity": "Label integrity",
   "Suggest map edits and Field Mode": "Suggest map edits at Field Mode",
-  "Inventory and pallet hub": "Inventory at pallet hub",
   "Backfill review and history": "Backfill review at history",
   "Adjustments": "Adjustments",
   "Stock intelligence": "Stock intelligence",
@@ -339,4 +338,6 @@ export default {
   "Carton profiles": "Carton profiles",
   "Receiving history": "Receiving history",
   "Wallboard and analytics": "Wallboard at analytics",
+  "Callbacks and returns": "Mga callback at return",
+  "Off-site pallets and other loads": "Mga off-site na pallet at iba pang load",
 };

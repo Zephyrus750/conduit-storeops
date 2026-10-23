@@ -10,6 +10,7 @@
 //   pacePoints(t, now)                   cumulative cartons decanted over the decant clock
 //   personNow(t, now, rates)             this truck's rate per person against their 28-day rate
 //   insights(t, now, opts)               the live board's plain-language flags
+//   arrivalsByWeek(history, opts)        cartons each week by the manifest's departments, with callouts
 
 import { csvLines } from './records.js';
 import { segWorkedMs, startOf } from './reducers/backdock.js';
@@ -115,4 +116,34 @@ export function insights(t, now = Date.now(), opts = {}) {
   if (at && goal) { const d = Math.round((at - goal) / MIN); out.push(d > 0 ? { tone: 'bad', text: `Forecast finish is ${d} min past the goal.` } : { tone: 'good', text: `On track: forecast finish ${-d} min ahead of the goal.` }); }
   if (!out.length) out.push({ tone: 'good', text: 'All steady.' });
   return out;
+}
+
+// What arrived each week (Monday start, by the truck's day), from finished
+// trucks: cartons by the manifest's departments (historyRow.byDept; a
+// consol's department names its biggest first, "101/205", and its cartons
+// count to that one). Gap weeks are zero; the trend compares the newer half of the active weeks with
+// the older half once there are four (the Inventory hub's Trends, now read
+// from the dock's own history instead of separately imported loads).
+export function arrivalsByWeek(history, { weeks = 12, today } = {}) {
+  const add = (day, n) => { const d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const monday = day => add(day, -((new Date(day + 'T12:00:00Z').getUTCDay() + 6) % 7));
+  const end = monday(today), start = weeks === 'all' ? null : add(end, -7 * (weeks - 1)), by = new Map();
+  for (const r of history || []) {
+    const day = r.date || String(r.id || '').slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    const wk = monday(day); if ((start && wk < start) || wk > end) continue;
+    const b = by.get(wk) || { wk, cartons: 0, trucks: 0, depts: {} };
+    b.trucks++;
+    const depts = r.byDept || [], known = depts.reduce((n, d) => n + (Number(d.cartons) || 0), 0);
+    b.cartons += Math.max(known, Number(r.cartons) || 0);
+    for (const d of depts) { const k = String(d.dept || '').split('/')[0].trim() || '?'; b.depts[k] = (b.depts[k] || 0) + (Number(d.cartons) || 0); }
+    by.set(wk, b);
+  }
+  const first = start || [...by.keys()].sort()[0] || end, list = [];
+  for (let wk = first; wk <= end; wk = add(wk, 7)) list.push(by.get(wk) || { wk, cartons: 0, trucks: 0, depts: {} });
+  const active = list.filter(w => w.trucks), cartons = list.reduce((n, w) => n + w.cartons, 0), trucks = list.reduce((n, w) => n + w.trucks, 0);
+  const busiest = active.reduce((m, w) => (!m || w.cartons > m.cartons ? w : m), null);
+  let trend = null;
+  if (active.length >= 4) { const h = Math.floor(active.length / 2), older = active.slice(0, h).reduce((a, w) => a + w.cartons, 0) / h, newer = active.slice(-h).reduce((a, w) => a + w.cartons, 0) / h; trend = older ? Math.round((newer - older) / older * 100) : null; }
+  const depts = {}; for (const w of list) for (const [d, c] of Object.entries(w.depts)) depts[d] = (depts[d] || 0) + c;
+  return { weeks: list, depts: Object.entries(depts).sort((a, b) => b[1] - a[1]), callouts: { cartons, trucks, perTruck: trucks ? Math.round(cartons / trucks) : 0, busiest: busiest?.wk || null, busiestCartons: busiest?.cartons || 0, trend } };
 }

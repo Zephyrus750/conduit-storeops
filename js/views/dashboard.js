@@ -15,6 +15,7 @@ import { teamChip, openTeamFor } from '../team.js';
 import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex } from './backdock/common.js';
 import { ratesFor } from './backdock/plan.js';
 import { registerSummary, isFixture, consolidate } from '../../shared/inventory.js';
+import { toolOff } from '../../shared/tools.js';
 import { tx, txn, locale } from '../i18n.js';
 
 const TARGET = 100, DAILY = 20;
@@ -181,7 +182,8 @@ function register(ctx, r) {
 
 // ── Today at the store and logistics (Floor P2) ─────────────────────────
 // Five tiles for what the floor did today (ShelfSearcher's "Today at") and
-// three logistics cards from the inventory hub. The store map left the
+// three logistics cards: other loads (Manifests), off-site pallets and the
+// latest load, in a store with the Back dock and the off-site tool on. The store map left the
 // dashboard (2026-10-14); it has its own view.
 function todayAt(ctx) {
   const t = today(), wk = weekId(), R = ctx.store.get('refresh'), marks = Object.values(R.weeks[wk] || {});
@@ -197,21 +199,22 @@ function todayAt(ctx) {
     tile('stocktake', 'm-stocktake', counted == null ? '—' : counted, tx('Stocktake'), sess ? tx('counted · session {id}', { id: esc(sess[0]) }) : tx('no session')) + `</div></div>`;
 }
 function logistics(ctx) {
+  if (!(ctx.session.current?.caps || []).includes('backdock') || toolOff(ctx.store.get('tools')?.off, 'inventory')) return '';
   const I = ctx.store.get('inventory') || { offsite: {}, loads: {} }, t = today(), sum = registerSummary(I.offsite, t);
   const loads = Object.values(I.loads).sort((a, b) => (b.recvDate || b.date || '').localeCompare(a.recvDate || a.date || '')), units = l => l.pallets.reduce((n, p) => n + p.items.reduce((k, i) => k + i.q, 0), 0);
   const next = loads.filter(l => l.status === 'incoming').sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0], latest = loads.find(l => l.status === 'received') || loads[0];
   let clr = null; try { const c = JSON.parse(localStorage.getItem(`inventory_prices:${ctx.storeNo}`) || 'null'); if (c) { const on = new Set(Object.entries(c.items || {}).filter(([, v]) => v.clr).map(([k]) => k)); clr = { items: on.size, pallets: Object.values(I.offsite).filter(r => !r.rec && r.products.some(p => on.has(p.kc))).length }; } } catch {}
   const pallets = loads.reduce((n, l) => n + l.pallets.length, 0);
-  const inv = `<div class="card kpi logi"><div class="kh">${ic('m-inventory')}<h3>${tx('Inventory')}</h3><a class="open" data-go="inventory">${tx('Open')} ${ic('arrow')}</a></div><div class="rows">` +
+  const inv = `<div class="card kpi logi"><div class="kh">${ic('packages')}<h3>${tx('Other loads')}</h3><a class="open" data-go="manifests">${tx('Open')} ${ic('arrow')}</a></div><div class="rows">` +
     `<div class="row">${tx('Loads')}<b>${txn(pallets, '{loads} · {n} pallet', '{loads} · {n} pallets', { loads: loads.length })}</b></div>` +
     `<div class="row">${tx('Next in')}<b>${next ? `${esc(next.label)} · ${esc(fmtDay(next.date))}` : loads.length ? tx('All loads received') : '—'}</b></div>` +
     `<div class="row">${tx('Off-site')}<b>${txn(sum.live, '{n} pallet', '{n} pallets')}${sum.nextCallback ? ' · ' + tx('callback {date}', { date: esc(fmtDay(sum.nextCallback)) }) : ''}</b></div>` +
-    (clr ? `<div class="row">${tx('Clearance')}<b class="${clr.items ? 'c-red' : ''}">${clr.items ? tx('▼ {items} · {pallets} worth calling back', { items: txn(clr.items, '{n} item', '{n} items'), pallets: txn(clr.pallets, '{n} pallet', '{n} pallets') }) : tx('nothing held is marked down')}</b></div>` : '') + `</div></div>`;
+    (clr ? `<div class="row go" data-go="offsite">${tx('Clearance')}<b class="${clr.items ? 'c-red' : ''}">${clr.items ? tx('▼ {items} · {pallets} worth calling back', { items: txn(clr.items, '{n} item', '{n} items'), pallets: txn(clr.pallets, '{n} pallet', '{n} pallets') }) : tx('nothing held is marked down')}</b></div>` : '') + `</div></div>`;
   const live = sum.byCallback.slice(0, 4);
-  const off = `<div class="card kpi logi"><div class="kh">${ic('box')}<h3>${tx('Off-site pallets')}</h3><a class="open" data-go="inventory">${tx('Hub')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${sum.live}</span><span class="d">${tx('{n} fixtures', { n: sum.fixtures })}${sum.overdue.length ? ` · <b class="c-red">${tx('{n} overdue', { n: sum.overdue.length })}</b>` : ''}</span></div><div class="rows">` +
-    (live.length ? live.map(r => `<div class="row"><span class="l"><b class="mono">${esc(r.pid)}</b> ${esc((r.title || r.desc || '').slice(0, 28))}${isFixture(r) ? ` <span class="inv-pill fx">${tx('Fixtures')}</span>` : ''}</span><b class="${r.cb && r.cb < t ? 'c-red' : ''}">${r.cb ? tx('cb {date}', { date: esc(fmtDay(r.cb)) }) : '—'}</b></div>`).join('') + (sum.live > 4 ? `<div class="row cs-dim">${tx('+{n} more in the hub', { n: sum.live - 4 })}</div>` : '') : `<div class="row">${tx('No pallets off-site')}<b>✓</b></div>`) + `</div></div>`;
+  const off = `<div class="card kpi logi"><div class="kh">${ic('m-inventory')}<h3>${tx('Off-site pallets')}</h3><a class="open" data-go="offsite">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${sum.live}</span><span class="d">${tx('{n} fixtures', { n: sum.fixtures })}${sum.overdue.length ? ` · <b class="c-red">${tx('{n} overdue', { n: sum.overdue.length })}</b>` : ''}</span></div><div class="rows">` +
+    (live.length ? live.map(r => `<div class="row go" data-go="offsite" data-pid="${esc(r.pid)}"><span class="l"><b class="mono">${esc(r.pid)}</b> ${esc((r.title || r.desc || '').slice(0, 28))}${isFixture(r) ? ` <span class="inv-pill fx">${tx('Fixtures')}</span>` : ''}</span><b class="${r.cb && r.cb < t ? 'c-red' : ''}">${r.cb ? tx('cb {date}', { date: esc(fmtDay(r.cb)) }) : '—'}</b></div>`).join('') + (sum.live > 4 ? `<div class="row cs-dim">${tx('+{n} more off-site', { n: sum.live - 4 })}</div>` : '') : `<div class="row">${tx('No pallets off-site')}<b>✓</b></div>`) + `</div></div>`;
   const top = latest ? consolidate(latest.pallets).slice(0, 4) : [];
-  const lt = `<div class="card kpi logi"><div class="kh">${ic('truck')}<h3>${tx('Latest load')}</h3><a class="open" data-go="inventory">${tx('Open')} ${ic('arrow')}</a></div>` + (latest ? `<div class="hl"><b style="color:var(--ink)">${esc(latest.label)}</b> · ${esc(LOAD_ST[latest.status] || latest.status)}${latest.recvDate ? ' ' + esc(fmtDay(latest.recvDate)) : ''}</div><div class="rows"><div class="row">${tx('Pallets · units')}<b>${latest.pallets.length} · ${units(latest).toLocaleString('en-AU')}</b></div>${top.map(([d, u]) => `<div class="row"><span class="l"><b class="mono">${esc(d)}</b> ${esc(codeName(d))}</span><b>${u.toLocaleString('en-AU')}</b></div>`).join('')}</div>` : `<div class="hl">${tx('No loads yet. Import a manifest or CSV in the Inventory hub.')}</div>`) + `</div>`;
+  const lt = `<div class="card kpi logi"><div class="kh">${ic('truck')}<h3>${tx('Latest load')}</h3><a class="open" data-go="manifests"${latest ? ` data-load="${esc(latest.id)}"` : ''}>${tx('Open')} ${ic('arrow')}</a></div>` + (latest ? `<div class="hl"><b style="color:var(--ink)">${esc(latest.label)}</b> · ${esc(LOAD_ST[latest.status] || latest.status)}${latest.recvDate ? ' ' + esc(fmtDay(latest.recvDate)) : ''}</div><div class="rows"><div class="row">${tx('Pallets · units')}<b>${latest.pallets.length} · ${units(latest).toLocaleString('en-AU')}</b></div>${top.map(([d, u]) => `<div class="row"><span class="l"><b class="mono">${esc(d)}</b> ${esc(codeName(d))}</span><b>${u.toLocaleString('en-AU')}</b></div>`).join('')}</div>` : `<div class="hl">${tx('No loads yet. Add one in Manifests.')}</div>`) + `</div>`;
   return `<div class="logis">${inv}${off}${lt}</div>`;
 }
 const fmtDay = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) : '';

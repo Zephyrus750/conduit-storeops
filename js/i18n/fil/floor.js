@@ -506,4 +506,5 @@ export default {
   "Fire alarm call point": "Fire alarm call point",
   "Serviced": "Na-service",
   "Schedule set": "Naitakda ang iskedyul",
+  "On the map": "Sa mapa",
 };

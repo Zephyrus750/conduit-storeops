@@ -506,4 +506,5 @@ export default {
   "Fire alarm call point": "Pulsante di allarme antincendio",
   "Serviced": "Revisionato",
   "Schedule set": "Programma impostato",
+  "On the map": "Sulla mappa",
 };

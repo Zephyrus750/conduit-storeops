@@ -328,7 +328,6 @@ export default {
   "Location refresh": "Làm mới kệ",
   "Label integrity": "Kiểm tra nhãn",
   "Suggest map edits and Field Mode": "Đề xuất sửa sơ đồ và Chế độ hiện trường",
-  "Inventory and pallet hub": "Tồn kho và trung tâm pallet",
   "Backfill review and history": "Duyệt bổ sung hàng và lịch sử",
   "Adjustments": "Điều chỉnh",
   "Stock intelligence": "Phân tích tồn kho",
@@ -339,4 +338,6 @@ export default {
   "Carton profiles": "Hồ sơ thùng",
   "Receiving history": "Lịch sử nhận hàng",
   "Wallboard and analytics": "Bảng treo tường và phân tích",
+  "Callbacks and returns": "Gọi về và hàng về",
+  "Off-site pallets and other loads": "Pallet ngoài cửa hàng và chuyến hàng khác",
 };

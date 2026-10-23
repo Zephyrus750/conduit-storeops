@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readOffsiteSheets, guessColumns, readGeneric, registerSummary, consolidate, heatBands, loadTrends, clearanceDiff, isFixture, OFFSITE_CAP } from '../../shared/inventory.js';
 import { initialState, apply } from '../../shared/reducers.js';
 import { CATALOGUE } from '../../shared/catalogue.js';
+import { validateEvent } from '../../shared/validate.js';
+import { ulid } from '../../shared/ulid.js';
 
 const AT = '2026-10-08T01:00:00.000Z';
 const ev = (type, entity, payload, at = AT) => ({ type, entity, payload, at, actor: { device: 'd1', roles: ['floor'] } });
@@ -78,8 +80,12 @@ test('clearance: newly on clearance or a lower price, against a previous day onl
   assert.deepEqual(out.map(x => [x.kc, x.kind, x.prevPrice, x.price]), [['a', 'clr', 10, 6], ['b', 'drop', 10, 8]]);
 });
 
-test('inventory events: catalogued for the floor, validated, and rejected without touching state', () => {
-  for (const t of ['inventory.offsite.set', 'inventory.offsite.add', 'inventory.offsite.update', 'inventory.load.add', 'inventory.load.status', 'inventory.load.remove']) assert.equal(CATALOGUE[t].area, 'floor', t);
+test('inventory events: catalogued for the Back dock, validated, and rejected without touching state', () => {
+  for (const t of ['inventory.offsite.set', 'inventory.offsite.add', 'inventory.offsite.update', 'inventory.load.add', 'inventory.load.status', 'inventory.load.remove']) { assert.equal(CATALOGUE[t].area, 'backdock', t); assert.deepEqual(CATALOGUE[t].roles, ['dock'], t); }
+  // A device on a release from before the move still sends area 'floor'.
+  const env = area => ({ id: ulid(), store: '1241', area, type: 'inventory.offsite.update', entity: { pid: '51' }, payload: { rec: '' }, at: '2026-10-23T01:00:00Z', v: 1 });
+  assert.equal(validateEvent(env('backdock')), null); assert.equal(validateEvent(env('floor')), null);
+  assert.equal(validateEvent(env('stockroom')).code, 'invalid_event');
   const s = initialState();
   assert.equal(apply(s, ev('inventory.offsite.set', {}, { rows: [{ pid: '51', cb: '2026-10-20', products: [{ kc: '43166022', q: 12 }, { kc: 'bad', q: 1 }] }, { pid: '' }], src: 'list.xlsx' })), null);
   assert.deepEqual(Object.keys(s.inventory.offsite), ['51']); assert.equal(s.inventory.offsite['51'].products.length, 1); assert.equal(s.inventory.offsiteSrc, 'list.xlsx');

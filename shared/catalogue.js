@@ -12,7 +12,9 @@
 
 export const AREAS = ['floor', 'stockroom', 'backdock', 'store'];
 
-const T = (area, roles, entity, payload = {}, v = 1) => ({ area, roles, entity, payload, v });
+// wasArea: the area a type moved from, still accepted from a device on an
+// older release (the worker logs the event under its area now).
+const T = (area, roles, entity, payload = {}, v = 1, wasArea) => ({ area, roles, entity, payload, v, ...(wasArea ? { wasArea } : {}) });
 const F = ['floor'], S = ['stockroom'], D = ['dock'], M = ['manager'];
 
 export const CATALOGUE = {
@@ -46,12 +48,6 @@ export const CATALOGUE = {
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),
-  'inventory.offsite.set':    T('floor', F, [], { rows: 'array' }),             // the off-site master list, whole; payload.src
-  'inventory.offsite.add':    T('floor', F, ['pid']),                           // one pallet sent off-site: sent, desc, req, cb, note, products
-  'inventory.offsite.update': T('floor', F, ['pid']),                           // cb, rec ('' = still off-site), note
-  'inventory.load.add':       T('floor', F, ['load'], { label: 'string', pallets: 'array' }),   // date, status, recvDate, src
-  'inventory.load.status':    T('floor', F, ['load'], { status: 'string' }),   // incoming | received | offsite; recvDate
-  'inventory.load.remove':    T('floor', F, ['load']),
 
   // ── Stockroom ────────────────────────────────────────────────────────
   'cage.create':         T('stockroom', S, ['cage'], { ring: 'string' }),
@@ -125,6 +121,15 @@ export const CATALOGUE = {
   'plan.remove':         T('backdock', D, ['date', 'slot']),
   'plan.noTrucks':       T('backdock', D, ['date']),                            // a day confirmed with no trucks; payload.on false clears it
 
+  // Off-site pallets and other loads: the Inventory hub's events, Floor
+  // until it moved to the Back dock (23 Oct 2026).
+  'inventory.offsite.set':    T('backdock', D, [], { rows: 'array' }, 1, 'floor'),             // the off-site master list, whole; payload.src
+  'inventory.offsite.add':    T('backdock', D, ['pid'], {}, 1, 'floor'),                       // one pallet sent off-site: sent, desc, req, cb, note, products
+  'inventory.offsite.update': T('backdock', D, ['pid'], {}, 1, 'floor'),                       // cb, rec ('' = still off-site), note
+  'inventory.load.add':       T('backdock', D, ['load'], { label: 'string', pallets: 'array' }, 1, 'floor'),   // date, status, recvDate, src
+  'inventory.load.status':    T('backdock', D, ['load'], { status: 'string' }, 1, 'floor'),   // incoming | received | offsite; recvDate
+  'inventory.load.remove':    T('backdock', D, ['load'], {}, 1, 'floor'),
+
   // ── Store-wide ───────────────────────────────────────────────────────
   'map.publish':         T('store', M, ['version']),
   'roster.rotate':       T('store', M, []),
@@ -147,9 +152,9 @@ export function typeInfo(type) {
 
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
-  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'inventory'],
+  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
-  backdock: ['dock', 'plan'],
+  backdock: ['dock', 'plan', 'inventory'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'areas', 'comms', 'retention'],
 };
 

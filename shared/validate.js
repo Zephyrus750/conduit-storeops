@@ -18,7 +18,7 @@ export function validateEvent(ev) {
   // reason tells a device its app is ahead of this worker (a deploy in
   // flight): the change waits in its outbox instead of being dropped.
   if (!info) return { code: 'invalid_event', reason: 'unknown_type', message: `unknown type ${ev.type}` };
-  if (ev.area !== info.area) return bad(`area must be ${info.area} for ${ev.type}`);
+  if (ev.area !== info.area && ev.area !== info.wasArea) return bad(`area must be ${info.area} for ${ev.type}`);
   if (typeof ev.at !== 'string' || !ISO_RE.test(ev.at)) return bad('at must be an ISO 8601 timestamp with offset');
   if ((ev.v ?? 1) !== info.v) return { code: 'invalid_event', reason: 'schema_version', message: `${ev.type} is at schema v${info.v}` };
 
