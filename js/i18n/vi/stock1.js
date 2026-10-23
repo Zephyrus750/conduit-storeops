@@ -551,4 +551,7 @@ export default {
   "SPOT-CHECK": "KIỂM TRA NHANH",
   "COUNT · STUCK": "ĐẾM · ĐỨNG YÊN",
   "COUNT": "ĐẾM",
+  "No price yet": "Chưa có giá",
+  "Click the name for kmart.com.au, the keycode to copy it": "Bấm vào tên để mở kmart.com.au, bấm vào keycode để sao chép",
+  "Not sold online, or a retired code. Click the keycode to copy it.": "Không bán trực tuyến, hoặc mã đã ngừng. Bấm vào keycode để sao chép.",
 };

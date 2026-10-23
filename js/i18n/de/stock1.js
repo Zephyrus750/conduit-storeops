@@ -551,4 +551,7 @@ export default {
   "SPOT-CHECK": "STICHPROBE",
   "COUNT · STUCK": "ZÄHLEN · STECKT FEST",
   "COUNT": "ZÄHLEN",
+  "No price yet": "Noch kein Preis",
+  "Click the name for kmart.com.au, the keycode to copy it": "Name anklicken für kmart.com.au, Keycode anklicken zum Kopieren",
+  "Not sold online, or a retired code. Click the keycode to copy it.": "Nicht online erhältlich oder ein alter Code. Keycode anklicken zum Kopieren.",
 };

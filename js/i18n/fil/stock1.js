@@ -551,4 +551,7 @@ export default {
   "SPOT-CHECK": "SPOT-CHECK",
   "COUNT · STUCK": "BILANGIN · STUCK",
   "COUNT": "BILANGIN",
+  "No price yet": "Wala pang presyo",
+  "Click the name for kmart.com.au, the keycode to copy it": "I-click ang pangalan para sa kmart.com.au, ang keycode para kopyahin",
+  "Not sold online, or a retired code. Click the keycode to copy it.": "Hindi ibinebenta online, o lumang code. I-click ang keycode para kopyahin.",
 };

@@ -439,6 +439,12 @@ rail row shows 1 while today's morning report is missing. Today's morning
 setup marks the morning report Required and the midday one Optional (it never
 holds the list back) and both open Reports & files.
 
+On a PC, resting the pointer on a keycode or a product name anywhere
+(`kcCopy`, `itemName`, or anything marked `data-kccard`) shows a product card:
+the catalogue's picture, keycode, name, price, was-price and clearance, from
+this device's catalogue cache (`installProductCard` in
+`js/views/stockroom/common.js`). Phones have no hover and show none.
+
 The colour scheme is fixed for every store device (managers share PCs):
 charcoal rail and phone bars with the Lagoon accent, set in `js/prefs.js`.
 The owner console keeps charcoal with Signal orange. Display size and the

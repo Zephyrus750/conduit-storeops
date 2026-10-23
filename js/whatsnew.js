@@ -17,6 +17,7 @@ export const RELEASES = [
     ['lock', tx('Bays open on another desk'), tx('A bay being reviewed elsewhere shows a banner with Take over. A desk that walks away lets go after 20 minutes.'), 'bfreview', 'desk'],
     ['users', tx('The decant plan on the Team Board'), tx('Up next follows each person’s queue, and the Wallboard timeline shows planned pallets and breaks.'), 'teamboard'],
     ['print', tx('Print the map'), tx('The print composer, a department booklet, the evacuation map and maintenance work orders with a QR code.'), 'printmap', 'desk'],
+    ['tag', tx('Product cards'), tx('Rest the pointer on a keycode or a product name for a moment: a card shows its picture, name and price, and whether it is on clearance.'), null, 'desk'],
     ['file', tx('Reports & files'), tx('One place for everything the store brings in: paste the morning report (required) or the midday one (optional), or drop a DC manifest, a sheet of pallets, the off-site list or the SOH report. It says what it found before anything is saved.'), 'inputs', 'desk'],
     ['sidebar', tx('A shorter rail'), tx('The rail has a few rows for each area. Floor checks, Safety & upkeep, Backfill, Stock accuracy, Receiving, Plan and Results each hold several screens, as tabs at the top. Print map and Suggest edits are buttons on the Store map; the dock boards are under Screens.'), null, 'desk'],
     ['search', tx('Search the store’s records'), tx('Search finds manifests, consolidations, cages, other loads and off-site pallets as well as shelves.'), null, 'desk'],

@@ -34,7 +34,7 @@ import { whatsNewOnce } from './whatsnew.js';
 import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
 import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
-import { installProductLinks } from './views/stockroom/common.js';
+import { installProductLinks, installProductCard } from './views/stockroom/common.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
 
@@ -67,7 +67,7 @@ document.addEventListener('change', e => { if (e.target.matches?.('#siLang, [dat
 installKeyboard();
 applyOrientation();
 installCameraButtons(document);
-installProductLinks(client.catalogue);
+installProductLinks(client.catalogue); installProductCard(client.catalogue);
 let content = $('#content');
 const isMobile = () => frame.clientWidth <= 600;
 

@@ -1,6 +1,6 @@
 // Shared bits for the Stockroom views: ring colours, today's key, product
 // names from the catalogue with a repaint when they arrive.
-import { esc, today, DEPTS_DEFAULT, DEPT_COLOUR } from '../../ui.js';
+import { esc, ic, today, DEPTS_DEFAULT, DEPT_COLOUR } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 
 export const RING = { 'new-lines': [tx('New lines'), '#7C3AED'], overstock: [tx('Overstock'), '#2563EB'], 'cant-work': [tx('Can’t work'), '#DC2626'], 'online-picks': [tx('Online picks'), '#16A34A'] };
@@ -96,6 +96,46 @@ export function installProductLinks(catalogue) {
     const send = u => { if (w && !w.closed) { try { w.opener = null; } catch {} w.location.replace(u); } else window.open(u, '_blank', 'noopener'); };
     catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null } : null); send(urlOf(kc)); }).catch(() => send(searchUrl(kc)));
   }, true);
+}
+// On a PC, resting the pointer on a keycode or a product name for a moment
+// shows the product: its picture, keycode, name, price (the was-price and
+// clearance when the catalogue has them) and what a click does. The card is
+// the catalogue's (this device's cache, a week), so it costs nothing a name
+// on the screen has not already asked for. Anything else can opt in with
+// data-kccard="<keycode>".
+const CARD_ON = '[data-copykc], a[data-kcgo], [data-kccard]';
+const cardCode = el => el.dataset.copykc || el.dataset.kcgo || el.dataset.kccard || '';
+const money = v => '$' + Number(v).toFixed(2);
+function cardHtml(kc, it) {
+  const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : it ? `<span class="pch-none">${tx('No price yet')}</span>` : '';
+  return `<div class="pch-img">${it?.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ic('box')}</div>` +
+    `<div class="pch-b"><span class="mono pch-kc">${esc(kc)}</span><b>${it ? esc(it.name || tx('Verified product')) : tx('Not in the catalogue')}</b>${price}` +
+    `<small>${it?.url ? tx('Click the name for kmart.com.au, the keycode to copy it') : tx('Not sold online, or a retired code. Click the keycode to copy it.')}</small></div>`;
+}
+export function installProductCard(catalogue) {
+  const fine = matchMedia('(hover: hover) and (pointer: fine)');
+  let card = null, cur = null, timer = null;
+  // The element's own tooltip steps aside while the card is up (the card says the same).
+  const hide = () => { clearTimeout(timer); timer = null; if (cur?.dataset.tip0 != null) { cur.title = cur.dataset.tip0; delete cur.dataset.tip0; } cur = null; card?.classList.remove('on'); };
+  document.addEventListener('mouseover', e => {
+    if (!fine.matches) return;
+    const el = e.target.closest?.(CARD_ON), kc = el ? cardCode(el) : '';
+    if (!el || el === cur || !/^\d{6,8}$/.test(kc)) return;
+    hide(); cur = el; if (el.title) { el.dataset.tip0 = el.title; el.removeAttribute('title'); }
+    timer = setTimeout(async () => {
+      const it = await catalogue.lookup(kc).catch(() => null), fr = document.querySelector('.frame');
+      if (cur !== el || !el.isConnected || !fr) return;
+      if (!card || card.parentNode !== fr) { card?.remove(); card = document.createElement('div'); card.className = 'pch'; card.setAttribute('role', 'tooltip'); fr.appendChild(card); }
+      card.innerHTML = cardHtml(kc, it); card.classList.add('on');
+      // Under the code, or above it near the foot; kept inside the frame (which Display size may scale).
+      const r = el.getBoundingClientRect(), fb = fr.getBoundingClientRect(), sc = fb.width / fr.offsetWidth || 1, w = card.offsetWidth, h = card.offsetHeight;
+      const left = Math.min(Math.max(8, (r.left - fb.left) / sc), fr.offsetWidth - w - 8);
+      let top = (r.bottom - fb.top) / sc + 8; if (top + h > fr.offsetHeight - 8) top = Math.max(8, (r.top - fb.top) / sc - h - 8);
+      card.style.left = left + 'px'; card.style.top = top + 'px';
+    }, 350);
+  });
+  document.addEventListener('mouseout', e => { const el = e.target.closest?.(CARD_ON); if (el && el === cur && !(e.relatedTarget && el.contains(e.relatedTarget))) hide(); });
+  for (const ev of ['scroll', 'mousedown', 'keydown']) document.addEventListener(ev, hide, true);
 }
 async function copyCode(kc, el) {
   const { toast } = await import('../../ui.js');

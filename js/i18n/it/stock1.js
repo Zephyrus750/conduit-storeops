@@ -551,4 +551,7 @@ export default {
   "SPOT-CHECK": "CONTROLLO A CAMPIONE",
   "COUNT · STUCK": "CONTARE · FERMO",
   "COUNT": "CONTARE",
+  "No price yet": "Ancora nessun prezzo",
+  "Click the name for kmart.com.au, the keycode to copy it": "Clicca il nome per kmart.com.au, il keycode per copiarlo",
+  "Not sold online, or a retired code. Click the keycode to copy it.": "Non in vendita online, o un codice ritirato. Clicca il keycode per copiarlo.",
 };
