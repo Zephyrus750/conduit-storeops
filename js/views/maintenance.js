@@ -1,7 +1,7 @@
 // Maintenance: log issues with a map pin, work them open → progress →
 // completed, reopen as recurring. Reads store.get('issues').
 
-import { $, ic, esc, vh, sub, status, fmtTime, ago, toast } from '../ui.js';
+import { $, ic, esc, vh, sub, status, fmtTime, ago, toast, mgr } from '../ui.js';
 import { mountMap, mapbar, crumbx, bindMapChrome, segmentId, mvMap, setStrip, sx } from '../map.js';
 import { ISSUE_CATS } from '../../shared/reducers/floor.js';
 import { printSheet, table, signoff } from '../print.js';
@@ -249,7 +249,7 @@ function phoneStrip(m) {
     (draft.x != null || draft.editId ? `<button class="act go" type="button" data-act="draft-save">${ic('check')}${draft.editId ? tx('Save') : tx('Send')}</button>` : `<button class="act" type="button" data-act="draft-open">${ic('chev')}${tx('Skip')}</button>`);
   const i = m.all.find(x => x.id === selected);
   if (i) return `<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span><b>${esc(i.title)}</b><span class="s">${stName(i)}</span><button class="act" type="button" data-act="back">${ic('x')}${tx('Close')}</button>`;
-  return `${ic('m-maintenance')}<b>${tx('Maintenance')}</b><span class="n${m.overdue ? ' red' : ''}">${m.open.length}</span><span class="s">${m.overdue ? tx('{n} overdue', { n: m.overdue }) : ''}</span><button class="act go" type="button" data-act="new">${ic('plus')}${tx('Report')}</button>`;
+  return `${ic('m-maintenance')}<b>${tx('Maintenance')}</b>${mgr()}<span class="n${m.overdue ? ' red' : ''}">${m.open.length}</span><span class="s">${m.overdue ? tx('{n} overdue', { n: m.overdue }) : ''}</span><button class="act go" type="button" data-act="new">${ic('plus')}${tx('Report')}</button>`;
 }
 // The sheet: the report form, an issue with its photos, log and actions, or
 // the open list.

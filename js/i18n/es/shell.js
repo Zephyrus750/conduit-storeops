@@ -351,4 +351,7 @@ export default {
   "Stock accuracy": "Exactitud de existencias",
   "Results": "Resultados",
   "Screens": "Pantallas",
+  "marks what only managers see": "marca lo que solo ven los gerentes",
+  "Managers only": "Solo para gerentes",
+  "Managers only: team members don’t see this": "Solo para gerentes: los miembros del equipo no lo ven",
 };

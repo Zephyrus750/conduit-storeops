@@ -351,4 +351,7 @@ export default {
   "Stock accuracy": "Katumpakan ng stock",
   "Results": "Mga resulta",
   "Screens": "Mga screen",
+  "marks what only managers see": "tanda ng nakikita lang ng mga manager",
+  "Managers only": "Para sa mga manager lang",
+  "Managers only: team members don’t see this": "Para sa mga manager lang: hindi ito nakikita ng mga team member",
 };

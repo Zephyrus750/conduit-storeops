@@ -10,7 +10,7 @@
 
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
-import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners } from './ui.js';
+import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners, mgr } from './ui.js';
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
@@ -728,10 +728,12 @@ function openDepts() {
 function openMore() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const cur = client.session.current, area = WORKSPACES.find(w => w[0] === ws)?.[1] || '', items = MORE[ws].filter(m => !offView(m[0]) && !(VIEWS[m[0]] && deskOnly(VIEWS[m[0]])));
-  const row = m => `<button class="mo-row" type="button" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><b>${m[2]}${m[3] ? `<small>${m[3]}</small>` : ''}</b>${ic('chev', 'chv')}</button>`;
+  // A row only a manager's phone shows (its desk-only test reads the session) carries the manager mark.
+  const isMgr = (cur?.roles || []).includes('manager'), mark = m => isMgr && typeof VIEWS[m[0]]?.deskOnly === 'function' ? mgr() : '';
+  const row = m => `<button class="mo-row" type="button" data-view="${m[0]}"><span class="ti">${ic(m[1])}</span><b>${m[2]}${mark(m)}${m[3] ? `<small>${m[3]}</small>` : ''}</b>${ic('chev', 'chv')}</button>`;
   const group = (label, list) => list.length ? `<div class="mo-sec">${label}</div><div class="mo-list">${list.map(row).join('')}</div>` : '';
   sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>${tx('More')}</h3>${SHEET_X}</div>` +
-    (cur?.store ? `<div class="mo-who"><span class="av">${esc(cur.store)}</span><div><b>${esc(cur.name || tx('Store {no}', { no: cur.store }))}${area ? ' · ' + area : ''}</b><small>${cur.actas ? tx('Acting as the store from the console') : tx('Signed in on this phone')}</small></div></div>` : '') +
+    (cur?.store ? `<div class="mo-who"><span class="av">${esc(cur.store)}</span><div><b>${esc(cur.name || tx('Store {no}', { no: cur.store }))}${area ? ' · ' + area : ''}</b><small>${cur.actas ? tx('Acting as the store from the console') : tx('Signed in on this phone')}</small>${isMgr ? `<small class="mo-mgr">${mgr()}${tx('marks what only managers see')}</small>` : ''}</div></div>` : '') +
     group(tx('Tools'), items.filter(m => !MORE_STORE.includes(m[0]))) + group(tx('Store and app'), items.filter(m => MORE_STORE.includes(m[0]))) +
     `<div class="mo-foot"><button type="button" data-shell-act="switch-area">${ic('grid')}${tx('Switch area')}</button><button type="button" class="out" data-shell-act="signout">${ic('lock')}${cur?.actas ? tx('Back to the console') : tx('Sign out')}</button></div></div>`;
   sh.dataset.kind = ''; sh.classList.add('open');

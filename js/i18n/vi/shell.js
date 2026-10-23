@@ -351,4 +351,7 @@ export default {
   "Stock accuracy": "Độ chính xác tồn kho",
   "Results": "Kết quả",
   "Screens": "Màn hình",
+  "marks what only managers see": "đánh dấu những gì chỉ quản lý thấy",
+  "Managers only": "Chỉ dành cho quản lý",
+  "Managers only: team members don’t see this": "Chỉ dành cho quản lý: thành viên trong tổ không thấy mục này",
 };

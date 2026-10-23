@@ -14,7 +14,7 @@
 // how each went. Export still writes the field-capture/1 file.
 // Opened by a manager from Settings.
 
-import { $, ic, esc, vh, sub, mhead, toast, today, fmtTime } from '../ui.js';
+import { $, ic, esc, vh, sub, mhead, toast, today, fmtTime, mgr } from '../ui.js';
 import { mountMap, mvMap, bindMapChrome, segmentId, canonCode, hasMap, setStrip, sx } from '../map.js';
 import { haptic } from '../device.js';
 import { tx, txn } from '../i18n.js';
@@ -46,7 +46,7 @@ export default {
   },
   mobile(ctx) {
     if (!isManager(ctx)) return mhead(tx('Field Mode'), tx('Needs the manager code')) + `<div class="mv-note">${ic('lock')}${tx('Enter the manager code on this device to check shelves.')}</div>`;
-    return mvMap({ badge: `<span>${tx('Field Mode')}</span>` }) + `<div class="mv-sel mode fm-mob" id="fmpanel"></div>`;
+    return mvMap({ badge: `<span>${tx('Field Mode')}</span>${mgr()}` }) + `<div class="mv-sel mode fm-mob" id="fmpanel"></div>`;
   },
   mount(ctx, root) {
     if (!isManager(ctx) || !hasMap()) return [];

@@ -351,4 +351,7 @@ export default {
   "Stock accuracy": "Bestandsgenauigkeit",
   "Results": "Ergebnisse",
   "Screens": "Bildschirme",
+  "marks what only managers see": "kennzeichnet, was nur Manager sehen",
+  "Managers only": "Nur für Manager",
+  "Managers only: team members don’t see this": "Nur für Manager: Teammitglieder sehen das nicht",
 };

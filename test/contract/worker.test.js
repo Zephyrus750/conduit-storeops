@@ -417,6 +417,27 @@ test('a keycode’s life, the history lists and the CSV export read the stockroo
   assert.match(text, /2026-09-17,7012,submitted,/);
 });
 
+test('reveal: the owner reads a store’s PIN or a code back without rotating it, and each read is logged', async () => {
+  assert.equal((await reg2('2101')).status, 201);
+  const reveal = (name, token = ownerToken) => api('POST', '/v1/admin/stores/2101/reveal', { name }, token);
+  assert.deepEqual((await reveal('pin')).body, { name: 'pin', set: true, value: '135790' });
+  assert.deepEqual((await reveal('dock')).body, { name: 'dock', set: true, value: 'DK-2101' }, 'as the owner wrote it');
+  assert.deepEqual((await reveal('stockroom')).body, { name: 'stockroom', set: false, value: null }, 'a code never set');
+  assert.equal((await reveal('owner')).status, 400);
+  const floor = (await api('POST', '/v1/auth/signin', { store: '2101', pin: '135790', device: 'rv-1' })).body.token;
+  const mgr = (await api('POST', '/v1/auth/signin', { store: '2101', managerCode: 'mg 2101', device: 'rv-2' })).body.token;
+  assert.ok(floor && mgr, 'a code typed in lower case with a space still signs in');
+  assert.equal((await reveal('pin', floor)).status, 403, 'a store device cannot read codes');
+  assert.equal((await reveal('pin', mgr)).status, 403, 'nor can a manager');
+  assert.equal((await reveal('manager')).body.value, 'MG-2101', 'a sign-in typed differently keeps the owner’s spelling');
+  // Reading a code signs nobody out; setting one still does, and the new one reads back.
+  assert.equal((await api('GET', '/v1/store/2101/snapshot', undefined, floor)).status, 200);
+  assert.equal((await api('PATCH', '/v1/admin/stores/2101', { codes: { dock: 'DK-NEW-1' } }, ownerToken)).status, 200);
+  assert.equal((await reveal('dock')).body.value, 'DK-NEW-1');
+  const log = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions.filter(a => a.store === '2101' && a.type === 'codes.view');
+  assert.ok(log.length >= 5 && log.some(a => a.detail.name === 'dock' && a.detail.shown) && log.some(a => a.detail.name === 'stockroom' && !a.detail.shown));
+});
+
 test('tools: the owner switches one off, every device sees it in the projection, and the worker refuses its changes and routes', async () => {
   const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'tools-desk' })).body.token;
   const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, dev)).body.token;

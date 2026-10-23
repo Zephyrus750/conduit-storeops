@@ -21,7 +21,7 @@
 // Store status: 'registered' (no areas live), 'migrating', 'live', 'legacy', 'suspended'.
 
 import { DurableObject } from 'cloudflare:workers';
-import { hashSecret, verifySecret, randomToken, sha256, pinOk, cleanText } from './auth.js';
+import { hashSecret, verifySecret, randomToken, sha256, pinOk, cleanText, b64u, unb64u } from './auth.js';
 import { HttpError, json } from './http.js';
 import { TOOL_IDS } from '../shared/tools.js';
 
@@ -62,9 +62,10 @@ export class RegistryObject extends DurableObject {
       );
     `);
     // Columns added after first deploy: a lockout window start, the store's
-    // credential epoch (bumped to revoke every session), and the tools
-    // switched off inside its entitled areas ({ toolId: false }).
-    for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT', 'ALTER TABLE refresh ADD COLUMN elevated INTEGER', 'ALTER TABLE refresh ADD COLUMN epoch INTEGER', "ALTER TABLE stores ADD COLUMN tools TEXT NOT NULL DEFAULT '{}'"]) {
+    // credential epoch (bumped to revoke every session), the tools
+    // switched off inside its entitled areas ({ toolId: false }), and the
+    // sealed copies of the PIN and codes the owner can read back (seal()).
+    for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT', 'ALTER TABLE refresh ADD COLUMN elevated INTEGER', 'ALTER TABLE refresh ADD COLUMN epoch INTEGER', "ALTER TABLE stores ADD COLUMN tools TEXT NOT NULL DEFAULT '{}'", 'ALTER TABLE stores ADD COLUMN sealed TEXT']) {
       try { this.sql.exec(ddl); } catch { /* already there */ }
     }
   }
@@ -91,6 +92,7 @@ export class RegistryObject extends DurableObject {
       case 'GET /stores/*': return p[1] === '_all' ? this.fullList() : this.record(p[1]);
       case 'POST /stores': return this.register(body);
       case 'PATCH /stores/*': return this.patch(p[1], body);
+      case 'POST /reveal/*': return this.reveal(p[1], body.name);
       case 'POST /lockout/*':
         if (p[1] === 'fail') { this.failAll(body.keys || [body.key]); return { ok: true }; }
         if (p[1] === 'check') { for (const k of body.keys || [body.key]) this.checkLocked(k); return { ok: true }; }
@@ -133,6 +135,7 @@ export class RegistryObject extends DurableObject {
     }
     if (row.status === 'suspended') throw new HttpError(403, 'suspended', `store ${store} is suspended`);
     this.clear(keys[0]);
+    await this.keepSeen(row, manager ? 'manager' : 'pin', manager ? String(managerCode).trim().toUpperCase() : String(pin));
     return { store: row.no, name: row.name, roles: manager ? ['floor', 'manager'] : ['floor'], caps: this.caps(row), status: row.status, epoch: row.epoch || 0, elevated: manager };
   }
 
@@ -147,7 +150,7 @@ export class RegistryObject extends DurableObject {
     if ((epoch ?? 0) < (row.epoch || 0)) throw new HttpError(401, 'revoked', 'this session was signed out; sign in again');
     const codes = JSON.parse(row.codes);
     for (const [name, role] of Object.entries(CODE_ROLES)) {
-      if (codes[name] && await verifySecret(normCode(code), codes[name])) { this.clear(keys[0]); return { role, epoch: row.epoch || 0 }; }
+      if (codes[name] && await verifySecret(normCode(code), codes[name])) { this.clear(keys[0]); await this.keepSeen(row, name, String(code).trim().toUpperCase()); return { role, epoch: row.epoch || 0 }; }
     }
     this.failAll(keys);
     throw new HttpError(403, 'unauthorised', 'wrong code');
@@ -269,6 +272,7 @@ export class RegistryObject extends DurableObject {
     this.sql.exec('INSERT INTO stores (no, name, region, format, status, pin_hash, codes, entitlements, areas, map_version, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       String(b.no), b.name, b.region || null, b.format || null, 'registered', await hashSecret(String(b.pin)), JSON.stringify(codes), JSON.stringify(ent), JSON.stringify(areas), null, now, now);
     this.log('store.register', b.no, { name: b.name, entitlements: ent });
+    await this.seal(b.no, { pin: String(b.pin), ...Object.fromEntries(Object.keys(codes).map(n => [n, String(b.codes[n]).trim()])) });
     return this.present(this.get(b.no));
   }
   async patch(no, b) {
@@ -314,8 +318,56 @@ export class RegistryObject extends DurableObject {
     if (!sets.length) throw new HttpError(400, 'invalid_request', 'nothing to change');
     sets.push('updated = ?'); vals.push(new Date().toISOString());
     this.sql.exec(`UPDATE stores SET ${sets.join(', ')} WHERE no = ?`, ...vals, no);
+    if (b.pin || b.codes) await this.seal(no, { ...(b.pin ? { pin: String(b.pin) } : {}), ...Object.fromEntries(Object.keys(CODE_ROLES).filter(n => b.codes?.[n]).map(n => [n, String(b.codes[n]).trim()])) });
     if (revoke) { this.sql.exec('DELETE FROM refresh WHERE store = ?', String(no)); this.log('sessions.revoke', no, { epoch: (row.epoch || 0) + 1, why: b.revoke ? 'owner' : b.status === 'suspended' ? 'suspended' : 'rotation' }); }
     return this.present(this.get(no));
+  }
+  // ── codes the owner can read back ─────────────────────────────────────
+  // The hashes stay the check. Beside them, an AES-GCM copy of the PIN and
+  // each code, under a key derived from TOKEN_SECRET (HKDF, its own label)
+  // and bound to the store and the code's name, so the owner can read one
+  // back (console › Access › Show) instead of setting a new one, which signs
+  // every device out. Set before this existed? The copy is taken the next
+  // time someone signs in with it. Reading one is logged.
+  async codeKey() {
+    if (!this.sealKey) {
+      const enc = new TextEncoder(), base = await crypto.subtle.importKey('raw', enc.encode(String(this.env.TOKEN_SECRET || '')), 'HKDF', false, ['deriveKey']);
+      this.sealKey = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: enc.encode('store-codes'), info: enc.encode('v1') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    }
+    return this.sealKey;
+  }
+  async seal(no, values) {
+    const row = this.get(no); if (!row) return;
+    const kept = JSON.parse(row.sealed || '{}'), enc = new TextEncoder();
+    for (const [name, value] of Object.entries(values)) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(`${no}:${name}`) }, await this.codeKey(), enc.encode(value));
+      kept[name] = `v1.${b64u(iv)}.${b64u(new Uint8Array(ct))}`;
+    }
+    this.sql.exec('UPDATE stores SET sealed = ? WHERE no = ?', JSON.stringify(kept), String(no));
+  }
+  async unseal(no, name, sealed) {
+    try {
+      const [v, iv, ct] = String(sealed || '').split('.'); if (v !== 'v1') return null;
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(iv), additionalData: new TextEncoder().encode(`${no}:${name}`) }, await this.codeKey(), unb64u(ct));
+      return new TextDecoder().decode(pt);
+    } catch { return null; }   // none kept, or a TOKEN_SECRET since changed: taken again at the next sign-in
+  }
+  // After a good sign-in or unlock: keep a copy if there is none to read.
+  // A code kept as the owner wrote it ("DK-2101") is the same code typed
+  // "dk 2101", so only a PIN or code that reads differently is kept again.
+  async keepSeen(row, name, value) {
+    const sealed = JSON.parse(row.sealed || '{}')[name], kept = sealed ? await this.unseal(row.no, name, sealed) : null;
+    if (kept == null || (name === 'pin' ? kept !== value : normCode(kept) !== normCode(value))) await this.seal(row.no, { [name]: value });
+  }
+  async reveal(no, name) {
+    const row = this.get(no);
+    if (!row) throw new HttpError(404, 'not_registered', `store ${no} is not registered`);
+    if (name !== 'pin' && !CODE_ROLES[name]) throw new HttpError(400, 'invalid_request', 'name must be pin, stockroom, dock or manager');
+    const set = name === 'pin' || !!JSON.parse(row.codes)[name];
+    const value = set ? await this.unseal(row.no, name, JSON.parse(row.sealed || '{}')[name]) : null;
+    this.log('codes.view', no, { name, shown: !!value });
+    return { name, set, value };
   }
   actions() {
     return { actions: this.sql.exec('SELECT seq, at, type, store, detail FROM actions ORDER BY seq DESC LIMIT 200').toArray().map(r => ({ ...r, detail: JSON.parse(r.detail) })) };

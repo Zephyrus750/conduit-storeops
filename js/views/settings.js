@@ -5,7 +5,7 @@
 
 import { openTour } from '../tour.js';
 import { haptic, applyOrientation, isPhone } from '../device.js';
-import { $, ic, esc, vh, sub, toast, ago, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR } from '../ui.js';
+import { $, ic, esc, vh, sub, toast, ago, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR, mgr } from '../ui.js';
 import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/reducers/store.js';
 import { SCALES, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
@@ -38,7 +38,7 @@ export default {
   // Store settings, the refresh focus and target, and the price-check size
   // are set on a store PC. A manager sees Field Mode first, under Manager.
   // Help and feedback sit together at the foot.
-  mobile(ctx) { return `<div class="mv-head"><div><h2>${tx('Settings')}</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${howtoBody(true)}</div>`; },
+  mobile(ctx) { return `<div class="mv-head"><div><h2>${tx('Settings')}</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}${mgr()}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${howtoBody(true)}</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
