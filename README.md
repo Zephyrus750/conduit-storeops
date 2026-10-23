@@ -428,16 +428,24 @@ Store map's buttons. A row whose screens are all switched off, or outside the
 store's areas, is not on the rail. The phone's strip and More are unchanged.
 
 Reports & files (`js/views/inputs.js`) is where everything the store brings
-in arrives: one box takes a paste or a file and says what it found before
-anything is saved, and a list says what is due today (the morning SIM report
-is required, the midday one optional), what each feeds and where it comes
-from. Each kind is saved by the screen it feeds, through that screen's code:
-the SIM report through Backfill review's `pasteReport`, the SOH report in
-Stock intelligence (opened with the paste read), a DC manifest through the
+in arrives: one box takes the clipboard or a file and says what it found
+before anything is saved, and a list says what is due today (the morning SIM
+report is required, the midday one optional), what each feeds and where it
+comes from. Each kind is saved by the screen it feeds, through that screen's
+code: the SIM report through Backfill review's `pasteReport`, the SOH report
+in Stock intelligence (opened with the paste read), a DC manifest through the
 publish preview, the off-site list and other loads through `loads.js`. Its
 rail row shows 1 while today's morning report is missing. Today's morning
 setup marks the morning report Required and the midday one Optional (it never
-holds the list back) and both open Reports & files.
+holds the list back).
+
+Every Paste for a SIM report (Today's checklist, Reports & files, Backfill
+review's Paste whole report) opens the paste pop-up (`js/views/pastebox.js`).
+It reads the clipboard as it opens, says what it found (bays, keycodes, lines
+with an SOH) and saves with one more click; text that is not the report asked
+for says "Incorrect format". A browser that will not hand over the clipboard
+leaves Ctrl V and a box to paste into, and Ctrl V on Reports & files opens the
+pop-up on what was pasted.
 
 On a PC, resting the pointer on a keycode or a product name anywhere
 (`kcCopy`, `itemName`, or anything marked `data-kccard`) shows a product card:

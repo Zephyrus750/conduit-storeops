@@ -330,4 +330,6 @@ export default {
   "One place for everything the store brings in: paste the morning report (required) or the midday one (optional), or drop a DC manifest, a sheet of pallets, the off-site list or the SOH report. It says what it found before anything is saved.": "Iisang lugar para sa lahat ng ipinapasok ng tindahan: i-paste ang morning report (kailangan) o ang midday report (opsyonal), o i-drop ang DC manifest, isang sheet ng mga pallet, ang off-site list o ang SOH report. Ipinapakita nito ang nakita bago i-save ang anuman.",
   "Product cards": "Mga product card",
   "Rest the pointer on a keycode or a product name for a moment: a card shows its picture, name and price, and whether it is on clearance.": "Itapat sandali ang pointer sa keycode o pangalan ng produkto: lalabas ang card na may larawan, pangalan, presyo, at kung naka-clearance ito.",
+  "Paste a report in one click": "Mag-paste ng report sa isang click",
+  "Copy the report in SIM, then press Paste on Today, Reports & files or Backfill review. A pop-up reads the clipboard and says what it found, or that the format is wrong; one more click saves it.": "Kopyahin ang report sa SIM, saka pindutin ang I-paste sa Ngayon, Mga report at file o Backfill review. Babasahin ng pop-up ang clipboard at sasabihin kung ano ang nakita, o kung mali ang format; isa pang click para i-save.",
 };

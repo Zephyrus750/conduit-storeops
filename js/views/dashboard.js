@@ -16,6 +16,7 @@ import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, fore
 import { ratesFor } from './backdock/plan.js';
 import { registerSummary, isFixture, consolidate } from '../../shared/inventory.js';
 import { toolOff } from '../../shared/tools.js';
+import { openPasteBox } from './pastebox.js';
 import { tx, txn, locale } from '../i18n.js';
 
 const TARGET = 100, DAILY = 20;
@@ -135,17 +136,18 @@ function morning(ctx) {
   const meta = srOk ? ctx.store.get('backfill')?.report : null;
   const rep = meta?.date === t ? meta : report && srOk ? { at: report.at, bays: Object.keys(report.byLoc || {}).length, codes: Object.values(report.byLoc || {}).reduce((n, l) => n + l.length, 0) } : null, midday = rep && new Date(rep.at).getHours() >= 12;
   const A = [
-    srOk && [`${tx('Morning inventory report')} <span class="chip due">${tx('Required')}</span>`, rep ? tx('Pasted {time} · {bays} bays · {codes} codes', { time: fmtHM(new Date(rep.at).toISOString()), bays: rep.bays, codes: rep.codes }) : tx('Not pasted yet · the board compares against nothing until it is'), !!rep, tx('Paste whole report'), tx('Re-paste'), 'inputs'],
+    srOk && [`${tx('Morning inventory report')} <span class="chip due">${tx('Required')}</span>`, rep ? tx('Pasted {time} · {bays} bays · {codes} codes', { time: fmtHM(new Date(rep.at).toISOString()), bays: rep.bays, codes: rep.codes }) : tx('Not pasted yet · the board compares against nothing until it is'), !!rep, tx('Paste whole report'), tx('Re-paste'), 'paste'],
     dockOk && (none ? [tx('Manifests for today’s trucks'), tx('No trucks today · confirmed in the Planner') + tmrw, true, '', tx('Open'), 'planner'] : manRow(mans, lib, tmrw, dock, t)),
     dockOk && none ? [tx('Planner'), tx('No trucks today · confirmed'), true, '', tx('Open'), 'planner'] : dockOk && [tx('Planner'), mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · ' + tx('teams set') : ''}` : tx('Today’s trucks not planned · or confirm no trucks in the Planner'), mans.length > 0, tx('Plan today’s trucks'), tx('Open'), 'planner'],
   ].filter(Boolean);
   const B = [
     dockOk && none ? [tx('First truck decant'), tx('No trucks today'), true, '', tx('Open'), 'planner'] : dockOk && [tx('First truck decant'), !first ? tx('No truck on the dock yet today') : first.status === 'closed' || first.clearMins != null ? tx('Closed · {time}', { time: fmtMins(first.clearMins || 0) }) : first.goalAt ? tx('goal {time} · {pct}% decanted', { time: fmtHM(first.goalAt), pct: progress(first).pct }) : tx('{pct}% decanted', { pct: progress(first).pct }), !!first && (first.status === 'closed' || first.clearMins != null), tx('Open the dock'), tx('History'), first && first.clearMins != null ? 'rhistory' : 'receiving'],
     // Optional: the midday report takes about ten minutes to make, so it never holds the list back.
-    srOk && [`${tx('Midday report')} <span class="chip opt">${tx('Optional')}</span>`, midday ? tx('Pasted {time}', { time: fmtHM(new Date(rep.at).toISOString()) }) : tx('After 12:00 if there is time · the room moves after the next truck lands'), !!midday, tx('Paste whole report'), tx('Re-paste'), 'inputs', true],
+    srOk && [`${tx('Midday report')} <span class="chip opt">${tx('Optional')}</span>`, midday ? tx('Pasted {time}', { time: fmtHM(new Date(rep.at).toISOString()) }) : tx('After 12:00 if there is time · the room moves after the next truck lands'), !!midday, tx('Paste whole report'), tx('Re-paste'), 'paste', true],
     [tx('Label integrity · today’s department'), liToday.length ? tx('{list} · checked', { list: liToday.map(([id]) => { const [sid, code] = id.split('-'); const e = (MICRO[sid] || []).find(x => microCode(x) === code); return `${esc(sid.toUpperCase())} ${esc(code)}${e ? ' ' + esc(microName(e)) : ''}`; }).join(' · ') }) : tx('pick the micro-department and print the sheet'), liToday.length > 0, tx('Pick department'), tx('Open'), 'labelint'],
   ].filter(Boolean);
-  const row = ([title, text, done, act, again, go]) => `<div class="mrow${done ? ' done' : ''}"><span class="mst">${done ? ic('check') : ''}</span><div class="mtx"><b>${title}</b><span>${text}</span></div>${done ? `<a data-go="${go}">${again}</a>` : `<button class="mact" data-go="${go}">${ic('arrow')}${act}</button>`}</div>`;
+  // 'paste' opens the paste pop-up on the clipboard instead of a screen.
+  const row = ([title, text, done, act, again, go]) => { const to = go === 'paste' ? 'data-paste="report"' : `data-go="${go}"`; return `<div class="mrow${done ? ' done' : ''}"><span class="mst">${done ? ic('check') : ''}</span><div class="mtx"><b>${title}</b><span>${text}</span></div>${done ? `<a ${to}>${again}</a>` : `<button class="mact" ${to}>${ic(go === 'paste' ? 'clip' : 'arrow')}${act}</button>`}</div>`; };
   const counted = B.filter(x => !x[6] || x[2]), dA = A.filter(x => x[2]).length, dB = counted.filter(x => x[2]).length;
   return `<div class="morn">${A.length ? `<div class="mh"><b>${tx('Morning setup')}</b><span class="cs-dim">${dA === A.length ? tx('{done} of {total} · complete', { done: dA, total: A.length }) : tx('{done} of {total} · do these first', { done: dA, total: A.length })}</span><span class="mprog"><i style="width:${Math.round(dA / A.length * 100)}%"></i></span></div>${A.map(row).join('')}` : ''}` +
     `<div class="mh later"><b>${tx('Later today')}</b><span class="cs-dim">${tx('{done} of {total}', { done: dB, total: counted.length })}</span><span class="mprog"><i style="width:${counted.length ? Math.round(dB / counted.length * 100) : 0}%"></i></span></div>${B.map(row).join('')}</div>`;
@@ -244,7 +246,9 @@ export default {
     root.addEventListener('click', e => { const b = e.target.closest('[data-period]'); if (b) { period = b.dataset.period; re(); } });
     root.addEventListener('click', e => { if (e.target.closest('[data-team="open"]')) openTeamFor({ store: ctx.store, session: ctx.session, storeNo: ctx.storeNo, today, onClose: re }); });
     // Today's pasted report lives on the desk that pasted it (bfreview).
-    if (ctx.storage && ctx.storeNo) ctx.storage.get(`simreport:${ctx.storeNo}:${today()}`).then(v => { const had = !!report; report = v || null; if (report || had) re(); }).catch(() => {});
+    const mine = () => { if (ctx.storage && ctx.storeNo) ctx.storage.get(`simreport:${ctx.storeNo}:${today()}`).then(v => { const had = !!report; report = v || null; if (report || had) re(); }).catch(() => {}); };
+    mine();
+    root.addEventListener('click', e => { if (e.target.closest('[data-paste]')) { e.preventDefault(); openPasteBox(ctx, { want: 'report', after: mine }); } });
     return ['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock', 'plan', 'inventory', 'comms'].map(k => ctx.store.on(k, re));
   },
 };

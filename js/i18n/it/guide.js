@@ -330,4 +330,6 @@ export default {
   "One place for everything the store brings in: paste the morning report (required) or the midday one (optional), or drop a DC manifest, a sheet of pallets, the off-site list or the SOH report. It says what it found before anything is saved.": "Un unico posto per tutto ciò che il negozio carica: incolla il report del mattino (obbligatorio) o quello di mezzogiorno (facoltativo), o trascina un manifesto del DC, un foglio di pallet, l’elenco fuori sede o il report SOH. Mostra cosa ha trovato prima di salvare qualsiasi cosa.",
   "Product cards": "Schede prodotto",
   "Rest the pointer on a keycode or a product name for a moment: a card shows its picture, name and price, and whether it is on clearance.": "Tieni il puntatore per un attimo su un keycode o sul nome di un prodotto: una scheda mostra immagine, nome, prezzo e se è in liquidazione.",
+  "Paste a report in one click": "Incolla un report con un clic",
+  "Copy the report in SIM, then press Paste on Today, Reports & files or Backfill review. A pop-up reads the clipboard and says what it found, or that the format is wrong; one more click saves it.": "Copia il report in SIM, poi premi Incolla in Oggi, Report e file o Verifica rifornimento. Una finestra legge gli appunti e dice cosa ha trovato, o che il formato è errato; un altro clic lo salva.",
 };

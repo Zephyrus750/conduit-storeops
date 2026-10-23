@@ -330,4 +330,6 @@ export default {
   "One place for everything the store brings in: paste the morning report (required) or the midday one (optional), or drop a DC manifest, a sheet of pallets, the off-site list or the SOH report. It says what it found before anything is saved.": "Một chỗ cho mọi thứ cửa hàng nhập vào: dán báo cáo buổi sáng (bắt buộc) hoặc buổi trưa (tùy chọn), hoặc thả bảng kê hàng DC, bảng tính pallet, danh sách hàng ngoài cửa hàng hoặc báo cáo SOH. Nó cho xem kết quả trước khi lưu.",
   "Product cards": "Thẻ sản phẩm",
   "Rest the pointer on a keycode or a product name for a moment: a card shows its picture, name and price, and whether it is on clearance.": "Để con trỏ một lúc trên keycode hoặc tên sản phẩm: một thẻ sẽ hiện hình ảnh, tên, giá và cho biết có đang thanh lý không.",
+  "Paste a report in one click": "Dán báo cáo chỉ với một lần bấm",
+  "Copy the report in SIM, then press Paste on Today, Reports & files or Backfill review. A pop-up reads the clipboard and says what it found, or that the format is wrong; one more click saves it.": "Sao chép báo cáo trong SIM, rồi nhấn Dán ở Hôm nay, Báo cáo & tệp hoặc Duyệt bổ sung hàng. Một cửa sổ đọc bộ nhớ tạm và cho biết đã tìm thấy gì, hoặc định dạng bị sai; bấm thêm một lần để lưu.",
 };

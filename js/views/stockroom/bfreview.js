@@ -22,12 +22,13 @@ import { openScreenScan } from '../../screenscan.js';
 import { CLAIM_TTL_MS } from '../../../shared/reducers/stockroom.js';
 import { STATUS, todayKey, ensureNames, nameHtml, nameOf, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge } from './common.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
+import { openPasteBox } from '../pastebox.js';
 import { tx, txn } from '../../i18n.js';
 
 // Desk state. report: the pasted SIM report { at, byLoc, range, delta, bayAt }
 // (delta: what changed per bay since the previous paste; bayAt: when one
 // bay's list was pasted on its own). focus: the one-code-at-a-time view.
-const st = { sel: null, sort: 'pct', view: 'list', paste: false, bayPaste: false, reqPaste: false, help: false, report: null, reportFor: null, focusIdx: 0, focusCol: 'all', processed: new Map(), mStep: 1, mBay: '', mLast: null, claimed: null };
+const st = { sel: null, sort: 'pct', view: 'list', bayPaste: false, reqPaste: false, help: false, report: null, reportFor: null, focusIdx: 0, focusCol: 'all', processed: new Map(), mStep: 1, mBay: '', mLast: null, claimed: null };
 const SORTS = { pct: tx('Match, best first'), loc: tx('By location'), when: tx('Most recent') };
 const reportKey = ctx => `simreport:${ctx.storeNo}:${todayKey()}`;
 
@@ -66,7 +67,7 @@ export default {
       `</div><div class="srail-foot"><div class="req">${tx('<b>{sent}</b> sent through · <b>{requested}</b> requested', { sent: m.subs.length, requested: m.requested.length })}</div><div class="addrow"><input class="inp" data-field="addloc" placeholder="${tx('Add or request a bay…')}" inputmode="numeric"><button class="btn sm" data-act="request">${tx('Request')}</button></div></div></div>`;
     const right = `<div class="srail right"><div class="srail-t">${tx('Ready')}<span class="ct green">${m.ready.length}</span></div><div class="srail-list">${m.ready.map(s => slc(s, compareCounts(s, m.sys ? m.sys[s.bay] || null : null))).join('') || `<div class="scol-empty" style="padding:14px"><small>${tx('Nothing marked ready yet')}</small></div>`}</div>` +
       `<div class="srail-sub"><div class="srail-t sub">${tx('Submitted today')}<span class="ct green">${m.submitted.length}</span></div>${m.submitted.map(s => slc(s, compareCounts(s, m.sys ? m.sys[s.bay] || null : null), ' subm')).join('')}</div>${m.ready.length ? `<button class="finall" data-act="finalise">${ic('check')}${tx('Finalise all ({n})', { n: m.ready.length })}</button>` : ''}</div>`;
-    return head + (st.paste ? pasteSheet() : '') + (st.reqPaste ? reqSheet(m) : '') + (st.help ? helpSheet() : '') + `<div class="sr3">${left}<div class="smid">${middle(ctx, m)}</div>${right}</div>`;
+    return head + (st.reqPaste ? reqSheet(m) : '') + (st.help ? helpSheet() : '') + `<div class="sr3">${left}<div class="smid">${middle(ctx, m)}</div>${right}</div>`;
   },
   mobile(ctx) {
     mineUse(ctx.storeNo);
@@ -115,11 +116,11 @@ export default {
 // in a field. In Focus with a bay open, the keys work its codes; otherwise
 // they move between bays.
 async function deskKey(e, ctx) {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]') || document.getElementById('pbox')) return;
   const m = model(ctx), s = m.subs.find(x => key(x) === st.sel), k = e.key;
-  if (k === 'Escape' && (st.help || st.paste || st.bayPaste || st.reqPaste)) { st.help = st.paste = st.bayPaste = st.reqPaste = false; e.preventDefault(); return ctx.rerender(); }
+  if (k === 'Escape' && (st.help || st.bayPaste || st.reqPaste)) { st.help = st.bayPaste = st.reqPaste = false; e.preventDefault(); return ctx.rerender(); }
   if (k === '?') { e.preventDefault(); st.help = !st.help; return ctx.rerender(); }
-  if (st.paste || st.bayPaste || st.reqPaste) return;
+  if (st.bayPaste || st.reqPaste) return;
   if (st.view === 'focus' && s) {
     const list = focusList(reviewRows(s, m.sys?.[s.bay] || null)), n = list.length; if (!n) return;
     const r = list[((st.focusIdx % n) + n) % n], done = st.processed.get(key(s)) || new Set();
@@ -200,9 +201,10 @@ async function pushReport(ctx, r) {
     return true;
   } catch { if (!r.unsent) { r.unsent = true; await ctx.storage.set(reportKey(ctx), r); } return false; }
 }
-// The whole SIM report, pasted here or in Reports & files: added to today's
-// (a later paste updates the bays it lists), sent to the store, and its
-// items at 0 or less go to Adjustments. Null when no location line is found.
+// The whole SIM report, from the paste pop-up (js/views/pastebox.js): added
+// to today's (a later paste updates the bays it lists), sent to the store,
+// and its items at 0 or less go to Adjustments. Null when no location line
+// is found.
 export async function pasteReport(ctx, text) {
   const byLoc = parseReportByLocation(text), n = Object.keys(byLoc).length; if (!n) return null;
   await loadReport(ctx);
@@ -210,9 +212,6 @@ export async function pasteReport(ctx, text) {
   await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh } });
   const sent = await reportToAdjust(ctx, byLoc, lines);
   return { bays: n, codes: Object.values(byLoc).reduce((x, l) => x + l.length, 0), sent };
-}
-function pasteSheet() {
-  return `<div class="card" style="margin-bottom:14px"><div class="ch"><h3>${tx('Paste the whole SIM report')}</h3><span class="cs-dim">${tx('one paste, every bay pre-compared')}</span><span class="btn sm" style="margin-left:auto" data-act="paste-close">${ic('x')}${tx('Close')}</span></div><textarea class="ad-in" data-field="paste" rows="7" placeholder="${tx('Location · keycode · … one line per code, or “Location: 7012” headers. Copy the report from SIM and paste it here.')}"></textarea><div class="acts" style="margin-top:10px"><button class="btn primary" data-act="paste-save">${ic('check')}${tx('Use this report')}</button><span class="cs-dim" id="pasteCount"></span></div></div>`;
 }
 // One bay's inventory list from SIM (K2B's paste): lines or a glued blob,
 // detected live with names, duplicates removed, leftovers called out, and a
@@ -317,14 +316,7 @@ async function onClick(e, ctx, root, repaint) {
   const cur = () => m.subs.find(x => key(x) === st.sel);
   if (act === 'sel') { await select(ctx, a.dataset.sel); ctx.rerender(); }
   else if (act === 'view') { st.view = a.dataset.v; ctx.rerender(); }
-  else if (act === 'paste') { st.paste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="paste"]')?.focus(), 30); }
-  else if (act === 'paste-close') { st.paste = false; ctx.rerender(); }
-  else if (act === 'paste-save') {
-    const r = await pasteReport(ctx, root.querySelector('[data-field="paste"]')?.value || '');
-    if (!r) return toast(tx('No location lines found. Each line needs a bay number and a keycode.'), 'bad');
-    const { bays: n, codes, sent } = r;
-    st.paste = false; toast(`${txn(n, 'Report pasted: {n} bay, {codes} codes', 'Report pasted: {n} bays, {codes} codes', { codes })}${sent ? ` · ${tx('{n} at 0 or less sent to Adjustments', { n: sent })}` : ''}`, '', sent ? { label: tx('Open'), run: () => ctx.go('adjust') } : null); ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender();
-  }
+  else if (act === 'paste') openPasteBox(ctx, { want: 'report', after: () => { ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender(); } });
   else if (act === 'bay-paste') { st.bayPaste = true; ctx.rerender(); setTimeout(() => root.querySelector('[data-field="baypaste"]')?.focus(), 30); }
   else if (act === 'bay-paste-close') { st.bayPaste = false; ctx.rerender(); }
   else if (act === 'bay-screen') {

@@ -286,8 +286,9 @@ test('owner diagnostics and act-as', async () => {
   assert.equal(actas.status, 200);
   const r = await api('POST', '/v1/store/1241/events', { events: [event('cage.park', { cage: 'BSN1240417' }, { location: 'Aisle 2, near 7023' }, 'stockroom')] }, actas.body.token);
   assert.equal(r.body.results[0].ok, true);
-  const tail2 = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
-  assert.deepEqual(tail2.body.events[0].actor, { role: 'owner', device: 'dev-laptop', owner: true });
+  // The store's first alarm logs store.retain at any point; look past it.
+  const tail2 = await api('GET', '/v1/admin/stores/1241/tail?limit=5', undefined, ownerToken);
+  assert.deepEqual(tail2.body.events.find(e => e.type !== 'store.retain').actor, { role: 'owner', device: 'dev-laptop', owner: true });
 
   const flip = await api('PATCH', '/v1/admin/stores/1241', { entitlements: { backdock: true }, status: 'migrating', areas: { stockroom: 'live' } }, ownerToken);
   assert.equal(flip.body.entitlements.backdock, true); assert.equal(flip.body.areas.stockroom, 'live'); assert.equal(flip.body.status, 'migrating');
@@ -324,8 +325,9 @@ test('maps: owner publishes, devices read by version or latest, the log and regi
 
   const snap = await api('GET', '/v1/store/1241/snapshot?areas=store', undefined, dev);
   assert.equal(snap.body.state.map.version, '4.3');
-  const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
-  assert.equal(tail.body.events[0].type, 'map.publish'); assert.equal(tail.body.events[0].actor.owner, true);
+  // The store's first alarm logs store.retain at any point; look past it.
+  const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=5', undefined, ownerToken), last = tail.body.events.find(e => e.type !== 'store.retain');
+  assert.equal(last.type, 'map.publish'); assert.equal(last.actor.owner, true);
   assert.equal((await api('GET', '/v1/admin/stores/1241', undefined, ownerToken)).body.mapVersion, '4.3');
 
   // Markup outside the map allow-list is stripped at publish, never stored.
