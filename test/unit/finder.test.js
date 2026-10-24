@@ -48,3 +48,14 @@ test('names: a cage tag, a load, an off-site pallet; closed cages stay out', () 
   assert.equal(recordCount(findRecords(state, 'x')), 0, 'one character finds nothing');
   assert.equal(recordCount(findRecords({}, 'M-4471')), 0, 'an area the device cannot read is empty');
 });
+
+test('equipment by its code, typed any way, or its name; removed equipment stays out', () => {
+  const s = { equipment: { items: {
+    q1: { id: 'q1', code: 'LAD-02', kind: 'step', name: 'Step ladder, 3 step', loc: 'Floor, aisle 8', removed: null },
+    q2: { id: 'q2', code: 'MHE-03', kind: 'pj', name: 'Hand pallet jack', loc: '', removed: { why: 'retired' } },
+  } } };
+  assert.deepEqual(findRecords(s, 'lad02').equipment.map(e => e.code), ['LAD-02']);
+  assert.deepEqual(findRecords(s, 'LAD-02').equipment[0], { id: 'q1', code: 'LAD-02', name: 'Step ladder, 3 step', kind: 'step', loc: 'Floor, aisle 8' });
+  assert.equal(findRecords(s, 'ladder').equipment.length, 1);
+  assert.equal(findRecords(s, 'MHE-03').equipment.length, 0, 'removed');
+});

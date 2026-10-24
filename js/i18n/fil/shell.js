@@ -359,4 +359,12 @@ export default {
   "Reports & files": "Mga report at file",
   "Live pull": "Live pull",
   "Ask the stockroom for stock, or pull it": "Humingi ng stock sa stockroom, o i-pull ito",
+  "Equipment checks": "Equipment checks",
+  "Ladders, MHE and trolleys": "Ladder, MHE at trolley",
+  "That equipment label is for store {store}. Add that store from Store details to open it.": "Para sa tindahan {store} ang equipment label na iyan. Idagdag ang tindahang iyon mula sa Store details para mabuksan ito.",
+  "Equipment checks open on a store PC, or a manager’s phone": "Bumubukas ang Equipment checks sa PC ng tindahan, o sa phone ng manager",
+  "Sign in to open the equipment card.": "Mag-sign in para mabuksan ang equipment card.",
+  "Continue and open the equipment card.": "Magpatuloy at buksan ang equipment card.",
+  "{n} check overdue or out of service": "{n} check na lampas na o out of service",
+  "{n} checks overdue or out of service": "{n} check na lampas na o out of service",
 };

@@ -1089,3 +1089,18 @@ test('live pull: a floor phone finds an item’s stockroom bays by keycode or AP
   const seen = (await api('GET', '/v1/store/1241/snapshot', undefined, floor)).body.state.pulls.sessions[S];
   assert.deepEqual([seen.lines[L].st, seen.lines[L].got, seen.people['lp-room'].bays], ['pulled', { 7036: 8, 7041: 4 }, ['7030-7059']], 'the floor phone sees the stockroom’s answer');
 });
+
+test('equipment checks: a team member adds and checks; only a manager removes, and the store sees it', async () => {
+  const floor = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'eq-floor' })).body.token;
+  const mgr = (await api('POST', '/v1/auth/unlock', { code: 'MGR-CODE' }, (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'eq-mgr' })).body.token)).body.token;
+  const send = (tok, ...events) => api('POST', '/v1/store/1241/events', { events }, tok).then(r => r.body.results);
+  const Q = ulid();
+  const added = await send(floor, event('equip.add', { equip: Q }, { code: 'lad-07', kind: 'step', every: 3, last: '2026-07-14', x: 100, y: 200 }, 'floor'),
+    event('equip.check', { equip: Q }, { day: '2026-10-20', result: 'fail', points: { feet: 'fail' }, note: 'foot missing' }, 'floor'));
+  assert.deepEqual(added.map(r => r.ok), [true, true], JSON.stringify(added));
+  const byFloor = (await send(floor, event('equip.remove', { equip: Q }, { why: 'retired' }, 'floor')))[0];
+  assert.deepEqual([byFloor.ok, byFloor.code], [false, 'unauthorised'], 'the store PIN cannot remove equipment');
+  assert.equal((await send(mgr, event('equip.remove', { equip: Q }, { why: 'broken' }, 'floor')))[0].ok, true);
+  const it = (await api('GET', '/v1/store/1241/snapshot', undefined, floor)).body.state.equipment.items[Q];
+  assert.deepEqual([it.code, it.out.since, it.removed.why, it.log.map(l => l.a)], ['LAD-07', '2026-10-20', 'broken', ['Added', 'Failed', 'Removed']], 'every store device holds the list');
+});

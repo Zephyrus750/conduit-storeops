@@ -41,9 +41,10 @@ import danalytics from './views/backdock/danalytics.js';
 import offsite from './views/backdock/offsite.js';
 import screens from './views/backdock/screenlist.js';
 import livepull from './views/livepull.js';
+import equipment from './views/equipment.js';
 import { tx } from './i18n.js';
 
-export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refresh, labelint, emergency, maintenance, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS, livepull].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refresh, labelint, emergency, maintenance, equipment, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS, livepull].map(v => [v.id, v]));
 
 // The desktop rail (Version A, 23 Oct 2026): Today and Reports & files on
 // top, then a few rows per area, then the foot. A row is one screen or a group of screens
@@ -58,7 +59,7 @@ export const GROUPS = {
   map: G(tx('Store map'), 'm-map', ['map'], ['printmap', 'mapedits', 'fieldmode']),
   floorchecks: G(tx('Floor checks'), 'listcheck', ['refresh', 'labelint', 'stocktake']),
   picklist: G(tx('Pick list'), 'm-picklist', ['picklist']),
-  safety: G(tx('Safety & upkeep'), 'm-emergency', ['emergency', 'maintenance']),
+  safety: G(tx('Safety & upkeep'), 'm-emergency', ['emergency', 'maintenance', ['equipment', tx('Equipment')]]),
   backfill: G(tx('Backfill'), 'm-bfreview', [['bfreview', tx('Review')], 'daylist', ['srhistory', tx('History')], 'srtrends', 'livepull']),
   accuracy: G(tx('Stock accuracy'), 'm-adjust', ['adjust', 'srintel', ['codelist', tx('Quick Scan')]], ['srloc']),
   cages: G(tx('Cages'), 'm-cages', ['cages']),
@@ -93,8 +94,8 @@ export const ADMIN_RAIL = [['admin', 'grid', tx('Overview')], ['adminmaps', 'm-m
 // for), then the store and the app; Switch area and Sign out sit at the foot.
 // A desk-only view drops out (Maintenance shows on a manager's phone only).
 export const MORE = {
-  floor: [['livepull', 'packages', tx('Live pull'), tx('Ask the stockroom for stock, or pull it')], ['stocktake', 'm-stocktake', tx('Stocktake'), tx('Count shelves in a session')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['mapedits', 'edit', tx('Suggest map edits'), tx('A wrong name or a missing shelf')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
-  stockroom: [['livepull', 'packages', tx('Live pull'), tx('Ask the stockroom for stock, or pull it')], ['daylist', 'm-daylist', tx('Day list'), tx('What to backfill next')], ['codelist', 'barcode', tx('Quick Scan'), tx('Scan codes into a list')], ['srhistory', 'm-srhistory', tx('History'), tx('Today’s sent bays')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
-  backdock: [['rhistory', 'm-rhistory', tx('History'), tx('Finished trucks')], ['offsite', 'm-inventory', tx('Off-site pallets'), tx('Callbacks and returns')], ['dockscreen', 'grid', tx('Dock screen'), tx('The big screen at the dock')], ['wallboard', 'chart', tx('Wallboard'), tx('Progress for the team')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
+  floor: [['livepull', 'packages', tx('Live pull'), tx('Ask the stockroom for stock, or pull it')], ['stocktake', 'm-stocktake', tx('Stocktake'), tx('Count shelves in a session')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['equipment', 'm-equipment', tx('Equipment checks'), tx('Ladders, MHE and trolleys')], ['mapedits', 'edit', tx('Suggest map edits'), tx('A wrong name or a missing shelf')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
+  stockroom: [['livepull', 'packages', tx('Live pull'), tx('Ask the stockroom for stock, or pull it')], ['daylist', 'm-daylist', tx('Day list'), tx('What to backfill next')], ['codelist', 'barcode', tx('Quick Scan'), tx('Scan codes into a list')], ['srhistory', 'm-srhistory', tx('History'), tx('Today’s sent bays')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['equipment', 'm-equipment', tx('Equipment checks'), tx('Ladders, MHE and trolleys')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
+  backdock: [['rhistory', 'm-rhistory', tx('History'), tx('Finished trucks')], ['offsite', 'm-inventory', tx('Off-site pallets'), tx('Callbacks and returns')], ['dockscreen', 'grid', tx('Dock screen'), tx('The big screen at the dock')], ['wallboard', 'chart', tx('Wallboard'), tx('Progress for the team')], ['maintenance', 'm-maintenance', tx('Maintenance'), tx('Report a fault, with photos')], ['equipment', 'm-equipment', tx('Equipment checks'), tx('Ladders, MHE and trolleys')], ['storeinfo', 'm-store', tx('Store details')], ['help', 'star', tx('Help')], ['settings', 'm-settings', tx('Settings')]],
 };
 export const MORE_STORE = ['storeinfo', 'help', 'settings'];

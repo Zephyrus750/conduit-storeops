@@ -298,7 +298,7 @@ function phone(m) {
 }
 
 // The shelf nearest a point on the shown floor, by the centre of its box.
-function nearestShelf(map, p) {
+export function nearestShelf(map, p) {
   let best = null;
   for (const g of map.segments()) {
     if (g.closest('.mfl')?.getAttribute('data-fid') !== map.floorId()) continue;

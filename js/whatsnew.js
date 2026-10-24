@@ -12,6 +12,7 @@ import { tx } from './i18n.js';
 
 export const RELEASES = [
   { v: 'v0.3.0', date: '2026-10-09', items: [
+    ['m-equipment', tx('Equipment checks'), tx('Under Safety & upkeep: the store’s ladders, MHE and trolleys on the map, each with its own code and QR label. Record each check; a failed one puts it out of service until one passes. What’s due shows with Emergency’s services, on the Today page and on the rail.'), 'equipment', 'desk'],
     ['packages', tx('Live pull'), tx('One person scans on the floor and sends how many; the stockroom’s phones buzz and pull straight away, bay by bay. Find it in More, on the Floor and in the Stockroom.'), 'livepull', 'phone'],
     ['packages', tx('Live pull'), tx('Under Backfill: what the floor asked for and what the stockroom pulled, cage by cage, for today’s sessions and the last 7 days. The sessions run on the phones.'), 'livepull', 'desk'],
     ['users', tx('Team message and today’s briefing'), tx('Managers publish a message and the day’s briefing for every device in the store. It shows in the strip at the top until you have read it.'), null],
