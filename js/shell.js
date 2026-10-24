@@ -35,6 +35,7 @@ import { WORKER_DEFAULT, WORKER_ALLOWED } from './config.js';
 import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
 import { installProductLinks, installProductCard } from './views/stockroom/common.js';
+import { installPullAlerts } from './views/livepull.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
 
@@ -59,7 +60,7 @@ const workerLine = () => WORKER === WORKER_DEFAULT ? '' : `<div class="si-worker
 
 const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
 let team = null;      // the team message strip (js/team.js)
-let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor';
+let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor', pullAlertsOff = null;
 const frame = $('.frame');
 translateStatic();
 // The language: on the sign-in cards and in Settings › Display (a reload redraws every screen).
@@ -144,6 +145,8 @@ async function enter() {
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
   store.on('backfill', paintBadges); store.on('cages', paintBadges);
+  // Live pull: a new request in a puller's bays buzzes the phone wherever it is.
+  pullAlertsOff?.(); pullAlertsOff = installPullAlerts({ store, session: client.session, storeNo: s.store, isOpen: () => current === 'livepull', open: () => show('livepull') });
   // The owner switched a tool on or off: the rail follows, and a view that
   // has just been switched off closes.
   // The owner switched an area on or off: renew the token now (its areas

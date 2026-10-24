@@ -13,7 +13,7 @@
 // phone that loses wifi mid-bay keeps its scans in the outbox.
 
 import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, msteps, mlast, mrows, mbig, mghost, mfoot, camButton } from '../../ui.js';
-import { phoneCode, disputes, parseReportByLocation, parseReportLines, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
+import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { printSheet, code as pcode, tick, table, section, signoff } from '../../print.js';
@@ -158,7 +158,7 @@ async function syncReport(ctx) {
   try {
     const doc = await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report?date=${todayKey()}`);
     if (st.reportFor !== k) return changed;
-    st.report = { at: doc.at, byLoc: doc.byLoc || {}, range: doc.range ?? null, delta: doc.delta || {}, bayAt: doc.bayAt || {}, soh: doc.soh || {}, rev: meta.rev };
+    st.report = { at: doc.at, byLoc: doc.byLoc || {}, range: doc.range ?? null, delta: doc.delta || {}, bayAt: doc.bayAt || {}, soh: doc.soh || {}, apn: doc.apn || {}, rev: meta.rev };
     await ctx.storage.set(k, st.report); return true;
   } catch { return changed; }
 }
@@ -196,7 +196,7 @@ async function saveReport(ctx, report) {
 }
 async function pushReport(ctx, r) {
   try {
-    await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report`, { method: 'POST', body: { date: todayKey(), report: { at: r.at, byLoc: r.byLoc, range: r.range ?? null, delta: r.delta || {}, bayAt: r.bayAt || {}, soh: r.soh || {} } }, timeoutMs: 60000 });
+    await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report`, { method: 'POST', body: { date: todayKey(), report: { at: r.at, byLoc: r.byLoc, range: r.range ?? null, delta: r.delta || {}, bayAt: r.bayAt || {}, soh: r.soh || {}, apn: r.apn || {} } }, timeoutMs: 60000 });
     if (r.unsent) { delete r.unsent; await ctx.storage.set(reportKey(ctx), r); }
     return true;
   } catch { if (!r.unsent) { r.unsent = true; await ctx.storage.set(reportKey(ctx), r); } return false; }
@@ -209,7 +209,7 @@ export async function pasteReport(ctx, text) {
   const byLoc = parseReportByLocation(text), n = Object.keys(byLoc).length; if (!n) return null;
   await loadReport(ctx);
   const prev = st.report?.byLoc || {}, lines = parseReportLines(text), soh = Object.fromEntries(Object.entries(lines).map(([kc, r]) => [kc, r.soh]));
-  await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh } });
+  await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh }, apn: { ...(st.report?.apn || {}), ...reportApns(text) } });
   const sent = await reportToAdjust(ctx, byLoc, lines);
   return { bays: n, codes: Object.values(byLoc).reduce((x, l) => x + l.length, 0), sent };
 }

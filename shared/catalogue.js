@@ -15,7 +15,7 @@ export const AREAS = ['floor', 'stockroom', 'backdock', 'store'];
 // wasArea: the area a type moved from, still accepted from a device on an
 // older release (the worker logs the event under its area now).
 const T = (area, roles, entity, payload = {}, v = 1, wasArea) => ({ area, roles, entity, payload, v, ...(wasArea ? { wasArea } : {}) });
-const F = ['floor'], S = ['stockroom'], D = ['dock'], M = ['manager'];
+const F = ['floor'], S = ['stockroom'], D = ['dock'], M = ['manager'], FS = ['floor', 'stockroom'];
 
 export const CATALOGUE = {
   // ── Floor ────────────────────────────────────────────────────────────
@@ -48,6 +48,17 @@ export const CATALOGUE = {
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),
+  // Live pull (shared/reducers/pull.js): the floor asks, the stockroom pulls.
+  // Floor events so every phone holds the list; marking off and sending a
+  // cage need the Stockroom code.
+  'pull.session.start':  T('floor', FS, ['session'], { name: 'string', dept: 'string' }),   // payload.part req | pull, shelves
+  'pull.session.end':    T('floor', FS, ['session']),
+  'pull.join':           T('floor', FS, ['session']),                            // a requester joins
+  'pull.zone.set':       T('floor', S, ['session'], { bays: 'array' }),          // a puller joins with the bays this phone pulls
+  'pull.request':        T('floor', FS, ['session', 'line'], { kc: 'string', bays: 'array' }),   // qty | all: true; carton, name, shelf
+  'pull.update':         T('floor', FS, ['session', 'line']),                    // qty | all while it waits; cancel: true takes it back
+  'pull.mark':           T('floor', S, ['session', 'line'], { st: 'string' }),   // pulled | short | gone | todo (undo); got { bay: n }
+  'pull.cage.send':      T('floor', S, ['session'], { cage: 'number' }),         // payload.tag
 
   // ── Stockroom ────────────────────────────────────────────────────────
   'cage.create':         T('stockroom', S, ['cage'], { ring: 'string' }),
@@ -152,7 +163,7 @@ export function typeInfo(type) {
 
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
-  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists'],
+  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'pulls'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan', 'inventory'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'areas', 'comms', 'retention'],

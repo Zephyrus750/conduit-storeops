@@ -357,4 +357,6 @@ export default {
   "Everything the store brings in: the morning and midday reports, DC manifests, the SOH report, loads and the off-site list.": "Mọi thứ cửa hàng nhập vào: báo cáo buổi sáng và buổi trưa, bảng kê hàng DC, báo cáo SOH, chuyến hàng và danh sách hàng ngoài cửa hàng.",
   "The morning report is not pasted yet": "Chưa dán báo cáo buổi sáng",
   "Reports & files": "Báo cáo & tệp",
+  "Live pull": "Lấy hàng trực tiếp",
+  "Ask the stockroom for stock, or pull it": "Yêu cầu hàng từ kho, hoặc lấy hàng",
 };

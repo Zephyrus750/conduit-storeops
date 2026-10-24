@@ -274,6 +274,7 @@ r.post('/v1/store/:no/manifest', (req, env, _c, p) => anyStoreCall(req, env, p.n
 r.get('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));
 r.delete('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));
 r.get('/v1/store/:no/profiles', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/profiles'));
+r.get('/v1/store/:no/pull/find', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/pull/find', new URL(req.url).search));
 // Issue photos: a store device adds one (JPEG bytes); any device of the
 // store, or the owner, reads it; the store or the owner deletes it.
 r.post('/v1/store/:no/photo', (req, env, _c, p) => storeCall(req, env, p.no, '/photo'));
