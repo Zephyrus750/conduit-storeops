@@ -17,9 +17,9 @@ import { settingsOf } from '../../../shared/reducers/store.js';
 import { previewManifest } from './mpreview.js';
 import { inv, loadsOf, send, statusPill, loadUnits, loadDetail, loadHeat, mapCard, paintMap, showPaint, paintNotes, stageFile, stagePanel, saveStage, stageChange } from './loads.js';
 import { manifestIndex, microDept, microChip, microName, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
-import { retailPeriod } from '../../../shared/time.js';
+import { retailPeriod, addDays } from '../../../shared/time.js';
 import { toolOff } from '../../../shared/tools.js';
-import { tx, txn } from '../../i18n.js';
+import { tx, txn, locale } from '../../i18n.js';
 
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {}, load: null, paint: null, stage: null };
@@ -29,7 +29,6 @@ const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'K
 const groupOf = code => { const d = microDept(code); return !d ? '?' : d === 'flex' ? 'flex' : d[0]; };
 const STATUS = { done: [tx('Done'), 'good'], live: [tx('Decanting'), 'warn'], staged: [tx('Receiving'), ''], planned: [tx('Planned'), ''], library: [tx('Published'), ''] };
 const TRUCK_ST = { staged: tx('staged'), live: tx('live'), closed: tx('closed') };
-const mondayOf = day => { const d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const units = c => (c.items || []).reduce((n, i) => n + (Number(i.q) || 0), 0);
 // An item's cartons: logged on the line, else its share of the consol's cartons by units.
 export const itemCartons = (c, it) => it.c || (units(c) ? c.cartons * (Number(it.q) || 0) / units(c) : 0);
@@ -42,10 +41,38 @@ function entries(ctx) {
   const dock = ctx.store.get('dock'), plan = ctx.store.get('plan') || {}, by = new Map();
   const put = (manNo, x) => { const cur = by.get(manNo) || { manNo, status: 'library' }; by.set(manNo, { ...cur, ...x }); };
   for (const m of manifestIndex(dock)) put(m.manNo, { ...m, day: (m.publishedAt || '').slice(0, 10) });
-  for (const [date, day] of Object.entries(plan.days || {})) for (const [slot, sl] of Object.entries(day.slots || {})) if (sl.manifest?.manNo) put(sl.manifest.manNo, { status: 'planned', day: date, slot, consols: by.get(sl.manifest.manNo)?.consols ?? (sl.manifest.ref ? sl.manifest.n : sl.manifest.consols?.length || 0), totalCartons: by.get(sl.manifest.manNo)?.totalCartons ?? sl.manifest.cartons });
+  for (const [date, day] of Object.entries(plan.days || {})) for (const [slot, sl] of Object.entries(day.slots || {})) if (sl.manifest?.manNo) put(sl.manifest.manNo, { status: 'planned', day: date, slot, eta: sl.eta || '', consols: by.get(sl.manifest.manNo)?.consols ?? (sl.manifest.ref ? sl.manifest.n : sl.manifest.consols?.length || 0), totalCartons: by.get(sl.manifest.manNo)?.totalCartons ?? sl.manifest.cartons });
   for (const r of dock.history || []) if (r.manifest?.manNo) put(r.manifest.manNo, { status: 'done', day: r.date, truck: r.id, totalCartons: by.get(r.manifest.manNo)?.totalCartons || r.manifest.cartons || 0 });
   for (const [id, t] of Object.entries(dock.trucks || {})) if (t.manifest?.manNo) put(t.manifest.manNo, { status: t.status === 'closed' ? 'done' : t.status, day: id.slice(0, 10), truck: id, consols: (t.manifest.consols || []).length, totalCartons: t.manifest.consols.reduce((n, c) => n + c.cartons, 0) });
   return [...by.values()].sort((a, b) => (b.day || '').localeCompare(a.day || '') || (b.publishedAt || '').localeCompare(a.publishedAt || ''));
+}
+
+// The list by day and truck: manifests not on a truck yet (newest first),
+// then today's, the days coming up and earlier days, each day's manifests
+// in truck order. A planner slot is its truck until the truck is on the dock.
+const tkNo = x => (x.truck ? truckNo(x.truck) : x.slot ? String(x.slot) : '');
+const byTruck = (a, b) => tkNo(a).localeCompare(tkNo(b), 'en', { numeric: true });
+function grouped(list) {
+  const d0 = today(), on = x => !!(x.truck || x.slot) && !!x.day;
+  return [
+    ['free', tx('Not on a truck yet'), list.filter(x => !on(x)).sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''))],
+    ['today', dayName(d0), list.filter(x => on(x) && x.day === d0).sort(byTruck)],
+    ['next', tx('Coming up'), list.filter(x => on(x) && x.day > d0).sort((a, b) => a.day.localeCompare(b.day) || byTruck(a, b))],
+    ['past', tx('Earlier'), list.filter(x => on(x) && x.day < d0).sort((a, b) => b.day.localeCompare(a.day) || byTruck(a, b))],
+  ].filter(g => g[2].length);
+}
+// "Today · Sat 24 Oct", "Tomorrow · …", "Yesterday · …", else the day.
+function dayName(d) {
+  const t = today(), w = new Date(d + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+  return d === t ? tx('Today · {date}', { date: w }) : d === addDays(t, 1) ? tx('Tomorrow · {date}', { date: w }) : d === addDays(t, -1) ? tx('Yesterday · {date}', { date: w }) : w;
+}
+function listRow(x, free) {
+  const [label, cls] = STATUS[x.status], n = tkNo(x);
+  const facts = (free ? [x.publishedAt ? tx('published {date}', { date: esc(fmtDate(x.publishedAt.slice(0, 10))) }) : ''] : [x.eta && x.status === 'planned' ? tx('due {time}', { time: esc(x.eta) }) : ''])
+    .concat(x.despatch ? tx('despatch {date}', { date: esc(x.despatch) }) : '').filter(Boolean).join(' · ');
+  return `<div class="mfl-row tk${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}"><span class="mfl-tk${n ? '' : ' none'}" title="${n ? tx('Truck {no}', { no: esc(n) }) : tx('Not on a truck yet')}">${n ? `<small>${tx('Truck')}</small><b>${esc(n)}</b>` : ic('truck')}</span>` +
+    `<span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b><span class="status ${cls}">${label}</span></span><small>${facts}</small></span>` +
+    `<span class="mfl-facts"><span>${tx('<b>{cartons}</b> ctn · <b>{consols}</b> consols', { cartons: x.totalCartons ?? '–', consols: x.consols ?? '–' })}</span></span>${ic('chev')}</div>`;
 }
 
 // Consol id → how far it has got on the truck that carries the manifest.
@@ -127,7 +154,7 @@ function explorer(ctx, e, doc) {
   const tip = e?.truck
     ? tx('{cartons} cartons × {mpc} min a carton = {work} minutes of decanting for one person (Minutes per carton in Settings › Store settings, as this truck took it). Split it across the team: four people ≈ {share}.', { cartons: cartons.toLocaleString(), mpc, work: work.toLocaleString(), share })
     : tx('{cartons} cartons × {mpc} min a carton = {work} minutes of decanting for one person (Minutes per carton in Settings › Store settings). Split it across the team: four people ≈ {share}.', { cartons: cartons.toLocaleString(), mpc, work: work.toLocaleString(), share });
-  return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>${tx('despatch <b>{date}</b>', { date: esc(doc.despatch || '—') })}</span><span>${tx('DC <b>{no}</b>', { no: esc(doc.dcNo || '—') })}</span>${attachedTo ? `<span>${tx('Truck <b>{no}</b> · {n}/{total} landed', { no: esc(truckNo(attachedTo)), n: nLanded, total: doc.consols.length })}</span>` : ''}</span></div>` +
+  return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>${tx('despatch <b>{date}</b>', { date: esc(doc.despatch || '—') })}</span><span>${tx('DC <b>{no}</b>', { no: esc(doc.dcNo || '—') })}</span>${attachedTo ? `<span>${tx('Truck <b>{no}</b> · {n}/{total} landed', { no: esc(truckNo(attachedTo)), n: nLanded, total: doc.consols.length })}</span>` : e?.slot ? `<span>${tx('Planned for Truck <b>{no}</b> · {day}', { no: esc(String(e.slot)), day: esc(dayName(e.day)) })}${e.eta ? ' · ' + tx('due {time}', { time: esc(e.eta) }) : ''}</span>` : ''}</span></div>` +
     `<div class="ps-facts mfx-stats">${stat(tx('Consols'), doc.consols.length)}${stat(tx('Cartons'), cartons.toLocaleString())}${stat(tx('Keycodes'), keycodes.toLocaleString())}${stat(tx('Units'), allUnits.toLocaleString())}${stat(tx('Est. work'), tx('{h}h {m}m', { h: Math.floor(work / 60), m: String(work % 60).padStart(2, '0') }), tip, tx('{mpc} min/ctn · one person', { mpc }))}</div>` + roll +
     `<div class="mfd-acts">${attachedTo ? `<span class="status good">${tx('On Truck {no}', { no: esc(truckNo(attachedTo)) })}</span>` : trucks.length ? `<select class="ad-in" data-field="truck">${trucks.map(t => `<option value="${esc(t.id)}">${tx('Truck {no} · {status}', { no: esc(truckNo(t.id)), status: esc(TRUCK_ST[t.status] || t.status) })}</option>`).join('')}</select><button class="btn primary sm" data-act="attach">${ic('truck')}${tx('Attach to truck')}</button>` : `<span class="cs-dim">${tx('No truck on the board to attach to')}</span>`}<button class="btn sm" data-act="remove" style="margin-left:auto">${ic('trash')}${tx('Remove')}</button></div>` +
     `<div class="mfx-bar"><div class="seg">${[['consols', tx('Consols')], ['products', tx('Products')], ['depts', tx('Departments')]].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="${tx('find consol, keycode, product, dept…')}" aria-label="${tx('Search this manifest')}"></div>${st.tab === 'depts' ? `<button class="btn sm${st.paint?.mode === 'heat' ? ' on' : ''}" data-act="heat">${ic('layers')}${tx('Whole load heat')}</button>` : ''}<span class="mfd-hit">${st.tab === 'depts' ? txn(list.length, '{n} department', '{n} departments') : st.tab === 'products' ? txn(list.length, '{n} product', '{n} products') : txn(list.length, '{n} consol', '{n} consols')}</span></div>` +
@@ -155,12 +182,11 @@ export default {
     if (st.load && !open) st.load = null;
     if (st.open && !list.some(x => x.manNo === st.open)) st.open = null;
     if (!st.open && !st.load && list.length) st.open = list[0].manNo;
-    const head = vh(tx('Manifests'), sub(tx('Manifest explorer'), txn(list.length, '{n} manifest', '{n} manifests'), loads.length ? txn(loads.length, '{n} other load', '{n} other loads') : '', tx('by week')), (loadsOn ? `<label class="btn" style="cursor:pointer" title="${tx('A sheet of pallets and keycodes that is not a DC manifest')}"><input type="file" accept=".xls,.xlsx,.csv" data-field="loadfile" style="display:none">${ic('plus')}${tx('Add a load')}</label>` : '') + `<label class="btn primary" style="cursor:pointer"><input type="file" accept=".xls,.xlsx,.csv" data-field="file" style="display:none">${ic('file')}${tx('Publish a manifest')}</label>`, 'm-manifests');
-    let wk = null;
-    const rowsHtml = list.map(x => {
-      const w = x.day ? mondayOf(x.day) : '', hd = w !== wk ? `<div class="pt3 mfx-wk">${w ? tx('Week of {date} · {period}', { date: esc(fmtDate(w)), period: retailPeriod(w) }) : tx('Undated')}</div>` : ''; wk = w;
-      const [label, cls] = STATUS[x.status];
-      return hd + `<div class="mfl-row${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}"><span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b><span class="status ${cls}">${label}</span></span><small>${x.day ? esc(fmtDate(x.day)) : ''}${x.truck ? ` · ${tx('Truck {no}', { no: esc(truckNo(x.truck)) })}` : ''}${x.despatch ? ` · ${tx('despatch {date}', { date: esc(x.despatch) })}` : ''}</small></span><span class="mfl-facts"><span>${tx('<b>{cartons}</b> ctn · <b>{consols}</b> consols', { cartons: x.totalCartons ?? '–', consols: x.consols ?? '–' })}</span><span class="cs-dim">${x.publishedAt ? ago(x.publishedAt) : ''}</span></span>${ic('chev')}</div>`;
+    const head = vh(tx('Manifests'), sub(tx('Manifest explorer'), txn(list.length, '{n} manifest', '{n} manifests'), loads.length ? txn(loads.length, '{n} other load', '{n} other loads') : '', tx('by day and truck')), (loadsOn ? `<label class="btn" style="cursor:pointer" title="${tx('A sheet of pallets and keycodes that is not a DC manifest')}"><input type="file" accept=".xls,.xlsx,.csv" data-field="loadfile" style="display:none">${ic('plus')}${tx('Add a load')}</label>` : '') + `<label class="btn primary" style="cursor:pointer"><input type="file" accept=".xls,.xlsx,.csv" data-field="file" style="display:none">${ic('file')}${tx('Publish a manifest')}</label>`, 'm-manifests');
+    const rowsHtml = grouped(list).map(([k, title, xs]) => {
+      let day = null;
+      const body = xs.map(x => { const hd = (k === 'next' || k === 'past') && x.day !== day ? `<div class="mfl-day">${esc(dayName(x.day))}<span class="cs-dim">${retailPeriod(x.day)}</span></div>` : ''; day = x.day; return hd + listRow(x, k === 'free'); }).join('');
+      return `<div class="pt3 mfx-wk">${esc(title)}<span class="cs-dim">${txn(xs.length, '{n} manifest', '{n} manifests')}</span></div>` + body;
     }).join('');
     const loadRows = loads.length ? `<div class="pt3 mfx-wk">${tx('Other loads')}</div>` + loads.map(l => `<div class="mfl-row${l.id === st.load ? ' on' : ''}" data-act="open-load" data-id="${esc(l.id)}"><span class="mfl-main"><span class="mfl-top"><b>${esc(l.label)}</b>${statusPill(l.status)}</span><small>${esc(fmtDate(l.recvDate || l.date))}</small></span><span class="mfl-facts"><span>${txn(l.pallets.length, '<b>{n}</b> pallet', '<b>{n}</b> pallets')}</span><span class="cs-dim">${txn(loadUnits(l), '<b>{n}</b> unit', '<b>{n}</b> units', { n: loadUnits(l).toLocaleString('en-AU') })}</span></span>${ic('chev')}</div>`).join('') : '';
     const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">${tx("Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.")}</div>`}${loadRows}</div>`;

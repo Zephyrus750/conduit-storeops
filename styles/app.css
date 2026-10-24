@@ -2888,3 +2888,14 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .eq-form .mv-sub { margin-top: 12px; }
 .eq-form .mv-chips { flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .eq-form .mv-chips button { flex: 0 1 auto; min-height: 40px; padding: 0 12px; font-size: 13px; }
+
+/* Manifests: the list by day and truck. */
+.mfl-row.tk { grid-template-columns: 42px minmax(0, 1fr) auto 14px; gap: 8px; }
+.mfl-row.tk .mfl-top { flex-wrap: wrap; row-gap: 2px; }
+.mfl-tk { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 40px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); line-height: 1.05; }
+.mfl-tk small { font-size: 8.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.mfl-tk b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mfl-tk.none { background: var(--ground); color: var(--faint); }
+.mfl-tk.none svg.i { width: 18px; height: 18px; }
+.mfl-day { display: flex; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 700; color: var(--ink2); margin: 10px 6px 2px; }
+.mfl-day .cs-dim { font-weight: 500; font-size: 11px; }
