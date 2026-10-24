@@ -5,7 +5,7 @@
 
 import { openTour } from '../tour.js';
 import { haptic, applyOrientation, isPhone } from '../device.js';
-import { $, ic, esc, vh, sub, toast, ago, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR } from '../ui.js';
+import { $, ic, esc, vh, sub, toast, ago, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR, mgr } from '../ui.js';
 import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/reducers/store.js';
 import { SCALES, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
@@ -38,7 +38,7 @@ export default {
   // Store settings, the refresh focus and target, and the price-check size
   // are set on a store PC. A manager sees Field Mode first, under Manager.
   // Help and feedback sit together at the foot.
-  mobile(ctx) { return `<div class="mv-head"><div><h2>${tx('Settings')}</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${howtoBody(true)}</div>`; },
+  mobile(ctx) { return `<div class="mv-head"><div><h2>${tx('Settings')}</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}${mgr()}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${howtoBody(true)}</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
@@ -205,7 +205,7 @@ async function sendFeedback(ctx, root) {
 
 // ── How to use ────────────────────────────────────────────────────────
 const HOWTO = [
-  [tx('The shell'), [tx('The rail on the left lists every view: Store, Back dock, Stockroom. Settings and the store chip sit at the foot.'), tx('Search (Ctrl K) finds a shelf, a bay, a keycode, a manifest or a tool.'), tx('The store chip opens the store’s details and the other stores on this device.')]],
+  [tx('The shell'), [tx('The rail on the left has a few rows for each area: Floor, Stockroom, Back dock. A row with several screens shows them as tabs at the top; Screens, Settings and Help sit at the foot.'), tx('Search (Ctrl K) finds a shelf, a bay, a keycode, a manifest or a tool.'), tx('The store chip opens the store’s details and the other stores on this device.')]],
   [tx('Floor'), [tx('Store map: tap a shelf for its card; Share gives a QR code and a link.'), tx('Location refresh: tap or scan shelf labels as they are refreshed. The week counts toward 100 in the focus departments.'), tx('Label integrity: pick a micro-department, check its labels, log the wrong ones; print the marking sheet.'), tx('Pick list: add shelves, then Plan route for the shortest walk, stairs included.'), tx('Stocktake, Maintenance and Emergency each keep their own map marks.')]],
   [tx('Stockroom'), [tx('On the phone: scan the bay label, scan each product, Send to review.'), tx('At the desk: paste the SIM report, review each bay (F for Focus), Enter marks it ready.'), tx('Back on the phone: My locations shows Submit once the bay is finalised on the PDT.')]],
   [tx('Back dock'), [tx('Land a truck, attach its manifest, start the decant.'), tx('Crew work pallets by D-number; hold-ups and breaks stop the clock.'), tx('The Dock screen and Team Board show progress on a big screen.')]],

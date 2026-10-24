@@ -57,6 +57,7 @@ export const clsBadge = (cls, flat) => `<span class="sri-cls ${cls}">${cls === '
 export const bandSoh = (soh, ctn) => `<span class="sri-soh ${sohBand(soh, ctn)}">SOH ${soh}</span>`;
 
 const st = { text: '', parsed: null, keep: false, filter: 'all', q: '', busy: false, open: false, loc: '', saved: null };
+let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const FILTERS = ['all', 'stuck', 'ghost', 'frozen', 'deep', 'new', 'moving'];
 
 function pastePanel(ctx, data) {
@@ -140,6 +141,8 @@ export default {
     return head + `<div class="sri-grid"><div>${sendCard()}${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${lookupCard(ctx, data)}${snapsCard(data)}<div class="card"><div class="ch"><h3>${tx('How the classes work')}</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} ${tx('SOH has not moved for three snapshots although stock arrived: count it.')}</li><li>${clsBadge('ghost')} ${tx('The system says zero but stock arrived: count it.')}</li><li>${clsBadge('frozen', 3)} ${tx('Flat for three or more snapshots with nothing arriving: count it.')}</li><li>${clsBadge('deep')} ${tx('Flat, but two cartons or more on hand: a spot-check.')}</li><li>${clsBadge('new')} ${tx('Under three snapshots: not enough history yet.')}</li><li><span class="sri-badge recount">RECOUNT</span> ${tx('Re-cartoned within the last four trucks: count, do not spot-check.')}</li></ul></div></div></div>`;
   },
   mount(ctx, root) {
+    // From Reports & files: an SOH report pasted there, read here for its review.
+    if (ctx.arg?.paste && ctx.arg !== usedArg) { usedArg = ctx.arg; const r = parseReport(ctx.arg.paste, {}); st.parsed = { items: r.items, skipped: r.skipped }; st.text = ''; setTimeout(() => ctx.rerender(), 0); }
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;

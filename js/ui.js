@@ -15,6 +15,10 @@ export function esc(v) {
 export function ic(name, cls = '') {
   return `<svg class="i ${cls}"><use href="icons.svg#i-${name}"/></svg>`;
 }
+// On a manager's phone, beside what only managers see: team members never
+// see the thing at all, so the mark tells the manager not to expect it on
+// a crew phone.
+export const mgr = () => `<span class="mgr-tag" role="img" aria-label="${tx('Managers only')}" title="${tx('Managers only: team members don’t see this')}">${ic('shield')}</span>`;
 export function vh(title, sub, acts, icon) {
   return `<div class="vh"><div class="vt">${icon ? `<span class="vic">${ic(icon)}</span>` : ''}<div><h2>${title}</h2>${sub ? `<div class="sub">${sub}</div>` : ''}</div></div>${acts ? `<div class="acts">${acts}</div>` : ''}</div>`;
 }

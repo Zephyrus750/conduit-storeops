@@ -2627,3 +2627,97 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .dpt-add > span { color: var(--dim); }
 .dpt-add .btn { flex: none; }
 .dpt-pastecard { margin-bottom: 14px; }
+
+/* ── The Version A rail: a grouped row's screens as tabs, above the one open ── */
+.content > .gtabs { flex: none; }
+.gtabs { display: flex; flex-wrap: wrap; gap: 2px; width: fit-content; max-width: 100%; margin: 0 0 16px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.gtab { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 14px; border-radius: 9px; font-weight: 600; font-size: 13.5px; color: var(--dim); white-space: nowrap; cursor: pointer; }
+.gtab svg.i { width: 17px; height: 17px; }
+.gtab:hover { background: var(--hover); color: var(--ink); }
+.gtab.on { background: var(--accent); color: #fff; }
+.gtab .badge { margin-left: 2px; font-size: 11.5px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 999px; padding: 1px 7px; min-width: 22px; text-align: center; }
+.gtab .badge.red { background: #DC2626; } .gtab.on .badge { background: #fff; color: var(--accent-ink); }
+@container shell (min-width: 1600px) { .gtab { font-size: 14.5px; min-height: 42px; padding: 0 18px; } }
+
+/* ── Screens (js/views/backdock/screenlist.js) ─────────────────────────── */
+.scr-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.scr-card { display: flex; flex-direction: column; gap: 6px; }
+.scr-card p { margin: 0; font-size: 14px; color: var(--ink2); line-height: 1.45; }
+.scr-card .lbl { margin-top: auto; padding-top: 6px; }
+.scr-card .btn { align-self: flex-start; margin-top: 8px; }
+.scr-note { display: flex; align-items: flex-start; gap: 12px; }
+.scr-note svg.i { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--dim); }
+.scr-note p { margin: 0; font-size: 14px; color: var(--ink2); line-height: 1.45; }
+@container shell (max-width: 1100px) { .scr-list { grid-template-columns: minmax(0, 1fr); } }
+
+/* Console › Access › Show: the current PIN or code, for 30 seconds. */
+.ad-revealed { background: var(--accent-soft); border-radius: 10px; }
+.ad-shown { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.ad-shown b { font-size: 20px; font-weight: 800; letter-spacing: .1em; color: var(--ink); user-select: all; }
+
+/* The manager mark on a phone (js/ui.js mgr()): beside what only managers see. */
+.mgr-tag { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 18px; height: 18px; margin-left: 6px; vertical-align: -3px; color: #7C3AED; }
+.mgr-tag svg.i { width: 16px; height: 16px; }
+.btn .mgr-tag { margin-left: 4px; }
+.mo-who .mo-mgr { display: flex; align-items: center; gap: 2px; }
+.mo-who .mo-mgr .mgr-tag { margin-left: 0; }
+.sx-lbl .sx-lt { font: inherit; display: inline-flex; align-items: center; }
+.sx-lbl .mgr-tag, .mv-strip .mgr-tag { color: #A78BFA; }
+.sx-lbl .mgr-tag { width: 14px; height: 14px; margin-left: 5px; } .sx-lbl .mgr-tag svg.i { width: 13px; height: 13px; }
+
+/* ── Reports & files (js/views/inputs.js) and Today's checklist chips ──── */
+.inp-t .chip, .morn .mtx .chip { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.inp-t .chip.ok { background: #DCFCE7; color: #14532D; }
+.inp-t .chip.due, .morn .mtx .chip.due { background: #FEF3C7; color: #78350F; }
+.inp-t .chip.opt, .morn .mtx .chip.opt { background: #E0F2FE; color: #0C4A6E; }
+.inp-t .chip.bad { background: #FEE2E2; color: #7F1D1D; }
+.morn .mtx b .chip { margin-left: 6px; vertical-align: 1px; }
+.inp-drop { border: 2px dashed var(--accent-line); background: var(--accent-soft); margin-bottom: 16px; }
+.inp-drop.over { border-color: var(--accent); }
+.inp-dh { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 12px; }
+.inp-dh h3 { margin: 0; font-size: 16px; }
+.inp-dh p { margin: 4px 0 0; font-size: 14px; color: var(--ink2); line-height: 1.45; }
+.inp-ic { flex: none; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: var(--panel); color: var(--accent-ink); }
+.inp-ic svg.i { width: 24px; height: 24px; }
+.inp-paste { width: 100%; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; background: var(--panel); }
+.inp-drop .acts2 { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.inp-saved { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; color: #14532D; font-weight: 600; }
+.inp-list { margin-top: 0; }
+.inp-t td { vertical-align: top; font-size: 13.5px; } .inp-t td:first-child b { display: block; margin-bottom: 4px; }
+.inp-t td:last-child { text-align: right; white-space: nowrap; }
+.content > .inp-list, .content > .inv-stage { flex: none; }
+.inp-acts { align-items: center; } .inp-acts .cs-dim { font-size: 13px; }
+
+/* The paste pop-up (js/views/pastebox.js): the clipboard read, then one button. */
+.pbox .pb-card { width: min(560px, 100%); height: auto; max-height: 100%; }
+.pbox .ss-top b { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.pbox .ss-top b svg.i { width: 20px; height: 20px; color: var(--accent-ink); }
+.pb-body { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 20px; overflow: auto; }
+.pb-state { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 12px; background: var(--ground); }
+.pb-state > svg.i { flex: none; width: 26px; height: 26px; color: var(--dim); }
+.pb-state > b { align-self: center; font-size: 15px; }
+.pb-state div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pb-state div b { font-size: 15px; }
+.pb-state div span { font-size: 14px; line-height: 1.45; color: var(--ink2); }
+.pb-state.ok { background: #DCFCE7; } .pb-state.ok > svg.i { color: var(--green-ink); } .pb-state.ok div b { color: #14532D; }
+.pb-state.bad { background: #FEE2E2; } .pb-state.bad > svg.i { color: var(--red); } .pb-state.bad div b { color: #7F1D1D; }
+.pb-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.pb-acts .btn { font-size: 15px; padding: 10px 16px; }
+.pb-body .lbl { margin: 0; font-size: 13px; }
+.pb-manual summary { cursor: pointer; font-size: 13.5px; color: var(--dim); }
+.pb-manual textarea { margin: 8px 0; }
+
+/* The product card: a keycode or product name under the pointer on a PC (installProductCard). */
+.pch { position: absolute; z-index: 40; display: none; width: 310px; gap: 12px; padding: 12px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 40px -16px rgba(17, 24, 39, .45); pointer-events: none; }
+.pch.on { display: flex; }
+.pch-img { flex: none; width: 84px; height: 84px; display: grid; place-items: center; overflow: hidden; border-radius: 10px; background: #fff; border: 1px solid var(--line-soft); color: var(--faint); }
+.pch-img img { width: 100%; height: 100%; object-fit: contain; }
+.pch-img svg.i { width: 28px; height: 28px; }
+.pch-b { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pch-kc { font-size: 12px; color: var(--dim); }
+.pch-b > b { font-size: 14px; line-height: 1.3; }
+.pch-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.pch-price b { font-size: 17px; } .pch-price s { font-size: 13px; color: var(--dim); }
+.pch-price em { font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: #FEE2E2; color: #991B1B; }
+.pch-none { font-size: 12.5px; color: var(--dim); }
+.pch small { margin-top: 4px; font-size: 11.5px; line-height: 1.35; color: var(--faint); }

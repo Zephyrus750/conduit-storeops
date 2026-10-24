@@ -105,6 +105,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/admin/stores`, `POST /v1/admin/stores`, `PATCH …/:no`, `GET …/:no` | owner | live: list, register, entitle, status, rotate; a new PIN or code, `status: suspended` or `revoke: true` signs every device out (the store's credential epoch moves on); `tools: { id: bool }` switches tools inside an area (`shared/tools.js`), logged into the store as `store.tools.set` so devices hide them at once and the worker refuses them; `entitlements` likewise as `store.areas.set` (worker only): an area switched off stops at once for every token and socket, and devices renew and follow (decision 19) |
 | `GET /v1/admin/stores/:no/tail`, `/devices`, `/snapshot`, `/kpis`, `GET /v1/admin/actions` | owner | live: diagnostics, read-only projections; `/kpis` is the console's numbers for one store (backfill, dock, issues, devices, set-up alerts) |
 | `POST /v1/admin/actas/:no` | owner | live: store-scoped token with `actor: owner` |
+| `POST /v1/admin/stores/:no/reveal` | owner | live: the store's current PIN or one code (`{ name: pin \| stockroom \| dock \| manager }` → `{ name, set, value }`) for console › Access › Show, without rotating it; logged as `codes.view`. The registry keeps an AES-GCM copy beside each hash (key derived from `TOKEN_SECRET`, bound to the store and the code's name); a code set before 24 Oct 2026 is kept at the next sign-in with it (`value: null` until then) |
 | `POST /v1/admin/stores/:no/mapedits/:id` | owner | live: accept or decline a suggested map edit (`{ status, note }`), logged as an owner action |
 | `GET /v1/store/:no/map`, `GET …/map/:version` (`latest` allowed) | store token or owner | live: published map metadata and document, ETag / 304 |
 | `POST /v1/store/:no/map` | owner | live: publish a version (floors with their level and walk paths, stairs and lift links included; `source`, the map editor's own document, optional); logs `map.publish`, sets the registry's map version |
@@ -415,6 +416,42 @@ whose classes the shell and views use survive, so the stylesheet tracks the
 code rather than the other way round. `js/registry.js` is the one view registry:
 a view is `{ id, title, icon, desktop(ctx), mobile?(ctx), mount?(ctx, root) }`
 and renders into the content region; it owns no chrome and no stylesheet.
+
+The desktop rail is Version A of the rail showcase (23 Oct 2026): Today (the
+dashboard) and Reports & files, then Floor (Store map, Floor checks, Pick list, Safety & upkeep), Stockroom
+(Backfill, Stock accuracy, Cages) and Back dock (Receiving, Plan, Results),
+and Screens, Settings and Help in the foot. `GROUPS` in `js/registry.js` maps
+each row to its screens: a row with several shows them as tabs above the one
+open (the shell adds them; the screens are unchanged) and opens the one used
+last on that device (`rail_tabs`). Print map and Suggest edits open from the
+Store map's buttons. A row whose screens are all switched off, or outside the
+store's areas, is not on the rail. The phone's strip and More are unchanged.
+
+Reports & files (`js/views/inputs.js`) is where everything the store brings
+in arrives: one box takes the clipboard or a file and says what it found
+before anything is saved, and a list says what is due today (the morning SIM
+report is required, the midday one optional), what each feeds and where it
+comes from. Each kind is saved by the screen it feeds, through that screen's
+code: the SIM report through Backfill review's `pasteReport`, the SOH report
+in Stock intelligence (opened with the paste read), a DC manifest through the
+publish preview, the off-site list and other loads through `loads.js`. Its
+rail row shows 1 while today's morning report is missing. Today's morning
+setup marks the morning report Required and the midday one Optional (it never
+holds the list back).
+
+Every Paste for a SIM report (Today's checklist, Reports & files, Backfill
+review's Paste whole report) opens the paste pop-up (`js/views/pastebox.js`).
+It reads the clipboard as it opens, says what it found (bays, keycodes, lines
+with an SOH) and saves with one more click; text that is not the report asked
+for says "Incorrect format". A browser that will not hand over the clipboard
+leaves Ctrl V and a box to paste into, and Ctrl V on Reports & files opens the
+pop-up on what was pasted.
+
+On a PC, resting the pointer on a keycode or a product name anywhere
+(`kcCopy`, `itemName`, or anything marked `data-kccard`) shows a product card:
+the catalogue's picture, keycode, name, price, was-price and clearance, from
+this device's catalogue cache (`installProductCard` in
+`js/views/stockroom/common.js`). Phones have no hover and show none.
 
 The colour scheme is fixed for every store device (managers share PCs):
 charcoal rail and phone bars with the Lagoon accent, set in `js/prefs.js`.

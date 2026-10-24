@@ -111,6 +111,9 @@ r.post('/v1/store/:no/hb', (req, env, _ctx, p) => storeCall(req, env, p.no, '/hb
 r.get('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/stores/_all')); });
 r.post('/v1/admin/stores', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'POST', '/stores', await readJson(req)), 201); });
 r.get('/v1/admin/stores/:no', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'GET', `/stores/${p.no}`)); });
+// The store's current PIN or one code, read back for the owner (console ›
+// Access › Show) instead of rotating it; logged as an owner action.
+r.post('/v1/admin/stores/:no/reveal', async (req, env, _c, p) => { await requireOwner(req, env); const b = await readJson(req); return json(await registry(env, 'POST', `/reveal/${p.no}`, { name: String(b.name || '') })); });
 r.patch('/v1/admin/stores/:no', async (req, env, _c, p) => {
   const c = await requireOwner(req, env);
   const body = await readJson(req), rec = await registry(env, 'PATCH', `/stores/${p.no}`, body);

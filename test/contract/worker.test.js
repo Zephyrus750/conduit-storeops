@@ -286,8 +286,9 @@ test('owner diagnostics and act-as', async () => {
   assert.equal(actas.status, 200);
   const r = await api('POST', '/v1/store/1241/events', { events: [event('cage.park', { cage: 'BSN1240417' }, { location: 'Aisle 2, near 7023' }, 'stockroom')] }, actas.body.token);
   assert.equal(r.body.results[0].ok, true);
-  const tail2 = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
-  assert.deepEqual(tail2.body.events[0].actor, { role: 'owner', device: 'dev-laptop', owner: true });
+  // The store's first alarm logs store.retain at any point; look past it.
+  const tail2 = await api('GET', '/v1/admin/stores/1241/tail?limit=5', undefined, ownerToken);
+  assert.deepEqual(tail2.body.events.find(e => e.type !== 'store.retain').actor, { role: 'owner', device: 'dev-laptop', owner: true });
 
   const flip = await api('PATCH', '/v1/admin/stores/1241', { entitlements: { backdock: true }, status: 'migrating', areas: { stockroom: 'live' } }, ownerToken);
   assert.equal(flip.body.entitlements.backdock, true); assert.equal(flip.body.areas.stockroom, 'live'); assert.equal(flip.body.status, 'migrating');
@@ -324,8 +325,9 @@ test('maps: owner publishes, devices read by version or latest, the log and regi
 
   const snap = await api('GET', '/v1/store/1241/snapshot?areas=store', undefined, dev);
   assert.equal(snap.body.state.map.version, '4.3');
-  const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=1', undefined, ownerToken);
-  assert.equal(tail.body.events[0].type, 'map.publish'); assert.equal(tail.body.events[0].actor.owner, true);
+  // The store's first alarm logs store.retain at any point; look past it.
+  const tail = await api('GET', '/v1/admin/stores/1241/tail?limit=5', undefined, ownerToken), last = tail.body.events.find(e => e.type !== 'store.retain');
+  assert.equal(last.type, 'map.publish'); assert.equal(last.actor.owner, true);
   assert.equal((await api('GET', '/v1/admin/stores/1241', undefined, ownerToken)).body.mapVersion, '4.3');
 
   // Markup outside the map allow-list is stripped at publish, never stored.
@@ -415,6 +417,27 @@ test('a keycode’s life, the history lists and the CSV export read the stockroo
   const text = await csv.text();
   assert.equal(text.split('\n')[0], 'date,bay,status,readyAt,submittedAt,expected,scanned,match,accuracy,incorrect,codes,auto');
   assert.match(text, /2026-09-17,7012,submitted,/);
+});
+
+test('reveal: the owner reads a store’s PIN or a code back without rotating it, and each read is logged', async () => {
+  assert.equal((await reg2('2101')).status, 201);
+  const reveal = (name, token = ownerToken) => api('POST', '/v1/admin/stores/2101/reveal', { name }, token);
+  assert.deepEqual((await reveal('pin')).body, { name: 'pin', set: true, value: '135790' });
+  assert.deepEqual((await reveal('dock')).body, { name: 'dock', set: true, value: 'DK-2101' }, 'as the owner wrote it');
+  assert.deepEqual((await reveal('stockroom')).body, { name: 'stockroom', set: false, value: null }, 'a code never set');
+  assert.equal((await reveal('owner')).status, 400);
+  const floor = (await api('POST', '/v1/auth/signin', { store: '2101', pin: '135790', device: 'rv-1' })).body.token;
+  const mgr = (await api('POST', '/v1/auth/signin', { store: '2101', managerCode: 'mg 2101', device: 'rv-2' })).body.token;
+  assert.ok(floor && mgr, 'a code typed in lower case with a space still signs in');
+  assert.equal((await reveal('pin', floor)).status, 403, 'a store device cannot read codes');
+  assert.equal((await reveal('pin', mgr)).status, 403, 'nor can a manager');
+  assert.equal((await reveal('manager')).body.value, 'MG-2101', 'a sign-in typed differently keeps the owner’s spelling');
+  // Reading a code signs nobody out; setting one still does, and the new one reads back.
+  assert.equal((await api('GET', '/v1/store/2101/snapshot', undefined, floor)).status, 200);
+  assert.equal((await api('PATCH', '/v1/admin/stores/2101', { codes: { dock: 'DK-NEW-1' } }, ownerToken)).status, 200);
+  assert.equal((await reveal('dock')).body.value, 'DK-NEW-1');
+  const log = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions.filter(a => a.store === '2101' && a.type === 'codes.view');
+  assert.ok(log.length >= 5 && log.some(a => a.detail.name === 'dock' && a.detail.shown) && log.some(a => a.detail.name === 'stockroom' && !a.detail.shown));
 });
 
 test('tools: the owner switches one off, every device sees it in the projection, and the worker refuses its changes and routes', async () => {

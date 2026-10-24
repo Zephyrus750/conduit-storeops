@@ -7,7 +7,7 @@
 // editor's Store Info shows as a banner with directions.
 
 import { haptic } from '../device.js';
-import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost } from '../ui.js';
+import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost, mgr } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo, mapFloors, setStrip, sx } from '../map.js';
 import { paperMap } from '../printmap.js';
 import { printSheet, table, tick, signoff } from '../print.js';
@@ -98,7 +98,7 @@ export default {
 };
 // A marker's card. Servicing (due dates, the log, Service done) is for
 // managers on the desktop; the phone shows what it is and how to use it.
-function detail(r, phone = false) {
+function detail(r, phone = false, mark = false) {
   const t = TYPES[r.type] || [r.type, '#64748B', 'alert'];
   const rec = r.rec;
   return `<div class="card"><div class="ch"><h3 style="color:${t[1]}">${t[0]}${r.extClass ? ` · ${extBand(r.extClass)}${esc(extName(r.extClass))}` : ''}</h3><span class="ibtn" data-act="close">${ic('x')}</span></div>` +
@@ -106,7 +106,7 @@ function detail(r, phone = false) {
     (r.detail ? `<div class="msh-sec"><b>${ic('file')}${tx('Notes')}</b><p>${esc(r.detail)}</p></div>` : '') +
     (r.method ? `<div class="msh-sec"><b>${ic('listcheck')}${tx('Method')}</b><p>${esc(r.method)}</p></div>` : '') + (r.operation ? `<div class="msh-sec"><b>${ic('tool')}${tx('Operation')}</b><p>${esc(r.operation)}</p></div>` : '') +
     (phone ? '' : (rec ? `<div class="list">${rec.log.slice().reverse().slice(0, 6).map(l => `<div class="li"><span class="rt" style="margin:0">${fmtDate(l.t)}</span><span class="nm">${esc(tx(l.a))}${l.n ? ' · ' + logNote(l) : ''}</span></div>`).join('')}</div>` : '') +
-    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px"><span class="btn primary sm" data-act="service">${ic('check')}${tx('Service done')}</span><span class="btn sm" data-act="schedule">${tx('Set schedule')}</span></div>`) + '</div>';
+    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px;align-items:center">${mark ? mgr() : ''}<span class="btn primary sm" data-act="service">${ic('check')}${tx('Service done')}</span><span class="btn sm" data-act="schedule">${tx('Set schedule')}</span></div>`) + '</div>';
 }
 function sidebar(m) {
   const sel = m.rows.find(r => r.id === selected);
@@ -124,7 +124,7 @@ const isManager = ctx => (ctx.session.current?.roles || []).includes('manager') 
 function mobile(m, manager = false) {
   const sel = m.rows.find(r => r.id === selected);
   if (evac) return `<div class="sx">${evacCard(true)}${assemblyCard()}</div>`;
-  if (sel) return `<div class="sx">${detail(sel, !manager)}</div>`;
+  if (sel) return `<div class="sx">${detail(sel, !manager, manager)}</div>`;
   const types = Object.keys(m.counts), name = t => (TYPES[t] || [t])[0], icon = t => (TYPES[t] || [])[2] || 'alert';
   const head = `<div class="sx-h">${ic('m-emergency')}${tx('Emergency')}<span class="n red">${txn(m.rows.length, '{n} marker', '{n} markers')}</span></div>`;
   const tile = (t, sym, label, n) => `<button class="em-kind${filterType === t ? ' on' : ''}${filterType && filterType !== t ? ' off' : ''}" type="button" data-act="filter" data-type="${filterType === t ? '' : t}" aria-pressed="${filterType === t}"><span class="sym">${sym}</span><b>${label}</b>${n != null ? `<small>${n}</small>` : ''}</button>`;
@@ -132,7 +132,7 @@ function mobile(m, manager = false) {
   const due = manager ? m.due.map(r => sx.row(icon(r.type), `${name(r.type)} · ${esc(r.location || r.label || tx('on the map'))}`, txn(r.rec.intMonths, 'every {n} month · due {date}', 'every {n} months · due {date}', { date: fmtDate(r.rec.due) }), r.st === 'overdue' ? tx('Overdue') : tx('Due soon'), r.st === 'overdue' ? 'bad' : 'warn', `data-act="select" data-id="${esc(r.id)}"`)) : [];
   const eq = manager ? types.map(t => { const inDate = m.rows.filter(r => r.type === t && r.st === 'ok').length; return sx.row(icon(t), name(t), tx('{n} of {total} in date', { n: inDate, total: m.counts[t] }), '', '', `data-act="filter" data-type="${filterType === t ? '' : t}"`); }) : [];
   return `<div class="sx">${head}<div class="em-mevac">${mbig(tx('Nearest exit'), 'evac', 'pin', ' data-act="evac"')}</div>${sx.sec(tx('Show on the map'), kinds, filterType ? tx('tap again for all') : tx('tap a kind'))}${assemblyCard()}` +
-    (due.length ? sx.sec(tx('Service due'), sx.rows(due), tx('next 30 days · manager')) : '') + (eq.length ? sx.sec(tx('Equipment'), sx.rows(eq), tx('manager')) : '') +
+    (due.length ? sx.sec(`<b class="sx-lt">${tx('Service due')}${mgr()}</b>`, sx.rows(due), tx('next 30 days · manager')) : '') + (eq.length ? sx.sec(`<b class="sx-lt">${tx('Equipment')}${mgr()}</b>`, sx.rows(eq), tx('manager')) : '') +
     `<div class="sx-sub" style="margin-top:12px">${tx('Tap a marker for what it is and how to use it.')}</div></div>`;
 }
 // The strip under the phone's Emergency map: the marker count and the

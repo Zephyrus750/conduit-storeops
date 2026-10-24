@@ -76,7 +76,7 @@ const filterPills = (sum, cls = '') => `<div class="pills ${cls}">${FILTERS(sum)
 const callback = r => `<label>${tx('Callback')}<input type="date" value="${esc(r.cb)}" data-act="cb" data-pid="${esc(r.pid)}"></label>`;
 const recButton = r => r.rec ? `<button class="btn sm" data-act="unrec" data-pid="${esc(r.pid)}">${tx('Still off-site')}</button>` : `<button class="btn sm primary" data-act="rec" data-pid="${esc(r.pid)}">${ic('check')}${tx('Received')}</button>`;
 const backOn = r => r.rec === 'yes' ? BACK : tx('Back {date}', { date: esc(fmtDate(r.rec)) });
-const prods = r => r.products.length ? `<span class="prods">${r.products.slice(0, 6).map(p => `<i>${esc(p.kc)}${p.q ? ` ×${p.q}` : ''}</i>`).join('')}${r.products.length > 6 ? `<i>+${r.products.length - 6}</i>` : ''}</span>` : '';
+const prods = r => r.products.length ? `<span class="prods">${r.products.slice(0, 6).map(p => `<i data-kccard="${esc(p.kc)}">${esc(p.kc)}${p.q ? ` ×${p.q}` : ''}</i>`).join('')}${r.products.length > 6 ? `<i>+${r.products.length - 6}</i>` : ''}</span>` : '';
 const addForm = () => st.adding ? `<form class="inv-add" data-form="add"><input name="pid" placeholder="${tx('Pallet no')}" required maxlength="20"><input name="desc" placeholder="${tx('What is on it (43166022 x 12, …)')}" maxlength="200"><input name="req" placeholder="${tx('Requested by')}" maxlength="40"><label>${tx('Callback')}<input type="date" name="cb"></label><button class="btn primary sm" type="submit">${ic('plus')}${tx('Add')}</button><button class="btn sm" type="button" data-act="add-cancel">${tx('Cancel')}</button></form>` : '';
 
 function regRow(ctx, r, t) {
