@@ -1,4 +1,4 @@
-// The help tour (ShelfSearcher's help cards): eight cards on how the app
+// The help tour (ShelfSearcher's help cards): nine cards on how the app
 // works, swiped or stepped through. Opened from Settings › How to use and
 // from Help in the phone's More sheet.
 //
@@ -20,6 +20,7 @@ const CARDS = [
   ['m-map', '#0FA3A3', tx('The map'), [tx('Tap a shelf for its card: department, its run, size, what was done this week.'), tx('Double-tap or pinch to zoom; flick to pan.'), desk(tx('On a desk, Ctrl + and Ctrl − zoom, Ctrl 0 fits.')), tx('The grid button opens one department; the key lists the departments and every map symbol.')]],
   ['m-emergency', '#DC2626', tx('Emergency'), [tx('Emergency shows every exit, extinguisher, first aid kit and AED.'), tx('Nearest exit: tap where you are and the map draws the way out and on to the assembly point.'), tx('Tap a sign for its notes and how to use it.'), desk(tx('On a desk, managers see service dates and log each service.'))]],
   ['m-refresh', '#7C3AED', tx('Refresh and labels'), [tx('Location refresh: scan or tap each shelf as it is refreshed; the week counts toward 100 in the focus departments.'), tx('Label integrity: pick a micro-department, check its labels and log any wrong ones.'), tx('Both show on the map as you go, on every device.')]],
+  ['packages', '#2563EB', tx('Live pull'), [tx('Need stock from the stockroom? Open Live pull in More, start a session for your department, scan the item and send how many.'), tx('Only items with a stockroom bay in the morning report can be asked for. Each answer comes back as it is pulled: pulled, short or not there.')]],
   ['m-settings', '#4B5563', tx('Settings'), [tx('Display size is set on each device; the colours are the same on every store device.'), tx('Price checks can show normal, large or hidden on the map.'), tx('Vibration and the portrait lock are under Scanner and vibration.')]],
   ['star', '#F59E0B', tx('Tips'), [tx('Changes made offline wait in the outbox and send when the connection is back.'), tx('Share on a shelf card gives a QR code that opens the map on that shelf.'), tx('Settings › Feedback sends a note to the owner, with a diagnostic summary if you tick it.')]],
 ];
@@ -31,6 +32,7 @@ const AREA_CARDS = {
     ['barcode', '#0FA3A3', tx('Backfill scan'), [tx('Scan the bay label to start a bay, then scan every product on the shelf.'), tx('A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.'), tx('Send it to review when the bay is done. Any code can be removed, with Undo.')]],
     ['listcheck', '#16A34A', tx('Review and submit'), [tx('Review compares each bay with the pasted SIM report: what to add, what to delete.'), tx('Mark it ready when the PDT matches, then Submit once it is finalised on the PDT.'), tx('My locations on the phone shows your bays and which are ready to submit.')]],
     ['m-cages', '#7C3AED', tx('Cages and adjustments'), [tx('Cages: scan a cage tag, then what goes in it; park it on the map so anyone can find it.'), tx('Adjust: stock is here but the system says none. Scan it, enter the PDT’s SOH and count the shelf.')]],
+    ['packages', '#2563EB', tx('Live pull'), [tx('Join a session as a puller and pick your bays: requests in them buzz your phone, and bays nobody picked show to everyone.'), tx('Mark each line Pulled, Short or Not there. Short takes from the next bay too.'), tx('Send the cage down when it is full; the requester sees what is coming.')]],
     ['m-daylist', '#D97706', tx('The day list'), [tx('The bays to walk today, split between walkers, from the requests or the SOH snapshot.'), tx('Tick a location when it is checked. History shows every bay’s accuracy over time.')]],
   ],
   backdock: [

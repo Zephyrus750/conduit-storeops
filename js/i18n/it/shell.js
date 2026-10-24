@@ -357,4 +357,6 @@ export default {
   "Everything the store brings in: the morning and midday reports, DC manifests, the SOH report, loads and the off-site list.": "Tutto ciò che il negozio carica: i report del mattino e di mezzogiorno, i manifesti del DC, il report SOH, i carichi e l’elenco fuori sede.",
   "The morning report is not pasted yet": "Il report del mattino non è ancora incollato",
   "Reports & files": "Report e file",
+  "Live pull": "Prelievo in diretta",
+  "Ask the stockroom for stock, or pull it": "Richiedi merce al magazzino o prelevala",
 };

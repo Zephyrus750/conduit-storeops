@@ -22,6 +22,7 @@ export const TOOLS = [
   T('maintenance', 'floor', 'Maintenance', ['maintenance'], ['issue.']),
   T('stocktake', 'floor', 'Stocktake', ['stocktake'], ['stocktake.']),
   T('mapedits', 'floor', 'Suggest map edits and Field Mode', ['mapedits', 'fieldmode'], ['map.edit.suggest']),   // Field Mode sends its checks as suggestions
+  T('livepull', 'floor', 'Live pull', ['livepull'], ['pull.']),   // the floor asks the stockroom for stock (needs the Stockroom too)
   T('backfill', 'stockroom', 'Backfill review and history', ['bfreview', 'srhistory'], ['submission.']),
   T('cages', 'stockroom', 'Cages', ['cages'], ['cage.']),
   T('adjust', 'stockroom', 'Adjustments', ['adjust'], ['adjustment.']),

@@ -357,4 +357,6 @@ export default {
   "Everything the store brings in: the morning and midday reports, DC manifests, the SOH report, loads and the off-site list.": "Lahat ng ipinapasok ng tindahan: ang morning at midday report, mga DC manifest, ang SOH report, mga load at ang off-site list.",
   "The morning report is not pasted yet": "Hindi pa na-paste ang morning report",
   "Reports & files": "Mga report at file",
+  "Live pull": "Live pull",
+  "Ask the stockroom for stock, or pull it": "Humingi ng stock sa stockroom, o i-pull ito",
 };

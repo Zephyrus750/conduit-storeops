@@ -1045,3 +1045,47 @@ test('backfill report: the desk saves the pasted report, every device reads the 
   // A device may not log the event itself: only the worker does, when it stores the report.
   assert.notEqual((await api('POST', '/v1/store/1241/events', { events: [{ id: '01JA0000000000000000000000', store: '1241', area: 'stockroom', type: 'backfill.report.publish', entity: { date: '2026-10-16' }, payload: {}, at: new Date().toISOString(), v: 1 }] }, sr)).body?.results?.[0]?.ok, true);
 });
+
+test('live pull: a floor phone finds an item’s stockroom bays by keycode or APN, asks for it, and only the Stockroom marks it off', async () => {
+  const { storeDay, DEFAULT_TZ } = await import('../../shared/time.js');
+  const today = storeDay(new Date(), DEFAULT_TZ);
+  const floor = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'lp-floor' })).body.token;
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'lp-room' })).body.token)).body.token;
+  const dk = (await api('POST', '/v1/auth/unlock', { code: 'DK-CODE' }, (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'lp-dock' })).body.token)).body.token;
+  const report = { at: Date.now(), byLoc: { 7036: ['43648803'], 7041: ['43648803', '43652214'], 7012: ['42977636'] }, soh: { 43648803: 34 }, apn: { 9341234567893: '43648803' } };
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: today, report: { ...report, apn: { 12: 'x' } } }, sr)).status, 400, 'an APN map is APNs to keycodes');
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: today, report }, sr)).status, 201);
+  const find = code => api('GET', `/v1/store/1241/pull/find?code=${code}`, undefined, floor);
+  const byKc = await find('43648803');
+  assert.equal(byKc.status, 200, JSON.stringify(byKc.body));
+  assert.deepEqual([byKc.body.kc, byKc.body.via, byKc.body.bays, byKc.body.soh, byKc.body.report.date], ['43648803', 'keycode', ['7036', '7041'], 34, today], 'every bay, in order');
+  const byApn = (await find('9341234567893')).body;
+  assert.deepEqual([byApn.kc, byApn.via, byApn.bays], ['43648803', 'apn', ['7036', '7041']], 'the barcode on the item finds its keycode');
+  const none = (await find('11112222')).body;
+  assert.deepEqual([none.kc, none.bays], ['11112222', []], 'not in the report: no stockroom location');
+  assert.equal((await find('abc')).status, 400);
+  // Today's truck: a planned slot whose manifest carries the keycode.
+  const man = { v: 1, kind: 'report', manNo: '7031999', storeNo: '1241', despatch: '24/10/2026', dcNo: '4101533', filename: 'm.xls', consols: [
+    { id: '601804391', cons: '093008012601804391', cartons: 3, dept: '070', mix: [], items: [{ k: '43648803', q: 18, dept: '070', c: 3 }] },
+    { id: '601804392', cons: '093008012601804392', cartons: 1, dept: '070', mix: [], items: [{ k: '43648803', q: 6, dept: '070', c: 1 }] }] };
+  assert.equal((await api('POST', '/v1/store/1241/manifest', man, dk)).status, 201);
+  const plan = event('plan.set', { date: today, slot: 2 }, { eta: '13:30', manifest: { manNo: '7031999', ref: true, ids: ['601804391'], n: 1, cartons: 3, keycodes: 1, units: 18 } }, 'backdock');
+  assert.equal((await api('POST', '/v1/store/1241/events', { events: [plan] }, dk)).body.results[0].ok, true);
+  assert.deepEqual((await find('43648803')).body.truck, { truck: '2', eta: '13:30', onDock: false, manNo: '7031999', units: 18, cartons: 3 }, 'only the consols staged on the slot');
+  // The floor asks; only a Stockroom phone marks it off; both see the same line.
+  const S = ulid(), L = ulid();
+  const asked = await api('POST', '/v1/store/1241/events', { events: [
+    event('pull.session.start', { session: S }, { name: 'Toys', dept: 'k2', part: 'req' }, 'floor'),
+    event('pull.request', { session: S, line: L }, { kc: '43648803', bays: ['7036', '7041'], qty: 12, carton: 12 }, 'floor'),
+  ] }, floor);
+  assert.deepEqual(asked.body.results.map(r => r.ok), [true, true], JSON.stringify(asked.body));
+  const byFloor = (await api('POST', '/v1/store/1241/events', { events: [event('pull.mark', { session: S, line: L }, { st: 'pulled' }, 'floor')] }, floor)).body.results[0];
+  assert.deepEqual([byFloor.ok, byFloor.code], [false, 'unauthorised'], 'the store PIN cannot mark a pull off');
+  const byRoom = await api('POST', '/v1/store/1241/events', { events: [
+    event('pull.zone.set', { session: S }, { bays: ['7030-7059'] }, 'floor'),
+    event('pull.mark', { session: S, line: L }, { st: 'pulled', got: { 7036: 8, 7041: 4 } }, 'floor'),
+  ] }, sr);
+  assert.deepEqual(byRoom.body.results.map(r => r.ok), [true, true], JSON.stringify(byRoom.body));
+  const seen = (await api('GET', '/v1/store/1241/snapshot', undefined, floor)).body.state.pulls.sessions[S];
+  assert.deepEqual([seen.lines[L].st, seen.lines[L].got, seen.people['lp-room'].bays], ['pulled', { 7036: 8, 7041: 4 }, ['7030-7059']], 'the floor phone sees the stockroom’s answer');
+});

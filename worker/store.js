@@ -15,6 +15,7 @@
 //   GET  /map/:version             → the published document; `latest` allowed; floors carry their svg
 //   GET  /map/:version/source      → the map editor's own document for that version (owner), so it reopens for editing
 //   POST /map  { version, name?, departments?, floors:[{ id, name, type, level?, svg, paths? }], source? }  (owner) → applies map.publish
+//   GET  /pull/find?code=          → Live pull: one item's stockroom bays from the latest report (any device of the store)
 //
 // WebSocket protocol (JSON text frames):
 //   → { t:'hello', since }          ← { t:'snapshot', seq, state } or { t:'delta', seq, events }
@@ -42,6 +43,7 @@ import { sanitizeSvg } from '../shared/svgsafe.js';
 import { cleanStoreInfo } from '../shared/maprender.js';
 import { storeDay, storeIso, msToStoreMidnight, addDays, DEFAULT_TZ } from '../shared/time.js';
 import { retiring, rowKey } from '../shared/retain.js';
+import { gs1Parse } from '../shared/gs1.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
@@ -173,6 +175,7 @@ export class StoreObject extends DurableObject {
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1], claims));
           if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readJson(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12), url.searchParams.get('weekly') === '1'); }
+          if (url.pathname === '/pull/find') return this.pullFind(url.searchParams.get('code'), claims);
           if (url.pathname === '/backfill/report') { const no = needArea(claims, 'stockroom'); if (no) return no; return request.method === 'POST' ? this.publishReport(await readJson(request, REPORT_MAX), claims) : this.reportDoc(url.searchParams.get('date') || ''); }
           const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
           if (sohDay) { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
@@ -436,6 +439,7 @@ export class StoreObject extends DurableObject {
     if (text.length > MANIFEST_MAX) throw new HttpError(413, 'payload_too_large', `manifest is over ${MANIFEST_MAX / 1_000_000} MB`);
     const at = new Date().toISOString(), by = claims.device || (claims.owner ? 'owner' : '');
     this.sql.exec('INSERT OR REPLACE INTO manifests (manNo, doc, at, by) VALUES (?, ?, ?, ?)', manNo, text, at, by);
+    this.manLines?.delete(manNo);
     this.keepArrivals(manNo, arrivalsOf({ ...doc, at }));
     const totalCartons = doc.consols.reduce((n, c) => n + (Number(c.cartons) || 0), 0), keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size;
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.publish', entity: { manNo }, payload: { dcNo: doc.dcNo || '', despatch: doc.despatch || '', filename: String(doc.filename || '').slice(0, 80), consols: doc.consols.length, totalCartons, keycodes }, at, v: 1 };
@@ -458,6 +462,7 @@ export class StoreObject extends DurableObject {
     const [r] = this.submit([ev], claims, { internal: true });
     if (!r.ok) throw new HttpError(r.code === 'unauthorised' ? 403 : 400, r.code, r.message);
     this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
+    this.manLines?.delete(manNo);
     this.sql.exec('DELETE FROM manifest_arrivals WHERE manNo = ?', manNo); this.profilesCache = null;
     return json({ ok: true, manNo });
   }
@@ -505,13 +510,21 @@ export class StoreObject extends DurableObject {
       if (!/^\d{6,13}$/.test(kc) || !Number.isFinite(Number(v))) throw new HttpError(400, 'invalid_request', `soh ${String(kc).slice(0, 13)}: a keycode and a number`);
       soh[kc] = Math.round(Number(v));
     }
-    const at = Number(r.at) || Date.now(), doc = JSON.stringify({ date, at, byLoc, range: r.range ?? null, delta: obj(r.delta), bayAt: obj(r.bayAt), soh });
+    // The report's APNs, each to its keycode: a scan of the item or its
+    // ticket finds the keycode (Live pull).
+    const apn = {};
+    for (const [a, kc] of Object.entries(obj(r.apn))) {
+      if (!/^\d{12,14}$/.test(a) || !/^\d{6,13}$/.test(String(kc))) throw new HttpError(400, 'invalid_request', `apn ${String(a).slice(0, 14)}: an APN and its keycode`);
+      apn[a] = String(kc);
+    }
+    const at = Number(r.at) || Date.now(), doc = JSON.stringify({ date, at, byLoc, range: r.range ?? null, delta: obj(r.delta), bayAt: obj(r.bayAt), soh, ...(Object.keys(apn).length ? { apn } : {}) });
     if (doc.length > REPORT_MAX) throw new HttpError(413, 'payload_too_large', 'the report is over 1.9 MB');
     const by = claims.device || (claims.owner ? 'owner' : ''), bays = Object.keys(byLoc).length;
     const ev = { id: ulid(), store: this.storeNo, area: 'stockroom', type: 'backfill.report.publish', entity: { date }, payload: { at, bays, codes }, at: new Date().toISOString(), v: 1 };
     const [res] = this.submit([ev], claims, { internal: true });
     if (!res.ok) throw new HttpError(res.code === 'unauthorised' ? 403 : 400, res.code, res.message);
     this.sql.exec('INSERT OR REPLACE INTO simreport (date, doc, at, by) VALUES (?, ?, ?, ?)', date, doc, ev.at, by);
+    this.reportIdx = null;
     const keep = this.sql.exec('SELECT date FROM simreport ORDER BY date DESC').toArray().map(x => x.date).slice(0, REPORT_KEEP);
     this.sql.exec(`DELETE FROM simreport WHERE date NOT IN (${keep.map(() => '?').join(',')})`, ...keep);
     return json({ ok: true, date, at, bays, codes, seq: res.seq }, 201);
@@ -521,6 +534,72 @@ export class StoreObject extends DurableObject {
     const row = this.sql.exec('SELECT doc FROM simreport WHERE date = ?', date).toArray()[0];
     if (!row) throw new HttpError(404, 'not_found', `no inventory report for ${date}`);
     return new Response(row.doc, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...CORS } });
+  }
+
+  // ── Live pull: one item, for any phone of the store ──────────────────
+  // The floor's phones have no Stockroom code, so they cannot read the
+  // inventory report. This answers one scan and nothing more: the stockroom
+  // bays the latest report lists the item in (found by its keycode, or by an
+  // APN the report or a cage pairing gives it), its SOH, how many come in a
+  // carton, and whether a truck planned or on the dock today brings it.
+  pullFind(code, claims) {
+    if (!(claims.caps || []).includes('stockroom')) return fail(403, 'not_entitled', 'Live pull needs the Stockroom, which is not enabled for this store');
+    const off = this.needTool('livepull'); if (off) return off;
+    const raw = String(code || '').trim(), digits = raw.replace(/\D/g, '');
+    if (!/^\d{6,14}$/.test(digits) && !gs1Parse(raw)) throw new HttpError(400, 'invalid_request', 'code is a keycode or an item barcode');
+    const rep = this.reportIndex(), gtin = gs1Parse(raw)?.gtin || null;
+    let kc = null, via = null;
+    if (rep?.bays.has(digits)) { kc = digits; via = 'keycode'; }
+    else if (gtin && rep?.apn.has(gtin)) { kc = rep.apn.get(gtin); via = 'apn'; }
+    else if (gtin && this.state.apnPairs?.[gtin]) { kc = this.state.apnPairs[gtin].kc; via = 'apn'; }
+    else if (!gtin && /^\d{6,8}$/.test(digits)) { kc = digits; via = 'keycode'; }
+    const prof = kc ? this.profiles() : null;
+    return json({
+      code: digits || raw, kc, via,
+      report: rep ? { date: rep.date, at: rep.at } : null,
+      bays: kc && rep ? rep.bays.get(kc) || [] : [],
+      soh: kc && rep && kc in rep.soh ? rep.soh[kc] : null,
+      carton: kc ? prof?.profiles?.[kc]?.ctn || prof?.last?.[kc]?.ctn || null : null,
+      truck: kc ? this.onTruckToday(kc) : null,
+    });
+  }
+  // A published manifest's lines by keycode: kc → [{ id (consol), q, c }]
+  // (kept until the manifest is published again or removed).
+  manifestLines(manNo) {
+    const memo = (this.manLines ||= new Map()); if (memo.has(manNo)) return memo.get(manNo);
+    const row = this.sql.exec('SELECT doc FROM manifests WHERE manNo = ?', manNo).toArray()[0], by = new Map();
+    for (const c of row ? JSON.parse(row.doc).consols || [] : []) for (const it of c.items || []) {
+      const kc = String(it.k || '').replace(/\D/g, ''); if (!kc) continue;
+      const l = by.get(kc) || []; l.push({ id: String(c.id || String(c.cons || '').slice(-9)), q: Number(it.q) || 0, c: Number(it.c) || 0 }); by.set(kc, l);
+    }
+    if (memo.size > 20) memo.clear();
+    memo.set(manNo, by); return by;
+  }
+  // The latest inventory report as lookups (rebuilt when a report is saved).
+  reportIndex() {
+    if (this.reportIdx !== undefined && this.reportIdx !== null) return this.reportIdx;
+    const row = this.sql.exec('SELECT doc FROM simreport ORDER BY date DESC LIMIT 1').toArray()[0];
+    if (!row) return (this.reportIdx = null);
+    const doc = JSON.parse(row.doc), bays = new Map(), apn = new Map();
+    for (const [bay, list] of Object.entries(doc.byLoc || {})) for (const kc of list) { const b = bays.get(kc) || []; if (!b.includes(bay)) b.push(bay); bays.set(kc, b); }
+    for (const b of bays.values()) b.sort((x, y) => x.localeCompare(y, 'en', { numeric: true }));
+    for (const [a, kc] of Object.entries(doc.apn || {})) { const g = gs1Parse(a)?.gtin; if (g) apn.set(g, kc); }
+    return (this.reportIdx = { date: doc.date, at: doc.at, bays, apn, soh: doc.soh || {} });
+  }
+  // A truck planned for today, or on the dock now, whose manifest has the
+  // keycode: { truck, eta, units, cartons, manNo, onDock }. A closed truck has
+  // been decanted already, so it does not count.
+  onTruckToday(kc) {
+    const today = storeDay(new Date(), this.tz()), seen = new Set(), found = [];
+    const look = (manNo, ids, base) => {
+      if (!manNo || seen.has(manNo)) return; seen.add(manNo);
+      const lines = this.manifestLines(manNo).get(kc) || [], want = ids?.length ? new Set(ids) : null; let units = 0, cartons = 0;
+      for (const x of lines) if (!want || want.has(x.id)) { units += x.q; cartons += x.c; }
+      if (units) found.push({ ...base, manNo, units, cartons: Math.round(cartons) || null });
+    };
+    for (const [id, t] of Object.entries(this.state.dock?.trucks || {})) if (id.slice(0, 10) === today && t.status !== 'closed') look(t.manifest?.manNo || t.plannedManifest, null, { truck: id.replace(/^\d{4}-\d{2}-\d{2}-T/, ''), eta: null, onDock: true });
+    for (const [n, slot] of Object.entries(this.state.plan?.days?.[today]?.slots || {})) look(slot.manifest?.manNo, slot.manifest?.ref ? slot.manifest.ids : null, { truck: String(n), eta: slot.eta || null, onDock: false });
+    return found[0] || null;
   }
 
   // ── SOH snapshots ─────────────────────────────────────────────────────

@@ -52,6 +52,13 @@ export function parseReportSoh(text) {
   return out;
 }
 // Each item's SOH, price and description (what Adjustments shows), by keycode.
+// The report's APNs, each to its keycode: the barcode on the item and its
+// ticket, so a scan finds the keycode (Live pull).
+export function reportApns(text) {
+  const out = {};
+  for (const r of Object.values(parseReport(text).items)) for (const a of r.apns || []) if (/^\d{12,14}$/.test(a)) out[a] = r.kc;
+  return out;
+}
 export function parseReportLines(text) {
   const out = {};
   for (const r of Object.values(parseReport(text).items)) out[r.kc] = { soh: r.soh, price: r.price, desc: r.desc || '' };

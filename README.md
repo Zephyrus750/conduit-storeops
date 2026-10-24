@@ -121,7 +121,8 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
 | `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }], merge? }`, ≤ 20,000 rows, one row a keycode a location; a re-save that day replaces it, or with `merge: true` replaces only the locations it holds and carries its store-wide SOH into the rest); logs `soh.publish`; every day is kept for 14 days, then the last of each week for 26 weeks |
 | `GET /v1/store/:no/soh?n=12[&weekly=1]`, `DELETE /v1/store/:no/soh/:date` | stockroom code, manager or owner | live: the newest n snapshots, oldest first, or with `weekly=1` the last of each of the newest n weeks (what the stock classes read); remove logs `soh.remove` |
-| `POST /v1/store/:no/backfill/report`, `GET /v1/store/:no/backfill/report?date=` | stockroom code or manager to save; any stockroom device (or the owner) to read | live: the Backfill review desk's pasted SIM report, whole (`{ date, report: { at, byLoc, range, delta, bayAt } }`, ≤ 1.9 MB, one a day, last three kept); saving logs `backfill.report.publish` (`state.backfill.report`: date, at, bays, codes, rev) so every device fetches the newer one |
+| `POST /v1/store/:no/backfill/report`, `GET /v1/store/:no/backfill/report?date=` | stockroom code or manager to save; any stockroom device (or the owner) to read | live: the Backfill review desk's pasted SIM report, whole (`{ date, report: { at, byLoc, range, delta, bayAt, soh, apn } }`; `apn` maps each APN on the report to its keycode, ≤ 1.9 MB, one a day, last three kept); saving logs `backfill.report.publish` (`state.backfill.report`: date, at, bays, codes, rev) so every device fetches the newer one |
+| `GET /v1/store/:no/pull/find?code=` | any device of the store, stockroom entitled, Live pull on | live: one scan for Live pull, so a floor phone never reads the report itself: `{ code, kc, via (keycode \| apn), report: { date, at }, bays, soh, carton, truck }`. The keycode comes straight from the code, or from an APN the latest report lists (or a cage pairing); `bays` are the report's stockroom bays for it in order (none: no stockroom location); `carton` is from the carton profiles; `truck` is a truck planned or on the dock today whose manifest carries it (`{ truck, eta, onDock, manNo, units, cartons }`) |
 | `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`carton-profiles/1`, the shape of Decant Visualiser’s `dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes; `last` holds every keycode's latest delivery, ungated, so a first delivery still gives a carton size |
 | `POST /v1/store/:no/photo` | store token for that store | live: an issue photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
 | `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo while an issue lists it (until 90 days after the issue is completed or removed); one on no issue only to the device that took it |
@@ -245,6 +246,23 @@ already in the log:
   walkers; print the sheet; the phone starts a bay from it.
 - **History**: every bay marked ready or submitted, any day, with metrics
   and codes; copy as CSV.
+- **Live pull** (`livepull`, `shared/reducers/pull.js`): the floor asks,
+  the stockroom pulls, in named sessions per department, listed for 7 days.
+  Its events are Floor events so team members' phones read them; marking
+  off and cages need the Stockroom. A requester scans an item, its ticket
+  (the APN maps to a keycode through the report's `apn` map) or types a
+  keycode; `GET …/pull/find` answers with the report's stockroom bays (none:
+  "No stockroom location", and it isn't added), the carton size and any
+  truck today whose manifest carries it, and the phone adds what was pulled
+  earlier today. The number pad sends `pull.request` (a number, a carton, or
+  all there is); scanning an item that is still waiting offers Add, Change or
+  Leave it. Each puller picks bays on their own phone (`pull.zone.set`; bays
+  nobody picked show to every puller), marks each line Pulled, Short (a count
+  per bay, across the item's bays) or Not there (`pull.mark`, the first mark
+  wins), and sends the cage down (`pull.cage.send`). A new request in a
+  puller's bays buzzes the phone and, if chosen, beeps (`installPullAlerts`
+  in the shell). On the PC it is a tab under Backfill: the week's sessions
+  and every line by cage. Not there does not flag Adjustments.
 
 A Stockroom view asks for the crew code once per device (`js/unlock.js`,
 `session.unlock`), and the client store reconnects its socket when the

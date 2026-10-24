@@ -12,6 +12,8 @@ import { tx } from './i18n.js';
 
 export const RELEASES = [
   { v: 'v0.3.0', date: '2026-10-09', items: [
+    ['packages', tx('Live pull'), tx('One person scans on the floor and sends how many; the stockroom’s phones buzz and pull straight away, bay by bay. Find it in More, on the Floor and in the Stockroom.'), 'livepull', 'phone'],
+    ['packages', tx('Live pull'), tx('Under Backfill: what the floor asked for and what the stockroom pulled, cage by cage, for today’s sessions and the last 7 days. The sessions run on the phones.'), 'livepull', 'desk'],
     ['users', tx('Team message and today’s briefing'), tx('Managers publish a message and the day’s briefing for every device in the store. It shows in the strip at the top until you have read it.'), null],
     ['barcode', tx('Stricter backfill scanning'), tx('Keycodes are 7 or 8 digits and item barcodes must read cleanly, as K2B checked them. Two codes one digit apart are flagged; any code can be removed, with Undo.'), 'bfreview'],
     ['lock', tx('Bays open on another desk'), tx('A bay being reviewed elsewhere shows a banner with Take over. A desk that walks away lets go after 20 minutes.'), 'bfreview', 'desk'],
