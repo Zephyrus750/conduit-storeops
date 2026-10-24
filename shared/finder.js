@@ -8,18 +8,20 @@
 //     cages:     [{ id, ring, location, lines, units, status, has }],      has: the keycode's quantity
 //     loads:     [{ id, label, status, date, pallets, has }],               has: pallets carrying the keycode or named
 //     offsite:   [{ pid, title, cb, rec, has }],
+//     equipment: [{ id, code, name, kind, loc }],                         by code (LAD-02, lad02) or name
 //   }
 //
 // A query of digits is a keycode (6 to 8), a consolidation (its last nine
 // digits, 9 to 22) or a pallet number; anything else matches manifest
-// numbers, cage tags, load names and off-site pallets by name.
+// numbers, cage tags, load names, off-site pallets by name and equipment
+// by its code or name.
 
 const digits = q => String(q || '').replace(/\D/g, '');
 const LIMIT = 8;
 
 export function findRecords(state, query) {
   const Q = String(query || '').trim(), U = Q.toUpperCase(), L = Q.toLowerCase(), D = digits(Q), numeric = /^\d[\d\s-]*$/.test(Q);
-  const out = { manifests: [], consols: [], cages: [], loads: [], offsite: [] };
+  const out = { manifests: [], consols: [], cages: [], loads: [], offsite: [], equipment: [] };
   if (Q.length < 2) return out;
   const dock = state?.dock || {}, cages = state?.cages || {}, inv = state?.inventory || {};
   const kc = numeric && D.length >= 6 && D.length <= 8 ? D : null;
@@ -70,6 +72,12 @@ export function findRecords(state, query) {
     const byPid = String(r.pid).toUpperCase() === U || (numeric && D.length >= 3 && String(r.pid).includes(D));
     const byName = !numeric && L.length >= 3 && `${r.title || ''} ${r.desc || ''}`.toLowerCase().includes(L);
     if (has || byPid || byName) out.offsite.push({ pid: r.pid, title: r.title || r.desc || '', cb: r.cb || '', rec: r.rec || '', has });
+  }
+  // Equipment still on the list: its code as typed or squashed (LAD02), or its name.
+  const squash = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  for (const it of Object.values(state?.equipment?.items || {})) {
+    if (it.removed) continue;
+    if ((squash(Q).length >= 2 && squash(it.code).includes(squash(Q))) || (!numeric && L.length >= 3 && String(it.name || '').toLowerCase().includes(L))) out.equipment.push({ id: it.id, code: it.code, name: it.name || '', kind: it.kind, loc: it.loc || '' });
   }
   for (const k of Object.keys(out)) out[k] = out[k].slice(0, LIMIT);
   return out;

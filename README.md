@@ -264,6 +264,21 @@ already in the log:
   in the shell). On the PC it is a tab under Backfill: the week's sessions
   and every line by cage. Not there does not flag Adjustments.
 
+**Equipment checks** (`equipment`, `shared/reducers/equip.js`) sit beside
+Maintenance under Safety & upkeep: the store's mechanical equipment, not its
+emergency gear. Ladders, MHE (pallet jacks, walkie stackers, forklifts),
+trolleys and anything else, each with its own code (LAD-01, or the number on
+its tag), a pin where it lives, how often it is checked (or a booked date)
+and every check. `equip.add`, `equip.update` (edit or move) and `equip.check`
+come from any store device; a check is a short OK/Fail list for its kind, and
+any Fail puts the item out of service (black on the map, do not use) until a
+check passes, with a Maintenance issue logged alongside if asked. Only a
+manager removes an item (`equip.remove` with a reason, `equip.restore` to
+bring it back); its history stays. The due list takes in Emergency's
+serviced markers too, the rail counts what is overdue or out of service, the
+Today page has a row, and QR labels (`?store=…&equip=…`) open an item's card
+on a store PC or a manager's phone. Search finds an item by its code.
+
 A Stockroom view asks for the crew code once per device (`js/unlock.js`,
 `session.unlock`), and the client store reconnects its socket when the
 session's roles change so the next submit is judged on the new role. The

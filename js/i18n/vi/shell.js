@@ -359,4 +359,12 @@ export default {
   "Reports & files": "Báo cáo & tệp",
   "Live pull": "Lấy hàng trực tiếp",
   "Ask the stockroom for stock, or pull it": "Yêu cầu hàng từ kho, hoặc lấy hàng",
+  "Equipment checks": "Kiểm tra thiết bị",
+  "Ladders, MHE and trolleys": "Thang, thiết bị nâng hạ và xe đẩy",
+  "That equipment label is for store {store}. Add that store from Store details to open it.": "Nhãn thiết bị này thuộc cửa hàng {store}. Thêm cửa hàng đó trong Thông tin cửa hàng để mở.",
+  "Equipment checks open on a store PC, or a manager’s phone": "Kiểm tra thiết bị mở trên máy tính của cửa hàng hoặc điện thoại của quản lý",
+  "Sign in to open the equipment card.": "Đăng nhập để mở thẻ thiết bị.",
+  "Continue and open the equipment card.": "Tiếp tục và mở thẻ thiết bị.",
+  "{n} check overdue or out of service": "{n} lần kiểm tra quá hạn hoặc ngừng sử dụng",
+  "{n} checks overdue or out of service": "{n} lần kiểm tra quá hạn hoặc ngừng sử dụng",
 };

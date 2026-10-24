@@ -48,6 +48,13 @@ export const CATALOGUE = {
   'asset.service':       T('floor', F, ['asset']),
   'asset.schedule':      T('floor', F, ['asset'], { months: 'number' }),
   'picklist.set':        T('floor', F, ['device'], { items: 'array' }),
+  // Equipment checks (shared/reducers/equip.js): ladders, MHE, trolleys.
+  // Anyone adds, edits, moves and checks; only a manager removes one.
+  'equip.add':           T('floor', F, ['equip'], { code: 'string', kind: 'string' }),   // name, every, last, due, x, y, floor, loc
+  'equip.update':        T('floor', F, ['equip']),                                // any of code, kind, name, every, due, x/y/floor/loc
+  'equip.check':         T('floor', F, ['equip'], { day: 'string', result: 'string' }),   // ok | fail; points, note, issue, due
+  'equip.remove':        T('floor', M, ['equip'], { why: 'string' }),             // retired | broken | lost | moved | mistake; note
+  'equip.restore':       T('floor', M, ['equip']),
   // Live pull (shared/reducers/pull.js): the floor asks, the stockroom pulls.
   // Floor events so every phone holds the list; marking off and sending a
   // cage need the Stockroom code.
@@ -163,7 +170,7 @@ export function typeInfo(type) {
 
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
-  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'pulls'],
+  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'pulls', 'equipment'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan', 'inventory'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'areas', 'comms', 'retention'],

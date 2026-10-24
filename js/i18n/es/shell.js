@@ -359,4 +359,12 @@ export default {
   "Reports & files": "Informes y archivos",
   "Live pull": "Recogida en directo",
   "Ask the stockroom for stock, or pull it": "Pide mercancía al almacén o sácala",
+  "Equipment checks": "Revisiones de equipos",
+  "Ladders, MHE and trolleys": "Escaleras, equipos de manutención y carros",
+  "That equipment label is for store {store}. Add that store from Store details to open it.": "Esa etiqueta de equipo es de la tienda {store}. Añade esa tienda desde Datos de la tienda para abrirla.",
+  "Equipment checks open on a store PC, or a manager’s phone": "Las revisiones de equipos se abren en un PC de la tienda o en el teléfono de un gerente",
+  "Sign in to open the equipment card.": "Inicia sesión para abrir la ficha del equipo.",
+  "Continue and open the equipment card.": "Continuar y abrir la ficha del equipo.",
+  "{n} check overdue or out of service": "{n} revisión con retraso o fuera de servicio",
+  "{n} checks overdue or out of service": "{n} revisiones con retraso o fuera de servicio",
 };

@@ -359,4 +359,12 @@ export default {
   "Reports & files": "Rapports et fichiers",
   "Live pull": "Prélèvement en direct",
   "Ask the stockroom for stock, or pull it": "Demander du stock à la réserve, ou le prélever",
+  "Equipment checks": "Contrôles du matériel",
+  "Ladders, MHE and trolleys": "Échelles, matériel de manutention et chariots",
+  "That equipment label is for store {store}. Add that store from Store details to open it.": "Cette étiquette de matériel est pour le magasin {store}. Ajoutez ce magasin depuis Infos magasin pour l’ouvrir.",
+  "Equipment checks open on a store PC, or a manager’s phone": "Les contrôles du matériel s’ouvrent sur un PC du magasin ou le téléphone d’un responsable",
+  "Sign in to open the equipment card.": "Connectez-vous pour ouvrir la fiche du matériel.",
+  "Continue and open the equipment card.": "Continuer et ouvrir la fiche du matériel.",
+  "{n} check overdue or out of service": "{n} contrôle en retard ou hors service",
+  "{n} checks overdue or out of service": "{n} contrôles en retard ou hors service",
 };

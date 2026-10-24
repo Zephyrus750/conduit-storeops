@@ -18,6 +18,7 @@ import { registerSummary, isFixture, consolidate } from '../../shared/inventory.
 import { toolOff } from '../../shared/tools.js';
 import { openPasteBox } from './pastebox.js';
 import { tx, txn, locale } from '../i18n.js';
+import { equipmentNeeds } from './equipment.js';
 
 const TARGET = 100, DAILY = 20;
 const PERIODS = [['today', tx('Today')], ['week', tx('This week')], ['month', tx('This month')]];
@@ -172,6 +173,8 @@ function register(ctx, r) {
   rows.push(['maintenance', 'tool', tx('Maintenance'), tx('Open'), [chip(issues.length ? txn(issues.length, '{n} open issue', '{n} open issues') : tx('Nothing open'), issues.length ? 'warn' : 'good')]]); if (issues.length) need.push(1);
   const assets = ctx.store.get('assets') || {}, due = Object.values(assets).filter(a => a.due && (Date.parse(a.due) - Date.now()) / 86400000 <= 30).length;
   rows.push(['emergency', 'm-emergency', tx('Emergency'), tx('Open'), [chip(due ? txn(due, '{n} service due within 30 days', '{n} services due within 30 days') : tx('No services due'), due ? 'warn' : 'good')]]); if (due) need.push(1);
+  const eq = equipmentNeeds(ctx.store), eqBad = eq.late + eq.out;
+  if (!toolOff(ctx.store.get('tools')?.off, 'equipment')) rows.push(['equipment', 'm-equipment', tx('Equipment checks'), tx('Open'), eq.total ? [eq.late ? chip(txn(eq.late, '{n} check overdue', '{n} checks overdue'), 'bad') : '', eq.out ? chip(tx('{n} out of service', { n: eq.out }), 'bad') : '', eq.soon ? chip(tx('{n} due in 14 days', { n: eq.soon }), 'warn') : '', eqBad || eq.soon ? '' : chip(tx('All in date'), 'good')].filter(Boolean) : [chip(tx('No equipment added yet'))]]); if (eqBad && !toolOff(ctx.store.get('tools')?.off, 'equipment')) need.push(1);
   const sess = Object.entries(ctx.store.get('stocktake').sessions).find(([, x]) => !x.ended), counted = sess ? Object.values(sess[1].shelves).filter(x => x.state !== 'pending').length : 0;
   rows.push(['stocktake', 'm-stocktake', tx('Stocktake'), sess ? tx('Open') : tx('Start'), [chip(sess ? txn(counted, 'Session {id} · {n} shelf counted', 'Session {id} · {n} shelves counted', { id: esc(sess[0]) }) : tx('No session open'), sess ? 'info' : '')]]);
   if (caps.includes('stockroom')) {

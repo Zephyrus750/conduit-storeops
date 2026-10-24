@@ -359,4 +359,12 @@ export default {
   "Reports & files": "Report e file",
   "Live pull": "Prelievo in diretta",
   "Ask the stockroom for stock, or pull it": "Richiedi merce al magazzino o prelevala",
+  "Equipment checks": "Controlli attrezzature",
+  "Ladders, MHE and trolleys": "Scale, mezzi di movimentazione e carrelli",
+  "That equipment label is for store {store}. Add that store from Store details to open it.": "Questa etichetta attrezzatura è del negozio {store}. Aggiungi quel negozio da Dati del negozio per aprirla.",
+  "Equipment checks open on a store PC, or a manager’s phone": "I controlli attrezzature si aprono su un PC del negozio o sul telefono di un responsabile",
+  "Sign in to open the equipment card.": "Accedi per aprire la scheda dell’attrezzatura.",
+  "Continue and open the equipment card.": "Continua e apri la scheda dell’attrezzatura.",
+  "{n} check overdue or out of service": "{n} controllo in ritardo o fuori servizio",
+  "{n} checks overdue or out of service": "{n} controlli in ritardo o fuori servizio",
 };

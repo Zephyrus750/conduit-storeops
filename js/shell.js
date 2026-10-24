@@ -36,6 +36,7 @@ import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
 import { installProductLinks, installProductCard } from './views/stockroom/common.js';
 import { installPullAlerts } from './views/livepull.js';
+import { equipmentNeeds } from './views/equipment.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
 
@@ -117,8 +118,9 @@ let pendingLink = takeDeepLink();
 function reloaded() { try { return performance.getEntriesByType('navigation')[0]?.type === 'reload'; } catch { return false; } }
 function openPendingLink(s) {
   const l = pendingLink; pendingLink = null; if (!l) return false;
-  if (l.store !== s.store) { toast(l.issue ? tx('That work order is for store {store}. Add that store from Store details to open it.', { store: l.store }) : tx('That shelf link is for store {store}. Add that store from Store details to open it.', { store: l.store })); return false; }
+  if (l.store !== s.store) { toast(l.equip ? tx('That equipment label is for store {store}. Add that store from Store details to open it.', { store: l.store }) : l.issue ? tx('That work order is for store {store}. Add that store from Store details to open it.', { store: l.store }) : tx('That shelf link is for store {store}. Add that store from Store details to open it.', { store: l.store })); return false; }
   if (l.issue) { if (isMobile() && deskOnly(VIEWS.maintenance)) { toast(tx('Work orders open on a store PC')); return false; } show('maintenance', { issue: l.issue }); return true; }
+  if (l.equip) { if (isMobile() && deskOnly(VIEWS.equipment)) { toast(tx('Equipment checks open on a store PC, or a manager’s phone')); return false; } show('equipment', { equip: l.equip }); return true; }
   show('map', { select: l.shelf }); return true;
 }
 
@@ -144,7 +146,7 @@ async function enter() {
   store.on('newer', () => { updates.check(); toast(tx('A newer Conduit is out. Tap Update now when it shows, so this device sees every change.'), 'warn', null, 'newer'); });
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
-  store.on('backfill', paintBadges); store.on('cages', paintBadges);
+  store.on('backfill', paintBadges); store.on('cages', paintBadges); store.on('equipment', paintBadges); store.on('assets', paintBadges);
   // Live pull: a new request in a puller's bays buzzes the phone wherever it is.
   pullAlertsOff?.(); pullAlertsOff = installPullAlerts({ store, session: client.session, storeNo: s.store, isOpen: () => current === 'livepull', open: () => show('livepull') });
   // The owner switched a tool on or off: the rail follows, and a view that
@@ -323,7 +325,7 @@ async function showSignin({ error, owner } = {}) {
     `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit"></button>` +
     `<div class="si-foot"><span>${tx('Works offline')}</span><a class="si-owner-link" data-shell-act="owner-signin">${tx('Owner sign-in')}</a>${langSelect(`class="si-lang" id="siLang" aria-label="${tx('Language')}"`)}<span class="ver">${VERSION}</span></div></form>`;
   const el = cover(polyBackground() + siCard(form)); signinTitle();
-  const linkTo = list => { if (pendingLink && list.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.issue ? tx('Sign in to open the work order.') : tx('Sign in to open shelf {shelf}.', { shelf: pendingLink.shelf })); } };
+  const linkTo = list => { if (pendingLink && list.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.equip ? tx('Sign in to open the equipment card.') : pendingLink.issue ? tx('Sign in to open the work order.') : tx('Sign in to open shelf {shelf}.', { shelf: pendingLink.shelf })); } };
   linkTo(stores);
   client.transport.request('/v1/stores').then(r => {
     const list = r.stores || []; try { localStorage.setItem('store_list', JSON.stringify(list)); } catch {}
@@ -384,7 +386,7 @@ async function showContinue(s) {
   let ready = false; try { ready = await client.storage.has(`snap:${s.store}`); } catch {}
   const lapsed = !s.screen && !(s.roles || []).includes('manager') && (s.lapsed || !mobile);
   const area = s.screen ? tx('Dock screen') : (s.roles || []).includes('manager') ? tx('Manager') : lapsed ? tx('Manager code needed') : areaName(last);
-  const link = pendingLink && pendingLink.store === s.store ? (pendingLink.issue ? tx('Continue and open the work order.') : tx('Continue and open shelf {shelf}.', { shelf: esc(pendingLink.shelf) })) : '';
+  const link = pendingLink && pendingLink.store === s.store ? (pendingLink.equip ? tx('Continue and open the equipment card.') : pendingLink.issue ? tx('Continue and open the work order.') : tx('Continue and open shelf {shelf}.', { shelf: esc(pendingLink.shelf) })) : '';
   const form = `<form class="si-form" id="siCont"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>${tx('Welcome back')}</h2><div class="si-sub">${mobile ? tx('This device is signed in.') : tx('This PC is signed in.')}${link ? ' ' + link : ''}</div>` +
     `<div class="si-store"><span class="si-sav">${esc(s.store)}</span><div><b>${esc(name)}</b><small>${tx('Store {no}', { no: esc(s.store) })} · ${area}</small></div>${ready ? `<span class="si-ready">${ic('check')}${tx('Ready')}</span>` : ''}</div>` +
     `<button class="si-cta" type="submit">${tx('Continue in {name}', { name: esc(name) })}${ic('arrow')}</button><a class="si-alt" data-shell-act="signout" role="button" tabindex="0">${tx('Use a different store')}</a><div class="si-foot">${langSelect(`class="si-lang" id="siLang" aria-label="${tx('Language')}"`)}</div></form>`;
@@ -501,14 +503,20 @@ function groupTabs(id) {
 // waiting for review; Cages, in red, the open cages not seen for a week.
 // Each reads its area's projection, which is empty until the device holds
 // that area's code, so a badge stays hidden without it.
-const BADGED = ['inputs', 'bfreview', 'cages'];
+const BADGED = ['inputs', 'bfreview', 'cages', 'equipment'];
+// Checks that need a person now: equipment overdue or out of service, and
+// Emergency's serviced markers past their due date.
+function checksNeeded(store, day) {
+  const eq = equipmentNeeds(store), assets = Object.values(store.get('assets') || {}).filter(a => a.due && a.due < day).length;
+  return eq.late + eq.out + assets;
+}
 function paintBadges() {
   if (!store) return;
   const day = today(), bf = store.get('backfill'), cages = store.get('cages') || {};
   // The morning report is due until any desk has pasted today's (a store with a Stockroom, its code on this device).
   const caps = client.session.current?.caps || [], morningDue = caps.includes('stockroom') && hasArea(client.session, 'stockroom') && !offView('bfreview') && bf?.report?.date !== day;
-  const n = { inputs: morningDue ? 1 : 0, bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length };
-  for (const el of $$('[data-badge]')) { const v = n[el.dataset.badge] || 0; el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v); el.classList.toggle('red', el.dataset.badge === 'cages'); el.title = el.dataset.badge === 'inputs' ? tx('The morning report is not pasted yet') : el.dataset.badge === 'cages' ? txn(v, '{n} cage not seen this week', '{n} cages not seen this week') : txn(v, '{n} location to review today', '{n} locations to review today'); }
+  const n = { inputs: morningDue ? 1 : 0, bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length, equipment: offView('equipment') ? 0 : checksNeeded(store, day) };
+  for (const el of $$('[data-badge]')) { const v = n[el.dataset.badge] || 0; el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v); el.classList.toggle('red', el.dataset.badge === 'cages' || el.dataset.badge === 'equipment'); el.title = el.dataset.badge === 'inputs' ? tx('The morning report is not pasted yet') : el.dataset.badge === 'equipment' ? txn(v, '{n} check overdue or out of service', '{n} checks overdue or out of service') : el.dataset.badge === 'cages' ? txn(v, '{n} cage not seen this week', '{n} cages not seen this week') : txn(v, '{n} location to review today', '{n} locations to review today'); }
 }
 function setWs(w) {
   ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
