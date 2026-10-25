@@ -434,4 +434,9 @@ export default {
   "Kiosk": "Chiosco",
   "Trolley bay": "Area carrelli",
   "Other loads": "Altri carichi",
+  "Withdrawal": "Ritiro",
+  "Recall": "Richiamo",
+  "lists {kc}": "include {kc}",
+  "Removing": "In rimozione",
+  "All removed": "Tutto rimosso",
 };

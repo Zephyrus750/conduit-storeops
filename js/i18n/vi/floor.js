@@ -507,4 +507,5 @@ export default {
   "Serviced": "Đã bảo dưỡng",
   "Schedule set": "Đã đặt lịch",
   "On the map": "Trên sơ đồ",
+  "Variance logged. {product} is recalled: move it to the recall bay and tell a manager.": "Đã ghi chênh lệch. {product} đang bị thu hồi: chuyển đến khu hàng thu hồi và báo quản lý.",
 };

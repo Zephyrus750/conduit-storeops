@@ -507,4 +507,5 @@ export default {
   "Serviced": "Entretenu",
   "Schedule set": "Échéancier défini",
   "On the map": "Sur le plan",
+  "Variance logged. {product} is recalled: move it to the recall bay and tell a manager.": "Écart enregistré. {product} fait l’objet d’un rappel : déposez-le dans la zone des rappels et prévenez un responsable.",
 };

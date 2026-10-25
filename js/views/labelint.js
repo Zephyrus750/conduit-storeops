@@ -6,6 +6,7 @@ import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, setStrip, sx
 import { SUBS, MICRO, microId, microCode, microName, microCount } from '../data/micros.js';
 import { printSheet, table, signoff } from '../print.js';
 import { tx, txn, locale } from '../i18n.js';
+import { recallFor } from '../recallflag.js';
 
 // A selected micro-department is checked; its shelves change only in
 // assigning mode, which only a desk opens (Assign shelves, or Settings ›
@@ -143,7 +144,10 @@ export default {
           const kc = $('[data-field="keycode"]', root)?.value.trim(), note = $('[data-field="note"]', root)?.value.trim();
           if (!/^\d{6,13}$/.test(kc || '')) return toast(tx('Keycode must be 6 to 13 digits'), 'bad');
           await ctx.store.dispatch({ type: 'label.variance', entity: { micro: varianceFor, cycle: m.cycle }, payload: { keycode: kc, note } });
-          varianceFor = null; toast(tx('Variance logged')); paint();
+          // A label for a recalled product: the stock behind it comes off sale.
+          const rec = recallFor(ctx.store, kc);
+          varianceFor = null; paint();
+          if (rec) toast(tx('Variance logged. {product} is recalled: move it to the recall bay and tell a manager.', { product: rec.title }), 'bad'); else toast(tx('Variance logged'));
         }
         else if (act === 'zoom-dept') map.filterDept(a.getAttribute('data-dept'));
       } catch (err) { toast(err.message, 'bad'); }

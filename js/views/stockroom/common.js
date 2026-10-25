@@ -1,5 +1,6 @@
 // Shared bits for the Stockroom views: ring colours, today's key, product
 // names from the catalogue with a repaint when they arrive.
+import { recallTagFor, recallFor, recallWord } from '../../recallflag.js';
 import { esc, ic, today, DEPTS_DEFAULT, DEPT_COLOUR } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 
@@ -52,8 +53,9 @@ export function nameHtml(kc, missing = tx('Unverified · not in the catalogue'))
   if (isItemBarcode(kc)) return `<span class="nm-apn" title="${tx('That is an item barcode (APN), not a keycode')}">${tx('Item barcode · not a keycode')}</span>`;
   const n = names.get(kc);
   if (n === undefined) return '<span class="cs-dim">…</span>';
-  if (n === null) return `<span class="warn nm-unv" title="${tx('Not found in the catalogue: double-check this code')}">⚠ ${esc(missing)}</span>${nearHtml(kc)}`;
-  return n.url ? `<a class="nm-ok" ${goAttrs(kc)} title="${tx('Open the product page on kmart.com.au')}">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`;
+  const rc = recallTagFor(kc);   // a recalled or withdrawn product says so first, wherever it is listed
+  if (n === null) return `${rc}<span class="warn nm-unv" title="${tx('Not found in the catalogue: double-check this code')}">⚠ ${esc(missing)}</span>${nearHtml(kc)}`;
+  return rc + (n.url ? `<a class="nm-ok" ${goAttrs(kc)} title="${tx('Open the product page on kmart.com.au')}">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`);
 }
 // Keycodes and product names (K2B's review, Decant Visualiser's klink): a
 // click on the keycode copies it, a click on the name opens its product page
@@ -64,10 +66,14 @@ export const searchUrl = kc => `https://www.kmart.com.au/search/?searchTerm=${en
 export const urlOf = kc => names.get(String(kc))?.url || searchUrl(kc);
 export const kcCopy = kc => `<button type="button" class="kcopy mono" data-copykc="${esc(kc)}" title="${tx('Copy {code}', { code: esc(kc) })}">${esc(kc)}</button>`;
 const goAttrs = kc => `href="${esc(urlOf(kc))}" data-kcgo="${esc(kc)}" target="_blank" rel="noopener noreferrer"`;
-// A line's product: the verified name with a tick; else the description the
-// report carried, marked when the catalogue has no such code.
+// A line's product, after the red pill when it is recalled: the verified
+// name with a tick; else the description the report carried, marked when
+// the catalogue has no such code.
 export function itemName(kc, fallback = '') {
-  const n = names.get(String(kc));
+  const n = names.get(String(kc)), rc = recallTagFor(kc);
+  return rc + itemLink(kc, n, fallback);
+}
+function itemLink(kc, n, fallback) {
   if (n) return `<a class="nm-ok" ${goAttrs(kc)} title="${tx('Open the product page on kmart.com.au')}"><span class="nm-tick">✓</span>${esc(n.name)} ↗</a>`;
   if (n === null) return `<a class="nm-go" ${goAttrs(kc)} title="${tx('Not in the catalogue (not sold online, or a retired code): search kmart.com.au')}">${esc(fallback || kc)}</a> <small class="nm-off">${tx('not online')}</small>`;
   return `<a class="nm-go" ${goAttrs(kc)} title="${tx('Open the product page on kmart.com.au')}">${esc(fallback || kc)}</a>`;
@@ -107,9 +113,11 @@ const CARD_ON = '[data-copykc], a[data-kcgo], [data-kccard]';
 const cardCode = el => el.dataset.copykc || el.dataset.kcgo || el.dataset.kccard || '';
 const money = v => '$' + Number(v).toFixed(2);
 function cardHtml(kc, it) {
+  const rc = recallFor(null, kc);
   const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : it ? `<span class="pch-none">${tx('No price yet')}</span>` : '';
   return `<div class="pch-img">${it?.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ic('box')}</div>` +
     `<div class="pch-b"><span class="mono pch-kc">${esc(kc)}</span><b>${it ? esc(it.name || tx('Verified product')) : tx('Not in the catalogue')}</b>${price}` +
+    (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') +
     `<small>${it?.url ? tx('Click the name for kmart.com.au, the keycode to copy it') : tx('Not sold online, or a retired code. Click the keycode to copy it.')}</small></div>`;
 }
 export function installProductCard(catalogue) {

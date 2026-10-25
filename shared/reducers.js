@@ -15,16 +15,17 @@ import { backdockState, backdockReducers } from './reducers/backdock.js';
 import { storeState, storeReducers } from './reducers/store.js';
 import { pullState, pullReducers } from './reducers/pull.js';
 import { equipState, equipReducers } from './reducers/equip.js';
+import { recallState, recallReducers } from './reducers/recall.js';
 import { reject } from './reducers/util.js';
 
 export const STATE_VERSION = 2;
 
 export { RINGS } from './reducers/stockroom.js';
 
-const REDUCERS = { ...floorReducers, ...stockroomReducers, ...backdockReducers, ...storeReducers, ...pullReducers, ...equipReducers };
+const REDUCERS = { ...floorReducers, ...stockroomReducers, ...backdockReducers, ...storeReducers, ...pullReducers, ...equipReducers, ...recallReducers };
 
 export function initialState() {
-  return { v: STATE_VERSION, seq: 0, ...storeState(), ...floorState(), ...stockroomState(), ...backdockState(), ...pullState(), ...equipState() };
+  return { v: STATE_VERSION, seq: 0, ...storeState(), ...floorState(), ...stockroomState(), ...backdockState(), ...pullState(), ...equipState(), ...recallState() };
 }
 
 export function hasReducer(type) { return typeof REDUCERS[type] === 'function'; }

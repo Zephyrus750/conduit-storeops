@@ -12,6 +12,8 @@
 // Phone: bay → scan → send. Each scan is its own submission.update, so a
 // phone that loses wifi mid-bay keeps its scans in the outbox.
 
+import { haptic } from '../../device.js';
+import { recallFor, recallFlag } from '../../recallflag.js';
 import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, msteps, mlast, mrows, mbig, mghost, mfoot, camButton } from '../../ui.js';
 import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
@@ -526,12 +528,12 @@ function mobile(ctx) {
     const s = m.subs.find(x => x.bay === st.mBay), codes = s ? Object.entries(s.codes).filter(([, c]) => c.scanned).map(([c]) => c) : [];
     // Every code scanned here, newest first, each removable (K2B could
     // delete any code, with undo); a pair one digit apart is flagged.
-    const all = codes.slice().reverse(), dsp = disputes(codes), nDsp = Object.keys(dsp).length;
+    const all = codes.slice().reverse(), dsp = disputes(codes), nDsp = Object.keys(dsp).length, recallNow = st.mRecall ? ctx.store.get('recalls')?.items?.[st.mRecall.id] : null;
     const row = c => [esc(c), dsp[c] ? `<span class="mv-dsp">${ic('alert')}${esc(disputeHint(c, dsp[c][0]))}</span>` : nameHtml(c),
-      `<button class="mv-x" data-act="m-del" data-code="${esc(c)}" aria-label="${tx('Remove {code}', { code: esc(c) })}" title="${tx('Remove {code}', { code: esc(c) })}">${ic('x')}</button>`, dsp[c] ? 'warn' : nameOf(c) === null ? 'bad' : ''];
+      `<button class="mv-x" data-act="m-del" data-code="${esc(c)}" aria-label="${tx('Remove {code}', { code: esc(c) })}" title="${tx('Remove {code}', { code: esc(c) })}">${ic('x')}</button>`, dsp[c] ? 'warn' : nameOf(c) === null || recallFor(ctx.store, c) ? 'bad' : ''];
     return mhead(esc(st.mBay), tx('scanning'), `<span class="mv-cnt">${codes.length}<small>${tx('codes')}</small></span>`) + msteps(2, steps()) +
       `<div class="mv-scan typed"><div class="cap">${tx('Scan each product on the shelf')}</div><div class="mv-field"><input data-field="mscan" inputmode="numeric" autocomplete="off" placeholder="${tx('Keycode or item barcode')}" enterkeyhint="done">${camButton('mscan')}</div><div class="tools"><button data-act="m-scan-btn">${ic('barcode')}${tx('Add')}</button></div></div>` +
-      (st.mLast ? mlast(esc(st.mLast), nameHtml(st.mLast), tx('just now')) : '') +
+      (recallNow ? recallFlag(ctx.store, recallNow, st.mRecall.kc) : st.mLast ? mlast(esc(st.mLast), nameHtml(st.mLast), tx('just now')) : '') +
       (nDsp ? `<div class="mv-note warn">${ic('alert')}${nDsp / 2 === 1 ? tx('Two codes are one digit apart: check which is on the shelf and remove the other.') : tx('{n} codes are one digit apart: check which is on the shelf and remove the other.', { n: nDsp })}</div>` : '') +
       (all.length ? `<div class="mv-sub">${tx('Scanned here')}</div>` + mrows(all.map(row)) : '') +
       mfoot(mbig(tx('Send {bay} to review', { bay: esc(st.mBay) }), 'ok', 'listcheck', ' data-act="m-send"') + (st.mLast ? mghost(tx('Undo last scan'), ' data-act="m-undo"') : ''));
@@ -558,13 +560,17 @@ export async function openBayIfNeeded(ctx) { if (st.mStep === 2 && st.mBay && !c
 async function startBay(ctx, raw, repaint) {
   const bay = String(raw || '').trim().toUpperCase(); if (!bay) return;
   const r = await send(ctx, 'submission.open', { bay, date: todayKey() }); if (!r) return;
-  st.mBay = bay; st.mStep = 2; st.mLast = null; repaint();
+  st.mBay = bay; st.mStep = 2; st.mLast = null; st.mRecall = null; repaint();
   setTimeout(() => document.querySelector('[data-field="mscan"]')?.focus(), 30);
 }
 async function scanCode(ctx, input, repaint) {
   const raw = input.value; input.value = '';
   const { code: kc } = phoneCode(raw);
   if (!kc) { toast(whyText(raw), 'bad'); return focusScan(document); }
+  // A recalled or withdrawn product stops here: it is not backfilled; the flag says where it goes.
+  const rec = recallFor(ctx.store, kc) || recallFor(ctx.store, raw);
+  if (rec) { st.mRecall = { id: rec.id, kc }; haptic('error'); repaint(); return focusScan(document); }
+  st.mRecall = null;
   const s = ctx.store.get('backfill').subs[`${st.mBay}:${todayKey()}`];
   if (s?.codes[kc]?.scanned) { toast(tx('{code} is already scanned here', { code: kc })); return focusScan(document); }
   const r = await send(ctx, 'submission.update', { bay: st.mBay, date: todayKey() }, { codes: { [kc]: true } });

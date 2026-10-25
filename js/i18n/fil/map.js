@@ -434,4 +434,9 @@ export default {
   "Kiosk": "Kiosk",
   "Trolley bay": "Trolley bay",
   "Other loads": "Iba pang load",
+  "Withdrawal": "Withdrawal",
+  "Recall": "Recall",
+  "lists {kc}": "kasama ang {kc}",
+  "Removing": "Inaalis",
+  "All removed": "Naalis na lahat",
 };

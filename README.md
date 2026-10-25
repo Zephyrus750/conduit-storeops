@@ -294,6 +294,25 @@ serviced markers too, the rail counts what is overdue or out of service, the
 Today page has a row, and QR labels (`?store=…&equip=…`) open an item's card
 on a store PC or a manager's phone. Search finds an item by its code.
 
+**Recalls and withdrawals** (`recalls`, `shared/reducers/recall.js`) are the
+third tab under Safety & upkeep: products that must come off sale, a recall
+for safety or a withdrawal for any other reason. A manager adds one from the
+notice (`recall.add`: the product, its keycodes and any item barcodes, the
+notice reference, why, and what to do with the stock), edits it
+(`recall.update`), moves it along Open → Removing → All removed → Closed
+(`recall.status`) and sets where recalled stock goes (`recall.bay.set`). The
+list is a Floor projection, so every store device holds it and flags a listed
+keycode or barcode without the network: a scan in Live pull, Backfill, Cages
+or Adjustments stops with a red banner (amber for a withdrawal), "move it to
+the recall bay and tell a manager"; every product name in a list carries a
+red pill, the PC product card says so, a wrong label logged in Label integrity
+warns, and search finds a recall by keycode, barcode, product or reference.
+Anyone records stock they moved (`recall.found`: how many of which keycode,
+and where it was), which starts the removal and counts up on the recall; stock
+found after All removed puts it back to Removing. A closed recall flags
+nothing and leaves the live state 180 days after closing; its events stay.
+The rail and the Today page count what still needs someone.
+
 A Stockroom view asks for the crew code once per device (`js/unlock.js`,
 `session.unlock`), and the client store reconnects its socket when the
 session's roles change so the next submit is judged on the new role. The

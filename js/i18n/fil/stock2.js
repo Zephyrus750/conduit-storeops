@@ -571,4 +571,5 @@ export default {
   "DEEP · spot-check": "DEEP · spot-check",
   "NEW · first snapshot": "NEW · unang snapshot",
   "MOVING": "MOVING",
+  "Scan another": "Mag-scan ng iba",
 };

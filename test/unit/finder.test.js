@@ -59,3 +59,15 @@ test('equipment by its code, typed any way, or its name; removed equipment stays
   assert.equal(findRecords(s, 'ladder').equipment.length, 1);
   assert.equal(findRecords(s, 'MHE-03').equipment.length, 0, 'removed');
 });
+
+test('recalls by a keycode or item barcode they list, or their product or reference; in force first', () => {
+  const s = { recalls: { items: {
+    c1: { id: 'c1', kind: 'withdrawal', title: 'Bath mat', ref: 'W-12', status: 'closed', kcs: ['43648803'], apns: [] },
+    r1: { id: 'r1', kind: 'recall', title: 'Bath toy set', ref: 'PR-2026-118', status: 'removing', kcs: ['43648803', '43648804'], apns: ['9341234567893'] },
+  } } };
+  assert.deepEqual(findRecords(s, '43648803').recalls.map(r => [r.id, r.kc]), [['r1', '43648803'], ['c1', '43648803']]);
+  assert.deepEqual(findRecords(s, '9341234567893').recalls.map(r => r.id), ['r1'], 'by its item barcode');
+  assert.deepEqual(findRecords(s, 'bath').recalls.map(r => r.id), ['r1', 'c1']);
+  assert.deepEqual(findRecords(s, 'pr-2026').recalls[0], { id: 'r1', kind: 'recall', title: 'Bath toy set', ref: 'PR-2026-118', status: 'removing', kc: '' });
+  assert.equal(findRecords(s, '42977636').recalls.length, 0);
+});

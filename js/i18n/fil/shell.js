@@ -367,4 +367,10 @@ export default {
   "Continue and open the equipment card.": "Magpatuloy at buksan ang equipment card.",
   "{n} check overdue or out of service": "{n} check na lampas na o out of service",
   "{n} checks overdue or out of service": "{n} check na lampas na o out of service",
+  "Recalls open on a store PC, or a manager’s phone": "Bumubukas ang Recalls sa PC ng tindahan, o sa phone ng manager",
+  "{n} recall or withdrawal to act on": "{n} recall o withdrawal na aasikasuhin",
+  "{n} recalls or withdrawals to act on": "{n} recall o withdrawal na aasikasuhin",
+  "Recalls": "Recalls",
+  "Products off sale: what to pull": "Mga produktong bawal ibenta: ano ang aalisin",
+  "Recalls and withdrawals": "Mga recall at withdrawal",
 };

@@ -367,4 +367,10 @@ export default {
   "Continue and open the equipment card.": "Weiter und die Gerätekarte öffnen.",
   "{n} check overdue or out of service": "{n} Prüfung überfällig oder außer Betrieb",
   "{n} checks overdue or out of service": "{n} Prüfungen überfällig oder außer Betrieb",
+  "Recalls open on a store PC, or a manager’s phone": "Rückrufe öffnen sich an einem Filial-PC oder auf dem Telefon eines Managers",
+  "{n} recall or withdrawal to act on": "{n} Rückruf oder Rücknahme zu bearbeiten",
+  "{n} recalls or withdrawals to act on": "{n} Rückrufe oder Rücknahmen zu bearbeiten",
+  "Recalls": "Rückrufe",
+  "Products off sale: what to pull": "Gesperrte Artikel: was entfernt werden muss",
+  "Recalls and withdrawals": "Rückrufe und Rücknahmen",
 };

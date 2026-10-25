@@ -434,4 +434,9 @@ export default {
   "Kiosk": "Ki-ốt",
   "Trolley bay": "Chỗ để xe đẩy",
   "Other loads": "Chuyến hàng khác",
+  "Withdrawal": "Ngừng bán",
+  "Recall": "Thu hồi",
+  "lists {kc}": "gồm {kc}",
+  "Removing": "Đang gỡ",
+  "All removed": "Đã gỡ hết",
 };

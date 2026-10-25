@@ -9,6 +9,7 @@
 //     loads:     [{ id, label, status, date, pallets, has }],               has: pallets carrying the keycode or named
 //     offsite:   [{ pid, title, cb, rec, has }],
 //     equipment: [{ id, code, name, kind, loc }],                         by code (LAD-02, lad02) or name
+//     recalls:   [{ id, kind, title, ref, status, kc }],                  by keycode, item barcode, product or notice reference
 //   }
 //
 // A query of digits is a keycode (6 to 8), a consolidation (its last nine
@@ -21,7 +22,7 @@ const LIMIT = 8;
 
 export function findRecords(state, query) {
   const Q = String(query || '').trim(), U = Q.toUpperCase(), L = Q.toLowerCase(), D = digits(Q), numeric = /^\d[\d\s-]*$/.test(Q);
-  const out = { manifests: [], consols: [], cages: [], loads: [], offsite: [], equipment: [] };
+  const out = { recalls: [], manifests: [], consols: [], cages: [], loads: [], offsite: [], equipment: [] };
   if (Q.length < 2) return out;
   const dock = state?.dock || {}, cages = state?.cages || {}, inv = state?.inventory || {};
   const kc = numeric && D.length >= 6 && D.length <= 8 ? D : null;
@@ -78,6 +79,12 @@ export function findRecords(state, query) {
   for (const it of Object.values(state?.equipment?.items || {})) {
     if (it.removed) continue;
     if ((squash(Q).length >= 2 && squash(it.code).includes(squash(Q))) || (!numeric && L.length >= 3 && String(it.name || '').toLowerCase().includes(L))) out.equipment.push({ id: it.id, code: it.code, name: it.name || '', kind: it.kind, loc: it.loc || '' });
+  }
+  // Recalls and withdrawals, in force first: a keycode or item barcode they list, or their product or reference.
+  const gtin = numeric && D.length >= 12 && D.length <= 14 ? D.padStart(13, '0').slice(-13) : null;
+  for (const r of Object.values(state?.recalls?.items || {}).sort((a, b) => (a.status === 'closed') - (b.status === 'closed'))) {
+    const byKc = kc && r.kcs.includes(kc), byApn = gtin && (r.apns || []).includes(gtin);
+    if (byKc || byApn || (!numeric && L.length >= 3 && (String(r.title).toLowerCase().includes(L) || String(r.ref || '').toLowerCase().includes(L)))) out.recalls.push({ id: r.id, kind: r.kind, title: r.title, ref: r.ref || '', status: r.status, kc: byKc ? kc : '' });
   }
   for (const k of Object.keys(out)) out[k] = out[k].slice(0, LIMIT);
   return out;

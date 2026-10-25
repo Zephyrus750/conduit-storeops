@@ -8,6 +8,7 @@
 // the view registry. Opens from the header search, the rail search, Ctrl K,
 // and the phone's search bar (a compact list under the bar; see bar()).
 
+import { recallTag } from './recallflag.js';
 import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
 import { VIEWS } from './registry.js';
@@ -53,10 +54,12 @@ function recordsHtml(r, Q) {
   if (r.cages.length) out += grp(tx('Cages'), r.cages.length) + r.cages.map(c => orow('s', 'm-cages', tx('Cage {id}', { id: hi(c.id, Q) }), [esc(ringName(c.ring)), c.location ? tx('at {place}', { place: esc(c.location) }) : tx('not parked'), txn(c.lines, '{n} line', '{n} lines'), c.has ? `<b>${tx('{n} of this keycode', { n: c.has })}</b>` : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="cages" data-cage="${esc(c.id)}"`)).join('');
   if (r.loads.length) out += grp(tx('Other loads'), r.loads.length) + r.loads.map(l => orow('', 'box', tx('Load {label}', { label: hi(l.label, Q) }), [esc(where(l.status)), txn(l.pallets, '{n} pallet', '{n} pallets'), l.has.length ? tx('on pallet {pallets}', { pallets: esc(l.has.slice(0, 3).join(', ')) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="manifests" data-load="${esc(l.id)}"`)).join('');
   if (r.offsite.length) out += grp(tx('Off-site pallets'), r.offsite.length) + r.offsite.map(o => orow('', 'truck', tx('Off-site pallet {pid}', { pid: hi(String(o.pid), Q) }), [o.title ? esc(o.title) : tx('no description'), o.has ? `<b>${tx('{n} of this keycode', { n: o.has })}</b>` : '', o.rec ? tx('back') : o.cb ? tx('callback {date}', { date: esc(o.cb) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="offsite" data-pid="${esc(o.pid)}"`)).join('');
+  if (r.recalls.length) out += grp(tx('Recalls'), r.recalls.length) + r.recalls.map(x => orow('', 'alert', `${x.status === 'closed' ? '' : recallTag(x) + ' '}${hi(x.title, Q)}`, [x.kind === 'withdrawal' ? tx('Withdrawal') : tx('Recall'), RC_STATUS[x.status], x.ref ? esc(x.ref) : '', x.kc ? tx('lists {kc}', { kc: esc(x.kc) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="recalls" data-recall="${esc(x.id)}"`)).join('');
   if (r.equipment.length) out += grp(tx('Equipment'), r.equipment.length) + r.equipment.map(e => orow('', 'm-equipment', `<span class="mono">${hi(e.code, Q)}</span>${e.name ? ' ' + esc(e.name) : ''}`, esc(e.loc), tx('Open'), `data-view="equipment" data-equip="${esc(e.id)}"`)).join('');
   return out;
 }
-const ARG_KEYS = ['select', 'dept', 'micro', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay', 'equip'];
+const ARG_KEYS = ['select', 'dept', 'micro', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay', 'equip', 'recall'];
+const RC_STATUS = { open: tx('issue status::Open'), removing: tx('Removing'), removed: tx('All removed'), closed: tx('Closed') };
 
 export function initSearch({ client, frame, go, tools = () => [], life = () => null, data = () => null, phone = () => false }) {
   // On a phone, the records that open desk-only views (manifests, other loads) are left out.

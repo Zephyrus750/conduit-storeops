@@ -21,6 +21,7 @@ export const TOOLS = [
   T('emergency', 'floor', 'Emergency', ['emergency'], ['asset.']),   // equipment servicing lives on the Emergency screen
   T('maintenance', 'floor', 'Maintenance', ['maintenance'], ['issue.']),
   T('equipment', 'floor', 'Equipment checks', ['equipment'], ['equip.']),   // ladders, MHE and trolleys: where each lives and its checks
+  T('recalls', 'floor', 'Recalls and withdrawals', ['recalls'], ['recall.']),   // products off sale: flagged wherever they are scanned
   T('stocktake', 'floor', 'Stocktake', ['stocktake'], ['stocktake.']),
   T('mapedits', 'floor', 'Suggest map edits and Field Mode', ['mapedits', 'fieldmode'], ['map.edit.suggest']),   // Field Mode sends its checks as suggestions
   T('livepull', 'floor', 'Live pull', ['livepull'], ['pull.']),   // the floor asks the stockroom for stock (needs the Stockroom too)

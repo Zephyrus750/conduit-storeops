@@ -507,4 +507,5 @@ export default {
   "Serviced": "Revisión hecha",
   "Schedule set": "Calendario fijado",
   "On the map": "En el mapa",
+  "Variance logged. {product} is recalled: move it to the recall bay and tell a manager.": "Diferencia registrada. {product} está retirado: llévalo a la zona de retiradas y avisa a un gerente.",
 };

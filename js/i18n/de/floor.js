@@ -507,4 +507,5 @@ export default {
   "Serviced": "Gewartet",
   "Schedule set": "Intervall festgelegt",
   "On the map": "Auf dem Plan",
+  "Variance logged. {product} is recalled: move it to the recall bay and tell a manager.": "Abweichung erfasst. {product} wird zurückgerufen: Bringen Sie den Artikel zum Rückrufplatz und informieren Sie einen Manager.",
 };

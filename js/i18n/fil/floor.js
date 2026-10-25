@@ -507,4 +507,5 @@ export default {
   "Serviced": "Na-service",
   "Schedule set": "Naitakda ang iskedyul",
   "On the map": "Sa mapa",
+  "Variance logged. {product} is recalled: move it to the recall bay and tell a manager.": "Naitala ang variance. Naka-recall ang {product}: ilipat ito sa recall bay at sabihan ang manager.",
 };
