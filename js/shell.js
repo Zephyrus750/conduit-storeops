@@ -24,6 +24,7 @@ installLog();
 import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, RAIL_TOP, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { toolForView, toolOff } from '../shared/tools.js';
+import { openFound, useRecallStore } from './recallflag.js';
 import { ensureArea, ensureManager, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
@@ -37,6 +38,7 @@ import { applyOrientation, haptic } from './device.js';
 import { installProductLinks, installProductCard } from './views/stockroom/common.js';
 import { installPullAlerts } from './views/livepull.js';
 import { equipmentNeeds } from './views/equipment.js';
+import { recallsNeeding } from './views/recalls.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
 
@@ -130,7 +132,7 @@ async function enter() {
   showLoading();
   const s = client.session.current;
   try {
-    store = await client.open(s.store);
+    store = await client.open(s.store); useRecallStore(store);
     await loadStoreMap(s.store);
   } catch (e) {
     if (s.actas) { await client.session.endActAs(); await enterAdmin(); toast(tx('Cannot open {store}: {error}', { store: s.store, error: e.message }), 'bad'); return; }
@@ -146,7 +148,7 @@ async function enter() {
   store.on('newer', () => { updates.check(); toast(tx('A newer Conduit is out. Tap Update now when it shows, so this device sees every change.'), 'warn', null, 'newer'); });
   store.on('map', onMapProjection);
   store.on('settings', applySettings); applySettings(store.get('settings'));
-  store.on('backfill', paintBadges); store.on('cages', paintBadges); store.on('equipment', paintBadges); store.on('assets', paintBadges);
+  store.on('backfill', paintBadges); store.on('cages', paintBadges); store.on('equipment', paintBadges); store.on('assets', paintBadges); store.on('recalls', paintBadges);
   // Live pull: a new request in a puller's bays buzzes the phone wherever it is.
   pullAlertsOff?.(); pullAlertsOff = installPullAlerts({ store, session: client.session, storeNo: s.store, isOpen: () => current === 'livepull', open: () => show('livepull') });
   // The owner switched a tool on or off: the rail follows, and a view that
@@ -245,7 +247,7 @@ function managerCheck() {
     else if (current) show(current, currentArg);
   });
 }
-function closeStore() { team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
+function closeStore() { useRecallStore(null); team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); applyPrefs(frame); actasBar(null); resetAdmin(); }
 async function signOut() {
   try { await store?.flush(); } catch {}
@@ -489,7 +491,8 @@ function railTabs(g) {
 let lastTabs = {}; try { lastTabs = JSON.parse(localStorage.getItem('rail_tabs') || '{}') || {}; } catch {}
 const rowTarget = (g, tabs) => tabs.some(t => t[0] === lastTabs[g]) ? lastTabs[g] : tabs[0][0];
 function railRow(g, tabs) {
-  const G = GROUPS[g], one = G.tabs.length === 1, badged = tabs.map(t => t[0]).find(v => BADGED.includes(v));
+  // A row with several counted tabs (Safety & upkeep: Equipment and Recalls) shows their sum.
+  const G = GROUPS[g], one = G.tabs.length === 1, badged = tabs.map(t => t[0]).filter(v => BADGED.includes(v)).join('+');
   return `<button class="rrow" data-view="${rowTarget(g, tabs)}" data-group="${g}">${ic(G.icon)}<span class="rl">${one ? tabs[0][1] : G.label}</span>${badged ? `<span class="badge" data-badge="${badged}" hidden></span>` : ''}</button>`;
 }
 // Above a grouped screen on a PC: its row's other screens, as tabs.
@@ -503,7 +506,7 @@ function groupTabs(id) {
 // waiting for review; Cages, in red, the open cages not seen for a week.
 // Each reads its area's projection, which is empty until the device holds
 // that area's code, so a badge stays hidden without it.
-const BADGED = ['inputs', 'bfreview', 'cages', 'equipment'];
+const BADGED = ['inputs', 'bfreview', 'cages', 'equipment', 'recalls'];
 // Checks that need a person now: equipment overdue or out of service, and
 // Emergency's serviced markers past their due date.
 function checksNeeded(store, day) {
@@ -515,8 +518,14 @@ function paintBadges() {
   const day = today(), bf = store.get('backfill'), cages = store.get('cages') || {};
   // The morning report is due until any desk has pasted today's (a store with a Stockroom, its code on this device).
   const caps = client.session.current?.caps || [], morningDue = caps.includes('stockroom') && hasArea(client.session, 'stockroom') && !offView('bfreview') && bf?.report?.date !== day;
-  const n = { inputs: morningDue ? 1 : 0, bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length, equipment: offView('equipment') ? 0 : checksNeeded(store, day) };
-  for (const el of $$('[data-badge]')) { const v = n[el.dataset.badge] || 0; el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v); el.classList.toggle('red', el.dataset.badge === 'cages' || el.dataset.badge === 'equipment'); el.title = el.dataset.badge === 'inputs' ? tx('The morning report is not pasted yet') : el.dataset.badge === 'equipment' ? txn(v, '{n} check overdue or out of service', '{n} checks overdue or out of service') : el.dataset.badge === 'cages' ? txn(v, '{n} cage not seen this week', '{n} cages not seen this week') : txn(v, '{n} location to review today', '{n} locations to review today'); }
+  const n = { inputs: morningDue ? 1 : 0, bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length, equipment: offView('equipment') ? 0 : checksNeeded(store, day), recalls: offView('recalls') ? 0 : recallsNeeding(store).need };
+  const titleOf = (k, v) => k === 'inputs' ? tx('The morning report is not pasted yet') : k === 'equipment' ? txn(v, '{n} check overdue or out of service', '{n} checks overdue or out of service') : k === 'recalls' ? txn(v, '{n} recall or withdrawal to act on', '{n} recalls or withdrawals to act on') : k === 'cages' ? txn(v, '{n} cage not seen this week', '{n} cages not seen this week') : txn(v, '{n} location to review today', '{n} locations to review today');
+  for (const el of $$('[data-badge]')) {
+    const keys = el.dataset.badge.split('+'), v = keys.reduce((t, k) => t + (n[k] || 0), 0);
+    el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v);
+    el.classList.toggle('red', keys.some(k => ['cages', 'equipment', 'recalls'].includes(k) && n[k]));
+    el.title = keys.filter(k => n[k]).map(k => titleOf(k, n[k])).join(' · ');
+  }
 }
 function setWs(w) {
   ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
@@ -766,6 +775,7 @@ document.addEventListener('click', e => {
     else if (act === 'owner-signin') showSignin({ owner: true });
     else if (act === 'switch-area') { $('#msheet')?.classList.remove('open'); if (store) openLauncher(); }
     else if (act === 'store-signin') showSignin();
+    else if (act === 'recall-found') { if (store) openFound(store, sa.dataset.recall, sa.dataset.kc); }
     return;
   }
   // The search palette routes its own rows (they carry select, dept or q);
@@ -794,7 +804,7 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>${tx('Updating…')}</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => show(id, arg), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [...[...RAIL_TOP, ...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
+const search = initSearch({ client, frame, go: (id, arg) => (id === 'recalls' && isMobile() && deskOnly(VIEWS.recalls) ? toast(tx('Recalls open on a store PC, or a manager’s phone')) : show(id, arg)), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [...[...RAIL_TOP, ...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
 // The phone's bar is typed into directly: a compact list drops under it.
 const msBar = search.bar($('#msearch'), () => !admin && !!store);
 

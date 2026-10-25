@@ -12,6 +12,8 @@ import { tx } from './i18n.js';
 
 export const RELEASES = [
   { v: 'v0.3.0', date: '2026-10-09', items: [
+    ['alert', tx('Recalls and withdrawals'), tx('Under Safety & upkeep: a manager adds a recall or withdrawal from the notice, with its keycodes, and moves it from Open to Closed. Every device flags those products straight away: in Live pull, Backfill, Cages, Adjustments, search and every list.'), 'recalls', 'desk'],
+    ['alert', tx('Recalled stock'), tx('Scan a recalled or withdrawn product and the phone stops with a red flag: move it to the recall bay and tell a manager. Tap I moved some to record how many.'), null, 'phone'],
     ['m-equipment', tx('Equipment checks'), tx('Under Safety & upkeep: the store’s ladders, MHE and trolleys on the map, each with its own code and QR label. Record each check; a failed one puts it out of service until one passes. What’s due shows with Emergency’s services, on the Today page and on the rail.'), 'equipment', 'desk'],
     ['packages', tx('Live pull'), tx('One person scans on the floor and sends how many; the stockroom’s phones buzz and pull straight away, bay by bay. Find it in More, on the Floor and in the Stockroom.'), 'livepull', 'phone'],
     ['packages', tx('Live pull'), tx('Under Backfill: what the floor asked for and what the stockroom pulled, cage by cage, for today’s sessions and the last 7 days. The sessions run on the phones.'), 'livepull', 'desk'],

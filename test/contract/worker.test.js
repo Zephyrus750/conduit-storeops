@@ -1118,3 +1118,19 @@ test('equipment checks: a team member adds and checks; only a manager removes, a
   const it = (await api('GET', '/v1/store/1241/snapshot', undefined, floor)).body.state.equipment.items[Q];
   assert.deepEqual([it.code, it.out.since, it.removed.why, it.log.map(l => l.a)], ['LAD-07', '2026-10-20', 'broken', ['Added', 'Failed', 'Removed']], 'every store device holds the list');
 });
+
+test('recalls: only a manager adds and closes one; any device records stock found, and every device holds the list', async () => {
+  const floor = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'rc-floor' })).body.token;
+  const mgr = (await api('POST', '/v1/auth/unlock', { code: 'MGR-CODE' }, (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'rc-mgr' })).body.token)).body.token;
+  const send = (tok, ...events) => api('POST', '/v1/store/1241/events', { events }, tok).then(r => r.body.results);
+  const R = 'rc' + ulid().toLowerCase();
+  const notice = { kind: 'recall', title: 'Bath toy set', kcs: ['43648803'], ref: 'PR-2026-118' };
+  const byFloor = (await send(floor, event('recall.add', { recall: R }, notice, 'floor')))[0];
+  assert.deepEqual([byFloor.ok, byFloor.code], [false, 'unauthorised'], 'the store PIN cannot add a recall');
+  const added = await send(mgr, event('recall.add', { recall: R }, notice, 'floor'), event('recall.bay.set', {}, { bay: 'Returns cage' }, 'floor'));
+  assert.deepEqual(added.map(r => r.ok), [true, true], JSON.stringify(added));
+  assert.equal((await send(floor, event('recall.found', { recall: R }, { kc: '43648803', n: 2, where: 'A16 S2' }, 'floor')))[0].ok, true, 'anyone records stock found');
+  assert.equal((await send(floor, event('recall.status', { recall: R }, { status: 'closed' }, 'floor')))[0].code, 'unauthorised', 'only a manager closes it');
+  const seen = (await api('GET', '/v1/store/1241/snapshot', undefined, floor)).body.state.recalls;
+  assert.deepEqual([seen.bay, seen.items[R].status, seen.items[R].units, seen.items[R].found[0].by], ['Returns cage', 'removing', 2, 'rc-floor'], 'the floor phone holds the list and its count');
+});

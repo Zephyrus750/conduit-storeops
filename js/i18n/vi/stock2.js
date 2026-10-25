@@ -571,4 +571,5 @@ export default {
   "DEEP · spot-check": "DEEP · kiểm tra nhanh",
   "NEW · first snapshot": "NEW · bản chụp đầu",
   "MOVING": "MOVING",
+  "Scan another": "Quét mã khác",
 };

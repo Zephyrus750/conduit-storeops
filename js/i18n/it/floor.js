@@ -507,4 +507,5 @@ export default {
   "Serviced": "Revisionato",
   "Schedule set": "Programma impostato",
   "On the map": "Sulla mappa",
+  "Variance logged. {product} is recalled: move it to the recall bay and tell a manager.": "Differenza registrata. {product} è richiamato: portalo nell’area richiami e avvisa un responsabile.",
 };

@@ -14,6 +14,8 @@ import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { todayKey, ensureNames, productHtml, kcCopy, nameOf, priceOf, send, loadProfiles, depthChip, ghostChip, cartonOf, profilesReady, SR_GROUPS, deptGroup, deptLabel, deptBadge } from './common.js';
 import { shrinkValue, cartonShrink, cartonUnits } from '../../../shared/stockintel.js';
 import { gs1Parse } from '../../../shared/gs1.js';
+import { recallFor, recallFlag } from '../../recallflag.js';
+import { haptic } from '../../device.js';
 import { tx, txn } from '../../i18n.js';
 
 const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '', mPair: null };
@@ -158,6 +160,9 @@ function takeCode(ctx, raw, repaint) {
   const g = barcodeOf(raw);
   if (g) { const kc = ctx.store.get('apnPairs')?.[g]?.kc; st.mKc = kc || ''; st.mPair = kc ? null : g; }
   else { st.mKc = keycodeOf(raw); st.mPair = null; if (!st.mKc) toast(tx('That is not a keycode'), 'bad'); }
+  // A recalled product stops here, keycode or item barcode (paired or not).
+  const rec = recallFor(ctx.store, st.mKc) || (g ? recallFor(ctx.store, g) : null);
+  if (rec) { st.mKc = st.mKc || rec.kcs[0]; st.mPair = null; haptic('error'); }
   if (st.mKc) ensureNames(ctx, [st.mKc], repaint);
   repaint();
   if (st.mPair) setTimeout(() => document.querySelector('[data-field="mpairkc"]')?.focus(), 30);
@@ -172,7 +177,8 @@ function mobile(ctx) {
   return mhead(tx('Adjust SOH'), tx('Stock is here but the system says no')) + (m.shrink.total || m.shrink.carton ? `<div class="adj-shrinks mv">${m.shrink.total ? `<div class="adj-shrinkline">${ic('dollar')}<span>${tx('<b>{amount}</b> potential shrink today', { amount: money(m.shrink.total) })}${m.shrink.unpriced ? ` · ${tx('{n} without a price', { n: m.shrink.unpriced })}` : ''}</span></div>` : ''}${m.shrink.carton ? `<div class="adj-shrinkline ctn">${ic('box')}<span>${tx('<b>{amount}</b> to one carton', { amount: money(m.shrink.carton) })}${m.shrink.noSize ? ` · ${tx('{n} without a carton size', { n: m.shrink.noSize })}` : ''}</span></div>` : ''}</div>` : '') +
     mscan(tx('Scan the product'), `<input data-field="mkc" inputmode="numeric" autocomplete="off" placeholder="${tx('Keycode or item barcode')}" value="${esc(st.mKc)}" enterkeyhint="done">`, tx('Then enter the SOH the PDT shows and count the shelf')) +
     (st.mPair ? `<div class="mv-last"><small>${tx('Item barcode {code}', { code: esc(st.mPair) })}</small><b>${tx('Which keycode is it?')}</b><span>${tx('Scan or type the keycode on the shelf label or carton, once: the store remembers it.')}</span></div>` + mscan(tx('Keycode'), `<input data-field="mpairkc" inputmode="numeric" autocomplete="off" placeholder="${tx('Keycode')}" enterkeyhint="done">`, tx('From the shelf label or the carton')) + mfoot(mghost(tx('Not this one'), ' data-act="m-clear"')) : '') +
-    (st.mKc ? `<div class="mv-last"><small>${tx('Scanned')}</small><b>${kcCopy(st.mKc)}</b><span>${productHtml(st.mKc)}</span></div><div class="mv-stepper"><button data-act="m-soh" data-d="-1" aria-label="${tx('Lower system SOH')}">−</button><div><b>${st.mSoh}</b><small>${tx('system SOH (PDT)')}</small></div><button data-act="m-soh" data-d="1" aria-label="${tx('Raise system SOH')}">+</button></div><div class="mv-stepper"><button data-act="m-qty" data-d="-1" aria-label="${tx('One fewer found')}">−</button><div><b>${st.mQty}</b><small>${tx('found on the shelf')}</small></div><button data-act="m-qty" data-d="1" aria-label="${tx('One more found')}">+</button></div>` + mfoot(mbig(tx('Flag for adjustment'), '', 'sort', ' data-act="m-flag"') + mghost(tx('Not this one'), ' data-act="m-clear"')) : '') +
+    (st.mKc && recallFor(ctx.store, st.mKc) ? `<div class="mv-last"><small>${tx('Scanned')}</small><b>${kcCopy(st.mKc)}</b><span>${productHtml(st.mKc)}</span></div>` + recallFlag(ctx.store, recallFor(ctx.store, st.mKc), st.mKc) + mfoot(mghost(tx('Scan another'), ' data-act="m-clear"')) :
+     st.mKc ? `<div class="mv-last"><small>${tx('Scanned')}</small><b>${kcCopy(st.mKc)}</b><span>${productHtml(st.mKc)}</span></div><div class="mv-stepper"><button data-act="m-soh" data-d="-1" aria-label="${tx('Lower system SOH')}">−</button><div><b>${st.mSoh}</b><small>${tx('system SOH (PDT)')}</small></div><button data-act="m-soh" data-d="1" aria-label="${tx('Raise system SOH')}">+</button></div><div class="mv-stepper"><button data-act="m-qty" data-d="-1" aria-label="${tx('One fewer found')}">−</button><div><b>${st.mQty}</b><small>${tx('found on the shelf')}</small></div><button data-act="m-qty" data-d="1" aria-label="${tx('One more found')}">+</button></div>` + mfoot(mbig(tx('Flag for adjustment'), '', 'sort', ' data-act="m-flag"') + mghost(tx('Not this one'), ' data-act="m-clear"')) : '') +
     (m.items.length ? `<div class="mv-sub">${tx('Today')} · ${m.items.length}</div><div class="mv-rows">${m.items.slice(0, 6).map(i => `<div class="mv-row"><span class="a">${i.qty}</span><span class="b">${kcCopy(i.kc)} ${productHtml(i.kc, i.name)}</span><span class="c">${[i.location ? esc(i.location) : '', toCarton(i) != null ? `<b class="loss1">${money(toCarton(i))}</b>` : ''].filter(Boolean).join(' · ')}</span></div>`).join('')}</div>` : '');
 }
 

@@ -367,4 +367,10 @@ export default {
   "Continue and open the equipment card.": "Continuar y abrir la ficha del equipo.",
   "{n} check overdue or out of service": "{n} revisión con retraso o fuera de servicio",
   "{n} checks overdue or out of service": "{n} revisiones con retraso o fuera de servicio",
+  "Recalls open on a store PC, or a manager’s phone": "Las retiradas se abren en un PC de la tienda o en el teléfono de un gerente",
+  "{n} recall or withdrawal to act on": "{n} retirada pendiente de gestionar",
+  "{n} recalls or withdrawals to act on": "{n} retiradas pendientes de gestionar",
+  "Recalls": "Retiradas",
+  "Products off sale: what to pull": "Productos fuera de venta: qué retirar",
+  "Recalls and withdrawals": "Retiradas de producto y de venta",
 };

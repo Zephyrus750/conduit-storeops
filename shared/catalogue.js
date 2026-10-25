@@ -55,6 +55,13 @@ export const CATALOGUE = {
   'equip.check':         T('floor', F, ['equip'], { day: 'string', result: 'string' }),   // ok | fail; points, note, issue, due
   'equip.remove':        T('floor', M, ['equip'], { why: 'string' }),             // retired | broken | lost | moved | mistake; note
   'equip.restore':       T('floor', M, ['equip']),
+  // Recalls and withdrawals (shared/reducers/recall.js): managers keep the
+  // list; anyone records stock found and moved to the recall bay.
+  'recall.add':          T('floor', M, ['recall'], { kind: 'string', title: 'string', kcs: 'array' }),   // apns, ref, reason, action
+  'recall.update':       T('floor', M, ['recall']),                               // any of kind, title, kcs, apns, ref, reason, action
+  'recall.status':       T('floor', M, ['recall'], { status: 'string' }),         // open | removing | removed | closed
+  'recall.found':        T('floor', F, ['recall'], { kc: 'string', n: 'number' }),   // where
+  'recall.bay.set':      T('floor', M, [], { bay: 'string' }),
   // Live pull (shared/reducers/pull.js): the floor asks, the stockroom pulls.
   // Floor events so every phone holds the list; marking off and sending a
   // cage need the Stockroom code.
@@ -171,7 +178,7 @@ export function typeInfo(type) {
 
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
-  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'pulls', 'equipment'],
+  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'pulls', 'equipment', 'recalls'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan', 'inventory'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'areas', 'comms', 'retention'],

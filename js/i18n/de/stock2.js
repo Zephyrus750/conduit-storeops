@@ -571,4 +571,5 @@ export default {
   "DEEP · spot-check": "DEEP · Stichprobe",
   "NEW · first snapshot": "NEW · erster Snapshot",
   "MOVING": "MOVING",
+  "Scan another": "Nächsten scannen",
 };

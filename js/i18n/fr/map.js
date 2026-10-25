@@ -434,4 +434,9 @@ export default {
   "Kiosk": "Borne",
   "Trolley bay": "Abri à chariots",
   "Other loads": "Autres chargements",
+  "Withdrawal": "Retrait",
+  "Recall": "Rappel",
+  "lists {kc}": "inclut {kc}",
+  "Removing": "Retrait en cours",
+  "All removed": "Tout retiré",
 };

@@ -14,6 +14,7 @@
 import { addDays } from './time.js';
 import { historyRows } from './records.js';
 import { retainPulls, KEEP_PULL_DAYS } from './reducers/pull.js';
+import { retainRecalls, KEEP_RECALL_DAYS } from './reducers/recall.js';
 
 export const KEEP_DETAIL_DAYS = 14, KEEP_DAYS = 60, KEEP_ISSUE_DAYS = 180;
 const KEEP_WEEKS = 13, KEEP_CYCLES = 13, KEEP_STOCKTAKES = 10, KEEP_DOCK_HISTORY = 500;
@@ -82,6 +83,8 @@ export function retain(s, day) {
   for (const [id, i] of Object.entries(s.issues || {})) if ((i.removed || i.status === 'completed') && String(i.updated || '').slice(0, 10) < d180) { delete s.issues[id]; n('issues'); }
   // Live pull sessions are listed for a week.
   const pulls = retainPulls(s, addDays(day, -KEEP_PULL_DAYS)); if (pulls) done.pulls = pulls;
+  // Closed recalls are kept for 180 days.
+  const recalls = retainRecalls(s, addDays(day, -KEEP_RECALL_DAYS)); if (recalls) done.recalls = recalls;
 
   // Inventory: a received load keeps one summary line per department after
   // 14 days (its pallet count and units stay for Trends).

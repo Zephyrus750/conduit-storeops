@@ -367,4 +367,10 @@ export default {
   "Continue and open the equipment card.": "Tiếp tục và mở thẻ thiết bị.",
   "{n} check overdue or out of service": "{n} lần kiểm tra quá hạn hoặc ngừng sử dụng",
   "{n} checks overdue or out of service": "{n} lần kiểm tra quá hạn hoặc ngừng sử dụng",
+  "Recalls open on a store PC, or a manager’s phone": "Thu hồi mở trên máy tính cửa hàng hoặc điện thoại của quản lý",
+  "{n} recall or withdrawal to act on": "{n} thu hồi hoặc ngừng bán cần xử lý",
+  "{n} recalls or withdrawals to act on": "{n} thu hồi hoặc ngừng bán cần xử lý",
+  "Recalls": "Thu hồi",
+  "Products off sale: what to pull": "Hàng ngừng bán: cần gỡ những gì",
+  "Recalls and withdrawals": "Thu hồi và ngừng bán",
 };

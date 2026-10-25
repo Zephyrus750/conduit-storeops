@@ -434,4 +434,9 @@ export default {
   "Kiosk": "Kiosk",
   "Trolley bay": "Einkaufswagenstation",
   "Other loads": "Weitere Lieferungen",
+  "Withdrawal": "Rücknahme",
+  "Recall": "Rückruf",
+  "lists {kc}": "enthält {kc}",
+  "Removing": "Wird entfernt",
+  "All removed": "Alles entfernt",
 };
