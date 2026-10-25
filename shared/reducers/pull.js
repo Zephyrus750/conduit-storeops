@@ -12,6 +12,12 @@
 //     lines id → { id, kc, name, bays[], qty (n | 'all'), carton, shelf, at, by,
 //                  st: todo | pulled | short | gone | cancelled, got { bay: n } | null, doneAt, doneBy, cage }
 //   }
+//   pulls.apn gtin → { kc, at, by }   an item barcode linked to its keycode
+//
+// A clearance ticket's barcode is the item's own (an EAN, often a book's
+// ISBN), not its keycode, and the morning report rarely knows it. The first
+// requester to scan one types the keycode printed on the ticket; pull.pair
+// links the two so every phone finds it from the barcode after that.
 //
 // Conflict rules: the first mark wins (a second phone marking the same line
 // is refused); a mark comes back (undo) only until its cage has gone down;
@@ -20,16 +26,17 @@
 // (store.retain); the log keeps every event.
 
 import { reject } from './util.js';
+import { gs1Parse } from '../gs1.js';
 
 export const PULL_STATES = ['todo', 'pulled', 'short', 'gone', 'cancelled'];
-export const KEEP_PULL_DAYS = 7, SESSION_CAP = 80, LINE_CAP = 600, BAYS_MAX = 12, QTY_MAX = 999;
+export const KEEP_PULL_DAYS = 7, SESSION_CAP = 80, LINE_CAP = 600, BAYS_MAX = 12, QTY_MAX = 999, APN_CAP = 3000;
 const KC_RE = /^\d{6,13}$/, BAY_RE = /^[\w-]{1,12}$/, ZONE_RE = /^(all|\d{1,6}(-\d{1,6})?)$/, DEPT_RE = /^[a-z0-9]{1,12}$/, SHELF_RE = /^[\w .-]{1,16}$/, TAG_RE = /^[\w-]{1,20}$/;
 const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, n);
 const who = e => String(e.actor?.device || 'unknown');
 const whole = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
 
 export function pullState() {
-  return { pulls: { sessions: {} } };
+  return { pulls: { sessions: {}, apn: {} } };
 }
 
 // A session that takes changes: there, and not closed.
@@ -158,6 +165,19 @@ export const pullReducers = {
     for (const l of lines) l.cage = n;
     ses.cages[n] = { at: e.at, by: who(e), ...(tag ? { tag } : {}), lines: lines.length };
     ses.cage = n + 1;
+    return null;
+  },
+  // Link an item barcode to its keycode, for every phone of the store. A
+  // second link replaces the first (someone corrected it); past APN_CAP the
+  // oldest link goes.
+  'pull.pair'(s, e) {
+    const g = gs1Parse(e.entity.apn), kc = String(e.payload.keycode || '');
+    if (!g?.gtin) return reject('invalid_event', 'that is not a valid item barcode (UPC-A, EAN-13 or GTIN-14)');
+    if (!/^\d{6,8}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 8 digits');
+    const all = (s.pulls.apn ||= {});
+    if (all[g.gtin]?.kc === kc) return reject('unchanged', `${g.gtin} already finds ${kc}`);
+    if (!all[g.gtin] && Object.keys(all).length >= APN_CAP) { const old = Object.entries(all).sort((x, y) => String(x[1].at).localeCompare(String(y[1].at)))[0]; delete all[old[0]]; }
+    all[g.gtin] = { kc, at: e.at, by: who(e) };
     return null;
   },
   'pull.session.end'(s, e) {

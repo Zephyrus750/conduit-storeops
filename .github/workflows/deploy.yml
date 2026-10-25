@@ -15,6 +15,10 @@
 #   NETLIFY_SITE_ID        the site's API ID (Site configuration) } publishing locked
 #                          (docs/SETUP.md step 5); without them Netlify publishes
 #                          on its own, ahead of the worker
+#   BROWSER_TOKEN          optional: an API token with Account › Browser Rendering ›
+#                          Edit, for product details and barcode lookups on
+#                          kmart.com.au (docs/SETUP.md step 11). The account id
+#                          reaches the worker from CLOUDFLARE_ACCOUNT_ID.
 name: deploy
 on:
   push:
@@ -61,7 +65,10 @@ jobs:
       # BUILD stamps the commit on the worker, so the health check below can
       # tell this build from the one it replaces.
       - name: Deploy
-        run: npx wrangler deploy --env "$TARGET" --var "BUILD:${GITHUB_SHA::12}"
+        run: |
+          ARGS=(--env "$TARGET" --var "BUILD:${GITHUB_SHA::12}")
+          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then ARGS+=(--var "CF_ACCOUNT_ID:$CLOUDFLARE_ACCOUNT_ID"); fi
+          npx wrangler deploy "${ARGS[@]}"
       # Secrets reach the shell as environment variables, never inlined, so a
       # key containing $ ` " or ! survives intact. hash-secret trims stdin.
       - name: Worker secrets (first run, or when asked)
@@ -75,6 +82,17 @@ jobs:
           printf '%s' "$TOKEN_SECRET" | npx wrangler secret put TOKEN_SECRET --env "$TARGET"
           printf '%s' "$OWNER_KEY" | npm run --silent hash-secret | npx wrangler secret put OWNER_KEY_HASH --env "$TARGET"
           echo "owner key length: ${#OWNER_KEY} characters (hash stored, key never printed)"
+      # Browser Rendering (product details, barcode lookups): the BROWSER_TOKEN
+      # repository secret goes onto the worker the first deploy after it is
+      # added. A changed token goes on with a manual run and set_secrets.
+      - name: Browser Rendering token (once, or when asked)
+        env:
+          BROWSER_TOKEN: ${{ secrets.BROWSER_TOKEN }}
+          SET_SECRETS: ${{ github.event.inputs.set_secrets }}
+        run: |
+          if [ -z "$BROWSER_TOKEN" ]; then echo "::notice::BROWSER_TOKEN is not set: product details come from the legacy details worker, and barcode lookups use book titles only (docs/SETUP.md step 11)"; exit 0; fi
+          if [ "$SET_SECRETS" != "true" ] && npx wrangler secret list --env "$TARGET" 2>/dev/null | grep -q '"BROWSER_TOKEN"'; then echo "BROWSER_TOKEN is already on the worker"; exit 0; fi
+          printf '%s' "$BROWSER_TOKEN" | npx wrangler secret put BROWSER_TOKEN --env "$TARGET"
       # Fails unless the worker answers with this build within two minutes.
       - name: Health
         run: |
