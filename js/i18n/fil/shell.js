@@ -289,7 +289,6 @@ export default {
   "Write a team message or briefing": "Sumulat ng team message o briefing",
   "Hide until there is something new": "Itago hangga’t walang bago",
   "Team message and today’s briefing": "Team message at briefing ngayong araw",
-  "Write a team message or today’s briefing": "Sumulat ng team message o briefing ngayong araw",
   "Edit": "I-edit",
   "Write": "Sumulat",
   "From the owner": "Mula sa owner",

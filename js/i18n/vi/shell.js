@@ -289,7 +289,6 @@ export default {
   "Write a team message or briefing": "Viết tin nhắn nhóm hoặc thông báo",
   "Hide until there is something new": "Ẩn cho đến khi có tin mới",
   "Team message and today’s briefing": "Tin nhắn nhóm và thông báo hôm nay",
-  "Write a team message or today’s briefing": "Viết tin nhắn nhóm hoặc thông báo hôm nay",
   "Edit": "Sửa",
   "Write": "Viết",
   "From the owner": "Từ chủ sở hữu",

@@ -289,7 +289,6 @@ export default {
   "Write a team message or briefing": "Scrivi un messaggio del team o un briefing",
   "Hide until there is something new": "Nascondi finché non c’è qualcosa di nuovo",
   "Team message and today’s briefing": "Messaggio del team e briefing di oggi",
-  "Write a team message or today’s briefing": "Scrivi un messaggio del team o il briefing di oggi",
   "Edit": "Modifica",
   "Write": "Scrivi",
   "From the owner": "Dal titolare",
