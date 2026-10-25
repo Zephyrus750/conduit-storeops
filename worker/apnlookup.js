@@ -1,7 +1,7 @@
-// Item barcode → keycode, for a barcode nothing in the store links yet. A
-// clearance ticket or shelf talker carries the item's own barcode (an EAN,
-// often a book's ISBN), not the keycode, so Live pull asks here before it
-// asks a person to type the keycode printed on the ticket. Two sources,
+// Item barcode → keycode, for a barcode the inventory report doesn't list.
+// A clearance ticket or shelf talker carries the item's own barcode (an
+// EAN, often a book's ISBN), not the keycode, so Live pull asks here before
+// it asks a person to type the keycode printed on the ticket. Two sources,
 // first hit wins:
 //
 //   1. Kmart's own site search, which finds a product by its barcode. The
@@ -12,11 +12,11 @@
 //   2. A book (ISBN, 978 or 979): its title from Google Books or Open
 //      Library, matched against the names in Conduit's own catalogue.
 //
-// Nothing here links anything: the phone shows the candidates and the
-// person's phone sends pull.pair (one candidate the search is sure of links
-// at once; anything else is a one-tap choice). A definite answer is cached
-// at the edge by barcode, a week for a hit and a day for a miss, so each
-// barcode costs one search per colo at most; a failed render is not cached.
+// Nothing here links anything: the phone finds the one candidate the search
+// is sure of at once, and anything else is a one-tap choice. A definite
+// answer is cached at the edge by barcode, a week for a hit and a day for a
+// miss, so each barcode costs one search per colo at most; a failed render
+// is not cached.
 //
 //   GET /v1/catalogue/barcode?code=9780241813799   (any signed-in device)
 //   → { gtin, source: 'kmart' | 'isbn' | null, sure, candidates: [{ kc, name, url }], why }

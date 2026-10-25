@@ -180,7 +180,8 @@ The same rendering answers a barcode with its keycode (`worker/apnlookup.js`):
 Kmart's site search finds a product by its barcode, so a clearance ticket or
 shelf talker, which carries the item's own barcode, needs no keycode typed.
 A book is also found by its title (Google Books, then Open Library) matched
-against the catalogue. Live pull links what it finds with `pull.pair`.
+against the catalogue. Live pull finds the item from the answer and links
+nothing; the answer is cached by barcode, so the next scan of it is quick.
 The deploy workflow passes `CLOUDFLARE_ACCOUNT_ID` to the worker as
 `CF_ACCOUNT_ID` and attaches the `BROWSER_TOKEN` repository secret
 (docs/SETUP.md step 11).
@@ -262,11 +263,13 @@ already in the log:
   off and cages need the Stockroom. A requester scans an item, its ticket
   (the APN maps to a keycode through the report's `apn` map) or types a
   keycode. A clearance ticket's barcode is the item's own (a book's ISBN,
-  say): when nothing links it, the phone asks for the keycode printed on the
-  ticket and `pull.pair` links the two for every phone of the store. First
-  the phone asks `GET /v1/catalogue/barcode`: one sure match from Kmart's
-  site search links at once, other candidates are a one-tap choice, and
-  only when nothing is found is the keycode typed; `GET …/pull/find` answers with the report's stockroom bays (none:
+  say): when the report doesn't list it, the phone searches first
+  (`GET /v1/catalogue/barcode`, waiting up to 50 seconds; the worker finishes
+  and caches the search even if the phone stops waiting): one sure match
+  from Kmart's site search is found at once, other candidates are a one-tap
+  choice, and only when nothing is found is the keycode on the ticket typed
+  in the scan box. Live pull links nothing (`pull.pair` stays in the
+  catalogue for the events already logged); `GET …/pull/find` answers with the report's stockroom bays (none:
   "No stockroom location", and it isn't added), the carton size and any
   truck today whose manifest carries it, and the phone adds what was pulled
   earlier today. The number pad sends `pull.request` (a number, a carton, or
