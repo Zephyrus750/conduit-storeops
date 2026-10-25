@@ -1401,7 +1401,6 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .cg-swctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; }
 .cg-swctl > div { flex: 1 1 100%; display: flex; flex-direction: column; }
 .cg-swctl small { color: var(--dim); }
-.cg-pair { padding: 10px 12px; border-color: #F59E0B; }
 #printroot .ps-tags { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
 #printroot .ps-cagetag { border: 1.5px dashed #000; border-radius: 4mm; padding: 5mm; display: flex; flex-direction: column; align-items: center; gap: 2mm; break-inside: avoid; height: 58mm; }
 #printroot .ct-store { font-size: 8pt; text-transform: uppercase; letter-spacing: .08em; }
@@ -2780,16 +2779,8 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .lp-pn b { display: block; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lp-pn small { display: block; font-size: 12.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* A ticket whose barcode nothing links: the keycode printed on it, then the link. */
-.lp-gtin { margin: -2px 0 0; font-size: 12.5px; color: var(--dim); }
 .lp-pn small.lp-from { white-space: normal; overflow: visible; }
 .lp-a { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
-.lp-hint p small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint); }
-.lp-again { align-self: flex-start; }
-.lp-picks { display: flex; flex-direction: column; gap: 8px; }
-.lp-pick { width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
-.lp-pick > svg.i { flex: none; color: var(--dim); }
-.lp-pick:active { transform: scale(.99); }
-.lp-none { align-self: flex-start; font-size: 13.5px; padding: 4px 2px; }
 .lp-bay { flex: none; display: flex; flex-direction: column; align-items: center; min-width: 72px; padding: 5px 10px; border-radius: 12px; background: #ECFDF3; border: 1px solid #BBE5C8; color: #166534; }
 .lp-bay small { font-size: 10px; font-weight: 800; letter-spacing: .08em; }
 .lp-bay b { font-size: 22px; line-height: 1.1; }
@@ -2974,3 +2965,27 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .rc-back svg.i { transform: rotate(90deg); }
 @container shell (max-width: 1400px) { .rc-grid { grid-template-columns: 340px minmax(0, 1fr); } }
 @container shell (max-width: 900px) { .rc-grid { grid-template-columns: 1fr; } .rc-kc { grid-template-columns: 80px minmax(0, 1fr); } .rc-where { grid-column: 1 / -1; text-align: left; } }
+
+/* ── An item barcode the store can't match (js/barcodesearch.js): Live pull, Cages and Adjust ── */
+.bcs-hint { display: flex; align-items: center; gap: 10px; padding: 12px; color: var(--dim); }
+.bcs-hint > svg.i { width: 26px; height: 26px; flex: none; }
+.bcs-hint p { margin: 0; font-size: 13.5px; line-height: 1.4; }
+.bcs-hint p small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint); }
+.bcs-ans { display: flex; gap: 10px; align-items: flex-start; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.4; }
+.bcs-ans > svg.i { flex: none; width: 20px; height: 20px; margin-top: 1px; }
+.bcs-ans b { display: block; font-size: 14px; }
+.bcs-ans.warn { background: #FFF7E6; border: 1px solid #F8D9A0; color: #92400E; }
+.bcs-ans.info { background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent-ink); }
+.bcs-picks { display: flex; flex-direction: column; gap: 8px; }
+.bcs-pick { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.bcs-pick > svg.i { flex: none; color: var(--dim); }
+.bcs-pick:active { transform: scale(.99); }
+.bcs-pic { width: 52px; height: 52px; border-radius: 10px; background: var(--ground); border: 1px solid var(--line-soft); display: grid; place-items: center; overflow: hidden; flex: none; color: var(--faint); }
+.bcs-pic img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.bcs-pn { flex: 1; min-width: 0; }
+.bcs-pn b { display: block; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bcs-pn small { display: block; font-size: 12.5px; color: var(--dim); }
+.bcs-a { align-self: flex-start; background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 13.5px; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
+.bcs-gtin { margin: -2px 0 0; font-size: 12.5px; color: var(--dim); }
+.bcs-again { align-self: flex-start; }
+.frame.dark .bcs-ans.warn { background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .35); color: #FCD34D; }

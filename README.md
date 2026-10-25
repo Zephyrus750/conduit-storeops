@@ -180,8 +180,12 @@ The same rendering answers a barcode with its keycode (`worker/apnlookup.js`):
 Kmart's site search finds a product by its barcode, so a clearance ticket or
 shelf talker, which carries the item's own barcode, needs no keycode typed.
 A book is also found by its title (Google Books, then Open Library) matched
-against the catalogue. Live pull finds the item from the answer and links
-nothing; the answer is cached by barcode, so the next scan of it is quick.
+against the catalogue. Live pull, Cages and Adjust on the phone search first
+(`js/barcodesearch.js`) for a barcode the store can't match itself, find the
+item from the answer and link nothing; when nothing is found the keycode is
+typed in the same scan box. The answer is cached by barcode, so the next scan
+of it is quick. Pairs made earlier (`cage.pair`, `pull.pair`) are still read;
+no screen makes new ones.
 The deploy workflow passes `CLOUDFLARE_ACCOUNT_ID` to the worker as
 `CF_ACCOUNT_ID` and attaches the `BROWSER_TOKEN` repository secret
 (docs/SETUP.md step 11).

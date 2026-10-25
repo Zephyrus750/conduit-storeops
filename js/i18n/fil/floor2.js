@@ -790,8 +790,6 @@ export default {
   "Wrong item?": "Maling item?",
   "Type the keycode instead": "I-type na lang ang keycode",
   "Is this it?": "Ito ba?",
-  "Found on kmart.com.au from the barcode. Tap the item on the ticket.": "Nahanap sa kmart.com.au mula sa barcode. I-tap ang item na nasa ticket.",
-  "Matched by the book’s title. Tap the one on the ticket.": "Tugma ayon sa pamagat ng libro. I-tap ang nasa ticket.",
   "None of these: type the keycode": "Wala rito: i-type ang keycode",
   "None in force": "Walang aktibo",
   "{n} in force": "{n} aktibo",
@@ -866,6 +864,8 @@ export default {
   "It can take up to half a minute.": "Puwedeng umabot ng kalahating minuto.",
   "Not found on kmart.com.au": "Hindi nahanap sa kmart.com.au",
   "Couldn’t search kmart.com.au": "Hindi nakapaghanap sa kmart.com.au",
-  "Type the keycode printed on the ticket in the box above.": "I-type sa kahon sa itaas ang keycode na nakaprint sa ticket.",
   "found on kmart.com.au from the barcode": "nahanap sa kmart.com.au mula sa barcode",
+  "Found on kmart.com.au from the barcode. Tap the right one.": "Nahanap sa kmart.com.au mula sa barcode. I-tap ang tama.",
+  "Matched by the book’s title. Tap the right one.": "Tugma ayon sa pamagat ng libro. I-tap ang tama.",
+  "Type its keycode in the box above, from the ticket, shelf label or carton.": "I-type ang keycode nito sa kahon sa itaas, mula sa ticket, shelf label o carton.",
 };

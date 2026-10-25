@@ -16,6 +16,7 @@
 // week's. A new request in a puller's bays buzzes the phone wherever it is
 // in the app (installPullAlerts, from the shell).
 
+import { searchBarcode, barcodeCard } from '../barcodesearch.js';
 import { recallFor, recallFlag, recallTagFor } from '../recallflag.js';
 import { ic, esc, vh, sub, toast, dep, DEPTS_DEFAULT, DEPT_NAME, today } from '../ui.js';
 import { hasArea, ensureArea } from '../unlock.js';
@@ -144,13 +145,7 @@ function requester(ctx, ses, repaint) {
   const card = rec ? productRow(f) + recallFlag(ctx.store, rec, f.kc || '') : !f ? (st.sent ? `<div class="lp-sent" role="status">${ic('check')}<span><b>${st.sent.change ? tx('Changed: {name} × {qty}', { name: esc(st.sent.name), qty: esc(st.sent.qty) }) : tx('Sent: {name} × {qty}', { name: esc(st.sent.name), qty: esc(st.sent.qty) })}</b><small>${tx('On the pullers’ phones now. Scan the next item.')}</small></span></div>` : `<div class="card lp-card lp-hint">${ic('barcode')}<p>${tx('Scan an item, its ticket, or type the keycode. Only items with a stockroom location can be asked for.')}</p></div>`)
     : f.state === 'busy' ? `<div class="card lp-card lp-hint">${ic('clock')}<p>${tx('Looking it up…')}</p></div>`
     : f.state === 'error' ? `<div class="lp-ans bad">${ic('alert')}<span><b>${tx('Couldn’t look it up')}</b>${esc(f.message || '')}</span></div>`
-    : f.state === 'searching' ? `<div class="card lp-card lp-hint">${ic('search')}<p>${tx('Searching kmart.com.au for this barcode…')}<small>${tx('It can take up to half a minute.')}</small></p></div>`
-    : f.state === 'choose' ? `<div class="lp-ans info">${ic('search')}<span><b>${tx('Is this it?')}</b>${f.source === 'isbn' ? tx('Matched by the book’s title. Tap the one on the ticket.') : tx('Found on kmart.com.au from the barcode. Tap the item on the ticket.')}</span></div>` +
-      `<div class="lp-picks">${f.list.map(c => `<button type="button" class="card lp-prod lp-pick" data-act="lp-pick" data-kc="${esc(c.kc)}"><span class="lp-pic">${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : ic('box')}</span><span class="lp-pn"><b>${esc(c.name || c.kc)}</b><small class="mono">${esc(c.kc)}</small></span>${ic('arrow')}</button>`).join('')}</div>` +
-      `<button type="button" class="lp-a lp-none" data-act="lp-type">${tx('None of these: type the keycode')}</button>`
-    : f.state === 'manual' ? `<div class="lp-ans warn">${ic('barcode')}<span><b>${f.why === 'none' ? tx('Not found on kmart.com.au') : f.why === 'failed' ? tx('Couldn’t search kmart.com.au') : tx('Type the keycode instead')}</b>${tx('Type the keycode printed on the ticket in the box above.')}</span></div>` +
-      `<p class="lp-gtin">${tx('Barcode {code}', { code: `<span class="mono">${esc(f.gtin)}</span>` })}</p>` +
-      (f.why === 'failed' ? `<button type="button" class="btn lp-again" data-act="lp-research">${ic('refresh')}${tx('Search again')}</button>` : '')
+    : f.state === 'searching' || f.state === 'choose' || f.state === 'manual' ? barcodeCard(f)
     : f.state === 'recalled' ? productRow(f)   // closed since the scan: nothing more to say
     : f.state === 'noreport' ? `<div class="lp-ans warn">${ic('alert')}<span><b>${tx('No inventory report yet')}</b>${tx('Live pull reads the stockroom bays from the morning inventory report. Paste it in Reports & files first.')}</span></div>`
     : f.state === 'none' ? productRow(f) + `<div class="lp-ans warn">${ic('x')}<span><b>${tx('No stockroom location')}</b>${f.report?.date && f.report.date !== day ? tx('The latest report ({date}) has no stockroom bay for it, so it isn’t added to the list.', { date: esc(f.report.date) }) : tx('This morning’s report has no stockroom bay for it, so it isn’t added to the list.')}</span></div>`
@@ -310,29 +305,20 @@ async function find(ctx, raw, viaCam = false) {
   ctx.rerender();
 }
 // A barcode the report doesn't list (a clearance ticket, a shelf talker
-// carries the item's own barcode): Kmart's site search, or a book's title,
-// finds its keycode. One sure match is found at once; candidates are a
-// one-tap choice; nothing found, and the person types the keycode on the
-// ticket in the scan box. Nothing is linked: the worker caches each answer
-// by barcode, so the next scan of it is quick.
-// Rendering Kmart's search page takes 10 to 30 seconds (the worker allows 45).
-const SEARCH_WAIT_MS = 50_000;
-const SEARCH_FAILED = /render|refused|Browser Rendering|Abort|Timeout/i;
+// carries the item's own barcode): the search (js/barcodesearch.js) finds
+// its keycode. One sure match is found at once; candidates are a one-tap
+// choice; nothing found, and the person types the keycode in the scan box.
+// Nothing is linked.
 async function lookUp(ctx, f) {
   const gtin = f.gtin, seq = (st.seq = (st.seq || 0) + 1), viaCam = st.viaCam;
   st.find = { state: 'searching', code: gtin, gtin, report: f.report }; ctx.rerender();
-  const b = await ctx.api(`/v1/catalogue/barcode?code=${gtin}`, { timeoutMs: SEARCH_WAIT_MS }).catch(() => null);
+  let res = null;
+  res = await searchBarcode(ctx, gtin, () => { if (st.find?.list && st.find.list === res?.list) ctx.rerender(); });
   if (st.seq !== seq || st.find?.gtin !== gtin || st.find.state !== 'searching') return;   // another scan came first
   st.viaCam = viaCam;
-  const list = (b?.candidates || []).filter(c => /^\d{6,8}$/.test(c.kc));
-  if (b?.sure && list.length === 1) return pick(ctx, list[0].kc, gtin);
-  if (list.length) {
-    st.find = { state: 'choose', code: gtin, gtin, report: f.report, source: b.source, list };
-    haptic('warning'); ctx.rerender();
-    for (const c of list) ctx.catalogue.lookup(c.kc).then(it => { if (it && st.find?.list?.includes(c)) { Object.assign(c, { name: it.name || c.name, img: it.img || '' }); ctx.rerender(); } }).catch(() => {});
-    return;
-  }
-  typeIt(ctx, gtin, f.report, !b || SEARCH_FAILED.test(b.why || '') ? 'failed' : 'none');
+  if (res.kc) return pick(ctx, res.kc, gtin);
+  if (res.list) { st.find = { state: 'choose', code: gtin, gtin, report: f.report, source: res.source, list: res.list }; haptic('warning'); return ctx.rerender(); }
+  typeIt(ctx, gtin, f.report, res.why);
 }
 // The keycode the search found, or the one tapped: found as if it were typed.
 async function pick(ctx, kc, gtin) {
@@ -426,10 +412,10 @@ export default {
       if (act === 'lp-allthere') { st.qty = st.qty === 'ALL' ? '' : 'ALL'; haptic('tap'); return ctx.rerender(); }
       if (act === 'lp-send') return ses && sendRequest(ctx, ses);
       if (act === 'lp-clear') { st.find = null; return ctx.rerender(); }
-      if (act === 'lp-pick') { const f = st.find; if (f?.gtin) return pick(ctx, a.dataset.kc, f.gtin); return; }
-      if (act === 'lp-type') { const f = st.find; if (f?.gtin) typeIt(ctx, f.gtin, f.report, 'pick'); return; }
+      if (act === 'bc-pick') { const f = st.find; if (f?.gtin) return pick(ctx, a.dataset.kc, f.gtin); return; }
+      if (act === 'bc-type') { const f = st.find; if (f?.gtin) typeIt(ctx, f.gtin, f.report, 'pick'); return; }
       if (act === 'lp-wrong') { typeIt(ctx, a.dataset.gtin, st.find?.report, 'wrong'); return; }
-      if (act === 'lp-research') { const f = st.find; if (f?.gtin) lookUp(ctx, f); return; }
+      if (act === 'bc-again') { const f = st.find; if (f?.gtin) lookUp(ctx, f); return; }
       if (act === 'lp-ack') { st.ack = true; return ctx.rerender(); }
       if (act === 'lp-dup-add') { const l = ses?.lines[a.dataset.line]; if (!l || l.qty === 'all') return; if (await send(ctx, 'pull.update', { session: ses.id, line: l.id }, { qty: Math.min(999, l.qty + (l.carton || l.qty)) })) { st.sent = { name: l.name || l.kc, qty: Math.min(999, l.qty + (l.carton || l.qty)), change: true }; st.find = null; haptic('success'); ctx.rerender(); } return; }
       if (act === 'lp-dup-change') { st.change = a.dataset.line; st.ack = true; st.qty = ''; return ctx.rerender(); }

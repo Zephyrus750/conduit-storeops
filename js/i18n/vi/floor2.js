@@ -790,8 +790,6 @@ export default {
   "Wrong item?": "Sai mặt hàng?",
   "Type the keycode instead": "Nhập keycode thay vào đó",
   "Is this it?": "Có phải mặt hàng này?",
-  "Found on kmart.com.au from the barcode. Tap the item on the ticket.": "Tìm thấy trên kmart.com.au qua mã vạch. Chạm vào mặt hàng trên nhãn.",
-  "Matched by the book’s title. Tap the one on the ticket.": "Khớp theo tên sách. Chạm vào cuốn trên nhãn.",
   "None of these: type the keycode": "Không phải: nhập keycode",
   "None in force": "Không có mục nào",
   "{n} in force": "{n} đang áp dụng",
@@ -866,6 +864,8 @@ export default {
   "It can take up to half a minute.": "Có thể mất đến nửa phút.",
   "Not found on kmart.com.au": "Không tìm thấy trên kmart.com.au",
   "Couldn’t search kmart.com.au": "Không tìm được trên kmart.com.au",
-  "Type the keycode printed on the ticket in the box above.": "Nhập keycode in trên nhãn vào ô phía trên.",
   "found on kmart.com.au from the barcode": "tìm thấy trên kmart.com.au qua mã vạch",
+  "Found on kmart.com.au from the barcode. Tap the right one.": "Tìm thấy trên kmart.com.au qua mã vạch. Chạm vào mặt hàng đúng.",
+  "Matched by the book’s title. Tap the right one.": "Khớp theo tên sách. Chạm vào cuốn đúng.",
+  "Type its keycode in the box above, from the ticket, shelf label or carton.": "Nhập keycode vào ô phía trên, từ nhãn, nhãn kệ hoặc thùng.",
 };
