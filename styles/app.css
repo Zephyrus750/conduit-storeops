@@ -2736,7 +2736,7 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .lp-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .lp-acts .btn { min-height: 42px; }
 .lp-hist { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line-soft); padding: 10px 0; font: inherit; color: var(--ink); cursor: pointer; min-height: 44px; }
-.lp-hist > span { flex: 1; min-width: 0; } .lp-hist b { display: block; font-size: 14px; } .lp-hist small { display: block; font-size: 12px; color: var(--dim); } .lp-hist > svg.i { color: var(--dim); }
+.lp-hist > span:not(.dep) { flex: 1; min-width: 0; } .lp-hist > .dep { flex: none; min-width: 30px; text-align: center; } .lp-hist b { display: block; font-size: 14px; } .lp-hist small { display: block; font-size: 12px; color: var(--dim); } .lp-hist > svg.i { color: var(--dim); }
 .lp-fl { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-top: 2px; }
 .lp-depts { display: flex; flex-wrap: wrap; gap: 6px; }
 .lp-dept { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 600; padding: 6px 9px; min-height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink2); cursor: pointer; }
