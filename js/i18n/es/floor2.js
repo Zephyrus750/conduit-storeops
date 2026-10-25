@@ -790,8 +790,6 @@ export default {
   "Wrong item?": "¿Artículo equivocado?",
   "Type the keycode instead": "Escribir el keycode en su lugar",
   "Is this it?": "¿Es este?",
-  "Found on kmart.com.au from the barcode. Tap the item on the ticket.": "Encontrado en kmart.com.au por el código de barras. Toca el artículo de la etiqueta.",
-  "Matched by the book’s title. Tap the one on the ticket.": "Encontrado por el título del libro. Toca el de la etiqueta.",
   "None of these: type the keycode": "Ninguno: escribir el keycode",
   "None in force": "Ninguna activa",
   "{n} in force": "{n} activas",
@@ -866,6 +864,8 @@ export default {
   "It can take up to half a minute.": "Puede tardar hasta medio minuto.",
   "Not found on kmart.com.au": "No se encontró en kmart.com.au",
   "Couldn’t search kmart.com.au": "No se pudo buscar en kmart.com.au",
-  "Type the keycode printed on the ticket in the box above.": "Escribe en la casilla de arriba el keycode impreso en la etiqueta.",
   "found on kmart.com.au from the barcode": "encontrado en kmart.com.au por el código de barras",
+  "Found on kmart.com.au from the barcode. Tap the right one.": "Encontrado en kmart.com.au por el código de barras. Toca el correcto.",
+  "Matched by the book’s title. Tap the right one.": "Encontrado por el título del libro. Toca el correcto.",
+  "Type its keycode in the box above, from the ticket, shelf label or carton.": "Escribe su keycode en la casilla de arriba, de la etiqueta, la etiqueta del estante o la caja.",
 };

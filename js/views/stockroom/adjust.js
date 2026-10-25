@@ -15,10 +15,11 @@ import { todayKey, ensureNames, productHtml, kcCopy, nameOf, priceOf, send, load
 import { shrinkValue, cartonShrink, cartonUnits } from '../../../shared/stockintel.js';
 import { gs1Parse } from '../../../shared/gs1.js';
 import { recallFor, recallFlag } from '../../recallflag.js';
+import { searchBarcode, barcodeCard } from '../../barcodesearch.js';
 import { haptic } from '../../device.js';
 import { tx, txn } from '../../i18n.js';
 
-const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '', mPair: null };
+const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '', bc: null };
 const NONE = '\u0000none', OTHER = '\u0000other';
 const SOURCE = { report: tx('Morning report'), review: tx('Backfill review'), phone: tx('Phone'), desk: tx('Typed'), screen: tx('Screen scan'), import: 'K2B' };
 function model(ctx) {
@@ -115,7 +116,7 @@ export default {
     loadProfiles(ctx, repaint);
     root.addEventListener('click', e => onClick(e, ctx, root, repaint));
     root.addEventListener('change', e => { if (e.target.matches('[data-field="day"]')) { st.date = e.target.value === todayKey() ? null : e.target.value; st.group = 'all'; st.dept = 'all'; ctx.rerender(); } });
-    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.matches('[data-field="tick"]')) { e.preventDefault(); tickOff(ctx, e.target); return; } if (e.target.matches('[data-field="kc"],[data-field="qty"],[data-field="loc"]')) { e.preventDefault(); root.querySelector('[data-act="add"]')?.click(); } if (e.target.matches('[data-field="mkc"]')) { e.preventDefault(); takeCode(ctx, e.target.value, repaint); } if (e.target.matches('[data-field="mpairkc"]')) { e.preventDefault(); pairCode(ctx, e.target.value, repaint); } });
+    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.matches('[data-field="tick"]')) { e.preventDefault(); tickOff(ctx, e.target); return; } if (e.target.matches('[data-field="kc"],[data-field="qty"],[data-field="loc"]')) { e.preventDefault(); root.querySelector('[data-act="add"]')?.click(); } if (e.target.matches('[data-field="mkc"]')) { e.preventDefault(); takeCode(ctx, e.target.value, repaint); } });
     return [ctx.store.on('adjustments', () => { ensureNames(ctx, model(ctx).items.map(i => i.kc), repaint); repaint(); })];
   },
 };
@@ -139,7 +140,10 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-qty') { st.mQty = Math.max(0, st.mQty + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-soh') { st.mSoh = Math.min(0, st.mSoh + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-flag') { if (!st.mKc) return; const r = await send(ctx, 'adjustment.set', { keycode: st.mKc, date: m.date }, { qty: st.mSoh, counted: st.mQty, location: '', confirmed: false, name: nameOf(st.mKc) || '', source: 'phone' }); if (r) { toast(tx('{kc} flagged', { kc: st.mKc })); st.mKc = ''; st.mSoh = 0; st.mQty = 1; repaint(); } }
-  else if (act === 'm-clear') { st.mKc = ''; st.mPair = null; repaint(); }
+  else if (act === 'm-clear') { st.mKc = ''; st.bc = null; repaint(); }
+  else if (act === 'bc-pick') { if (st.bc) useKc(ctx, a.dataset.kc, repaint); }
+  else if (act === 'bc-type') { if (st.bc) { st.bc = { state: 'manual', gtin: st.bc.gtin, why: 'pick' }; repaint(); focusKc(); } }
+  else if (act === 'bc-again') { if (st.bc) search(ctx, st.bc.gtin, repaint); }
 }
 // A scanned keycode is ticked off the list being shown.
 async function tickOff(ctx, input) {
@@ -151,32 +155,45 @@ async function tickOff(ctx, input) {
   if (await send(ctx, 'adjustment.done', { keycode: kc, date: m.date })) toast(tx('{kc} adjusted ✓', { kc }));
   document.querySelector('#content [data-field="tick"]')?.focus();
 }
-// A scanned item barcode is not a keycode: the store's pair for it (learned
-// in Cages or here) gives the keycode, or the phone asks for it once and
-// remembers the pair for everyone (cage.pair).
+// A scanned item barcode is not a keycode: a pair the store made for it
+// earlier (Cages, Adjust) gives the keycode; else the search
+// (js/barcodesearch.js) finds it; else the keycode is typed in the scan box.
+// Nothing is linked.
 const barcodeOf = raw => { const v = String(raw || '').trim(); const g = v.replace(/\D/g, '').length >= 12 || v.startsWith('(') ? gs1Parse(v) : null; return g?.gtin || null; };
 const keycodeOf = raw => parseKeycodes(raw).find(k => k.length <= 8) || '';
 function takeCode(ctx, raw, repaint) {
   const g = barcodeOf(raw);
-  if (g) { const kc = ctx.store.get('apnPairs')?.[g]?.kc; st.mKc = kc || ''; st.mPair = kc ? null : g; }
-  else { st.mKc = keycodeOf(raw); st.mPair = null; if (!st.mKc) toast(tx('That is not a keycode'), 'bad'); }
+  st.bc = null;
+  if (g) st.mKc = ctx.store.get('apnPairs')?.[g]?.kc || '';
+  else { st.mKc = keycodeOf(raw); if (!st.mKc) toast(tx('That is not a keycode'), 'bad'); }
   // A recalled product stops here, keycode or item barcode (paired or not).
   const rec = recallFor(ctx.store, st.mKc) || (g ? recallFor(ctx.store, g) : null);
-  if (rec) { st.mKc = st.mKc || rec.kcs[0]; st.mPair = null; haptic('error'); }
+  if (rec) { st.mKc = st.mKc || rec.kcs[0]; haptic('error'); }
+  else if (g && !st.mKc) return search(ctx, g, repaint);
   if (st.mKc) ensureNames(ctx, [st.mKc], repaint);
   repaint();
-  if (st.mPair) setTimeout(() => document.querySelector('[data-field="mpairkc"]')?.focus(), 30);
 }
-async function pairCode(ctx, raw, repaint) {
-  const kc = keycodeOf(raw); if (!kc) return toast(tx('Scan or type the keycode on the shelf label or carton'), 'bad');
-  const apn = st.mPair; st.mPair = null; st.mKc = kc; ensureNames(ctx, [kc], repaint); repaint();
-  if (apn && await send(ctx, 'cage.pair', { apn }, { keycode: kc })) toast(tx('{apn} paired with {kc}: next time it needs no keycode', { apn, kc }));
+async function search(ctx, gtin, repaint) {
+  st.bc = { state: 'searching', gtin }; repaint();
+  let res = null;
+  res = await searchBarcode(ctx, gtin, () => { if (st.bc?.list && st.bc.list === res?.list) repaint(); });
+  if (st.bc?.gtin !== gtin || st.bc.state !== 'searching') return;   // another scan came first
+  if (res.kc) return useKc(ctx, res.kc, repaint);
+  st.bc = res.list ? { state: 'choose', gtin, list: res.list, source: res.source } : { state: 'manual', gtin, why: res.why };
+  haptic('warning'); repaint();
+  if (!res.list) focusKc();
 }
+function useKc(ctx, kc, repaint) {
+  st.bc = null; st.mKc = kc;
+  if (recallFor(ctx.store, kc)) haptic('error');
+  ensureNames(ctx, [kc], repaint); repaint();
+}
+const focusKc = () => setTimeout(() => { const i = document.querySelector('[data-field="mkc"]'); if (i) { i.value = ''; i.focus(); } }, 30);
 function mobile(ctx) {
   const m = model(ctx);
   return mhead(tx('Adjust SOH'), tx('Stock is here but the system says no')) + (m.shrink.total || m.shrink.carton ? `<div class="adj-shrinks mv">${m.shrink.total ? `<div class="adj-shrinkline">${ic('dollar')}<span>${tx('<b>{amount}</b> potential shrink today', { amount: money(m.shrink.total) })}${m.shrink.unpriced ? ` · ${tx('{n} without a price', { n: m.shrink.unpriced })}` : ''}</span></div>` : ''}${m.shrink.carton ? `<div class="adj-shrinkline ctn">${ic('box')}<span>${tx('<b>{amount}</b> to one carton', { amount: money(m.shrink.carton) })}${m.shrink.noSize ? ` · ${tx('{n} without a carton size', { n: m.shrink.noSize })}` : ''}</span></div>` : ''}</div>` : '') +
     mscan(tx('Scan the product'), `<input data-field="mkc" inputmode="numeric" autocomplete="off" placeholder="${tx('Keycode or item barcode')}" value="${esc(st.mKc)}" enterkeyhint="done">`, tx('Then enter the SOH the PDT shows and count the shelf')) +
-    (st.mPair ? `<div class="mv-last"><small>${tx('Item barcode {code}', { code: esc(st.mPair) })}</small><b>${tx('Which keycode is it?')}</b><span>${tx('Scan or type the keycode on the shelf label or carton, once: the store remembers it.')}</span></div>` + mscan(tx('Keycode'), `<input data-field="mpairkc" inputmode="numeric" autocomplete="off" placeholder="${tx('Keycode')}" enterkeyhint="done">`, tx('From the shelf label or the carton')) + mfoot(mghost(tx('Not this one'), ' data-act="m-clear"')) : '') +
+    (st.bc ? barcodeCard(st.bc) : '') +
     (st.mKc && recallFor(ctx.store, st.mKc) ? `<div class="mv-last"><small>${tx('Scanned')}</small><b>${kcCopy(st.mKc)}</b><span>${productHtml(st.mKc)}</span></div>` + recallFlag(ctx.store, recallFor(ctx.store, st.mKc), st.mKc) + mfoot(mghost(tx('Scan another'), ' data-act="m-clear"')) :
      st.mKc ? `<div class="mv-last"><small>${tx('Scanned')}</small><b>${kcCopy(st.mKc)}</b><span>${productHtml(st.mKc)}</span></div><div class="mv-stepper"><button data-act="m-soh" data-d="-1" aria-label="${tx('Lower system SOH')}">−</button><div><b>${st.mSoh}</b><small>${tx('system SOH (PDT)')}</small></div><button data-act="m-soh" data-d="1" aria-label="${tx('Raise system SOH')}">+</button></div><div class="mv-stepper"><button data-act="m-qty" data-d="-1" aria-label="${tx('One fewer found')}">−</button><div><b>${st.mQty}</b><small>${tx('found on the shelf')}</small></div><button data-act="m-qty" data-d="1" aria-label="${tx('One more found')}">+</button></div>` + mfoot(mbig(tx('Flag for adjustment'), '', 'sort', ' data-act="m-flag"') + mghost(tx('Not this one'), ' data-act="m-clear"')) : '') +
     (m.items.length ? `<div class="mv-sub">${tx('Today')} · ${m.items.length}</div><div class="mv-rows">${m.items.slice(0, 6).map(i => `<div class="mv-row"><span class="a">${i.qty}</span><span class="b">${kcCopy(i.kc)} ${productHtml(i.kc, i.name)}</span><span class="c">${[i.location ? esc(i.location) : '', toCarton(i) != null ? `<b class="loss1">${money(toCarton(i))}</b>` : ''].filter(Boolean).join(' · ')}</span></div>`).join('')}</div>` : '');

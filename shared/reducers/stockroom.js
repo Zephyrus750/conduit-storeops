@@ -138,7 +138,9 @@ export const stockroomReducers = {
     return null;
   },
   // An item barcode (EAN / UPC / GTIN) paired with its keycode, so the next
-  // scan of that barcode onto a cage needs no keycode.
+  // scan of that barcode onto a cage needs no keycode. Since 25 Oct 2026 no
+  // screen pairs (Cages and Adjust search Kmart's site first); the pairs
+  // already made are still read.
   'cage.pair'(s, e) {
     const g = gs1Parse(e.entity.apn), kc = String(e.payload.keycode || '');
     if (!g?.gtin) return reject('invalid_event', 'that is not a valid item barcode (UPC-A, EAN-13 or GTIN-14)');

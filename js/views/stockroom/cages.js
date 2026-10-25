@@ -4,6 +4,7 @@
 // the room (cage.sweep). Ring colour is the physical ring on the cage.
 
 import { recallFor, recallFlag } from '../../recallflag.js';
+import { searchBarcode, barcodeCard } from '../../barcodesearch.js';
 import { haptic } from '../../device.js';
 import { $, ic, esc, vh, sub, today as storeToday, dayOf, status, fmtTime, ago, toast, mhead, mrows, mbig, mghost, mfoot, mscan } from '../../ui.js';
 import { parseKeycodes } from '../../../shared/backfill.js';
@@ -17,7 +18,7 @@ import { barcodeSvg } from '../../../shared/barcode.js';
 import { tx, txn } from '../../i18n.js';
 
 let usedArg = null;
-const st = { sel: null, find: '', filter: 'all', sort: 'age', mode: 'scan', target: null, qty: 1, last: null, newRing: 'new-lines', placing: null, feed: 'all', tags: false, zone: '', pairing: null };
+const st = { sel: null, find: '', filter: 'all', sort: 'age', mode: 'scan', target: null, qty: 1, last: null, newRing: 'new-lines', placing: null, feed: 'all', tags: false, zone: '', bc: null };
 const LOG_NAME = { open: tx('Opened'), in: tx('Stock on'), out: tx('Stock off'), park: tx('Parked'), move: tx('Moved'), seen: tx('Seen'), found: tx('Found again'), missing: tx('Missing'), lost: tx('Lost'), retag: tx('Re-tagged'), close: tx('Closed') };
 // A log line's detail as the reducer (shared/reducers/stockroom.js) wrote it, in the device's language: the ring a cage opened with, and the reducer's own few words.
 const logText = l => { const d = String(l.d || ''), miss = /^missed (\d+) sweeps$/.exec(d); return l.k === 'open' && RING[d] ? RING[d][0] : d === 'not seen on the sweep' ? tx('not seen on the sweep') : miss ? txn(+miss[1], 'missed {n} sweep', 'missed {n} sweeps') : d.replace(/ \(seen on a sweep\)$/, () => ` (${tx('seen on a sweep')})`).replace(/ \(item barcode ([^)]*)\)$/, (x, code) => ` (${tx('item barcode {code}', { code })})`); };
@@ -66,7 +67,6 @@ export default {
       if (e.key !== 'Enter') return;
       if (e.target.matches('[data-field="mtag"]')) { e.preventDefault(); pickCage(ctx, e.target.value, repaint); }
       if (e.target.matches('[data-field="mscan"]')) { e.preventDefault(); scanOnto(ctx, e.target.value, repaint); e.target.value = ''; }
-      if (e.target.matches('[data-field="pairkc"]')) { e.preventDefault(); pairAndScan(ctx, e.target.value, repaint); }
       if (e.target.matches('[data-field="msweep"]')) { e.preventDefault(); sweepTag(ctx, e.target.value, repaint); e.target.value = ''; }
       if (e.target.matches('[data-field="addkc"],[data-field="addqty"]')) { e.preventDefault(); root.querySelector('[data-act="addline"]')?.click(); }
       if (e.target.matches('[data-field="park"]')) { e.preventDefault(); root.querySelector('[data-act="park"]')?.click(); }
@@ -114,8 +114,9 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'sw-start') { const id = ulid(); if (await send(ctx, 'cage.sweepStart', { sweep: id })) toast(tx('Sweep started: scan every cage tag you pass')); repaint(); }
   else if (act === 'sw-end') { const cur = ctx.store.get('cageSweeps')?.current; if (!cur) return; const left = m.open.filter(c => !cur.seen[c.id]).length; if (left && !confirm(txn(left, '{n} cage has not been seen on this sweep. Finish anyway? It is marked missing.', '{n} cages have not been seen on this sweep. Finish anyway? They are marked missing.'))) return; if (await send(ctx, 'cage.sweepEnd', { sweep: cur.id })) { const h = ctx.store.get('cageSweeps').history.at(-1); toast(`${tx('Sweep done · {n} of {total} seen', { n: h.seen, total: h.total })}${h.moved.length ? ` · ${tx('{n} moved', { n: h.moved.length })}` : ''}${h.missing.length ? ` · ${tx('{n} missing', { n: h.missing.length })}` : ''}`); } repaint(); }
   else if (act === 'zone') { const z = (prompt(tx('Which zone are you in? (aisle, bay or area: a cage scanned here that was parked elsewhere is moved here)'), st.zone) ?? st.zone).trim().toUpperCase(); st.zone = z; repaint(); }
-  else if (act === 'pair-cancel') { st.pairing = null; repaint(); }
-  else if (act === 'pair-save') { const i = root.querySelector('[data-field="pairkc"]'); await pairAndScan(ctx, i?.value, repaint); }
+  else if (act === 'bc-pick') { const g = st.bc?.gtin; if (g) { st.bc = null; await addLine(ctx, a.dataset.kc, repaint, g); } }
+  else if (act === 'bc-type') { if (st.bc) { st.bc = { state: 'manual', gtin: st.bc.gtin, why: 'pick' }; repaint(); focusScan(); } }
+  else if (act === 'bc-again') { if (st.bc) search(ctx, st.bc.gtin, repaint); }
   else if (act === 'mode') { st.mode = a.dataset.mode; repaint(); }
   else if (act === 'm-pick') { st.target = a.dataset.id; repaint(); setTimeout(() => root.querySelector('[data-field="mscan"]')?.focus(), 30); }
   else if (act === 'm-change') { st.target = null; st.last = null; repaint(); }
@@ -130,21 +131,34 @@ async function pickCage(ctx, raw, repaint) {
   const id = tagOf(raw); if (!id) return;
   const c = ctx.store.get('cages')[id];
   if (!c || c.status !== 'open') { if (!confirm(tx('{cage} is not an open cage. Open it now with a {ring} ring?', { cage: id, ring: RING[st.newRing][0] }))) return; const r = await send(ctx, 'cage.create', { cage: id }, { ring: st.newRing }); if (!r) return; }
-  st.target = id; st.last = null; repaint(); setTimeout(() => document.querySelector('[data-field="mscan"]')?.focus(), 30);
+  st.target = id; st.last = null; st.bc = null; repaint(); setTimeout(() => document.querySelector('[data-field="mscan"]')?.focus(), 30);
 }
 async function scanOnto(ctx, raw, repaint) {
   const v = String(raw || '').trim().toUpperCase();
+  st.bc = null;
   if (ctx.store.get('cages')[v]?.status === 'open') return pickCage(ctx, v, repaint);
   if (ctx.store.get('cages')[tagOf(v)]?.status === 'open') return pickCage(ctx, v, repaint);
-  // An item barcode: its paired keycode, or ask for it once.
+  // An item barcode: a pair the store made for it earlier, else the search
+  // (js/barcodesearch.js), else the keycode typed in the scan box. Nothing is linked.
   const g = v.replace(/\D/g, '').length >= 12 || v.startsWith('(') ? gs1Parse(v) : null;
   const pairKc = g?.gtin ? ctx.store.get('apnPairs')?.[g.gtin]?.kc || '' : parseKeycodes(v)[0];
   const rec = recallFor(ctx.store, pairKc) || (g?.gtin ? recallFor(ctx.store, g.gtin) : null);   // by its keycode or its own barcode
   if (rec) return flagRecall(ctx, rec, pairKc, repaint);
-  if (g?.gtin) { const pr = ctx.store.get('apnPairs')?.[g.gtin]; if (!pr) { st.pairing = g.gtin; repaint(); setTimeout(() => document.querySelector('[data-field="pairkc"]')?.focus(), 30); return; } return addLine(ctx, pr.kc, repaint, g.gtin); }
+  if (g?.gtin) return pairKc ? addLine(ctx, pairKc, repaint, g.gtin) : search(ctx, g.gtin, repaint);
   const kc = parseKeycodes(v)[0]; if (!kc) return toast(tx('That is not a keycode, an item barcode or a cage tag'), 'bad');
   return addLine(ctx, kc, repaint);
 }
+async function search(ctx, gtin, repaint) {
+  st.bc = { state: 'searching', gtin }; st.last = null; repaint();
+  let res = null;
+  res = await searchBarcode(ctx, gtin, () => { if (st.bc?.list && st.bc.list === res?.list) repaint(); });
+  if (st.bc?.gtin !== gtin || st.bc.state !== 'searching') return;   // another scan came first
+  if (res.kc) { st.bc = null; return addLine(ctx, res.kc, repaint, gtin); }
+  st.bc = res.list ? { state: 'choose', gtin, list: res.list, source: res.source } : { state: 'manual', gtin, why: res.why };
+  haptic('warning'); repaint();
+  if (!res.list) focusScan();
+}
+const focusScan = () => setTimeout(() => document.querySelector('[data-field="mscan"]')?.focus(), 30);
 // A recalled or withdrawn product never goes onto a cage: the flag says where it goes.
 function flagRecall(ctx, rec, kc, repaint) {
   st.recall = { id: rec.id, kc }; st.last = null; haptic('error'); repaint();
@@ -186,8 +200,8 @@ function mobile(ctx) {
   const lines = Object.entries(t.items);
   return mhead(tx('Cage scan'), tx('{cage} · scan carton, product or cage tag', { cage: esc(t.id) })) + `<div class="cs">${cagetabs('scan')}` +
     `<div class="cs-target"><div class="cs-tag"><span class="cs-cg">${ring(t.ring)}${esc(t.id)}</span><span class="chip" style="background:${RING[t.ring][1]}22;color:${RING[t.ring][1]}"><i style="width:8px;height:8px;border-radius:50%;background:${RING[t.ring][1]}"></i>${RING[t.ring][0]}</span></div><div class="cs-where">${ic('pin')}<span>${t.location ? `<b>${esc(t.location)}</b>` : tx('not parked yet')} · ${tx('seen {ago}', { ago: ago(t.seen) })}</span></div><div class="cs-meta">${tx('Opened {time}', { time: fmtTime(t.created) })} · ${txn(t.units, '<b>{n} unit</b> on {lines} lines', '<b>{n} units</b> on {lines} lines', { lines: t.lines })}</div><div class="cs-tacts"><span class="btn sm" data-act="m-change">${ic('cage')}${tx('Change cage')}</span><span class="btn sm" data-act="m-park">${ic('parking')}${tx('Park here')}</span></div></div>` +
-    (st.pairing ? `<div class="card cg-pair"><b>${tx('New item barcode {code}', { code: esc(st.pairing) })}</b><p class="lbl">${tx('Scan or type its keycode once (shelf label or carton); after that this barcode goes straight onto a cage.')}</p><div class="adj-form2"><input class="ad-in mono" data-field="pairkc" inputmode="numeric" placeholder="${tx('Keycode')}" autocomplete="off"><button class="btn sm primary" data-act="pair-save">${tx('Pair & add')}</button><button class="btn sm" data-act="pair-cancel">${tx('Cancel')}</button></div></div>` : '') +
     mscan(tx('Scan a product'), `<input data-field="mscan" inputmode="numeric" autocomplete="off" placeholder="${tx('Keycode, item barcode or cage tag')}" enterkeyhint="done">`, '', `<span class="cs-step"><button data-act="m-qty" data-d="-1">${ic('minus')}</button><b>${st.qty}</b><button data-act="m-qty" data-d="1">${ic('plus')}</button></span><button data-act="m-scan-btn">${ic('barcode')}${tx('Add × {n}', { n: st.qty })}</button>`) +
+    (st.bc ? barcodeCard(st.bc) : '') +
     (st.recall && ctx.store.get('recalls')?.items?.[st.recall.id] ? recallFlag(ctx.store, ctx.store.get('recalls').items[st.recall.id], st.recall.kc) : '') +
     (st.last ? `<div class="cs-last ok"><div class="cs-lh"><span class="cs-kind">${ic('tag')}${tx('Product')}</span><span class="cs-tick">${ic('check')}${tx('Added to {cage}', { cage: esc(t.id) })}</span></div><div class="cs-kc">${esc(st.last.kc)}<small>${nameHtml(st.last.kc)}</small></div><div class="cs-facts"><span>${txn(st.last.qty, '<b>× {n}</b> unit', '<b>× {n}</b> units')}</span></div></div>` : '') +
     `<div class="card cs-list"><div class="pt3">${tx('On this cage')}<span class="cs-dim">${txn(t.units, '{n} unit', '{n} units')} · ${txn(t.lines, '{n} line', '{n} lines')}</span></div>${lines.map(([kc, q]) => `<div class="row"><span class="kc">${kcCopy(kc)}<small>${nameHtml(kc)}</small></span><span class="q">× ${q}</span></div>`).join('') || `<div class="row cs-dim">${tx('Nothing yet')}</div>`}</div>` +
@@ -197,11 +211,6 @@ function mobile(ctx) {
 // A cage tag as typed or scanned; an SSCC label (GS1 AI 00) is its 18 digits.
 function tagOf(raw) { const v = String(raw || '').trim().toUpperCase(); return gs1Parse(v)?.sscc || v; }
 function sweepPayload(ctx) { const cur = ctx.store.get('cageSweeps')?.current; return { ...(cur ? { session: cur.id } : {}), ...(st.zone ? { location: st.zone } : {}) }; }
-async function pairAndScan(ctx, raw, repaint) {
-  const kc = parseKeycodes(raw)[0]; if (!kc) return toast(tx('Scan or type the keycode on the shelf label or carton'), 'bad');
-  const apn = st.pairing; if (!apn) return;
-  if (await send(ctx, 'cage.pair', { apn }, { keycode: kc })) { st.pairing = null; toast(tx('{apn} paired with {kc}: next time it needs no keycode', { apn, kc })); await addLine(ctx, kc, repaint, apn); }
-}
 function nearestShelf(map, p) {
   let best = null;
   for (const g of map.segments()) {

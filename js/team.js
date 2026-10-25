@@ -1,9 +1,10 @@
 // Team communication (TODO 2, decision 20): the store's team message and
-// today's briefing. On a phone, a strip above the view; on a PC, a card in
-// the Dashboard's title row (teamChip) and a dot on the rail's Dashboard row
-// while it is unread, so no view is pushed down (2026-10-14). Tapping either
-// opens the sheet with both in full; managers and the owner write them there
-// (team.message.set, team.briefing.set). A device marks a message read
+// today's briefing. On a team member's phone, a strip above the view; on a
+// PC, a card in the Dashboard's title row (teamChip) and a dot on the rail's
+// Dashboard row while it is unread, so no view is pushed down (2026-10-14).
+// Tapping either opens the sheet with both in full; managers and the owner
+// write them there (team.message.set, team.briefing.set), on a PC only: a
+// manager's phone shows neither (2026-10-25). A device marks a message read
 // until a new one is published.
 //
 //   mountTeam({ store, session, host, today, storeNo, isHome, desk }) → { repaint, off }
@@ -61,15 +62,17 @@ export function mountTeam({ store, session, host, today, storeNo, isHome = () =>
     // A PC: no strip; the Dashboard carries it (teamChip) and the rail's dot says it is unread.
     if (desk()) { host.hidden = true; host.innerHTML = ''; dot(!!key && seen(storeNo) !== key); return; }
     dot(false);
-    // Unread: the whole strip, on every view. Read (or nothing yet): a small
-    // way back in on the home screens, to read again or for a manager to write.
+    // A manager's phone: nothing. Managers read and write them on a PC.
+    if (w) { host.hidden = true; host.innerHTML = ''; return; }
+    // Unread: the whole strip, on every view. Read: a small way back in on
+    // the home screens, to read it again.
     if (key && seen(storeNo) !== key) {
       const first = firstLine;
       host.hidden = false; host.className = 'teambar';
       host.innerHTML = `<button class="tb-open" data-team="open">${ic('users')}<span class="tb-txt">${msg ? `<b>${tx('Team message')}</b> ${first(msg.text)}` : ''}${msg && brief ? '<i class="tb-sep"></i>' : ''}${brief ? `<b>${tx('Today’s briefing')}</b> ${first(brief.text)}` : ''}</span><span class="tb-more">${tx('Read')}</span></button><button class="tb-x" data-team="hide" aria-label="${tx('Hide until there is something new')}" title="${tx('Hide until there is something new')}">${ic('x')}</button>`;
-    } else if (isHome() && (key || w)) {
+    } else if (isHome() && key) {
       host.hidden = false; host.className = 'teambar quiet';
-      host.innerHTML = `<button class="tb-open" data-team="open">${ic('users')}<span class="tb-txt">${key ? tx('Team message and today’s briefing') : tx('Write a team message or today’s briefing')}</span></button>`;
+      host.innerHTML = `<button class="tb-open" data-team="open">${ic('users')}<span class="tb-txt">${tx('Team message and today’s briefing')}</span></button>`;
     } else { host.hidden = true; host.innerHTML = ''; }
   };
   const hide = () => { markSeen(storeNo, now().key); paint(); };
