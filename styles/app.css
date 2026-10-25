@@ -233,7 +233,6 @@ form.li { margin: 0; }
 .mapbar .search input.not-found { border-color: #DC2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .12); }
 .map.real.has-hl .shelf-group:not([data-hl]) { opacity: .28; }
 .map.real .shelf-group[data-hl] .shelf { stroke: #111827; stroke-width: 7; stroke-opacity: 1; }
-.map.real.has-hl .shelf-badges { opacity: 0; }
 
 /* Search palette: a keycode's life in the store under the product card. */
 .plife { margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
@@ -365,6 +364,7 @@ svg.map.real { background: #fff; }
 .map.real .shelf-group[data-sel] .shelf-label { fill: #fff !important; font-weight: 800; }
 /* find on the map: cyan and magenta pulse on the hits, the rest step back */
 .map.real.has-hl .shelf-group:not([data-hl]) { opacity: .3; }
+/* the found shelf's run badge stays, the others step back with their shelves (ShelfSearcher's has-highlight) */
 .map.real.has-hl .shelf-badges [data-shelf]:not([data-hl]) { opacity: .15; }
 .map.real .shelf-group[data-hl] { opacity: 1 !important; }
 .map.real .shelf-group[data-hl] .shelf { stroke-width: 5 !important; fill-opacity: 1 !important; animation: shelf-pulse-border 1.4s ease-in-out infinite; }
