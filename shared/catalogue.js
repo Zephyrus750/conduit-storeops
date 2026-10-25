@@ -66,6 +66,7 @@ export const CATALOGUE = {
   'pull.update':         T('floor', FS, ['session', 'line']),                    // qty | all while it waits; cancel: true takes it back
   'pull.mark':           T('floor', S, ['session', 'line'], { st: 'string' }),   // pulled | short | gone | todo (undo); got { bay: n }
   'pull.cage.send':      T('floor', S, ['session'], { cage: 'number' }),         // payload.tag
+  'pull.pair':           T('floor', FS, ['apn'], { keycode: 'string' }),         // a ticket's item barcode → the keycode printed on it
 
   // ── Stockroom ────────────────────────────────────────────────────────
   'cage.create':         T('stockroom', S, ['cage'], { ring: 'string' }),

@@ -1063,6 +1063,13 @@ test('live pull: a floor phone finds an item’s stockroom bays by keycode or AP
   assert.deepEqual([byApn.kc, byApn.via, byApn.bays], ['43648803', 'apn', ['7036', '7041']], 'the barcode on the item finds its keycode');
   const none = (await find('11112222')).body;
   assert.deepEqual([none.kc, none.bays], ['11112222', []], 'not in the report: no stockroom location');
+  // A clearance ticket: the book's own barcode, which nothing links yet. The floor phone links it to the keycode printed on the ticket.
+  const ticket = (await find('9780241813799')).body;
+  assert.deepEqual([ticket.gtin, ticket.kc, ticket.bays], ['9780241813799', null, []], 'a barcode nothing links: no keycode, so the phone asks for it');
+  const paired = await api('POST', '/v1/store/1241/events', { events: [event('pull.pair', { apn: '9780241813799' }, { keycode: '43652214' }, 'floor')] }, floor);
+  assert.equal(paired.body.results[0].ok, true, JSON.stringify(paired.body));
+  const linked = (await find('9780241813799')).body;
+  assert.deepEqual([linked.kc, linked.via, linked.bays], ['43652214', 'paired', ['7041']], 'the next scan of the ticket finds it');
   assert.equal((await find('abc')).status, 400);
   // Today's truck: a planned slot whose manifest carries the keycode.
   const man = { v: 1, kind: 'report', manNo: '7031999', storeNo: '1241', despatch: '24/10/2026', dcNo: '4101533', filename: 'm.xls', consols: [

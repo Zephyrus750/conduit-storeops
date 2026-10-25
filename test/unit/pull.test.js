@@ -4,7 +4,7 @@ import { initialState, apply } from '../../shared/reducers.js';
 import { CATALOGUE } from '../../shared/catalogue.js';
 import { toolForEvent } from '../../shared/tools.js';
 import { retain } from '../../shared/retain.js';
-import { sessionCounts, sessionPeople, inZone, lineInZone, uncovered, pulledToday, gotOf } from '../../shared/reducers/pull.js';
+import { sessionCounts, sessionPeople, inZone, lineInZone, uncovered, pulledToday, gotOf, APN_CAP } from '../../shared/reducers/pull.js';
 import { ulid } from '../../shared/ulid.js';
 
 const ev = (type, entity, payload = {}, { device = 'P1', role = 'floor', at = '2026-10-24T09:00:00+08:00' } = {}) => ({
@@ -17,7 +17,7 @@ const ask = (s, line, payload, opts) => apply(s, ev('pull.request', { session: S
 const mark = (s, line, payload, opts = { device: 'R1', role: 'stockroom' }) => apply(s, ev('pull.mark', { session: S, line }, payload, opts));
 
 test('live pull: events are Floor events; marking off and cages need the Stockroom; the tool covers them all', () => {
-  for (const t of ['pull.session.start', 'pull.session.end', 'pull.join', 'pull.zone.set', 'pull.request', 'pull.update', 'pull.mark', 'pull.cage.send']) {
+  for (const t of ['pull.session.start', 'pull.session.end', 'pull.join', 'pull.zone.set', 'pull.request', 'pull.update', 'pull.mark', 'pull.cage.send', 'pull.pair']) {
     assert.equal(CATALOGUE[t].area, 'floor', t); assert.equal(toolForEvent(t)?.id, 'livepull', t);
   }
   assert.deepEqual(CATALOGUE['pull.mark'].roles, ['stockroom']); assert.deepEqual(CATALOGUE['pull.cage.send'].roles, ['stockroom']); assert.deepEqual(CATALOGUE['pull.zone.set'].roles, ['stockroom']);
@@ -117,4 +117,28 @@ test('live pull: sessions are listed for a week, then leave the live state', () 
   apply(s, ev('pull.session.start', { session: 'OLD' }, { name: 'Kitchen', dept: 'h1' }, { at: '2026-10-15T09:00:00+08:00' }));
   assert.equal(retain(s, '2026-10-24').pulls, 1);
   assert.deepEqual(Object.keys(s.pulls.sessions), [S]);
+});
+
+test('live pull: a ticket’s barcode is linked to the keycode printed on it, for every phone, and the link outlives the week', () => {
+  const s = initialState(), pair = (apn, keycode, opts) => apply(s, ev('pull.pair', { apn }, { keycode }, opts));
+  assert.deepEqual(CATALOGUE['pull.pair'].roles, ['floor', 'stockroom'], 'a team member’s phone links it');
+  assert.equal(pair('9780241813798', '43761234').code, 'invalid_event', 'a misread barcode fails its check digit');
+  assert.equal(pair('9780241813799', '4376A234').code, 'invalid_event');
+  assert.equal(pair('9780241813799', '43761234'), null);
+  assert.deepEqual(s.pulls.apn['9780241813799'], { kc: '43761234', at: '2026-10-24T09:00:00+08:00', by: 'P1' });
+  assert.equal(pair('9780241813799', '43761234').code, 'unchanged');
+  assert.equal(pair('9780241813799', '43761235', { device: 'P2', at: '2026-10-25T09:00:00+08:00' }), null, 'a second link puts the first right');
+  assert.deepEqual(s.pulls.apn['9780241813799'], { kc: '43761235', at: '2026-10-25T09:00:00+08:00', by: 'P2' });
+  assert.equal(pair('036000291452', '42977636'), null, 'a UPC-A is kept as its EAN-13');
+  assert.equal(s.pulls.apn['0036000291452'].kc, '42977636');
+  // Sessions leave after a week; the links stay.
+  assert.equal(start(s), null);
+  retain(s, '2026-11-20');
+  assert.deepEqual(Object.keys(s.pulls.sessions), [], 'the session has gone');
+  assert.equal(s.pulls.apn['9780241813799'].kc, '43761235', 'the link has not');
+  // Past the cap the oldest link goes.
+  for (let i = Object.keys(s.pulls.apn).length; i < APN_CAP; i++) s.pulls.apn[`F${i}`] = { kc: '1234567', at: '2026-10-26T00:00:00Z', by: 'x' };
+  assert.equal(pair('9341234567893', '43648803', { at: '2026-10-27T09:00:00+08:00' }), null);
+  assert.equal(Object.keys(s.pulls.apn).length, APN_CAP);
+  assert.equal(s.pulls.apn['0036000291452'], undefined, 'the oldest link made room');
 });

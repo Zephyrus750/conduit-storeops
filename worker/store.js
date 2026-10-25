@@ -540,8 +540,10 @@ export class StoreObject extends DurableObject {
   // The floor's phones have no Stockroom code, so they cannot read the
   // inventory report. This answers one scan and nothing more: the stockroom
   // bays the latest report lists the item in (found by its keycode, or by an
-  // APN the report or a cage pairing gives it), its SOH, how many come in a
-  // carton, and whether a truck planned or on the dock today brings it.
+  // APN the report gives it or a person linked: via keycode | apn | paired),
+  // its SOH, how many come in a carton, and whether a truck planned or on the
+  // dock today brings it. A barcode nothing links comes back with gtin and no
+  // kc, so the phone can ask for the keycode printed on the ticket.
   pullFind(code, claims) {
     if (!(claims.caps || []).includes('stockroom')) return fail(403, 'not_entitled', 'Live pull needs the Stockroom, which is not enabled for this store');
     const off = this.needTool('livepull'); if (off) return off;
@@ -551,11 +553,15 @@ export class StoreObject extends DurableObject {
     let kc = null, via = null;
     if (rep?.bays.has(digits)) { kc = digits; via = 'keycode'; }
     else if (gtin && rep?.apn.has(gtin)) { kc = rep.apn.get(gtin); via = 'apn'; }
-    else if (gtin && this.state.apnPairs?.[gtin]) { kc = this.state.apnPairs[gtin].kc; via = 'apn'; }
-    else if (!gtin && /^\d{6,8}$/.test(digits)) { kc = digits; via = 'keycode'; }
+    else if (gtin) {
+      // A person's link: on a cage (cage.pair) or from a ticket in Live pull (pull.pair); the newer wins.
+      const a = this.state.apnPairs?.[gtin], b = this.state.pulls?.apn?.[gtin], p = a && b ? (String(b.at) > String(a.at) ? b : a) : a || b;
+      if (p) { kc = p.kc; via = 'paired'; }
+    }
+    else if (/^\d{6,8}$/.test(digits)) { kc = digits; via = 'keycode'; }
     const prof = kc ? this.profiles() : null;
     return json({
-      code: digits || raw, kc, via,
+      code: digits || raw, gtin, kc, via,
       report: rep ? { date: rep.date, at: rep.at } : null,
       bays: kc && rep ? rep.bays.get(kc) || [] : [],
       soh: kc && rep && kc in rep.soh ? rep.soh[kc] : null,

@@ -141,6 +141,9 @@ function requester(ctx, ses, repaint) {
   const card = !f ? (st.sent ? `<div class="lp-sent" role="status">${ic('check')}<span><b>${st.sent.change ? tx('Changed: {name} × {qty}', { name: esc(st.sent.name), qty: esc(st.sent.qty) }) : tx('Sent: {name} × {qty}', { name: esc(st.sent.name), qty: esc(st.sent.qty) })}</b><small>${tx('On the pullers’ phones now. Scan the next item.')}</small></span></div>` : `<div class="card lp-card lp-hint">${ic('barcode')}<p>${tx('Scan an item, its ticket, or type the keycode. Only items with a stockroom location can be asked for.')}</p></div>`)
     : f.state === 'busy' ? `<div class="card lp-card lp-hint">${ic('clock')}<p>${tx('Looking it up…')}</p></div>`
     : f.state === 'error' ? `<div class="lp-ans bad">${ic('alert')}<span><b>${tx('Couldn’t look it up')}</b>${esc(f.message || '')}</span></div>`
+    : f.state === 'unlinked' ? `<div class="lp-ans warn">${ic('barcode')}<span><b>${f.relink ? tx('Link this barcode again') : tx('This barcode isn’t linked to a keycode yet')}</b>${f.tried ? tx('{kc} isn’t in the catalogue or the latest report. Check the keycode on the ticket.', { kc: `<span class="mono">${esc(f.tried)}</span>` }) : f.relink ? tx('Type the keycode printed on the ticket. It replaces the old link on every phone.') : tx('Clearance tickets carry the item’s own barcode. Type the keycode printed on the ticket once, and every phone finds it from then on.')}</span></div>` +
+      `<form class="lp-scan lp-link" data-form="lp-link" data-gtin="${esc(f.gtin)}"><input class="ad-in mono" data-field="lp-linkkc" inputmode="numeric" autocomplete="off" enterkeyhint="go" maxlength="8" placeholder="${tx('Keycode on the ticket')}" aria-label="${tx('Keycode on the ticket')}"><button class="btn primary" type="submit">${tx('Find')}</button></form>` +
+      `<p class="lp-gtin">${tx('Barcode {code}', { code: `<span class="mono">${esc(f.gtin)}</span>` })}</p>`
     : f.state === 'noreport' ? `<div class="lp-ans warn">${ic('alert')}<span><b>${tx('No inventory report yet')}</b>${tx('Live pull reads the stockroom bays from the morning inventory report. Paste it in Reports & files first.')}</span></div>`
     : f.state === 'none' ? productRow(f) + `<div class="lp-ans warn">${ic('x')}<span><b>${tx('No stockroom location')}</b>${f.report?.date && f.report.date !== day ? tx('The latest report ({date}) has no stockroom bay for it, so it isn’t added to the list.', { date: esc(f.report.date) }) : tx('This morning’s report has no stockroom bay for it, so it isn’t added to the list.')}</span></div>`
     : productRow(f, true) + flags(ctx, ses, f, dup, day);
@@ -159,7 +162,7 @@ function requester(ctx, ses, repaint) {
 }
 function productRow(f, bays) {
   const price = Number.isFinite(f.price) ? ` · $${Number(f.price).toFixed(2)}` : '';
-  return `<div class="card lp-prod"><span class="lp-pic">${f.img ? `<img src="${esc(f.img)}" alt="" loading="lazy">` : ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${f.via === 'apn' ? `<small>${tx('found from the barcode')}</small>` : ''}</span>` +
+  return `<div class="card lp-prod"><span class="lp-pic">${f.img ? `<img src="${esc(f.img)}" alt="" loading="lazy">` : ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${f.via === 'apn' || f.via === 'paired' ? `<small>${tx('found from the barcode')}${f.via === 'paired' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-relink" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}${f.linked ? `<small class="lp-linked">${ic('check')}${tx('Linked: this barcode now finds {kc} on every phone.', { kc: esc(f.kc) })} <button type="button" class="lp-a" data-act="lp-relink" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button></small>` : ''}</span>` +
     (bays && f.bays?.length ? `<span class="lp-bay"><small>${f.bays.length > 1 ? tx('BAYS') : tx('BAY')}</small><b class="mono">${esc(f.bays[0])}</b>${f.bays.length > 1 ? `<small class="mono">+ ${esc(f.bays.slice(1).join(', '))}</small>` : ''}</span>` : '') + `</div>`;
 }
 // What the requester is told before the pad: already asked for in this
@@ -278,12 +281,33 @@ async function find(ctx, raw, viaCam = false) {
   st.find = { state: 'busy', code }; st.sent = null; st.ack = false; st.change = null; st.qty = ''; st.viaCam = viaCam; ctx.rerender();
   try {
     const r = await ctx.api(`/v1/store/${ctx.storeNo}/pull/find?code=${encodeURIComponent(code)}`);
-    st.find = { ...r, state: r.bays?.length ? 'found' : r.report ? 'none' : 'noreport', code };
+    st.find = { ...r, state: r.bays?.length ? 'found' : !r.report ? 'noreport' : r.gtin && !r.kc ? 'unlinked' : 'none', code };
     if (r.kc) { const it = await ctx.catalogue.lookup(r.kc).catch(() => null); if (it) Object.assign(st.find, { name: it.name || '', img: it.img || '', price: it.price }); }
     haptic(st.find.state === 'found' ? 'success' : 'warning');
   } catch (e) { st.find = { state: 'error', code, message: e.message }; haptic('error'); }
-  ctx.rerender();
+  ctx.rerender(); focusLink();
 }
+// A clearance ticket's barcode is the item's own (a book's ISBN, say), which
+// nothing may link to a keycode yet. The keycode printed on the ticket finds
+// the item, and pull.pair links the two for every phone of the store: only
+// for a keycode the report or the catalogue knows, so a mistyped one links
+// nothing.
+async function link(ctx, raw, gtin) {
+  const kc = String(raw || '').replace(/\D/g, '');
+  if (!/^\d{7,8}$/.test(kc)) { toast(tx('A keycode is 7 or 8 digits'), 'bad'); return focusLink(); }
+  const relink = st.find?.relink, viaCam = st.viaCam;
+  st.find = { state: 'busy', code: kc }; ctx.rerender();
+  try {
+    const r = await ctx.api(`/v1/store/${ctx.storeNo}/pull/find?code=${kc}`);
+    const it = await ctx.catalogue.lookup(kc).catch(() => null);
+    if (!r.bays?.length && !it) { st.find = { state: 'unlinked', code: gtin, gtin, report: r.report, tried: kc, relink }; haptic('warning'); ctx.rerender(); return focusLink(); }
+    st.find = { ...r, state: r.bays?.length ? 'found' : 'none', code: kc, gtin, ...(it ? { name: it.name || '', img: it.img || '', price: it.price } : {}) };
+    if (pulls(ctx).apn?.[gtin]?.kc === kc || (await send(ctx, 'pull.pair', { apn: gtin }, { keycode: kc }))) st.find.linked = true;
+    haptic(st.find.state === 'found' ? 'success' : 'warning');
+  } catch (e) { st.find = { state: 'error', code: kc, message: e.message }; haptic('error'); }
+  st.viaCam = viaCam; ctx.rerender();
+}
+const focusLink = () => setTimeout(() => document.querySelector('[data-field="lp-linkkc"]')?.focus(), 40);
 async function sendRequest(ctx, ses) {
   const f = st.find; if (f?.state !== 'found' || !st.qty) return;
   const all = st.qty === 'ALL', qty = all ? undefined : Number(st.qty), q = all ? { all: true } : { qty };
@@ -364,6 +388,7 @@ export default {
       if (act === 'lp-allthere') { st.qty = st.qty === 'ALL' ? '' : 'ALL'; haptic('tap'); return ctx.rerender(); }
       if (act === 'lp-send') return ses && sendRequest(ctx, ses);
       if (act === 'lp-clear') { st.find = null; return ctx.rerender(); }
+      if (act === 'lp-relink') { st.find = { state: 'unlinked', code: a.dataset.gtin, gtin: a.dataset.gtin, report: st.find?.report, relink: true }; st.qty = ''; ctx.rerender(); return focusLink(); }
       if (act === 'lp-ack') { st.ack = true; return ctx.rerender(); }
       if (act === 'lp-dup-add') { const l = ses?.lines[a.dataset.line]; if (!l || l.qty === 'all') return; if (await send(ctx, 'pull.update', { session: ses.id, line: l.id }, { qty: Math.min(999, l.qty + (l.carton || l.qty)) })) { st.sent = { name: l.name || l.kc, qty: Math.min(999, l.qty + (l.carton || l.qty)), change: true }; st.find = null; haptic('success'); ctx.rerender(); } return; }
       if (act === 'lp-dup-change') { st.change = a.dataset.line; st.ack = true; st.qty = ''; return ctx.rerender(); }
@@ -400,7 +425,10 @@ export default {
     });
     // Typing: the session name, and a keycode (or a wedge scanner) with Enter.
     root.addEventListener('input', e => { if (e.target.matches('[data-field="lp-name"]') && st.form) st.form.name = e.target.value; if (e.target.matches('[data-field="lp-tag"]')) st.tag = e.target.value; });
-    root.addEventListener('submit', e => { if (!e.target.matches('[data-form="lp-find"]')) return; e.preventDefault(); const i = e.target.querySelector('[data-field="lp-code"]'); const v = i.value; i.value = ''; find(ctx, v, false); });
+    root.addEventListener('submit', e => {
+      if (e.target.matches('[data-form="lp-link"]')) { e.preventDefault(); return link(ctx, e.target.querySelector('[data-field="lp-linkkc"]').value, e.target.dataset.gtin); }
+      if (!e.target.matches('[data-form="lp-find"]')) return; e.preventDefault(); const i = e.target.querySelector('[data-field="lp-code"]'); const v = i.value; i.value = ''; find(ctx, v, false);
+    });
     // A number typed on a keyboard works the pad too.
     const onKey = e => {
       if (!ctx.isMobile || e.target.closest?.('input, textarea')) return;
