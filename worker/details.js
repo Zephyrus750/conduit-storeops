@@ -18,7 +18,7 @@ const RENDER_TIMEOUT_MS = 45_000;
 export const detailsConfigured = env => !!(env?.CF_ACCOUNT_ID && env?.BROWSER_TOKEN);
 export function okHost(u) { try { return ALLOWED_HOSTS.includes(new URL(u).hostname); } catch { return false; } }
 
-async function renderPage(url, env, fetchImpl) {
+export async function renderPage(url, env, fetchImpl = fetch) {
   const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/browser-rendering/content`;
   const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), RENDER_TIMEOUT_MS);
   try {

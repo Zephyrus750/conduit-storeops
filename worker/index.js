@@ -11,6 +11,8 @@ export { CatalogueObject } from './catalogue-object.js';
 import { VERSION } from './version.js';
 import { ulid } from '../shared/ulid.js';
 import { parseCodes, lookup, catalogueStub } from './catalogue.js';
+import { gs1Parse } from '../shared/gs1.js';
+import { findByBarcode } from './apnlookup.js';
 import { importK2B } from './import.js';
 import { importDV } from './import-dv.js';
 
@@ -194,6 +196,15 @@ r.get('/v1/catalogue/nearmiss', async (req, env) => {
   const stub = catalogueStub(env); if (!stub) throw new HttpError(503, 'not_configured', 'the catalogue object is not bound');
   const res = await stub.fetch('https://catalogue/nearmiss' + new URL(req.url).search);
   return json(await res.json(), res.status, res.ok ? { 'Cache-Control': 'public, max-age=3600' } : {});
+});
+// An item barcode nothing in the store links yet (a clearance ticket, a shelf
+// talker): candidates from Kmart's own site search, or a book's title
+// (worker/apnlookup.js). Signed-in devices only: a search renders a page.
+r.get('/v1/catalogue/barcode', async (req, env) => {
+  await requireClaims(req, env);
+  const gtin = gs1Parse(new URL(req.url).searchParams.get('code'))?.gtin;
+  if (!gtin) throw new HttpError(400, 'invalid_request', 'code is an item barcode (UPC-A, EAN-13 or GTIN-14)');
+  return json(await findByBarcode(env, gtin));
 });
 // The owner's view of the catalogue build, and "rebuild now".
 r.get('/v1/admin/catalogue', async (req, env) => {

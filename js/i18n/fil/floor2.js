@@ -796,4 +796,12 @@ export default {
   "A keycode is 7 or 8 digits": "Ang keycode ay 7 o 8 digit",
   "Linked: this barcode now finds {kc} on every phone.": "Naka-link na: mahahanap na ng barcode na ito ang {kc} sa bawat phone.",
   "Wrong item?": "Maling item?",
+  "Looking it up on kmart.com.au…": "Hinahanap sa kmart.com.au…",
+  "Type the keycode instead": "I-type na lang ang keycode",
+  "Is this it?": "Ito ba?",
+  "Found on kmart.com.au from the barcode. Tap the item on the ticket.": "Nahanap sa kmart.com.au mula sa barcode. I-tap ang item na nasa ticket.",
+  "Matched by the book’s title. Tap the one on the ticket.": "Tugma ayon sa pamagat ng libro. I-tap ang nasa ticket.",
+  "None of these: type the keycode": "Wala rito: i-type ang keycode",
+  "Found on kmart.com.au and linked: this barcode now finds {kc} on every phone.": "Nahanap sa kmart.com.au at naka-link na: mahahanap na ng barcode na ito ang {kc} sa bawat phone.",
+  "Kmart’s website doesn’t list it. Type the keycode printed on the ticket once, and every phone finds it from then on.": "Wala ito sa website ng Kmart. I-type nang isang beses ang keycode na nakaprint sa ticket, at mahahanap na ito ng bawat phone mula ngayon.",
 };

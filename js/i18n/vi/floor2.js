@@ -796,4 +796,12 @@ export default {
   "A keycode is 7 or 8 digits": "Keycode có 7 hoặc 8 chữ số",
   "Linked: this barcode now finds {kc} on every phone.": "Đã liên kết: mã vạch này giờ tìm thấy {kc} trên mọi điện thoại.",
   "Wrong item?": "Sai mặt hàng?",
+  "Looking it up on kmart.com.au…": "Đang tìm trên kmart.com.au…",
+  "Type the keycode instead": "Nhập keycode thay vào đó",
+  "Is this it?": "Có phải mặt hàng này?",
+  "Found on kmart.com.au from the barcode. Tap the item on the ticket.": "Tìm thấy trên kmart.com.au qua mã vạch. Chạm vào mặt hàng trên nhãn.",
+  "Matched by the book’s title. Tap the one on the ticket.": "Khớp theo tên sách. Chạm vào cuốn trên nhãn.",
+  "None of these: type the keycode": "Không phải: nhập keycode",
+  "Found on kmart.com.au and linked: this barcode now finds {kc} on every phone.": "Đã tìm thấy trên kmart.com.au và liên kết: mã vạch này giờ tìm thấy {kc} trên mọi điện thoại.",
+  "Kmart’s website doesn’t list it. Type the keycode printed on the ticket once, and every phone finds it from then on.": "Website Kmart không có mặt hàng này. Nhập một lần keycode in trên nhãn, từ đó mọi điện thoại đều tìm thấy.",
 };

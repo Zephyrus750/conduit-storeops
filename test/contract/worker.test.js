@@ -1070,6 +1070,13 @@ test('live pull: a floor phone finds an item’s stockroom bays by keycode or AP
   assert.equal(paired.body.results[0].ok, true, JSON.stringify(paired.body));
   const linked = (await find('9780241813799')).body;
   assert.deepEqual([linked.kc, linked.via, linked.bays], ['43652214', 'paired', ['7041']], 'the next scan of the ticket finds it');
+  // The barcode lookup a phone asks before typing: signed-in devices only; without Browser Rendering a non-book barcode finds nothing (and says why).
+  assert.equal((await api('GET', '/v1/catalogue/barcode?code=9341234567893')).status, 401);
+  assert.equal((await api('GET', '/v1/catalogue/barcode?code=43648803', undefined, floor)).status, 400, 'a keycode is not an item barcode');
+  const look = await api('GET', '/v1/catalogue/barcode?code=9341234567893', undefined, floor);
+  assert.equal(look.status, 200, JSON.stringify(look.body));
+  assert.deepEqual([look.body.gtin, look.body.source, look.body.candidates], ['9341234567893', null, []]);
+  assert.match(look.body.why, /Browser Rendering/);
   assert.equal((await find('abc')).status, 400);
   // Today's truck: a planned slot whose manifest carries the keycode.
   const man = { v: 1, kind: 'report', manNo: '7031999', storeNo: '1241', despatch: '24/10/2026', dcNo: '4101533', filename: 'm.xls', consols: [

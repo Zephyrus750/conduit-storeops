@@ -113,6 +113,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/admin/stores/:no/import`, `POST …/flip` | owner | live: K2B (`source: k2b`) and Decant Visualiser (`source: dv`) importers with dry run; area state flip |
 | `GET /v1/catalogue?kc=a,b[&fields=link]` | anyone | live: name, URL, price, was, image, clearance per keycode; cached at the edge. Only a caller with a token starts the product-page fetches for price and image; anyone else gets what is cached |
 | `GET /v1/catalogue/nearmiss?kc=` | anyone | live: catalogue keycodes one digit away (a mistyped or misread code) |
+| `GET /v1/catalogue/barcode?code=` | any signed-in device | live: the keycode behind an item barcode nothing in the store links yet (a clearance ticket, a shelf talker): `{ gtin, source (kmart \| isbn \| null), sure, candidates: [{ kc, name, url }], why }`, from Kmart's site search (Browser Rendering) or, for a book, its title matched against the catalogue; cached a week per barcode (a miss a day) |
 | `GET /v1/admin/service` | owner | live: the console's Service page: worker version, bindings and secrets as set or not (never their values), the catalogue build, each store object (events, live data size, last event, nightly run, next alarm, sockets, photos) and the last 100 errors recorded |
 | `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
@@ -174,6 +175,15 @@ Cloudflare Browser Rendering (`worker/details.js`) once `CF_ACCOUNT_ID`
 and those are set, the legacy suite and details workers (`LOOKUP_URL`,
 `DETAILS_URL`) answer instead; after that they can be removed from
 `wrangler.toml`. `npm run dev` serves stand-in sitemaps on :8791.
+
+The same rendering answers a barcode with its keycode (`worker/apnlookup.js`):
+Kmart's site search finds a product by its barcode, so a clearance ticket or
+shelf talker, which carries the item's own barcode, needs no keycode typed.
+A book is also found by its title (Google Books, then Open Library) matched
+against the catalogue. Live pull links what it finds with `pull.pair`.
+The deploy workflow passes `CLOUDFLARE_ACCOUNT_ID` to the worker as
+`CF_ACCOUNT_ID` and attaches the `BROWSER_TOKEN` repository secret
+(docs/SETUP.md step 11).
 
 Keycodes and product names work as in K2B and Decant Visualiser: a click
 on a keycode (`kcCopy()`) copies it, a click on a product name
@@ -253,7 +263,10 @@ already in the log:
   (the APN maps to a keycode through the report's `apn` map) or types a
   keycode. A clearance ticket's barcode is the item's own (a book's ISBN,
   say): when nothing links it, the phone asks for the keycode printed on the
-  ticket and `pull.pair` links the two for every phone of the store; `GET …/pull/find` answers with the report's stockroom bays (none:
+  ticket and `pull.pair` links the two for every phone of the store. First
+  the phone asks `GET /v1/catalogue/barcode`: one sure match from Kmart's
+  site search links at once, other candidates are a one-tap choice, and
+  only when nothing is found is the keycode typed; `GET …/pull/find` answers with the report's stockroom bays (none:
   "No stockroom location", and it isn't added), the carton size and any
   truck today whose manifest carries it, and the phone adds what was pulled
   earlier today. The number pad sends `pull.request` (a number, a carton, or

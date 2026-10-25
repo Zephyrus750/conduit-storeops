@@ -796,4 +796,12 @@ export default {
   "A keycode is 7 or 8 digits": "Un keycode tiene 7 u 8 dígitos",
   "Linked: this barcode now finds {kc} on every phone.": "Vinculado: este código de barras ahora encuentra {kc} en todos los teléfonos.",
   "Wrong item?": "¿Artículo equivocado?",
+  "Looking it up on kmart.com.au…": "Buscando en kmart.com.au…",
+  "Type the keycode instead": "Escribir el keycode en su lugar",
+  "Is this it?": "¿Es este?",
+  "Found on kmart.com.au from the barcode. Tap the item on the ticket.": "Encontrado en kmart.com.au por el código de barras. Toca el artículo de la etiqueta.",
+  "Matched by the book’s title. Tap the one on the ticket.": "Encontrado por el título del libro. Toca el de la etiqueta.",
+  "None of these: type the keycode": "Ninguno: escribir el keycode",
+  "Found on kmart.com.au and linked: this barcode now finds {kc} on every phone.": "Encontrado en kmart.com.au y vinculado: este código de barras ahora encuentra {kc} en todos los teléfonos.",
+  "Kmart’s website doesn’t list it. Type the keycode printed on the ticket once, and every phone finds it from then on.": "La web de Kmart no lo tiene. Escribe una vez el keycode impreso en la etiqueta y desde entonces todos los teléfonos lo encontrarán.",
 };

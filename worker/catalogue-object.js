@@ -17,6 +17,7 @@
 // Internal fetch (the worker calls it; nothing here is public):
 //   GET  /lookup?kc=a,b        → { total, items: { kc: { name, slug, url } | null } }
 //   GET  /nearmiss?kc=         → { query, matches: [{ keycode, name, url, position }] }
+//   GET  /search?slug=         → { items: [{ kc, slug, name }] } whose name holds the slug (a book's title)
 //   GET  /status               → { total, files, lastbuild, build, collected, next }
 //   POST /rebuild { trigger }  → starts a build unless one is running or ran in the last 20 h (force: true overrides)
 
@@ -69,6 +70,7 @@ export class CatalogueObject extends DurableObject {
       switch (`${request.method} ${url.pathname}`) {
         case 'GET /lookup': return json(this.lookup(url.searchParams.get('kc')));
         case 'GET /nearmiss': return json(this.nearMiss(url.searchParams.get('kc')));
+        case 'GET /search': return json(this.search(url.searchParams.get('slug')));
         case 'GET /status': return json(await this.status());
         case 'POST /rebuild': { const b = await request.json().catch(() => ({})); return json(await this.startBuild(String(b.trigger || 'owner').slice(0, 20), !!b.force)); }
         default: return fail(404, 'not_found', `catalogue has no ${request.method} ${url.pathname}`);
@@ -99,6 +101,14 @@ export class CatalogueObject extends DurableObject {
     }
     matches.sort((a, b) => a.position - b.position);
     return { query: code, found: matches.length > 0, matches };
+  }
+  // Products whose name holds a slug (a book's title: our-perfect-storm), for
+  // a barcode lookup (worker/apnlookup.js). Whole words only, at most 12.
+  search(raw) {
+    const slug = String(raw || '').toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
+    if (slug.length < 3) throw new HttpError(400, 'invalid_request', 'slug is a product name in lower case with dashes');
+    const rows = this.sql.exec(`SELECT kc, slug FROM products WHERE slug = ? OR slug LIKE ? OR slug LIKE ? OR slug LIKE ? LIMIT 12`, slug, `${slug}-%`, `%-${slug}`, `%-${slug}-%`).toArray();
+    return { items: rows.map(r => ({ kc: r.kc, slug: r.slug, name: slugToName(r.slug) })) };
   }
   async status() {
     const files = this.sql.exec('SELECT name, count, at FROM shards ORDER BY name').toArray();
