@@ -2780,12 +2780,11 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .lp-pn b { display: block; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lp-pn small { display: block; font-size: 12.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* A ticket whose barcode nothing links: the keycode printed on it, then the link. */
-.lp-link .btn { min-height: 48px; }
 .lp-gtin { margin: -2px 0 0; font-size: 12.5px; color: var(--dim); }
-.lp-pn small.lp-linked { white-space: normal; color: var(--green-ink); }
-.lp-pn small.lp-linked svg.i { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
+.lp-pn small.lp-from { white-space: normal; overflow: visible; }
 .lp-a { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
-.lp-hint .lp-a { margin-left: auto; flex: none; font-size: 13px; }
+.lp-hint p small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint); }
+.lp-again { align-self: flex-start; }
 .lp-picks { display: flex; flex-direction: column; gap: 8px; }
 .lp-pick { width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
 .lp-pick > svg.i { flex: none; color: var(--dim); }

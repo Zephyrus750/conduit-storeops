@@ -144,13 +144,13 @@ function requester(ctx, ses, repaint) {
   const card = rec ? productRow(f) + recallFlag(ctx.store, rec, f.kc || '') : !f ? (st.sent ? `<div class="lp-sent" role="status">${ic('check')}<span><b>${st.sent.change ? tx('Changed: {name} × {qty}', { name: esc(st.sent.name), qty: esc(st.sent.qty) }) : tx('Sent: {name} × {qty}', { name: esc(st.sent.name), qty: esc(st.sent.qty) })}</b><small>${tx('On the pullers’ phones now. Scan the next item.')}</small></span></div>` : `<div class="card lp-card lp-hint">${ic('barcode')}<p>${tx('Scan an item, its ticket, or type the keycode. Only items with a stockroom location can be asked for.')}</p></div>`)
     : f.state === 'busy' ? `<div class="card lp-card lp-hint">${ic('clock')}<p>${tx('Looking it up…')}</p></div>`
     : f.state === 'error' ? `<div class="lp-ans bad">${ic('alert')}<span><b>${tx('Couldn’t look it up')}</b>${esc(f.message || '')}</span></div>`
-    : f.state === 'searching' ? `<div class="card lp-card lp-hint">${ic('search')}<p>${tx('Looking it up on kmart.com.au…')}</p><button type="button" class="lp-a" data-act="lp-type">${tx('Type the keycode instead')}</button></div>`
+    : f.state === 'searching' ? `<div class="card lp-card lp-hint">${ic('search')}<p>${tx('Searching kmart.com.au for this barcode…')}<small>${tx('It can take up to half a minute.')}</small></p></div>`
     : f.state === 'choose' ? `<div class="lp-ans info">${ic('search')}<span><b>${tx('Is this it?')}</b>${f.source === 'isbn' ? tx('Matched by the book’s title. Tap the one on the ticket.') : tx('Found on kmart.com.au from the barcode. Tap the item on the ticket.')}</span></div>` +
       `<div class="lp-picks">${f.list.map(c => `<button type="button" class="card lp-prod lp-pick" data-act="lp-pick" data-kc="${esc(c.kc)}"><span class="lp-pic">${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : ic('box')}</span><span class="lp-pn"><b>${esc(c.name || c.kc)}</b><small class="mono">${esc(c.kc)}</small></span>${ic('arrow')}</button>`).join('')}</div>` +
       `<button type="button" class="lp-a lp-none" data-act="lp-type">${tx('None of these: type the keycode')}</button>`
-    : f.state === 'unlinked' ? `<div class="lp-ans warn">${ic('barcode')}<span><b>${f.relink ? tx('Link this barcode again') : tx('This barcode isn’t linked to a keycode yet')}</b>${f.tried ? tx('{kc} isn’t in the catalogue or the latest report. Check the keycode on the ticket.', { kc: `<span class="mono">${esc(f.tried)}</span>` }) : f.relink ? tx('Type the keycode printed on the ticket. It replaces the old link on every phone.') : f.searched ? tx('Kmart’s website doesn’t list it. Type the keycode printed on the ticket once, and every phone finds it from then on.') : tx('Clearance tickets carry the item’s own barcode. Type the keycode printed on the ticket once, and every phone finds it from then on.')}</span></div>` +
-      `<form class="lp-scan lp-link" data-form="lp-link" data-gtin="${esc(f.gtin)}"><input class="ad-in mono" data-field="lp-linkkc" inputmode="numeric" autocomplete="off" enterkeyhint="go" maxlength="8" placeholder="${tx('Keycode on the ticket')}" aria-label="${tx('Keycode on the ticket')}"><button class="btn primary" type="submit">${tx('Find')}</button></form>` +
-      `<p class="lp-gtin">${tx('Barcode {code}', { code: `<span class="mono">${esc(f.gtin)}</span>` })}</p>`
+    : f.state === 'manual' ? `<div class="lp-ans warn">${ic('barcode')}<span><b>${f.why === 'none' ? tx('Not found on kmart.com.au') : f.why === 'failed' ? tx('Couldn’t search kmart.com.au') : tx('Type the keycode instead')}</b>${tx('Type the keycode printed on the ticket in the box above.')}</span></div>` +
+      `<p class="lp-gtin">${tx('Barcode {code}', { code: `<span class="mono">${esc(f.gtin)}</span>` })}</p>` +
+      (f.why === 'failed' ? `<button type="button" class="btn lp-again" data-act="lp-research">${ic('refresh')}${tx('Search again')}</button>` : '')
     : f.state === 'recalled' ? productRow(f)   // closed since the scan: nothing more to say
     : f.state === 'noreport' ? `<div class="lp-ans warn">${ic('alert')}<span><b>${tx('No inventory report yet')}</b>${tx('Live pull reads the stockroom bays from the morning inventory report. Paste it in Reports & files first.')}</span></div>`
     : f.state === 'none' ? productRow(f) + `<div class="lp-ans warn">${ic('x')}<span><b>${tx('No stockroom location')}</b>${f.report?.date && f.report.date !== day ? tx('The latest report ({date}) has no stockroom bay for it, so it isn’t added to the list.', { date: esc(f.report.date) }) : tx('This morning’s report has no stockroom bay for it, so it isn’t added to the list.')}</span></div>`
@@ -168,9 +168,12 @@ function requester(ctx, ses, repaint) {
     sx.acts([sx.btn('x', tx('Leave session'), 'data-act="lp-leave"'), sx.btn('check', tx('End session'), 'data-act="lp-end"')]));
   return `<div class="lp-body">${head}${scan}${card}${showPad ? pad : ''}</div>${sheet}${strip('listcheck', esc(ses.name), countsLine(c), c.todo || '')}`;
 }
+// How a scanned barcode found its keycode: the report's own APN, a pair a
+// person made earlier (Cages, Adjust), or Kmart's site search.
+const FROM = { apn: () => tx('found from the barcode'), paired: () => tx('found from the barcode'), web: () => tx('found on kmart.com.au from the barcode') };
 function productRow(f, bays) {
   const price = Number.isFinite(f.price) ? ` · $${Number(f.price).toFixed(2)}` : '';
-  return `<div class="card lp-prod"><span class="lp-pic">${f.img ? `<img src="${esc(f.img)}" alt="" loading="lazy">` : ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${f.via === 'apn' || f.via === 'paired' ? `<small>${tx('found from the barcode')}${f.via === 'paired' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-relink" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}${f.linked ? `<small class="lp-linked">${ic('check')}${f.linked === 'web' ? tx('Found on kmart.com.au and linked: this barcode now finds {kc} on every phone.', { kc: esc(f.kc) }) : tx('Linked: this barcode now finds {kc} on every phone.', { kc: esc(f.kc) })} <button type="button" class="lp-a" data-act="lp-relink" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button></small>` : ''}</span>` +
+  return `<div class="card lp-prod"><span class="lp-pic">${f.img ? `<img src="${esc(f.img)}" alt="" loading="lazy">` : ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${FROM[f.via] ? `<small class="lp-from">${FROM[f.via]()}${f.via !== 'apn' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-wrong" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}</span>` +
     (bays && f.bays?.length ? `<span class="lp-bay"><small>${f.bays.length > 1 ? tx('BAYS') : tx('BAY')}</small><b class="mono">${esc(f.bays[0])}</b>${f.bays.length > 1 ? `<small class="mono">+ ${esc(f.bays.slice(1).join(', '))}</small>` : ''}</span>` : '') + `</div>`;
 }
 // What the requester is told before the pad: already asked for in this
@@ -306,47 +309,42 @@ async function find(ctx, raw, viaCam = false) {
   } catch (e) { st.find = { state: 'error', code, message: e.message }; haptic('error'); }
   ctx.rerender();
 }
-// A barcode nothing in the store links yet: Kmart's site search (or a book's
-// title) finds its keycode. One sure match links at once; candidates are a
-// one-tap choice; nothing found, and the person types the keycode on the ticket.
-async function lookUp(ctx, r) {
-  const gtin = r.gtin, seq = (st.seq = (st.seq || 0) + 1), viaCam = st.viaCam;
-  st.find = { state: 'searching', code: gtin, gtin, report: r.report }; ctx.rerender();
-  const b = await ctx.api(`/v1/catalogue/barcode?code=${gtin}`).catch(() => null);
-  if (st.seq !== seq || st.find?.gtin !== gtin || st.find.state !== 'searching') return;
+// A barcode the report doesn't list (a clearance ticket, a shelf talker
+// carries the item's own barcode): Kmart's site search, or a book's title,
+// finds its keycode. One sure match is found at once; candidates are a
+// one-tap choice; nothing found, and the person types the keycode on the
+// ticket in the scan box. Nothing is linked: the worker caches each answer
+// by barcode, so the next scan of it is quick.
+// Rendering Kmart's search page takes 10 to 30 seconds (the worker allows 45).
+const SEARCH_WAIT_MS = 50_000;
+const SEARCH_FAILED = /render|refused|Browser Rendering|Abort|Timeout/i;
+async function lookUp(ctx, f) {
+  const gtin = f.gtin, seq = (st.seq = (st.seq || 0) + 1), viaCam = st.viaCam;
+  st.find = { state: 'searching', code: gtin, gtin, report: f.report }; ctx.rerender();
+  const b = await ctx.api(`/v1/catalogue/barcode?code=${gtin}`, { timeoutMs: SEARCH_WAIT_MS }).catch(() => null);
+  if (st.seq !== seq || st.find?.gtin !== gtin || st.find.state !== 'searching') return;   // another scan came first
   st.viaCam = viaCam;
   const list = (b?.candidates || []).filter(c => /^\d{6,8}$/.test(c.kc));
-  if (b?.sure && list.length === 1) return link(ctx, list[0].kc, gtin, { from: 'web' });
+  if (b?.sure && list.length === 1) return pick(ctx, list[0].kc, gtin);
   if (list.length) {
-    st.find = { state: 'choose', code: gtin, gtin, report: r.report, source: b.source, list };
+    st.find = { state: 'choose', code: gtin, gtin, report: f.report, source: b.source, list };
     haptic('warning'); ctx.rerender();
     for (const c of list) ctx.catalogue.lookup(c.kc).then(it => { if (it && st.find?.list?.includes(c)) { Object.assign(c, { name: it.name || c.name, img: it.img || '' }); ctx.rerender(); } }).catch(() => {});
     return;
   }
-  st.find = { state: 'unlinked', code: gtin, gtin, report: r.report, searched: !!b?.why && !/Browser Rendering/.test(b.why) };
-  haptic('warning'); ctx.rerender(); focusLink();
+  typeIt(ctx, gtin, f.report, !b || SEARCH_FAILED.test(b.why || '') ? 'failed' : 'none');
 }
-// A clearance ticket's barcode is the item's own (a book's ISBN, say), which
-// nothing may link to a keycode yet. The keycode printed on the ticket finds
-// the item, and pull.pair links the two for every phone of the store: only
-// for a keycode the report or the catalogue knows, so a mistyped one links
-// nothing.
-async function link(ctx, raw, gtin, { from } = {}) {
-  const kc = String(raw || '').replace(/\D/g, '');
-  if (!(from ? /^\d{6,8}$/ : /^\d{7,8}$/).test(kc)) { toast(tx('A keycode is 7 or 8 digits'), 'bad'); return focusLink(); }
-  const relink = st.find?.relink, viaCam = st.viaCam;
-  st.find = { state: 'busy', code: kc }; ctx.rerender();
-  try {
-    const r = await ctx.api(`/v1/store/${ctx.storeNo}/pull/find?code=${kc}`);
-    const it = await ctx.catalogue.lookup(kc).catch(() => null);
-    if (!r.bays?.length && !it) { st.find = { state: 'unlinked', code: gtin, gtin, report: r.report, tried: kc, relink }; haptic('warning'); ctx.rerender(); return focusLink(); }
-    st.find = { ...r, state: r.bays?.length ? 'found' : 'none', code: kc, gtin, ...(it ? { name: it.name || '', img: it.img || '', price: it.price } : {}) };
-    if (pulls(ctx).apn?.[gtin]?.kc === kc || (await send(ctx, 'pull.pair', { apn: gtin }, { keycode: kc }))) st.find.linked = from === 'web' ? 'web' : true;
-    haptic(st.find.state === 'found' ? 'success' : 'warning');
-  } catch (e) { st.find = { state: 'error', code: kc, message: e.message }; haptic('error'); }
-  st.viaCam = viaCam; ctx.rerender();
+// The keycode the search found, or the one tapped: found as if it were typed.
+async function pick(ctx, kc, gtin) {
+  await find(ctx, kc, st.viaCam);
+  if (st.find?.code === kc && st.find.state !== 'error') { Object.assign(st.find, { gtin, via: 'web' }); ctx.rerender(); }
 }
-const focusLink = () => setTimeout(() => document.querySelector('[data-field="lp-linkkc"]')?.focus(), 40);
+// Nothing found (or the wrong item): the keycode printed on the ticket goes in the scan box.
+function typeIt(ctx, gtin, report, why) {
+  st.find = { state: 'manual', code: gtin, gtin, report, why }; st.qty = '';
+  haptic('warning'); ctx.rerender();
+  setTimeout(() => { const i = document.querySelector('[data-field="lp-code"]'); if (i) { i.value = ''; i.focus(); } }, 40);
+}
 async function sendRequest(ctx, ses) {
   const f = st.find; if (f?.state !== 'found' || !st.qty) return;
   if (recallFor(ctx.store, f.kc)) return toast(tx('This product is recalled: it can’t be asked for'), 'bad');
@@ -428,9 +426,10 @@ export default {
       if (act === 'lp-allthere') { st.qty = st.qty === 'ALL' ? '' : 'ALL'; haptic('tap'); return ctx.rerender(); }
       if (act === 'lp-send') return ses && sendRequest(ctx, ses);
       if (act === 'lp-clear') { st.find = null; return ctx.rerender(); }
-      if (act === 'lp-pick') { const f = st.find; if (f?.gtin) return link(ctx, a.dataset.kc, f.gtin, { from: 'pick' }); return; }
-      if (act === 'lp-type') { const f = st.find; if (!f?.gtin) return; st.find = { state: 'unlinked', code: f.gtin, gtin: f.gtin, report: f.report, searched: f.state === 'choose' }; ctx.rerender(); return focusLink(); }
-      if (act === 'lp-relink') { st.find = { state: 'unlinked', code: a.dataset.gtin, gtin: a.dataset.gtin, report: st.find?.report, relink: true }; st.qty = ''; ctx.rerender(); return focusLink(); }
+      if (act === 'lp-pick') { const f = st.find; if (f?.gtin) return pick(ctx, a.dataset.kc, f.gtin); return; }
+      if (act === 'lp-type') { const f = st.find; if (f?.gtin) typeIt(ctx, f.gtin, f.report, 'pick'); return; }
+      if (act === 'lp-wrong') { typeIt(ctx, a.dataset.gtin, st.find?.report, 'wrong'); return; }
+      if (act === 'lp-research') { const f = st.find; if (f?.gtin) lookUp(ctx, f); return; }
       if (act === 'lp-ack') { st.ack = true; return ctx.rerender(); }
       if (act === 'lp-dup-add') { const l = ses?.lines[a.dataset.line]; if (!l || l.qty === 'all') return; if (await send(ctx, 'pull.update', { session: ses.id, line: l.id }, { qty: Math.min(999, l.qty + (l.carton || l.qty)) })) { st.sent = { name: l.name || l.kc, qty: Math.min(999, l.qty + (l.carton || l.qty)), change: true }; st.find = null; haptic('success'); ctx.rerender(); } return; }
       if (act === 'lp-dup-change') { st.change = a.dataset.line; st.ack = true; st.qty = ''; return ctx.rerender(); }
@@ -468,7 +467,6 @@ export default {
     // Typing: the session name, and a keycode (or a wedge scanner) with Enter.
     root.addEventListener('input', e => { if (e.target.matches('[data-field="lp-name"]') && st.form) st.form.name = e.target.value; if (e.target.matches('[data-field="lp-tag"]')) st.tag = e.target.value; });
     root.addEventListener('submit', e => {
-      if (e.target.matches('[data-form="lp-link"]')) { e.preventDefault(); return link(ctx, e.target.querySelector('[data-field="lp-linkkc"]').value, e.target.dataset.gtin); }
       if (!e.target.matches('[data-form="lp-find"]')) return; e.preventDefault(); const i = e.target.querySelector('[data-field="lp-code"]'); const v = i.value; i.value = ''; find(ctx, v, false);
     });
     // A number typed on a keyboard works the pad too.

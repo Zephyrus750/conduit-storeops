@@ -197,14 +197,18 @@ r.get('/v1/catalogue/nearmiss', async (req, env) => {
   const res = await stub.fetch('https://catalogue/nearmiss' + new URL(req.url).search);
   return json(await res.json(), res.status, res.ok ? { 'Cache-Control': 'public, max-age=3600' } : {});
 });
-// An item barcode nothing in the store links yet (a clearance ticket, a shelf
+// An item barcode the report doesn't list (a clearance ticket, a shelf
 // talker): candidates from Kmart's own site search, or a book's title
 // (worker/apnlookup.js). Signed-in devices only: a search renders a page.
-r.get('/v1/catalogue/barcode', async (req, env) => {
+// The search runs to the end even if the phone stops waiting, so its answer
+// is cached for the next scan.
+r.get('/v1/catalogue/barcode', async (req, env, ctx) => {
   await requireClaims(req, env);
   const gtin = gs1Parse(new URL(req.url).searchParams.get('code'))?.gtin;
   if (!gtin) throw new HttpError(400, 'invalid_request', 'code is an item barcode (UPC-A, EAN-13 or GTIN-14)');
-  return json(await findByBarcode(env, gtin));
+  const answer = findByBarcode(env, gtin);
+  ctx?.waitUntil?.(answer.catch(() => {}));
+  return json(await answer);
 });
 // The owner's view of the catalogue build, and "rebuild now".
 r.get('/v1/admin/catalogue', async (req, env) => {
