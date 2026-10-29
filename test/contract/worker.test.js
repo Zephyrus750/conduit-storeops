@@ -634,6 +634,32 @@ test('manifest delete needs the dock code, and a refused delete leaves the docum
   assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, dock)).status, 404);
 });
 
+test('manifests list and stats: every report with its counts; a day set by hand places one; a period against the one before', async () => {
+  assert.equal((await reg2('2121')).status, 201);
+  const floor = (await api('POST', '/v1/auth/signin', { store: '2121', pin: '135790', device: 'ms1' })).body.token;
+  const dock = (await api('POST', '/v1/auth/unlock', { code: 'DK-2121' }, floor)).body.token;
+  const doc = (manNo, despatch, items) => ({ v: 1, kind: 'report', manNo, storeNo: '2121', despatch, consols: [{ id: '601804381', cons: '093008012601804381', cartons: 4, dept: '024', items }] });
+  assert.equal((await api('POST', '/v1/store/2121/manifest', doc('7100001', '05/10/2026', [{ k: '43307685', q: 20, dept: '024' }]), dock)).status, 201);
+  assert.equal((await api('POST', '/v1/store/2121/manifest', doc('7100002', '12/10/2026', [{ k: '43307685', q: 8, dept: '024' }, { k: '42977636', q: 8, dept: '070' }]), dock)).status, 201);
+  assert.equal((await api('GET', '/v1/store/2121/manifests', undefined, floor)).status, 403, 'the PIN alone does not read the Back dock');
+  const list = await api('GET', '/v1/store/2121/manifests', undefined, dock);
+  assert.equal(list.status, 200); assert.deepEqual(list.body.manifests.map(m => [m.manNo, m.cartons, m.units, m.keycodes]).sort(), [['7100001', 4, 20, 1], ['7100002', 4, 16, 2]]);
+  assert.equal(list.body.manifests[0].kc, undefined, 'the list leaves the keycodes out');
+  const e = (type, entity, payload) => ({ id: ulid(), store: '2121', area: 'backdock', type, entity, payload, at: at(), v: 1 });
+  const r = await api('POST', '/v1/store/2121/events', { events: [e('manifest.day', { manNo: '7100001' }, { day: '2026-10-06', truck: 1 }), e('manifest.day', { manNo: '7100002' }, { day: '2026-10-13', truck: 2 })] }, dock);
+  assert.ok(r.body.results.every(x => x.ok), JSON.stringify(r.body));
+  const w = await api('GET', '/v1/store/2121/manifests/stats?from=2026-10-12&to=2026-10-18', undefined, dock);
+  assert.equal(w.status, 200); assert.equal(w.body.totals.manifests, 1); assert.equal(w.body.totals.units, 16); assert.equal(w.body.prev.totals.units, 20);
+  assert.deepEqual(w.body.list.map(x => [x.manNo, x.day, x.truck, x.via]), [['7100002', '2026-10-13', 2, 'label']]);
+  assert.equal(w.body.newKeycodes, 1, '42977636 came for the first time');
+  const all = await api('GET', '/v1/store/2121/manifests/stats', undefined, dock);
+  assert.equal(all.body.all, true); assert.equal(all.body.totals.manifests, 2); assert.equal(all.body.from, '2026-10-06');
+  for (const q of ['?from=2026-10-12', '?from=2026-10-18&to=2026-10-12', '?from=12/10/2026&to=2026-10-18', '?from=2025-01-01&to=2026-10-18', '?from=2026-13-01&to=2026-13-07']) assert.equal((await api('GET', `/v1/store/2121/manifests/stats${q}`, undefined, dock)).status, 400, q);
+  assert.equal((await api('DELETE', '/v1/store/2121/manifest/7100002', undefined, dock)).status, 200);
+  assert.deepEqual((await api('GET', '/v1/store/2121/manifests', undefined, dock)).body.manifests.map(m => m.manNo), ['7100001'], 'a removed report leaves the list');
+  assert.equal((await api('GET', '/v1/store/2121/manifests/stats?from=2026-10-12&to=2026-10-18', undefined, dock)).body.totals.manifests, 0, 'and the stats');
+});
+
 test('sessions: revoke, rotation and suspension sign devices out; sign-out ends the refresh token', async () => {
   assert.equal((await reg2('2007')).status, 201);
   const signin = device => api('POST', '/v1/auth/signin', { store: '2007', pin: '135790', device });

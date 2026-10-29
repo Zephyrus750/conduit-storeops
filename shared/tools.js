@@ -33,7 +33,7 @@ export const TOOLS = [
   T('trends', 'stockroom', 'Trends', ['srtrends']),
   T('codelist', 'stockroom', 'Barcode list and Quick Scan', ['codelist']),
   T('receiving', 'backdock', 'Receiving, Team Board and Dock screen', ['receiving', 'teamboard', 'dockscreen'], ['truck.', 'pallet.', 'halt.', 'huddle.', 'break.', 'receiving.', 'manifest.attach', 'manifest.linkLate', 'plan.queues', 'dock.roster']),
-  T('manifests', 'backdock', 'Manifests', ['manifests'], ['manifest.publish', 'manifest.remove']),
+  T('manifests', 'backdock', 'Manifests', ['manifests'], ['manifest.publish', 'manifest.remove', 'manifest.day']),
   T('inventory', 'backdock', 'Off-site pallets and other loads', ['offsite'], ['inventory.']),   // the Inventory hub's id, kept so a store's switch carries over
   T('profiles', 'backdock', 'Carton profiles', ['profiles']),
   T('planner', 'backdock', 'Planner', ['planner'], ['plan.set', 'plan.remove', 'plan.noTrucks']),

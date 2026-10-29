@@ -2989,3 +2989,53 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .bcs-gtin { margin: -2px 0 0; font-size: 12.5px; color: var(--dim); }
 .bcs-again { align-self: flex-start; }
 .frame.dark .bcs-ans.warn { background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .35); color: #FCD34D; }
+
+/* Manifests by week, day and truck; several published at once; stats. */
+.mfl-row.tk { grid-template-columns: 46px minmax(0, 1fr) 14px; }
+.mfl-row.tk .mfl-main small { white-space: normal; line-height: 1.35; }
+.mfl-dd { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 42px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); line-height: 1.05; }
+.mfl-dd small { font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.mfl-dd b { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mfl-dd.now { background: var(--accent); color: #fff; }
+.mfl-dd.none { background: var(--ground); color: var(--faint); }
+.mfl-dd.none svg.i { width: 18px; height: 18px; }
+.mfl-tn { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; color: var(--ink2); background: var(--chip); border-radius: 6px; padding: 1px 6px; }
+.mfl-tn svg.i { width: 12px; height: 12px; }
+.mfx-wk .mfx-rp { font-size: 10.5px; font-weight: 700; color: var(--faint); letter-spacing: .04em; }
+.mfx-wk .btn.sm { margin-left: 4px; padding: 3px 8px; font-size: 11.5px; text-transform: none; letter-spacing: 0; }
+.mf-views button svg.i { width: 15px; height: 15px; }
+.mfd-came { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; padding: 8px 10px; border-radius: 10px; background: var(--ground); }
+.mfd-came .mfd-cl { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; }
+.mfd-came .mfd-cl svg.i { width: 15px; height: 15px; color: var(--accent-ink); }
+.mfd-came input[type="date"], .mfd-came select { width: auto; }
+.mfd-came small { flex-basis: 100%; }
+.mb-card { width: min(1240px, 100%); }
+.mb-body { padding: 12px 16px; overflow: auto; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.mb-t td { vertical-align: middle; }
+.mb-t tr.off td { opacity: .55; }
+.mb-t td.mb-file { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--dim); }
+.mb-t .mb-no { width: 130px; }
+.mb-came { display: flex; gap: 6px; align-items: center; }
+.mb-came input[type="date"], .mb-came select { width: auto; }
+.mb-t td small { display: block; margin-top: 2px; font-size: 11px; }
+.mb-chk { font-size: 12px; white-space: nowrap; }
+.mb-chk.bad { color: #B91C1C; white-space: normal; } .mb-chk.warn { color: #B45309; } .mb-chk.ok { color: #15803D; }
+.mb-foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.mb-foot > span { margin-right: auto; font-size: 12.5px; }
+.mp-side .mb-came { margin-bottom: 2px; }
+.ms-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.ms-bar .ms-name { font-size: 15px; }
+.ms-busy { margin: -4px 0 8px; font-size: 12px; }
+.ms-kpis .wb-kpi > small.up { color: #15803D; } .ms-kpis .wb-kpi > small.down { color: #B45309; }
+.ms-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 12px; align-items: start; margin-bottom: 12px; }
+.ms-grid > div { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ms-grid .card { margin: 0; }
+.ms-grid .ch { flex-wrap: wrap; row-gap: 6px; }
+.ms-chart rect { fill: #2563EB; } .ms-chart text.now { fill: var(--ink); font-weight: 800; }
+.ms-chart text.v { font-size: 9.5px; fill: var(--ink2); font-weight: 700; }
+.ms-wd b { font-size: 12.5px; } .ms-wd.top > div i { background: #EA580C; }
+.ms-facts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink2); margin-bottom: 8px; }
+.ms-t tbody tr { cursor: pointer; } .ms-t tbody tr:hover { background: var(--hover); }
+@container shell (max-width: 1400px) { .ms-grid { grid-template-columns: minmax(0, 1fr); } }
+@container shell (max-width: 760px) { .mb-t { display: block; overflow-x: auto; } .ms-bar .ms-name { flex-basis: 100%; } }
+.mb-t .status.bad { background: #FEE2E2; color: #991B1B; }
