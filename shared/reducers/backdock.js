@@ -22,6 +22,8 @@
 // worker and the credit in history are all 'D4'.
 //   dock.history  closed trucks, newest last, capped (the D1 archive takes the rest)
 //   dock.manifests manNo → index entry (20 most recent)
+//   dock.manifestDays manNo → { day, truck, at, by }: the day and truck a report came on, set
+//                 for one that never went on a truck here (manifest.day)
 //   plan.days     date → slots: 1..4 → { eta, note, team, manifest }
 //
 // pallet.scan is the server-side half of the legacy client ingest: match the
@@ -31,7 +33,7 @@
 
 import { reject } from './util.js';
 import { settingsOf } from './store.js';
-import { storeDay, DEFAULT_TZ } from '../time.js';
+import { storeDay, addDays, DEFAULT_TZ } from '../time.js';
 
 export const PTYPES = ['chep', 'loscam', 'bulk'];
 export const PALLET_STATUS = ['landed', 'assigned', 'active', 'paused', 'done'];
@@ -49,6 +51,7 @@ export const STD_MINS_PER_CARTON = 0.5;
 // oldest row before retention could archive it (audit 19 Oct D8).
 const HISTORY_CAP = 1000;
 const MANIFEST_INDEX_CAP = 20;
+const MANIFEST_DAYS_CAP = 1000;   // about two years of reports at one or two a day
 const BAY_RE = /^[A-Z]\d{1,2}$/;
 const MAX_CARTONS = 500;
 const TRUCK_RE = /^\d{4}-\d{2}-\d{2}-T\d+$/;
@@ -56,7 +59,7 @@ export const TAKE5_IDS = ['brief', 'safe', 'equip', 'area', 'goal'];
 
 export function backdockState() {
   return {
-    dock: { trucks: {}, history: [], manifests: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' }, rollover: null, roster: null, ledger: {} },
+    dock: { trucks: {}, history: [], manifests: {}, manifestDays: {}, grid: { rows: 4, cols: 7, rowLabels: 'ABCD' }, rollover: null, roster: null, ledger: {} },
     plan: { days: {} },
   };
 }
@@ -92,6 +95,7 @@ function fileManifest(s, truckId, t, p, consols, e) {
   for (const c of consols) { const seen = ledgerFind(s, c.id, ['off', 'land'], truckId).find(x => x.d < day); if (seen) c.landedEarlier = seen; ledgerAdd(s, c.id, { t: truckId, d: day, k: 'man' }, e.at); }
   for (const pal of Object.values(t.pallets)) for (const id of pal.consolIds) ledgerAdd(s, id, { t: truckId, d: day, k: 'land', ref: pal.ref }, e.at);
   const cur = s.dock.manifests[String(p.manNo)] || {};
+  if (s.dock.manifestDays) delete s.dock.manifestDays[String(p.manNo)];   // its truck says when it came now
   s.dock.manifests[String(p.manNo)] = { ...cur, manNo: String(p.manNo), dcNo: p.dcNo || cur.dcNo || '', despatch: p.despatch || cur.despatch || '', truck: truckId, totalCartons: consols.reduce((n, c) => n + c.cartons, 0), consols: consols.length, keycodes: cur.keycodes || new Set(consols.flatMap(c => c.items.map(i => i.k))).size, publishedAt: cur.publishedAt || e.at, attachedAt: e.at };
   capManifests(s);
 }
@@ -300,7 +304,26 @@ export const backdockReducers = {
     capManifests(s);
     return null;
   },
-  'manifest.remove'(s, e) { delete s.dock.manifests[String(e.entity.manNo)]; return null; },
+  'manifest.remove'(s, e) { delete s.dock.manifests[String(e.entity.manNo)]; if (s.dock.manifestDays) delete s.dock.manifestDays[String(e.entity.manNo)]; return null; },
+  // The day and truck a report came on, for one that never went on a truck
+  // here: a missed day published later, or a truck run before the dock
+  // used Conduit. The Manifests list and its stats place it there; once it
+  // is on a truck, the truck says when. payload { day: 'YYYY-MM-DD' (null
+  // clears it), truck: 1..9 | null }
+  'manifest.day'(s, e) {
+    const no = String(e.entity.manNo); if (!MAN_NO.test(no)) return reject('invalid_event', 'manifest number must be 1 to 20 letters, digits or dashes');
+    const p = e.payload || {}, days = (s.dock.manifestDays ||= {});
+    if (p.day == null) { delete days[no]; return null; }
+    const day = String(p.day);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || isNaN(Date.parse(day + 'T00:00:00Z')) || addDays(day, 0) !== day) return reject('invalid_event', 'day must be a date, YYYY-MM-DD');
+    if (day > addDays(String(e.at).slice(0, 10), 14)) return reject('invalid_event', 'the day a manifest came is at most two weeks ahead');
+    const truck = p.truck == null ? null : Number(p.truck);
+    if (truck !== null && !(Number.isInteger(truck) && truck >= 1 && truck <= 9)) return reject('invalid_event', 'truck must be 1 to 9');
+    const on = manifestTruck(s, no); if (on) return reject('on_truck', `manifest ${no} is on ${on}: its truck says when it came`);
+    days[no] = { day, truck, at: e.at, by: e.actor?.device || null };
+    const keys = Object.keys(days); if (keys.length > MANIFEST_DAYS_CAP) for (const k of keys.sort((a, b) => days[a].day.localeCompare(days[b].day)).slice(0, keys.length - MANIFEST_DAYS_CAP)) delete days[k];
+    return null;
+  },
   // consols: [{ id (last 9 digits), cons (18–22 digits), cartons, dept, mix, desc, items }]
   // A late manifest can still go on a truck already finalised, the same day
   // and by a manager (DV): its history row is rebuilt with the manifest.
@@ -710,6 +733,12 @@ function sighting(s, e, p, id) {
   else if (plan) p.plannedFor = { t: plan.t, d: plan.d };
   else if (!p.seenBefore) { const seen = ledgerFind(s, id, ['off', 'land'], e.entity.truck)[0]; if (seen) p.seenBefore = seen; }
   ledgerAdd(s, id, { t: e.entity.truck, d: day, k: 'off', ref: p.ref }, e.at);
+}
+// The truck a report is on or came on, as the dock knows it, else null.
+function manifestTruck(s, no) {
+  for (const [id, t] of Object.entries(s.dock.trucks)) if (t.manifest?.manNo === no || t.plannedManifest === no) return id;
+  for (let i = s.dock.history.length - 1; i >= 0; i--) if (s.dock.history[i].manifest?.manNo === no) return s.dock.history[i].id;
+  const ix = s.dock.manifests[no]; return ix?.truck && TRUCK_RE.test(ix.truck) ? ix.truck : null;
 }
 function capManifests(s) { const keys = Object.keys(s.dock.manifests); if (keys.length > MANIFEST_INDEX_CAP) for (const k of keys.sort((a, b) => s.dock.manifests[a].publishedAt < s.dock.manifests[b].publishedAt ? -1 : 1).slice(0, keys.length - MANIFEST_INDEX_CAP)) delete s.dock.manifests[k]; }
 function bay(e) { return String(e.entity.bay).toUpperCase(); }

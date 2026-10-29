@@ -120,6 +120,8 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV; `only=archive` pages just the rows retention moved out of the live state |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
 | `GET /v1/store/:no/manifest/:manNo`, `DELETE …` | store token, backdock entitled (delete: dock code) | live: the full report document; remove logs `manifest.remove` |
+| `GET /v1/store/:no/manifests` | store token or owner, backdock entitled | live: every report in the library, newest first, with its counts (`manNo`, `dcNo`, `despatch`, `filename`, `at`, `consols`, `cartons`, `units`, `keycodes`); the device's own index keeps only the latest 20 |
+| `GET /v1/store/:no/manifests/stats?from=&to=` | store token or owner, backdock entitled | live: what came in from `from` to `to` (YYYY-MM-DD, at most 400 days; neither for all time), each report on the day and truck it came on (`shared/manifeststats.js`): `totals` and `prev` (the same number of days before), `byDay`, `depts`, `top` products, `regular` (on the most manifests), `fresh` and `newKeycodes` (never on an earlier manifest), and the `list` of reports with how each was placed (`via`: truck, history, label, plan, or `despatch` for one with no day on file) |
 | `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }], merge? }`, ≤ 20,000 rows, one row a keycode a location; a re-save that day replaces it, or with `merge: true` replaces only the locations it holds and carries its store-wide SOH into the rest); logs `soh.publish`; every day is kept for 14 days, then the last of each week for 26 weeks |
 | `GET /v1/store/:no/soh?n=12[&weekly=1]`, `DELETE /v1/store/:no/soh/:date` | stockroom code, manager or owner | live: the newest n snapshots, oldest first, or with `weekly=1` the last of each of the newest n weeks (what the stock classes read); remove logs `soh.remove` |
 | `POST /v1/store/:no/backfill/report`, `GET /v1/store/:no/backfill/report?date=` | stockroom code or manager to save; any stockroom device (or the owner) to read | live: the Backfill review desk's pasted SIM report, whole (`{ date, report: { at, byLoc, range, delta, bayAt, soh, apn } }`; `apn` maps each APN on the report to its keycode, ≤ 1.9 MB, one a day, last three kept); saving logs `backfill.report.publish` (`state.backfill.report`: date, at, bays, codes, rev) so every device fetches the newer one |
@@ -550,6 +552,26 @@ it to the Back dock area (the dock code or a manager); a device on an older
 release still sends them as Floor, and the worker accepts that (`wasArea` in
 `shared/catalogue.js`) and logs them as Back dock.
 
+Manifests lists every report in the library by week (Monday to Sunday), each
+on the day and truck it came on: its truck on the dock or in the history,
+else a day set by hand (`manifest.day`, for a report no truck here carried:
+a missed day published late, or one from before the dock used Conduit),
+else its planner slot. Reports with none sit under No day yet. Publish
+manifests takes one report or several at once (`js/views/backdock/mbatch.js`):
+one table checks them all, each with a suggested day and truck (a truck the
+Planner or Receiving has with no manifest within two days of despatch plus
+the store's usual gap, else despatch plus that gap on the next free truck
+number), and the chosen ones publish with their days. Give them days does
+the same for reports already published with no day. A report for today or
+later still goes on its truck through the Planner or Receiving. Stats
+(`js/views/backdock/mstats.js`, `GET /manifests/stats`) reads every
+published report over a week, a fortnight, a month or all time: totals
+against the period before, cartons by day (by week or month over a long
+span), by weekday, the department groups and top departments (on the map),
+top products, keycodes new in the period and those on the most manifests,
+and the reports in it. A report with no day on file counts on its despatch
+date plus the usual gap and is marked estimated.
+
 The owner's queue (console › Maps, and a store's Map tab) holds Suggest map
 edits and Field Mode alike. **Apply to map** writes a rename or a name that
 reads as a shelf code into the published map's editor source
@@ -633,7 +655,7 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 | --- | --- | --- |
 | Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list | ShelfSearcher refresh, label-integrity, stocktake, maintenance and em-service modes |
 | Stockroom | cages with ring colours, backfill submissions (pending, corrected, submitted; requested list; claims; rename), negative-SOH adjustments, day list | K2B review, adjust and scan modules |
-| Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits, pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4 and days confirmed without trucks (`plan.noTrucks`: the morning checklist reads them as done; planning a truck or one arriving clears it) (a staged manifest is a reference: number, counts and consol ids; the device that starts the truck attaches the report from the library), history rows on finalise; off-site pallets and other loads (`inventory.*`: register set, add, update; loads add, status, remove; Floor events until 23 Oct 2026) | Decant Visualiser receiving, manifests, planner, history; ShelfSearcher inventory mode |
+| Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits and the day and truck a report came on (`manifest.day`, for one no truck here carried), pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4 and days confirmed without trucks (`plan.noTrucks`: the morning checklist reads them as done; planning a truck or one arriving clears it) (a staged manifest is a reference: number, counts and consol ids; the device that starts the truck attaches the report from the library), history rows on finalise; off-site pallets and other loads (`inventory.*`: register set, add, update; loads add, status, remove; Floor events until 23 Oct 2026) | Decant Visualiser receiving, manifests, planner, history; ShelfSearcher inventory mode |
 | Store | map publish, roster rotation marker, settings, tools, map edit suggestions, feedback (device presence is a projection written directly from the socket `hb` frame or `POST /hb`, not an event) | |
 
 A catalogued type without a reducer would be rejected `not_implemented`; the

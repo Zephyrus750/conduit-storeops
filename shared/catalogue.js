@@ -118,6 +118,7 @@ export const CATALOGUE = {
   'manifest.publish':    T('backdock', D, ['manNo']),                            // payload: dcNo, despatch, filename, consols, totalCartons, keycodes
   'manifest.remove':     T('backdock', D, ['manNo']),
   'manifest.attach':     T('backdock', D, ['truck'], { manNo: 'string', consols: 'array' }),
+  'manifest.day':        T('backdock', D, ['manNo']),                            // payload: day 'YYYY-MM-DD' | null (clears), truck 1..9 | null
   'pallet.land':         T('backdock', D, ['truck', 'bay'], { ptype: 'string' }),  // chep | loscam | bulk
   'pallet.update':       T('backdock', D, ['truck', 'bay']),
   'pallet.start':        T('backdock', D, ['truck', 'bay'], { pid: 'string' }),

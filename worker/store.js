@@ -34,6 +34,7 @@ import { HttpError, json, fail, CORS, readJson, reportError } from './http.js';
 import { ulid } from '../shared/ulid.js';
 import { productLife, historyRows, toCsv, HISTORY_KINDS, HISTORY_AREA } from '../shared/records.js';
 import { arrivalsOf, profilesFrom } from '../shared/profiles.js';
+import { manSummary, manifestStats } from '../shared/manifeststats.js';
 import { isoWeek, weeklyDates } from '../shared/stockintel.js';
 import { toolForEvent, toolOff } from '../shared/tools.js';
 import { storeKpis } from '../shared/kpis.js';
@@ -82,6 +83,7 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS map_floors (version TEXT NOT NULL, floor TEXT NOT NULL, svg TEXT NOT NULL, PRIMARY KEY (version, floor));
       CREATE TABLE IF NOT EXISTS manifests (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS manifest_arrivals (manNo TEXT PRIMARY KEY, doc TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS manifest_sums (manNo TEXT PRIMARY KEY, head TEXT NOT NULL, kc TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS simreport (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -182,6 +184,7 @@ export class StoreObject extends DurableObject {
           if (url.pathname === '/manifest' && request.method === 'POST') return this.needTool('manifests') || this.publishManifest(await readJson(request, MANIFEST_MAX), claims);
           if (url.pathname === '/profiles') { const dk = needArea(claims, 'backdock'), sr = needArea(claims, 'stockroom'); if (dk && sr) return dk;   // carton depths serve the dock and the stockroom (K2B read them)
            return json(this.profiles()); }
+          if (url.pathname === '/manifests' || url.pathname === '/manifests/stats') { const no = needArea(claims, 'backdock'); if (no) return no; return url.pathname === '/manifests' ? this.manifestList() : this.manifestStatsFor(url.searchParams.get('from') || '', url.searchParams.get('to') || ''); }
           const man = url.pathname.match(/^\/manifest\/([\w-]{1,20})$/);
           if (man) { const no = needArea(claims, 'backdock'); if (no) return no; return request.method === 'DELETE' ? this.removeManifest(man[1], claims) : this.manifestDoc(man[1]); }
           const life = url.pathname.match(/^\/life\/(\d{6,13})$/);
@@ -441,6 +444,7 @@ export class StoreObject extends DurableObject {
     this.sql.exec('INSERT OR REPLACE INTO manifests (manNo, doc, at, by) VALUES (?, ?, ?, ?)', manNo, text, at, by);
     this.manLines?.delete(manNo);
     this.keepArrivals(manNo, arrivalsOf({ ...doc, at }));
+    this.keepSummary(manNo, manSummary({ ...doc, manNo, at }));
     const totalCartons = doc.consols.reduce((n, c) => n + (Number(c.cartons) || 0), 0), keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size;
     const ev = { id: ulid(), store: this.storeNo, area: 'backdock', type: 'manifest.publish', entity: { manNo }, payload: { dcNo: doc.dcNo || '', despatch: doc.despatch || '', filename: String(doc.filename || '').slice(0, 80), consols: doc.consols.length, totalCartons, keycodes }, at, v: 1 };
     const [r] = this.submit([ev], claims, { internal: true });
@@ -464,6 +468,7 @@ export class StoreObject extends DurableObject {
     this.sql.exec('DELETE FROM manifests WHERE manNo = ?', manNo);
     this.manLines?.delete(manNo);
     this.sql.exec('DELETE FROM manifest_arrivals WHERE manNo = ?', manNo); this.profilesCache = null;
+    this.sql.exec('DELETE FROM manifest_sums WHERE manNo = ?', manNo); this.statsCache = null;
     return json({ ok: true, manNo });
   }
 
@@ -483,6 +488,41 @@ export class StoreObject extends DurableObject {
     const doc = profilesFrom(arrivals, { store: this.storeNo });
     this.profilesCache = { day, doc };
     return doc;
+  }
+
+  // Every published report's counts (manSummary), kept when it is published
+  // so the list and the stats never parse the reports themselves; one from
+  // before summaries were kept gets its own once. The keycodes sit in their
+  // own column: only the stats read them.
+  keepSummary(manNo, sum) {
+    const { kc, ...head } = sum;
+    this.sql.exec('INSERT OR REPLACE INTO manifest_sums (manNo, head, kc) VALUES (?, ?, ?)', manNo, JSON.stringify(head), JSON.stringify(kc));
+    this.statsCache = null;
+  }
+  manifestSums(withKeycodes) {
+    for (const r of this.sql.exec('SELECT m.manNo, m.doc, m.at FROM manifests m LEFT JOIN manifest_sums s ON s.manNo = m.manNo WHERE s.manNo IS NULL').toArray()) this.keepSummary(r.manNo, manSummary({ ...JSON.parse(r.doc), manNo: r.manNo, at: r.at }));
+    return this.sql.exec(`SELECT head${withKeycodes ? ', kc' : ''} FROM manifest_sums`).toArray().map(r => ({ ...JSON.parse(r.head), ...(withKeycodes ? { kc: JSON.parse(r.kc) } : {}) }));
+  }
+  // GET /manifests: every report in the library, newest first, with its counts.
+  manifestList() {
+    const list = this.manifestSums(false).map(({ depts, ...m }) => m).sort((a, b) => b.at.localeCompare(a.at));
+    return json({ manifests: list });
+  }
+  // GET /manifests/stats?from=&to=: what came in over the days given (all
+  // of it without them), against the same number of days before. The last
+  // few answers are kept until the next event or report: flicking between
+  // periods reads the keycodes once.
+  manifestStatsFor(from, to) {
+    if (!!from !== !!to) throw new HttpError(400, 'invalid_request', 'give both from and to, or neither for all time');
+    const day = d => /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d + 'T00:00:00Z')) && addDays(d, 0) === d;
+    if (from && (!day(from) || !day(to) || to < from || addDays(from, 400) < to)) throw new HttpError(400, 'invalid_request', 'from and to are YYYY-MM-DD, from first, at most 400 days apart');
+    const key = `${this.state.seq}|${from}|${to}`;
+    this.statsCache ||= new Map();
+    if (!this.statsCache.has(key)) {
+      if (this.statsCache.size >= 8) this.statsCache.delete(this.statsCache.keys().next().value);
+      this.statsCache.set(key, manifestStats(this.manifestSums(true), this.state, { from: from || null, to: to || null }));
+    }
+    return json(this.statsCache.get(key));
   }
 
   needTool(id) { return toolOff(this.state.tools?.off, id) ? fail(403, 'tool_off', 'that tool is switched off for this store') : null; }

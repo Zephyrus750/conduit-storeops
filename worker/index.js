@@ -288,6 +288,8 @@ r.get('/v1/store/:no/backfill/report', (req, env, _c, p) => anyStoreCall(req, en
 r.post('/v1/store/:no/manifest', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/manifest'));
 r.get('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));
 r.delete('/v1/store/:no/manifest/:manNo', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/manifest/${p.manNo}`));
+r.get('/v1/store/:no/manifests', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/manifests'));
+r.get('/v1/store/:no/manifests/stats', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/manifests/stats', new URL(req.url).search));
 r.get('/v1/store/:no/profiles', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/profiles'));
 r.get('/v1/store/:no/pull/find', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/pull/find', new URL(req.url).search));
 // Issue photos: a store device adds one (JPEG bytes); any device of the

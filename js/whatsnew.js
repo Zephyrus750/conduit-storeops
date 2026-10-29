@@ -12,6 +12,8 @@ import { tx } from './i18n.js';
 
 export const RELEASES = [
   { v: 'v0.3.0', date: '2026-10-09', items: [
+    ['m-manifests', tx('Manifests by week, day and truck'), tx('Each manifest shows the day and truck it came on, by week. Publish several reports at once for a missed day or two: each gets a suggested day from the Planner to check before it goes.'), 'manifests', 'desk'],
+    ['chart', tx('Manifest stats'), tx('Under Manifests › Stats: what came in this week, fortnight or month, or all time, against the period before. Cartons by day, the busiest weekdays, departments, top products and what came for the first time.'), 'manifests', 'desk'],
     ['alert', tx('Recalls and withdrawals'), tx('Under Safety & upkeep: a manager adds a recall or withdrawal from the notice, with its keycodes, and moves it from Open to Closed. Every device flags those products straight away: in Live pull, Backfill, Cages, Adjustments, search and every list.'), 'recalls', 'desk'],
     ['alert', tx('Recalled stock'), tx('Scan a recalled or withdrawn product and the phone stops with a red flag: move it to the recall bay and tell a manager. Tap I moved some to record how many.'), null, 'phone'],
     ['m-equipment', tx('Equipment checks'), tx('Under Safety & upkeep: the store’s ladders, MHE and trolleys on the map, each with its own code and QR label. Record each check; a failed one puts it out of service until one passes. What’s due shows with Emergency’s services, on the Today page and on the rail.'), 'equipment', 'desk'],
