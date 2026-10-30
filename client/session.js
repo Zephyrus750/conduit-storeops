@@ -115,27 +115,38 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
       } catch (e) {
         // Only an answer that says the session is gone signs the device out.
         // A server error, a rate limit or a timeout keeps it: the next try
-        // may work. Another tab of this app may have spent the refresh token
-        // a moment ago; if the stored session moved on, take that one.
-        if (e instanceof TransportError && AUTH_GONE.has(e.status)) {
-          const stored = await storage.get('suite_session');
-          if (stored?.refresh && used && stored.refresh !== used && stored.expires * 1000 > now()) { cur = stored; emit('change', snapshot()); return snapshot(); }
-          cur = null; await save(); emit('signin-required', { reason: e.code });
-        }
+        // may work.
+        if (e instanceof TransportError && AUTH_GONE.has(e.status) && await ended(e, used)) return snapshot();
         throw e;
       } finally { refreshing = null; }
     })();
     return refreshing;
   }
-  // Opening the app: a store session whose token has run out (or is about
-  // to) is renewed before anything shows, so the shell opens on what the
-  // worker says now (signed out, or a manager's shift over) rather than on
-  // what this device saved. Offline, or a worker slower than waitMs, keeps
-  // the saved session (the refresh carries on behind). Null: signed out.
-  async function check({ waitMs = 5000 } = {}) {
-    if (!cur || cur.owner || cur.expires * 1000 - now() >= REFRESH_AHEAD_S * 1000) return snapshot();
+  // The worker said the session that held refresh token `used` is over.
+  // Another tab of this app may have spent that token a moment ago: if the
+  // stored session moved on, take that one (true); else sign out here.
+  async function ended(e, used) {
+    const stored = await storage.get('suite_session');
+    if (stored?.refresh && used && stored.refresh !== used && stored.expires * 1000 > now()) { cur = stored; emit('change', snapshot()); return true; }
+    cur = null; await save(); emit('signin-required', { reason: e.code });
+    return false;
+  }
+  // Opening the app: the shell opens on what the worker says now, not on
+  // what this device saved. A store session whose token has run out (or is
+  // about to) is renewed (a manager's shift over shows as lapsed); one with
+  // time left is only asked whether it still stands (/v1/auth/check rotates
+  // nothing, so tabs opening together are safe), since the owner may have
+  // signed the device out meanwhile. Offline, or a worker slower than the
+  // wait, keeps the saved session (the answer still counts when it comes).
+  // Null: signed out.
+  async function check({ waitMs = 5000, askMs = 2000 } = {}) {
+    if (!cur || cur.owner) return snapshot();
+    const renew = cur.expires * 1000 - now() < REFRESH_AHEAD_S * 1000, used = cur.refresh;
+    const ask = renew ? refresh() : transport.request('/v1/auth/check', { method: 'POST', body: { refresh: used } })
+      // A worker from before the route answers not_found: that is not a sign-out.
+      .catch(async e => { if (e instanceof TransportError && AUTH_GONE.has(e.status) && e.code !== 'not_found' && cur?.refresh === used) await ended(e, used); });
     let timer = null;
-    await Promise.race([refresh().catch(() => {}), new Promise(r => { timer = setTimeout(r, waitMs); })]);
+    await Promise.race([ask.catch(() => {}), new Promise(r => { timer = setTimeout(r, renew ? waitMs : askMs); })]);
     clearTimeout(timer);
     return snapshot();
   }

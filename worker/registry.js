@@ -9,6 +9,7 @@
 //   POST /refresh/issue { store, device, roles, owner, epoch } → { refresh } (a store token from before the store's epoch is refused)
 //   POST /refresh/use   { refresh }                        → { store, device, roles, owner, epoch, refresh } | error
 //   POST /refresh/revoke { refresh }                       → { ok } (sign-out)
+//   POST /refresh/check { refresh }                        → { ok } | the error /refresh/use would give (nothing rotated)
 //   GET  /stores                                           → public list
 //   GET  /stores/_all                                      → full records (owner)
 //   GET  /stores/:no                                       → full record (owner)
@@ -95,7 +96,7 @@ export class RegistryObject extends DurableObject {
     switch (key) {
       case 'POST /signin': return this.signin(body);
       case 'POST /unlock': return this.unlock(body);
-      case 'POST /refresh/*': return p[1] === 'issue' ? this.issueRefresh(body) : p[1] === 'revoke' ? this.revokeRefresh(body) : this.useRefresh(body);
+      case 'POST /refresh/*': return p[1] === 'issue' ? this.issueRefresh(body) : p[1] === 'revoke' ? this.revokeRefresh(body) : p[1] === 'check' ? this.checkRefresh(body) : this.useRefresh(body);
       case 'GET /stores': return this.publicList();
       case 'GET /stores/*': return p[1] === '_all' ? this.fullList() : this.record(p[1]);
       case 'POST /stores': return this.register(body);
@@ -235,16 +236,22 @@ export class RegistryObject extends DurableObject {
       await sha256(refresh), store || null, device || null, JSON.stringify(roles || []), owner ? 1 : 0, new Date().toISOString(), Date.now() + ttl * 1000, owner ? await this.ownerFp() : null, elevated, rec ? rec.epoch || 0 : null);
     return { refresh, roleExpires: elevated ? elevated + this.roleTtlMs() : null };
   }
-  async useRefresh({ refresh }) {
-    const hash = await sha256(String(refresh || ''));
-    const row = this.sql.exec('SELECT * FROM refresh WHERE hash = ?', hash).toArray()[0];
-    this.sql.exec('DELETE FROM refresh WHERE hash = ? OR expires < ?', hash, Date.now());
+  // A refresh token's store, while the token still signs in: the reasons it
+  // no longer does are the same for using it and for checking it.
+  async liveRefresh(row) {
     if (!row || row.expires < Date.now()) throw new HttpError(401, 'unauthorised', 'refresh token is not valid');
     if (row.owner && row.fp !== await this.ownerFp()) throw new HttpError(401, 'revoked', 'the owner key has changed; sign in again');
     const store = row.store ? this.get(row.store) : null;
     if (row.store && !store) throw new HttpError(404, 'not_registered', `store ${row.store} is not registered`);
     if (store?.status === 'suspended') throw new HttpError(403, 'suspended', `store ${row.store} is suspended`);
     if (store && row.epoch != null && row.epoch < (store.epoch || 0)) throw new HttpError(401, 'revoked', 'this device was signed out; sign in again');
+    return store;
+  }
+  async useRefresh({ refresh }) {
+    const hash = await sha256(String(refresh || ''));
+    const row = this.sql.exec('SELECT * FROM refresh WHERE hash = ?', hash).toArray()[0];
+    this.sql.exec('DELETE FROM refresh WHERE hash = ? OR expires < ?', hash, Date.now());
+    const store = await this.liveRefresh(row);
     let roles = JSON.parse(row.roles), elevated = row.elevated || null;
     if (!row.owner && roles.some(r => r !== 'floor')) {
       if (!elevated) elevated = Date.now();                  // a session from before roles expired: its shift starts now
@@ -252,6 +259,13 @@ export class RegistryObject extends DurableObject {
     }
     const next = await this.issueRefresh({ store: row.store, device: row.device, roles, owner: !!row.owner, elevated, epoch: store?.epoch || 0 });
     return { store: row.store, device: row.device, roles, owner: !!row.owner, caps: store ? this.caps(store) : [], epoch: store?.epoch || 0, refresh: next.refresh, roleExpires: next.roleExpires };
+  }
+  // Opening the app with time left on the token: does the session still
+  // stand? Nothing is rotated or deleted, so tabs opening together cannot
+  // spend each other's token.
+  async checkRefresh({ refresh }) {
+    await this.liveRefresh(this.sql.exec('SELECT * FROM refresh WHERE hash = ?', await sha256(String(refresh || ''))).toArray()[0]);
+    return { ok: true };
   }
   // Sign-out: the refresh token stops working now, not in 30 days.
   async revokeRefresh({ refresh }) {

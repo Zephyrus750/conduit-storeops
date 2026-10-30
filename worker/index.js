@@ -90,6 +90,14 @@ r.post('/v1/auth/refresh', async (req, env) => {
   return json({ token: await signToken(claims, env.TOKEN_SECRET), refresh: res.refresh, expires: claims.exp, roles: res.roles, caps: res.caps, owner: res.owner });
 });
 
+// Opening the app with time left on the token: is the session still good?
+// Signed out, revoked, suspended or gone answers as a refresh would;
+// nothing is rotated, so it is safe for several tabs at once.
+r.post('/v1/auth/check', async (req, env) => {
+  const b = await readJson(req);
+  return json(await registry(env, 'POST', '/refresh/check', { refresh: b.refresh }));
+});
+
 // Sign-out: the refresh token is deleted on the worker, so a lost or shared
 // device's session ends now. Holding the refresh token is the authority.
 r.post('/v1/auth/signout', async (req, env) => {

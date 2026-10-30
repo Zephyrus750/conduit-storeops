@@ -82,11 +82,13 @@ PIN elsewhere). The sign-in names the worker when it is not the default.
 Opening the app on a signed-in device shows the store to continue in:
 "Continue in <store>" goes in with no PIN and no network, "Use a different
 store" signs out (unsent changes stay on the device). A reload goes straight
-back in. A saved session whose token has run out is renewed first, behind
-the opening screen: one the worker has ended (signed out, a new PIN, the
-30-day refresh gone) opens on the sign-in, and a manager whose 12-hour
-shift is over is asked for the code on the Continue card (offline, or a
-worker that takes over 5 s, opens the saved session as before).
+back in. The saved session is checked first, behind the opening screen: a
+token that has run out is renewed, and one with time left is only asked
+about (`/v1/auth/check`, which rotates nothing). One the worker has ended
+(signed out, a new PIN, the 30-day refresh gone) opens on the sign-in, and
+a manager whose 12-hour shift is over is asked for the code on the Continue
+card. Offline, or a worker that takes over 5 s to renew (2 s to answer the
+check), opens the saved session as before.
 
 D1, R2 and KV bindings are added when the features that need them land
 (history, manifests and exports, map cache). See `wrangler.toml`.
@@ -98,6 +100,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/auth/signin` | anyone | live: store + PIN; store + `managerCode` in place of the PIN (a manager: the Floor and the manager role, every area, for the shift); or `ownerKey` (answers a `trust` secret the device sends back next time, so the owner-wide lockout cannot shut it out) |
 | `POST /v1/auth/unlock` | signed-in device | live: area or manager code adds a role |
 | `POST /v1/auth/refresh` | signed-in device | live: rotates the refresh token |
+| `POST /v1/auth/check` | holder of the refresh token | live: whether the session still stands (signed out, revoked, suspended: the refresh's error); rotates nothing. A device asks it when it opens with time left on its token |
 | `POST /v1/auth/lock` | signed-in store device | live: idle re-lock, drops area and manager codes back to the floor session |
 | `POST /v1/auth/signout` | holder of the refresh token | live: deletes the refresh token on the worker |
 | `GET /v1/stores` | anyone | live: number, name, region, status |

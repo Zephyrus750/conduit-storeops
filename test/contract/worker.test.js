@@ -712,10 +712,14 @@ test('sessions: revoke, rotation and suspension sign devices out; sign-out ends 
   const signin = device => api('POST', '/v1/auth/signin', { store: '2007', pin: '135790', device });
   const a = (await signin('ra1')).body;
   assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, a.token)).status, 200);
+  // Opening the app asks whether the session stands: it does, and asking rotates nothing.
+  assert.deepEqual((await api('POST', '/v1/auth/check', { refresh: a.refresh })).body, { ok: true });
+  assert.equal((await api('POST', '/v1/auth/check', { refresh: a.refresh })).status, 200, 'asking twice is fine');
   const rev = await api('PATCH', '/v1/admin/stores/2007', { revoke: true }, ownerToken);
   assert.equal(rev.status, 200); assert.equal(rev.body.epoch, 1);
   const refused = await api('GET', '/v1/store/2007/snapshot', undefined, a.token);
   assert.equal(refused.status, 401); assert.equal(refused.body.code, 'revoked');
+  assert.equal((await api('POST', '/v1/auth/check', { refresh: a.refresh })).status, 401, 'the check says so before the token runs out');
   assert.equal((await api('POST', '/v1/auth/refresh', { refresh: a.refresh })).status, 401, 'the refresh token went too');
   assert.equal((await api('POST', '/v1/auth/unlock', { code: 'DK-2007' }, a.token)).status, 401, 'an old token cannot unlock');
   const relock = await api('POST', '/v1/auth/lock', { refresh: a.refresh }, a.token);
@@ -724,13 +728,16 @@ test('sessions: revoke, rotation and suspension sign devices out; sign-out ends 
   const b = (await signin('rb1')).body;
   assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, b.token)).status, 200, 'signing in again works');
   assert.equal((await api('POST', '/v1/auth/signout', { refresh: b.refresh })).status, 200);
-  assert.equal((await api('POST', '/v1/auth/refresh', { refresh: b.refresh })).status, 401, 'signed out on the worker');
+  assert.equal((await api('POST', '/v1/auth/check', { refresh: b.refresh })).status, 401, 'signed out on the worker');
+  assert.equal((await api('POST', '/v1/auth/refresh', { refresh: b.refresh })).status, 401);
 
   const c = (await signin('rc1')).body;
   assert.equal((await api('PATCH', '/v1/admin/stores/2007', { codes: { manager: 'MG-NEW' } }, ownerToken)).body.epoch, 2, 'a code rotation revokes');
   assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, c.token)).status, 401);
 
+  const d = (await signin('rs1')).body;
   assert.equal((await api('PATCH', '/v1/admin/stores/2007', { status: 'suspended' }, ownerToken)).status, 200);
+  assert.equal((await api('POST', '/v1/auth/check', { refresh: d.refresh })).status, 401, 'a suspended store\'s devices are signed out too');
   const sus = await signin('rd1');
   assert.equal(sus.status, 403); assert.equal(sus.body.code, 'suspended');
   assert.equal((await api('PATCH', '/v1/admin/stores/2007', { status: 'live' }, ownerToken)).status, 200);
