@@ -82,7 +82,11 @@ PIN elsewhere). The sign-in names the worker when it is not the default.
 Opening the app on a signed-in device shows the store to continue in:
 "Continue in <store>" goes in with no PIN and no network, "Use a different
 store" signs out (unsent changes stay on the device). A reload goes straight
-back in.
+back in. A saved session whose token has run out is renewed first, behind
+the opening screen: one the worker has ended (signed out, a new PIN, the
+30-day refresh gone) opens on the sign-in, and a manager whose 12-hour
+shift is over is asked for the code on the Continue card (offline, or a
+worker that takes over 5 s, opens the saved session as before).
 
 D1, R2 and KV bindings are added when the features that need them land
 (history, manifests and exports, map cache). See `wrangler.toml`.

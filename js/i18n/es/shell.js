@@ -372,4 +372,5 @@ export default {
   "Recalls": "Retiradas",
   "Products off sale: what to pull": "Productos fuera de venta: qué retirar",
   "Recalls and withdrawals": "Retiradas de producto y de venta",
+  "This device was signed out. Sign in again.": "Se cerró la sesión en este dispositivo. Vuelve a iniciar sesión.",
 };

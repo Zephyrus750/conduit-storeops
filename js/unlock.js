@@ -40,14 +40,21 @@ export function ensureArea({ session, frame, area }) {
 // idle, or another store was opened on it. A PC has no other way in (it signs
 // in with the manager code), so it offers the code or signing out; a phone
 // may carry on as a team member. Resolves true once the manager role is back.
+// The Welcome back card asks for it the same way when the app opens
+// (js/shell.js showContinue): managerReason and managerCode are shared.
+export const managerReason = (why, lockMins = 0) => why === 'shift' ? tx('A manager sign-in lasts one shift (12 hours). Enter the manager code to carry on.')
+  : why === 'idle' && lockMins ? tx('Locked after {n} min idle. Enter the manager code to carry on.', { n: lockMins })
+  : why === 'switch' ? tx('Another store was opened on this device, so this one kept only the Floor. Enter the manager code to carry on.')
+  : tx('The manager sign-in on this PC has ended. Enter the manager code to carry on.');
+// The code as typed: '' once the manager role is back, else what to say.
+export async function managerCode(session, code) {
+  try { const s = await session.unlock(code); return (s?.roles || []).includes('manager') ? '' : tx('That is a crew code, not the manager code.'); }
+  catch (err) { return err.code === 'locked_out' ? tx('Too many attempts. Try again later.') : err.code === 'unauthorised' ? tx('Wrong code.') : err.message; }
+}
 let mgrOpen = null;
 export function ensureManager({ session, frame, mobile, lockMins = 0, onSignOut }) {
   if (mgrOpen) return mgrOpen;
-  const why = session.current?.lapsed;
-  const reason = why === 'shift' ? tx('A manager sign-in lasts one shift (12 hours). Enter the manager code to carry on.')
-    : why === 'idle' ? tx('Locked after {n} min idle. Enter the manager code to carry on.', { n: lockMins || '—' })
-    : why === 'switch' ? tx('Another store was opened on this device, so this one kept only the Floor. Enter the manager code to carry on.')
-    : tx('The manager sign-in on this PC has ended. Enter the manager code to carry on.');
+  const reason = managerReason(session.current?.lapsed, lockMins);
   mgrOpen = new Promise(resolve => {
     $('#unlock')?.remove(); $('#mgrLock')?.remove();
     const el = document.createElement('div'); el.id = 'mgrLock'; el.className = 'signin unlock';
@@ -65,11 +72,9 @@ export function ensureManager({ session, frame, mobile, lockMins = 0, onSignOut 
     $('#mgrLockForm', el).addEventListener('submit', async e => {
       e.preventDefault();
       const btn = e.target.querySelector('.si-cta'); btn.disabled = true;
-      try {
-        const s = await session.unlock(e.target.code.value);
-        if ((s?.roles || []).includes('manager')) return done(true);
-        $('#mgrLockErr', el).textContent = tx('That is a crew code, not the manager code.'); e.target.code.value = '';
-      } catch (err) { $('#mgrLockErr', el).textContent = err.code === 'locked_out' ? tx('Too many attempts. Try again later.') : err.code === 'unauthorised' ? tx('Wrong code.') : err.message; }
+      const why = await managerCode(session, e.target.code.value);
+      if (!why) return done(true);
+      $('#mgrLockErr', el).textContent = why; e.target.code.select();
       btn.disabled = false;
     });
     setTimeout(() => { try { $('#mgrLockCode', el).focus(); } catch {} }, 30);

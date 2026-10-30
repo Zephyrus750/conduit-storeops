@@ -111,3 +111,30 @@ test('session: a manager sign-in remembers it; the role going at a refresh, the 
   // A PIN sign-in never counts as a manager's.
   await s.signOut(); await s.signIn({ store: '1241', pin: '111111' }); assert.equal(s.current.asManager, false);
 });
+
+test('session: opening renews a token that has run out before anything shows; a session the worker ended comes back null; offline or slow keeps it', async () => {
+  const { TransportError } = await import('../../client/transport.js');
+  let t = 1_000_000_000, answer = null, asked = 0; const now = () => t;
+  const transport = { async request(path, { body } = {}) {
+    if (path === '/v1/auth/signin') return { token: 't1', refresh: 'r1', expires: now() / 1000 + 43200, store: body.store, name: 'S', roles: ['manager'], caps: [] };
+    if (path === '/v1/auth/refresh') { asked += 1; if (answer instanceof Error) throw answer; return answer; }
+    return {};
+  } };
+  const storage = memoryStorage(), s = createSession({ transport, storage, now });
+  await s.load(); await s.signIn({ store: '1241', managerCode: 'MG-1' });
+  // Hours left on the token: the saved session, nothing asked.
+  assert.deepEqual((await s.check()).roles, ['manager']); assert.equal(asked, 0);
+  // Twelve hours on, the shift is over: the session opens as it is now, and says why.
+  t += 43200_000; answer = { token: 't2', refresh: 'r2', expires: now() / 1000 + 43200, roles: ['floor'], caps: [] };
+  const after = await s.check(); assert.equal(asked, 1); assert.deepEqual(after.roles, ['floor']); assert.equal(after.lapsed, 'shift');
+  // Offline: the saved session stays.
+  t += 43200_000; answer = new TransportError(0, 'network', 'offline');
+  assert.ok(await s.check()); assert.equal(asked, 2);
+  // Signed out on the worker: null, the sign-in is asked for and nothing is kept.
+  let out = 0; s.on('signin-required', () => { out += 1; });
+  answer = new TransportError(401, 'revoked', 'this device was signed out; sign in again');
+  assert.equal(await s.check(), null); assert.equal(out, 1); assert.ok(!(await storage.get('suite_session')));
+  // A worker that does not answer in time: the saved session opens.
+  await s.signIn({ store: '1241', managerCode: 'MG-1' }); t += 43200_000; answer = new Promise(() => {});
+  assert.ok(await s.check({ waitMs: 20 }));
+});

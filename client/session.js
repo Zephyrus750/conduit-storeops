@@ -127,6 +127,18 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
     })();
     return refreshing;
   }
+  // Opening the app: a store session whose token has run out (or is about
+  // to) is renewed before anything shows, so the shell opens on what the
+  // worker says now (signed out, or a manager's shift over) rather than on
+  // what this device saved. Offline, or a worker slower than waitMs, keeps
+  // the saved session (the refresh carries on behind). Null: signed out.
+  async function check({ waitMs = 5000 } = {}) {
+    if (!cur || cur.owner || cur.expires * 1000 - now() >= REFRESH_AHEAD_S * 1000) return snapshot();
+    let timer = null;
+    await Promise.race([refresh().catch(() => {}), new Promise(r => { timer = setTimeout(r, waitMs); })]);
+    clearTimeout(timer);
+    return snapshot();
+  }
   // The access token, refreshed first when it is about to expire.
   async function token() {
     if (!cur) return null;
@@ -181,5 +193,5 @@ export function createSession({ transport, storage, app = 'conduit', now = () =>
   function unauthorised() { cur = null; save(); emit('signin-required', { reason: 'unauthorised' }); }
   function on(k, f) { listeners[k].add(f); return () => listeners[k].delete(f); }
 
-  return { load, signIn, signInScreen, signInOwner, signInAnother, switchTo, forget, parked, actAs, endActAs, unlock, lock, dropManager, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
+  return { load, check, signIn, signInScreen, signInOwner, signInAnother, switchTo, forget, parked, actAs, endActAs, unlock, lock, dropManager, refresh, token, signOut, unauthorised, on, get current() { return snapshot(); }, get device() { return device; }, app };
 }
