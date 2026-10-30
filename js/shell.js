@@ -24,6 +24,7 @@ installLog();
 import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, RAIL_TOP, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { toolForView, toolOff } from '../shared/tools.js';
+import { loadResources, cachedResources, useResource } from './resourcelib.js';
 import { openFound, useRecallStore } from './recallflag.js';
 import { ensureArea, ensureManager, hasArea } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
@@ -808,7 +809,15 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>${tx('Updating…')}</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => (id === 'recalls' && isMobile() && deskOnly(VIEWS.recalls) ? toast(tx('Recalls open on a store PC, or a manager’s phone')) : show(id, arg)), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [...[...RAIL_TOP, ...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
+// The store's Resources in the search palette: a manager's PC, with the tool on.
+const resourcesOn = () => !!store && !isMobile() && isManager() && !offView('resources');
+const storeApi = (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token }));
+const resourceHooks = {
+  resources: () => (resourcesOn() ? cachedResources(client.session.current?.store) : null),
+  loadResources: () => (resourcesOn() ? loadResources(storeApi, client.session.current?.store) : null),
+  useResource: id => { const e = (cachedResources(client.session.current?.store) || []).find(x => x.id === id); if (e) useResource(storeApi, e); },
+};
+const search = initSearch({ ...resourceHooks, client, frame, go: (id, arg) => (id === 'recalls' && isMobile() && deskOnly(VIEWS.recalls) ? toast(tx('Recalls open on a store PC, or a manager’s phone')) : show(id, arg)), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [...[...RAIL_TOP, ...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
 // The phone's bar is typed into directly: a compact list drops under it.
 const msBar = search.bar($('#msearch'), () => !admin && !!store);
 

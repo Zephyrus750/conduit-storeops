@@ -439,4 +439,9 @@ export default {
   "lists {kc}": "kasama ang {kc}",
   "Removing": "Inaalis",
   "All removed": "Naalis na lahat",
+  "Link": "Link",
+  "Resources used most on this PC": "Pinakamadalas gamiting resources sa PC na ito",
+  "a form or file from Resources": "isang form o file mula sa Resources",
+  "All {n} resources matching “{q}”": "Lahat ng {n} resources na tugma sa “{q}”",
+  "Open Resources with this search": "Buksan ang Resources gamit ang paghahanap na ito",
 };

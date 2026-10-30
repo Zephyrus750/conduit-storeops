@@ -226,7 +226,10 @@ a link, and goes to every store or the ones picked; it can be edited, have
 its file replaced, be opened or removed. A store's PC lists the ones for it
 under **Resources** at the top of the rail, for managers only
 (`js/views/resources.js`): searchable across titles, categories, notes and
-file names, by category, with the ones this PC opens most on top. PDFs and
+file names, by category, with the ones this PC opens most on top. The
+search palette (Ctrl K) finds them too, by the same words, and lists the
+ones used most before anything is typed; Enter opens one. The list, the
+counts and opening a file are `js/resourcelib.js`, shared by both. PDFs and
 pictures open in a tab or print straight away (a hidden frame of the
 downloaded copy, so the site's CSP allows `frame-src blob:`); Word, Excel and
 the rest download. Resources is a store-wide tool: the store's Access tab

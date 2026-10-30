@@ -5,7 +5,9 @@
 // On a phone it is streamlined: shelves, departments and micro-departments
 // only, no keyboard hints, no records, and no product codes for now.
 // (client.catalogue.lookup); shelves come from the mounted map; tools from
-// the view registry. Opens from the header search, the rail search, Ctrl K,
+// the view registry; on a manager's PC, the store's Resources by title,
+// category, note or file name (js/resourcelib.js), the ones used most
+// before anything is typed. Opens from the header search, the rail search, Ctrl K,
 // and the phone's search bar (a compact list under the bar; see bar()).
 
 import { recallTag } from './recallflag.js';
@@ -16,6 +18,8 @@ import { findRecords } from '../shared/finder.js';
 import { RING } from './views/stockroom/common.js';
 import { SUBS, MICRO, microId, microCode, microName } from './data/micros.js';
 import { tx, txn, lang, locale } from './i18n.js';
+import { matches, fileKind } from '../shared/resources.js';
+import { mostUsed } from './resourcelib.js';
 
 const KIND = { prod: tx('Product code'), cons: tx('Consolidation'), shelf: tx('Shelf'), loc: tx('Shelf or bay'), name: tx('Name'), none: tx('Type to search') };
 const KICON = { prod: 'm-product', cons: 'packages', shelf: 'pin', loc: 'pin', name: 'search', none: 'search' };
@@ -58,10 +62,15 @@ function recordsHtml(r, Q) {
   if (r.equipment.length) out += grp(tx('Equipment'), r.equipment.length) + r.equipment.map(e => orow('', 'm-equipment', `<span class="mono">${hi(e.code, Q)}</span>${e.name ? ' ' + esc(e.name) : ''}`, esc(e.loc), tx('Open'), `data-view="equipment" data-equip="${esc(e.id)}"`)).join('');
   return out;
 }
+// A resource: a PDF or a picture opens in a tab, the rest download, a link opens.
+function resRow(e, Q) {
+  const k = e.file && fileKind(e.file.name), what = e.file ? `${k?.label === 'Picture' ? tx('Picture') : k?.label === 'Text' ? tx('Text') : esc(k?.label || '')} · ${esc(e.file.name)}` : tx('Link');
+  return orow('', 'stack', hi(e.title, Q), [e.category ? esc(e.category) : '', what].filter(Boolean).join(' · '), !e.file ? tx('Open link') : k?.inline ? tx('Open') : tx('Download'), `data-res="${esc(e.id)}"`);
+}
 const ARG_KEYS = ['select', 'dept', 'micro', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay', 'equip', 'recall'];
 const RC_STATUS = { open: tx('issue status::Open'), removing: tx('Removing'), removed: tx('All removed'), closed: tx('Closed') };
 
-export function initSearch({ client, frame, go, tools = () => [], life = () => null, data = () => null, phone = () => false }) {
+export function initSearch({ client, frame, go, tools = () => [], life = () => null, data = () => null, phone = () => false, resources = () => null, loadResources = () => null, useResource = () => {} }) {
   // On a phone, the records that open desk-only views (manifests, other loads) are left out.
   const found = Q => { const r = findRecords(data(), Q); if (phone()) { r.manifests = []; r.loads = []; r.equipment = []; } return r; };
   const el = document.createElement('div'); el.className = 'omni'; el.id = 'omni';
@@ -83,7 +92,11 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   // Focus goes back to whatever opened the palette when it closes.
   let opener = null;
   const DESK_PH = input.placeholder, PHONE_PH = tx('Search');
-  function open(q = '') { if (!el.classList.contains('open')) opener = document.activeElement; el.classList.add('open'); el.classList.toggle('phone', phone()); input.placeholder = phone() ? PHONE_PH : DESK_PH; input.value = q; render(q); try { input.focus(); } catch {} }
+  function open(q = '') {
+    if (!el.classList.contains('open')) opener = document.activeElement; el.classList.add('open'); el.classList.toggle('phone', phone()); input.placeholder = phone() ? PHONE_PH : DESK_PH; input.value = q; render(q); try { input.focus(); } catch {}
+    // The store's Resources: fetched the first time (and every few minutes), then the list redraws.
+    loadResources()?.then(() => { if (isOpen()) render(input.value); }, () => {});
+  }
   function close() { el.classList.remove('open'); prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide'); if (opener?.isConnected && opener !== document.body) { try { opener.focus(); } catch {} } opener = null; }
   const isOpen = () => el.classList.contains('open');
 
@@ -142,8 +155,10 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (k === 'none') {
       const r = recent();
       if (r.length) out += grp(tx('Recent')) + r.map(x => orow(x[1] === 'prod' ? 'p' : x[1] === 'name' ? '' : 's', 'history', esc(x[0]), KIND[x[1]] || '', tx('Search again'), `data-q="${esc(x[0])}"`)).join('');
+      const used = mostUsed(resources(), 3);
+      if (used.length) out += grp(tx('Resources used most on this PC')) + used.map(e => resRow(e, '')).join('');
       out += grp(tx('Jump to')) + tools().slice(0, 6).map(t => orow('', t.icon, esc(t.title), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
-      out += `<div class="ohint"><b>${tx('It understands')}</b><span>${tx('keycode 42977636')}</span><span>${tx('shelf A16 S2')}</span><span>${tx('bay A12')}</span><span>${tx('a manifest number')}</span><span>${tx('a consolidation label')}</span><span>${tx('a cage tag')}</span><span>${tx('an inventory load')}</span><span>${tx('a department like Toys')}</span><span>${tx('a tool like Refresh')}</span></div>`;
+      out += `<div class="ohint"><b>${tx('It understands')}</b><span>${tx('keycode 42977636')}</span><span>${tx('shelf A16 S2')}</span><span>${tx('bay A12')}</span><span>${tx('a manifest number')}</span><span>${tx('a consolidation label')}</span><span>${tx('a cage tag')}</span><span>${tx('an inventory load')}</span><span>${tx('a department like Toys')}</span><span>${tx('a tool like Refresh')}</span>${resources() ? `<span>${tx('a form or file from Resources')}</span>` : ''}</div>`;
     } else if (k === 'prod') {
       out += grp(tx('Products')) + `<div class="ohint">${tx('Looking up {code}…', { code: esc(Q) })}</div>`;
       body.innerHTML = out; prev.hidden = true; pal.classList.remove('wide');
@@ -180,10 +195,12 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const ql = Q.toLowerCase();
       const depts = Object.entries(DEPT_NAME).filter(([, n]) => n.toLowerCase().includes(ql));
       const ts = tools().filter(t => t.title.toLowerCase().includes(ql));
+      const rs = (resources() || []).filter(e => matches(e, Q));
       if (depts.length) out += grp(tx('Departments'), depts.length) + depts.map(([d, n]) => orow('s', 'map', `${hi(n, Q)} ${dep(d)}`, tx('Show the department on the map'), tx('Show'), `data-view="map" data-dept="${d}"`)).join('');
       if (ts.length) out += grp(tx('Tools'), ts.length) + ts.map(t => orow('', t.icon, hi(t.title, Q), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
+      if (rs.length) out += grp(tx('Resources'), rs.length) + rs.slice(0, 6).map(e => resRow(e, Q)).join('') + (rs.length > 6 ? orow('', 'stack', tx('All {n} resources matching “{q}”', { n: rs.length, q: esc(Q) }), tx('Open Resources with this search'), tx('Open'), `data-view="resources" data-q="${esc(Q)}"`) : '');
       const recs = recordsHtml(found(Q), Q); out += recs;
-      if (!depts.length && !ts.length && !recs) out += `<div class="ohint">${tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) })}</div>`;
+      if (!depts.length && !ts.length && !rs.length && !recs) out += `<div class="ohint">${tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) })}</div>`;
     }
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();
@@ -207,6 +224,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   function act(row) {
     if (!row) return;
     const q = input.value.trim(); if (q) remember(q, classify(q));
+    if (row.dataset.res) { close(); useResource(row.dataset.res); return; }   // still inside the click or the Enter: a tab may open
     if (row.dataset.view) { const arg = {}; for (const k of ARG_KEYS) if (row.dataset[k] != null) arg[k] = row.dataset[k]; close(); go(row.dataset.view, Object.keys(arg).length ? arg : undefined); return; }
     if (row.dataset.q != null) { open(row.dataset.q); return; }        // a recent search: run it again
     if (row.dataset.url) { try { window.open(row.dataset.url, '_blank', 'noopener'); } catch {} close(); return; }

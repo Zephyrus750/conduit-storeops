@@ -439,4 +439,9 @@ export default {
   "lists {kc}": "incluye {kc}",
   "Removing": "Retirando",
   "All removed": "Todo retirado",
+  "Link": "Enlace",
+  "Resources used most on this PC": "Recursos más usados en este PC",
+  "a form or file from Resources": "un formulario o archivo de Recursos",
+  "All {n} resources matching “{q}”": "Los {n} recursos que coinciden con «{q}»",
+  "Open Resources with this search": "Abrir Recursos con esta búsqueda",
 };

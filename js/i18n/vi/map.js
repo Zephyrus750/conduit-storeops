@@ -439,4 +439,9 @@ export default {
   "lists {kc}": "gồm {kc}",
   "Removing": "Đang gỡ",
   "All removed": "Đã gỡ hết",
+  "Link": "Liên kết",
+  "Resources used most on this PC": "Tài liệu dùng nhiều nhất trên máy này",
+  "a form or file from Resources": "một biểu mẫu hoặc tệp trong Tài liệu",
+  "All {n} resources matching “{q}”": "Tất cả {n} tài liệu khớp “{q}”",
+  "Open Resources with this search": "Mở Tài liệu với tìm kiếm này",
 };
