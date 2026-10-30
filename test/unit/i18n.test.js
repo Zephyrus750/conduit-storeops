@@ -19,12 +19,12 @@ export const AREAS = {
   guide: ['js/views/settings.js', 'js/tour.js', 'js/whatsnew.js', 'js/views/help.js'],
   map: ['js/map.js', 'js/search.js', 'js/views/map.js', 'js/views/picklist.js', 'js/printmap.js', 'js/views/printmap.js'],
   floor: ['js/views/refresh.js', 'js/views/labelint.js', 'js/views/emergency.js', 'js/views/stocktake.js', 'js/views/storeinfo.js', 'js/views/mapedits.js', 'js/views/fieldmode.js'],
-  floor2: ['js/views/dashboard.js', 'js/views/maintenance.js', 'js/views/inputs.js', 'js/views/pastebox.js', 'js/views/livepull.js', 'js/views/equipment.js', 'js/views/recalls.js', 'js/recallflag.js', 'js/barcodesearch.js'],
+  floor2: ['js/views/dashboard.js', 'js/views/maintenance.js', 'js/views/inputs.js', 'js/views/pastebox.js', 'js/views/livepull.js', 'js/views/equipment.js', 'js/views/recalls.js', 'js/recallflag.js', 'js/barcodesearch.js', 'js/views/resources.js', 'js/resourcelib.js'],
   stock1: ['js/views/stockroom/bfreview.js', 'js/views/stockroom/srhome.js', 'js/views/stockroom/srloc.js', 'js/views/stockroom/common.js', 'js/views/stockroom/daylist.js', 'js/views/stockroom/codelist.js', 'js/screenscan.js'],
   stock2: ['js/views/stockroom/adjust.js', 'js/views/stockroom/cages.js', 'js/views/stockroom/intel.js', 'js/views/stockroom/srhistory.js', 'js/views/stockroom/srtrends.js', 'js/views/stockroom/depts.js'],
   dock1: ['js/views/backdock/receiving.js', 'js/views/backdock/plan.js', 'js/views/backdock/late.js', 'js/views/backdock/mpreview.js', 'js/views/backdock/phonesearch.js', 'js/views/backdock/common.js', 'js/views/backdock/bdhome.js', 'js/views/backdock/audit.js'],
   dock2: ['js/views/backdock/wallboard.js', 'js/views/backdock/screens.js', 'js/views/backdock/rhistory.js', 'js/views/backdock/danalytics.js', 'js/views/backdock/manifests.js', 'js/views/backdock/profiles.js', 'js/views/backdock/planner.js', 'js/views/backdock/offsite.js', 'js/views/backdock/loads.js', 'js/views/backdock/screenlist.js', 'js/views/backdock/mbatch.js', 'js/views/backdock/mstats.js'],
-  admin: ['js/views/admin.js'],
+  admin: ['js/views/admin.js', 'js/views/adminresources.js'],
 };
 
 // A JS string literal's text: '…' or "…" with \' \" \\ \n escapes.

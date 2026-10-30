@@ -39,6 +39,8 @@ export const TOOLS = [
   T('planner', 'backdock', 'Planner', ['planner'], ['plan.set', 'plan.remove', 'plan.noTrucks']),
   T('rhistory', 'backdock', 'Receiving history', ['rhistory']),
   T('boards', 'backdock', 'Wallboard and analytics', ['wallboard', 'danalytics']),
+  // Store-wide: the owner's library of files and links for the managers (no events: the registry keeps it).
+  T('resources', 'store', 'Resources', ['resources']),
 ];
 export const TOOL_IDS = TOOLS.map(t => t.id);
 const byView = new Map(TOOLS.flatMap(t => t.views.map(v => [v, t])));

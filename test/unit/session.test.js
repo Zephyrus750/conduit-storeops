@@ -111,3 +111,59 @@ test('session: a manager sign-in remembers it; the role going at a refresh, the 
   // A PIN sign-in never counts as a manager's.
   await s.signOut(); await s.signIn({ store: '1241', pin: '111111' }); assert.equal(s.current.asManager, false);
 });
+
+test('session: opening renews a token that has run out before anything shows; a session the worker ended comes back null; offline or slow keeps it', async () => {
+  const { TransportError } = await import('../../client/transport.js');
+  let t = 1_000_000_000, answer = null, asked = 0; const now = () => t;
+  const transport = { async request(path, { body } = {}) {
+    if (path === '/v1/auth/signin') return { token: 't1', refresh: 'r1', expires: now() / 1000 + 43200, store: body.store, name: 'S', roles: ['manager'], caps: [] };
+    if (path === '/v1/auth/refresh') { asked += 1; if (answer instanceof Error) throw answer; return answer; }
+    return {};
+  } };
+  const storage = memoryStorage(), s = createSession({ transport, storage, now });
+  await s.load(); await s.signIn({ store: '1241', managerCode: 'MG-1' });
+  // Hours left on the token: the saved session, nothing renewed.
+  assert.deepEqual((await s.check()).roles, ['manager']); assert.equal(asked, 0);
+  // Twelve hours on, the shift is over: the session opens as it is now, and says why.
+  t += 43200_000; answer = { token: 't2', refresh: 'r2', expires: now() / 1000 + 43200, roles: ['floor'], caps: [] };
+  const after = await s.check(); assert.equal(asked, 1); assert.deepEqual(after.roles, ['floor']); assert.equal(after.lapsed, 'shift');
+  // Offline: the saved session stays.
+  t += 43200_000; answer = new TransportError(0, 'network', 'offline');
+  assert.ok(await s.check()); assert.equal(asked, 2);
+  // Signed out on the worker: null, the sign-in is asked for and nothing is kept.
+  let out = 0; s.on('signin-required', () => { out += 1; });
+  answer = new TransportError(401, 'revoked', 'this device was signed out; sign in again');
+  assert.equal(await s.check(), null); assert.equal(out, 1); assert.ok(!(await storage.get('suite_session')));
+  // A worker that does not answer in time: the saved session opens.
+  await s.signIn({ store: '1241', managerCode: 'MG-1' }); t += 43200_000; answer = new Promise(() => {});
+  assert.ok(await s.check({ waitMs: 20 }));
+});
+
+test('session: opening with time left on the token asks whether it still stands and rotates nothing; signed out there, null; another tab that moved on is taken', async () => {
+  const { TransportError } = await import('../../client/transport.js');
+  let answer = { ok: true }, asked = 0, renewed = 0; const now = () => 1_000_000_000;
+  const transport = { async request(path, { body } = {}) {
+    if (path === '/v1/auth/signin') return { token: 't1', refresh: 'r1', expires: now() / 1000 + 43200, store: body.store, name: 'S', roles: ['floor'], caps: [] };
+    if (path === '/v1/auth/check') { asked += 1; assert.equal(body.refresh, 'r1'); if (answer instanceof Error) throw answer; return answer; }
+    if (path === '/v1/auth/refresh') renewed += 1;
+    return {};
+  } };
+  const storage = memoryStorage(), s = createSession({ transport, storage, now });
+  await s.load(); await s.signIn({ store: '1241', pin: '2468' });
+  let out = 0; s.on('signin-required', () => { out += 1; });
+  // Still good: asked once, nothing renewed or rotated.
+  assert.ok(await s.check()); assert.equal(asked, 1); assert.equal(renewed, 0); assert.equal((await storage.get('suite_session')).refresh, 'r1');
+  // Offline, or a worker that does not answer in time: the saved session opens.
+  answer = new TransportError(0, 'network', 'offline'); assert.ok(await s.check());
+  answer = new Promise(() => {}); assert.ok(await s.check({ askMs: 20 }));
+  // A worker from before the check answers an unknown route: not a sign-out.
+  answer = new TransportError(404, 'not_found', 'no route POST /v1/auth/check'); assert.ok(await s.check()); assert.equal(out, 0);
+  // Another tab renewed a moment ago (its new session is stored): that one is taken, not a sign-out.
+  answer = new TransportError(401, 'unauthorised', 'refresh token is not valid');
+  await storage.set('suite_session', { ...(await storage.get('suite_session')), token: 't2', refresh: 'r2', expires: now() / 1000 + 43200 });
+  const moved = await s.check(); assert.equal(out, 0); assert.ok(moved);
+  // The owner signed the device out: null, and the sign-in is asked for.
+  await storage.set('suite_session', { ...(await storage.get('suite_session')), token: 't1', refresh: 'r1' }); await s.load();
+  answer = new TransportError(401, 'revoked', 'this device was signed out; sign in again');
+  assert.equal(await s.check(), null); assert.equal(out, 1); assert.ok(!(await storage.get('suite_session')));
+});

@@ -9,6 +9,7 @@
 //   POST /refresh/issue { store, device, roles, owner, epoch } → { refresh } (a store token from before the store's epoch is refused)
 //   POST /refresh/use   { refresh }                        → { store, device, roles, owner, epoch, refresh } | error
 //   POST /refresh/revoke { refresh }                       → { ok } (sign-out)
+//   POST /refresh/check { refresh }                        → { ok } | the error /refresh/use would give (nothing rotated)
 //   GET  /stores                                           → public list
 //   GET  /stores/_all                                      → full records (owner)
 //   GET  /stores/:no                                       → full record (owner)
@@ -17,6 +18,11 @@
 //   POST /lockout/fail  { key }   POST /lockout/clear { key }   (used by owner sign-in)
 //   GET  /actions                                          → owner action tail
 //   POST /log          { type, store, detail }             → append an owner action
+//   GET  /resources                                        → every resource (owner)
+//   GET  /resources/for/:store                             → the ones that store's managers see (403 tool_off when switched off)
+//   POST /resources    { title, category?, note?, link?, stores? }  → the new entry
+//   PATCH /resources/:id { title?, category?, note?, link?, stores?, file? } → { entry, oldKey } (file: set by the worker after the upload)
+//   DELETE /resources/:id                                  → { key } (the worker deletes the file)
 //
 // Store status: 'registered' (no areas live), 'migrating', 'live', 'legacy', 'suspended'.
 
@@ -24,6 +30,8 @@ import { DurableObject } from 'cloudflare:workers';
 import { hashSecret, verifySecret, randomToken, sha256, pinOk, cleanText, b64u, unb64u } from './auth.js';
 import { HttpError, json } from './http.js';
 import { TOOL_IDS } from '../shared/tools.js';
+import { cleanEntry, visibleTo, ready } from '../shared/resources.js';
+import { ulid } from '../shared/ulid.js';
 
 const ALL_AREAS = ['floor', 'stockroom', 'backdock'];
 // 'suspended' refuses sign-in, unlock and refresh, and signs every device out.
@@ -60,6 +68,7 @@ export class RegistryObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS actions (
         seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, type TEXT NOT NULL, store TEXT, detail TEXT
       );
+      CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, doc TEXT NOT NULL, updated TEXT NOT NULL);
     `);
     // Columns added after first deploy: a lockout window start, the store's
     // credential epoch (bumped to revoke every session), the tools
@@ -87,7 +96,7 @@ export class RegistryObject extends DurableObject {
     switch (key) {
       case 'POST /signin': return this.signin(body);
       case 'POST /unlock': return this.unlock(body);
-      case 'POST /refresh/*': return p[1] === 'issue' ? this.issueRefresh(body) : p[1] === 'revoke' ? this.revokeRefresh(body) : this.useRefresh(body);
+      case 'POST /refresh/*': return p[1] === 'issue' ? this.issueRefresh(body) : p[1] === 'revoke' ? this.revokeRefresh(body) : p[1] === 'check' ? this.checkRefresh(body) : this.useRefresh(body);
       case 'GET /stores': return this.publicList();
       case 'GET /stores/*': return p[1] === '_all' ? this.fullList() : this.record(p[1]);
       case 'POST /stores': return this.register(body);
@@ -108,6 +117,11 @@ export class RegistryObject extends DurableObject {
       case 'GET /errors': return { errors: this.sql.exec('SELECT seq, at, kind, store, detail FROM errors ORDER BY seq DESC LIMIT 100').toArray().map(r => ({ ...r, detail: JSON.parse(r.detail || '{}') })) };
       case 'GET /actions': return this.actions();
       case 'POST /log': this.log(String(body.type || 'note'), body.store || null, body.detail || {}); return { ok: true };
+      case 'GET /resources': return { resources: this.resources() };
+      case 'GET /resources/*': return p[1] === 'for' ? this.resourcesFor(p[2]) : this.resource(p[1]);
+      case 'POST /resources': return this.addResource(body);
+      case 'PATCH /resources/*': return this.editResource(p[1], body);
+      case 'DELETE /resources/*': return this.removeResource(p[1]);
       default: throw new HttpError(404, 'not_found', `registry has no ${key}`);
     }
   }
@@ -222,16 +236,22 @@ export class RegistryObject extends DurableObject {
       await sha256(refresh), store || null, device || null, JSON.stringify(roles || []), owner ? 1 : 0, new Date().toISOString(), Date.now() + ttl * 1000, owner ? await this.ownerFp() : null, elevated, rec ? rec.epoch || 0 : null);
     return { refresh, roleExpires: elevated ? elevated + this.roleTtlMs() : null };
   }
-  async useRefresh({ refresh }) {
-    const hash = await sha256(String(refresh || ''));
-    const row = this.sql.exec('SELECT * FROM refresh WHERE hash = ?', hash).toArray()[0];
-    this.sql.exec('DELETE FROM refresh WHERE hash = ? OR expires < ?', hash, Date.now());
+  // A refresh token's store, while the token still signs in: the reasons it
+  // no longer does are the same for using it and for checking it.
+  async liveRefresh(row) {
     if (!row || row.expires < Date.now()) throw new HttpError(401, 'unauthorised', 'refresh token is not valid');
     if (row.owner && row.fp !== await this.ownerFp()) throw new HttpError(401, 'revoked', 'the owner key has changed; sign in again');
     const store = row.store ? this.get(row.store) : null;
     if (row.store && !store) throw new HttpError(404, 'not_registered', `store ${row.store} is not registered`);
     if (store?.status === 'suspended') throw new HttpError(403, 'suspended', `store ${row.store} is suspended`);
     if (store && row.epoch != null && row.epoch < (store.epoch || 0)) throw new HttpError(401, 'revoked', 'this device was signed out; sign in again');
+    return store;
+  }
+  async useRefresh({ refresh }) {
+    const hash = await sha256(String(refresh || ''));
+    const row = this.sql.exec('SELECT * FROM refresh WHERE hash = ?', hash).toArray()[0];
+    this.sql.exec('DELETE FROM refresh WHERE hash = ? OR expires < ?', hash, Date.now());
+    const store = await this.liveRefresh(row);
     let roles = JSON.parse(row.roles), elevated = row.elevated || null;
     if (!row.owner && roles.some(r => r !== 'floor')) {
       if (!elevated) elevated = Date.now();                  // a session from before roles expired: its shift starts now
@@ -239,6 +259,13 @@ export class RegistryObject extends DurableObject {
     }
     const next = await this.issueRefresh({ store: row.store, device: row.device, roles, owner: !!row.owner, elevated, epoch: store?.epoch || 0 });
     return { store: row.store, device: row.device, roles, owner: !!row.owner, caps: store ? this.caps(store) : [], epoch: store?.epoch || 0, refresh: next.refresh, roleExpires: next.roleExpires };
+  }
+  // Opening the app with time left on the token: does the session still
+  // stand? Nothing is rotated or deleted, so tabs opening together cannot
+  // spend each other's token.
+  async checkRefresh({ refresh }) {
+    await this.liveRefresh(this.sql.exec('SELECT * FROM refresh WHERE hash = ?', await sha256(String(refresh || ''))).toArray()[0]);
+    return { ok: true };
   }
   // Sign-out: the refresh token stops working now, not in 30 days.
   async revokeRefresh({ refresh }) {
@@ -381,6 +408,54 @@ export class RegistryObject extends DurableObject {
       entitlements: JSON.parse(row.entitlements), toolsOff: Object.keys(JSON.parse(row.tools || '{}')), areas: JSON.parse(row.areas), codes: Object.keys(JSON.parse(row.codes)),
       mapVersion: row.map_version, epoch: row.epoch || 0, created: row.created, updated: row.updated };
   }
+  // ── resources ────────────────────────────────────────────────────────
+  // The owner's library for every store (shared/resources.js). An entry
+  // lists every store or some; a store's managers see the ones listed for
+  // it that have a file or a link, unless the owner switched Resources off
+  // for that store. Each change is an owner action.
+  resources() { return this.sql.exec('SELECT doc FROM resources ORDER BY updated DESC').toArray().map(r => JSON.parse(r.doc)); }
+  resource(id) {
+    const row = this.sql.exec('SELECT doc FROM resources WHERE id = ?', String(id)).toArray()[0];
+    if (!row) throw new HttpError(404, 'not_found', `no resource ${id}`);
+    return JSON.parse(row.doc);
+  }
+  resourcesFor(no) {
+    const row = this.get(no); if (!row) throw new HttpError(404, 'not_registered', `store ${no} is not registered`);
+    if (JSON.parse(row.tools || '{}').resources === false) throw new HttpError(403, 'tool_off', 'Resources is switched off for this store');
+    return { resources: this.resources().filter(e => ready(e) && visibleTo(e, no)) };
+  }
+  storeNos() { return this.sql.exec('SELECT no FROM stores').toArray().map(r => String(r.no)); }
+  saveResource(e) { this.sql.exec('INSERT OR REPLACE INTO resources (id, doc, updated) VALUES (?, ?, ?)', e.id, JSON.stringify(e), e.updated); return e; }
+  addResource(body) {
+    const c = cleanEntry({ stores: 'all', ...body }, { stores: this.storeNos() });
+    if (c.error) throw new HttpError(400, 'invalid_request', c.error);
+    if (!c.title) throw new HttpError(400, 'invalid_request', 'a resource needs a title');
+    const at = new Date().toISOString(), e = this.saveResource({ id: ulid(), title: c.title, category: c.category || '', note: c.note || '', stores: c.stores, link: c.link || '', file: null, created: at, updated: at });
+    this.log('resource.add', null, { id: e.id, title: e.title, stores: e.stores });
+    return e;
+  }
+  editResource(id, body) {
+    const cur = this.resource(id), c = cleanEntry(body, { stores: this.storeNos() });
+    if (c.error) throw new HttpError(400, 'invalid_request', c.error);
+    let oldKey = null;
+    if (body.file !== undefined) {
+      const f = body.file;
+      if (f !== null && !(f && typeof f.key === 'string' && f.key.startsWith(`resources/${id}/`) && f.name && f.type && Number.isFinite(f.size))) throw new HttpError(400, 'invalid_request', 'not a stored file');
+      oldKey = cur.file?.key || null;
+      c.file = f && { name: String(f.name).slice(0, 120), type: String(f.type), size: Number(f.size), key: f.key, at: f.at || new Date().toISOString() };
+    }
+    if (!Object.keys(c).length) return { entry: cur, oldKey: null };
+    const e = this.saveResource({ ...cur, ...c, updated: new Date().toISOString() });
+    this.log(body.file !== undefined ? 'resource.file' : 'resource.edit', null, { id, title: e.title, ...(body.file !== undefined ? { file: e.file?.name || null } : { fields: Object.keys(c) }) });
+    return { entry: e, oldKey: oldKey !== e.file?.key ? oldKey : null };
+  }
+  removeResource(id) {
+    const cur = this.resource(id);
+    this.sql.exec('DELETE FROM resources WHERE id = ?', cur.id);
+    this.log('resource.remove', null, { id: cur.id, title: cur.title });
+    return { key: cur.file?.key || null };
+  }
+
   log(type, store, detail) {
     this.sql.exec('INSERT INTO actions (at, type, store, detail) VALUES (?, ?, ?, ?)', new Date().toISOString(), type, store || null, JSON.stringify(detail || {}));
   }

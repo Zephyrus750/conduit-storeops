@@ -43,12 +43,14 @@ import screens from './views/backdock/screenlist.js';
 import livepull from './views/livepull.js';
 import equipment from './views/equipment.js';
 import recalls from './views/recalls.js';
+import resources from './views/resources.js';
+import adminresources from './views/adminresources.js';
 import { tx } from './i18n.js';
 
-export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refresh, labelint, emergency, maintenance, equipment, recalls, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS, livepull].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refresh, labelint, emergency, maintenance, equipment, recalls, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS, livepull, resources, adminresources].map(v => [v.id, v]));
 
-// The desktop rail (Version A, 23 Oct 2026): Today and Reports & files on
-// top, then a few rows per area, then the foot. A row is one screen or a group of screens
+// The desktop rail (Version A, 23 Oct 2026): Today, Reports & files and
+// Resources (managers) on top, then a few rows per area, then the foot. A row is one screen or a group of screens
 // shown as tabs above whichever is open; the row opens the one used last
 // (the first at the start). A tab's label is the screen's own name unless
 // the group gives a shorter one. `also`: screens the row stands for with no
@@ -57,6 +59,7 @@ const G = (label, icon, tabs, also = []) => ({ label, icon, tabs: tabs.map(t => 
 export const GROUPS = {
   today: G(tx('Today'), 'm-dashboard', [['dashboard', tx('Today')]]),
   inputs: G(tx('Reports & files'), 'file', ['inputs']),
+  resources: G(tx('Resources'), 'stack', ['resources']),
   map: G(tx('Store map'), 'm-map', ['map'], ['printmap', 'mapedits', 'fieldmode']),
   floorchecks: G(tx('Floor checks'), 'listcheck', ['refresh', 'labelint', 'stocktake']),
   picklist: G(tx('Pick list'), 'm-picklist', ['picklist']),
@@ -76,7 +79,7 @@ export const RAIL = [
   { sec: tx('Stockroom'), rows: ['backfill', 'accuracy', 'cages'] },
   { sec: tx('Back dock'), rows: ['receiving', 'plan', 'results'] },
 ];
-export const RAIL_TOP = ['today', 'inputs'];
+export const RAIL_TOP = ['today', 'inputs', 'resources'];
 export const RAIL_FOOT = ['screens', 'settings', 'help'];
 // The row a screen belongs to, by view id.
 export const GROUP_OF = Object.fromEntries(Object.entries(GROUPS).flatMap(([g, x]) => [...x.tabs.map(t => [t[0], g]), ...x.also.map(v => [v, g])]));
@@ -90,7 +93,7 @@ export const STRIP = {
 export const HOME = { floor: 'map', stockroom: 'srhome', backdock: 'bdhome', admin: 'admin' };
 export const WORKSPACES = [['floor', tx('Floor'), 'm-map', tx('Map, refresh, labels, routes, stocktake')], ['stockroom', tx('Stockroom'), 'box', tx('Backfill scan, cages, adjustments, day list')], ['backdock', tx('Back dock'), 'truck', tx('Land and decant pallets, run the truck')]];
 // The owner console's rail: stores are added at runtime, these are the system rows.
-export const ADMIN_RAIL = [['admin', 'grid', tx('Overview')], ['adminmaps', 'm-map', tx('Maps')], ['adminservice', 'm-settings', tx('Service')], ['adminreg', 'plus', tx('Register a store')], ['adminactions', 'history', tx('Owner actions')]];
+export const ADMIN_RAIL = [['admin', 'grid', tx('Overview')], ['adminmaps', 'm-map', tx('Maps')], ['adminservice', 'm-settings', tx('Service')], ['adminresources', 'stack', tx('Resources')], ['adminreg', 'plus', tx('Register a store')], ['adminactions', 'history', tx('Owner actions')]];
 // The phone's More sheet: each area's tools (with a line on what each is
 // for), then the store and the app; Switch area and Sign out sit at the foot.
 // A desk-only view drops out (Maintenance shows on a manager's phone only).

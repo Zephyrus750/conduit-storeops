@@ -24,8 +24,9 @@ installLog();
 import { updates, initUpdates } from './updates.js';
 import { VIEWS, RAIL, RAIL_TOP, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
 import { toolForView, toolOff } from '../shared/tools.js';
+import { loadResources, cachedResources, useResource } from './resourcelib.js';
 import { openFound, useRecallStore } from './recallflag.js';
-import { ensureArea, ensureManager, hasArea } from './unlock.js';
+import { ensureArea, ensureManager, hasArea, managerReason, managerCode } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
@@ -97,7 +98,7 @@ client.session.on('change', snap => {
   if (view && view.area && view.area !== 'store' && !(snap?.caps || []).includes(view.area)) { setWs('floor'); show(HOME.floor); }
   if (gone.length) { const [a, b, c] = gone.map(areaName); toast(c ? tx('{a}, {b} and {c} were switched off for this store', { a, b, c }) : b ? tx('{a} and {b} were switched off for this store', { a, b }) : tx('{a} was switched off for this store', { a })); }
 });
-client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: tx('Owner session expired. Sign in again.') } : {}); });
+client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: tx('Owner session expired. Sign in again.') } : { error: tx('This device was signed out. Sign in again.') }); });
 // A shared shelf link (?store=…&shelf=…): open the map on that shelf once
 // signed in to that store. A store parked on this device is switched to; a
 // device that is not signed in gets the sign-in with that store chosen.
@@ -107,9 +108,15 @@ let pendingLink = takeDeepLink();
   if (pendingLink && s?.store && !s.actas && s.store !== pendingLink.store) {
     try { if ((await client.session.parked()).some(p => p.store === pendingLink.store)) s = await client.session.switchTo(pendingLink.store); } catch {}
   }
+  // A saved session whose token has run out is renewed before anything
+  // shows: one the worker has ended goes straight to the sign-in (the
+  // signin-required handler above), and a manager whose shift is over is
+  // asked for the code on the Welcome back card, not after the store opens.
+  const saved = !!s; s = await client.session.check();
+  if (saved && !s) return;
   // Opening the app shows the store to continue in; a reload (or the
-  // owner acting as a store) goes straight back in.
-  if (s?.store) { if (s.actas || reloaded()) await enter(); else await showContinue(s); }
+  // owner acting as a store) goes straight back in, unless it needs the manager code.
+  if (s?.store) { if (s.actas || (reloaded() && !codeNeeded(s))) await enter(); else await showContinue(s); }
   else if (s?.owner) await enterAdmin(); else showSignin();
 })().catch(e => {
   // Opening failed part-way (a bad saved session, a view that threw): the
@@ -157,7 +164,7 @@ async function enter() {
   // come from the registry), and the rail, the views and the data follow.
   let areasSig = JSON.stringify(store.get('areas')?.on || null);
   store.on('areas', a => { const sig = JSON.stringify(a?.on || null); if (sig === areasSig) return; areasSig = sig; client.session.refresh().catch(() => {}); });
-  store.on('tools', () => { if (offList().join() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
+  store.on('tools', () => { if (railSig() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = tx('Store {no}', { no: s.store });
   buildRail(); paintBadges(); setWs('floor');
@@ -235,10 +242,11 @@ async function idleCheck() {
 // lock, another store opened here): a PC asks for the manager code at once,
 // since it has no other way in, and a phone signed in as a manager asks too
 // (it may carry on as a team member). The store stays open underneath.
+// A team member's phone never asks; a dock screen holds no manager role.
+const codeNeeded = s => !s.screen && !(s.roles || []).includes('manager') && (!!s.lapsed || !isMobile());
 function managerCheck() {
   const s = client.session.current, mobile = isMobile();
-  if (!store || admin || !s || s.owner || s.actas || s.screen || (s.roles || []).includes('manager')) return;
-  if (mobile && !s.lapsed) return;   // a team member's phone never asks
+  if (!store || admin || !s || s.owner || s.actas || !codeNeeded(s)) return;
   ensureManager({ session: client.session, frame, mobile, lockMins, onSignOut: signOut }).then(ok => {
     if (!store) return;
     buildRail(); paintBadges();
@@ -386,15 +394,25 @@ async function showContinue(s) {
   const mobile = isMobile(), name = s.name || tx('Store {no}', { no: s.store });
   let last = 'floor'; try { last = localStorage.getItem('last_workspace') || 'floor'; } catch {}
   let ready = false; try { ready = await client.storage.has(`snap:${s.store}`); } catch {}
-  const lapsed = !s.screen && !(s.roles || []).includes('manager') && (s.lapsed || !mobile);
-  const area = s.screen ? tx('Dock screen') : (s.roles || []).includes('manager') ? tx('Manager') : lapsed ? tx('Manager code needed') : areaName(last);
+  // A manager role that has gone (the shift ended, the idle lock, another
+  // store opened here) is asked for here, before the store opens.
+  const ask = codeNeeded(s);
+  const area = s.screen ? tx('Dock screen') : (s.roles || []).includes('manager') ? tx('Manager') : ask ? tx('Manager code needed') : areaName(last);
   const link = pendingLink && pendingLink.store === s.store ? (pendingLink.equip ? tx('Continue and open the equipment card.') : pendingLink.issue ? tx('Continue and open the work order.') : tx('Continue and open shelf {shelf}.', { shelf: esc(pendingLink.shelf) })) : '';
-  const form = `<form class="si-form" id="siCont"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>${tx('Welcome back')}</h2><div class="si-sub">${mobile ? tx('This device is signed in.') : tx('This PC is signed in.')}${link ? ' ' + link : ''}</div>` +
-    `<div class="si-store"><span class="si-sav">${esc(s.store)}</span><div><b>${esc(name)}</b><small>${tx('Store {no}', { no: esc(s.store) })} · ${area}</small></div>${ready ? `<span class="si-ready">${ic('check')}${tx('Ready')}</span>` : ''}</div>` +
-    `<button class="si-cta" type="submit">${tx('Continue in {name}', { name: esc(name) })}${ic('arrow')}</button><a class="si-alt" data-shell-act="signout" role="button" tabindex="0">${tx('Use a different store')}</a><div class="si-foot">${langSelect(`class="si-lang" id="siLang" aria-label="${tx('Language')}"`)}</div></form>`;
-  const el = cover(polyBackground() + siCard(form)); signinTitle();
-  $('#siCont', el).addEventListener('submit', e => { e.preventDefault(); e.target.querySelector('.si-cta').disabled = true; enter(); });
-  if (!mobile) try { $('#siCont .si-cta', el).focus(); } catch {}   // Enter continues at a desk
+  const code = ask ? `<label for="siMgr">${tx('Manager code')}</label><input class="si-pin si-code" id="siMgr" name="code" type="password" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MG-······" required><div class="si-err" id="siErr"></div>` : '';
+  const form = `<form class="si-form" id="siCont"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>${tx('Welcome back')}</h2><div class="si-sub">${ask ? managerReason(s.lapsed) : mobile ? tx('This device is signed in.') : tx('This PC is signed in.')}${link ? ' ' + link : ''}</div>` +
+    `<div class="si-store"><span class="si-sav">${esc(s.store)}</span><div><b>${esc(name)}</b><small>${tx('Store {no}', { no: esc(s.store) })} · ${area}</small></div>${ready ? `<span class="si-ready">${ic('check')}${tx('Ready')}</span>` : ''}</div>` + code +
+    `<button class="si-cta" type="submit">${ask ? tx('Carry on as manager') : tx('Continue in {name}', { name: esc(name) })}${ic('arrow')}</button>` +
+    `${ask && mobile ? `<a class="si-alt" data-shell-act="as-team" role="button" tabindex="0">${tx('Carry on as a team member')}</a>` : ''}<a class="si-alt" data-shell-act="signout" role="button" tabindex="0">${tx('Use a different store')}</a><div class="si-foot">${langSelect(`class="si-lang" id="siLang" aria-label="${tx('Language')}"`)}</div></form>`;
+  const el = cover(polyBackground() + siCard(form)); signinTitle(ask ? tx('Manager code') : undefined);
+  $('#siCont', el).addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('.si-cta'); btn.disabled = true;
+    if (ask) { const why = await managerCode(client.session, e.target.code.value); if (why) { $('#siErr', el).textContent = why; e.target.code.select(); btn.disabled = false; return; } }
+    enter();
+  });
+  if (ask) try { $('#siMgr', el).focus(); } catch {}
+  else if (!mobile) try { $('#siCont .si-cta', el).focus(); } catch {}   // Enter continues at a desk
 }
 function showOwnerSignin(error) {
   const el = cover(polyBackground() + `<div class="si-panel si-owner"><form class="si-own" id="siOwner"><div class="si-brand">${mark()}<b>Conduit</b><span class="own">${tx('Owner')}</span></div><h2>${tx('Owner sign-in')}</h2><p>${tx('For the developer. Store teams sign in on the store screen and never see this.')}</p>` +
@@ -472,9 +490,12 @@ document.addEventListener('click', () => railTip(null, false));
 // hidden everywhere and refused when opened.
 const offList = () => (store?.get('tools')?.off) || [];
 const offView = id => toolOff(offList(), toolForView(id));
+// A managers' view (Resources) shows for a manager, or the owner acting as the store.
+const isManager = () => { const c = client.session.current; return !!c && (!!c.owner || (c.roles || []).includes('manager')); };
+const railSig = () => `${offList().join()}|${isManager()}`;
 let toolsSig = null;
 function buildRail() {
-  toolsSig = offList().join();
+  toolsSig = railSig();
   const rows = ids => ids.map(g => { const tabs = railTabs(g); return tabs.length ? railRow(g, tabs) : ''; }).join('');
   $('#railscroll').innerHTML = RAIL.map(sec => { const html = rows(sec.rows); return html ? `<div class="rsec">${sec.sec}</div>${html}` : ''; }).join('');
   $('#railtop').innerHTML = rows(RAIL_TOP);
@@ -485,7 +506,7 @@ function buildRail() {
 // area entitled (the area's code is asked for when the screen opens).
 function railTabs(g) {
   const caps = client.session.current?.caps || [], outside = v => v.area && v.area !== 'floor' && v.area !== 'store' && !caps.includes(v.area);
-  return GROUPS[g].tabs.filter(([v]) => VIEWS[v] && !offView(v) && !outside(VIEWS[v])).map(([v, label]) => [v, label || VIEWS[v].rail || VIEWS[v].title]);
+  return GROUPS[g].tabs.filter(([v]) => VIEWS[v] && !offView(v) && !outside(VIEWS[v]) && !(VIEWS[v].managers && !isManager())).map(([v, label]) => [v, label || VIEWS[v].rail || VIEWS[v].title]);
 }
 // The tab a row opens: the one used last on this device, else the first.
 let lastTabs = {}; try { lastTabs = JSON.parse(localStorage.getItem('rail_tabs') || '{}') || {}; } catch {}
@@ -633,7 +654,8 @@ function show(id, arg) {
     ensureArea({ session: client.session, frame, area: view.area }).then(ok => { if (ok) show(id, arg); });
     return;
   }
-  if (store && offList().join() !== toolsSig) { buildRail(); paintBadges(); setWs(ws); }
+  if (store && railSig() !== toolsSig) { buildRail(); paintBadges(); setWs(ws); }
+  if (store && view.managers && !isManager()) { toast(tx('{name} is for managers: sign in with the manager code', { name: view.title })); if (current && current !== view.id) return; view = VIEWS[mobile ? HOME[ws] || 'map' : 'dashboard']; }
   if (store && offView(view.id)) { toast(tx('{name} is switched off for this store', { name: tx(toolForView(view.id).name) })); if (current && current !== view.id && !offView(current)) return; view = VIEWS[mobile ? HOME[view.area] || 'map' : 'dashboard']; }
   if (store && view.area && view.area !== ws && view.area !== 'admin') setWs(view.area);
   // A phone-only view (a workspace home) opens its desktop counterpart on a wide screen.
@@ -775,6 +797,7 @@ document.addEventListener('click', e => {
     else if (act === 'owner-signin') showSignin({ owner: true });
     else if (act === 'switch-area') { $('#msheet')?.classList.remove('open'); if (store) openLauncher(); }
     else if (act === 'store-signin') showSignin();
+    else if (act === 'as-team') client.session.dropManager().then(enter);   // a manager's phone, from the Welcome back card
     else if (act === 'recall-found') { if (store) openFound(store, sa.dataset.recall, sa.dataset.kc); }
     return;
   }
@@ -804,7 +827,15 @@ updates.on(kind => {
   if (kind === 'applying') { const bar = $('#updBar'); if (bar) bar.innerHTML = `${ic('refresh')}<div><b>${tx('Updating…')}</b></div>`; }
 });
 // The palette: keycodes to the catalogue, shelves from the map, tools from the registry.
-const search = initSearch({ client, frame, go: (id, arg) => (id === 'recalls' && isMobile() && deskOnly(VIEWS.recalls) ? toast(tx('Recalls open on a store PC, or a manager’s phone')) : show(id, arg)), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [...[...RAIL_TOP, ...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
+// The store's Resources in the search palette: a manager's PC, with the tool on.
+const resourcesOn = () => !!store && !isMobile() && isManager() && !offView('resources');
+const storeApi = (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token }));
+const resourceHooks = {
+  resources: () => (resourcesOn() ? cachedResources(client.session.current?.store) : null),
+  loadResources: () => (resourcesOn() ? loadResources(storeApi, client.session.current?.store) : null),
+  useResource: id => { const e = (cachedResources(client.session.current?.store) || []).find(x => x.id === id); if (e) useResource(storeApi, e); },
+};
+const search = initSearch({ ...resourceHooks, client, frame, go: (id, arg) => (id === 'recalls' && isMobile() && deskOnly(VIEWS.recalls) ? toast(tx('Recalls open on a store PC, or a manager’s phone')) : show(id, arg)), life: kc => store ? productLife(store.get(), kc) : null, data: () => store ? store.get() : null, tools: () => [...[...RAIL_TOP, ...RAIL.flatMap(sec => sec.rows), ...RAIL_FOOT].flatMap(g => [...railTabs(g).map(t => t[0]), ...GROUPS[g].also.filter(v => VIEWS[v] && !offView(v))]).map(v => VIEWS[v])].filter(v => !VIEWS[v.id].desktopView && !(isMobile() && deskOnly(v))), phone: () => isMobile() });
 // The phone's bar is typed into directly: a compact list drops under it.
 const msBar = search.bar($('#msearch'), () => !admin && !!store);
 

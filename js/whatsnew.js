@@ -12,6 +12,7 @@ import { tx } from './i18n.js';
 
 export const RELEASES = [
   { v: 'v0.3.0', date: '2026-10-09', items: [
+    ['stack', tx('Resources'), tx('At the top of the rail for managers: the forms, procedures, posters and links the owner shares with every store. Search them, open or print a PDF in one click, and the ones you use most sit on top.'), 'resources', 'desk'],
     ['m-manifests', tx('Manifests by week, day and truck'), tx('Each manifest shows the day and truck it came on, by week. Publish several reports at once for a missed day or two: each gets a suggested day from the Planner to check before it goes.'), 'manifests', 'desk'],
     ['chart', tx('Manifest stats'), tx('Under Manifests › Stats: what came in this week, fortnight or month, or all time, against the period before. Cartons by day, the busiest weekdays, departments, top products and what came for the first time.'), 'manifests', 'desk'],
     ['alert', tx('Recalls and withdrawals'), tx('Under Safety & upkeep: a manager adds a recall or withdrawal from the notice, with its keycodes, and moves it from Open to Closed. Every device flags those products straight away: in Live pull, Backfill, Cages, Adjustments, search and every list.'), 'recalls', 'desk'],

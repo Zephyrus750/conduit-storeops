@@ -372,4 +372,5 @@ export default {
   "Recalls": "Richiami",
   "Products off sale: what to pull": "Prodotti fuori vendita: cosa ritirare",
   "Recalls and withdrawals": "Richiami e ritiri",
+  "This device was signed out. Sign in again.": "Questo dispositivo è stato disconnesso. Accedi di nuovo.",
 };

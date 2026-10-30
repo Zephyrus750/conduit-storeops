@@ -439,4 +439,9 @@ export default {
   "lists {kc}": "enthält {kc}",
   "Removing": "Wird entfernt",
   "All removed": "Alles entfernt",
+  "Link": "Link",
+  "Resources used most on this PC": "Meistgenutzte Unterlagen an diesem PC",
+  "a form or file from Resources": "ein Formular oder eine Datei aus Unterlagen",
+  "All {n} resources matching “{q}”": "Alle {n} Unterlagen zu „{q}“",
+  "Open Resources with this search": "Unterlagen mit dieser Suche öffnen",
 };

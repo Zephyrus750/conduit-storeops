@@ -634,6 +634,53 @@ test('manifest delete needs the dock code, and a refused delete leaves the docum
   assert.equal((await api('GET', '/v1/store/2006/manifest/7777001', undefined, dock)).status, 404);
 });
 
+test('resources: the owner adds files and links for every store or some; managers list and open theirs', async () => {
+  assert.equal((await reg2('2131')).status, 201); assert.equal((await reg2('2132')).status, 201);
+  const send = (method, path, token, body, type) => mf.dispatchFetch('http://conduit.test' + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(type ? { 'Content-Type': type } : {}) }, body });
+  const mgr = async no => (await api('POST', '/v1/auth/signin', { store: no, managerCode: `MG-${no}`, device: `rs-${no}` })).body.token;
+  const m31 = await mgr('2131'), m32 = await mgr('2132'), floor = (await api('POST', '/v1/auth/signin', { store: '2131', pin: '135790', device: 'rs-floor' })).body.token;
+  assert.equal((await api('POST', '/v1/admin/resources', { title: 'x' }, m31)).status, 403, 'only the owner keeps the library');
+  assert.equal((await api('POST', '/v1/admin/resources', { title: ' ' }, ownerToken)).status, 400);
+  assert.equal((await api('POST', '/v1/admin/resources', { title: 'Plan', stores: ['9999'] }, ownerToken)).status, 400, 'a store that is not registered');
+  const all = await api('POST', '/v1/admin/resources', { title: 'Daily opening checklist', category: 'Forms' }, ownerToken);
+  assert.equal(all.status, 201); assert.equal(all.body.stores, 'all'); assert.equal(all.body.file, null);
+  const one = (await api('POST', '/v1/admin/resources', { title: 'Evacuation plan', category: 'Safety', stores: ['2131'] }, ownerToken)).body;
+  const link = (await api('POST', '/v1/admin/resources', { title: 'Supplier portal', link: 'https://supplier.example/portal' }, ownerToken)).body;
+  assert.deepEqual((await api('GET', '/v1/resources', undefined, m31)).body.resources.map(r => r.title), ['Supplier portal'], 'an entry with no file yet is not listed');
+  // Files: the type follows the name; a page or a script is refused.
+  const pdf = new TextEncoder().encode('%PDF-1.4 checklist');
+  assert.equal((await send('POST', `/v1/admin/resources/${all.body.id}/file?name=page.html`, ownerToken, new Uint8Array([60, 104]), 'text/html')).status, 415);
+  assert.equal((await send('POST', `/v1/admin/resources/NOPE/file?name=a.pdf`, ownerToken, pdf, 'application/pdf')).status, 404);
+  assert.equal((await send('POST', `/v1/admin/resources/${all.body.id}/file?name=Opening%20checklist.pdf`, m31, pdf, 'application/pdf')).status, 403);
+  const up = await send('POST', `/v1/admin/resources/${all.body.id}/file?name=Opening%20checklist.pdf`, ownerToken, pdf, 'application/pdf');
+  assert.equal(up.status, 201); const upBody = await up.json(); assert.equal(upBody.file.name, 'Opening checklist.pdf'); assert.equal(upBody.file.type, 'application/pdf'); assert.equal(upBody.file.size, pdf.length);
+  assert.equal((await send('POST', `/v1/admin/resources/${one.id}/file?name=evac.png`, ownerToken, new Uint8Array([0x89, 80, 78, 71, 1, 2]), 'image/png')).status, 201);
+  // Each store's managers see what is listed for them; the store PIN alone does not.
+  assert.deepEqual((await api('GET', '/v1/resources', undefined, m31)).body.resources.map(r => r.title).sort(), ['Daily opening checklist', 'Evacuation plan', 'Supplier portal']);
+  assert.deepEqual((await api('GET', '/v1/resources', undefined, m32)).body.resources.map(r => r.title).sort(), ['Daily opening checklist', 'Supplier portal']);
+  assert.equal((await api('GET', '/v1/resources', undefined, floor)).status, 403);
+  const f = await send('GET', `/v1/resources/${all.body.id}/file`, m31);
+  assert.equal(f.status, 200); assert.equal(f.headers.get('content-type'), 'application/pdf'); assert.match(f.headers.get('content-disposition'), /^inline; filename\*=UTF-8''Opening%20checklist\.pdf$/); assert.equal(f.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(new TextDecoder().decode(await f.arrayBuffer()), '%PDF-1.4 checklist');
+  assert.match((await send('GET', `/v1/resources/${all.body.id}/file?download=1`, m31)).headers.get('content-disposition'), /^attachment/);
+  assert.equal((await send('GET', `/v1/resources/${one.id}/file`, m32)).status, 404, 'listed for another store');
+  // A new file replaces the old; an edit moves an entry between stores.
+  await send('POST', `/v1/admin/resources/${all.body.id}/file?name=Opening%20checklist%20v2.pdf`, ownerToken, new TextEncoder().encode('%PDF-1.4 v2'), 'application/pdf');
+  assert.equal(new TextDecoder().decode(await (await send('GET', `/v1/admin/resources/${all.body.id}/file`, ownerToken)).arrayBuffer()), '%PDF-1.4 v2');
+  const ed = await api('PATCH', `/v1/admin/resources/${one.id}`, { stores: ['2132'], note: 'print A3' }, ownerToken);
+  assert.equal(ed.status, 200); assert.deepEqual(ed.body.stores, ['2132']); assert.equal(ed.body.note, 'print A3'); assert.equal(ed.body.title, 'Evacuation plan');
+  assert.ok((await api('GET', '/v1/resources', undefined, m32)).body.resources.some(r => r.id === one.id));
+  // Switched off for a store: its managers get nothing.
+  assert.equal((await api('PATCH', '/v1/admin/stores/2132', { tools: { resources: false } }, ownerToken)).status, 200);
+  const off = await api('GET', '/v1/resources', undefined, m32); assert.equal(off.status, 403); assert.equal(off.body.code, 'tool_off');
+  // Removed: gone from the list and its file with it; the owner's log keeps each change.
+  assert.equal((await api('DELETE', `/v1/admin/resources/${all.body.id}`, undefined, ownerToken)).status, 200);
+  assert.equal((await send('GET', `/v1/admin/resources/${all.body.id}/file`, ownerToken)).status, 404);
+  assert.deepEqual((await api('GET', '/v1/admin/resources', undefined, ownerToken)).body.resources.map(r => r.id).sort(), [link.id, one.id].sort());
+  const acts = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions.map(a => a.type);
+  for (const t of ['resource.add', 'resource.file', 'resource.edit', 'resource.remove']) assert.ok(acts.includes(t), t);
+});
+
 test('manifests list and stats: every report with its counts; a day set by hand places one; a period against the one before', async () => {
   assert.equal((await reg2('2121')).status, 201);
   const floor = (await api('POST', '/v1/auth/signin', { store: '2121', pin: '135790', device: 'ms1' })).body.token;
@@ -665,10 +712,14 @@ test('sessions: revoke, rotation and suspension sign devices out; sign-out ends 
   const signin = device => api('POST', '/v1/auth/signin', { store: '2007', pin: '135790', device });
   const a = (await signin('ra1')).body;
   assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, a.token)).status, 200);
+  // Opening the app asks whether the session stands: it does, and asking rotates nothing.
+  assert.deepEqual((await api('POST', '/v1/auth/check', { refresh: a.refresh })).body, { ok: true });
+  assert.equal((await api('POST', '/v1/auth/check', { refresh: a.refresh })).status, 200, 'asking twice is fine');
   const rev = await api('PATCH', '/v1/admin/stores/2007', { revoke: true }, ownerToken);
   assert.equal(rev.status, 200); assert.equal(rev.body.epoch, 1);
   const refused = await api('GET', '/v1/store/2007/snapshot', undefined, a.token);
   assert.equal(refused.status, 401); assert.equal(refused.body.code, 'revoked');
+  assert.equal((await api('POST', '/v1/auth/check', { refresh: a.refresh })).status, 401, 'the check says so before the token runs out');
   assert.equal((await api('POST', '/v1/auth/refresh', { refresh: a.refresh })).status, 401, 'the refresh token went too');
   assert.equal((await api('POST', '/v1/auth/unlock', { code: 'DK-2007' }, a.token)).status, 401, 'an old token cannot unlock');
   const relock = await api('POST', '/v1/auth/lock', { refresh: a.refresh }, a.token);
@@ -677,13 +728,16 @@ test('sessions: revoke, rotation and suspension sign devices out; sign-out ends 
   const b = (await signin('rb1')).body;
   assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, b.token)).status, 200, 'signing in again works');
   assert.equal((await api('POST', '/v1/auth/signout', { refresh: b.refresh })).status, 200);
-  assert.equal((await api('POST', '/v1/auth/refresh', { refresh: b.refresh })).status, 401, 'signed out on the worker');
+  assert.equal((await api('POST', '/v1/auth/check', { refresh: b.refresh })).status, 401, 'signed out on the worker');
+  assert.equal((await api('POST', '/v1/auth/refresh', { refresh: b.refresh })).status, 401);
 
   const c = (await signin('rc1')).body;
   assert.equal((await api('PATCH', '/v1/admin/stores/2007', { codes: { manager: 'MG-NEW' } }, ownerToken)).body.epoch, 2, 'a code rotation revokes');
   assert.equal((await api('GET', '/v1/store/2007/snapshot', undefined, c.token)).status, 401);
 
+  const d = (await signin('rs1')).body;
   assert.equal((await api('PATCH', '/v1/admin/stores/2007', { status: 'suspended' }, ownerToken)).status, 200);
+  assert.equal((await api('POST', '/v1/auth/check', { refresh: d.refresh })).status, 401, 'a suspended store\'s devices are signed out too');
   const sus = await signin('rd1');
   assert.equal(sus.status, 403); assert.equal(sus.body.code, 'suspended');
   assert.equal((await api('PATCH', '/v1/admin/stores/2007', { status: 'live' }, ownerToken)).status, 200);

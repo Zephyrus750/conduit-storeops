@@ -271,7 +271,9 @@ function accessTab(rec) {
   const identity = st.edit
     ? `<form class="card" data-form="edit"><div class="ch"><h3>${tx('Store')}</h3></div><div class="ad-grid2">${field(tx('Name'), inp('name', rec.name, tx('Store name'), '', 'required'))}${field(tx('Region'), inp('region', rec.region, tx('e.g. {example}', { example: 'WA South' })))}${field(tx('Status'), `<select class="ad-in" name="status">${STATUSES.map(v => `<option value="${v}" ${rec.status === v ? 'selected' : ''}>${stateName(v)}</option>`).join('')}</select>`, tx('live once any area is live on Conduit'))}</div><div class="acts" style="margin-top:12px"><button class="btn primary sm" type="submit">${ic('check')}${tx('Save')}</button><button class="btn sm" type="button" data-act="edit-cancel">${tx('Cancel')}</button></div></form>`
     : `<div class="card"><div class="ch"><h3>${tx('Store')}</h3><span class="btn sm" data-act="edit">${ic('edit')}${tx('Edit')}</span></div><div class="ad-kv"><span>${tx('Number')}</span><b class="mono">${esc(rec.no)}</b><span>${tx('Name')}</span><b>${esc(rec.name)}</b><span>${tx('Region')}</span><b>${esc(rec.region || '—')}</b><span>${tx('Status')}</span><b>${tst(rec.status)}</b><span>${tx('Created')}</span><b>${fmtTime(rec.created)}</b><span>${tx('Updated')}</span><b>${fmtTime(rec.updated)}</b></div></div>`;
-  return areas + `<div class="grid2 ad-two">${creds}${identity}</div>`;
+  // Store-wide tools (Resources): on with the store, not inside an area.
+  const whole = toolsIn('store').length ? `<div class="card ad-whole"><div class="ch"><h3>${tx('Whole store')}</h3><span class="cs-dim">${tx('managers on any PC')}</span></div><div class="ad-tools">${toolsIn('store').map(t => { const live = !(rec.toolsOff || []).includes(t.id); return `<button type="button" class="ad-tool" data-act="tool" data-tool="${t.id}" role="switch" aria-checked="${live}" title="${live ? tx('On: click to switch it off for this store') : tx('Off: click to switch it on')}"><span class="tick ${live ? 'on' : ''}">${live ? ic('check') : ''}</span>${esc(tx(t.name))}</button>`; }).join('')}</div></div>` : '';
+  return areas + whole + `<div class="grid2 ad-two">${creds}${identity}</div>`;
 }
 // ── migration: import from the legacy app, review, flip the area ───────
 const AREA_STATE = { legacy: [tx('On the legacy app'), ''], migrating: [tx('Migrating'), 'staged'], live: [tx('Live on Conduit'), 'live'] };
@@ -622,6 +624,10 @@ function actionText(a) {
     case 'roster.rotate': return s + (d.pin ? tx('rotated the store PIN') : tx('rotated {codes} code', { codes: (d.codes || []).join(', ') }));
     case 'codes.view': return s + (d.name === 'pin' ? (d.shown ? tx('viewed the store PIN') : tx('asked for the store PIN (not on file yet)')) : d.shown ? tx('viewed the {code} code', { code: esc(d.name) }) : tx('asked for the {code} code (not on file yet)', { code: esc(d.name) }));
     case 'store.import': { const vars = { app: d.source === 'dv' ? 'Decant Visualiser' : 'K2B', code: esc(d.code || ''), applied: d.applied, dups: d.duplicates, rejected: d.rejected }; return s + (d.rejected ? tx('imported from {app} {code}: {applied} events written, {dups} already there, {rejected} rejected', vars) : tx('imported from {app} {code}: {applied} events written, {dups} already there', vars)); }
+    case 'resource.add': return tx('added the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
+    case 'resource.edit': return tx('edited the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
+    case 'resource.file': return d.file ? tx('uploaded {file} to the resource {title}', { file: esc(d.file), title: `<b>${esc(d.title || '')}</b>` }) : tx('took the file off the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
+    case 'resource.remove': return tx('removed the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
     default: return `${s}${esc(a.type)} ${esc(short(d))}`;
   }
 }
