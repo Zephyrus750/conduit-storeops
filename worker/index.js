@@ -3,13 +3,14 @@
 // 501 not_implemented with the route named, never a silent 404.
 
 import { Router } from './router.js';
-import { json, fail, preflight, readJson, HttpError, reportError } from './http.js';
+import { json, fail, preflight, readJson, HttpError, reportError, CORS } from './http.js';
 import { signToken, verifyToken, verifySecret, makeClaims, hasRole } from './auth.js';
 export { StoreObject } from './store.js';
 export { RegistryObject } from './registry.js';
 export { CatalogueObject } from './catalogue-object.js';
 import { VERSION } from './version.js';
 import { ulid } from '../shared/ulid.js';
+import { fileKind, FILE_EXTS, FILE_MAX } from '../shared/resources.js';
 import { parseCodes, lookup, catalogueStub } from './catalogue.js';
 import { gs1Parse } from '../shared/gs1.js';
 import { findByBarcode } from './apnlookup.js';
@@ -271,6 +272,63 @@ r.post('/v1/admin/stores/:no/flip', async (req, env, _c, p) => {
   if (!['legacy', 'migrating', 'live'].includes(b.state)) throw new HttpError(400, 'invalid_request', 'state must be legacy, migrating or live');
   const rec = await registry(env, 'PATCH', `/stores/${p.no}`, { areas: { [b.area]: b.state } });
   return json({ ok: true, no: rec.no, areas: rec.areas });
+});
+
+// ── resources: the owner's files and links for every store's managers ────
+// The registry keeps the entries (shared/resources.js); the files sit in
+// the R2 bucket bound as PHOTOS, under resources/<id>/, apart from the
+// stores' photos. The owner adds, edits, uploads and removes; a store's
+// managers (or the owner acting as the store) list and open the ones
+// listed for it.
+const files = env => { if (!env.PHOTOS) throw new HttpError(501, 'not_implemented', 'resource files need the PHOTOS R2 bucket bound to the worker'); return env.PHOTOS; };
+r.get('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/resources')); });
+r.post('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; return json(await registry(env, 'POST', '/resources', b), 201); });
+r.patch('/v1/admin/resources/:id', async (req, env, _c, p) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; return json((await registry(env, 'PATCH', `/resources/${p.id}`, b)).entry); });
+r.delete('/v1/admin/resources/:id', async (req, env, _c, p) => {
+  await requireOwner(req, env);
+  const { key } = await registry(env, 'DELETE', `/resources/${p.id}`);
+  if (key && env.PHOTOS) await env.PHOTOS.delete(key);
+  return json({ ok: true, id: p.id });
+});
+// The file: the body is its bytes, ?name= its file name (the type follows
+// the name, from the allowed kinds). A new file replaces the old one.
+r.post('/v1/admin/resources/:id/file', async (req, env, _c, p) => {
+  const c = await requireOwner(req, env), bucket = files(env);
+  const name = (new URL(req.url).searchParams.get('name') || '').replace(/[\u0000-\u001f\u007f/\\]+/g, ' ').trim().slice(0, 120), kind = fileKind(name);
+  if (!kind) throw new HttpError(415, 'unsupported_media', `a resource file is one of: ${FILE_EXTS.join(', ')}`);
+  if (Number(req.headers.get('Content-Length') || 0) > FILE_MAX) throw new HttpError(413, 'payload_too_large', `a resource file must be under ${FILE_MAX / 1_000_000} MB`);
+  await registry(env, 'GET', `/resources/${p.id}`);   // 404 before the upload when there is no such entry
+  const buf = new Uint8Array(await req.arrayBuffer());
+  if (!buf.length) throw new HttpError(400, 'invalid_request', 'the file is empty');
+  if (buf.length > FILE_MAX) throw new HttpError(413, 'payload_too_large', `a resource file must be under ${FILE_MAX / 1_000_000} MB`);
+  const at = new Date().toISOString(), key = `resources/${p.id}/${ulid()}.${kind.ext}`;
+  await bucket.put(key, buf, { httpMetadata: { contentType: kind.type }, customMetadata: { name, by: String(c.device || 'owner').slice(0, 64), at } });
+  let out;
+  try { out = await registry(env, 'PATCH', `/resources/${p.id}`, { file: { name, type: kind.type, size: buf.length, key, at } }); }
+  catch (e) { await bucket.delete(key); throw e; }
+  if (out.oldKey) await bucket.delete(out.oldKey);
+  return json(out.entry, 201);
+});
+async function resourceFile(env, entry, download) {
+  if (!entry.file) throw new HttpError(404, 'not_found', 'this resource has no file');
+  const obj = await files(env).get(entry.file.key);
+  if (!obj) throw new HttpError(404, 'not_found', 'the file is gone');
+  const kind = fileKind(entry.file.name), how = kind?.inline && !download ? 'inline' : 'attachment';
+  return new Response(obj.body, { headers: { 'Content-Type': entry.file.type, 'Content-Length': String(entry.file.size), 'Content-Disposition': `${how}; filename*=UTF-8''${encodeURIComponent(entry.file.name)}`, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=300', ...CORS } });
+}
+r.get('/v1/admin/resources/:id/file', async (req, env, _c, p) => { await requireOwner(req, env); return resourceFile(env, await registry(env, 'GET', `/resources/${p.id}`), new URL(req.url).searchParams.get('download') === '1'); });
+// A store's managers: the list, and a file. Every other device of the store is refused.
+async function managerOfStore(req, env) {
+  const c = await requireClaims(req, env);
+  if (!c.store) throw new HttpError(403, 'unauthorised', 'a store token is needed: the console has its own list');
+  if (!c.owner && !(c.roles || []).includes('manager')) throw new HttpError(403, 'unauthorised', 'resources are for managers: sign in with the manager code');
+  return c;
+}
+r.get('/v1/resources', async (req, env) => { const c = await managerOfStore(req, env); return json(await registry(env, 'GET', `/resources/for/${c.store}`)); });
+r.get('/v1/resources/:id/file', async (req, env, _c, p) => {
+  const c = await managerOfStore(req, env), { resources } = await registry(env, 'GET', `/resources/for/${c.store}`), e = resources.find(x => x.id === p.id);
+  if (!e) throw new HttpError(404, 'not_found', 'no such resource for this store');
+  return resourceFile(env, e, new URL(req.url).searchParams.get('download') === '1');
 });
 
 // ── records: a keycode's life, per-area history, CSV export ───────────────

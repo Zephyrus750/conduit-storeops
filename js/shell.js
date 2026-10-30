@@ -157,7 +157,7 @@ async function enter() {
   // come from the registry), and the rail, the views and the data follow.
   let areasSig = JSON.stringify(store.get('areas')?.on || null);
   store.on('areas', a => { const sig = JSON.stringify(a?.on || null); if (sig === areasSig) return; areasSig = sig; client.session.refresh().catch(() => {}); });
-  store.on('tools', () => { if (offList().join() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
+  store.on('tools', () => { if (railSig() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = tx('Store {no}', { no: s.store });
   buildRail(); paintBadges(); setWs('floor');
@@ -472,9 +472,12 @@ document.addEventListener('click', () => railTip(null, false));
 // hidden everywhere and refused when opened.
 const offList = () => (store?.get('tools')?.off) || [];
 const offView = id => toolOff(offList(), toolForView(id));
+// A managers' view (Resources) shows for a manager, or the owner acting as the store.
+const isManager = () => { const c = client.session.current; return !!c && (!!c.owner || (c.roles || []).includes('manager')); };
+const railSig = () => `${offList().join()}|${isManager()}`;
 let toolsSig = null;
 function buildRail() {
-  toolsSig = offList().join();
+  toolsSig = railSig();
   const rows = ids => ids.map(g => { const tabs = railTabs(g); return tabs.length ? railRow(g, tabs) : ''; }).join('');
   $('#railscroll').innerHTML = RAIL.map(sec => { const html = rows(sec.rows); return html ? `<div class="rsec">${sec.sec}</div>${html}` : ''; }).join('');
   $('#railtop').innerHTML = rows(RAIL_TOP);
@@ -485,7 +488,7 @@ function buildRail() {
 // area entitled (the area's code is asked for when the screen opens).
 function railTabs(g) {
   const caps = client.session.current?.caps || [], outside = v => v.area && v.area !== 'floor' && v.area !== 'store' && !caps.includes(v.area);
-  return GROUPS[g].tabs.filter(([v]) => VIEWS[v] && !offView(v) && !outside(VIEWS[v])).map(([v, label]) => [v, label || VIEWS[v].rail || VIEWS[v].title]);
+  return GROUPS[g].tabs.filter(([v]) => VIEWS[v] && !offView(v) && !outside(VIEWS[v]) && !(VIEWS[v].managers && !isManager())).map(([v, label]) => [v, label || VIEWS[v].rail || VIEWS[v].title]);
 }
 // The tab a row opens: the one used last on this device, else the first.
 let lastTabs = {}; try { lastTabs = JSON.parse(localStorage.getItem('rail_tabs') || '{}') || {}; } catch {}
@@ -633,7 +636,8 @@ function show(id, arg) {
     ensureArea({ session: client.session, frame, area: view.area }).then(ok => { if (ok) show(id, arg); });
     return;
   }
-  if (store && offList().join() !== toolsSig) { buildRail(); paintBadges(); setWs(ws); }
+  if (store && railSig() !== toolsSig) { buildRail(); paintBadges(); setWs(ws); }
+  if (store && view.managers && !isManager()) { toast(tx('{name} is for managers: sign in with the manager code', { name: view.title })); if (current && current !== view.id) return; view = VIEWS[mobile ? HOME[ws] || 'map' : 'dashboard']; }
   if (store && offView(view.id)) { toast(tx('{name} is switched off for this store', { name: tx(toolForView(view.id).name) })); if (current && current !== view.id && !offView(current)) return; view = VIEWS[mobile ? HOME[view.area] || 'map' : 'dashboard']; }
   if (store && view.area && view.area !== ws && view.area !== 'admin') setWs(view.area);
   // A phone-only view (a workspace home) opens its desktop counterpart on a wide screen.

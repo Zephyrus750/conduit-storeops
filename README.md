@@ -116,6 +116,9 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/catalogue/barcode?code=` | any signed-in device | live: the keycode behind an item barcode nothing in the store links yet (a clearance ticket, a shelf talker): `{ gtin, source (kmart \| isbn \| null), sure, candidates: [{ kc, name, url }], why }`, from Kmart's site search (Browser Rendering) or, for a book, its title matched against the catalogue; cached a week per barcode (a miss a day) |
 | `GET /v1/admin/service` | owner | live: the console's Service page: worker version, bindings and secrets as set or not (never their values), the catalogue build, each store object (events, live data size, last event, nightly run, next alarm, sockets, photos) and the last 100 errors recorded |
 | `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
+| `GET /v1/admin/resources`, `POST …`, `PATCH …/:id`, `DELETE …/:id` | owner | live: the Resources library (`shared/resources.js`): `{ title, category, note, link, stores: 'all' \| ['1241', …] }`; a link is https only, stores must be registered; each change is an owner action (`resource.add`, `.edit`, `.file`, `.remove`); a delete takes the file with it |
+| `POST /v1/admin/resources/:id/file?name=`, `GET …/file` | owner | live: the entry's file, its bytes as the body (PDF, pictures, Word, Excel, PowerPoint, CSV or text by the name's extension, under 25 MB); a new one replaces the old. Kept in the `PHOTOS` R2 bucket under `resources/<id>/` (`501` until it is bound) |
+| `GET /v1/resources`, `GET /v1/resources/:id/file?download=` | a store's manager, or the owner acting as the store | live: the entries listed for the token's store that have a file or a link (`403 tool_off` when Resources is switched off for it), and a file: PDFs and pictures inline (to open and print), the rest, or `?download=1`, as an attachment |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV; `only=archive` pages just the rows retention moved out of the live state |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
@@ -215,6 +218,20 @@ store** mints a store-scoped token (manager role, `actor: owner`) and opens
 the store views with a bar to return; the owner session is kept underneath
 so refresh keeps working. Everything the console writes is a registry
 action or an ordinary event; nothing is deployed.
+
+Resources (`js/views/adminresources.js`) is the owner's library of files and
+links for every store's managers: forms to print, procedures, posters, a
+supplier's portal. Each entry has a title, a category, a note and a file or
+a link, and goes to every store or the ones picked; it can be edited, have
+its file replaced, be opened or removed. A store's PC lists the ones for it
+under **Resources** at the top of the rail, for managers only
+(`js/views/resources.js`): searchable across titles, categories, notes and
+file names, by category, with the ones this PC opens most on top. PDFs and
+pictures open in a tab or print straight away (a hidden frame of the
+downloaded copy, so the site's CSP allows `frame-src blob:`); Word, Excel and
+the rest download. Resources is a store-wide tool: the store's Access tab
+switches it off (**Whole store**). The registry keeps the entries; the files
+share the photos bucket under their own prefix, so nothing new is set up.
 
 ## Install and updates
 
