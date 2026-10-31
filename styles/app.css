@@ -3305,3 +3305,9 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .dk-sheet.pan .rvp-msg.warn { background: #3A2E0B; color: #FDE68A; }
 .dk-sheet.pan .phb-chip.ph-receiving { background: #3A2E0B; color: #FDE68A; }
 .frame.dark .dk-steps li.on span { color: #5CC4EA; }
+/* The land popup: an icon on each part, and Est. mins says whether it is worked out or typed. */
+.bdk-declab.ic { display: flex; align-items: center; gap: 6px; }
+.bdk-declab.ic svg.i, .bdk-fields .fl-h svg.i { width: 15px; height: 15px; flex: none; color: var(--accent-ink); }
+.bdk-land .bdk-pal-h > svg.i { width: 20px; height: 20px; flex: none; color: var(--accent-ink); }
+.bdk-fields .fl-h { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.bdk-fields .fl-t { margin-left: auto; padding: 1px 7px; border-radius: 999px; background: var(--ground); color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: none; }

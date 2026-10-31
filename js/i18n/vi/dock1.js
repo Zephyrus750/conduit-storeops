@@ -671,7 +671,6 @@ export default {
   "{n} pallets have no carton count: they are planned at 60 minutes until they are counted.": "{n} pallet chưa có số thùng: được tính 60 phút cho đến khi đếm.",
   "{n} pallets held from Truck {t}": "{n} pallet giữ lại từ xe tải {t}",
   "{n} pallets · {c} ctn on the dock": "{n} pallet · {c} thùng ở bến",
-  "{n} · auto": "{n} · tự động",
   "{ref} cannot start now": "{ref} chưa thể bắt đầu lúc này",
   "{ref} decanted · every pallet is done: close the truck": "Đã dỡ {ref} · tất cả pallet đã xong: đóng xe tải",
   "{ref} holds a pallet: tap an empty square": "{ref} đã có pallet: chạm vào ô trống",
@@ -715,4 +714,9 @@ export default {
   "Scan labels": "Quét nhãn",
   "Type it": "Nhập tay",
   "Type the label number": "Nhập số trên nhãn",
+  "Worked out from the cartons until you type a time; a new scan works it out again": "Tính theo số thùng cho đến khi bạn nhập thời gian; lần quét mới sẽ tính lại",
+  "by hand": "nhập tay",
+  "{n} label is not on the manifest: open {ref} to flag or ignore it.": "{n} nhãn không có trong bảng kê: mở {ref} để đánh dấu hoặc bỏ qua.",
+  "{n} labels are not on the manifest: open {ref} to flag or ignore them.": "{n} nhãn không có trong bảng kê: mở {ref} để đánh dấu hoặc bỏ qua.",
+  "The receiving audit prints from a PC, for managers.": "Biên bản nhận hàng được in từ máy tính, dành cho quản lý.",
 };

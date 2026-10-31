@@ -671,7 +671,6 @@ export default {
   "{n} pallets have no carton count: they are planned at 60 minutes until they are counted.": "{n} pallet ang walang bilang ng karton: naka-plano ang mga ito sa 60 minuto hanggang mabilang.",
   "{n} pallets held from Truck {t}": "{n} pallet na naka-hold mula sa Truck {t}",
   "{n} pallets · {c} ctn on the dock": "{n} pallet · {c} ctn sa dock",
-  "{n} · auto": "{n} · auto",
   "{ref} cannot start now": "Hindi pa masisimulan ang {ref}",
   "{ref} decanted · every pallet is done: close the truck": "Na-decant ang {ref} · tapos na lahat ng pallet: isara ang truck",
   "{ref} holds a pallet: tap an empty square": "May pallet sa {ref}: i-tap ang bakanteng square",
@@ -715,4 +714,9 @@ export default {
   "Scan labels": "Mag-scan ng mga label",
   "Type it": "I-type",
   "Type the label number": "I-type ang numero ng label",
+  "Worked out from the cartons until you type a time; a new scan works it out again": "Kinukuwenta mula sa mga karton hanggang mag-type ka ng oras; kinukuwenta ulit ng bagong scan",
+  "by hand": "manual",
+  "{n} label is not on the manifest: open {ref} to flag or ignore it.": "{n} label ang wala sa manifest: buksan ang {ref} para i-flag o i-ignore ito.",
+  "{n} labels are not on the manifest: open {ref} to flag or ignore them.": "{n} label ang wala sa manifest: buksan ang {ref} para i-flag o i-ignore ang mga ito.",
+  "The receiving audit prints from a PC, for managers.": "Sa PC ipinapa-print ang receiving audit, para sa mga manager.",
 };

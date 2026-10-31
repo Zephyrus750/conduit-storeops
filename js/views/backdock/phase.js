@@ -11,7 +11,8 @@
 //   newTruckSheet(dock, plan, nt, now)   the New truck sheet; nt holds its choices
 //   ntDefaults(dock, plan, now)          the choices it opens on
 //   ntPayload(dock, plan, nt, now)       → { id, payload, slot } for truck.create
-//   finishSheet(t)                       Finish receiving: what landed against the manifest
+//   finishSheet(t, { audit })            Finish receiving: what landed against the manifest
+//                                        (audit: offer the printed audit, a manager at a PC)
 
 import { ic, esc } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
@@ -101,7 +102,7 @@ export function newTruckSheet(dock, plan, nt, open) {
 
 // ── Finish receiving ───────────────────────────────────────────────────
 // The layout against the manifest, then Confirm: the receiver's hand-over.
-export function finishSheet(t) {
+export function finishSheet(t, { audit = false } = {}) {
   const c = phaseCounts(t), a = liveAudit(t);
   const row = (cls, v, l) => `<div class="fs-r ${cls}"><b>${v}</b><span>${l}</span></div>`;
   const rows = row('', c.pallets, txn(c.pallets, 'pallet on the dock', 'pallets on the dock')) + row('', c.cartons, txn(c.cartons, 'carton counted', 'cartons counted')) +
@@ -111,5 +112,5 @@ export function finishSheet(t) {
   return `<div class="card fs"><div class="ch"><h3>${tx('Finish receiving · Truck {n}', { n: esc(truckNo(t.id)) })}</h3><button class="ibtn" data-act="fs-cancel" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
     `<p class="lbl">${tx('Confirm the layout once everything is off the truck. Pallets can still be changed afterwards.')}</p><div class="fs-g">${rows}</div>` +
     (off ? `<p class="nt-warn">${ic('alert')}${tx('Something is off. Check it now, or confirm and sort it out in the audit.')}</p>` : '') +
-    `<div class="nt-acts"><button class="btn primary big" data-act="fs-go">${ic('check')}${tx('Confirm layout')}</button>${a ? `<button class="btn" data-act="audit">${ic('file')}${tx('Receiving audit')}</button>` : ''}<button class="btn" data-act="fs-cancel">${tx('Back')}</button></div></div>`;
+    `<div class="nt-acts"><button class="btn primary big" data-act="fs-go">${ic('check')}${tx('Confirm layout')}</button>${a && audit ? `<button class="btn" data-act="audit">${ic('file')}${tx('Receiving audit')}</button>` : ''}<button class="btn" data-act="fs-cancel">${tx('Back')}</button></div></div>`;
 }
