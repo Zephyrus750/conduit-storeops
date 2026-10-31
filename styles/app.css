@@ -3205,8 +3205,11 @@ body:has(.content.mv > .dk-body) #toasts { top: 76px; bottom: auto; }
 .dk-tn { border: 0; background: none; padding: 0; display: inline-flex; align-items: center; gap: 2px; font: inherit; font-size: 18px; font-weight: 800; color: var(--ink); min-height: 44px; cursor: pointer; white-space: nowrap; }
 .dk-tn svg.i { width: 16px; height: 16px; color: var(--dim); }
 .dk-sp { flex: 1; }
-.dk-scan { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: 11px; border: 0; background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
-.dk-scan svg.i { width: 18px; height: 18px; color: #fff; }
+.dk-man { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding: 4px 8px; margin-right: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: inherit; text-align: right; cursor: pointer; }
+.dk-man b { display: inline-flex; align-items: center; gap: 4px; font: 800 14px ui-monospace, Menlo, monospace; white-space: nowrap; }
+.dk-man b svg.i { width: 15px; height: 15px; color: var(--accent); }
+.dk-man small { font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.dk-man.none { border-style: dashed; } .dk-man.none b { font-family: inherit; font-size: 13px; } .dk-man.none b svg.i { color: var(--dim); }
 .dk-steps { list-style: none; margin: 0 6px 0 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; }
 .dk-steps li { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .dk-steps li i { display: block; height: 4px; border-radius: 99px; background: var(--track); }
@@ -3218,7 +3221,8 @@ body:has(.content.mv > .dk-body) #toasts { top: 76px; bottom: auto; }
 .dk-body .t5 { margin: 0; }
 .dk-hint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: var(--dim); }
 .dk-hint .lg { display: inline-flex; align-items: center; gap: 4px; } .dk-hint .lg i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
-.dk-hint .r { margin-left: auto; }
+.dk-hint .r { margin-left: auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-hint { flex-wrap: nowrap; } .dk-hint .lg { flex: none; }
 .card.dk-list { padding: 0; overflow: hidden; margin: 0; }
 .dk-lh { display: flex; align-items: center; gap: 8px; padding: 8px 12px 6px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
 .dk-lh span { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 600; text-align: right; }
@@ -3272,7 +3276,7 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .frame.dark .dk-tool.lit { background: #3A2E0B; border-color: #B45309; color: #FDE68A; } .frame.dark .dk-tool.lit svg.i { color: #FBBF24; }
 .frame.dark .dk-tile.r b { color: #FCA5A5; }
 @container shell (max-width: 380px) {
-  .dk-tn { font-size: 16px; } .dk-scan { padding: 0 10px; }
+  .dk-tn { font-size: 16px; } .dk-man { padding: 4px 6px; }
   .content.mv > .dk-strip { padding-left: 12px; gap: 6px; }
   .dk-go { padding: 0 10px; font-size: 13px; } .dk-go.halt { min-width: 80px; }
   .dk-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3311,3 +3315,22 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .bdk-land .bdk-pal-h > svg.i { width: 20px; height: 20px; flex: none; color: var(--accent-ink); }
 .bdk-fields .fl-h { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .bdk-fields .fl-t { margin-left: auto; padding: 1px 7px; border-radius: 999px; background: var(--ground); color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: none; }
+/* Pallet type on the phone's popups: three big buttons in the pallets' colours,
+   the chosen one filled with a tick. */
+.bdk-ptrow.big { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bdk-ptrow.big .bdr-pt { --pt: #2953D6; height: 54px; justify-content: center; gap: 6px; padding: 0 6px; border-radius: 12px; border: 2px solid var(--pt); background: color-mix(in srgb, var(--pt) 9%, var(--panel)); color: var(--pt); font-size: 14.5px; font-weight: 800; cursor: pointer; text-align: center; line-height: 1.15; }
+.bdk-ptrow.big .bdr-pt.t-l { --pt: #B3261E; } .bdk-ptrow.big .bdr-pt.t-b { --pt: #56646B; }
+.bdk-ptrow.big .bdr-pt.on { background: var(--pt); color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--pt) 28%, transparent); }
+.bdk-ptrow.big .bdr-pt svg.i { width: 18px; height: 18px; flex: none; }
+.bdk-ptrow.big.ask .bdr-pt { border-style: solid; }
+.frame.dark .bdk-ptrow.big .bdr-pt:not(.on) { color: #E5E7EB; background: color-mix(in srgb, var(--pt) 22%, var(--panel)); }
+/* The popups' fields, a touch taller for a thumb. */
+.dk-dlg .bdk-fields .bdr-in, .dk-dlg .bdk-scanrow .bdr-in { height: 44px; font-size: 15px; box-sizing: border-box; }
+.dk-dlg .bdk-pal-h { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+/* The Receive tab's grid: a consol verified on the manifest (green tick) or not yet (orange cross). */
+.bdk-vf { position: absolute; right: 3px; top: 3px; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; font-size: 9.5px; font-weight: 900; line-height: 1; color: #fff; box-shadow: 0 0 0 1.5px rgba(255,255,255,.9); }
+.bdk-vf.ok { background: #16A34A; } .bdk-vf.no { background: #EA580C; }
+/* Receive's grid sits in a card under its PALLET ENTRY header, like LAST LANDED. */
+.dk-pe .bdk-grid { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+/* Last landed rows carry the same mark, beside the square. */
+.dk-li .bdk-vf { position: static; flex: none; width: 17px; height: 17px; font-size: 10.5px; box-shadow: none; margin-left: -4px; }
