@@ -13,10 +13,10 @@ import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, ver
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
 import { liveAudit } from '../../../shared/reducers/backdock.js';
 import { planCard, take5Card, queuePicker, onPlanAct, onPlanChange, ratesFor, guard, decantBoard } from './plan.js';
-import { phaseBar, newTruckSheet, ntDefaults, ntPayload, finishSheet, PHASE_NAME } from './phase.js';
-import { begun, phaseCounts, truckPhase } from '../../../shared/dockphase.js';
+import { phaseBar, phaseChip, nextStep, newTruckSheet, ntDefaults, ntPayload, finishSheet, PHASE_NAME } from './phase.js';
+import { PHASES, begun, phaseCounts, truckPhase } from '../../../shared/dockphase.js';
 
-const st = { truck: null, land: { ref: '', ptype: null, cartons: '', note: '', codes: [] }, sheet: null, moving: null, manConfirm: null, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, manPick: false, linking: false, finalising: false, more: false, nt: null, finishing: false };
+const st = { truck: null, land: { ref: '', ptype: null, cartons: '', note: '', codes: [] }, sheet: null, moving: null, manConfirm: null, panel: false, trucks: false, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, manPick: false, linking: false, finalising: false, more: false, nt: null, finishing: false };
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const dispatch = (ctx, type, entity, payload) => ctx.store.dispatch({ type, entity, payload });
 // The hold-up buttons, a role inside a sentence (lower case in English), and
@@ -192,49 +192,127 @@ function heldCard(dock) {
 }
 
 // ── phone ──────────────────────────────────────────────────────────────
-function mobile(ctx) {
-  const m = model(ctx), t = m.t, pr = m.pr, rates = ratesFor(m.dock), plan = ctx.store.get('plan');
-  const nt = st.nt ? newTruckSheet(m.dock, plan, st.nt, t) : '';
-  if (!t) return mhead(tx('Receiving'), tx('No truck on the dock')) + phaseBar(null) + nt + (st.nt ? '' : decantBoard(m.dock, plan, todayKey(), { act: true })) + heldCard(m.dock);
-  const chips = `<div class="bdk-tchips">${m.open.map(x => `<button class="bdk-tchip${x.id === st.truck ? ' on' : ''}" data-act="pick" data-id="${esc(x.id)}">${tx('Truck {n}', { n: esc(truckNo(x.id)) })}<i>${esc(tstate(x.status))}</i></button>`).join('')}<button class="bdk-tchip add" data-act="newtruck">+ ${tx('New truck')}</button></div>`;
-  const run = st.view === 'run';
-  const head = mhead(tx('Truck {n}', { n: esc(truckNo(t.id)) }), t.status === 'live' ? landedLine(t) + (t.goalAt ? ' · ' + tx('goal {time}', { time: fmtHM(t.goalAt) }) : '') : tx('planned · Start receiving to land pallets'));
-  const toggle = `<div class="bdk-vt"><button class="${run ? '' : 'on'}" data-act="view" data-mode="receive">${tx('Receive')}</button><button class="${run ? 'on' : ''}" data-act="view" data-mode="run">${tx('Run')}</button></div>`;
-  const prog = `<div class="bdk-prog"><div class="nums"><b>${pr.done}</b><span>${tx('/ {n} ctn decanted', { n: pr.total })}</span></div><div class="bar"><i style="width:${pr.pct}%"></i></div><div class="sub">${txn(pr.count, '{n} pallet landed', '{n} pallets landed')} · ${tx('{n} decanting', { n: pr.active })}${t.status !== 'live' ? ` · <b>${esc(tstate(t.status))}</b>` : ''}</div></div>`;
-  const tools = `<div class="ps-tools"><button class="btn sm${ss.open ? ' primary' : ''}" data-act="ps-open">${ic('search')}${tx('Search')}</button><button class="btn sm${ss.info || st.manPick ? ' primary' : ''}" data-act="${t.manifest ? 'ps-info' : 'manpick'}">${ic('packages')}${t.manifest ? tx('Manifest {no}', { no: esc(t.manifest.manNo) }) : tx('Manifest')}</button><button class="btn sm${st.more ? ' primary' : ''}" data-act="more" aria-expanded="${st.more}">${ic('users')}${tx('Team &amp; plan')}</button></div>`;
-  // The decant begins with Take 5 (Ready to start), on its own screen in
-  // Run; until it has begun, Run shows only that and nothing can be started.
-  const ready = run && !begun(t);
-  const body = ready ? readyBlock(t) : run ? runCard(t, m) + runHint() + `<div class="bdk">${dockGrid(t, false)}</div>` + crewStrip(t, m) : prog + phoneTally(t) + `<div class="bdk">${dockGrid(t, false)}</div>`;
-  const sel = ready || !st.sel ? '' : t.pallets[st.sel] ? palletPanel(t, t.pallets[st.sel], false) : landPanel(t, st.sel);
-  return head + clockNote(ctx) + chips + phaseBar(t) + nt + (st.finishing ? finishSheet(t) : '') + (st.finalising ? finaliseCard(t, m.dock) : '') + sheetCard(t, m.dock) + (st.manPick ? manPicker(m, t) : '') + movingBar() + toggle + tools + (st.more ? moreSheet(m, t) : '') + searchSheet(ctx, t) + infoSheet(t) + body + sel;
+// Two tabs, as Decant Visualiser had them: Receive (land pallets) and Decant
+// (run the truck). Each is the grid first, under a one-line truck bar with
+// a Scan button; the strip above the tabs carries the tally and the next
+// step (or Halt) and opens into the panel with every tool. One sheet at a
+// time (land, pallet, new truck, finish, search…) rises over the grid.
+let lastMode = null;
+function mobile(ctx, mode) {
+  // A tab switch closes what the other tab had open (a pallet chosen for it stays).
+  if (lastMode && lastMode !== mode) { st.more = st.panel = st.trucks = st.halting = st.finishing = st.finalising = st.manPick = false; st.sheet = null; ss.open = ss.info = false; st.arm = null; st.moving = null; if (!st.keepSel) st.sel = null; }
+  st.keepSel = false; lastMode = mode;
+  st.view = mode; const run = mode === 'run';
+  const m = model(ctx), t = m.t, plan = ctx.store.get('plan'), sheet = phoneSheet(ctx, m, t, plan, run);
+  if (!t) return `<div class="dk-top"><div class="dk-tr"><b class="dk-tn">${tx('No truck on the dock')}</b>${phaseChip(null)}</div></div>` +
+    `<div class="dk-body">${clockNote(ctx)}${decantBoard(m.dock, plan, todayKey(), { act: true })}${heldCard(m.dock)}</div>` + sheet +
+    strip(`<div class="dk-st"><div class="dk-l1"><span>${tx('Tap New truck when it lands.')}</span></div></div><button class="dk-go" data-act="newtruck">${ic('plus')}${tx('New truck')}</button>`, '', false);
+  const body = run ? (!begun(t) ? readyBlock(t) : movingBar() + `<div class="bdk">${dockGrid(t, false)}</div>` + runHint() + crewStrip(t, m) + noCartonNote(t) + upNext(t, m))
+    : movingBar() + `<div class="bdk">${dockGrid(t, false)}</div>` + legendHint(t) + lastLanded(t);
+  return truckBar(t, run) + `<div class="dk-body">${clockNote(ctx)}${body}</div>` + sheet + (run ? runStrip(t, m) : receiveStrip(t));
+}
+// The truck bar: which truck (tap to switch or start another), its phase,
+// the six steps, and Scan: a label lands or finds its pallet in Receive and
+// opens its pallet in Decant.
+function truckBar(t, run) {
+  const ph = truckPhase(t), at = PHASES.indexOf(ph);
+  return `<div class="dk-top"><div class="dk-tr"><button class="dk-tn" data-act="trucks" aria-expanded="${!!st.trucks}" aria-label="${tx('Truck {n}: switch truck or start a new one', { n: esc(truckNo(t.id)) })}">${tx('Truck {n}', { n: esc(truckNo(t.id)) })}${ic('chev')}</button>${phaseChip(t)}<span class="dk-sp"></span>` +
+    `<button class="dk-scan" data-camera="dkscan" title="${run ? tx('Scan a pallet label to open its pallet') : tx('Scan a label to land it, or to find the pallet it is on')}">${ic('barcode')}${tx('Scan')}</button><input data-field="dkscan" hidden></div>` +
+    `<ol class="dk-steps" aria-label="${tx('Truck phase')}: ${PHASE_NAME[ph]}">${PHASES.map((p, i) => `<li class="${i < at ? 'dn' : i === at ? 'on' : ''}"></li>`).join('')}</ol></div>`;
+}
+const strip = (inner, cls = '', tog = true) => `<div class="dk-strip${cls}">${inner}${tog ? `<button class="dk-tog" data-act="panel" aria-expanded="${!!st.panel}" aria-label="${st.panel ? tx('Hide the details') : tx('Show the details')}">${ic('chev')}</button>` : ''}</div>`;
+const nextBtn = t => { const n = nextStep(t); return n ? `<button class="dk-go" data-act="phase-${n.act}">${esc(n.label)}</button>` : ''; };
+// Receive: consols matched (or pallets and cartons with no manifest), what
+// is still to land and off the manifest, and the next step.
+function receiveStrip(t) {
+  const a = liveAudit(t), c = phaseCounts(t);
+  const info = a ? `<div class="dk-l1"><b>${a.matched}/${a.total}</b><span>${tx('consols matched')}</span></div><div class="dk-bar"><i style="width:${Math.round(a.matched / Math.max(1, a.total) * 100)}%"></i></div><div class="dk-l2"><b class="w">${a.missing}</b> ${tx('to land')} · <b class="${a.extra ? 'r' : ''}">${a.extra}</b> ${tx('off-manifest')}</div>`
+    : `<div class="dk-l1"><b>${c.pallets}</b><span>${txn(c.pallets, 'pallet landed', 'pallets landed')} · ${tx('{n} ctn', { n: c.cartons })}</span></div><div class="dk-l2">${t.status === 'live' ? tx('No manifest yet: open the panel to attach one.') : tx('Not landed yet')}</div>`;
+  return strip(`<div class="dk-st">${info}</div>${nextBtn(t)}`);
+}
+// Decant: Ready to start until Take 5, then cartons done, the pace against
+// the goal and a big Halt; a hold-up turns it red with Resume; cleared, it
+// offers Close the truck.
+function runStrip(t, m) {
+  const ph = truckPhase(t), pr = m.pr;
+  if (t.status !== 'live') return strip(`<div class="dk-st"><div class="dk-l1"><span>${tx('Start receiving first: the decant starts once the truck is on the dock.')}</span></div></div>${nextBtn(t)}`);
+  if (!begun(t)) return strip(`<div class="dk-st"><div class="dk-l1"><b class="t">${PHASE_NAME[ph]}</b></div><div class="dk-l2">${tx('Take 5, then Start decant')}</div></div>`);
+  if (m.halt) return strip(`<div class="dk-st"><div class="dk-l1"><b class="t">${esc(holdName(m.halt))}</b></div><div class="dk-l2">${tx('since {time}', { time: fmtHM(m.halt.start) })} · ${tx('decant clock stopped')}</div></div><button class="dk-go resume" data-act="haltend">▶ ${esc(END_KIND[m.halt.kind || 'halt'] || tx('Resume'))}</button>`, ' halted');
+  if (ph === 'cleared') return strip(`<div class="dk-st"><div class="dk-l1"><b>${pr.done}/${pr.total}</b><span>${tx('Every pallet is done.')}</span></div></div><button class="dk-go" data-act="phase-finalise">${tx('Close the truck')}</button>`);
+  const fc = forecast(t, Date.now(), ratesFor(m.dock)), gp = t.goalAt ? goalPace(t) : null, late = fc.at && t.goalAt && fc.at > Date.parse(t.goalAt);
+  return strip(`<div class="dk-st"><div class="dk-l1"><b>${pr.done}/${pr.total}</b><span>${tx('ctn · {pct}% · {done} of {n} done', { pct: pr.pct, done: pr.doneCount, n: pr.count })}</span></div>` +
+    `<div class="dk-bar"><i style="width:${pr.pct}%"></i>${gp !== null ? `<b style="left:${Math.round(gp * 100)}%"></b>` : ''}</div>` +
+    `<div class="dk-l2">${tx('est')} <b class="${late ? 'r' : ''}">${fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}</b> · ${t.goalAt ? tx('goal {time}', { time: fmtHM(t.goalAt) }) : tx('no goal set')}</div></div>` +
+    `<button class="dk-go halt" data-act="halt" aria-expanded="${st.halting}">${tx('Halt')}</button>`);
+}
+// The panel (the strip opened): the phase with its steps named and the next
+// step, the counts, and every tool.
+const tool = (act, icon, label, cls = '', extra = '') => `<button class="dk-tool${cls}" data-act="${act}"${extra}>${ic(icon)}<span>${label}</span></button>`;
+function receivePanel(t) {
+  const a = liveAudit(t), c = phaseCounts(t), off = a && (a.missing || a.extra || a.unmatched);
+  return `<div class="dk-pan rcv">${phaseBar(t)}<div class="dk-tiles"><span class="dk-tile"><b>${c.pallets}</b>${txn(c.pallets, 'pallet', 'pallets')}</span><span class="dk-tile"><b>${c.cartons}</b>${tx('ctn counted')}</span>` +
+    (a ? `<span class="dk-tile w"><b>${a.missing}</b>${tx('to land')}</span><span class="dk-tile${a.extra ? ' r' : ''}"><b>${a.extra}</b>${tx('off-manifest')}</span>` : `<span class="dk-tile w"><b>—</b>${tx('no manifest')}</span>`) + `</div>` +
+    `<div class="dk-tools">${tool('ps-open', 'search', tx('Search'))}${tool(t.manifest ? 'ps-info' : 'manpick', 'file', t.manifest ? tx('Manifest {no}', { no: esc(t.manifest.manNo) }) : tx('Attach a manifest'), t.manifest ? '' : ' lit')}${tool('more', 'users', tx('Team &amp; plan'))}` +
+    `${tool('audit', 'print', tx('Audit'), off ? ' lit' : '')}${tool('setstart', 'clock', tx('Decant start'))}${tool('newtruck', 'plus', tx('New truck'))}</div></div>`;
+}
+function runPanel(t, m) {
+  const fc = forecast(t, Date.now(), ratesFor(m.dock)), late = fc.at && t.goalAt && fc.at > Date.parse(t.goalAt), pr = m.pr;
+  return `<div class="dk-pan">${phaseBar(t)}<div class="dk-tiles"><span class="dk-tile${late ? ' r' : ''}"><b>${m.halt ? '—' : fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}</b>${tx('est. clear')}</span><button class="dk-tile" data-act="goal"><b>${t.goalAt ? fmtHM(t.goalAt) : tx('Set')}</b>${tx('goal')}</button><span class="dk-tile"><b>${pr.doneCount}/${pr.count}</b>${tx('pallets done')}</span><span class="dk-tile"><b>${fmtHM(startOf(t))}</b>${tx('decant start')}</span></div>` + noCartonNote(t) +
+    `<div class="dk-tools">${tool('goal', 'clock', tx('Goal'))}${tool('huddleplan', 'users', tx('Book huddle'))}${tool('more', 'users', tx('Team &amp; plan'))}${tool('ps-open', 'search', tx('Search'))}${tool('halt', 'alert', tx('Hold-up'))}${tool('finalise', 'check', tx('Complete decant'))}</div></div>`;
+}
+// The truck menu: the trucks on the dock, and New truck.
+function trucksSheet(m, t) {
+  return `<div class="dk-sh-h"><h3>${tx('Trucks on the dock')}</h3><button class="ibtn" data-act="trucks" aria-label="${tx('Close')}">${ic('x')}</button></div><div class="dk-tlist">` +
+    m.open.map(x => `<button class="dk-trow${x.id === t.id ? ' on' : ''}" data-act="pick" data-id="${esc(x.id)}" aria-pressed="${x.id === t.id}"><span><b>${tx('Truck {n}', { n: esc(truckNo(x.id)) })}</b>${phaseChip(x)}</span><small>${x.status === 'live' ? landedLine(x) : tx('planned · Start receiving to land pallets')}${x.manifest ? ' · ' + tx('Manifest {no}', { no: esc(x.manifest.manNo) }) : ''}</small></button>`).join('') +
+    `</div><button class="btn primary big" style="width:100%;justify-content:center;margin-top:10px" data-act="newtruck">${ic('plus')}${tx('New truck')}</button>`;
+}
+// The one sheet over the grid, most pressing first; closing it shows the
+// panel again if it was open (a step back).
+function phoneSheet(ctx, m, t, plan, run) {
+  const wrap = html => html ? `<div class="dk-sheet" role="dialog">${html}</div>` : '';
+  if (st.nt) return wrap(newTruckSheet(m.dock, plan, st.nt, t));
+  if (!t) return '';
+  if (st.finishing) return wrap(finishSheet(t));
+  if (st.finalising) return wrap(finaliseCard(t, m.dock));
+  if (st.sheet) return wrap(sheetCard(t, m.dock));
+  if (st.manPick) return wrap(manPicker(m, t));
+  if (st.halting && !m.halt) return wrap(`<div class="dk-sh-h"><h3>${tx('Hold-up')}</h3><button class="ibtn" data-act="halt" aria-label="${tx('Close')}">${ic('x')}</button></div><p class="lbl">${tx('The decant clock stops until it ends.')}</p>${holdPicker(t)}`);
+  if (ss.open) return wrap(searchSheet(ctx, t));
+  if (ss.info) return wrap(infoSheet(t));
+  if (st.more) return wrap(moreSheet(m, t));
+  if (st.trucks) return wrap(trucksSheet(m, t));
+  if (st.sel && !(run && !begun(t))) return wrap(t.pallets[st.sel] ? palletPanel(t, t.pallets[st.sel], false) : landPanel(t, st.sel));
+  if (st.panel) return wrap(run ? runPanel(t, m) : receivePanel(t));
+  return '';
+}
+// Under the grid in Receive: the colours and what to do, then the last
+// pallets landed (tap one to open it).
+function legendHint(t) {
+  return `<div class="dk-hint">${PTYPES.map(p => `<span class="lg"><i style="background:${p[2]}"></i>${p[1]}</span>`).join('')}<span class="r">${t.status === 'live' ? tx('Tap an empty square to land') : tx('Start receiving to land pallets')}</span></div>`;
+}
+function lastLanded(t) {
+  const ps = pallets(t).filter(p => !p.carryover && p.landedAt).sort((a, b) => b.landedAt.localeCompare(a.landedAt)), c = phaseCounts(t);
+  if (!ps.length) return t.status === 'live' ? `<p class="dk-empty">${tx('Nothing landed yet. Tap an empty square, or Scan a label.')}</p>` : '';
+  return `<div class="card dk-list"><div class="dk-lh">${tx('Last landed')}<span>${landedLine(t)} · ${tx('{n} ctn', { n: c.cartons })}</span></div>` +
+    ps.slice(0, 4).map(p => { const n = p.consolIds.length + p.scanIds.length; return `<button class="dk-li" data-act="cell" data-ref="${esc(p.ref)}"><b>${esc(p.ref)}</b><span>${esc(PT_NAME[p.ptype] || p.ptype)} · ${tx('{n} ctn', { n: p.cartons ?? '–' })}${n ? ' · ' + txn(n, '{n} label', '{n} labels') : ''}</span><small>${fmtHM(p.landedAt)}</small></button>`; }).join('') + `</div>`;
+}
+// Under the crew in Decant: where each busy cutter goes next, from the plan
+// (a free one has NEXT on their chip).
+function upNext(t, m) {
+  const rows = (t.team || []).filter(mm => (mm.role || 'cutter') === 'cutter' && !onBreak(t, mm.pid) && m.run[mm.pid]).map(mm => ({ mm, ref: nextFor(t, mm.pid) })).filter(x => x.ref);
+  if (!rows.length) return '';
+  return `<div class="card dk-list"><div class="dk-lh">${tx('Up next')}</div>` + rows.slice(0, 4).map(({ mm, ref }) => { const p = t.pallets[ref], on = m.run[mm.pid]; return `<button class="dk-li" data-act="cell" data-ref="${esc(ref)}"><b>${esc(who(mm))}</b><span>${esc(ref)} · ${esc(PT_NAME[p.ptype] || p.ptype)} · ${tx('{n} ctn', { n: p.cartons ?? '–' })}</span><small>${on ? tx('after {ref}', { ref: esc(on) }) : tx('now')}</small></button>`; }).join('') + `</div>`;
 }
 // The truck's landed time, and when its first pallet came off.
 function landedLine(t) {
   const own = pallets(t).filter(p => !p.carryover && p.landedAt).map(p => p.landedAt).sort()[0];
   return tx('landed {time}', { time: fmtHM(t.landedAt) }) + (own && fmtHM(own) !== fmtHM(t.landedAt) ? ' · ' + tx('first pallet {time}', { time: fmtHM(own) }) : '');
 }
-// Run, before the decant begins: Ready to start (the team, Take 5, then Start).
+// Decant, before it begins: Ready to start (the team, Take 5, then Start).
 function readyBlock(t) {
   if (t.status !== 'live') return `<div class="mv-note">${ic('truck')}${tx('Start receiving first: the decant starts once the truck is on the dock.')}</div>`;
   if (!(t.team || []).length) return `<div class="mv-note">${ic('users')}${tx('No crew on this truck yet. Add the team from <b>Team &amp; plan</b>, then Take 5 starts the decant.')}</div>`;
   return take5Card(t);
-}
-// Run, once it has begun: cartons done of the total, the estimated clear,
-// the goal and the pallets, with a big Halt (DV's progress card).
-function runCard(t, m) {
-  const pr = m.pr, fc = forecast(t, Date.now(), ratesFor(m.dock)), gp = t.goalAt ? goalPace(t) : null, ph = truckPhase(t);
-  const late = !m.halt && fc.at && t.goalAt && fc.at > Date.parse(t.goalAt);
-  // Cleared: the last pallet's done time, and no Halt (nothing is running).
-  const est = m.halt ? tx('paused') : ph === 'cleared' ? fmtHM(pallets(t).map(p => p.doneAt).filter(Boolean).sort().at(-1)) : fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—';
-  return `<div class="card rvp${m.halt ? ' halted' : ''}"><div class="rvp-top"><span class="rvp-n"><b>${pr.done}</b><small>${tx('/ {n} ctn', { n: pr.total })} · ${pr.pct}%</small></span>` +
-    (ph === 'cleared' ? '' : m.halt ? `<button class="rvp-halt on" data-act="haltend">▶ ${esc(END_KIND[m.halt.kind || 'halt'] || tx('Resume'))}</button>` : `<button class="rvp-halt" data-act="halt" aria-expanded="${st.halting}">⏸ ${tx('Halt')}</button>`) + `</div>` +
-    `<div class="bdr-bar">${gp !== null ? `<b class="bdr-pace" style="left:${Math.round(gp * 100)}%" title="${tx('Where the team should be by now to make the goal')}"></b>` : ''}<i style="width:${pr.pct}%"></i></div>` +
-    `<div class="rvp-k"><span class="${late ? 'bad' : ''}"><small>${ph === 'cleared' ? PHASE_NAME.cleared : tx('Est. clear')}</small><b>${est}</b></span><button data-act="goal"><small>${tx('Goal')}</small><b>${t.goalAt ? fmtHM(t.goalAt) : tx('Set')}</b></button><span><small>${tx('Pallets')}</small><b>${pr.doneCount}/${pr.count}</b></span></div>` +
-    (m.halt ? `<div class="rvp-msg">${ic('alert')}<span><b>${esc(holdName(m.halt))}</b>${m.halt.note ? ' · ' + esc(m.halt.note) : ''} · ${tx('since {time}', { time: fmtHM(m.halt.start) })} · ${tx('decant clock stopped')}</span></div>` : '') +
-    noCartonNote(t) +
-    (ph === 'cleared' ? `<div class="rvp-msg ok">${ic('check')}<span>${tx('Every pallet is done.')}</span><button class="btn primary sm" data-act="finalise">${tx('Close the truck')}</button></div>` : `<div class="rvp-acts"><button class="btn sm" data-act="huddleplan">${ic('users')}${tx('Book huddle')}</button><button class="btn sm" data-act="finalise">${ic('check')}${tx('Complete decant')}</button></div>`) +
-    `</div>` + (st.halting && !m.halt ? holdPicker(t) : '');
 }
 // A pallet with no carton count is planned at 60 minutes: said, not silent.
 const noCartonNote = t => { const n = phaseCounts(t).noCartons; return n ? `<div class="rvp-msg warn">${ic('alert')}<span>${txn(n, '{n} pallet has no carton count: it is planned at 60 minutes until it is counted.', '{n} pallets have no carton count: they are planned at 60 minutes until they are counted.')}</span></div>` : ''; };
@@ -250,12 +328,22 @@ function crewStrip(t, m) {
       (nx ? `<button class="bdk-next" data-act="next-go" data-pid="${esc(mm.pid)}" data-ref="${esc(nx)}" aria-label="${tx('Start {ref} for {pid}', { ref: esc(nx), pid: esc(mm.pid) })}">▶ ${tx('NEXT {ref}', { ref: esc(nx) })}</button>` : '') + `</span>`;
   }).join('')}</div>`;
 }
-// The receiving tally on the phone (the PC's strip): matched, not landed and
-// off the manifest; the audit button lights up while anything is off.
-function phoneTally(t) {
-  const a = liveAudit(t); if (!a) return '';
-  const off = a.missing || a.extra || a.unmatched;
-  return `<div class="bdk-tally"><span class="${a.matched === a.total ? 'ok' : ''}"><b>${a.matched}/${a.total}</b>${tx('matched')}</span><span class="${a.missing ? 'warn' : 'ok'}"><b>${a.missing}</b>${tx('not landed')}</span><span class="${a.extra ? 'bad' : 'ok'}"><b>${a.extra}</b>${tx('off-manifest')}</span><button class="btn sm${off ? ' lit' : ''}" data-act="audit">${ic('print')}${tx('Audit')}</button></div>`;
+// Scan from the truck bar. Receive: a label already on a pallet opens it;
+// any other opens the land sheet on the next free square with the label on
+// it (checked against the manifest there). Decant: opens the pallet it is on.
+async function quickScan(ctx, value) {
+  const t = model(ctx).t, raw = String(value || '').replace(/\D/g, '');
+  if (!t) return toast(tx('Tap New truck when it lands.'), 'bad');
+  if (raw.length < 9) return toast(tx('A pallet label has at least 9 digits'), 'bad');
+  const id9 = raw.slice(-9), k = codeCheck(t, raw), cid = k.c?.id;
+  const on = pallets(t).find(p => (cid && p.consolIds.includes(cid)) || p.consolIds.includes(id9) || p.scanIds.includes(id9) || (p.held || []).includes(id9));
+  st.panel = false; st.trucks = false; ss.open = false; ss.info = false;
+  if (on) { st.sel = on.ref; ctx.rerender(); return toast(tx('{id} on {ref}', { id: id9, ref: on.ref })); }
+  if (st.view === 'run') return toast(tx('{id} is not on a pallet on Truck {n}', { id: id9, n: truckNo(t.id) }), 'bad');
+  if (t.status !== 'live') return toast(tx('Land the first pallet after Start receiving, or tap New truck'), 'bad');
+  const free = grid(t).refs.find(r => !t.pallets[r]); if (!free) return toast(tx('No free square on the grid'), 'bad');
+  st.land = { ref: free, ptype: null, cartons: '', note: '', codes: [raw] }; st.sel = free; ctx.rerender(); show('.bdk-land');
+  toast(k.kind === 'off' ? tx('{id} is not on this manifest. Old label from a reused tub?', { id: id9 }) : tx('Landing at {ref}: choose the type, then Land', { ref: free }), k.kind === 'off' ? 'bad' : '');
 }
 // The facilitator on the phone (DV's More and person sheets): the team with
 // roles and breaks, the opening huddle, and the plan with auto-balance and
@@ -349,10 +437,10 @@ async function onAct(ctx, a, root) {
   const rates = ratesFor(m.dock);
   const keepLand = () => { if (!root.querySelector('[data-field="cartons"]')) return; st.land.cartons = field('cartons'); st.land.note = field('note'); };
   try {
-    if (t && await onSearchAct(ctx, t, a, root, { land: (ref, code) => { st.land = { ref, ptype: null, cartons: '', note: '', codes: [code] }; st.sel = ref; st.view = 'receive'; ss.open = false; ctx.rerender(); show('.bdk-land'); } })) return;
+    if (t && await onSearchAct(ctx, t, a, root, { land: (ref, code) => { st.land = { ref, ptype: null, cartons: '', note: '', codes: [code] }; st.sel = ref; ss.open = false; st.panel = false; if (st.view === 'run') { st.keepSel = true; ctx.go('receiving'); } else ctx.rerender(); show('.bdk-land'); } })) return;
     if (act === 't5-start' && t && t.status !== 'live') return toast(tx('Start receiving first: the decant starts once the truck is on the dock.'), 'bad');
     if (t && await onPlanAct(ctx, t, a, rates)) return;
-    if (act === 'pick') { st.truck = a.dataset.id; st.sel = null; st.arm = null; st.manPick = false; st.moving = null; st.sheet = null; st.finishing = false; return ctx.rerender(); }
+    if (act === 'pick') { st.truck = a.dataset.id; st.sel = null; st.arm = null; st.manPick = false; st.moving = null; st.sheet = null; st.finishing = false; st.trucks = false; return ctx.rerender(); }
     if (act === 'manpick') { st.manPick = !st.manPick; st.manConfirm = null; if (st.manPick) { ss.info = false; ss.open = false; } ctx.rerender(); return st.manPick && show('.bdr-manpick'); }
     if (act === 'manattach' || act === 'manreplace') {
       const no = act === 'manreplace' ? st.manConfirm?.manNo : a.dataset.man, file = act === 'manreplace' ? st.manConfirm?.f : null;
@@ -362,14 +450,16 @@ async function onAct(ctx, a, root) {
       await attachManifest(ctx, id, no); st.manPick = false; toast(tx('{no} attached to Truck {n}', { no, n: truckNo(id) })); return;
     }
     if (act === 'mankeep') { st.manConfirm = null; return ctx.rerender(); }
-    if (act === 'view') { st.view = a.dataset.mode; st.arm = null; st.sel = null; return ctx.rerender(); }
+    // The phone's truck menu and panel.
+    if (act === 'trucks') { st.trucks = !st.trucks; st.sel = null; return ctx.rerender(); }
+    if (act === 'panel') { st.panel = !st.panel; st.sel = null; st.trucks = false; st.halting = false; return ctx.rerender(); }
     // New truck (DV's sheet): the planned slot with its manifest, or an
     // unplanned truck; landed and decant start times; held pallets kept or
     // let go. One truck at a time: an open truck is finalised by the new one
     // and its unfinished pallets come with it on their bays.
     if (act === 'newtruck' || act === 'phase-newtruck') {
       const plan = ctx.store.get('plan'), n = a.dataset.n ? Number(a.dataset.n) : null;
-      st.nt = n ? { ...ntDefaults(m.dock, plan), slot: n, start: plan?.days?.[todayKey()]?.slots?.[n]?.eta || '' } : st.nt ? null : ntDefaults(m.dock, plan); st.finishing = false; st.finalising = false; ctx.rerender(); return st.nt && show('.nt');
+      st.nt = n ? { ...ntDefaults(m.dock, plan), slot: n, start: plan?.days?.[todayKey()]?.slots?.[n]?.eta || '' } : st.nt ? null : ntDefaults(m.dock, plan); st.finishing = false; st.finalising = false; st.trucks = false; ctx.rerender(); return st.nt && show('.nt');
     }
     if (act === 'nt-cancel') { st.nt = null; return ctx.rerender(); }
     if (act === 'nt-slot' || act === 'nt-keep') {
@@ -388,7 +478,7 @@ async function onAct(ctx, a, root) {
       a.disabled = true;
       await dispatch(ctx, 'truck.create', { truck: nid }, payload); await dispatch(ctx, 'truck.setLive', { truck: nid }, {});
       attachPlanned(ctx, nid);
-      st.truck = nid; st.sel = null; st.nt = null; st.view = 'receive';
+      st.truck = nid; st.sel = null; st.nt = null; st.panel = false; if (ctx.isMobile && st.view === 'run') ctx.go('receiving');
       toast(payload.carryFrom ? tx('Truck {a} finalised · Truck {b} is receiving', { a: truckNo(payload.carryFrom), b: truckNo(nid) }) : tx('Truck {n} is receiving', { n: truckNo(nid) })); return;
     }
     if (act === 'phase-golive') { await dispatch(ctx, 'truck.setLive', { truck: id }, {}); attachPlanned(ctx, id); toast(tx('Truck {n} is receiving', { n: truckNo(id) })); return; }
@@ -396,7 +486,7 @@ async function onAct(ctx, a, root) {
     if (act === 'phase-finish') { st.finishing = !st.finishing; st.nt = null; ctx.rerender(); return st.finishing && show('.fs'); }
     if (act === 'fs-cancel') { st.finishing = false; return ctx.rerender(); }
     if (act === 'fs-go') { await dispatch(ctx, 'receiving.confirm', { truck: id }, { confirmed: true }); st.finishing = false; toast(begun(t) ? tx('Layout confirmed · Truck {n} received', { n: truckNo(id) }) : tx('Layout confirmed · Truck {n} received: Take 5, then start', { n: truckNo(id) })); return; }
-    if (act === 'phase-begin') { if (ctx.isMobile) { st.view = 'run'; st.sel = null; ctx.rerender(); return show('.t5'); } ctx.rerender(); return show('.t5'); }
+    if (act === 'phase-begin') { st.sel = null; st.panel = false; if (ctx.isMobile) return st.view === 'run' ? ctx.rerender() : ctx.go('decant'); ctx.rerender(); return show('.t5'); }
     if (act === 'golive') { await dispatch(ctx, 'truck.setLive', { truck: id }, {}); return; }
     // Goal, opening huddle and decant start open their sheets.
     if (act === 'goal' || act === 'huddleplan' || act === 'setstart') { const kind = act === 'goal' ? 'goal' : act === 'huddleplan' ? 'huddle' : 'start'; st.sheet = st.sheet?.kind === kind ? null : { kind }; if (st.sheet && ctx.isMobile) st.more = false; ctx.rerender(); return st.sheet && show('.shx'); }
@@ -471,6 +561,7 @@ async function onAct(ctx, a, root) {
       }
       if (!p && t.status !== 'live') return toast(tx('Land the first pallet after Start receiving, or tap New truck'), 'bad');
       if (!p && st.land.ref !== ref) st.land = { ref, ptype: null, cartons: '', note: '', codes: [] };
+      st.panel = false; st.trucks = false;
       st.sel = st.sel === ref ? null : ref; ctx.rerender(); if (!p && st.sel) setTimeout(() => fresh('[data-field="lscan"]')?.focus({ preventScroll: true }), 0); return;
     }
     if (act === 'closepal') { st.sel = null; st.moving = null; return ctx.rerender(); }
@@ -588,12 +679,22 @@ function attachPlanned(ctx, id) {
 export default {
   id: 'receiving', title: tx('Receiving'), icon: 'm-receiving', area: 'backdock',
   desktop(ctx) { return desktop(ctx); },
-  mobile(ctx) { return mobile(ctx); },
-  mount(ctx, root) {
+  mobile(ctx) { return mobile(ctx, 'receive'); },
+  mount(ctx, root) { return mount(ctx, root); },
+};
+// The phone's Decant tab: the same truck, run (a wider screen opens Receiving).
+export const decant = {
+  id: 'decant', title: tx('Decant'), icon: 'box', area: 'backdock', desktopView: 'receiving',
+  desktop(ctx) { return desktop(ctx); },
+  mobile(ctx) { return mobile(ctx, 'run'); },
+  mount(ctx, root) { return mount(ctx, root); },
+};
+// Both tabs (and the PC) mount the same way.
+function mount(ctx, root) {
     for (const id of Object.keys(ctx.store.get('dock').trucks || {})) attachPlanned(ctx, id);
     // From search: the truck and the pallet a consolidation is on.
     // From Back dock home: Land a pallet, Run the decant or Team open their part.
-    if (ctx.arg?.mode && ctx.arg !== usedArg) { usedArg = ctx.arg; st.view = ctx.arg.mode === 'run' ? 'run' : 'receive'; st.more = ctx.arg.mode === 'team'; st.sel = null; st.arm = null; setTimeout(() => { ctx.rerender(); if (st.more) show('.bdk-more'); }, 0); }
+    if (ctx.arg?.mode && ctx.arg !== usedArg) { usedArg = ctx.arg; st.more = ctx.arg.mode === 'team'; st.sel = null; st.arm = null; st.panel = false; setTimeout(() => ctx.rerender(), 0); }
     if (ctx.arg?.truck && ctx.arg !== usedArg && ctx.store.get('dock').trucks?.[ctx.arg.truck]) { usedArg = ctx.arg; st.truck = ctx.arg.truck; st.sel = ctx.arg.bay && ctx.store.get('dock').trucks[ctx.arg.truck].pallets?.[ctx.arg.bay] ? ctx.arg.bay : null; setTimeout(() => ctx.rerender(), 0); }
     root.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (a) onAct(ctx, a, root); });
     root.addEventListener('input', e => onSearchInput(ctx, e, root));
@@ -646,10 +747,9 @@ export default {
         if (caret) { el.focus({ preventScroll: true }); try { if (caret[0] != null) el.setSelectionRange(...caret); } catch {} }
       }
     };
-    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const f = e.target.dataset?.field; if (f === 'ps-code') { e.preventDefault(); root.querySelector('[data-act="ps-find"]')?.click(); return; } if (f === 'cartons' || f === 'ref') { e.preventDefault(); root.querySelector('[data-act="land"]')?.click(); } else if (f === 'pscan' || f === 'lscan') { e.preventDefault(); root.querySelector(`[data-act="${f}"]`)?.click(); } else if (f === 'team') { e.preventDefault(); root.querySelector('[data-act="team-add"]')?.click(); } });
+    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const f = e.target.dataset?.field; if (f === 'ps-code') { e.preventDefault(); root.querySelector('[data-act="ps-find"]')?.click(); return; } if (f === 'dkscan') { e.preventDefault(); const v = e.target.value; e.target.value = ''; quickScan(ctx, v); return; } if (f === 'cartons' || f === 'ref') { e.preventDefault(); root.querySelector('[data-act="land"]')?.click(); } else if (f === 'pscan' || f === 'lscan') { e.preventDefault(); root.querySelector(`[data-act="${f}"]`)?.click(); } else if (f === 'team') { e.preventDefault(); root.querySelector('[data-act="team-add"]')?.click(); } });
     return [ctx.store.on('dock', redraw), ctx.store.on('clock', redraw), () => clearInterval(timer)];
-  },
-};
+}
 
 // Sightings from the dock's ledger: a consol manifested on an earlier
 // truck (a late arrival), on another planned truck's manifest (it may
