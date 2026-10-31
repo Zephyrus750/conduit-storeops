@@ -217,9 +217,14 @@ function landPanel(ref) {
 }
 
 // ── actions ────────────────────────────────────────────────────────────
+// What this device typed and then sent with an action: a redraw for
+// another device's change must not bring it back (this device's own change
+// can echo back a moment later).
+const sent = new Map();
+const spend = (n, v) => { if (!v) return; sent.set(n, v); setTimeout(() => { if (sent.get(n) === v) sent.delete(n); }, 8000); };
 async function onAct(ctx, a, root) {
   const act = a.dataset.act, m = model(ctx), t = m.t, id = t?.id;
-  const field = n => root.querySelector(`[data-field="${n}"]`)?.value ?? '';
+  const field = n => { const v = root.querySelector(`[data-field="${n}"]`)?.value ?? ''; spend(n, v); return v; };
   const num = v => { const n = parseInt(String(v).replace(/\D/g, ''), 10); return Number.isFinite(n) ? n : null; };
   const rates = ratesFor(m.dock);
   try {
@@ -412,8 +417,26 @@ export default {
       }
     };
     tick(); const timer = setInterval(tick, 1000);
+    // Another device's change redraws the board: what was half-typed here
+    // (a pallet label, cartons, a note) stays, with the caret where it was.
+    // The shell mounts a fresh #content on every redraw.
+    const redraw = () => {
+      const a = document.activeElement, typed = [];
+      for (const el of root.querySelectorAll('input[data-field], textarea[data-field]')) {
+        if (['file', 'checkbox', 'radio'].includes(el.type) || el.value === el.defaultValue || sent.get(el.dataset.field) === el.value) continue;
+        let caret = null; if (el === a) try { caret = [el.selectionStart, el.selectionEnd]; } catch {}
+        typed.push([el.dataset.field, el.value, caret]);
+      }
+      ctx.rerender();
+      const fresh = document.getElementById('content');
+      for (const [f, v, caret] of typed) {
+        const el = fresh?.querySelector(`[data-field="${CSS.escape(f)}"]`); if (!el || el.value !== el.defaultValue) continue;
+        el.value = v;
+        if (caret) { el.focus({ preventScroll: true }); try { if (caret[0] != null) el.setSelectionRange(...caret); } catch {} }
+      }
+    };
     root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const f = e.target.dataset?.field; if (f === 'ps-code') { e.preventDefault(); root.querySelector('[data-act="ps-find"]')?.click(); return; } if (f === 'cartons' || f === 'ref') { e.preventDefault(); root.querySelector('[data-act="land"]')?.click(); } else if (f === 'pscan') { e.preventDefault(); root.querySelector('[data-act="pscan"]')?.click(); } else if (f === 'team') { e.preventDefault(); root.querySelector('[data-act="team-add"]')?.click(); } });
-    return [ctx.store.on('dock', () => ctx.rerender()), ctx.store.on('clock', () => ctx.rerender()), () => clearInterval(timer)];
+    return [ctx.store.on('dock', redraw), ctx.store.on('clock', redraw), () => clearInterval(timer)];
   },
 };
 

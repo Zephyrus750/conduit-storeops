@@ -77,6 +77,19 @@ test('suggestPlace: a truck run without a manifest near the despatch day, else d
   assert.equal(suggestPlace(s, { despatch: '' }), null, 'no despatch date: nothing to go on');
 });
 
+test('suggestPlace: a report despatched yesterday goes on the truck still to come, not on yesterday’s truck finalised without one', () => {
+  const s = initialState();
+  ok(s, 'truck.create', { truck: '2026-10-30-T1' }, {}, '2026-10-30T06:00'); ok(s, 'truck.setLive', { truck: '2026-10-30-T1' }, {}, '2026-10-30T06:00');
+  ok(s, 'truck.finalise', { truck: '2026-10-30-T1' }, {}, '2026-10-30T15:00');
+  ok(s, 'plan.set', { date: '2026-10-31', slot: 1 }, { eta: '07:00' });
+  // A store whose trucks come the day they leave the DC (a usual gap of 0):
+  // without today, Friday’s closed truck is the nearest match.
+  assert.deepEqual(suggestPlace(s, { despatch: '30/10/2026' }, undefined, { gap: 0 }), { day: '2026-10-30', truck: 1, via: 'plan' });
+  assert.deepEqual(suggestPlace(s, { despatch: '30/10/2026' }, undefined, { gap: 0, today: '2026-10-31' }), { day: '2026-10-31', truck: 1, via: 'plan' });
+  // A report despatched days ago is a missed one: the closed truck still takes it.
+  assert.deepEqual(suggestPlace(s, { despatch: '30/10/2026' }, undefined, { gap: 0, today: '2026-11-03' }), { day: '2026-10-30', truck: 1, via: 'plan' });
+});
+
 test('manifestStats: a period against the one before, departments, top and new keycodes, and the reports in it', () => {
   const s = initialState();
   ok(s, 'manifest.day', { manNo: 'A' }, { day: '2026-10-06', truck: 1 });

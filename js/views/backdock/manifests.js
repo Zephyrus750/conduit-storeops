@@ -195,7 +195,7 @@ function explorer(ctx, e, doc) {
 function cameOn(ctx, e) {
   if (!e) return '';
   const s = { dock: ctx.store.get('dock'), plan: ctx.store.get('plan') || { days: {} } }, cur = e.via === 'label' ? e : null;
-  const sg0 = !e.day ? suggestPlace(s, { despatch: e.despatch }) : null, sg = sg0 && sg0.day < today() ? sg0 : null;
+  const sg0 = !e.day ? suggestPlace(s, { despatch: e.despatch }, undefined, { today: today() }) : null, sg = sg0 && sg0.day < today() ? sg0 : null;
   const day = cur?.day || sg?.day || '', n = cur?.n ?? sg?.truck ?? null;
   const why = cur ? tx('Set by hand: the list and the stats place it here.') : sg ? (sg.via === 'plan' ? tx('Suggested from the Planner: a truck that had no manifest. Save to keep it.') : txn(usualGap(s), 'Suggested from the despatch date plus {n} day. Save to keep it.', 'Suggested from the despatch date plus {n} days. Save to keep it.'))
     : e.via === 'plan' ? tx('Staged on the Planner. If it came another day, set that here.') : tx('Pick the day it came and its truck.');
