@@ -6,7 +6,7 @@
 
 import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
-import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
+import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
 import { previewManifest } from './mpreview.js';
 import { printAudit, canAudit } from './audit.js';
 import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, verifyContents, ss } from './phonesearch.js';
@@ -42,6 +42,10 @@ function truckCard(t, on) {
     `<div class="trk-c"><small>${ic('truck')}${tx('Truck')}</small><b>${t.status === 'live' ? txn(pr.count, '{n} pallet', '{n} pallets') : tx('Not landed')}</b><span>${t.status === 'live' ? tx('{n} to go', { n: pr.count - pr.doneCount }) : tx('from the planner')}</span></div>` +
     `<div class="trk-c"><small>${ic('users')}${tx('Decant')}</small><b>${t.status === 'live' && pr.total ? `${pr.done} / ${pr.total} · ${pr.pct}%` : team.length ? tx('Team staged') : tx('No team yet')}</b><div class="dk-team">${team.map(m => `<span class="dk-tc${run[m.pid] ? ' on' : ''}"><span class="av">${esc(who(m))}</span>${run[m.pid] ? `<b>${esc(run[m.pid])}</b>` : ''}</span>`).join('')}</div></div></div></div>`;
 }
+// A pallet is verified once a consol on it is matched on the manifest: a
+// green tick on the Receive grid and in Last landed, an orange cross until then.
+const verified = p => (p.consolIds || []).length > 0;
+const vfMark = p => verified(p) ? `<span class="bdk-vf ok" title="${tx('Consol verified on the manifest')}">✓</span>` : `<span class="bdk-vf no" title="${tx('No consol verified yet')}">✕</span>`;
 function dockGrid(t, desk) {
   const g = grid(t), byRef = {}; for (const p of Object.values(t.pallets || {})) byRef[p.ref] = p;
   return `<div class="bdk-grid${desk ? ' desk' : ''}" style="grid-template-columns:repeat(${g.cols},1fr)">` + g.refs.map(ref => {
@@ -49,8 +53,10 @@ function dockGrid(t, desk) {
     if (!p) return `<button class="bdk-sq empty${st.moving ? ' tg' : ''}" data-act="cell" data-ref="${ref}" title="${st.moving ? tx('Move {ref} here', { ref: st.moving }) : tx('Land a pallet at {ref}', { ref })}"><span class="bdk-ref">${ref}</span><span class="bdk-plus">${st.moving ? '⇲' : '+'}</span></button>`;
     // Not in this session (DV's exclude): on its bay, out of every count.
     if (p.excluded) return `<button class="bdk-sq marked out${st.sel === ref ? ' hit' : ''}" data-act="cell" data-ref="${ref}" title="${ref} · ${tx('not in this session')}"><span class="bdk-ref">${ref}</span><span class="bdk-ct">${tx('OUT')}</span></button>`;
+    // On the phone's Receive tab each pallet says whether a consol on it is verified on the manifest.
+    const rcv = !desk && st.view !== 'run', ver = verified(p);
     const s = p.status || 'landed', tg = !desk && st.view === 'run' && st.arm && (startable(p) || (s === 'active' && !openSegs(p).some(x => x.pid === st.arm))), pc = pace(t, p), crew = openSegs(p).map(x => x.pid).join('+');
-    return `<button class="bdk-sq marked t-${PT_LETTER[p.ptype] || 'c'} st-${s}${tg ? ' tg' : ''}${p.carryover ? ' co' : ''}${pc ? ' pc-' + pc : ''}${p.suspect ? ' sus' : ''}${st.sel === ref || st.moving === ref ? ' hit' : ''}" data-act="cell" data-ref="${ref}" title="${ref} · ${esc(PT_NAME[p.ptype] || p.ptype)} · ${tx('{n} cartons', { n: p.cartons ?? '–' })} · ${pstate(s)}${p.expectedMins ? ' · ' + tx('est {n} min', { n: p.expectedMins }) : ''}${p.carryover ? ' · ' + tx('carried over') : ''}${p.suspect ? ' · ' + tx('done very fast: check the times') : ''}${flags(t, p).map(f => ' · ' + f[1]).join('')}"><span class="bdk-ref">${ref}</span><span class="bdk-ct">${p.cartons ?? '–'}</span>${flagTag(t, p)}${s === 'active' || s === 'paused' ? `<span class="bdk-tm" data-tick="${ref}" data-tick-short="1"></span>` : ''}${crew ? `<span class="bdk-who">${esc(crew)}</span>` : ''}${p.suspect ? '<span class="bdk-flag">⚠</span>' : s === 'active' ? '<span class="bdk-flag">▶</span>' : s === 'done' ? '<span class="bdk-flag">✓</span>' : s === 'paused' ? '<span class="bdk-flag">⏸</span>' : ''}</button>`;
+    return `<button class="bdk-sq marked t-${PT_LETTER[p.ptype] || 'c'} st-${s}${tg ? ' tg' : ''}${p.carryover ? ' co' : ''}${pc ? ' pc-' + pc : ''}${p.suspect ? ' sus' : ''}${st.sel === ref || st.moving === ref ? ' hit' : ''}" data-act="cell" data-ref="${ref}" title="${ref} · ${esc(PT_NAME[p.ptype] || p.ptype)} · ${tx('{n} cartons', { n: p.cartons ?? '–' })} · ${pstate(s)}${p.expectedMins ? ' · ' + tx('est {n} min', { n: p.expectedMins }) : ''}${p.carryover ? ' · ' + tx('carried over') : ''}${p.suspect ? ' · ' + tx('done very fast: check the times') : ''}${flags(t, p).map(f => ' · ' + f[1]).join('')}${rcv ? ' · ' + (ver ? tx('Consol verified on the manifest') : tx('No consol verified yet')) : ''}"><span class="bdk-ref">${ref}</span><span class="bdk-ct">${p.cartons ?? '–'}</span>${flagTag(t, p)}${s === 'active' || s === 'paused' ? `<span class="bdk-tm" data-tick="${ref}" data-tick-short="1"></span>` : ''}${crew ? `<span class="bdk-who">${esc(crew)}</span>` : ''}${rcv ? vfMark(p) : p.suspect ? '<span class="bdk-flag">⚠</span>' : s === 'active' ? '<span class="bdk-flag">▶</span>' : s === 'done' ? '<span class="bdk-flag">✓</span>' : s === 'paused' ? '<span class="bdk-flag">⏸</span>' : ''}</button>`;
   }).join('') + '</div>';
 }
 // What a square needs from someone, most pressing first: labels off the
@@ -136,7 +142,7 @@ function palletPanel(t, p, desk) {
     p.scanIds.filter(id => !p.consolIds.includes(id)).map(id => `<div class="bdk-vrow"><span>·</span><b class="mono">${esc(id)}</b><span>${t.manifest ? tx('not on this manifest · flagged in the receiving audit') : tx('saved · matches when a manifest is attached')}</span>${unscan(id)}</div>`).join('') +
     (p.held || []).map(id => `<div class="bdk-vrow warn"><span>⚠</span><b class="mono">${esc(id)}</b><span>${tx('not on this manifest')}</span><span class="bdk-vbtns"><button class="btn sm" data-act="pend-add" data-id="${esc(id)}">${tx('Add &amp; flag')}</button><button class="btn sm" data-act="pend-drop" data-id="${esc(id)}">${tx('Ignore')}</button></span></div>`).join('');
   return `<div class="bdk-pal${desk ? ' desk' : ''}"><div class="bdk-pal-h"><b>${tx('Pallet {ref}', { ref: esc(p.ref) })}</b><span class="tst ${s === 'done' ? 'done' : s === 'active' ? 'live' : 'staged'}">${esc(pstate(s))}</span>${p.carryover ? `<span class="status warn">${tx('carryover')}</span>` : ''}${sightBadge(p)}<button class="ibtn" data-act="closepal" title="${tx('Close')}">${ic('x')}</button></div>` +
-    `<div class="bdk-pal-b"><div class="bdk-ptrow">${PTYPES.map(x => `<button class="bdr-pt${p.ptype === x[0] ? ' on' : ''}" data-act="pal-pt" data-pt="${x[0]}"><i style="background:${x[2]}"></i>${x[1]}</button>`).join('')}</div>` +
+    `<div class="bdk-pal-b">${desk ? `<div class="bdk-ptrow">${PTYPES.map(x => `<button class="bdr-pt${p.ptype === x[0] ? ' on' : ''}" data-act="pal-pt" data-pt="${x[0]}"><i style="background:${x[2]}"></i>${x[1]}</button>`).join('')}</div>` : typeButtons(p.ptype, 'pal-pt')}` +
     `<div class="bdk-fields"><label>${tx('Cartons')}<input class="bdr-in mono" data-field="pcartons" inputmode="numeric" maxlength="3" value="${p.cartons ?? ''}"></label><label>${tx('Est. mins')}<input class="bdr-in mono${p.expectedBasis === 'manual' ? '' : ' auto'}" data-field="pexp" inputmode="numeric" maxlength="4" value="${p.expectedMins ?? ''}" title="${p.expectedBasis === 'manual' ? tx('set by hand') : tx('auto · {n} min per carton', { n: t.minsPerCarton ?? STD_MINS_PER_CARTON })}"></label><label>${tx('Note')}<input class="bdr-in" data-field="pnote" maxlength="120" placeholder="${tx('optional')}" value="${esc(p.note || '')}"></label></div>` +
     (desk ? `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="pscan" inputmode="numeric" enterkeyhint="done" placeholder="${tx('Scan or type a pallet label')}" autocomplete="off">${camButton('pscan')}<button class="btn sm" data-act="pscan">${ic('barcode')}${tx('Add')}</button></div>` : scanRow('pscan', 'pscan', tx('Scan a label'), st.typing.pscan)) + `${scans ? `<div class="bdk-verified">${scans}</div>` : ''}` +
     palletContents(t, p) + `<div class="bdk-decant"><div class="bdk-declab">${tx('Decant')}${on.length ? ` · ${esc(on.join(' + '))}` : p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}</div>${worked}${sus}${s !== 'done' ? picker : ''}${desk ? queuePicker(t, p) : ''}<div class="bdk-verbs">${verbs}</div>${st.fix === p.ref ? fixTimes(p) : ''}</div>` +
@@ -208,7 +214,7 @@ function mobile(ctx, mode) {
     `<div class="dk-body">${clockNote(ctx)}${decantBoard(m.dock, plan, todayKey(), { act: true })}${heldCard(m.dock)}</div>` + sheet +
     strip(`<div class="dk-st"><div class="dk-l1"><span>${tx('Tap New truck when it lands.')}</span></div></div><button class="dk-go" data-act="newtruck">${ic('plus')}${tx('New truck')}</button>`, '', false);
   const body = run ? (!begun(t) ? readyBlock(t) : movingBar() + `<div class="bdk">${dockGrid(t, false)}</div>` + runHint() + crewStrip(t, m) + noCartonNote(t) + upNext(t, m))
-    : movingBar() + `<div class="bdk">${dockGrid(t, false)}</div>` + legendHint(t) + lastLanded(t);
+    : movingBar() + entryGrid(t) + legendHint(t) + lastLanded(t);
   return truckBar(t, run) + `<div class="dk-body">${clockNote(ctx)}${body}</div>` + sheet + (run ? runStrip(t, m) : receiveStrip(t));
 }
 // The truck bar: which truck (tap to switch or start another), its phase,
@@ -217,8 +223,16 @@ function mobile(ctx, mode) {
 function truckBar(t, run) {
   const ph = truckPhase(t), at = PHASES.indexOf(ph);
   return `<div class="dk-top"><div class="dk-tr"><button class="dk-tn" data-act="trucks" aria-expanded="${!!st.trucks}" aria-label="${tx('Truck {n}: switch truck or start a new one', { n: esc(truckNo(t.id)) })}">${tx('Truck {n}', { n: esc(truckNo(t.id)) })}${ic('chev')}</button>${phaseChip(t)}<span class="dk-sp"></span>` +
-    `<button class="dk-scan" data-camera="dkscan" title="${run ? tx('Scan a pallet label to open its pallet') : tx('Scan a label to land it, or to find the pallet it is on')}">${ic('barcode')}${tx('Scan')}</button><input data-field="dkscan" hidden></div>` +
+    manBox(t) + `</div>` +
     `<ol class="dk-steps" aria-label="${tx('Truck phase')}: ${PHASE_NAME[ph]}">${PHASES.map((p, i) => `<li class="${i < at ? 'dn' : i === at ? 'on' : ''}"${i === at ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[p]}</span></li>`).join('')}</ol></div>`;
+}
+// Beside the truck's name: its manifest and what it expects (tap for the
+// manifest), or a way to attach one.
+function manBox(t) {
+  const man = t.manifest;
+  if (!man) return `<button class="dk-man none" data-act="manpick"><b>${ic('file')}${tx('No manifest')}</b><small>${t.plannedManifest ? tx('{no} attaching', { no: esc(t.plannedManifest) }) : tx('Tap to attach one')}</small></button>`;
+  const ctn = man.consols.reduce((n, c) => n + (Number(c.cartons) || 0), 0);
+  return `<button class="dk-man" data-act="ps-info" aria-label="${tx('Manifest {no}', { no: esc(man.manNo) })}"><b>${ic('file')}${esc(man.manNo)}</b><small>${tx('{c} ctn · {n} consols expected', { c: ctn.toLocaleString(), n: man.consols.length })}</small></button>`;
 }
 const strip = (inner, cls = '', tog = true) => `<div class="dk-strip${cls}">${inner}${tog ? `<button class="dk-tog" data-act="panel" aria-expanded="${!!st.panel}" aria-label="${st.panel ? tx('Hide the details') : tx('Show the details')}">${ic('chev')}</button>` : ''}</div>`;
 const nextBtn = t => { const n = nextStep(t); return n ? `<button class="dk-go" data-act="phase-${n.act}">${esc(n.label)}</button>` : ''; };
@@ -281,21 +295,28 @@ function phoneSheet(ctx, m, t, plan, run) {
   if (ss.info) return wrap(infoSheet(t));
   if (st.more) return wrap(moreSheet(m, t));
   if (st.trucks) return wrap(trucksSheet(m, t));
-  if (st.sel && !(run && !begun(t))) return t.pallets[st.sel] ? wrap(palletPanel(t, t.pallets[st.sel], false))
-    : `<div class="dk-modal" role="dialog" aria-modal="true" aria-label="${tx('Land pallet {ref}', { ref: esc(st.sel) })}"><button class="dk-scrim" data-act="closepal" aria-label="${tx('Close')}"></button><div class="dk-dlg">${landPanel(t, st.sel)}</div></div>`;
+  // A pallet, landed or about to be, opens as a popup in the middle of the screen.
+  const modal = (label, html) => `<div class="dk-modal" role="dialog" aria-modal="true" aria-label="${label}"><button class="dk-scrim" data-act="closepal" aria-label="${tx('Close')}"></button><div class="dk-dlg">${html}</div></div>`;
+  if (st.sel && !(run && !begun(t))) return t.pallets[st.sel] ? modal(tx('Pallet {ref}', { ref: esc(st.sel) }), palletPanel(t, t.pallets[st.sel], false)) : modal(landTitle(t, st.sel), landPanel(t, st.sel));
   if (st.panel) return `<div class="dk-sheet pan" role="dialog">${run ? runPanel(t, m) : receivePanel(t)}</div>`;
   return '';
+}
+// Receive's grid under a slim header, with how many of its pallets carry a
+// consol verified on the manifest (the ticks and crosses on the squares).
+function entryGrid(t) {
+  const ps = Object.values(t.pallets || {}).filter(p => !p.excluded), ok = ps.filter(verified).length;
+  return `<div class="card dk-list dk-pe"><div class="dk-lh">${tx('Pallet entry')}${ps.length ? `<span>${tx('{n} of {total} verified', { n: ok, total: ps.length })}</span>` : ''}</div><div class="bdk">${dockGrid(t, false)}</div></div>`;
 }
 // Under the grid in Receive: the colours and what to do, then the last
 // pallets landed (tap one to open it).
 function legendHint(t) {
-  return `<div class="dk-hint">${PTYPES.map(p => `<span class="lg"><i style="background:${p[2]}"></i>${p[1]}</span>`).join('')}<span class="r">${t.status === 'live' ? tx('Tap an empty square to land') : tx('Start receiving to land pallets')}</span></div>`;
+  return `<div class="dk-hint">${PTYPES.map(p => `<span class="lg"><i style="background:${p[2]}"></i>${PT_SHORT[p[0]]}</span>`).join('')}<span class="r">${t.status === 'live' ? tx('Tap an empty square to land') : tx('Start receiving to land pallets')}</span></div>`;
 }
 function lastLanded(t) {
   const ps = pallets(t).filter(p => !p.carryover && p.landedAt).sort((a, b) => b.landedAt.localeCompare(a.landedAt)), c = phaseCounts(t);
   if (!ps.length) return t.status === 'live' ? `<p class="dk-empty">${tx('Nothing landed yet. Tap an empty square, or Scan a label.')}</p>` : '';
   return `<div class="card dk-list"><div class="dk-lh">${tx('Last landed')}<span>${landedLine(t)} · ${tx('{n} ctn', { n: c.cartons })}</span></div>` +
-    ps.slice(0, 4).map(p => { const n = p.consolIds.length + p.scanIds.length; return `<button class="dk-li" data-act="cell" data-ref="${esc(p.ref)}"><b class="dk-ref t-${PT_LETTER[p.ptype] || 'c'}">${esc(p.ref)}</b><span><em class="ty t-${PT_LETTER[p.ptype] || 'c'}">${esc(PT_ONE[p.ptype] || p.ptype)}</em> · ${tx('{n} ctn', { n: p.cartons ?? '–' })}${n ? ' · ' + txn(n, '{n} label', '{n} labels') : ''}</span><small>${fmtHM(p.landedAt)}</small></button>`; }).join('') + `</div>`;
+    ps.slice(0, 4).map(p => { const n = p.consolIds.length + p.scanIds.length; return `<button class="dk-li" data-act="cell" data-ref="${esc(p.ref)}"><b class="dk-ref t-${PT_LETTER[p.ptype] || 'c'}">${esc(p.ref)}</b>${vfMark(p)}<span><em class="ty t-${PT_LETTER[p.ptype] || 'c'}">${esc(PT_ONE[p.ptype] || p.ptype)}</em> · ${tx('{n} ctn', { n: p.cartons ?? '–' })}${n ? ' · ' + txn(n, '{n} label', '{n} labels') : ''}</span><small>${fmtHM(p.landedAt)}</small></button>`; }).join('') + `</div>`;
 }
 // Under the crew in Decant: where each busy cutter goes next, from the plan
 // (a free one has NEXT on their chip).
@@ -328,23 +349,6 @@ function crewStrip(t, m) {
     return `<span class="bdk-fw"><button class="bdk-fchip${st.arm === mm.pid ? ' armed' : ''}${br ? ' brk' : ''}" data-act="${br || !cut ? 'more' : 'arm'}" data-pid="${esc(mm.pid)}"${br ? ` title="${tx('On a break: open Team & plan to bring them back')}"` : ''}><i class="${on ? 'a' : ''}"></i><b>${esc(who(mm))}</b><span>${br ? tx('on a break') : on ? '▶ ' + esc(on) : !cut ? esc(ROLE_AS[mm.role] || mm.role) : tx('free')}</span></button>` +
       (nx ? `<button class="bdk-next" data-act="next-go" data-pid="${esc(mm.pid)}" data-ref="${esc(nx)}" aria-label="${tx('Start {ref} for {pid}', { ref: esc(nx), pid: esc(mm.pid) })}">▶ ${tx('NEXT {ref}', { ref: esc(nx) })}</button>` : '') + `</span>`;
   }).join('')}</div>`;
-}
-// Scan from the truck bar. Receive: a label already on a pallet opens it;
-// any other opens the land sheet on the next free square with the label on
-// it (checked against the manifest there). Decant: opens the pallet it is on.
-async function quickScan(ctx, value) {
-  const t = model(ctx).t, raw = String(value || '').replace(/\D/g, '');
-  if (!t) return toast(tx('Tap New truck when it lands.'), 'bad');
-  if (raw.length < 9) return toast(tx('A pallet label has at least 9 digits'), 'bad');
-  const id9 = raw.slice(-9), k = codeCheck(t, raw), cid = k.c?.id;
-  const on = pallets(t).find(p => (cid && p.consolIds.includes(cid)) || p.consolIds.includes(id9) || p.scanIds.includes(id9) || (p.held || []).includes(id9));
-  st.panel = false; st.trucks = false; ss.open = false; ss.info = false;
-  if (on) { st.sel = on.ref; ctx.rerender(); return toast(tx('{id} on {ref}', { id: id9, ref: on.ref })); }
-  if (st.view === 'run') return toast(tx('{id} is not on a pallet on Truck {n}', { id: id9, n: truckNo(t.id) }), 'bad');
-  if (t.status !== 'live') return toast(tx('Land the first pallet after Start receiving, or tap New truck'), 'bad');
-  const free = grid(t).refs.find(r => !t.pallets[r]); if (!free) return toast(tx('No free square on the grid'), 'bad');
-  st.land = { ref: free, ptype: null, cartons: '', note: '', codes: [raw] }; st.sel = free; ctx.rerender(); show('.bdk-land');
-  toast(k.kind === 'off' ? tx('{id} is not on this manifest. Old label from a reused tub?', { id: id9 }) : tx('Landing at {ref}: choose the type, then Land', { ref: free }), k.kind === 'off' ? 'bad' : '');
 }
 // The facilitator on the phone (DV's More and person sheets): the team with
 // roles and breaks, the opening huddle, and the plan with auto-balance and
@@ -410,6 +414,10 @@ function scanRow(field, act, label, typing) {
   if (typing) return `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="${field}" inputmode="numeric" enterkeyhint="done" placeholder="${tx('Type the label number')}" autocomplete="off">${camButton(field)}<button class="btn sm" data-act="${act}">${tx('Add')}</button></div>`;
   return `<div class="bdk-scanrow cam"><button type="button" class="btn primary bdk-cam" data-camera="${field}" data-camera-continuous title="${tx('Scan with the camera')}">${ic('camera')}${label}</button><button type="button" class="btn bdk-type" data-act="typing" data-f="${field}">${ic('keyboard')}${tx('Type it')}</button><input data-field="${field}" hidden><button data-act="${act}" hidden></button></div>`;
 }
+// "Land pallet 5 · A6": the truck's next pallet, and where it goes.
+const landTitle = (t, ref) => tx('Land pallet {n} · {ref}', { n: pallets(t).filter(p => !p.carryover).length + 1, ref: esc(ref) });
+// The type as three big buttons in their colours, the chosen one filled.
+const typeButtons = (cur, act, extra = '') => `<div class="bdk-ptrow big${cur ? '' : ' ask'}"${extra}>${PTYPES.map(x => `<button class="bdr-pt t-${PT_LETTER[x[0]]}${cur === x[0] ? ' on' : ''}" data-act="${act}" data-pt="${x[0]}" aria-pressed="${cur === x[0]}">${cur === x[0] ? ic('check') : ''}${PT_ONE[x[0]]}</button>`).join('')}</div>`;
 function landPanel(t, ref) {
   const L = st.land.ref === ref ? st.land : { ref, ptype: null, cartons: '', note: '', codes: [] };
   const checks = L.codes.map(raw => codeCheck(t, raw)), seen = new Set(), ok = checks.filter(k => k.kind === 'ok' && !seen.has(k.c.id) && seen.add(k.c.id));
@@ -419,10 +427,10 @@ function landPanel(t, ref) {
     const [cls, mark, what] = k.kind === 'ok' ? ['ok', '✓', tx('{n} ctn', { n: k.c.cartons }) + (k.c.dept ? ' · ' + esc(k.c.dept) : '')] : k.kind === 'taken' ? ['bad', '✕', tx('already on {ref}: it stays there', { ref: esc(k.on) })] : k.kind === 'off' ? ['warn', '⚠', tx('not on this manifest: held on the pallet to flag or ignore')] : ['', '·', tx('saved · matches when a manifest is attached')];
     return `<div class="bdk-vrow ${cls}"><span>${mark}</span><b class="mono">${esc(k.id9)}</b><span>${what}</span><button class="bdk-vx" data-act="l-drop" data-i="${i}" aria-label="${tx('Take {id} off this pallet', { id: esc(k.id9) })}">${ic('x')}</button></div>`;
   };
-  return `<div class="bdk-pal bdk-land"><div class="bdk-pal-h">${ic('parking')}<b>${tx('Land pallet {ref}', { ref: esc(ref) })}</b><button class="ibtn" data-act="closepal" title="${tx('Close')}">${ic('x')}</button></div><div class="bdk-pal-b">` +
-    lab('barcode', tx('1 · Scan the labels')) + scanRow('lscan', 'lscan', tx('Scan labels'), st.typing.lscan) +
+  return `<div class="bdk-pal bdk-land"><div class="bdk-pal-h">${ic('parking')}<b>${landTitle(t, ref)}</b><button class="ibtn" data-act="closepal" title="${tx('Close')}">${ic('x')}</button></div><div class="bdk-pal-b">` +
+    lab('barcode', tx('Scan the labels')) + scanRow('lscan', 'lscan', tx('Scan labels'), st.typing.lscan) +
     (checks.length ? `<div class="bdk-verified">${checks.map(row).join('')}</div>` : `<p class="lbl">${t.manifest ? tx('Each consol label fills its cartons. Stack as many as are on the pallet.') : tx('No manifest yet: labels are saved and match when one is attached.')}</p>`) +
-    lab('box', tx('2 · Pallet type')) + `<div class="bdk-ptrow${L.ptype ? '' : ' ask'}">${PTYPES.map(x => `<button class="bdr-pt${L.ptype === x[0] ? ' on' : ''}" data-act="ptype" data-pt="${x[0]}" aria-pressed="${L.ptype === x[0]}"><i style="background:${x[2]}"></i>${PT_ONE[x[0]]}</button>`).join('')}</div>` +
+    lab('box', tx('Pallet type')) + typeButtons(L.ptype, 'ptype') +
     `<div class="bdk-fields"><label><span class="fl-h">${ic('packages')}${tx('Cartons')}</span><input class="bdr-in mono" data-field="cartons" inputmode="numeric" maxlength="3" placeholder="${fromLabels || '0'}" value="${esc(L.cartons)}"></label>` +
     `<label><span class="fl-h">${ic('clock')}${tx('Est. mins')}<small class="fl-t">${L.minsManual ? tx('by hand') : tx('auto')}</small></span><input class="bdr-in mono${L.minsManual ? '' : ' auto'}" data-field="lmins" inputmode="numeric" maxlength="4" placeholder="—" value="${esc(mins)}" data-rate="${rate}" data-from="${fromLabels}" title="${tx('Worked out from the cartons until you type a time; a new scan works it out again')}"></label>` +
     `<label><span class="fl-h">${ic('edit')}${tx('Note')}</span><input class="bdr-in" data-field="note" maxlength="120" placeholder="${tx('optional')}" value="${esc(L.note || '')}"></label></div>` +
@@ -768,7 +776,7 @@ function mount(ctx, root) {
         if (caret) { el.focus({ preventScroll: true }); try { if (caret[0] != null) el.setSelectionRange(...caret); } catch {} }
       }
     };
-    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const f = e.target.dataset?.field; if (f === 'ps-code') { e.preventDefault(); root.querySelector('[data-act="ps-find"]')?.click(); return; } if (f === 'dkscan') { e.preventDefault(); const v = e.target.value; e.target.value = ''; quickScan(ctx, v); return; } if (f === 'cartons' || f === 'ref') { e.preventDefault(); root.querySelector('[data-act="land"]')?.click(); } else if (f === 'pscan' || f === 'lscan') { e.preventDefault(); root.querySelector(`[data-act="${f}"]`)?.click(); } else if (f === 'team') { e.preventDefault(); root.querySelector('[data-act="team-add"]')?.click(); } });
+    root.addEventListener('keydown', e => { if (e.key !== 'Enter') return; const f = e.target.dataset?.field; if (f === 'ps-code') { e.preventDefault(); root.querySelector('[data-act="ps-find"]')?.click(); return; } if (f === 'cartons' || f === 'ref') { e.preventDefault(); root.querySelector('[data-act="land"]')?.click(); } else if (f === 'pscan' || f === 'lscan') { e.preventDefault(); root.querySelector(`[data-act="${f}"]`)?.click(); } else if (f === 'team') { e.preventDefault(); root.querySelector('[data-act="team-add"]')?.click(); } });
     return [ctx.store.on('dock', redraw), ctx.store.on('clock', redraw), () => clearInterval(timer)];
 }
 
