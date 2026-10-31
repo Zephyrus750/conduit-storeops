@@ -8,7 +8,8 @@
 //                Hand over. It cannot land, remove, edit or finalise; that
 //                stays with Receiving.
 //   Team Board   the goal, the forecast finish, progress with a goal-pace
-//                marker, who is decanting what right now and who is next.
+//                marker, who is decanting what right now and who is next;
+//                on a phone (the Board tab) the Wallboard's timeline under it.
 //
 // Both keep the screen awake (Wake Lock, taken again when the page comes
 // back) and can go fullscreen. They tick every second without re-rendering;
@@ -17,6 +18,7 @@
 import { ic, esc, toast } from '../../ui.js';
 import { PT_LETTER, PT_NAME, truckNo, fmtHM, openTrucks, pallets, progress, openHalt, running, onBreak, openSegs, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, holdName, grid, ROLE_NAME } from './common.js';
 import { ratesFor, guard } from './plan.js';
+import { timeline, timelineAct } from './wallboard.js';
 import { phaseChip } from './phase.js';
 import { begun } from '../../../shared/dockphase.js';
 import { tx, txn } from '../../i18n.js';
@@ -149,7 +151,9 @@ function teamBoard(ctx) {
   const others = (t.team || []).filter(m => (m.role || 'cutter') !== 'cutter' || onBreak(t, m.pid));
   const nextCard = `<div class="card scr-card"><div class="ch"><h3>${tx('Up next')}</h3><span class="cs-dim">${txn(nx.waiting.length, '{n} pallet waiting', '{n} pallets waiting')}</span></div>${nx.pairs.length ? `<div class="scr-rows">${nx.pairs.map(x => `<div class="scr-row"><b class="who">${esc(x.pid)}</b>${x.p ? `<span class="bay">${esc(x.p.ref)}</span><span class="what">${esc(PT_NAME[x.p.ptype] || x.p.ptype)} · ${tx('{n} ctn', { n: x.p.cartons ?? '–' })}${x.p.status === 'paused' ? ` · ${tx('resume')}` : ''}</span>` : `<span class="what cs-dim">${tx('nothing waiting')}</span>`}</div>`).join('')}</div>` : `<p class="lbl">${tx('Every cutter is on a pallet.')}</p>`}` +
     (others.length ? `<div class="scr-others">${others.map(m => { const br = onBreak(t, m.pid); return `<span><b>${esc(m.pid)}</b> ${br ? tx('on a break since {time}', { time: fmtHM(br.start) }) : esc(roleWord(m.role))}</span>`; }).join('')}</div>` : '') + '</div>';
-  return `<div class="scr">${head}${holdBanner(openHalt(t))}${kpis}${progressBar(t, pr)}<div class="scr-two">${nowCard}${nextCard}</div></div>`;
+  // The phone has no Wallboard of its own, so its Board carries the timeline.
+  const line = ctx.isMobile ? timeline(t, Date.now(), ratesFor(dock)) : '';
+  return `<div class="scr">${head}${holdBanner(openHalt(t))}${kpis}${progressBar(t, pr)}<div class="scr-two">${nowCard}${nextCard}</div>${line}</div>`;
 }
 
 // ── shared mount: tick, wake lock, fullscreen ──────────────────────────
@@ -168,6 +172,7 @@ function mountScreen(ctx, root) {
   const onVis = () => { if (document.visibilityState === 'visible') wake(); };
   wake(); document.addEventListener('visibilitychange', onVis);
   root.addEventListener('click', e => {
+    const z = e.target.closest('[data-act="wb-zoom"], [data-act="wb-pan"]'); if (z) { if (timelineAct(z)) ctx.rerender(); return; }
     const s = e.target.closest('[data-act^="scr-"]:not([data-act="scr-full"])');
     if (s && !(s.dataset.act === 'scr-close-bg' && e.target !== s)) { onScreenAct(ctx, s); return; }
     const a = e.target.closest('[data-act="scr-full"]'); if (!a) return;

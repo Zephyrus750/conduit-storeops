@@ -3334,3 +3334,67 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .dk-pe .bdk-grid { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
 /* Last landed rows carry the same mark, beside the square. */
 .dk-li .bdk-vf { position: static; flex: none; width: 17px; height: 17px; font-size: 10.5px; box-shadow: none; margin-left: -4px; }
+/* Crew roles on the phone (receiving.js): the crew line over the names, the
+   role icon on every name, and the Roles and person popups. One colour per
+   role, set on its r-* class: cutter teal, runner amber, cleaner violet. */
+.r-cutter { --rl: #0E7CA8; --rl-soft: #E6F3F8; }
+.r-runner { --rl: #B45309; --rl-soft: #FFF7ED; }
+.r-cleaner { --rl: #7C3AED; --rl-soft: #F5F3FF; }
+.frame.dark .r-cutter { --rl: #5CC4EA; --rl-soft: #0F2A36; }
+.frame.dark .r-runner { --rl: #FBBF24; --rl-soft: #33240A; }
+.frame.dark .r-cleaner { --rl: #C4B5FD; --rl-soft: #251B45; }
+.dk-crew { display: flex; align-items: center; gap: 10px; min-height: 42px; }
+.dk-crew .lb { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.dk-crew .rc { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink2); white-space: nowrap; }
+.dk-crew .rc svg.i { width: 16px; height: 16px; color: var(--rl); }
+.dk-rolesb { margin-left: auto; flex: none; height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; border-radius: 11px; border: 1.5px solid var(--accent); background: var(--accent-soft); color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.dk-rolesb svg.i { width: 18px; height: 18px; }
+.bdk-fchip { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+.bdk-fchip svg.ri { width: 18px; height: 18px; grid-row: 1 / 3; color: var(--rl); }
+.bdk-fchip.on { border-color: #FFB300; box-shadow: inset 0 0 0 1px #FFB300; }
+.bdk-fchip.r-runner, .bdk-fchip.r-cleaner { background: var(--rl-soft); border-color: color-mix(in srgb, var(--rl) 45%, var(--line)); }
+.bdk-fchip.r-runner span, .bdk-fchip.r-cleaner span { color: var(--rl); font-weight: 600; }
+.dk-dlg .bdk-pal-h small { font-size: 12px; }
+.dk-dlg .rl .bdk-pal-h > svg.i { width: 20px; height: 20px; flex: none; color: var(--accent-ink); }
+.rl-rows { display: flex; flex-direction: column; }
+.rl-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line-soft); }
+.rl-row:first-child { border-top: 0; }
+.rl-who { width: 78px; flex: none; min-height: 44px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; border: 0; background: none; padding: 0; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.rl-who b { font: 800 15px ui-monospace, Menlo, monospace; text-decoration: underline dotted; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; }
+.rl-who span { max-width: 100%; font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rl-who span.on { color: var(--accent-ink); font-weight: 700; }
+.rl-seg { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.rl-seg button { min-width: 0; height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0 2px; border: 1.5px solid var(--line); border-radius: 11px; background: var(--panel); color: var(--dim); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.rl-seg button svg.i { width: 19px; height: 19px; color: var(--rl); }
+.rl-seg button.on, .pp-roles button.on { background: var(--rl); border-color: var(--rl); color: #fff; }
+.rl-seg button.on svg.i, .pp-roles button.on svg.i { color: #fff; }
+.frame.dark .rl-seg button.on, .frame.dark .pp-roles button.on, .frame.dark .rl-seg button.on svg.i, .frame.dark .pp-roles button.on svg.i { color: #0B1220; }
+.rl-ask { margin: 0 12px 10px; padding: 10px 12px; border-radius: 12px; background: #FFF7ED; border: 1px solid #FDBA74; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.4; color: #7C2D12; }
+.pp .rl-ask { margin: 10px 0 0; }
+.rl-ask .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.rl-ask .btn { min-height: 44px; }
+.rl-ask .rl-go { background: var(--rl); border-color: var(--rl); color: #fff; }
+.rl-ask .rl-go svg.i { color: #fff; }
+.frame.dark .rl-ask { background: #33240A; border-color: #92400E; color: #FDE68A; }
+.frame.dark .rl-ask .rl-go, .frame.dark .rl-ask .rl-go svg.i { color: #0B1220; }
+.rl-foot { position: sticky; bottom: 0; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+.rl-foot span { flex: 1; font-size: 12px; color: var(--dim); }
+.rl-foot .btn { min-height: 44px; padding: 0 22px; }
+.pp-av { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--rl-soft); color: var(--rl); }
+.pp-av svg.i { width: 24px; height: 24px; }
+.pp-t { display: flex; flex-direction: column; min-width: 0; }
+.pp-t b { font: 800 17px ui-monospace, Menlo, monospace; }
+.pp-t small { font-size: 12.5px; color: var(--dim); }
+.pp-roles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pp-roles button { height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 2px solid var(--rl); border-radius: 12px; background: var(--rl-soft); color: var(--rl); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.pp-roles button svg.i { width: 22px; height: 22px; }
+.pp-roles button.on { box-shadow: 0 0 0 3px color-mix(in srgb, var(--rl) 28%, transparent); }
+.pp-acts { display: flex; flex-direction: column; border-top: 1px solid var(--line-soft); }
+.pp-act { width: 100%; min-height: 56px; display: flex; align-items: center; gap: 12px; padding: 6px 14px; border: 0; border-top: 1px solid var(--line-soft); background: none; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.pp-act:first-child { border-top: 0; }
+.pp-act svg.i { width: 21px; height: 21px; color: var(--ink2); }
+.pp-act span { display: flex; flex-direction: column; gap: 1px; }
+.pp-act b { font-size: 14.5px; }
+.pp-act small { font-size: 12px; color: var(--dim); }
+.pp-act.red b, .pp-act.red svg.i { color: #B91C1C; }
+.frame.dark .pp-act.red b, .frame.dark .pp-act.red svg.i { color: #FCA5A5; }

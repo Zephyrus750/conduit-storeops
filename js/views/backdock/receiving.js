@@ -7,6 +7,7 @@
 import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
+import { haptic } from '../../device.js';
 import { previewManifest } from './mpreview.js';
 import { printAudit, canAudit } from './audit.js';
 import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, verifyContents, ss } from './phonesearch.js';
@@ -16,7 +17,7 @@ import { planCard, take5Card, queuePicker, onPlanAct, onPlanChange, ratesFor, gu
 import { phaseBar, phaseChip, nextStep, newTruckSheet, ntDefaults, ntPayload, finishSheet, PHASE_NAME } from './phase.js';
 import { PHASES, begun, phaseCounts, truckPhase } from '../../../shared/dockphase.js';
 
-const st = { truck: null, land: { ref: '', ptype: null, cartons: '', note: '', codes: [] }, sheet: null, moving: null, manConfirm: null, panel: false, trucks: false, typing: {}, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, manPick: false, linking: false, finalising: false, more: false, nt: null, finishing: false };
+const st = { truck: null, land: { ref: '', ptype: null, cartons: '', note: '', codes: [] }, sheet: null, moving: null, manConfirm: null, panel: false, trucks: false, typing: {}, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, manPick: false, linking: false, finalising: false, more: false, nt: null, finishing: false, roles: false, roleAsk: null, person: null };
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const dispatch = (ctx, type, entity, payload) => ctx.store.dispatch({ type, entity, payload });
 // The hold-up buttons, a role inside a sentence (lower case in English), and
@@ -24,6 +25,13 @@ const dispatch = (ctx, type, entity, payload) => ctx.store.dispatch({ type, enti
 const START_KIND = { halt: tx('Start halt'), huddle: tx('Start huddle'), transition: tx('Start transition'), break: tx('Start team break') };
 const END_KIND = { halt: tx('End halt'), huddle: tx('End huddle'), transition: tx('End transition'), break: tx('End team break') };
 const ROLE_AS = { cutter: tx('cutter'), runner: tx('runner'), cleaner: tx('cleaner') };
+// Crew roles on the phone: each has its own solid icon and colour (r-cutter,
+// r-runner, r-cleaner in app.css), on the name tiles, the crew line and the
+// Roles and person popups.
+const ROLES = ['cutter', 'runner', 'cleaner'];
+const ROLE_IC = { cutter: 'knife', runner: 'runner', cleaner: 'broom' };
+const ROLE_COUNT = { cutter: n => tx('{n} cutting', { n }), runner: n => tx('{n} running', { n }), cleaner: n => tx('{n} cleaning', { n }) };
+const roleOf = mm => mm.role || 'cutter';
 const pstate = s => PALLET_STATE[s] || s, tstate = s => TRUCK_STATE[s] || s;
 
 function model(ctx) {
@@ -206,7 +214,7 @@ function heldCard(dock) {
 let lastMode = null;
 function mobile(ctx, mode) {
   // A tab switch closes what the other tab had open (a pallet chosen for it stays).
-  if (lastMode && lastMode !== mode) { st.more = st.panel = st.trucks = st.halting = st.finishing = st.finalising = st.manPick = false; st.sheet = null; ss.open = ss.info = false; st.arm = null; st.moving = null; if (!st.keepSel) st.sel = null; }
+  if (lastMode && lastMode !== mode) { st.more = st.panel = st.trucks = st.halting = st.finishing = st.finalising = st.manPick = st.roles = false; st.sheet = st.roleAsk = st.person = null; ss.open = ss.info = false; st.arm = null; st.moving = null; if (!st.keepSel) st.sel = null; }
   st.keepSel = false; lastMode = mode;
   st.view = mode; const run = mode === 'run';
   const m = model(ctx), t = m.t, plan = ctx.store.get('plan'), sheet = phoneSheet(ctx, m, t, plan, run);
@@ -296,7 +304,9 @@ function phoneSheet(ctx, m, t, plan, run) {
   if (st.more) return wrap(moreSheet(m, t));
   if (st.trucks) return wrap(trucksSheet(m, t));
   // A pallet, landed or about to be, opens as a popup in the middle of the screen.
-  const modal = (label, html) => `<div class="dk-modal" role="dialog" aria-modal="true" aria-label="${label}"><button class="dk-scrim" data-act="closepal" aria-label="${tx('Close')}"></button><div class="dk-dlg">${html}</div></div>`;
+  const modal = (label, html, close = 'closepal') => `<div class="dk-modal" role="dialog" aria-modal="true" aria-label="${label}"><button class="dk-scrim" data-act="${close}" aria-label="${tx('Close')}"></button><div class="dk-dlg">${html}</div></div>`;
+  if (st.person && (t.team || []).some(x => x.pid === st.person)) return modal(esc(st.person), personPanel(t, m, st.person), 'person-close');
+  if (st.roles && (t.team || []).length) return modal(tx('Crew roles'), rolesPanel(t, m), 'roles-close');
   if (st.sel && !(run && !begun(t))) return t.pallets[st.sel] ? modal(tx('Pallet {ref}', { ref: esc(st.sel) }), palletPanel(t, t.pallets[st.sel], false)) : modal(landTitle(t, st.sel), landPanel(t, st.sel));
   if (st.panel) return `<div class="dk-sheet pan" role="dialog">${run ? runPanel(t, m) : receivePanel(t)}</div>`;
   return '';
@@ -338,17 +348,59 @@ function readyBlock(t) {
 }
 // A pallet with no carton count is planned at 60 minutes: said, not silent.
 const noCartonNote = t => { const n = phaseCounts(t).noCartons; return n ? `<div class="rvp-msg warn">${ic('alert')}<span>${txn(n, '{n} pallet has no carton count: it is planned at 60 minutes until it is counted.', '{n} pallets have no carton count: they are planned at 60 minutes until they are counted.')}</span></div>` : ''; };
-const runHint = () => `<div class="bdk-hint${st.arm ? ' on' : ''}">${st.arm ? tx('Armed: tap a lit square to start it (or join it), or the chip again to disarm.') : tx('Tap a crew member, then a square, to start decanting it.')}</div>`;
+const runHint = () => `<div class="bdk-hint${st.arm ? ' on' : ''}">${st.arm ? tx('Armed: tap a lit square to start it (or join it), or the chip again to disarm.') : tx('Tap a cutter, then a square, to start decanting it.') + ' ' + tx('Hold a name for more.')}</div>`;
 // Each cutter's next pallet from their queue (the plan): ▶ starts it in one tap.
 const nextFor = (t, pid) => (t.plan?.queues?.[pid] || []).find(r => t.pallets[r] && !t.pallets[r].excluded && startable(t.pallets[r]) && !openSegs(t.pallets[r]).length);
 function crewStrip(t, m) {
   const team = t.team || [];
   if (!team.length) return `<div class="mv-note">${ic('users')}${tx('No crew on this truck yet. Add the team from <b>Team &amp; plan</b>.')}</div>`;
-  return `<div class="bdk-strip">${team.map(mm => {
-    const br = onBreak(t, mm.pid), cut = (mm.role || 'cutter') === 'cutter', on = m.run[mm.pid], nx = cut && !br && !on && !m.halt ? nextFor(t, mm.pid) : null;
-    return `<span class="bdk-fw"><button class="bdk-fchip${st.arm === mm.pid ? ' armed' : ''}${br ? ' brk' : ''}" data-act="${br || !cut ? 'more' : 'arm'}" data-pid="${esc(mm.pid)}"${br ? ` title="${tx('On a break: open Team & plan to bring them back')}"` : ''}><i class="${on ? 'a' : ''}"></i><b>${esc(who(mm))}</b><span>${br ? tx('on a break') : on ? '▶ ' + esc(on) : !cut ? esc(ROLE_AS[mm.role] || mm.role) : tx('free')}</span></button>` +
-      (nx ? `<button class="bdk-next" data-act="next-go" data-pid="${esc(mm.pid)}" data-ref="${esc(nx)}" aria-label="${tx('Start {ref} for {pid}', { ref: esc(nx), pid: esc(mm.pid) })}">▶ ${tx('NEXT {ref}', { ref: esc(nx) })}</button>` : '') + `</span>`;
+  // The crew line: how many on each role, and Roles to change them.
+  const counts = ROLES.map(r => [r, team.filter(mm => roleOf(mm) === r).length]).filter(x => x[1]);
+  const line = `<div class="dk-crew"><span class="lb">${tx('Crew')}</span>${counts.map(([r, n]) => `<span class="rc r-${r}">${ic(ROLE_IC[r])}${ROLE_COUNT[r](n)}</span>`).join('')}<button class="dk-rolesb" data-act="roles" aria-expanded="${!!st.roles}">${ic('users')}${tx('Roles')}</button></div>`;
+  // A cutter's tap arms them (tap a square next); anyone else's opens Roles,
+  // and someone on a break opens their own popup to bring them back. Holding
+  // any name opens that person's popup.
+  return line + `<div class="bdk-strip">${team.map(mm => {
+    const pid = mm.pid, r = roleOf(mm), br = onBreak(t, pid), cut = r === 'cutter', on = m.run[pid], nx = cut && !br && !on && !m.halt ? nextFor(t, pid) : null;
+    return `<span class="bdk-fw"><button class="bdk-fchip r-${r}${on ? ' on' : ''}${st.arm === pid ? ' armed' : ''}${br ? ' brk' : ''}" data-act="${br ? 'person' : cut ? 'arm' : 'roles'}" data-pid="${esc(pid)}" data-hold="${esc(pid)}" title="${tx('Hold for {pid}’s role, break and more', { pid: esc(pid) })}">${ic(ROLE_IC[r], 'ri')}<b>${esc(who(mm))}</b><span>${br ? tx('on a break') : on ? '▶ ' + esc(on) : !cut ? esc(ROLE_NAME[r] || r) : tx('free')}</span></button>` +
+      (nx ? `<button class="bdk-next" data-act="next-go" data-pid="${esc(pid)}" data-ref="${esc(nx)}" aria-label="${tx('Start {ref} for {pid}', { ref: esc(nx), pid: esc(pid) })}">▶ ${tx('NEXT {ref}', { ref: esc(nx) })}</button>` : '') + `</span>`;
   }).join('')}</div>`;
+}
+// Minutes someone has been on the pallet they are decanting now.
+const onFor = (t, pid, ref) => { const seg = openSegs(t.pallets[ref] || { segments: [] }).find(x => x.pid === pid); return seg ? Math.max(0, Math.round((Date.now() - Date.parse(seg.start)) / 60000)) : 0; };
+// A cutter free to take a pallet over: not on one, not on a break.
+const freeCutter = (t, m, not) => (t.team || []).find(mm => mm.pid !== not && roleOf(mm) === 'cutter' && !m.run[mm.pid] && !onBreak(t, mm.pid));
+const roleButtons = (pid, cur, cls) => `<div class="${cls}" role="group" aria-label="${tx('Role for {pid}', { pid: esc(pid) })}">${ROLES.map(k => `<button class="r-${k}${cur === k ? ' on' : ''}" data-act="role-set" data-pid="${esc(pid)}" data-role="${k}" aria-pressed="${cur === k}">${ic(ROLE_IC[k])}<span>${ROLE_NAME[k]}</span></button>`).join('')}</div>`;
+// Someone decanting asked to stop cutting: they step off their pallet (the
+// reducer does it), so say what happens to it and offer a free cutter.
+function roleAsk(t, m) {
+  const a = st.roleAsk, ref = m.run[a.pid]; if (!ref) return '';
+  const others = openSegs(t.pallets[ref]).filter(x => x.pid !== a.pid).length, free = others ? null : freeCutter(t, m, a.pid);
+  const vars = { pid: esc(a.pid), ref: esc(ref), n: onFor(t, a.pid, ref), role: ROLE_NAME[a.role] };
+  return `<div class="rl-ask" role="alert"><span>${tx('{pid} is decanting {ref} ({n} min).', vars)} ${others ? tx('Moving them to {role} steps them off {ref}; the others on it carry on.', vars) : tx('Moving them to {role} steps them off {ref}: it pauses with the time kept.', vars)}</span>` +
+    `<div class="acts"><button class="btn rl-go r-${a.role}" data-act="role-go">${ic(ROLE_IC[a.role])}${tx('Move {pid} to {role}', vars)}</button>${free ? `<button class="btn rl-hand" data-act="role-hand" data-to="${esc(free.pid)}">${ic('swap')}${tx('Hand {ref} to {to}', { ref: esc(ref), to: esc(free.pid) })}</button>` : ''}<button class="btn" data-act="role-keep">${tx('Keep cutting')}</button></div></div>`;
+}
+// The Roles popup: everyone on the truck with Cutter, Runner and Cleaner.
+function rolesPanel(t, m) {
+  const team = t.team || [];
+  const state = mm => { const br = onBreak(t, mm.pid), on = m.run[mm.pid], r = roleOf(mm); return br ? tx('on a break') : on ? `▶ ${esc(on)} · ${tx('{n}m', { n: onFor(t, mm.pid, on) })}` : r === 'cutter' ? tx('free') : ROLE_NAME[r]; };
+  return `<div class="bdk-pal rl"><div class="bdk-pal-h">${ic('users')}<b>${tx('Crew roles')}</b><small class="cs-dim">${tx('Truck {n}', { n: esc(truckNo(t.id)) })} · ${tx('{n} on the dock', { n: team.length })}</small><button class="ibtn" data-act="roles-close" title="${tx('Close')}">${ic('x')}</button></div>` +
+    `<div class="rl-rows">${team.map(mm => `<div class="rl-row"><button class="rl-who" data-act="person" data-pid="${esc(mm.pid)}" aria-label="${tx('{pid}: break and more', { pid: esc(mm.pid) })}"><b>${esc(who(mm))}</b><span class="${m.run[mm.pid] ? 'on' : ''}">${state(mm)}</span></button>${roleButtons(mm.pid, roleOf(mm), 'rl-seg')}</div>${st.roleAsk?.pid === mm.pid && !st.person ? roleAsk(t, m) : ''}`).join('')}</div>` +
+    `<div class="rl-foot"><span>${tx('Tap a name, or hold it on the dock, for breaks and more.')}</span><button class="btn primary" data-act="roles-close">${tx('Done')}</button></div></div>`;
+}
+// One person (hold their name): role, break, step off, hand over, take off.
+function personPanel(t, m, pid) {
+  const mm = (t.team || []).find(x => x.pid === pid); if (!mm) return '';
+  const r = roleOf(mm), br = onBreak(t, pid), on = m.run[pid], others = on ? openSegs(t.pallets[on]).filter(x => x.pid !== pid).length : 0, free = on && !others ? freeCutter(t, m, pid) : null;
+  const line = br ? tx('on a break since {time}', { time: fmtHM(br.start) }) : on ? tx('decanting {ref} · {n} min', { ref: esc(on), n: onFor(t, pid, on) }) : r === 'cutter' ? tx('between pallets') : '';
+  const row = (act, icon, title, note, extra = '', cls = '') => `<button class="pp-act${cls}" data-act="${act}" data-pid="${esc(pid)}"${extra}>${ic(icon)}<span><b>${title}</b>${note ? `<small>${note}</small>` : ''}</span></button>`;
+  return `<div class="bdk-pal pp"><div class="bdk-pal-h"><span class="pp-av r-${r}">${ic(ROLE_IC[r])}</span><span class="pp-t"><b>${esc(who(mm))}</b><small>${ROLE_NAME[r]}${line ? ' · ' + line : ''}</small></span><button class="ibtn" data-act="person-close" title="${tx('Close')}">${ic('x')}</button></div>` +
+    `<div class="bdk-pal-b"><div class="bdk-declab ic">${ic('users')}${tx('Role')}</div>${roleButtons(pid, r, 'pp-roles')}${st.roleAsk?.pid === pid ? roleAsk(t, m) : ''}</div>` +
+    `<div class="pp-acts">` +
+    (br ? row('break-end', 'coffee', tx('Back from the break'), on ? '' : tx('back on the crew')) : row('break-start', 'coffee', tx('Start a break'), on ? tx('{ref} pauses while they are away', { ref: esc(on) }) : '')) +
+    (on ? row('pp-leave', 'pause', tx('Step off {ref}', { ref: esc(on) }), others ? tx('the others on it carry on') : tx('{ref} pauses, the time kept', { ref: esc(on) }), ` data-ref="${esc(on)}"`) : '') +
+    (free ? row('pp-hand', 'swap', tx('Hand {ref} over', { ref: esc(on) }), tx('to {to}, free now', { to: esc(free.pid) }), ` data-ref="${esc(on)}" data-to="${esc(free.pid)}"`) : '') +
+    row('team-drop', 'user-minus', tx('Take {pid} off the truck', { pid: esc(pid) }), on ? tx('their time on {ref} is kept', { ref: esc(on) }) : '', '', ' red') + `</div></div>`;
 }
 // The facilitator on the phone (DV's More and person sheets): the team with
 // roles and breaks, the opening huddle, and the plan with auto-balance and
@@ -528,6 +580,26 @@ async function onAct(ctx, a, root) {
       await dispatch(ctx, 'truck.setStart', { truck: id }, { at }); st.sheet = null; toast(at ? tx('Decant start {time}', { time: fmtHM(at) }) : tx('Decant start follows the landed time')); return;
     }
     if (act === 'more') { st.more = !st.more; if (!st.more) st.finalising = false; return ctx.rerender(); }
+    // Crew roles: the Roles popup, one person's popup, and a role change
+    // (asked first when it takes someone off the pallet they are on).
+    if (act === 'roles') { st.roles = !st.roles; st.roleAsk = null; st.person = null; st.arm = null; return ctx.rerender(); }
+    if (act === 'roles-close') { st.roles = false; st.roleAsk = null; st.person = null; return ctx.rerender(); }
+    if (act === 'person') { st.person = a.dataset.pid; st.roleAsk = null; st.arm = null; return ctx.rerender(); }
+    if (act === 'person-close') { st.person = null; st.roleAsk = null; return ctx.rerender(); }
+    if (act === 'role-keep') { st.roleAsk = null; return ctx.rerender(); }
+    if (act === 'role-set' || act === 'role-go' || act === 'role-hand') {
+      const pid = act === 'role-set' ? a.dataset.pid : st.roleAsk?.pid, role = act === 'role-set' ? a.dataset.role : st.roleAsk?.role, mm = (t.team || []).find(x => x.pid === pid);
+      if (!mm || !ROLES.includes(role) || roleOf(mm) === role) { st.roleAsk = null; return ctx.rerender(); }
+      const was = m.run[pid];
+      if (act === 'role-set' && was && role !== 'cutter') { st.roleAsk = { pid, role }; return ctx.rerender(); }
+      if (act === 'role-hand') await dispatch(ctx, 'pallet.handover', { truck: id, bay: was }, { toPid: a.dataset.to });
+      await dispatch(ctx, 'truck.team.set', { truck: id }, { team: t.team.map(x => ({ ...x, role: x.pid === pid ? role : roleOf(x) })) });
+      st.roleAsk = null;
+      toast(act === 'role-hand' ? tx('{pid} is {role} · {to} took over {ref}', { pid, role: ROLE_AS[role], to: a.dataset.to, ref: was }) : was && role !== 'cutter' ? tx('{pid} is {role}, off {ref}', { pid, role: ROLE_AS[role], ref: was }) : tx('{pid} is {role}', { pid, role: ROLE_AS[role] }));
+      return;
+    }
+    if (act === 'pp-leave') { const ref = a.dataset.ref; await dispatch(ctx, 'pallet.leave', { truck: id, bay: ref }, { pid: a.dataset.pid }); st.person = null; toast(tx('{pid} stepped off {ref}', { pid: a.dataset.pid, ref })); return; }
+    if (act === 'pp-hand') { const ref = a.dataset.ref, to = a.dataset.to; await dispatch(ctx, 'pallet.handover', { truck: id, bay: ref }, { toPid: to }); st.person = null; toast(tx('{ref} handed to {pid}', { ref, pid: to })); return; }
     if (act === 'finalise' || act === 'phase-finalise') { st.finalising = true; st.more = false; st.nt = null; st.finishing = false; ctx.rerender(); return show('.bdr-fin'); }
     if (act === 'fin-cancel') { st.finalising = false; return ctx.rerender(); }
     if (act === 'fin-keep' || act === 'fin-clear') {
@@ -544,7 +616,7 @@ async function onAct(ctx, a, root) {
     }
     if (act === 'haltend') { await dispatch(ctx, 'halt.end', { truck: id }, {}); toast(tx('Decant running')); return; }
     if (act === 'received') { await dispatch(ctx, 'receiving.confirm', { truck: id }, { confirmed: !t.receivingConfirmed }); toast(t.receivingConfirmed ? tx('Hand-over undone') : tx('Handed over: the layout is set')); return; }
-    if (act === 'break-start' || act === 'break-end') { const pid = a.dataset.pid, was = m.run[pid]; await dispatch(ctx, act === 'break-start' ? 'break.start' : 'break.end', { truck: id }, { pid }); toast(act === 'break-start' ? (was ? tx('{pid} is on a break, off {ref}: their clock stops', { pid, ref: was }) : tx('{pid} is on a break: their clock stops', { pid })) : tx('{pid} is back', { pid })); return; }
+    if (act === 'break-start' || act === 'break-end') { const pid = a.dataset.pid, was = m.run[pid]; if (a.closest('.pp')) st.person = null; await dispatch(ctx, act === 'break-start' ? 'break.start' : 'break.end', { truck: id }, { pid }); toast(act === 'break-start' ? (was ? tx('{pid} is on a break, off {ref}: their clock stops', { pid, ref: was }) : tx('{pid} is on a break: their clock stops', { pid })) : tx('{pid} is back', { pid })); return; }
     if (act === 'audit') return canAudit(ctx) ? printAudit(t, m.dock) : toast(tx('The receiving audit prints from a PC, for managers.'), 'bad');
     if (act === 'ptype') { keepLand(); st.land.ref = (ctx.isMobile ? st.sel : field('ref')) || st.land.ref; st.land.ptype = st.land.ptype === a.dataset.pt ? null : a.dataset.pt; return ctx.rerender(); }
     // The land sheet's scans: checked against the manifest on the sheet, sent with Land.
@@ -559,7 +631,7 @@ async function onAct(ctx, a, root) {
     if (act === 'l-drop') { keepLand(); st.land.codes.splice(+a.dataset.i, 1); st.land.minsManual = false; st.land.mins = ''; return ctx.rerender(); }
     if (act === 'move-cancel') { st.moving = null; return ctx.rerender(); }
     if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const pid = dnumId(v); if (!pid) return toast(tx('Enter a D-number, like D4. Names are not kept.'), 'bad'); if ((t.team || []).some(x => x.pid === pid)) return toast(tx('{pid} is already on the truck', { pid })); await dispatch(ctx, 'truck.team.set', { truck: id }, { team: [...(t.team || []), { pid }] }); return; }
-    if (act === 'team-drop') { if (m.run[a.dataset.pid] && !confirm(tx('{pid} is on {ref}. Take them off the truck? Their time on it is kept.', { pid: a.dataset.pid, ref: m.run[a.dataset.pid] }))) return; await dispatch(ctx, 'truck.team.set', { truck: id }, { team: (t.team || []).filter(x => x.pid !== a.dataset.pid) }); return; }
+    if (act === 'team-drop') { if (a.closest('.pp') && !m.run[a.dataset.pid] && !confirm(tx('Take {pid} off the truck?', { pid: a.dataset.pid }))) return; if (m.run[a.dataset.pid] && !confirm(tx('{pid} is on {ref}. Take them off the truck? Their time on it is kept.', { pid: a.dataset.pid, ref: m.run[a.dataset.pid] }))) return; if (a.closest('.pp')) st.person = null; await dispatch(ctx, 'truck.team.set', { truck: id }, { team: (t.team || []).filter(x => x.pid !== a.dataset.pid) }); return; }
     if (act === 'cell') {
       const ref = a.dataset.ref, p = t.pallets[ref];
       // Move: the pallet goes to the empty square tapped.
@@ -720,6 +792,20 @@ function mount(ctx, root) {
     // From Back dock home: Land a pallet, Run the decant or Team open their part.
     if (ctx.arg?.mode && ctx.arg !== usedArg) { usedArg = ctx.arg; st.more = ctx.arg.mode === 'team'; st.sel = null; st.arm = null; st.panel = false; setTimeout(() => ctx.rerender(), 0); }
     if (ctx.arg?.truck && ctx.arg !== usedArg && ctx.store.get('dock').trucks?.[ctx.arg.truck]) { usedArg = ctx.arg; st.truck = ctx.arg.truck; st.sel = ctx.arg.bay && ctx.store.get('dock').trucks[ctx.arg.truck].pallets?.[ctx.arg.bay] ? ctx.arg.bay : null; setTimeout(() => ctx.rerender(), 0); }
+    // Hold a name on the crew strip (half a second) for that person's popup.
+    // The click that ends a hold is swallowed, so a held cutter is not armed
+    // and the popup is not closed by its own scrim.
+    let hold = null, held = false, hx = 0, hy = 0;
+    const drop = () => { clearTimeout(hold); hold = null; };
+    root.addEventListener('pointerdown', e => {
+      held = false; const c = e.target.closest('[data-hold]'); if (!c) return;
+      hx = e.clientX; hy = e.clientY; drop();
+      hold = setTimeout(() => { hold = null; held = true; haptic('select'); st.person = c.dataset.hold; st.roleAsk = null; st.arm = null; ctx.rerender(); }, 500);
+    });
+    root.addEventListener('pointermove', e => { if (hold && Math.hypot(e.clientX - hx, e.clientY - hy) > 10) drop(); });
+    root.addEventListener('pointerup', drop); root.addEventListener('pointercancel', drop);
+    root.addEventListener('contextmenu', e => { if (e.target.closest('[data-hold]')) e.preventDefault(); });
+    root.addEventListener('click', e => { if (held) { held = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
     root.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (a) onAct(ctx, a, root); });
     root.addEventListener('input', e => onSearchInput(ctx, e, root));
     root.addEventListener('input', e => {
