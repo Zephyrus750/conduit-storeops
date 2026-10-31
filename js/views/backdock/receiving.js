@@ -8,7 +8,7 @@ import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton } from 
 import { tx, txn } from '../../i18n.js';
 import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
 import { previewManifest } from './mpreview.js';
-import { printAudit } from './audit.js';
+import { printAudit, canAudit } from './audit.js';
 import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, verifyContents, ss } from './phonesearch.js';
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
 import { liveAudit } from '../../../shared/reducers/backdock.js';
@@ -103,7 +103,7 @@ function desktop(ctx) {
   if (!t) return head + phaseBar(null) + ntCard + decantBoard(m.dock, ctx.store.get('plan'), todayKey(), { act: true }) + `<div class="card bdr-empty" style="padding:28px;text-align:center"><div style="font-size:34px;color:var(--faint)">${ic('truck')}</div><b style="display:block;font-size:18px;margin:8px 0 4px">${tx('No truck on the dock')}</b><p class="lbl">${tx('Start receiving the next truck here, or let a dock phone land it. The board wakes either way.')}</p><button class="btn primary" data-act="newtruck">${ic('plus')}${tx('Start receiving a truck')}</button></div>` + heldCard(m.dock);
   const strip = `<div class="trk-strip">${m.open.map(x => truckCard(x, x.id === t.id)).join('')}</div>`;
   const rates = ratesFor(m.dock), man = t.manifest, fc = forecast(t, Date.now(), rates), gp = t.goalAt ? goalPace(t) : null;
-  const headcard = `<div class="card bdr-headcard"><div class="bdr-head"><span class="bdr-tile">${ic('truck')}</span><div class="bdr-tt"><b>${tx('Truck {n}', { n: esc(truckNo(t.id)) })}</b><span class="tst ${esc(t.status)}">${live ? tx('Live') : tx('Staged')}</span><small>${live ? landedLine(t) + ' · ' + txn(pr.count, '{n} pallet', '{n} pallets') + (pallets(t).some(p => p.carryover) ? ' ' + tx('({n} carryover)', { n: pallets(t).filter(p => p.carryover).length }) : '') + ' · ' + tx('{n} decanting', { n: pr.active }) : tx('planned · Start receiving to land pallets')}${m.halt ? ` · <b style="color:#B91C1C">${esc(holdName(m.halt))}</b>` : ''}</small></div><button class="btn sm" data-act="audit" title="${tx('Print the receiving audit')}">${ic('print')}${tx('Audit')}</button>` +
+  const headcard = `<div class="card bdr-headcard"><div class="bdr-head"><span class="bdr-tile">${ic('truck')}</span><div class="bdr-tt"><b>${tx('Truck {n}', { n: esc(truckNo(t.id)) })}</b><span class="tst ${esc(t.status)}">${live ? tx('Live') : tx('Staged')}</span><small>${live ? landedLine(t) + ' · ' + txn(pr.count, '{n} pallet', '{n} pallets') + (pallets(t).some(p => p.carryover) ? ' ' + tx('({n} carryover)', { n: pallets(t).filter(p => p.carryover).length }) : '') + ' · ' + tx('{n} decanting', { n: pr.active }) : tx('planned · Start receiving to land pallets')}${m.halt ? ` · <b style="color:#B91C1C">${esc(holdName(m.halt))}</b>` : ''}</small></div>${canAudit(ctx) ? `<button class="btn sm" data-act="audit" title="${tx('Print the receiving audit')}">${ic('print')}${tx('Audit')}</button>` : ''}` +
     `<div class="bdr-chips"><span class="bdr-chip"><span class="l">${tx('Manifest')}</span><span class="v">${man ? tx('{n}<small> cons · {c}c</small>', { n: man.consols.length, c: man.consols.reduce((n, c) => n + c.cartons, 0) }) : '—'}</span></span><button class="bdr-chip" data-act="setstart" title="${tx('When the decant clock started (clear time and rate run from here)')}"><span class="l">${tx('Decant start')}</span><span class="v">${fmtHM(startOf(t))}${t.decantStartAt ? '' : `<small> ${tx('landed')}</small>`}</span></button><span class="bdr-chip"><span class="l">${tx('Goal')}</span><span class="v">${t.goalAt ? fmtHM(t.goalAt) : '—'}</span></span><span class="bdr-chip"><span class="l">${tx('Forecast')}</span><span class="v">${fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}${fc.at && t.goalAt ? `<small class="${fc.at > Date.parse(t.goalAt) ? 'c-red' : 'c-green'}"> ${fc.at > Date.parse(t.goalAt) ? tx('behind') : tx('ahead')}</small>` : ''}</span></span><button class="bdr-chip${t.receivingConfirmed ? ' ok' : ''}" data-act="${t.receivingConfirmed ? 'received' : 'phase-finish'}" title="${t.receivingConfirmed ? tx('Undo the hand-over: the layout is open again') : tx('Finish receiving: confirm the layout')}"><span class="l">${tx('Receiving')}</span><span class="v">${t.receivingConfirmed ? `${ic('check')}${tx('Confirmed {time}', { time: fmtHM(t.receivedAt) })}` : tx('Finish')}</span></button></div></div>` +
     `<div class="bdr-prog"><b class="bdr-big">${pr.done}</b><span class="bdr-of">${tx('/ {n} cartons', { n: pr.total })}</span><span class="bdr-pct">${pr.pct}%</span></div><div class="bdr-bar">${gp !== null ? `<b class="bdr-pace" style="left:${Math.round(gp * 100)}%" title="${tx('Where the team should be by now to make the goal')}"></b>` : ''}<i style="width:${pr.pct}%"></i></div>${tallyRow(t)}${noCartonNote(t)}</div>`;
   const dock = `<div class="card kpi dk rcv bdr-dock"><div class="kh">${ic('box')}<h3>${tx('The dock')}</h3>${legend()}</div>${live && !st.moving ? landForm() : ''}${movingBar()}${dockGrid(t, true)}${holdRow(t, m.halt, live)}</div>`;
@@ -113,7 +113,7 @@ function desktop(ctx) {
   const picker = st.manPick ? manPicker(m, t) : '';
   const nUn = man ? unlinked(t).length : 0;
   const late = !man ? '' : st.linking ? linkSheet(t, rates) : nUn && pr.count ? `<div class="card ll-warn"><div class="ch"><h3>${ic('alert')}${txn(nUn, '{n} pallet not linked to manifest {no}', '{n} pallets not linked to manifest {no}', { no: esc(man.manNo) })}</h3><button class="btn sm primary" data-act="ll-open">${tx('Link landed pallets →')}</button></div><p class="lbl">${tx("Landed before the manifest was attached, or without a readable label. Link them so the reconciliation and the clear forecast use the manifest's cartons.")}</p></div>` : '';
-  return head + clockNote(ctx) + strip + phaseBar(t) + ntCard + (st.finishing ? finishSheet(t) : '') + (st.finalising ? finaliseCard(t, m.dock) : '') + sheetCard(t, m.dock) + picker + late + `<div class="bdr-stack">${live && !begun(t) && (t.team || []).length ? take5Card(t) : ''}${headcard}${dock}${teamcard}${planCard(t, rates)}${landedcard}</div>`;
+  return head + clockNote(ctx) + strip + phaseBar(t) + ntCard + (st.finishing ? finishSheet(t, { audit: canAudit(ctx) }) : '') + (st.finalising ? finaliseCard(t, m.dock) : '') + sheetCard(t, m.dock) + picker + late + `<div class="bdr-stack">${live && !begun(t) && (t.team || []).length ? take5Card(t) : ''}${headcard}${dock}${teamcard}${planCard(t, rates)}${landedcard}</div>`;
 }
 
 // One pallet's controls: type, cartons, note, decant verbs, scanned
@@ -249,11 +249,11 @@ function runStrip(t, m) {
 // step, the counts, and every tool.
 const tool = (act, icon, label, cls = '', extra = '') => `<button class="dk-tool${cls}" data-act="${act}"${extra}>${ic(icon)}<span>${label}</span></button>`;
 function receivePanel(t) {
-  const a = liveAudit(t), c = phaseCounts(t), off = a && (a.missing || a.extra || a.unmatched);
+  const a = liveAudit(t), c = phaseCounts(t);
   return `<div class="dk-pan rcv">${phaseBar(t)}<div class="dk-tiles"><span class="dk-tile"><b>${c.pallets}</b>${txn(c.pallets, 'pallet', 'pallets')}</span><span class="dk-tile"><b>${c.cartons}</b>${tx('ctn counted')}</span>` +
     (a ? `<span class="dk-tile w"><b>${a.missing}</b>${tx('to land')}</span><span class="dk-tile${a.extra ? ' r' : ''}"><b>${a.extra}</b>${tx('off-manifest')}</span>` : `<span class="dk-tile w"><b>—</b>${tx('no manifest')}</span>`) + `</div>` +
     `<div class="dk-tools">${tool('ps-open', 'search', tx('Search'))}${tool(t.manifest ? 'ps-info' : 'manpick', 'file', t.manifest ? tx('Manifest {no}', { no: esc(t.manifest.manNo) }) : tx('Attach a manifest'), t.manifest ? '' : ' lit')}${tool('more', 'users', tx('Team &amp; plan'))}` +
-    `${tool('audit', 'print', tx('Audit'), off ? ' lit' : '')}${tool('setstart', 'clock', tx('Decant start'))}${tool('newtruck', 'plus', tx('New truck'))}</div></div>`;
+    `${tool('setstart', 'clock', tx('Decant start'))}${tool('newtruck', 'plus', tx('New truck'))}</div></div>`;
 }
 function runPanel(t, m) {
   const fc = forecast(t, Date.now(), ratesFor(m.dock)), late = fc.at && t.goalAt && fc.at > Date.parse(t.goalAt), pr = m.pr;
@@ -413,16 +413,19 @@ function scanRow(field, act, label, typing) {
 function landPanel(t, ref) {
   const L = st.land.ref === ref ? st.land : { ref, ptype: null, cartons: '', note: '', codes: [] };
   const checks = L.codes.map(raw => codeCheck(t, raw)), seen = new Set(), ok = checks.filter(k => k.kind === 'ok' && !seen.has(k.c.id) && seen.add(k.c.id));
-  const fromLabels = ok.reduce((n, k) => n + k.c.cartons, 0), ctn = Number(L.cartons) || fromLabels, mins = ctn ? Math.max(1, Math.round(ctn * (t.minsPerCarton ?? STD_MINS_PER_CARTON))) : null;
+  const rate = t.minsPerCarton ?? STD_MINS_PER_CARTON, fromLabels = ok.reduce((n, k) => n + k.c.cartons, 0), ctn = Number(L.cartons) || fromLabels, mins = L.minsManual ? L.mins : ctn ? Math.max(1, Math.round(ctn * rate)) : '';
+  const lab = (icon, text) => `<div class="bdk-declab ic">${ic(icon)}${text}</div>`;
   const row = (k, i) => {
     const [cls, mark, what] = k.kind === 'ok' ? ['ok', '✓', tx('{n} ctn', { n: k.c.cartons }) + (k.c.dept ? ' · ' + esc(k.c.dept) : '')] : k.kind === 'taken' ? ['bad', '✕', tx('already on {ref}: it stays there', { ref: esc(k.on) })] : k.kind === 'off' ? ['warn', '⚠', tx('not on this manifest: held on the pallet to flag or ignore')] : ['', '·', tx('saved · matches when a manifest is attached')];
     return `<div class="bdk-vrow ${cls}"><span>${mark}</span><b class="mono">${esc(k.id9)}</b><span>${what}</span><button class="bdk-vx" data-act="l-drop" data-i="${i}" aria-label="${tx('Take {id} off this pallet', { id: esc(k.id9) })}">${ic('x')}</button></div>`;
   };
-  return `<div class="bdk-pal bdk-land"><div class="bdk-pal-h"><b>${tx('Land pallet {ref}', { ref: esc(ref) })}</b><button class="ibtn" data-act="closepal" title="${tx('Close')}">${ic('x')}</button></div><div class="bdk-pal-b">` +
-    `<div class="bdk-declab">${tx('1 · Scan the labels')}</div>${scanRow('lscan', 'lscan', tx('Scan labels'), st.typing.lscan)}` +
+  return `<div class="bdk-pal bdk-land"><div class="bdk-pal-h">${ic('parking')}<b>${tx('Land pallet {ref}', { ref: esc(ref) })}</b><button class="ibtn" data-act="closepal" title="${tx('Close')}">${ic('x')}</button></div><div class="bdk-pal-b">` +
+    lab('barcode', tx('1 · Scan the labels')) + scanRow('lscan', 'lscan', tx('Scan labels'), st.typing.lscan) +
     (checks.length ? `<div class="bdk-verified">${checks.map(row).join('')}</div>` : `<p class="lbl">${t.manifest ? tx('Each consol label fills its cartons. Stack as many as are on the pallet.') : tx('No manifest yet: labels are saved and match when one is attached.')}</p>`) +
-    `<div class="bdk-declab">${tx('2 · Pallet type')}</div><div class="bdk-ptrow${L.ptype ? '' : ' ask'}">${PTYPES.map(x => `<button class="bdr-pt${L.ptype === x[0] ? ' on' : ''}" data-act="ptype" data-pt="${x[0]}" aria-pressed="${L.ptype === x[0]}"><i style="background:${x[2]}"></i>${PT_ONE[x[0]]}</button>`).join('')}</div>` +
-    `<div class="bdk-fields"><label>${tx('Cartons')}<input class="bdr-in mono" data-field="cartons" inputmode="numeric" maxlength="3" placeholder="${fromLabels || '0'}" value="${esc(L.cartons)}"></label><label>${tx('Est. mins')}<span class="bdk-auto">${mins ? tx('{n} · auto', { n: mins }) : '—'}</span></label><label>${tx('Note')}<input class="bdr-in" data-field="note" maxlength="120" placeholder="${tx('optional')}" value="${esc(L.note || '')}"></label></div>` +
+    lab('box', tx('2 · Pallet type')) + `<div class="bdk-ptrow${L.ptype ? '' : ' ask'}">${PTYPES.map(x => `<button class="bdr-pt${L.ptype === x[0] ? ' on' : ''}" data-act="ptype" data-pt="${x[0]}" aria-pressed="${L.ptype === x[0]}"><i style="background:${x[2]}"></i>${PT_ONE[x[0]]}</button>`).join('')}</div>` +
+    `<div class="bdk-fields"><label><span class="fl-h">${ic('packages')}${tx('Cartons')}</span><input class="bdr-in mono" data-field="cartons" inputmode="numeric" maxlength="3" placeholder="${fromLabels || '0'}" value="${esc(L.cartons)}"></label>` +
+    `<label><span class="fl-h">${ic('clock')}${tx('Est. mins')}<small class="fl-t">${L.minsManual ? tx('by hand') : tx('auto')}</small></span><input class="bdr-in mono${L.minsManual ? '' : ' auto'}" data-field="lmins" inputmode="numeric" maxlength="4" placeholder="—" value="${esc(mins)}" data-rate="${rate}" data-from="${fromLabels}" title="${tx('Worked out from the cartons until you type a time; a new scan works it out again')}"></label>` +
+    `<label><span class="fl-h">${ic('edit')}${tx('Note')}</span><input class="bdr-in" data-field="note" maxlength="120" placeholder="${tx('optional')}" value="${esc(L.note || '')}"></label></div>` +
     (fromLabels ? `<p class="cs-dim">${txn(ok.length, '{c} cartons from {n} label. Type a count only to correct it.', '{c} cartons from {n} labels. Type a count only to correct it.', { c: fromLabels })}</p>` : '') +
     `<div class="bdk-palacts"><button class="btn primary" data-act="land" data-ref="${esc(ref)}"${L.ptype ? '' : ' disabled'}>${ic('plus')}${L.ptype ? tx('Land at {ref}', { ref: esc(ref) }) : tx('Choose the type to land')}</button></div></div></div>`;
 }
@@ -443,7 +446,7 @@ async function onAct(ctx, a, root) {
   const field = n => { const v = root.querySelector(`[data-field="${n}"]`)?.value ?? ''; spend(n, v); return v; };
   const num = v => { const n = parseInt(String(v).replace(/\D/g, ''), 10); return Number.isFinite(n) ? n : null; };
   const rates = ratesFor(m.dock);
-  const keepLand = () => { if (!root.querySelector('[data-field="cartons"]')) return; st.land.cartons = field('cartons'); st.land.note = field('note'); };
+  const keepLand = () => { if (!root.querySelector('[data-field="cartons"]')) return; st.land.cartons = field('cartons'); st.land.note = field('note'); if (st.land.minsManual) st.land.mins = field('lmins'); };
   try {
     if (t && await onSearchAct(ctx, t, a, root, { land: (ref, code) => { st.land = { ref, ptype: null, cartons: '', note: '', codes: [code] }; st.sel = ref; ss.open = false; st.panel = false; if (st.view === 'run') { st.keepSel = true; ctx.go('receiving'); } else ctx.rerender(); show('.bdk-land'); } })) return;
     if (act === 't5-start' && t && t.status !== 'live') return toast(tx('Start receiving first: the decant starts once the truck is on the dock.'), 'bad');
@@ -534,18 +537,18 @@ async function onAct(ctx, a, root) {
     if (act === 'haltend') { await dispatch(ctx, 'halt.end', { truck: id }, {}); toast(tx('Decant running')); return; }
     if (act === 'received') { await dispatch(ctx, 'receiving.confirm', { truck: id }, { confirmed: !t.receivingConfirmed }); toast(t.receivingConfirmed ? tx('Hand-over undone') : tx('Handed over: the layout is set')); return; }
     if (act === 'break-start' || act === 'break-end') { const pid = a.dataset.pid, was = m.run[pid]; await dispatch(ctx, act === 'break-start' ? 'break.start' : 'break.end', { truck: id }, { pid }); toast(act === 'break-start' ? (was ? tx('{pid} is on a break, off {ref}: their clock stops', { pid, ref: was }) : tx('{pid} is on a break: their clock stops', { pid })) : tx('{pid} is back', { pid })); return; }
-    if (act === 'audit') return printAudit(t, m.dock);
+    if (act === 'audit') return canAudit(ctx) ? printAudit(t, m.dock) : toast(tx('The receiving audit prints from a PC, for managers.'), 'bad');
     if (act === 'ptype') { keepLand(); st.land.ref = (ctx.isMobile ? st.sel : field('ref')) || st.land.ref; st.land.ptype = st.land.ptype === a.dataset.pt ? null : a.dataset.pt; return ctx.rerender(); }
     // The land sheet's scans: checked against the manifest on the sheet, sent with Land.
     if (act === 'lscan') {
       const raw = field('lscan').replace(/\D/g, ''); if (raw.length < 9) return toast(tx('A pallet label has at least 9 digits'), 'bad');
       keepLand(); if (st.land.ref !== st.sel) st.land = { ref: st.sel, ptype: null, cartons: '', note: '', codes: [] };
       if (st.land.codes.some(x => x.slice(-9) === raw.slice(-9))) { toast(tx('{id} is already on this pallet', { id: raw.slice(-9) })); return ctx.rerender(); }
-      st.land.codes.push(raw); const k = codeCheck(t, raw);
+      st.land.codes.push(raw); st.land.minsManual = false; st.land.mins = ''; const k = codeCheck(t, raw);
       if (k.kind === 'taken') toast(tx('{id} is already on {ref}', { id: k.id9, ref: k.on }), 'bad'); else if (k.kind === 'off') toast(tx('{id} is not on this manifest. Old label from a reused tub?', { id: k.id9 }), 'bad');
       return ctx.rerender();
     }
-    if (act === 'l-drop') { keepLand(); st.land.codes.splice(+a.dataset.i, 1); return ctx.rerender(); }
+    if (act === 'l-drop') { keepLand(); st.land.codes.splice(+a.dataset.i, 1); st.land.minsManual = false; st.land.mins = ''; return ctx.rerender(); }
     if (act === 'move-cancel') { st.moving = null; return ctx.rerender(); }
     if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const pid = dnumId(v); if (!pid) return toast(tx('Enter a D-number, like D4. Names are not kept.'), 'bad'); if ((t.team || []).some(x => x.pid === pid)) return toast(tx('{pid} is already on the truck', { pid })); await dispatch(ctx, 'truck.team.set', { truck: id }, { team: [...(t.team || []), { pid }] }); return; }
     if (act === 'team-drop') { if (m.run[a.dataset.pid] && !confirm(tx('{pid} is on {ref}. Take them off the truck? Their time on it is kept.', { pid: a.dataset.pid, ref: m.run[a.dataset.pid] }))) return; await dispatch(ctx, 'truck.team.set', { truck: id }, { team: (t.team || []).filter(x => x.pid !== a.dataset.pid) }); return; }
@@ -579,11 +582,11 @@ async function onAct(ctx, a, root) {
       const ref = (a.dataset.ref || field('ref') || st.land.ref).trim().toUpperCase();
       if (!/^[A-Z]\d{1,2}$/.test(ref)) return toast(tx('Pick a bay like A1, or click an empty cell'), 'bad');
       if (!st.land.ptype) return toast(tx('Choose the pallet type first'), 'bad');
-      const typed = num(field('cartons')), note = field('note'), codes = st.land.ref === ref ? st.land.codes.slice() : [];
+      const typed = num(field('cartons')), note = field('note'), codes = st.land.ref === ref ? st.land.codes.slice() : [], mins = st.land.minsManual ? num(field('lmins')) : null;
       const ok = codes.filter(c => codeCheck(t, c).kind === 'ok').length, B = { truck: id, bay: ref };
       // Labels fill the cartons: land with none, then each scan adds its consol's.
-      await dispatch(ctx, 'pallet.land', B, { ptype: st.land.ptype, cartons: ok ? null : typed, note });
-      st.land = { ref: '', ptype: null, cartons: '', note: '', codes: [] }; st.sel = ctx.isMobile ? ref : null;
+      await dispatch(ctx, 'pallet.land', B, { ptype: st.land.ptype, cartons: ok ? null : typed, note, ...(mins ? { expectedMins: mins } : {}) });
+      st.land = { ref: '', ptype: null, cartons: '', note: '', codes: [] }; st.sel = null; st.typing = {};
       const held = [], taken = []; let was = sightOf(undefined);
       for (const code of codes) {
         try { await dispatch(ctx, 'pallet.scan', B, { code }); }
@@ -592,9 +595,12 @@ async function onAct(ctx, a, root) {
       if (held.length) await dispatch(ctx, 'pallet.update', B, { held });
       const now = model(ctx).t?.pallets?.[ref];
       if (ok && typed !== null && now && now.cartons !== typed) await dispatch(ctx, 'pallet.update', B, { cartons: typed });
-      if (taken.length) toast(txn(taken.length, '{ids} is already on another pallet: left there.', '{ids} are already on other pallets: left there.', { ids: taken.join(', ') }), 'bad');
-      else if (!sightToast(ctx, ref, was)) toast(codes.length ? txn(codes.length, 'Pallet landed at {ref} · {n} label', 'Pallet landed at {ref} · {n} labels', { ref }) : tx('Pallet landed at {ref}', { ref }));
-      return;
+      // Back to the dock; Open brings the pallet up (labels held off the manifest wait there).
+      const open = { label: tx('Open'), run: () => { st.sel = ref; ctx.rerender(); } };
+      if (taken.length) toast(txn(taken.length, '{ids} is already on another pallet: left there.', '{ids} are already on other pallets: left there.', { ids: taken.join(', ') }), 'bad', open);
+      else if (held.length) toast(txn(held.length, '{n} label is not on the manifest: open {ref} to flag or ignore it.', '{n} labels are not on the manifest: open {ref} to flag or ignore them.', { ref }), 'bad', open);
+      else if (!sightToast(ctx, ref, was)) toast(codes.length ? txn(codes.length, 'Pallet landed at {ref} · {n} label', 'Pallet landed at {ref} · {n} labels', { ref }) : tx('Pallet landed at {ref}', { ref }), '', open);
+      if (!ctx.isMobile) return; return ctx.rerender();
     }
     if (act === 'arm') { st.arm = st.arm === a.dataset.pid ? null : a.dataset.pid; return ctx.rerender(); }
     if (act === 'pal-pt') { await dispatch(ctx, 'pallet.update', { truck: id, bay: st.sel }, { ptype: a.dataset.pt }); return; }
@@ -708,6 +714,11 @@ function mount(ctx, root) {
     if (ctx.arg?.truck && ctx.arg !== usedArg && ctx.store.get('dock').trucks?.[ctx.arg.truck]) { usedArg = ctx.arg; st.truck = ctx.arg.truck; st.sel = ctx.arg.bay && ctx.store.get('dock').trucks[ctx.arg.truck].pallets?.[ctx.arg.bay] ? ctx.arg.bay : null; setTimeout(() => ctx.rerender(), 0); }
     root.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (a) onAct(ctx, a, root); });
     root.addEventListener('input', e => onSearchInput(ctx, e, root));
+    root.addEventListener('input', e => {
+      const f = e.target.dataset?.field, box = e.target.closest('.bdk-land'); if (!box) return;
+      if (f === 'lmins') { st.land.minsManual = e.target.value.trim() !== ''; st.land.mins = e.target.value; e.target.classList.toggle('auto', !st.land.minsManual); const tag = box.querySelector('.fl-t'); if (tag) tag.textContent = st.land.minsManual ? tx('by hand') : tx('auto'); return; }
+      if (f === 'cartons' && !st.land.minsManual) { const m = box.querySelector('[data-field="lmins"]'); if (!m) return; const c = Number(e.target.value) || Number(m.dataset.from) || 0; m.value = c ? Math.max(1, Math.round(c * Number(m.dataset.rate))) : ''; }
+    });
     verifyContents(ctx, root);
     root.addEventListener('change', e => { if (e.target.dataset.ll != null) linkPick(e.target.dataset.ll, e.target.value); });
     root.addEventListener('change', async e => {

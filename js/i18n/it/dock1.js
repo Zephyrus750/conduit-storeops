@@ -671,7 +671,6 @@ export default {
   "{n} pallets have no carton count: they are planned at 60 minutes until they are counted.": "{n} pallet non hanno il numero di cartoni: sono pianificati a 60 minuti finché non vengono contati.",
   "{n} pallets held from Truck {t}": "{n} pallet trattenuti dal camion {t}",
   "{n} pallets · {c} ctn on the dock": "{n} pallet · {c} crt in banchina",
-  "{n} · auto": "{n} · auto",
   "{ref} cannot start now": "{ref} non può partire ora",
   "{ref} decanted · every pallet is done: close the truck": "{ref} spacchettato · tutti i pallet finiti: chiudi il camion",
   "{ref} holds a pallet: tap an empty square": "{ref} ha un pallet: tocca una casella vuota",
@@ -715,4 +714,9 @@ export default {
   "Scan labels": "Scansiona etichette",
   "Type it": "Digita",
   "Type the label number": "Digita il numero dell’etichetta",
+  "Worked out from the cartons until you type a time; a new scan works it out again": "Calcolato dai cartoni finché non digiti un tempo; una nuova scansione lo ricalcola",
+  "by hand": "a mano",
+  "{n} label is not on the manifest: open {ref} to flag or ignore it.": "{n} etichetta non è nel manifesto: apri {ref} per segnalarla o ignorarla.",
+  "{n} labels are not on the manifest: open {ref} to flag or ignore them.": "{n} etichette non sono nel manifesto: apri {ref} per segnalarle o ignorarle.",
+  "The receiving audit prints from a PC, for managers.": "Il verbale di ricevimento si stampa da un PC, per i manager.",
 };

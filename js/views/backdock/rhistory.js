@@ -8,7 +8,7 @@
 
 import { ic, esc, vh, sub, toast, dep, mhead, mrows, fmtDate } from '../../ui.js';
 import { HALT_NAME, holdName, truckNo, fmtHM, microDept, todayKey, manifestIndex, attachManifest } from './common.js';
-import { printAudit } from './audit.js';
+import { printAudit, canAudit } from './audit.js';
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
 import { ratesFor } from './plan.js';
 import { layout } from './wallboard.js';
@@ -36,13 +36,13 @@ function model(ctx) {
 
 // Pallets landed on this truck, those carried on to the next one included.
 const landedAll = r => r.palletsLanded + (r.carriedOut?.pallets || 0);
-function detail(r, win, truck) {
+function detail(r, win, truck, printable = false) {
   const stopped = (r.downtime || []).reduce((n, h) => n + h.mins, 0) + PLANNED.reduce((n, [k]) => n + (r[k] || 0), 0);
   const active = Math.max(0, r.clearMins - stopped), total = Math.max(1, r.clearMins);
   const audit = r.audit, pct = audit && audit.total ? Math.round(audit.matched / audit.total * 100) : null;
   const cmp = (v, a, fmt, better) => { if (!win.length || !a) return ''; const d = v - a; if (!d) return `<i class="cs-dim">${tx('on average')}</i>`; const good = better === 'low' ? d < 0 : d > 0; return `<i class="${good ? 'c-green' : 'c-red'}">${d > 0 ? '+' : '−'}${fmt(Math.abs(d))}</i>`; };
   const halts = (r.downtime || []).slice().sort((a, b) => b.mins - a.mins);
-  return `<div class="card"><div class="ch">${ic('truck')}<h3>${esc(fmtDate(r.date))} · ${tx('Truck {no}', { no: esc(truckNo(r.id)) })}</h3><span class="status good" style="margin-left:auto">${tx('decanted')}</span>${truck ? `<button class="btn sm" data-act="audit">${ic('print')}${tx('Audit')}</button>` : ''}</div>` +
+  return `<div class="card"><div class="ch">${ic('truck')}<h3>${esc(fmtDate(r.date))} · ${tx('Truck {no}', { no: esc(truckNo(r.id)) })}</h3><span class="status good" style="margin-left:auto">${tx('decanted')}</span>${truck && printable ? `<button class="btn sm" data-act="audit">${ic('print')}${tx('Audit')}</button>` : ''}</div>` +
     `<div class="facts6"><div class="f6"><b>${r.cartons}</b><span>${tx('cartons decanted')}</span></div><div class="f6"><b>${r.pallets}<small> / ${landedAll(r)}</small></b><span>${r.carriedOut ? tx('pallets done of landed · {n} carried on', { n: r.carriedOut.pallets }) : tx('pallets done of landed')}</span></div><div class="f6"><b>${hm(r.clearMins)}</b><span>${r.decantStartAt ? tx('decant start to the last pallet') : tx('landed to the last pallet')}</span></div><div class="f6"><b>${r.teamRate}</b><span>${tx('ctn/hr team rate')}</span></div><div class="f6"><b>${r.manifest?.dcNo ? tx('DC {no}', { no: esc(r.manifest.dcNo) }) : r.manifest ? esc(r.manifest.manNo) : '—'}</b><span>${r.manifest?.despatch ? tx('despatched {date}', { date: esc(r.manifest.despatch) }) : r.manifest ? tx('manifest · no DC details') : tx('no manifest attached')}</span></div><div class="f6"><b>${fmtHM(r.landedAt)}</b><span>${tx('landed · cleared {time}', { time: fmtHM(r.clearedAt) })}</span></div></div>` +
     `<div class="k rh-k">${tx('Where the time went · {time}', { time: hm(r.clearMins) })}</div>` +
     `<div class="tl"><i style="width:${Math.round(active / total * 100)}%;background:#16A34A" title="${tx('Active decanting {time}', { time: hm(active) })}"></i>${halts.map(h => `<i style="width:${Math.round(h.mins / total * 100)}%;background:${downColour(h)}" title="${esc(holdName(h))} ${hm(h.mins)}"></i>`).join('')}${PLANNED.filter(([k]) => r[k]).map(([k, l, c]) => `<i style="width:${Math.round(r[k] / total * 100)}%;background:${c}" title="${l} ${hm(r[k])}"></i>`).join('')}</div>` +
@@ -70,7 +70,7 @@ export default {
     return head + `<div class="rh"><div class="card rhlist"><div class="ch"><h3>${tx('Decanted trucks')}</h3><div class="search rh-find">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="${tx('Truck day, manifest or DC…')}" aria-label="${tx('Find a truck')}"></div></div>` +
       (list ? `<div class="list">${list}</div>${m.rows.length > 60 ? `<div class="cs-dim" style="padding:8px 0">${tx('Showing {shown} of {total}', { shown: 60, total: m.rows.length })}</div>` : ''}` : `<div class="ohint">${m.all.length ? tx('Nothing matches.') : tx('No truck has been finalised yet. Finalise a truck at Receiving and its record lands here.')}</div>`) +
       (rates.length > 1 ? `<div class="k rh-k">${tx('Team rate · cartons per hour')}</div><div class="rhbars">${rates.map((r, i) => `<div class="${i === rates.length - 1 ? 'hi' : ''}" style="height:${Math.max(4, Math.round(r.teamRate / max * 100))}%" title="${esc(fmtDate(r.date))} ${tx('Truck {no}', { no: esc(truckNo(r.id)) })}"><span>${r.teamRate}</span></div>`).join('')}</div><div class="lbl" style="margin-top:20px">${tx('Oldest → newest across the {days}-day window.', { days: WINDOW_DAYS })}</div>` : '') + '</div>' +
-      `<div class="sidecol">${o ? lateBar(ctx, o) + detail(o, m.win, ctx.store.get('dock').trucks?.[o.id]) + pastLayout(ctx, o) : `<div class="card"><div class="ch"><h3>${tx('Pick a truck')}</h3></div><p class="lbl">${tx('Open one from the list to see where its time went, the manifest reconciliation and the crew credit.')}</p></div>`}</div></div>`;
+      `<div class="sidecol">${o ? lateBar(ctx, o) + detail(o, m.win, ctx.store.get('dock').trucks?.[o.id], canAudit(ctx)) + pastLayout(ctx, o) : `<div class="card"><div class="ch"><h3>${tx('Pick a truck')}</h3></div><p class="lbl">${tx('Open one from the list to see where its time went, the manifest reconciliation and the crew credit.')}</p></div>`}</div></div>`;
   },
   mobile(ctx) {
     const m = model(ctx), recent = m.all.slice(0, 8);
@@ -80,7 +80,7 @@ export default {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'open') { st.open = a.dataset.id; ctx.rerender(); }
-      else if (a.dataset.act === 'audit') { const o = model(ctx).open, dock = ctx.store.get('dock'), t = o && dock.trucks?.[o.id]; if (t) printAudit({ id: o.id, ...t }, dock); }
+      else if (a.dataset.act === 'audit' && canAudit(ctx)) { const o = model(ctx).open, dock = ctx.store.get('dock'), t = o && dock.trucks?.[o.id]; if (t) printAudit({ id: o.id, ...t }, dock); }
       else if (a.dataset.act === 'late-attach') { st.late = st.late === 'attach' ? null : 'attach'; ctx.rerender(); }
       else if (a.dataset.act === 'late-link' || a.dataset.act === 'll-close') { st.late = a.dataset.act === 'll-close' ? null : 'link'; ctx.rerender(); }
       else if (a.dataset.act === 'late-man') { try { await attachManifest(ctx, a.dataset.truck, a.dataset.man); toast(tx('{man} attached to Truck {no} · history rebuilt', { man: a.dataset.man, no: truckNo(a.dataset.truck) })); st.late = 'link'; } catch (err) { toast(err.message, 'bad'); } }

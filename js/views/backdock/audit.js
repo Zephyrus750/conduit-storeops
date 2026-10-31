@@ -14,6 +14,10 @@ import { PT_NAME, truckNo, fmtHM, fmtMins, holdName, pallets, PALLET_STATE, LINK
 // The date in the device's language (en-AU in English, as before).
 const day = iso => iso ? new Date(iso).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
+// Who prints it: a manager (or the owner) at a PC. The dock phones never
+// offer it.
+export const canAudit = ctx => !ctx.isMobile && (!!ctx.session?.current?.owner || (ctx.session?.current?.roles || []).includes('manager'));
+
 export function printAudit(t, dock) {
   const closed = t.status === 'closed';
   const row = (closed && dock?.history?.find(r => r.id === t.id)) || historyRow(t.id, { ...t, clearedAt: t.clearedAt || new Date().toISOString() });
