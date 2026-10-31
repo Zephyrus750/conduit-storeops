@@ -416,7 +416,6 @@ export default {
   "Scan": "Scansiona",
   "Products": "Prodotti",
   "No manifest on Truck {n} yet.": "Ancora nessun manifesto sul camion {n}.",
-  "Scan a consol label": "Scansiona un’etichetta di consolidamento",
   "Find": "Trova",
   "The last 9 digits of the pallet label name the consol.": "Le ultime 9 cifre dell’etichetta pallet indicano il consolidamento.",
   "Not on manifest {no}.": "Non è nel manifesto {no}.",
@@ -711,4 +710,9 @@ export default {
   "{id} is not on a pallet on Truck {n}": "{id} non è su nessun pallet del camion {n}",
   "{n} label": "{n} etichetta",
   "{n} labels": "{n} etichette",
+  "Load pallet": "Pallet di carico",
+  "Scan a label": "Scansiona etichetta",
+  "Scan labels": "Scansiona etichette",
+  "Type it": "Digita",
+  "Type the label number": "Digita il numero dell’etichetta",
 };

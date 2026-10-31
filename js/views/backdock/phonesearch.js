@@ -13,7 +13,7 @@ import { consolsOf } from '../../../shared/reducers/backdock.js';
 import { nameOf, kcCopy, itemName, ensureNames } from '../stockroom/common.js';
 import { itemCartons } from './manifests.js';
 
-export const ss = { open: false, tab: 'scan', q: '', hit: null, info: false };
+export const ss = { open: false, tab: 'scan', q: '', hit: null, info: false, typing: false };
 const chip = microChip;
 const id9 = raw => String(raw || '').replace(/\D/g, '').slice(-9);
 const findConsol = (cons, raw) => { const k = id9(raw); return k.length < 6 ? null : cons.find(c => c.id === k || String(c.cons || '').endsWith(k)) || null; };
@@ -59,7 +59,9 @@ export function searchSheet(ctx, t) {
   if (!t.manifest && ss.tab !== 'scan') body = `<div class="mv-note">${ic('packages')}${tx('No manifest on Truck {n} yet.', { n: esc(truckNo(t.id)) })}</div>`;
   else if (ss.tab === 'scan') {
     const c = ss.hit ? findConsol(cons, ss.hit) : null;
-    body = `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="ps-code" inputmode="numeric" enterkeyhint="search" placeholder="${tx('Scan a consol label')}" autocomplete="off" value="${esc(ss.hit || '')}">${camButton('ps-code')}<button class="btn sm" data-act="ps-find">${ic('search')}${tx('Find')}</button></div>` +
+    // The camera first; Type it shows the field (and the keyboard) only when needed.
+    body = (ss.typing ? `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="ps-code" inputmode="numeric" enterkeyhint="search" placeholder="${tx('Type the label number')}" autocomplete="off" value="${esc(ss.hit || '')}">${camButton('ps-code')}<button class="btn sm" data-act="ps-find">${ic('search')}${tx('Find')}</button></div>`
+      : `<div class="bdk-scanrow cam"><button type="button" class="btn primary bdk-cam" data-camera="ps-code" title="${tx('Scan with the camera')}">${ic('camera')}${tx('Scan a label')}</button><button type="button" class="btn bdk-type" data-act="ps-type">${ic('keyboard')}${tx('Type it')}</button><input data-field="ps-code" hidden><button data-act="ps-find" hidden></button></div>`) +
       (!ss.hit ? `<p class="lbl">${tx('The last 9 digits of the pallet label name the consol.')}</p>` : c ? consolCard(t, c, at) : `<div class="ps-card miss"><b class="mono">${esc(id9(ss.hit))}</b><p class="lbl">${t.manifest ? tx('Not on manifest {no}.', { no: esc(t.manifest.manNo) }) + ' ' : ''}${elsewhere(dock, t, ss.hit)}</p></div>`);
   } else if (ss.tab === 'consols') {
     const list = cons.filter(c => !q || c.id.includes(q) || String(c.dept || '').includes(q));
@@ -110,7 +112,8 @@ export async function onSearchAct(ctx, t, a, root, hooks = {}) {
   const act = a.dataset.act; if (!act?.startsWith('ps-')) return false;
   const cons = consolsOf(t);
   if (act === 'ps-open') { if (a.dataset.id) { ss.tab = 'scan'; ss.hit = a.dataset.id; } else { ss.open = !ss.open; ss.info = false; } }
-  else if (act === 'ps-close') ss.open = false;
+  else if (act === 'ps-close') { ss.open = false; ss.typing = false; }
+  else if (act === 'ps-type') { ss.typing = true; ctx.rerender(); setTimeout(() => document.querySelector('#content [data-field="ps-code"]')?.focus(), 0); return true; }
   else if (act === 'ps-info') { ss.info = !ss.info; ss.open = false; }
   else if (act === 'ps-tab') { ss.tab = a.dataset.tab; ss.q = ''; }
   else if (act === 'ps-find') { const v = root.querySelector('[data-field="ps-code"]')?.value || ''; if (id9(v).length < 6) { toast(tx('A pallet label has at least 9 digits'), 'bad'); return true; } ss.hit = v.replace(/\D/g, ''); }
