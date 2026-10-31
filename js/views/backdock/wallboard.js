@@ -67,7 +67,8 @@ function gauge(pct) {
 // As DV's: what was decanted, each person's personal breaks, and what the
 // decant plan has them on next (estimated starts from the queues, faint),
 // so Fit runs from the start to the plan's last finish.
-function timeline(t, now, rates) {
+// Shared with the phone's Board tab (screens.js), zoom and pan included.
+export function timeline(t, now, rates) {
   const sched = schedule(t, now, planOpts(t, rates)), ahead = {};
   for (const [pid, sc] of Object.entries(sched)) ahead[pid] = (sc.items || []).filter(x => x.tag === 'queued' && x.end > now);
   const planEnd = Math.max(now, ...Object.values(ahead).flat().map(x => x.end));
@@ -90,6 +91,13 @@ function timeline(t, now, rates) {
   for (let m = Math.ceil(left / step) * step; m <= right; m += step) marks.push(`<span style="left:${pct(m)}%">${fmtHM(new Date(m).toISOString())}</span>`);
   const tools = `<div class="seg wb-zoom">${ZOOMS.map(([k, l]) => `<button class="${String(st.zoom) === String(k) ? 'on' : ''}" data-act="wb-zoom" data-z="${k}">${l}</button>`).join('')}</div>${st.zoom !== 'fit' && maxPan > 0 ? `<button class="btn sm" data-act="wb-pan" data-d="1" title="${tx('timeline::Earlier')}">‹</button><button class="btn sm" data-act="wb-pan" data-d="-1" title="${tx('timeline::Later')}"${st.pan <= 0 ? ' disabled' : ''}>›</button>` : ''}`;
   return `<div class="card wb-time"><div class="ch"><h3>${tx('Timeline')}</h3><div class="wb-tools">${tools}</div></div>${people.length ? `<div class="wb-axis">${marks.join('')}</div>${lanes}` : `<p class="lbl">${tx('No crew yet.')}</p>`}<div class="wb-legend">${PTYPES.map(x => `<span><i class="l" style="background:${x[2]}"></i>${x[1]}</span>`).join('')}<span><i class="l haltl"></i>${tx('hold-up')}</span><span><i class="l brkl"></i>${tx('personal break')}</span>${planEnd > now ? `<span><i class="l planl"></i>${tx('planned (estimate)')}</span>` : ''}</div></div>`;
+}
+
+// The timeline's zoom and pan buttons; true when the button was one of them.
+export function timelineAct(a) {
+  if (a.dataset.act === 'wb-zoom') { st.zoom = a.dataset.z === 'fit' ? 'fit' : Number(a.dataset.z); st.pan = 0; return true; }
+  if (a.dataset.act === 'wb-pan') { const step = st.zoom === 'fit' ? 0 : st.zoom / 2; st.pan = Math.max(0, st.pan + Number(a.dataset.d) * step); return true; }
+  return false;
 }
 
 function mix(t) {
@@ -147,9 +155,7 @@ export default {
   mobile(ctx) { const { t } = current(ctx), pr = t ? progress(t) : null; return mhead(tx('Wallboard'), t ? tx('Truck {no}', { no: esc(truckNo(t.id)) }) : tx('No truck')) + (t ? `<div class="wb-kpis">${tile(tx('Decanted'), `${pr.done}/${pr.total}`, `${pr.pct}%`)}${tile(tx('Pallets'), `${pr.doneCount}/${pr.count}`, '')}</div>` : ''); },
   mount(ctx, root) {
     root.addEventListener('click', e => {
-      const a = e.target.closest('[data-act]'); if (!a) return;
-      if (a.dataset.act === 'wb-zoom') { st.zoom = a.dataset.z === 'fit' ? 'fit' : Number(a.dataset.z); st.pan = 0; ctx.rerender(); }
-      else if (a.dataset.act === 'wb-pan') { const step = st.zoom === 'fit' ? 0 : st.zoom / 2; st.pan = Math.max(0, st.pan + Number(a.dataset.d) * step); ctx.rerender(); }
+      const a = e.target.closest('[data-act]'); if (a && timelineAct(a)) ctx.rerender();
     });
     const tick = setInterval(() => ctx.rerender(), 30000);
     return [ctx.store.on('dock', () => ctx.rerender()), () => clearInterval(tick)];
