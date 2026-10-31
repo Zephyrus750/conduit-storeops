@@ -390,12 +390,16 @@ export const backdockReducers = {
     const u = e.payload, rate = s.dock.trucks[e.entity.truck].minsPerCarton;
     if (u.ptype !== undefined && !PTYPES.includes(u.ptype)) return reject('invalid_event', 'bad ptype');
     if (u.cartons !== undefined && badCartons(u.cartons)) return reject('invalid_event', `cartons must be 1 to ${MAX_CARTONS}`);
+    if (u.held !== undefined && (!Array.isArray(u.held) || u.held.length > 40 || u.held.some(x => !/^\d{9}$/.test(String(x))))) return reject('invalid_event', 'held must be 9-digit label ids');
     if (u.ptype !== undefined) p.ptype = u.ptype;
     if (u.cartons !== undefined) { p.cartons = Number.isFinite(u.cartons) ? Math.max(0, Math.round(u.cartons)) : null; if (p.expectedBasis !== 'manual') p.expectedMins = autoMins(p.cartons, rate); }
     if (u.expectedMins !== undefined) { if (u.expectedMins === null) { p.expectedBasis = 'auto'; p.expectedMins = autoMins(p.cartons, rate); } else { p.expectedMins = Math.max(1, Math.round(u.expectedMins)); p.expectedBasis = 'manual'; } }
     if (u.note !== undefined) p.note = String(u.note || '').slice(0, 120);
     if (u.consolIds !== undefined) p.consolIds = uniq(u.consolIds);
     if (u.scanIds !== undefined) { const before = new Set(p.scanIds); p.scanIds = uniq(u.scanIds); for (const id of p.scanIds) if (!before.has(id)) sighting(s, e, p, id); }
+    // Labels scanned off the manifest and not yet decided (Add & flag or
+    // Ignore): kept here so a reload or another phone still sees them.
+    if (u.held !== undefined) { p.held = uniq(u.held.map(String)).filter(x => !p.scanIds.includes(x) && !p.consolIds.includes(x)); if (!p.held.length) delete p.held; }
     if (u.excluded !== undefined) p.excluded = !!u.excluded;
     if (u.carryover !== undefined) p.carryover = !!u.carryover;
     if (u.suspectOk) { delete p.suspect; p.suspectOk = true; }   // the facilitator confirmed a quick finish was real
@@ -940,7 +944,9 @@ export function historyRow(id, t) {
     downtime: Object.values(downtime).map(d => ({ ...d, mins: Math.round(d.mins) })).sort((a, b) => b.mins - a.mins),
     teamRate: active > 0 ? Math.round(cartons / (active / 60)) : 0,
     suspect: done.filter(p => p.suspect).length,
-    audit: all.length ? auditOf(all, pallets) : null,
+    // Consols that went on to the next truck with their pallets are audited
+    // there; carriedOut counts them so the manifest's size still reads true.
+    audit: all.length ? { ...auditOf(all, pallets), carriedOut: consolsOf(t).filter(c => gone.has(c.id)).length } : null,
     carriedIn: carried.length ? { pallets: carried.length, cartons: carried.reduce((n, p) => n + (p.cartons || 0), 0), from: carried[0].carriedFrom || null } : null,
     perDept: perDeptOf(t, done, all, nowMs),
     perPerson: Object.values(perPerson).map(r => ({ pid: r.pid, cartons: Math.round(r.cartons), pallets: Math.round(r.pallets * 10) / 10, bays: [...r.bays], mins: Math.round(r.mins), workedMins: Math.round(r.mins * 10) / 10, rate: r.mins ? Math.round(r.cartons / (r.mins / 60)) : 0, deltaPct: r.expected ? Math.round((r.mins - r.expected) / r.expected * 100) : null })),
@@ -971,10 +977,12 @@ export function auditOf(consols, pallets) {
   const on = new Set(pallets.flatMap(p => p.consolIds));
   const total = consols.length;
   const matched = consols.filter(c => on.has(c.id)).length;
-  const extra = pallets.reduce((n, p) => n + p.scanIds.length, 0);
+  // Off the manifest: labels added and flagged, and labels still held for a decision.
+  const off = p => [...p.scanIds, ...(p.held || [])];
+  const extra = pallets.reduce((n, p) => n + off(p).length, 0);
   const missing = consols.filter(c => !on.has(c.id));
   const missingIds = missing.slice(0, 40).map(c => ({ id: c.id, cartons: c.cartons, dept: c.dept || '' }));
-  const extraIds = pallets.flatMap(p => p.scanIds.map(id => ({ id, bay: p.ref }))).slice(0, 40);
+  const extraIds = pallets.flatMap(p => off(p).map(id => ({ id, bay: p.ref }))).slice(0, 40);
   const shortCartons = missing.reduce((n, c) => n + (Number(c.cartons) || 0), 0);
   const unmatched = pallets.filter(p => !p.carryover && !p.excluded && !p.consolIds.length && !p.scanIds.length).length;
   return { matched, missing: total - matched, total, extra, missingIds, extraIds, shortCartons, unmatched };

@@ -9,21 +9,24 @@ import { ic, esc, toast } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { schedule, balance, finishCheck, personalRates, TAKE5, atTime } from '../../../shared/dockplan.js';
 import { fmtHM, truckNo, pallets, planOpts } from './common.js';
+import { truckPhase } from '../../../shared/dockphase.js';
 
 const hm = ms => ms ? fmtHM(new Date(ms).toISOString()) : '—';
 const take5 = { truck: null, ticks: new Set() };
 export const ratesFor = dock => personalRates(dock?.history || []);
 
-// Take 5 shows on a truck that has not started: no pallet worked yet, no
-// hold-up but the booked huddle, and no Take 5 recorded.
-export const needsTake5 = t => !t.take5 && !pallets(t).some(p => p.segments.length) && !(t.halts || []).some(h => !(h.kind === 'huddle' && h.planned));
+// Take 5 shows on a truck whose decant has not begun (shared/dockphase.js
+// begun(): a rollover truck's carried work is the last truck's, so it needs
+// its own Take 5 too) and gates every start until it is done.
 export function take5Card(t) {
   if (take5.truck !== t.id) { take5.truck = t.id; take5.ticks = new Set(); }
   const n = take5.ticks.size, all = n === TAKE5.length, start = t.team?.length ? Math.min(...t.team.map(m => atTime(t, m.start) || Infinity)) : null, crew = (t.team || []).length;
   // The five checks are shared/dockplan.js's (English there; listed in test/unit/i18n-keys/dock1.json).
   return `<div class="card t5"><div class="ch"><h3>${tx('Ready to start · Take 5')}</h3><span class="cs-dim">${isFinite(start) && start ? tx('official start {time}', { time: hm(start) }) + ' · ' : ''}${txn(crew, '{n} decanter', '{n} decanters')}${t.status !== 'live' ? ' · ' + tx('receiving still landing') : ''}</span></div>` +
+    // The team with their start times (DV's Ready to start).
+    ((t.team || []).length ? `<div class="t5-team">${t.team.map(m => `<span class="chip"><b>${esc(m.pid)}</b>${m.role && m.role !== 'cutter' ? ' · ' + esc(m.role) : ''}${m.start ? ' · ' + esc(m.start) : ''}</span>`).join('')}</div>` : '') +
     `<div class="t5-list">${TAKE5.map(([k, title, text]) => `<label class="t5-item${take5.ticks.has(k) ? ' on' : ''}"><input type="checkbox" data-t5="${k}"${take5.ticks.has(k) ? ' checked' : ''}><span><b>${tx(title)}</b><small>${tx(text)}</small></span></label>`).join('')}</div>` +
-    `<div class="t5-acts"><button class="btn primary" data-act="t5-start"${all ? '' : ' disabled'}>▶ ${tx('Start decant')}</button><button class="btn" data-act="t5-huddle"${all ? '' : ' disabled'}>${ic('users')}${tx('Launch huddle')}</button><span class="cs-dim">${all ? tx('All five checked. Good to go.') : tx('Tick all five to start. A huddle runs the safety talk and pauses the clock while you brief.')}</span></div></div>`;
+    `<div class="t5-acts"><button class="btn primary" data-act="t5-start"${all ? '' : ' disabled'}>▶ ${tx('Start decant')}</button><button class="btn" data-act="t5-huddle"${all ? '' : ' disabled'}>${ic('users')}${tx('Launch huddle')}</button><span class="cs-dim">${all ? tx('All five checked. Good to go.') : tx('{n} of 5 checked. Tick all five to start; nothing can be started until then. A huddle runs the safety talk and pauses the clock while you brief.', { n })}</span></div></div>`;
 }
 
 export function planCard(t, rates, now = Date.now()) {
@@ -101,8 +104,12 @@ export async function onPlanChange(ctx, t, el, rates, rerender) {
 }
 
 // Today's decants (DV's decant board): planned slots, trucks on the dock and
-// trucks cleared today, by number.
-export function decantBoard(dock, plan, day) {
+// trucks cleared today, by number. A truck on the dock shows its phase and
+// the READY checklist (landed, layout confirmed, manifest, pallets, team and
+// huddle); once received it reads "Tap to open and begin". A planned slot
+// opens the New truck sheet on itself where Receiving shows the board
+// (act), or links to Receiving elsewhere.
+export function decantBoard(dock, plan, day, { act = false } = {}) {
   const slots = plan?.days?.[day]?.slots || {}, nums = new Set(Object.keys(slots).map(Number));
   for (const id of Object.keys(dock.trucks)) if (id.startsWith(day + '-T')) nums.add(Number(truckNo(id)));
   for (const h of dock.history || []) if (h.id.startsWith(day + '-T')) nums.add(Number(truckNo(h.id)));
@@ -110,10 +117,17 @@ export function decantBoard(dock, plan, day) {
   const card = n => {
     const id = `${day}-T${n}`, t = dock.trucks[id], h = (dock.history || []).find(x => x.id === id), sl = slots[n];
     if (h || t?.status === 'closed') return `<div class="db-c done"><b>${tx('Truck {n}', { n })}</b><span class="status good">${tx('Done')}</span><small>${h ? tx('{n} ctn cleared in {time}', { n: h.cartons, time: tx('{h}h {m}m', { h: Math.floor((h.clearMins || 0) / 60), m: String((h.clearMins || 0) % 60).padStart(2, '0') }) }) : tx('cleared')}</small></div>`;
-    if (t) { const ready = t.receivingConfirmed, ps = pallets(t), huddle = (t.halts || []).find(x => x.kind === 'huddle' && x.planned), nc = (t.manifest?.consols || []).length, crew = (t.team || []).length;
-      return `<div class="db-c ${ready ? 'ready' : 'rcv'}" data-view="receiving"><b>${tx('Truck {n}', { n })}</b><span class="status ${ready ? 'good' : 'warn'}">${ready ? tx('Ready') : tx('Receiving')}</span><small>${t.landedAt ? tx('landed {time}', { time: fmtHM(t.landedAt) }) : tx('staged')}${ps.some(p => p.carryover) ? ' · ' + tx('+{n} carried over', { n: ps.filter(p => p.carryover).length }) : ''}</small><small>${t.manifest ? `${txn(nc, '{n} consol', '{n} consols')} · ${esc(t.manifest.manNo)}` : tx('no manifest')} · ${txn(ps.length, '{n} pallet', '{n} pallets')} · ${tx('{n} ctn', { n: ps.reduce((k, p) => k + (p.cartons || 0), 0) })}</small><small>${txn(crew, '{n} decanter in', '{n} decanters in')}${t.decantStartAt ? ' · ' + tx('start {time}', { time: fmtHM(t.decantStartAt) }) : ''}${huddle ? ' · ' + tx('huddle {n}m booked', { n: Math.round((Date.parse(huddle.end) - Date.parse(huddle.start)) / 60000) }) : ''}</small><em>${ready ? tx('Open and begin →') : tx('Open: plan while it lands →')}</em></div>`; }
+    if (t) {
+      const ph = truckPhase(t), ps = pallets(t), huddle = (t.halts || []).find(x => x.kind === 'huddle' && x.planned), crew = (t.team || []).length;
+      const tag = { planned: ['', tx('Planned')], receiving: ['warn', tx('Receiving')], received: ['good', tx('READY')], decanting: ['live', tx('Decanting')], cleared: ['good', tx('Cleared')] }[ph] || ['', ph];
+      const chk = (ok, text) => `<li class="${ok ? 'ok' : ''}">${ok ? '✓' : '○'} ${text}</li>`;
+      const list = `<ul class="db-chk">${chk(t.status === 'live', t.landedAt && t.status === 'live' ? tx('Landed {time}', { time: fmtHM(t.landedAt) }) : tx('Not landed yet'))}${chk(t.receivingConfirmed, t.receivingConfirmed ? tx('Layout confirmed {time}', { time: fmtHM(t.receivedAt) }) : tx('Layout not confirmed'))}${chk(!!t.manifest, t.manifest ? tx('Manifest {no} · {n} consols', { no: esc(t.manifest.manNo), n: t.manifest.consols.length }) : tx('No manifest'))}${chk(ps.length > 0, tx('{n} pallets · {c} ctn on the dock', { n: ps.length, c: ps.reduce((k, p) => k + (p.cartons || 0), 0) }) + (ps.some(p => p.carryover) ? ' · ' + tx('+{n} carried over', { n: ps.filter(p => p.carryover).length }) : ''))}${chk(crew > 0, txn(crew, '{n} decanter in', '{n} decanters in') + (huddle ? ' · ' + tx('huddle {n}m booked', { n: Math.round((Date.parse(huddle.end) - Date.parse(huddle.start)) / 60000) }) : '') + (t.decantStartAt ? ' · ' + tx('start {time}', { time: fmtHM(t.decantStartAt) }) : ''))}</ul>`;
+      const go = ph === 'received' ? tx('Tap to open and begin →') : ph === 'receiving' || ph === 'planned' ? tx('Open: plan while it lands →') : ph === 'cleared' ? tx('Open and close the truck →') : tx('Open the run →');
+      return `<div class="db-c ph-${ph}${ph === 'received' ? ' ready' : ''}" data-view="receiving" role="link" tabindex="0"><b>${tx('Truck {n}', { n })}</b><span class="status ${tag[0]}">${tag[1]}</span>${list}<em>${go}</em></div>`;
+    }
     const nc = sl.manifest ? (sl.manifest.ref ? sl.manifest.n : (sl.manifest.consols || []).length) : 0, crew = (sl.team || []).length;
-    return `<div class="db-c planned"><b>${tx('Truck {n}', { n })}</b><span class="status">${tx('Planned')}</span><small>${sl.eta ? tx('start {time}', { time: esc(sl.eta) }) : tx('no start time')}${sl.huddleMins ? ' · ' + tx('huddle {n}m', { n: sl.huddleMins }) : ''} · ${tx('waiting on Receiving')}</small><small>${sl.manifest ? `${txn(nc, '{n} consol', '{n} consols')} · ${esc(sl.manifest.manNo)}` : tx('no manifest yet')} · ${tx('{n} on the team', { n: crew })}</small></div>`;
+    const open = act ? ` data-act="phase-newtruck" data-n="${n}" role="button" tabindex="0"` : ` data-view="receiving" role="link" tabindex="0"`;
+    return `<div class="db-c planned"${open}><b>${tx('Truck {n}', { n })}</b><span class="status">${tx('Planned')}</span><small>${sl.eta ? tx('start {time}', { time: esc(sl.eta) }) : tx('no start time')}${sl.huddleMins ? ' · ' + tx('huddle {n}m', { n: sl.huddleMins }) : ''} · ${tx('waiting on Receiving')}</small><small>${sl.manifest ? `${txn(nc, '{n} consol', '{n} consols')} · ${esc(sl.manifest.manNo)}` : tx('no manifest yet')} · ${tx('{n} on the team', { n: crew })}</small><em>${act ? tx('Tap when it lands →') : tx('Open Receiving →')}</em></div>`;
   };
   return `<div class="card db"><div class="ch"><h3>${tx('Today’s decants')}</h3><span class="cs-dim">${nums.size}</span></div><div class="db-grid">${[...nums].sort((a, b) => a - b).map(card).join('')}</div></div>`;
 }
