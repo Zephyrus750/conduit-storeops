@@ -45,7 +45,7 @@ export function nextStep(t) {
 
 export function phaseBar(t, { link = false } = {}) {
   const ph = truckPhase(t), at = PHASES.indexOf(ph), n = nextStep(t);
-  const btn = !n ? '' : link ? `<button class="btn primary sm phb-go" data-view="receiving">${esc(n.label)}${ic('arrow')}</button>` : `<button class="btn primary sm phb-go" data-act="phase-${n.act}">${esc(n.label)}${ic('arrow')}</button>`;
+  const btn = !n ? '' : link ? `<button class="btn primary sm phb-go" data-view="${n.act === 'begin' || n.act === 'finalise' ? 'decant' : 'receiving'}">${esc(n.label)}${ic('arrow')}</button>` : `<button class="btn primary sm phb-go" data-act="phase-${n.act}">${esc(n.label)}${ic('arrow')}</button>`;
   return `<div class="phb ph-${ph}" role="group" aria-label="${tx('Truck phase')}"><ol class="phb-s">${PHASES.map((p, i) => `<li class="${i < at ? 'dn' : i === at ? 'on' : ''}"${i === at ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[p]}</span></li>`).join('')}</ol>` +
     `<div class="phb-n"><span class="phb-t"><b>${t ? tx('Truck {n}', { n: esc(truckNo(t.id)) }) + ' · ' : ''}${PHASE_NAME[ph]}</b><small>${line(t, ph)}</small></span>${btn}</div></div>`;
 }

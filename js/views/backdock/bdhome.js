@@ -11,7 +11,8 @@ const meKey = no => `dock_me:${no}`;
 function meOf(no) { try { const x = JSON.parse(localStorage.getItem(meKey(no)) || 'null'); return x && x.day === todayKey() ? x.pid : null; } catch { return null; } }
 function setMe(no, pid) { try { if (pid) localStorage.setItem(meKey(no), JSON.stringify({ pid, day: todayKey() })); else localStorage.removeItem(meKey(no)); } catch {} }
 
-const tile = (mode, html) => html.replace('data-go="receiving"', `data-go="receiving" data-mode="${mode}"`);
+// Land a pallet opens Receive; Run the decant opens Decant; Team opens Team & plan there.
+const tile = (view, mode, html) => html.replace('data-go="receiving"', `data-go="${view}"${mode ? ` data-mode="${mode}"` : ''}`);
 
 export default {
   id: 'bdhome', title: tx('Back dock'), icon: 'truck', area: 'backdock',
@@ -27,7 +28,7 @@ export default {
       (t ? `<div class="mv-tally"><b>${pr.done}</b><i><u style="width:${pr.pct}%"></u></i><span>${tx('{n} cartons · {pct}%', { n: pr.total, pct: pr.pct })}</span></div>` : '') +
       phaseBar(t || null, { link: true }) +
       // Each tile opens its own part of Receiving: Receive, Run, or Team & plan.
-      `<div class="mv-tiles">${tile('receive', mtile('parking', tx('Land a pallet'), tx('Scan the labels · type · cartons'), '', 'receiving', 'hot'))}${tile('run', mtile('box', mine ? tx('My pallet · {ref}', { ref: esc(mine) }) : tx('Run the decant'), mine ? tx('{pid} · decanting now', { pid: esc(me) }) : me ? tx('{pid} · not on a pallet', { pid: esc(me) }) : tx('Start, pause and finish pallets'), pr ? tx('{n} live', { n: pr.active }) : '', 'receiving'))}${tile('team', mtile('users', tx('Team'), t && t.team?.length ? t.team.map(m => `${who(m)}${run[m.pid] ? ' ' + run[m.pid] : ''}`).join(' · ') : tx('No team on this truck yet'), '', 'receiving'))}</div>` +
+      `<div class="mv-tiles">${tile('receiving', '', mtile('parking', tx('Land a pallet'), tx('Scan the labels · type · cartons'), '', 'receiving', 'hot'))}${tile('decant', '', mtile('box', mine ? tx('My pallet · {ref}', { ref: esc(mine) }) : tx('Run the decant'), mine ? tx('{pid} · decanting now', { pid: esc(me) }) : me ? tx('{pid} · not on a pallet', { pid: esc(me) }) : tx('Start, pause and finish pallets'), pr ? tx('{n} live', { n: pr.active }) : '', 'receiving'))}${tile('decant', 'team', mtile('users', tx('Team'), t && t.team?.length ? t.team.map(m => `${who(m)}${run[m.pid] ? ' ' + run[m.pid] : ''}`).join(' · ') : tx('No team on this truck yet'), '', 'receiving'))}</div>` +
       pick + decantBoard(dock, ctx.store.get('plan'), todayKey());
   },
   mount(ctx, root) {

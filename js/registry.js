@@ -29,7 +29,7 @@ import srdepts from './views/stockroom/depts.js';
 import srintel from './views/stockroom/intel.js';
 import srtrends from './views/stockroom/srtrends.js';
 import codelist from './views/stockroom/codelist.js';
-import receiving from './views/backdock/receiving.js';
+import receiving, { decant } from './views/backdock/receiving.js';
 import bdhome from './views/backdock/bdhome.js';
 import manifests from './views/backdock/manifests.js';
 import planner from './views/backdock/planner.js';
@@ -47,7 +47,7 @@ import resources from './views/resources.js';
 import adminresources from './views/adminresources.js';
 import { tx } from './i18n.js';
 
-export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refresh, labelint, emergency, maintenance, equipment, recalls, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS, livepull, resources, adminresources].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refresh, labelint, emergency, maintenance, equipment, recalls, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, decant, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS, livepull, resources, adminresources].map(v => [v.id, v]));
 
 // The desktop rail (Version A, 23 Oct 2026): Today, Reports & files and
 // Resources (managers) on top, then a few rows per area, then the foot. A row is one screen or a group of screens
@@ -86,7 +86,8 @@ export const GROUP_OF = Object.fromEntries(Object.entries(GROUPS).flatMap(([g, x
 export const STRIP = {
   floor: [['mhome', 'home', tx('Home')], ['refresh', 'm-refresh', tx('Refresh')], ['labelint', 'm-labelint', tx('Labels')], ['picklist', 'm-picklist', tx('Route')], ['emergency', 'm-emergency', tx('Emergency')], ['more', 'dots', tx('More')]],
   stockroom: [['mhome', 'home', tx('Home')], ['bfreview', 'barcode', tx('Scan')], ['cages', 'm-cages', tx('Cages')], ['adjust', 'm-adjust', tx('Adjust')], ['more', 'dots', tx('More')]],
-  backdock: [['mhome', 'home', tx('Home')], ['receiving', 'm-receiving', tx('Land')], ['teamboard', 'users', tx('Board')], ['more', 'dots', tx('More')]],
+  // Receive and Decant are separate tabs, as Decant Visualiser had them.
+  backdock: [['mhome', 'home', tx('Home')], ['receiving', 'm-receiving', tx('Receive')], ['decant', 'box', tx('Decant')], ['teamboard', 'users', tx('Board')], ['more', 'dots', tx('More')]],
   admin: [['admin', 'grid', tx('Stores')], ['adminreg', 'plus', tx('Register')], ['adminactions', 'history', tx('Actions')], ['settings', 'm-settings', tx('Settings')]],
 };
 // Phone home per workspace, and the workspaces the launcher offers.
