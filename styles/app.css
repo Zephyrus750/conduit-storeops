@@ -3208,8 +3208,11 @@ body:has(.content.mv > .dk-body) #toasts { top: 76px; bottom: auto; }
 .dk-scan { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: 11px; border: 0; background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .dk-scan svg.i { width: 18px; height: 18px; color: #fff; }
 .dk-steps { list-style: none; margin: 0 6px 0 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; }
-.dk-steps li { height: 4px; border-radius: 99px; background: var(--track); }
-.dk-steps li.dn { background: var(--green); } .dk-steps li.on { background: var(--accent); }
+.dk-steps li { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dk-steps li i { display: block; height: 4px; border-radius: 99px; background: var(--track); }
+.dk-steps li span { font-size: 10px; font-weight: 700; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-steps li.dn i { background: var(--green); } .dk-steps li.dn span { color: var(--green-ink); }
+.dk-steps li.on i { background: var(--accent); } .dk-steps li.on span { color: var(--accent-ink); font-weight: 800; }
 .dk-body { flex: 1 1 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 10px; }
 .dk-body > * { flex: none; }
 .dk-body .t5 { margin: 0; }
@@ -3274,3 +3277,31 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
   .dk-go { padding: 0 10px; font-size: 13px; } .dk-go.halt { min-width: 80px; }
   .dk-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Landing a pallet: a popup in the middle of the screen over a dimmed dock. */
+.dk-modal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; box-sizing: border-box; }
+.dk-scrim { position: absolute; inset: 0; border: 0; padding: 0; background: rgba(17,24,39,.55); cursor: pointer; }
+.dk-dlg { position: relative; width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; background: var(--panel); border-radius: 18px; box-shadow: 0 24px 60px -12px rgba(0,0,0,.5); }
+.dk-dlg > .bdk-pal { margin: 0; border: 0; }
+/* The camera first: a big Scan button, Type it beside it. */
+.bdk-scanrow.cam { gap: 8px; }
+.bdk-scanrow.cam .bdk-cam { flex: 1; justify-content: center; height: 48px; font-size: 15px; }
+.bdk-scanrow.cam .bdk-cam svg.i { width: 20px; height: 20px; }
+.bdk-scanrow.cam .bdk-type { flex: none; height: 48px; }
+/* Last landed and Up next: each pallet's type in its colour. */
+.dk-li b.dk-ref { color: #fff; border-radius: 6px; padding: 2px 0; text-align: center; min-width: 34px; }
+.dk-ref.t-c { background: #2953D6; } .dk-ref.t-l { background: #B3261E; } .dk-ref.t-b { background: #69787F; }
+.dk-li em.ty { font-style: normal; font-weight: 700; }
+.ty.t-c { color: #2953D6; } .ty.t-l { color: #B3261E; } .ty.t-b { color: #56646B; }
+.frame.dark .ty.t-c { color: #93B4FF; } .frame.dark .ty.t-l { color: #FCA5A5; } .frame.dark .ty.t-b { color: #B6C2C8; }
+/* The panel (the strip opened) is dark, as the Floor's sheets are. */
+.content.mv > .dk-sheet.pan {
+  --panel: #111827; --card: #1F2937; --line: #263145; --line-soft: #1C2536; --ink: #F3F4F6; --ink2: #D1D5DB; --dim: #9CA3AF; --faint: #6B7280; --chip: #1F2937; --chip-ink: #D1D5DB; --track: #374151; --hover: #1A2333; --ground: #0B1220; --amber-ink: #FBBF24; --green-ink: #4ADE80; --blue-ink: #93C5FD; --accent-ink: #5CC4EA;
+  color-scheme: dark; background: var(--panel); color: var(--ink); box-shadow: 0 -16px 40px -12px rgba(17,24,39,.45);
+}
+.dk-sheet.pan::before { background: #374151; }
+.dk-sheet.pan .dk-tile.r b { color: #FCA5A5; }
+.dk-sheet.pan .dk-tool { background: #1A2333; border-color: #263145; }
+.dk-sheet.pan .dk-tool.lit { background: #3A2E0B; border-color: #B45309; color: #FDE68A; } .dk-sheet.pan .dk-tool.lit svg.i { color: #FBBF24; }
+.dk-sheet.pan .rvp-msg.warn { background: #3A2E0B; color: #FDE68A; }
+.dk-sheet.pan .phb-chip.ph-receiving { background: #3A2E0B; color: #FDE68A; }
+.frame.dark .dk-steps li.on span { color: #5CC4EA; }

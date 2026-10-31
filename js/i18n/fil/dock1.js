@@ -416,7 +416,6 @@ export default {
   "Scan": "I-scan",
   "Products": "Mga produkto",
   "No manifest on Truck {n} yet.": "Wala pang manifest sa Truck {n}.",
-  "Scan a consol label": "I-scan ang consol label",
   "Find": "Hanapin",
   "The last 9 digits of the pallet label name the consol.": "Ang huling 9 na digit ng pallet label ang pangalan ng consol.",
   "Not on manifest {no}.": "Wala sa manifest {no}.",
@@ -711,4 +710,9 @@ export default {
   "{id} is not on a pallet on Truck {n}": "Wala ang {id} sa anumang pallet ng Truck {n}",
   "{n} label": "{n} label",
   "{n} labels": "{n} label",
+  "Load pallet": "Load pallet",
+  "Scan a label": "Mag-scan ng label",
+  "Scan labels": "Mag-scan ng mga label",
+  "Type it": "I-type",
+  "Type the label number": "I-type ang numero ng label",
 };

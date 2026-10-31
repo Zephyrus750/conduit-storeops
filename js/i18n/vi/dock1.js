@@ -416,7 +416,6 @@ export default {
   "Scan": "Quét",
   "Products": "Sản phẩm",
   "No manifest on Truck {n} yet.": "Xe tải {n} chưa có bảng kê hàng.",
-  "Scan a consol label": "Quét nhãn lô hàng gộp",
   "Find": "Tìm",
   "The last 9 digits of the pallet label name the consol.": "9 chữ số cuối của nhãn pallet là mã lô hàng gộp.",
   "Not on manifest {no}.": "Không có trong bảng kê {no}.",
@@ -711,4 +710,9 @@ export default {
   "{id} is not on a pallet on Truck {n}": "{id} không ở pallet nào của xe tải {n}",
   "{n} label": "{n} nhãn",
   "{n} labels": "{n} nhãn",
+  "Load pallet": "Pallet hàng",
+  "Scan a label": "Quét nhãn",
+  "Scan labels": "Quét nhãn",
+  "Type it": "Nhập tay",
+  "Type the label number": "Nhập số trên nhãn",
 };

@@ -9,6 +9,8 @@ export const PTYPES = [['chep', tx('Chep tubs'), '#2953D6'], ['loscam', tx('Load
 export const PT_LETTER = { chep: 'c', loscam: 'l', bulk: 'b' };
 export const PT_NAME = Object.fromEntries(PTYPES.map(p => [p[0], p[1]]));
 export const PT_COLOUR = Object.fromEntries(PTYPES.map(p => [p[0], p[2]]));
+// One pallet's type in a row about that pallet ("Load pallet", not "Load pallets").
+export const PT_ONE = { chep: tx('Chep tubs'), loscam: tx('Load pallet'), bulk: tx('Bulk') };
 export const HALT_NAME = { hcage: tx('Cages out'), nostock: tx('No stock'), equip: tx('Equipment'), safety: tx('Safety'), waiting: tx('Waiting'), other: tx('Other') };
 // Hold-up kinds (DV): a halt is downtime; a huddle, a transition and a team
 // break are planned pauses. All of them stop the decant clock.
