@@ -17,6 +17,8 @@
 import { ic, esc, toast } from '../../ui.js';
 import { PT_LETTER, PT_NAME, truckNo, fmtHM, openTrucks, pallets, progress, openHalt, running, onBreak, openSegs, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, holdName, grid, ROLE_NAME } from './common.js';
 import { ratesFor, guard } from './plan.js';
+import { phaseChip } from './phase.js';
+import { begun } from '../../../shared/dockphase.js';
 import { tx, txn } from '../../i18n.js';
 
 // A person's role as a word in a line (lower case in English).
@@ -45,7 +47,7 @@ function progressBar(t, pr) {
 // ── Dock screen ────────────────────────────────────────────────────────
 function dockScreen(ctx) {
   const { dock, t } = current(ctx);
-  const head = `<div class="scr-head"><div><h2>${t ? tx('Truck {no}', { no: esc(truckNo(t.id)) }) : tx('The dock')}</h2><span>${t ? `${tx('landed {time}', { time: fmtHM(t.landedAt) })}${t.goalAt ? ` · ${tx('goal {time}', { time: fmtHM(t.goalAt) })}` : ''}` : ''}</span></div>${tools('dock')}</div>`;
+  const head = `<div class="scr-head"><div><h2>${t ? tx('Truck {no}', { no: esc(truckNo(t.id)) }) : tx('The dock')}${t ? ' ' + phaseChip(t) : ''}</h2><span>${t ? `${tx('landed {time}', { time: fmtHM(t.landedAt) })}${t.goalAt ? ` · ${tx('goal {time}', { time: fmtHM(t.goalAt) })}` : ''}` : ''}</span></div>${tools('dock')}</div>`;
   if (!t) return `<div class="scr">${head}${empty(tx('The dock screen wakes when the next truck starts.'), dock)}</div>`;
   const g = grid(t), byRef = {}; for (const p of pallets(t)) byRef[p.ref] = p;
   const cells = g.refs.map(ref => {
@@ -56,7 +58,7 @@ function dockScreen(ctx) {
   }).join('');
   const run = running(t);
   const crew = (t.team || []).map(m => { const br = onBreak(t, m.pid); return `<span class="scr-crew${run[m.pid] ? ' on' : ''}${br ? ' brk' : ''}"><b>${esc(m.pid)}</b>${br ? tx('break') : run[m.pid] ? esc(run[m.pid]) : tx('free')}</span>`; }).join('');
-  return `<div class="scr">${head}${holdBanner(openHalt(t))}${progressBar(t, progress(t))}<div class="scr-grid" style="grid-template-columns:repeat(${g.cols},1fr)">${cells}</div><div class="scr-crews">${crew || `<span class="cs-dim">${tx('No crew on this truck yet')}</span>`}</div>${palletSheet(t)}</div>`;
+  return `<div class="scr dock">${head}${holdBanner(openHalt(t))}${progressBar(t, progress(t))}<div class="scr-grid" style="grid-template-columns:repeat(${g.cols},1fr);--rows:${Math.ceil(g.refs.length / g.cols)}">${cells}</div><div class="scr-crews">${crew || `<span class="cs-dim">${tx('No crew on this truck yet')}</span>`}</div>${palletSheet(t)}</div>`;
 }
 
 // The pallet sheet (DV's palletSheet and personPicker): what the crew can
@@ -92,6 +94,8 @@ async function onScreenAct(ctx, a) {
     if (act === 'scr-close' || act === 'scr-close-bg') { sheet = null; return ctx.rerender(); }
     if (!sheet) return;
     if (act === 'scr-back') { sheet.pick = null; return ctx.rerender(); }
+    // The decant starts with Take 5 at Receiving: until then nothing starts here either.
+    if (act === 'scr-pickfor' && ['start', 'resume', 'join'].includes(a.dataset.kind) && !begun(t)) return toast(tx('Take 5 first: tick the five checks and press Start decant.'), 'bad');
     if (act === 'scr-pickfor') { sheet.pick = a.dataset.kind; return ctx.rerender(); }
     const ref = sheet.ref;
     // Undo, one step deep as DV's: each action offers its opposite.
@@ -133,7 +137,7 @@ function upNext(t) {
 }
 function teamBoard(ctx) {
   const { dock, t } = current(ctx);
-  const head = `<div class="scr-head"><div><h2>${tx('Team Board')}</h2><span>${t ? tx('Truck {no} · landed {time}', { no: esc(truckNo(t.id)), time: fmtHM(t.landedAt) }) : ''}</span></div>${tools('team')}</div>`;
+  const head = `<div class="scr-head"><div><h2>${tx('Team Board')}${t ? ' ' + phaseChip(t) : ''}</h2><span>${t ? tx('Truck {no} · landed {time}', { no: esc(truckNo(t.id)), time: fmtHM(t.landedAt) }) : ''}</span></div>${tools('team')}</div>`;
   if (!t) return `<div class="scr">${head}${empty(tx('The Team Board wakes when the next truck starts.'), dock)}</div>`;
   const pr = progress(t), fc = forecast(t, Date.now(), ratesFor(ctx.store.get('dock'))), late = fc.at && t.goalAt && fc.at > Date.parse(t.goalAt);
   const kpis = `<div class="scr-kpis"><div><span>${tx('Goal')}</span><b>${t.goalAt ? fmtHM(t.goalAt) : '—'}</b></div><div class="${late ? 'bad' : fc.at && t.goalAt ? 'good' : ''}"><span>${tx('Forecast finish')}</span><b data-forecast>${fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}</b><small>${fc.at && t.goalAt ? (late ? tx('{time} behind', { time: fmtMins((fc.at - Date.parse(t.goalAt)) / 60000) }) : tx('{time} ahead', { time: fmtMins((Date.parse(t.goalAt) - fc.at) / 60000) })) : fc.remain ? tx('{time} of work left · {n} on', { time: fmtMins(fc.remain), n: fc.crew }) : ''}</small></div><div><span>${tx('Cartons')}</span><b>${pr.done}<small> / ${pr.total}</small></b></div><div><span>${tx('Pallets')}</span><b>${pr.doneCount}<small> / ${pr.count}</small></b></div></div>`;

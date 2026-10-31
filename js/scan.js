@@ -137,11 +137,12 @@ export function installCameraButtons(root = document) {
   root.addEventListener('click', e => {
     const b = e.target.closest('[data-camera]'); if (!b) return;
     e.preventDefault();
-    const scope = b.closest('#content') || document, field = b.dataset.camera;
+    // A view redraws as each code lands (a fresh #content): write into the live one.
+    const inView = !!b.closest('#content'), field = b.dataset.camera, scope = () => (inView && document.getElementById('content')) || document;
     openScanner({
       title: b.getAttribute('title') || tx('Scan'), continuous: b.hasAttribute('data-camera-continuous'),
       onCode: code => {
-        const input = scope.querySelector(`[data-field="${CSS.escape(field)}"]`); if (!input) return;
+        const input = scope().querySelector(`[data-field="${CSS.escape(field)}"]`); if (!input) return;
         input.value = code; input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       },

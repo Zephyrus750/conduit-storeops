@@ -9,7 +9,7 @@
 //                                   points at a truck), label (manifest.day), plan (staged on a slot)
 //   despatchDay('05/09/2026')       '2026-09-05' | null
 //   usualGap(state)                 days from despatch to the truck, by the store's own trucks (1 until known)
-//   suggestPlace(state, m, taken)   where a report nothing places most likely came: a truck or planner
+//   suggestPlace(state, m, taken, { today })   where a report nothing places most likely came: a truck or planner
 //                                   slot with no manifest within two days of despatch + the usual gap,
 //                                   else despatch + the gap on the first free truck number. taken: 'YYYY-MM-DD-Tn'
 //                                   keys already given out (a batch of uploads). → { day, truck, via } | null
@@ -78,17 +78,25 @@ export function suggestPlace(state, m, taken = new Set(), opts = {}) {
   const base = despatchDay(m?.despatch); if (!base) return null;
   const places = opts.places || placeIndex(state), gap = opts.gap ?? usualGap(state), want = addDays(base, gap);
   const held = new Set([...taken, ...[...places.values()].filter(p => p.day && p.truck).map(p => `${p.day}-T${p.truck}`)]);
-  const dock = state?.dock || {}, plan = state?.plan?.days || {}, open = [];
+  const dock = state?.dock || {}, plan = state?.plan?.days || {}, today = opts.today || null;
+  let open = [];
   // Trucks the dock ran or planned with no manifest, from the despatch day
-  // on and within two days of when the report should have come.
+  // on and within two days of when the report should have come. A truck
+  // finalised without one is 'gone'; one still to come (today on, not
+  // closed) is 'ahead'.
   for (let i = 0; i <= 7; i++) {
-    const day = addDays(base, i), ns = new Set();
-    for (const [id, t] of Object.entries(dock.trucks || {})) if (id.startsWith(day + '-T') && !t.manifest && !t.plannedManifest) ns.add(truckOf(id));
-    for (const h of dock.history || []) if (h.id.startsWith(day + '-T') && !h.manifest) ns.add(truckOf(h.id));
-    for (const [n, sl] of Object.entries(plan[day]?.slots || {})) if (!sl.manifest) ns.add(Number(n));
-    if (Math.abs(daysBetween(want, day)) <= 2) for (const n of ns) if (n && !held.has(`${day}-T${n}`)) open.push({ day, truck: n });
+    const day = addDays(base, i), ns = new Map(), mark = (n, gone) => { if (n && !(ns.get(n) === false)) ns.set(n, gone); };
+    for (const [id, t] of Object.entries(dock.trucks || {})) if (id.startsWith(day + '-T') && !t.manifest && !t.plannedManifest) mark(truckOf(id), t.status === 'closed');
+    for (const h of dock.history || []) if (h.id.startsWith(day + '-T') && !h.manifest) mark(truckOf(h.id), true);
+    for (const [n, sl] of Object.entries(plan[day]?.slots || {})) if (!sl.manifest) mark(Number(n), !!today && day < today);
+    if (Math.abs(daysBetween(want, day)) <= 2) for (const [n, gone] of ns) if (!held.has(`${day}-T${n}`)) open.push({ day, truck: n, gone });
   }
+  // A report despatched yesterday or today is on its way: a truck still to
+  // come takes it before one already finalised without a manifest (a usual
+  // gap of 0 days would otherwise file it on yesterday's closed truck).
+  if (today && base >= addDays(today, -1) && open.some(o => !o.gone && o.day >= today)) open = open.filter(o => !o.gone);
   open.sort((a, b) => Math.abs(daysBetween(want, a.day)) - Math.abs(daysBetween(want, b.day)) || b.day.localeCompare(a.day) || a.truck - b.truck);
+  open = open.map(({ gone, ...o }) => o);
   if (open.length) return { ...open[0], via: 'plan' };
   for (let n = 1; n <= 4; n++) if (!held.has(`${want}-T${n}`)) return { day: want, truck: n, via: 'despatch' };
   return { day: want, truck: null, via: 'despatch' };

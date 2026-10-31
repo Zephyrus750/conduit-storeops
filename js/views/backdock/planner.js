@@ -5,15 +5,17 @@
 // week grid with a side editor.
 
 import { $, ic, esc, vh, sub, toast, mhead, fmtDate, today as storeToday } from '../../ui.js';
-import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, slotRef, attachManifest } from './common.js';
+import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, fmtHM, slotRef, attachManifest } from './common.js';
 import { tx, txn } from '../../i18n.js';
+import { truckPhase, phaseCounts } from '../../../shared/dockphase.js';
+import { phaseChip } from './phase.js';
 
 const DOW = [tx('Mon'), tx('Tue'), tx('Wed'), tx('Thu'), tx('Fri'), tx('Sat'), tx('Sun')], MON = [tx('Jan'), tx('Feb'), tx('Mar'), tx('Apr'), tx('May'), tx('Jun'), tx('Jul'), tx('Aug'), tx('Sep'), tx('Oct'), tx('Nov'), tx('Dec')];
 const TRUCK_ST = { staged: tx('staged'), live: tx('live'), closed: tx('closed') };
 // "Mon 3 Feb" and "3 Feb", in the device's language and order.
 const dayLabel = (d, dow = DOW[(d.getDay() + 6) % 7]) => tx('{dow} {d} {mon}', { dow, d: d.getDate(), mon: MON[d.getMonth()] });
 const dateLabel = d => tx('{d} {mon}', { d: d.getDate(), mon: MON[d.getMonth()] });
-const st = { week: 0, sel: null, busy: false };
+const st = { week: 0, sel: null, busy: false, pick: null };
 const dkey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function weekDays(off) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + off * 7); return Array.from({ length: 7 }, (_, i) => { const x = new Date(d); x.setDate(d.getDate() + i); return x; }); }
 // A staged reference carries its counts; a truck's (or an older slot's) manifest carries the consols.
@@ -29,15 +31,32 @@ const truckOf = (dock, date, n) => dock.trucks[`${date}-T${n}`] || (dock.history
 const numbersOf = (plan, dock, date) => [...new Set([...Object.keys(plan.days[date]?.slots || {}).map(Number), ...Object.keys(dock.trucks).filter(id => id.startsWith(date + '-T')).map(id => Number(truckNo(id))), ...(dock.history || []).filter(h => h.id.startsWith(date + '-T')).map(h => Number(truckNo(h.id)))])].filter(n => n >= 1 && n <= 4).sort((a, b) => a - b);
 const stl = t => t?.status === 'live' ? 'live' : t?.status === 'closed' ? 'done' : t ? 'staged' : '';
 
+// A slot's card (DV's planner card): Manifest, Truck and Decant rows that
+// go grey (not yet), amber (under way) and green (done) as the day happens.
 function slotHtml(ctx, date, n, slot, dock) {
-  const id = `${date}-${n}`, on = st.sel === id, t = truckOf(dock, date, n);
+  const id = `${date}-${n}`, tid = `${date}-T${n}`, on = st.sel === id, t = truckOf(dock, date, n), live = dock.trucks[tid] ? { id: tid, ...dock.trucks[tid] } : null;
+  const hist = (dock.history || []).find(h => h.id === tid), past = date < storeToday(), ph = live ? truckPhase(live) : hist ? 'closed' : 'planned';
   slot = slot || {};
-  const man = t?.manifest ? `<div class="prow">${ic('file')}<div><b>${esc(t.manifest.manNo)}</b><span>${metrics(t.manifest)} · ${tx('on the truck')}</span></div></div>` : slot.manifest ? `<div class="prow">${ic('file')}<div><b>${esc(slot.manifest.manNo)}</b><span>${metrics(slot.manifest)}</span></div></div>` : `<div class="prow miss">${ic('file')}<div><b>${tx('No manifest yet')}</b><span>${tx('comes the night before')}</span></div></div>`;
-  const hist = t?.status === 'closed' ? (dock.history || []).find(h => h.id === `${date}-T${n}`) : null, pr = t?.status === 'live' ? progress({ id: `${date}-T${n}`, ...dock.trucks[`${date}-T${n}`] }) : null;
-  const trk = t ? `<div class="prow">${ic('truck')}<div><b>${t.status === 'live' ? tx('Decanting · {pct}%', { pct: pr?.pct ?? 0 }) : t.status === 'closed' ? `${tx('Decant cleared')}${hist?.clearMins ? ' · ' + fmtMins(hist.clearMins) : ''}` : tx('Created')}</b><span>${t.status === 'live' ? tx('{done} / {total} ctn · live at Receiving', { done: pr?.done ?? 0, total: pr?.total ?? 0 }) : t.status === 'closed' ? `${hist ? tx('{cartons} ctn · {rate} ctn/h', { cartons: hist.cartons, rate: hist.teamRate || 0 }) : tx('in History')}` : tx('staged')}</span></div></div>` : `<div class="prow">${ic('truck')}<div><b>${slot.eta ? tx('ETA {time}', { time: esc(slot.eta) }) : tx('No ETA')}</b><span>${tx('goes live when a pallet lands')}</span></div></div>`;
-  const crew = t?.team?.length ? t.team : slot.team || [];
-  const team = crew.length ? `<div class="prow">${ic('users')}<div><b>${tx('{n} on decant', { n: crew.length })}</b><div class="dk-team">${crew.map(m => `<span class="dk-tc${m.start && slot.eta && m.start > slot.eta ? ' late' : ''}" title="${esc(m.start ? tx('starts {time}', { time: m.start }) : tx('starts with the truck'))}${m.finish ? ' · ' + tx('finishes {time}', { time: esc(m.finish) }) : ''}"><span class="av">${esc(who(m))}</span>${m.start && m.start !== slot.eta ? `<small>${esc(m.start)}</small>` : ''}</span>`).join('')}</div></div></div>` : `<div class="prow miss">${ic('users')}<div><b>${tx('No team yet')}</b><span>${tx('pick devices')}</span></div></div>`;
-  return `<div class="pslot${on ? ' on' : ''}${stl(t) ? ' ' + stl(t) : ''}" data-act="sel" data-slot="${id}"><div class="pslot-h"><b>${tx('Truck {no}', { no: n })}</b>${t ? `<span class="tst ${esc(t.status)}">${esc(TRUCK_ST[t.status] || t.status)}</span>` : `<span class="eta">${ic('clock')}${esc(slot.eta || '—')}</span>`}</div>${man}${trk}${team}${slot.huddleMins || slot.breakMins ? `<div class="prow">${ic('clock')}<div><span>${slot.huddleMins ? tx('huddle {n}m booked', { n: slot.huddleMins }) : ''}${slot.huddleMins && slot.breakMins ? ' · ' : ''}${slot.breakMins ? tx('team break {n}m', { n: slot.breakMins }) : ''}</span></div></div>` : ''}${slot.note ? `<div class="prow note">${ic('edit')}<div><span>${esc(slot.note)}</span></div></div>` : ''}</div>`;
+  const row = (lvl, icon, b, sub, more = '') => `<div class="prow pr-${lvl}">${ic(icon)}<div><b>${b}</b>${sub ? `<span>${sub}</span>` : ''}${more}</div></div>`;
+  const man = live?.manifest ? row(2, 'file', esc(live.manifest.manNo), `${metrics(live.manifest)} · ${tx('on the truck')}`)
+    : live?.plannedManifest ? row(1, 'file', esc(live.plannedManifest), tx('attaching from this slot'))
+    : hist ? (hist.manifest ? row(2, 'file', esc(hist.manifest.manNo), hist.audit ? tx('{m} of {n} consols matched', { m: hist.audit.matched, n: hist.audit.total + (hist.audit.carriedOut || 0) }) : tx('on the truck')) : row(0, 'file', tx('No manifest'), tx('decanted without one')))
+    : live ? row(0, 'file', tx('No manifest'), tx('attach it at Receiving'))
+    : slot.manifest ? row(1, 'file', esc(slot.manifest.manNo), `${metrics(slot.manifest)} · ${tx('staged')}`)
+    : row(0, 'file', past ? tx('No manifest') : tx('No manifest yet'), past ? '' : tx('comes the night before'));
+  const c = live ? phaseCounts(live) : null, landed = live?.landedAt || hist?.landedAt;
+  const trk = ph === 'planned' ? row(0, 'truck', slot.eta ? tx('ETA {time}', { time: esc(slot.eta) }) : tx('No ETA'), live ? tx('planned · Start receiving on the dock') : past ? tx('never received') : tx('starts at Receiving when it lands'))
+    : ph === 'receiving' || (ph === 'decanting' && !live.receivingConfirmed) ? row(1, 'truck', tx('Receiving · {n} pallets', { n: c.pallets }), tx('landed {time} · layout not confirmed', { time: fmtHM(landed) }))
+    : row(2, 'truck', tx('Landed {time}', { time: fmtHM(landed) }), live?.receivedAt ? tx('{n} pallets · layout confirmed {time}', { n: c.pallets, time: fmtHM(live.receivedAt) }) : live ? txn(c.pallets, '{n} pallet', '{n} pallets') : txn(hist.palletsLanded + (hist.carriedOut?.pallets || 0), '{n} pallet', '{n} pallets'));
+  const crew = live?.team?.length ? live.team : slot.team || [];
+  const chips = crew.length ? `<div class="dk-team">${crew.map(m => `<span class="dk-tc${m.start && slot.eta && m.start > slot.eta ? ' late' : ''}" title="${esc(m.start ? tx('starts {time}', { time: m.start }) : tx('starts with the truck'))}${m.finish ? ' · ' + tx('finishes {time}', { time: esc(m.finish) }) : ''}"><span class="av">${esc(who(m))}</span>${m.start && m.start !== slot.eta ? `<small>${esc(m.start)}</small>` : ''}</span>`).join('')}</div>` : '';
+  const pr = live ? progress(live) : null;
+  const dec = ph === 'closed' ? row(2, 'users', hist ? tx('Cleared in {time}', { time: fmtMins(hist.clearMins || 0) }) : tx('Decant cleared'), hist ? tx('{cartons} ctn · {rate} ctn/h', { cartons: hist.cartons, rate: hist.teamRate || 0 }) : tx('in History'), chips)
+    : ph === 'cleared' ? row(2, 'users', tx('Every pallet done'), tx('close the truck at Receiving'), chips)
+    : ph === 'decanting' ? row(1, 'users', tx('Decanting · {pct}%', { pct: pr?.pct ?? 0 }), tx('{done} / {total} ctn', { done: pr?.done ?? 0, total: pr?.total ?? 0 }), chips)
+    : crew.length ? row(0, 'users', tx('{n} on decant', { n: crew.length }), ph === 'received' ? tx('Take 5, then start') : '', chips)
+    : row(0, 'users', tx('No team yet'), tx('pick devices'));
+  return `<div class="pslot${on ? ' on' : ''}${stl(t) ? ' ' + stl(t) : ''}" data-act="sel" data-slot="${id}"><div class="pslot-h"><b>${tx('Truck {no}', { no: n })}</b>${live || hist ? phaseChip(live || { status: 'closed' }) : `<span class="eta">${ic('clock')}${esc(slot.eta || '—')}</span>`}</div>${man}${trk}${dec}${slot.huddleMins || slot.breakMins ? `<div class="prow">${ic('clock')}<div><span>${slot.huddleMins ? tx('huddle {n}m booked', { n: slot.huddleMins }) : ''}${slot.huddleMins && slot.breakMins ? ' · ' : ''}${slot.breakMins ? tx('team break {n}m', { n: slot.breakMins }) : ''}</span></div></div>` : ''}${slot.note ? `<div class="prow note">${ic('edit')}<div><span>${esc(slot.note)}</span></div></div>` : ''}</div>`;
 }
 function editor(ctx, plan, dock) {
   if (!st.sel) return `<div class="card"><div class="ch"><h3>${tx('Pick a truck')}</h3></div><p class="lbl">${tx('Click a slot to set its ETA, manifest and decant team, or + Truck on a day to plan one.')}</p></div>`;
@@ -72,12 +91,21 @@ function manSelect(idx, plan, dock, cur, forTruck) {
 function usedManifests(plan) { const s = new Set(); for (const day of Object.values(plan.days || {})) for (const sl of Object.values(day.slots || {})) if (sl.manifest?.manNo) s.add(sl.manifest.manNo); return s; }
 function waiting(ctx, plan, dock) {
   const used = usedManifests(plan), list = manifestIndex(dock).filter(m => !m.truck && !used.has(m.manNo));
-  return `<div class="card"><div class="ch"><h3>${tx('Manifests without a slot')}</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${tx('{consols} consols · {cartons} cartons', { consols: m.consols, cartons: m.totalCartons })}${m.despatch ? ' · ' + tx('despatch {date}', { date: esc(m.despatch) }) : ''}</span><button class="btn sm" data-act="stage-next" data-day="0" data-man="${esc(m.manNo)}" title="${tx("Today's truck: the one on the dock if it has no manifest, else the next free slot")}">${tx('Today')}</button><button class="btn sm" data-act="stage-next" data-day="1" data-man="${esc(m.manNo)}" title="${tx('The next free truck tomorrow: for a report that came in the day before')}">${tx('Tomorrow')}</button></div>`).join('')}</div>` : `<p class="lbl">${tx('Every published manifest has a truck.')}</p>`}<p class="lbl">${tx('Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.')}</p></div>`;
+  return `<div class="card"><div class="ch"><h3>${tx('Manifests without a slot')}</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${tx('{consols} consols · {cartons} cartons', { consols: m.consols, cartons: m.totalCartons })}${m.despatch ? ' · ' + tx('despatch {date}', { date: esc(m.despatch) }) : ''}</span><button class="btn sm${st.pick?.man === m.manNo && st.pick.day === 0 ? ' primary' : ''}" data-act="stage-next" data-day="0" data-man="${esc(m.manNo)}" title="${tx("Choose today's truck for it")}">${tx('Today')}</button><button class="btn sm${st.pick?.man === m.manNo && st.pick.day === 1 ? ' primary' : ''}" data-act="stage-next" data-day="1" data-man="${esc(m.manNo)}" title="${tx("Choose tomorrow's truck for it: for a report that came in the day before")}">${tx('Tomorrow')}</button></div>${st.pick?.man === m.manNo ? truckChooser(plan, dock, st.pick) : ''}`).join('')}</div>` : `<p class="lbl">${tx('Every published manifest has a truck.')}</p>`}<p class="lbl">${tx('Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.')}</p></div>`;
 }
-// The next free truck slot from today (from = 0) or tomorrow (from = 1).
-function nextFree(plan, dock, from = 0) {
-  for (let off = from; off < 14; off++) { const d = new Date(); d.setDate(d.getDate() + off); const k = dkey(d); for (let n = 1; n <= 4; n++) if (!plan.days[k]?.slots?.[n] && !truckOf(dock, k, n)) return { date: k, n }; }
-  return null;
+// Today's or tomorrow's trucks for a waiting report: each says what it holds,
+// and the report goes on the one chosen (a truck on the dock without one
+// takes it now; a planned slot or a free number stages it).
+function truckChooser(plan, dock, pick) {
+  const d = new Date(); d.setDate(d.getDate() + pick.day); const date = dkey(d);
+  const opt = n => {
+    const t = dock.trucks[`${date}-T${n}`], h = (dock.history || []).find(x => x.id === `${date}-T${n}`), sl = plan.days[date]?.slots?.[n];
+    if (h || t?.status === 'closed') return `<button class="chip" disabled>${tx('Truck {no}', { no: n })} · ${tx('done')}</button>`;
+    if (t) return t.manifest || t.plannedManifest ? `<button class="chip" disabled>${tx('Truck {no}', { no: n })} · ${esc(t.manifest?.manNo || t.plannedManifest)}</button>` : `<button class="chip" data-act="stage-to" data-date="${date}" data-n="${n}">${tx('Truck {no}', { no: n })} · ${tx('on the dock now')}</button>`;
+    if (sl?.manifest) return `<button class="chip" disabled>${tx('Truck {no}', { no: n })} · ${esc(sl.manifest.manNo)}</button>`;
+    return `<button class="chip" data-act="stage-to" data-date="${date}" data-n="${n}">${tx('Truck {no}', { no: n })} · ${sl ? (sl.eta ? tx('planned {time}', { time: esc(sl.eta) }) : tx('planned')) : tx('new')}</button>`;
+  };
+  return `<div class="pchoose"><span class="cs-dim">${tx('{man} goes on which truck {day}?', { man: esc(pick.man), day: pick.day ? tx('tomorrow') : tx('today') })}</span><span class="chips">${[1, 2, 3, 4].map(opt).join('')}</span></div>`;
 }
 export default {
   id: 'planner', title: tx('Planner'), icon: 'm-planner', area: 'backdock',
@@ -105,15 +133,17 @@ export default {
         else if (act === 'remove') { const { date, n } = cur(); if (!confirm(tx('Remove Truck {no} from {date}?', { no: n, date: fmtDate(date) }))) return; await ctx.store.dispatch({ type: 'plan.remove', entity: { date, slot: n } }); st.sel = null; }
         else if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const { date, n, slot } = cur(); const pid = dnumId(v); if (!pid) return toast(tx('Enter a D-number, like D4. Names are not kept.'), 'bad'); if ((slot.team || []).some(x => x.pid === pid)) return; await set(date, n, { team: [...(slot.team || []), { pid }] }); }
         else if (act === 'team-drop') { const { date, n, slot } = cur(); await set(date, n, { team: (slot.team || []).filter(x => x.pid !== a.dataset.pid) }); }
+        else if (act === 'stage-to') {
+          const { man } = st.pick || {}, date = a.dataset.date, n = Number(a.dataset.n), t = ctx.store.get('dock').trucks[`${date}-T${n}`]; if (!man) return;
+          a.disabled = true; st.pick = null; st.sel = `${date}-${n}`;
+          if (t) { await attachManifest(ctx, `${date}-T${n}`, man); return toast(tx('{man} attached to Truck {no}, on the dock now', { man, no: n })); }
+          const doc = await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(man)}`);
+          await set(date, n, { manifest: slotRef(doc) }); toast(tx('{man} staged to Truck {no} on {date}', { man, no: n, date: fmtDate(date) }));
+        }
         else if (act === 'stage' || act === 'stage-next') {
           let date, n, manNo;
           if (act === 'stage') { ({ date, n } = cur()); manNo = field('man'); if (!manNo) return toast(tx('Choose a manifest first'), 'bad'); }
-          else {
-            // Today, with a truck on the dock that has no manifest yet: it goes on that truck.
-            const dock = ctx.store.get('dock'), t0 = !Number(a.dataset.day) && Object.entries(dock.trucks).find(([id, x]) => id.startsWith(storeToday()) && x.status !== 'closed' && !x.manifest && !x.plannedManifest);
-            if (t0) { a.disabled = true; await attachManifest(ctx, t0[0], a.dataset.man); st.sel = `${t0[0].slice(0, 10)}-${truckNo(t0[0])}`; return toast(tx('{man} attached to Truck {no}, on the dock now', { man: a.dataset.man, no: truckNo(t0[0]) })); }
-            const nf = nextFree(ctx.store.get('plan'), dock, Number(a.dataset.day) || 0); if (!nf) return toast(tx('No free slot in the next two weeks'), 'bad'); date = nf.date; n = nf.n; manNo = a.dataset.man; st.sel = `${date}-${n}`;
-          }
+          else { st.pick = st.pick?.man === a.dataset.man && st.pick.day === Number(a.dataset.day) ? null : { man: a.dataset.man, day: Number(a.dataset.day) }; return ctx.rerender(); }
           a.disabled = true;
           const doc = await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(manNo)}`);
           await set(date, n, { manifest: slotRef(doc) });
@@ -158,11 +188,12 @@ function noTruckCard(plan, dock, days, today) {
   return `<div class="card pnt-card"><div class="ch"><h3>${tx('Days without trucks')}</h3></div><p class="lbl">${tx('Confirm a day ahead or on the day: it expects no truck and no manifest, and the Dashboard’s morning checklist marks it done. Planning a truck on it clears the mark.')}</p><div class="rows">${ahead.map(row).join('')}</div></div>`;
 }
 function summary(plan, dock, days) {
-  const keys = days.map(dkey), slots = keys.flatMap(k => Object.values(plan.days[k]?.slots || {})), live = Object.entries(dock.trucks).filter(([id]) => keys.includes(id.slice(0, 10)));
-  const cleared = (dock.history || []).filter(h => keys.includes(h.id.slice(0, 10))), avg = cleared.length ? cleared.reduce((n, h) => n + (h.clearMins || 0), 0) / cleared.length : 0;
-  const manCtn = slots.reduce((n, sl) => n + cartonsOf(sl.manifest), 0) + live.reduce((n, [, t]) => n + cartonsOf(t.manifest), 0);
+  // Each truck once: a finalised truck is both on the dock record and in History.
+  const keys = days.map(dkey), slots = keys.flatMap(k => Object.values(plan.days[k]?.slots || {})), trucks = Object.entries(dock.trucks).filter(([id]) => keys.includes(id.slice(0, 10)));
+  const cleared = (dock.history || []).filter(h => keys.includes(h.id.slice(0, 10))), ids = new Set([...trucks.map(([id]) => id), ...cleared.map(h => h.id)]), avg = cleared.length ? cleared.reduce((n, h) => n + (h.clearMins || 0), 0) / cleared.length : 0;
+  const manCtn = slots.reduce((n, sl) => n + cartonsOf(sl.manifest), 0) + trucks.reduce((n, [, t]) => n + cartonsOf(t.manifest), 0);
   const row = (k, v) => `<div class="row">${k}<b>${v}</b></div>`;
-  return `<div class="card kpi"><div class="ch"><h3>${tx('This week')}</h3></div><div class="rows">${row(tx('Trucks planned'), slots.length + live.length + cleared.length)}${row(tx('Cartons manifested'), manCtn.toLocaleString())}${row(tx('Trucks cleared'), cleared.length)}${row(tx('Average clear'), cleared.length ? fmtMins(avg) : '—')}${row(tx('Cartons decanted'), cleared.reduce((n, h) => n + (h.cartons || 0), 0).toLocaleString())}</div></div>`;
+  return `<div class="card kpi"><div class="ch"><h3>${tx('This week')}</h3></div><div class="rows">${row(tx('Trucks planned'), slots.length + ids.size)}${row(tx('Cartons manifested'), manCtn.toLocaleString())}${row(tx('Trucks cleared'), cleared.length)}${row(tx('Average clear'), cleared.length ? fmtMins(avg) : '—')}${row(tx('Cartons decanted'), cleared.reduce((n, h) => n + (h.cartons || 0), 0).toLocaleString())}</div></div>`;
 }
 // The week's decant roster: new trucks start with these D-numbers when
 // their slot names no team.

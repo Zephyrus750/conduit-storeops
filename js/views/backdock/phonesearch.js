@@ -41,8 +41,13 @@ function consolCard(t, c, at) {
 // A label not on this truck: the other manifests the dock holds, then the ledger.
 function elsewhere(dock, t, raw) {
   for (const [id, x] of Object.entries(dock.trucks || {})) if (id !== t.id && x.manifest) { const c = findConsol(x.manifest.consols, raw); if (c) return tx("On Truck {n}'s manifest {no} ({date}), {c} ctn. Landing it here records a late arrival.", { n: esc(truckNo(id)), no: esc(x.manifest.manNo), date: esc(id.slice(0, 10)), c: c.cartons }); }
-  const seen = (dock.ledger?.[id9(raw)] || []).filter(x => x.t !== t.id).sort((a, b) => b.d.localeCompare(a.d))[0];
-  if (seen) return seen.k === 'man' ? tx('Manifested on Truck {n} ({date}). A late arrival.', { n: esc(truckNo(seen.t)), date: esc(seen.d) }) : tx('Scanned on Truck {n} ({date}). A duplicate or a reused tub?', { n: esc(truckNo(seen.t)), date: esc(seen.d) });
+  // The ledger: manifested on an earlier truck (late), staged on a planned
+  // truck's manifest (it may belong there), else scanned before (a duplicate?).
+  const L = (dock.ledger?.[id9(raw)] || []).filter(x => x.t !== t.id).sort((a, b) => b.d.localeCompare(a.d)), of = x => ({ n: esc(truckNo(x.t)), date: esc(x.d) });
+  const man = L.find(x => x.k === 'man'), plan = L.find(x => x.k === 'plan'), seen = L.find(x => x.k === 'land' || x.k === 'off');
+  if (man) return tx('Manifested on Truck {n} ({date}). A late arrival.', of(man));
+  if (plan) return tx('On the manifest planned for Truck {n} ({date}). It may belong to that truck.', of(plan));
+  if (seen) return tx('Scanned on Truck {n} ({date}). A duplicate or a reused tub?', of(seen));
   return tx('Not on any manifest the dock holds. An old label from a reused tub, or a report not published yet.');
 }
 
@@ -76,7 +81,7 @@ export function infoSheet(t) {
   if (!m) return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest')}</b><button class="ibtn" data-act="ps-info" title="${tx('Close')}">${ic('x')}</button></div><div class="mv-note">${ic('packages')}${tx('No manifest on this truck yet.')}</div></div>`;
   const total = cons.reduce((n, c) => n + c.cartons, 0), landed = cons.filter(c => at[c.id]), done = landed.filter(c => at[c.id].status === 'done');
   const sum = xs => xs.reduce((n, c) => n + c.cartons, 0);
-  return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest {no}', { no: esc(m.manNo) })}</b><button class="ibtn" data-act="ps-info" title="${tx('Close')}">${ic('x')}</button></div><p class="lbl">${m.dcNo ? tx('DC {no}', { no: esc(m.dcNo) }) + ' · ' : ''}${m.despatch ? tx('despatch {d}', { d: esc(m.despatch) }) + ' · ' : ''}${tx('{n} consols · {c} cartons', { n: cons.length, c: total })}</p>` +
+  return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest {no}', { no: esc(m.manNo) })}</b><button class="btn sm" data-act="manpick" style="margin-left:auto">${ic('file')}${tx('Change')}</button><button class="ibtn" data-act="ps-info" title="${tx('Close')}" style="margin-left:0">${ic('x')}</button></div><p class="lbl">${m.dcNo ? tx('DC {no}', { no: esc(m.dcNo) }) + ' · ' : ''}${m.despatch ? tx('despatch {d}', { d: esc(m.despatch) }) + ' · ' : ''}${tx('{n} consols · {c} cartons', { n: cons.length, c: total })}</p>` +
     `<div class="ps-donuts">${donut(landed.length, cons.length, '#3B82F6', tx('consols landed'))}${donut(sum(landed), total, '#F59E0B', tx('cartons landed'))}${donut(sum(done), total, '#16A34A', tx('cartons decanted'))}</div></div>`;
 }
 
@@ -99,7 +104,9 @@ export function verifyContents(ctx, root) {
 }
 
 // Handles the sheet's taps; true when it did.
-export async function onSearchAct(ctx, t, a, root) {
+// hooks.land(ref, code): Land at opens Receiving's land sheet with the label
+// on it, so the type is chosen and more labels can stack before it lands.
+export async function onSearchAct(ctx, t, a, root, hooks = {}) {
   const act = a.dataset.act; if (!act?.startsWith('ps-')) return false;
   const cons = consolsOf(t);
   if (act === 'ps-open') { if (a.dataset.id) { ss.tab = 'scan'; ss.hit = a.dataset.id; } else { ss.open = !ss.open; ss.info = false; } }
@@ -110,10 +117,11 @@ export async function onSearchAct(ctx, t, a, root) {
   else if (act === 'ps-land' || act === 'ps-stack') {
     const c = cons.find(x => x.id === a.dataset.id); if (!c) return true;
     const ref = act === 'ps-land' ? a.dataset.ref : root.querySelector('[data-field="ps-onto"]')?.value; if (!ref) return true;
+    if (act === 'ps-land' && hooks.land) { hooks.land(ref, c.cons || c.id); return true; }
     try {
-      if (act === 'ps-land') await ctx.store.dispatch({ type: 'pallet.land', entity: { truck: t.id, bay: ref }, payload: { ptype: 'chep', cartons: null, note: '' } });   // the scan adds the consol's cartons
+      if (act === 'ps-land') return true;
       await ctx.store.dispatch({ type: 'pallet.scan', entity: { truck: t.id, bay: ref }, payload: { code: c.cons || c.id } });
-      toast(act === 'ps-land' ? tx('{id} landed at {ref}', { id: c.id, ref }) : tx('{id} stacked on {ref}', { id: c.id, ref }));
+      toast(tx('{id} stacked on {ref}', { id: c.id, ref }));
     } catch (e) { toast(e.message, 'bad'); }
   }
   ctx.rerender();

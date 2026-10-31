@@ -12,7 +12,11 @@ import { pallets, truckNo } from './common.js';
 import { segWorkedMs } from '../../../shared/reducers/backdock.js';
 
 const st = { truck: null, picks: {} };
-export const unlinked = t => pallets(t).filter(p => !p.carriedFrom && !p.consolIds.length);
+// Pallets that can still be linked: in the session, not carried in, with no
+// consol matched and no label off the manifest (an off-manifest label is
+// flagged in the audit, never linked).
+const onManifest = (t, id) => { const k = String(id).slice(-9); return (t.manifest?.consols || []).some(c => c.id === k || String(c.cons || '').endsWith(k)); };
+export const unlinked = t => pallets(t).filter(p => !p.carriedFrom && !p.excluded && !p.consolIds.length && !(p.held || []).length && (!(p.scanIds || []).length || p.scanIds.some(id => onManifest(t, id))));
 
 function plan(t, rates) {
   const taken = new Set(pallets(t).flatMap(p => p.consolIds));

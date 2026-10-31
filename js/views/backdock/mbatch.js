@@ -32,7 +32,7 @@ function suggest(ctx, rows) {
     const p = r.manNo && places.get(r.manNo);
     if (p && p.via !== 'label') { r.fixed = p; continue; }
     if (p) { r.day = p.day; r.truck = p.truck; r.via = 'label'; }
-    else { const g = suggestPlace(s, r, taken, { places, gap }); if (g) { r.day = g.day; r.truck = g.truck; r.via = g.via; } }
+    else { const g = suggestPlace(s, r, taken, { places, gap, today: today() }); if (g) { r.day = g.day; r.truck = g.truck; r.via = g.via; } }
     if (r.day && r.truck) taken.add(`${r.day}-T${r.truck}`);
   }
   return gap;

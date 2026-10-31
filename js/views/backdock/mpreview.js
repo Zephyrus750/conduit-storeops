@@ -38,7 +38,7 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
       if (!dating || attachTo || came?.touched) return;
       const s = { dock: ctx.store.get('dock'), plan: ctx.store.get('plan') || { days: {} } }, p = /^[\w-]{1,20}$/.test(manNo) ? placeIndex(s).get(manNo) : null;
       if (p && p.via !== 'label') { came = { fixed: p }; return; }
-      const g = p || suggestPlace(s, { despatch: parsed.despatch });
+      const g = p || suggestPlace(s, { despatch: parsed.despatch }, undefined, { today: today() });
       came = g && (p || g.day < today()) ? { day: g.day, truck: g.truck, via: p ? 'label' : g.via, gap: usualGap(s) } : { day: '', truck: null, via: '' };
     };
     const cameHtml = () => {
