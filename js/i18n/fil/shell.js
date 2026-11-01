@@ -373,4 +373,5 @@ export default {
   "Products off sale: what to pull": "Mga produktong bawal ibenta: ano ang aalisin",
   "Recalls and withdrawals": "Mga recall at withdrawal",
   "This device was signed out. Sign in again.": "Na-sign out ang device na ito. Mag-sign in ulit.",
+  "Zones": "Mga zone",
 };

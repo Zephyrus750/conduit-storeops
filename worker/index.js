@@ -289,6 +289,12 @@ r.post('/v1/admin/stores/:no/flip', async (req, env, _c, p) => {
 // managers (or the owner acting as the store) list and open the ones
 // listed for it.
 const files = env => { if (!env.PHOTOS) throw new HttpError(501, 'not_implemented', 'resource files need the PHOTOS R2 bucket bound to the worker'); return env.PHOTOS; };
+// Zones: the owner's list a store's region is picked from; a rename moves
+// its stores, a zone with stores cannot be removed.
+r.get('/v1/admin/zones', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/zones')); });
+r.post('/v1/admin/zones', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'POST', '/zones', await readJson(req)), 201); });
+r.patch('/v1/admin/zones/:name', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'PATCH', `/zones/${encodeURIComponent(p.name)}`, await readJson(req))); });
+r.delete('/v1/admin/zones/:name', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'DELETE', `/zones/${encodeURIComponent(p.name)}`)); });
 r.get('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/resources')); });
 r.post('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; return json(await registry(env, 'POST', '/resources', b), 201); });
 r.patch('/v1/admin/resources/:id', async (req, env, _c, p) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; return json((await registry(env, 'PATCH', `/resources/${p.id}`, b)).entry); });

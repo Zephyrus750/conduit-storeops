@@ -373,4 +373,5 @@ export default {
   "Products off sale: what to pull": "Gesperrte Artikel: was entfernt werden muss",
   "Recalls and withdrawals": "Rückrufe und Rücknahmen",
   "This device was signed out. Sign in again.": "Dieses Gerät wurde abgemeldet. Bitte erneut anmelden.",
+  "Zones": "Zonen",
 };

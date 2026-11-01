@@ -23,8 +23,13 @@
 //   POST /resources    { title, category?, note?, link?, stores? }  → the new entry
 //   PATCH /resources/:id { title?, category?, note?, link?, stores?, file? } → { entry, oldKey } (file: set by the worker after the upload)
 //   DELETE /resources/:id                                  → { key } (the worker deletes the file)
+//   GET  /zones                                            → { zones: [{ name, stores: [no…] }] } (owner)
+//   POST /zones        { name }                            → the list, with the new zone
+//   PATCH /zones/:name { name }                            → the list; its stores move to the new name
+//   DELETE /zones/:name                                    → the list (409 zone_in_use while a store has it)
 //
 // Store status: 'registered' (no areas live), 'migrating', 'live', 'legacy', 'suspended'.
+// A store's region is its zone, picked from the owner's list (zones table).
 
 import { DurableObject } from 'cloudflare:workers';
 import { hashSecret, verifySecret, randomToken, sha256, pinOk, cleanText, b64u, unb64u } from './auth.js';
@@ -34,6 +39,9 @@ import { cleanEntry, visibleTo, ready } from '../shared/resources.js';
 import { ulid } from '../shared/ulid.js';
 
 const ALL_AREAS = ['floor', 'stockroom', 'backdock'];
+// The zones the list starts with (the Map Editor's, as ShelfSearcher had
+// them); the owner adds, renames and removes zones from the console.
+const ZONE_SEED = ['WA South', 'WA East', 'WA Central', 'WA North'];
 // 'suspended' refuses sign-in, unlock and refresh, and signs every device out.
 const STATUSES = ['registered', 'migrating', 'live', 'legacy', 'suspended'];
 const CODE_ROLES = { stockroom: 'stockroom', dock: 'dock', manager: 'manager' };
@@ -76,6 +84,15 @@ export class RegistryObject extends DurableObject {
     // sealed copies of the PIN and codes the owner can read back (seal()).
     for (const ddl of ['ALTER TABLE lockout ADD COLUMN since INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE stores ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE refresh ADD COLUMN fp TEXT', 'ALTER TABLE refresh ADD COLUMN elevated INTEGER', 'ALTER TABLE refresh ADD COLUMN epoch INTEGER', "ALTER TABLE stores ADD COLUMN tools TEXT NOT NULL DEFAULT '{}'", 'ALTER TABLE stores ADD COLUMN sealed TEXT']) {
       try { this.sql.exec(ddl); } catch { /* already there */ }
+    }
+    // The zones a store can be in. Seeded once (the list may later be
+    // emptied on purpose): the four WA zones and any region a store
+    // already had, so no registered store is left outside the list.
+    this.sql.exec('CREATE TABLE IF NOT EXISTS zones (name TEXT PRIMARY KEY COLLATE NOCASE, created TEXT NOT NULL); CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)');
+    if (!this.sql.exec("SELECT v FROM meta WHERE k = 'zones_seeded'").toArray().length) {
+      const now = new Date().toISOString(), used = this.sql.exec('SELECT DISTINCT region FROM stores WHERE region IS NOT NULL').toArray().map(r => r.region);
+      for (const z of [...ZONE_SEED, ...used]) this.sql.exec('INSERT OR IGNORE INTO zones (name, created) VALUES (?, ?)', z, now);
+      this.sql.exec("INSERT INTO meta (k, v) VALUES ('zones_seeded', ?)", now);
     }
   }
 
@@ -122,6 +139,10 @@ export class RegistryObject extends DurableObject {
       case 'POST /resources': return this.addResource(body);
       case 'PATCH /resources/*': return this.editResource(p[1], body);
       case 'DELETE /resources/*': return this.removeResource(p[1]);
+      case 'GET /zones': return this.zones();
+      case 'POST /zones': return this.addZone(body);
+      case 'PATCH /zones/*': return this.renameZone(decodeURIComponent(p[1]), body);
+      case 'DELETE /zones/*': return this.removeZone(decodeURIComponent(p[1]));
       default: throw new HttpError(404, 'not_found', `registry has no ${key}`);
     }
   }
@@ -287,7 +308,7 @@ export class RegistryObject extends DurableObject {
   }
   async register(b) {
     if (!/^\d{3,5}$/.test(String(b.no || ''))) throw new HttpError(400, 'invalid_request', 'no must be the store number');
-    b = { ...b, name: cleanText(b.name, 80), region: b.region ? cleanText(b.region, 80) : null, format: b.format ? cleanText(b.format, 40) : null };
+    b = { ...b, name: cleanText(b.name, 80), region: this.checkZone(b.region), format: b.format ? cleanText(b.format, 40) : null };
     if (!b.name) throw new HttpError(400, 'invalid_request', 'name is required');
     if (!pinOk(b.pin, this.env.PIN_MIN_DIGITS)) throw new HttpError(400, 'invalid_request', `pin must be ${this.env.PIN_MIN_DIGITS || 6} to 8 digits`);
     if (this.get(b.no)) throw new HttpError(409, 'exists', `store ${b.no} is already registered`);
@@ -307,7 +328,7 @@ export class RegistryObject extends DurableObject {
     if (!row) throw new HttpError(404, 'not_registered', `store ${no} is not registered`);
     const sets = [], vals = [];
     if (b.name) { const name = cleanText(b.name, 80); if (!name) throw new HttpError(400, 'invalid_request', 'name is required'); sets.push('name = ?'); vals.push(name); }
-    if (b.region !== undefined) { sets.push('region = ?'); vals.push(b.region ? cleanText(b.region, 80) : null); }
+    if (b.region !== undefined) { const z = this.checkZone(b.region, row.region); if ((z || null) !== (row.region || null)) this.log('store.zone', no, { from: row.region || null, to: z }); sets.push('region = ?'); vals.push(z); }
     if (b.pin && !pinOk(b.pin, this.env.PIN_MIN_DIGITS)) throw new HttpError(400, 'invalid_request', `pin must be ${this.env.PIN_MIN_DIGITS || 6} to 8 digits`);
     if (b.status) {
       if (!STATUSES.includes(b.status)) throw new HttpError(400, 'invalid_request', 'bad status');
@@ -408,6 +429,55 @@ export class RegistryObject extends DurableObject {
       entitlements: JSON.parse(row.entitlements), toolsOff: Object.keys(JSON.parse(row.tools || '{}')), areas: JSON.parse(row.areas), codes: Object.keys(JSON.parse(row.codes)),
       mapVersion: row.map_version, epoch: row.epoch || 0, created: row.created, updated: row.updated };
   }
+  // ── zones ────────────────────────────────────────────────────────────
+  // The owner's list of zones; a store's region is one of them. Names
+  // compare without case (the table's NOCASE key), each zone lists its
+  // stores, and every change is an owner action.
+  zones() {
+    const stores = this.sql.exec('SELECT no, region FROM stores WHERE region IS NOT NULL').toArray(), low = v => String(v).toLowerCase();
+    const names = this.sql.exec('SELECT name FROM zones').toArray().map(r => r.name).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    return { zones: names.map(name => ({ name, stores: stores.filter(s => low(s.region) === low(name)).map(s => s.no).sort() })) };
+  }
+  zoneNamed(name) { return this.sql.exec('SELECT name FROM zones WHERE name = ?', String(name)).toArray()[0]?.name || null; }
+  // A store's region must be a zone on the list (stored as the list spells
+  // it); an edit may leave a store's current region as it is (keep).
+  checkZone(region, keep) {
+    const r = cleanText(region, 40); if (!r) return null;
+    if (keep && r.toLowerCase() === String(keep).toLowerCase()) return keep;
+    const z = this.zoneNamed(r); if (!z) throw new HttpError(400, 'unknown_zone', `${r} is not a zone on the list: add it under Zones first`);
+    return z;
+  }
+  addZone(b) {
+    const name = cleanText(b.name, 40); if (!name) throw new HttpError(400, 'invalid_request', 'name is required');
+    const have = this.zoneNamed(name); if (have) throw new HttpError(409, 'exists', `${have} is already a zone`);
+    if ((this.sql.exec('SELECT COUNT(*) AS n FROM zones').toArray()[0]?.n || 0) >= 200) throw new HttpError(400, 'invalid_request', 'at most 200 zones');
+    this.sql.exec('INSERT INTO zones (name, created) VALUES (?, ?)', name, new Date().toISOString());
+    this.log('zone.add', null, { name });
+    return this.zones();
+  }
+  // A rename carries the zone's stores with it.
+  renameZone(from, b) {
+    const old = this.zoneNamed(from); if (!old) throw new HttpError(404, 'not_found', `${from} is not a zone`);
+    const name = cleanText(b.name, 40); if (!name) throw new HttpError(400, 'invalid_request', 'name is required');
+    const clash = this.zoneNamed(name); if (clash && clash.toLowerCase() !== old.toLowerCase()) throw new HttpError(409, 'exists', `${clash} is already a zone`);
+    if (name === old) return this.zones();
+    const moved = this.sql.exec('SELECT no FROM stores WHERE region = ? COLLATE NOCASE', old).toArray().map(r => r.no);
+    this.sql.exec('UPDATE zones SET name = ? WHERE name = ?', name, old);
+    this.sql.exec('UPDATE stores SET region = ?, updated = ? WHERE region = ? COLLATE NOCASE', name, new Date().toISOString(), old);
+    this.log('zone.rename', null, { from: old, to: name, stores: moved });
+    return this.zones();
+  }
+  // Refused while a store is in it: nothing is left pointing at a zone
+  // that is gone.
+  removeZone(name) {
+    const z = this.zoneNamed(name); if (!z) throw new HttpError(404, 'not_found', `${name} is not a zone`);
+    const using = this.sql.exec('SELECT no FROM stores WHERE region = ? COLLATE NOCASE', z).toArray().map(r => r.no).sort();
+    if (using.length) throw new HttpError(409, 'zone_in_use', `${z} still has ${using.length} store${using.length === 1 ? '' : 's'} (${using.join(', ')}): move them to another zone first`, { stores: using });
+    this.sql.exec('DELETE FROM zones WHERE name = ?', z);
+    this.log('zone.remove', null, { name: z });
+    return this.zones();
+  }
+
   // ── resources ────────────────────────────────────────────────────────
   // The owner's library for every store (shared/resources.js). An entry
   // lists every store or some; a store's managers see the ones listed for

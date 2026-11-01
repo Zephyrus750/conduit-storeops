@@ -373,4 +373,5 @@ export default {
   "Products off sale: what to pull": "Hàng ngừng bán: cần gỡ những gì",
   "Recalls and withdrawals": "Thu hồi và ngừng bán",
   "This device was signed out. Sign in again.": "Thiết bị này đã bị đăng xuất. Hãy đăng nhập lại.",
+  "Zones": "Vùng",
 };

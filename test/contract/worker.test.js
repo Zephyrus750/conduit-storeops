@@ -1214,3 +1214,33 @@ test('recalls: only a manager adds and closes one; any device records stock foun
   const seen = (await api('GET', '/v1/store/1241/snapshot', undefined, floor)).body.state.recalls;
   assert.deepEqual([seen.bay, seen.items[R].status, seen.items[R].units, seen.items[R].found[0].by], ['Returns cage', 'removing', 2, 'rc-floor'], 'the floor phone holds the list and its count');
 });
+
+test('zones: the owner keeps the list; a store’s zone comes from it, a rename moves its stores, a zone in use stays', async () => {
+  const zones = async () => (await api('GET', '/v1/admin/zones', undefined, ownerToken)).body.zones;
+  const at = name => '/v1/admin/zones/' + encodeURIComponent(name);
+  const first = await zones();
+  for (const z of ['WA South', 'WA East', 'WA Central', 'WA North']) assert.ok(first.some(x => x.name === z), `${z} is on the list from the start`);
+  assert.ok(first.find(z => z.name === 'WA South').stores.includes('1241'), 'Busselton is in WA South');
+  assert.ok((await api('GET', '/v1/admin/zones')).status >= 400, 'only the owner reads the list');
+  const add = await api('POST', '/v1/admin/zones', { name: '  WA   Coastal ' }, ownerToken);
+  assert.equal(add.status, 201); assert.ok(add.body.zones.some(z => z.name === 'WA Coastal'), 'spaces tidied');
+  assert.equal((await api('POST', '/v1/admin/zones', { name: 'wa coastal' }, ownerToken)).status, 409, 'names compare without case');
+  assert.equal((await api('POST', '/v1/admin/zones', { name: ' ' }, ownerToken)).status, 400);
+  const bad = await reg2('2141', { region: 'Nowhere' });
+  assert.equal(bad.status, 400); assert.equal(bad.body.code, 'unknown_zone', 'a new store’s zone must be on the list');
+  assert.equal((await reg2('2141', { region: 'wa coastal' })).status, 201);
+  assert.equal((await api('GET', '/v1/admin/stores/2141', undefined, ownerToken)).body.region, 'WA Coastal', 'kept as the list spells it');
+  const ren = await api('PATCH', at('WA Coastal'), { name: 'WA Coast' }, ownerToken);
+  assert.equal(ren.status, 200); assert.deepEqual(ren.body.zones.find(z => z.name === 'WA Coast').stores, ['2141']);
+  assert.equal((await api('GET', '/v1/admin/stores/2141', undefined, ownerToken)).body.region, 'WA Coast', 'the store moved with the rename');
+  assert.equal((await api('PATCH', at('WA Coast'), { name: 'WA East' }, ownerToken)).status, 409, 'not renamed onto another zone');
+  const busy = await api('DELETE', at('WA Coast'), undefined, ownerToken);
+  assert.equal(busy.status, 409); assert.equal(busy.body.code, 'zone_in_use', 'a zone with a store stays');
+  assert.equal((await api('PATCH', '/v1/admin/stores/2141', { region: 'Atlantis' }, ownerToken)).body.code, 'unknown_zone', 'a store moves only to a zone on the list');
+  assert.equal((await api('PATCH', '/v1/admin/stores/2141', { region: 'WA East' }, ownerToken)).status, 200);
+  const gone = await api('DELETE', at('WA Coast'), undefined, ownerToken);
+  assert.equal(gone.status, 200); assert.ok(!gone.body.zones.some(z => z.name === 'WA Coast'));
+  assert.equal((await api('DELETE', at('WA Coast'), undefined, ownerToken)).status, 404);
+  const log = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions.map(a => a.type);
+  for (const t of ['zone.add', 'zone.rename', 'zone.remove', 'store.zone']) assert.ok(log.includes(t), `${t} is an owner action`);
+});

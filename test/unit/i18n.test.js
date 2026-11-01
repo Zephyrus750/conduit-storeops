@@ -24,7 +24,7 @@ export const AREAS = {
   stock2: ['js/views/stockroom/adjust.js', 'js/views/stockroom/cages.js', 'js/views/stockroom/intel.js', 'js/views/stockroom/srhistory.js', 'js/views/stockroom/srtrends.js', 'js/views/stockroom/depts.js'],
   dock1: ['js/views/backdock/receiving.js', 'js/views/backdock/phase.js', 'js/views/backdock/plan.js', 'js/views/backdock/late.js', 'js/views/backdock/mpreview.js', 'js/views/backdock/phonesearch.js', 'js/views/backdock/common.js', 'js/views/backdock/bdhome.js', 'js/views/backdock/audit.js'],
   dock2: ['js/views/backdock/wallboard.js', 'js/views/backdock/screens.js', 'js/views/backdock/rhistory.js', 'js/views/backdock/danalytics.js', 'js/views/backdock/manifests.js', 'js/views/backdock/profiles.js', 'js/views/backdock/planner.js', 'js/views/backdock/offsite.js', 'js/views/backdock/loads.js', 'js/views/backdock/screenlist.js', 'js/views/backdock/mbatch.js', 'js/views/backdock/mstats.js'],
-  admin: ['js/views/admin.js', 'js/views/adminresources.js'],
+  admin: ['js/views/admin.js', 'js/views/adminresources.js', 'js/views/adminzones.js'],
 };
 
 // A JS string literal's text: '…' or "…" with \' \" \\ \n escapes.
