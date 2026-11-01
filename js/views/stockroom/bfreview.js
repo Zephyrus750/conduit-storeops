@@ -21,8 +21,9 @@ import { barcodeSvg } from '../../../shared/barcode.js';
 import { printSheet, code as pcode, tick, table, section, signoff } from '../../print.js';
 import { addDays } from '../../../shared/time.js';
 import { openScreenScan } from '../../screenscan.js';
+import { openLiveReader, warmReader, heldRows, resolveHeld } from '../../livescan.js';
 import { CLAIM_TTL_MS } from '../../../shared/reducers/stockroom.js';
-import { STATUS, todayKey, ensureNames, nameHtml, nameOf, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge } from './common.js';
+import { STATUS, todayKey, ensureNames, nameHtml, nameOf, catalogueVerdict, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge } from './common.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { openPasteBox } from '../pastebox.js';
 import { tx, txn } from '../../i18n.js';
@@ -30,7 +31,7 @@ import { tx, txn } from '../../i18n.js';
 // Desk state. report: the pasted SIM report { at, byLoc, range, delta, bayAt }
 // (delta: what changed per bay since the previous paste; bayAt: when one
 // bay's list was pasted on its own). focus: the one-code-at-a-time view.
-const st = { sel: null, sort: 'pct', view: 'list', bayPaste: false, reqPaste: false, help: false, report: null, reportFor: null, focusIdx: 0, focusCol: 'all', processed: new Map(), mStep: 1, mBay: '', mLast: null, claimed: null };
+const st = { sel: null, sort: 'pct', view: 'list', bayPaste: false, reqPaste: false, help: false, report: null, reportFor: null, focusIdx: 0, focusCol: 'all', processed: new Map(), mStep: 1, mBay: '', mLast: null, claimed: null, held: {} };
 const SORTS = { pct: tx('Match, best first'), loc: tx('By location'), when: tx('Most recent') };
 const reportKey = ctx => `simreport:${ctx.storeNo}:${todayKey()}`;
 
@@ -60,7 +61,7 @@ export default {
     // is not stale, so it opens straight to compare.
     const tags = s => (reqd.has(s.bay) ? `<span class="rq-tag req" title="${tx('On today’s requested list')}">${tx('REQ')}</span>` : m.sys?.[s.bay] ? `<span class="rq-tag pre" title="${tx('In the paste but not on today’s plan: banked ahead')}">${tx('PRE')}</span>` : '') + (s.status === 'pending' && m.sys?.[s.bay] && band !== 'r' ? `<span class="rq-cmp" title="${tx('Report loaded for this bay: opens straight to compare')}">${ic('sort')}</span>` : '') +
       (s.status === 'pending' && s.lateScans ? `<span class="rq-tag late" title="${txn(s.lateScans, 'Back in review: {n} scan landed after it was readied', 'Back in review: {n} scans landed after it was readied')}">${tx('LATE')}</span>` : '') +
-      (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) ? `<span class="rq-tag scan" title="${tx('The phone has not sent this bay to review yet')}">${tx('SCANNING')}</span>` : '');
+      (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) ? `<span class="rq-tag scan" title="${tx('The phone has not submitted this bay for review yet')}">${tx('SCANNING')}</span>` : '');
     const ranges = settingsOf(ctx.store.get()).deptRanges || [];
     const slc = (s, c, extra = '') => `<button class="slc${st.sel === key(s) ? ' sel' : ''}${extra}" data-act="sel" data-sel="${esc(key(s))}"><div class="sl"><div class="tp"><span class="loc">${esc(s.bay)}</span>${deptBadge(deptForBay(ranges, s.bay), { short: true })}${tags(s)}${heldElsewhere(ctx, m, s.bay) ? `<span class="lock" title="${tx('Being reviewed on another device')}">${ic('lock')}</span>` : ''}</div><div class="meta">${tx('{count} scanned', { count: `<b title="${tx('scanned / expected')}">${c.scannedCount}/${c.expected}</b>` })} · ${s.updatedAt ? fmtTime(s.updatedAt) : ''}</div></div><div class="sr">${c.pct == null ? `<span class="pc" style="color:var(--dim)">—</span><span class="dc">${tx('no report')}</span>` : `<span class="pc" style="color:${pcol(c.pct)}">${c.pct}%</span><span class="dc">${c.add ? `<b class="a">+${c.add}</b> ` : ''}${c.delete ? `<b class="d">−${c.delete}</b>` : ''}${!c.add && !c.delete ? tx('clean') : ''}</span>`}</div></button>`;
     const left = `<div class="srail left"><div class="srail-t">${tx('backfill stage::Review')}<span class="ct amber">${m.pending.length}</span><span class="tb"><select class="sortb" data-act="sort" title="${tx('Sort')}">${Object.entries(SORTS).map(([k, l]) => `<option value="${k}" ${st.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></span></div><div class="srail-list">` +
@@ -313,6 +314,9 @@ function focusView(s, rows) {
 }
 
 async function onClick(e, ctx, root, repaint) {
+  // A code the live reader held as a possible misread: use the suggestion, keep it as read, or remove it.
+  const h = e.target.closest('[data-held]');
+  if (h && st.mBay) { const use = resolveHeld(heldFor(st.mBay), h.dataset.code, h.dataset.held); if (use) await addRead(ctx, st.mBay, use, repaint); repaint(); return; }
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act, m = model(ctx), date = todayKey();
   const cur = () => m.subs.find(x => key(x) === st.sel);
@@ -387,8 +391,11 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-resume') { st.mBay = a.dataset.bay; st.mStep = 2; repaint(); focusScan(root); }
   else if (act === 'm-send') {
     // The desk may have deleted the bay from today's board while it was
-    // being scanned: say so instead of showing Sent, and go back to the bays.
-    if (!ctx.store.get('backfill').subs[`${st.mBay}:${date}`]) { toast(tx('{bay} was deleted from today’s board at the desk, so nothing was sent.', { bay: st.mBay }), 'bad'); st.mBay = null; st.mStep = 1; return repaint(); }
+    // being scanned: say so instead of showing it submitted, and go back to the bays.
+    if (!ctx.store.get('backfill').subs[`${st.mBay}:${date}`]) { toast(tx('{bay} was deleted from today’s board at the desk, so nothing was submitted.', { bay: st.mBay }), 'bad'); st.mBay = null; st.mStep = 1; return repaint(); }
+    // What isn't done yet is said first: codes the reader held stay out of the bay.
+    const nHeld = heldFor(st.mBay).size;
+    if (nHeld && !confirm(`${txn(nHeld, '{n} code was held as a possible misread and is not in the bay.', '{n} codes were held as possible misreads and are not in the bay.')} ${tx('Submit {bay} for review anyway?', { bay: st.mBay })}`)) return;
     if (!await send(ctx, 'submission.update', { bay: st.mBay, date }, { sent: true })) return;
     mineAdd(st.mBay, date); st.mStep = 3; repaint();
   }
@@ -412,12 +419,13 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-undo') { if (st.mLast) { await send(ctx, 'submission.update', { bay: st.mBay, date }, { remove: [st.mLast] }); st.mLast = null; repaint(); } }
   else if (act === 'm-next') { st.mStep = 1; st.mBay = ''; st.mLast = null; repaint(); setTimeout(() => root.querySelector('[data-field="mbay"]')?.focus(), 30); }
   else if (act === 'm-scan-btn') { const inp = root.querySelector('[data-field="mscan"]'); if (inp) await scanCode(ctx, inp, repaint); }
+  else if (act === 'm-read') readPdt(ctx, repaint);
 }
 // Mark a bay ready (writes the system-only codes and the report list so the
 // metrics match), free it, and with next open the bay that slides into its
 // place on the review list (Vector's Enter = ready and next).
 async function readyBay(ctx, s, m, next) {
-  if (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) && !confirm(tx('{bay} has not been sent to review from the phone yet, so it may still be scanning. Mark it ready anyway?', { bay: s.bay }))) return;
+  if (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) && !confirm(`${tx('{bay} has not been submitted for review from the phone yet, so it may still be scanning.', { bay: s.bay })} ${tx('Mark it ready anyway?')}`)) return;
   const date = todayKey(), sys = m.sys?.[s.bay] || null, p = readyPayload(s, sys), order = m.pending.map(key), idx = order.indexOf(key(s));
   if (Object.keys(p.codes).length || p.incorrect.length) await send(ctx, 'submission.update', { bay: s.bay, date }, p);
   const r = await send(ctx, 'submission.ready', { bay: s.bay, date }, sys ? { system: sys } : {}); if (!r) return;
@@ -494,7 +502,7 @@ function mineView(ctx) {
   const line = r => [esc(r.bay) + (r.date !== todayKey() ? ` <small class="cs-dim">${esc(r.date.slice(5))}</small>` : ''), r.state === 'ready' ? tx('Reviewed: finalise it on the PDT, then tap Submit') : r.state === 'gone' ? tx('Removed from today’s board') : r.state === 'done' ? `${tx('Submitted ✓')}${readdOpen(r.sub).length ? ` · ${tx('{n} to scan back', { n: readdOpen(r.sub).length })}` : ''}` : tx('In review'), r.state === 'gone' ? chip(r) : (r.state === 'done' ? '' : chip(r)) + readdBtn(r), r.state === 'ready' ? 'hot' : r.state === 'gone' ? 'warn' : ''];
   const items = rows.reduce((n, r) => n + readdOpen(r.sub).length, 0);
   return mhead(tx('My locations'), txn(rows.length, '{n} bay from this phone · last 2 days', '{n} bays from this phone · last 2 days')) +
-    (open.length ? mrows(open.map(line)) : `<div class="mv-note">${ic('layers')}${tx("No locations submitted yet. Scan a location's codes and send it to review.")}</div>`) +
+    (open.length ? mrows(open.map(line)) : `<div class="mv-note">${ic('layers')}${tx('No locations submitted yet.')} ${tx('Scan a location’s codes and submit it for review.')}</div>`) +
     (items ? `<div class="mv-tiles">${`<button class="mv-tile hot" data-act="m-check"><span class="ti">${ic('barcode')}</span><span class="tx"><b>${tx('Re-add checklist')}</b><span>${txn(items, '{n} item to scan back in', '{n} items to scan back in')}</span></span><span></span>${ic('chev')}</button>`}</div>` : '') +
     (done.length ? `<details class="mv-done-list"><summary>${tx('Completed · {n}', { n: done.length })}</summary>${mrows(done.map(line))}</details>` : '') +
     mfoot(mghost(tx('Back to scanning'), ' data-act="m-home"'));
@@ -524,7 +532,7 @@ function finaliseReminder(ctx) {
   return `<div class="mv-remind" role="dialog" aria-label="${tx('Ready to finalise')}"><b>${tx('Ready to finalise')}</b><span>${tx('These locations you submitted have been reviewed and are ready to finalise on the PDT.')}</span>${mrows(ready.map(r => [esc(r.bay), esc(r.date === todayKey() ? tx('today') : r.date), `<span class="btn sm primary" data-act="m-done" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">${tx('Submit')}</span>`, 'hot']))}<button class="btn" data-act="m-remind-close">${tx('Got it')}</button></div>`;
 }
 // The phone's three steps (bay → scan → send).
-const steps = () => [tx('Bay'), tx('Scan'), tx('Send')];
+const steps = () => [tx('Bay'), tx('Scan'), tx('Submit')];
 function mobile(ctx) {
   const m = model(ctx), date = todayKey();
   if (st.mView === 'mine') return mineView(ctx);
@@ -539,18 +547,22 @@ function mobile(ctx) {
     const all = codes.slice().reverse(), dsp = disputes(codes), nDsp = Object.keys(dsp).length, recallNow = st.mRecall ? ctx.store.get('recalls')?.items?.[st.mRecall.id] : null;
     const row = c => [esc(c), dsp[c] ? `<span class="mv-dsp">${ic('alert')}${esc(disputeHint(c, dsp[c][0]))}</span>` : nameHtml(c),
       `<button class="mv-x" data-act="m-del" data-code="${esc(c)}" aria-label="${tx('Remove {code}', { code: esc(c) })}" title="${tx('Remove {code}', { code: esc(c) })}">${ic('x')}</button>`, dsp[c] ? 'warn' : nameOf(c) === null || recallFor(ctx.store, c) ? 'bad' : ''];
+    warmReader();   // the reading engine loads while the bay is open, so Read the PDT starts quickly
     return mhead(esc(st.mBay), tx('scanning'), `<span class="mv-cnt">${codes.length}<small>${tx('codes')}</small></span>`) + msteps(2, steps()) +
       `<div class="mv-scan typed"><div class="cap">${tx('Scan each product on the shelf')}</div><div class="mv-field"><input data-field="mscan" inputmode="numeric" autocomplete="off" placeholder="${tx('Keycode or item barcode')}" enterkeyhint="done">${camButton('mscan')}</div><div class="tools"><button data-act="m-scan-btn">${ic('barcode')}${tx('Add')}</button></div></div>` +
+      `<button class="btn primary mv-read" data-act="m-read">${ic('camera')}${tx('Read the PDT’s list')}</button>` +
+      (heldFor(st.mBay).size ? `<div class="mv-held"><div class="mv-sub">${tx('Held: possible misreads')}</div>${heldRows(heldFor(st.mBay), nameHtml)}</div>` : '') +
       (recallNow ? recallFlag(ctx.store, recallNow, st.mRecall.kc) : st.mLast ? mlast(esc(st.mLast), nameHtml(st.mLast), tx('just now')) : '') +
       (nDsp ? `<div class="mv-note warn">${ic('alert')}${nDsp / 2 === 1 ? tx('Two codes are one digit apart: check which is on the shelf and remove the other.') : tx('{n} codes are one digit apart: check which is on the shelf and remove the other.', { n: nDsp })}</div>` : '') +
       (all.length ? `<div class="mv-sub">${tx('Scanned here')}</div>` + mrows(all.map(row)) : '') +
-      mfoot(mbig(tx('Send {bay} to review', { bay: esc(st.mBay) }), 'ok', 'listcheck', ' data-act="m-send"') + (st.mLast ? mghost(tx('Undo last scan'), ' data-act="m-undo"') : ''));
+      mfoot(mbig(tx('Submit {bay} for review', { bay: esc(st.mBay) }), 'ok', 'listcheck', ' data-act="m-send"') + (st.mLast ? mghost(tx('Undo last scan'), ' data-act="m-undo"') : ''));
   }
   if (st.mStep === 3 && st.mBay) {
     const s = m.subs.find(x => x.bay === st.mBay), n = s ? Object.values(s.codes).filter(c => c.scanned).length : 0;
     const next = m.requested.slice(0, 3);
-    return mhead(tx('Sent'), `${esc(st.mBay)} · ${txn(n, '{n} code', '{n} codes')} · ${fmtTime(new Date().toISOString())}`) + msteps(3, steps()) +
+    return mhead(tx('Submitted for review'), `${esc(st.mBay)} · ${txn(n, '{n} code', '{n} codes')} · ${fmtTime(s?.sentAt || new Date().toISOString())}`) + msteps(3, steps()) +
       `<div class="mv-done"><span class="ck">${ic('check')}</span><b>${tx('{bay} is with review', { bay: esc(st.mBay) })}</b><span>${tx('{n} codes. Review compares it against the report; the sheet is free for the floor.', { n })}</span></div>` +
+      timeline(s, n) +
       (next.length ? `<div class="mv-sub">${tx('up next::Next')}</div>` + mrows(next.map(b => [esc(b), tx('Requested'), `<span class="btn sm" data-act="m-resume" data-bay="${esc(b)}">${tx('Start')}</span>`, ''])) : '') +
       mfoot(mbig(tx('Scan the next bay'), '', 'barcode', ' data-act="m-next"') + mghost(tx('Back to home'), ' data-go="mhome"'));
   }
@@ -563,6 +575,47 @@ function mobile(ctx) {
   return (st.mRemind === false ? '' : finaliseReminder(ctx)) + mhead(tx('Backfill scan'), tx('Scan the bay label to start'), `<button class="mv-cnt mine" data-act="m-mine" title="${tx('My locations')}">${ic('listcheck')}${readyN ? `<b>${readyN}</b>` : ''}</button>`) + msteps(1, steps()) +
     `<div class="mv-scan typed"><div class="cap">${tx('Scan the location barcode')}</div><div class="mv-field"><input data-field="mbay" inputmode="numeric" autocomplete="off" placeholder="${tx('Bay label or number')}" enterkeyhint="go">${camButton('mbay')}</div><div class="tools"><button data-act="m-start">${ic('arrow')}${tx('Start')}</button></div></div>` +
     (board.length ? `<div class="mv-sub">${tx('On the board')}</div>` + mrows(board) : `<div class="mv-note">${ic('layers')}${tx('Nothing on the board yet. Scan a bay to start it.')}</div>`);
+}
+// Where a submitted bay is now: submitted, reviewed at the desk, finalised
+// on the PDT. It follows the desk live; a bay the desk removed says so.
+function timeline(s, n) {
+  if (!s) return `<div class="mv-note warn">${ic('alert')}${tx('{bay} was removed from today’s board at the desk.', { bay: esc(st.mBay) })}</div>`;
+  const reviewed = s.status === 'corrected' || s.status === 'submitted', done = s.status === 'submitted';
+  const row = (cls, title, small, btn = '') => `<div class="tl-r ${cls}"><i></i><b>${title}</b>${btn}<small>${small}</small></div>`;
+  return `<div class="mv-tl">` +
+    row('dn', tx('Submitted for review'), `${fmtTime(s.sentAt || s.updatedAt || new Date().toISOString())} · ${txn(n, '{n} code', '{n} codes')}`) +
+    row(reviewed ? 'dn' : 'now', tx('Reviewed at the desk'), !reviewed ? tx('Waiting for the desk') : s.metrics?.accuracy == null ? tx('Reviewed · no report') : tx('Reviewed · {acc}%', { acc: s.metrics.accuracy })) +
+    row(done ? 'dn' : reviewed ? 'now' : '', tx('Finalise on the PDT'), done ? tx('Submitted ✓') : reviewed ? tx('Finalise it on the PDT, then tap Submit') : tx('After the review'),
+      reviewed && !done ? `<span class="btn sm primary" data-act="m-done" data-bay="${esc(s.bay)}" data-date="${esc(s.date)}">${tx('Submit')}</span>` : '') +
+    `</div>`;
+}
+// The live reader's held codes, per bay (kept while the app is open).
+const heldFor = bay => (st.held[bay] ||= new Map());
+// Read the PDT's list into the open bay (js/livescan.js): a code on today's
+// list for the bay goes in on the first read; held codes wait on the bay.
+function readPdt(ctx, repaint) {
+  const bay = st.mBay, date = todayKey(), m = model(ctx);
+  openLiveReader({
+    title: tx('Read the PDT · {bay}', { bay }),
+    expected: m.sys?.[bay] || [],
+    have: () => { const s = ctx.store.get('backfill').subs[`${bay}:${date}`]; return new Set(s ? Object.keys(s.codes).filter(c => s.codes[c].scanned) : []); },
+    verify: kc => catalogueVerdict(ctx, kc),
+    add: kc => addRead(ctx, bay, kc, repaint),
+    label: kc => nameHtml(kc),
+    held: heldFor(bay), onHeldChange: repaint,
+    onClose: () => { repaint(); focusScan(document); },
+  });
+}
+// One code into the bay from the reader. A recalled product stays out: its flag shows on the bay.
+async function addRead(ctx, bay, kc, repaint) {
+  const rec = recallFor(ctx.store, kc);
+  if (rec) { st.mRecall = { id: rec.id, kc }; haptic('error'); toast(tx('{code} is recalled, so it is not backfilled', { code: kc }), 'bad'); repaint(); return false; }
+  // Already in the bay (a held code's suggestion often is): nothing to send.
+  if (ctx.store.get('backfill').subs[`${bay}:${todayKey()}`]?.codes[kc]?.scanned) return true;
+  const r = await send(ctx, 'submission.update', { bay, date: todayKey() }, { codes: { [kc]: true } });
+  if (!r) return false;
+  st.mLast = kc; ensureNames(ctx, [kc], repaint); repaint();
+  return true;
 }
 export async function openBayIfNeeded(ctx) { if (st.mStep === 2 && st.mBay && !ctx.store.get('backfill').subs[`${st.mBay}:${todayKey()}`]) await send(ctx, 'submission.open', { bay: st.mBay, date: todayKey() }); }
 async function startBay(ctx, raw, repaint) {

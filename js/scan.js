@@ -97,8 +97,9 @@ export function openScanner({ title = tx('Scan'), hint = '', continuous = false,
 }
 
 // Beep and buzz on a good read, following Settings (both on by default).
+// The live PDT reader (js/livescan.js) beeps the same way.
 let audio = null;
-function feedback() {
+export function feedback() {
   const p = prefs();
   if (p.scanVibrate !== false) try { navigator.vibrate?.(60); } catch {}
   if (p.scanSound !== false) try {

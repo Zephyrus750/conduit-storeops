@@ -20,6 +20,12 @@ const ASSETS = self.PRECACHE.files;
 // Bundled fallback maps (maps/<no>.svg) survive releases and serve
 // network-first, so a re-exported file arrives without an app release.
 const MAP_CACHE = 'suite-maps-v1';
+// Libraries under vendor/ (the OCR engine for Read the PDT and Screen scan is
+// about 7 MB) are not in the release: they load on first use and are kept
+// in their own cache, cache-first, which outlives releases, so an app update
+// never makes a phone download the reader again. Bump the name when a vendor
+// file changes.
+const LIB_CACHE = 'suite-lib-v1';
 
 /* Install: the whole shell, or nothing. NO skipWaiting: activating at once
    would fire controllerchange and reload the page mid-shift. The new worker
@@ -70,6 +76,17 @@ self.addEventListener('fetch', event => {
   // The map editor (owner only) is its own page, not part of the shell's
   // release: always from the network, never answered with the shell.
   if (url.pathname.includes('/editor/')) return;
+
+  // Vendor libraries: cache-first from the surviving library cache.
+  if (url.pathname.includes('/vendor/')) {
+    event.respondWith(
+      caches.open(LIB_CACHE).then(cache => cache.match(req, { ignoreSearch: true }).then(hit => hit || fetch(req).then(res => {
+        if (res && res.ok && res.type === 'basic') cache.put(req, res.clone()).catch(() => {});
+        return res;
+      }))).catch(() => fetch(req)),
+    );
+    return;
+  }
 
   // Bundled maps: network-first with the surviving cache behind it.
   if (url.pathname.includes('/maps/')) {
