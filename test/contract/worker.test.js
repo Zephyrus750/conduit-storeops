@@ -1244,3 +1244,21 @@ test('zones: the owner keeps the list; a store’s zone comes from it, a rename 
   const log = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions.map(a => a.type);
   for (const t of ['zone.add', 'zone.rename', 'zone.remove', 'store.zone']) assert.ok(log.includes(t), `${t} is an owner action`);
 });
+
+test('item bays: any device of a store with the Stockroom reads an item’s stockroom bays from the latest report, and nothing else', async () => {
+  const { storeDay, DEFAULT_TZ } = await import('../../shared/time.js');
+  const today = storeDay(new Date(), DEFAULT_TZ);
+  const floor = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'bays-floor' })).body.token;
+  const sr = (await api('POST', '/v1/auth/unlock', { code: 'SR-CODE' }, (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'bays-room' })).body.token)).body.token;
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: today, report: { at: Date.now(), byLoc: { 7041: ['43648803', '43652214'], 7036: ['43648803'] }, soh: { 43648803: 34 } } }, sr)).status, 201);
+  const r = await api('GET', '/v1/store/1241/bays?kc=43648803,43652214,41000001', undefined, floor);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.bays, { 43648803: ['7036', '7041'], 43652214: ['7041'], 41000001: [] }, 'every bay in order; an item the report does not list has none');
+  assert.equal(r.body.report.date, today);
+  assert.ok(!('soh' in r.body) && !JSON.stringify(r.body).includes('34'), 'no SOH');
+  assert.equal((await api('GET', '/v1/store/1241/bays?kc=12', undefined, floor)).status, 400);
+  assert.equal((await api('GET', '/v1/store/1241/bays?kc=43648803')).status >= 400, true, 'a signed-in device only');
+  assert.equal((await reg2('2151', { entitlements: { floor: true, stockroom: false, backdock: false } })).status, 201);
+  const other = (await api('POST', '/v1/auth/signin', { store: '2151', pin: '135790', device: 'bays-2151' })).body.token;
+  assert.equal((await api('GET', '/v1/store/2151/bays?kc=43648803', undefined, other)).body.code, 'not_entitled', 'a store without the Stockroom has no bays to read');
+});

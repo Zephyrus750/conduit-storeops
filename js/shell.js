@@ -72,7 +72,12 @@ document.addEventListener('change', e => { if (e.target.matches?.('#siLang, [dat
 installKeyboard();
 applyOrientation();
 installCameraButtons(document);
-installProductLinks(client.catalogue); installProductCard(client.catalogue);
+installProductLinks(client.catalogue);
+// The PC's product card also shows the item's stockroom bays, for a store with the Stockroom.
+installProductCard(client.catalogue, {
+  scope: () => client.session.current?.store || '',
+  bays: kc => { const s = client.session.current; if (!s?.store || !(s.caps || []).includes('stockroom')) return null; return client.session.token().then(token => client.transport.request(`/v1/store/${s.store}/bays?kc=${kc}`, { token })); },
+});
 let content = $('#content');
 const isMobile = () => frame.clientWidth <= 600;
 

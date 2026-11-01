@@ -16,6 +16,7 @@
 //   GET  /map/:version/source      → the map editor's own document for that version (owner), so it reopens for editing
 //   POST /map  { version, name?, departments?, floors:[{ id, name, type, level?, svg, paths? }], source? }  (owner) → applies map.publish
 //   GET  /pull/find?code=          → Live pull: one item's stockroom bays from the latest report (any device of the store)
+//   GET  /bays?kc=a,b              → items' stockroom bays from the latest report, bays only (the PC's product card)
 //
 // WebSocket protocol (JSON text frames):
 //   → { t:'hello', since }          ← { t:'snapshot', seq, state } or { t:'delta', seq, events }
@@ -178,6 +179,7 @@ export class StoreObject extends DurableObject {
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1], claims));
           if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readJson(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12), url.searchParams.get('weekly') === '1'); }
           if (url.pathname === '/pull/find') return this.pullFind(url.searchParams.get('code'), claims);
+          if (url.pathname === '/bays') return this.itemBays(url.searchParams.get('kc'), claims);
           if (url.pathname === '/backfill/report') { const no = needArea(claims, 'stockroom'); if (no) return no; return request.method === 'POST' ? this.publishReport(await readJson(request, REPORT_MAX), claims) : this.reportDoc(url.searchParams.get('date') || ''); }
           const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
           if (sohDay) { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; if (request.method !== 'DELETE') return fail(405, 'method_not_allowed', 'DELETE only'); return this.removeSoh(sohDay[1], claims); }
@@ -608,6 +610,16 @@ export class StoreObject extends DurableObject {
       carton: kc ? prof?.profiles?.[kc]?.ctn || prof?.last?.[kc]?.ctn || null : null,
       truck: kc ? this.onTruckToday(kc) : null,
     });
+  }
+  // Items' stockroom bays from the latest inventory report, for any device
+  // of a store with the Stockroom (the PC's product card shows where an
+  // item is kept). Bays only, no SOH: the store's own devices show that.
+  itemBays(list, claims) {
+    if (!(claims.caps || []).includes('stockroom')) return fail(403, 'not_entitled', 'stockroom bays need the Stockroom, which is not enabled for this store');
+    const kcs = [...new Set(String(list || '').split(',').map(x => x.trim()).filter(Boolean))];
+    if (!kcs.length || kcs.length > 50 || kcs.some(k => !/^\d{6,13}$/.test(k))) throw new HttpError(400, 'invalid_request', 'kc is 1 to 50 keycodes, comma separated');
+    const rep = this.reportIndex();
+    return json({ report: rep ? { date: rep.date, at: rep.at } : null, bays: Object.fromEntries(kcs.map(k => [k, rep?.bays.get(k) || []])) });
   }
   // A published manifest's lines by keycode: kc → [{ id (consol), q, c }]
   // (kept until the manifest is published again or removed).

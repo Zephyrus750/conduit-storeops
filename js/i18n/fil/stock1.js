@@ -550,4 +550,6 @@ export default {
   "Click the name for kmart.com.au, the keycode to copy it": "I-click ang pangalan para sa kmart.com.au, ang keycode para kopyahin",
   "Not sold online, or a retired code. Click the keycode to copy it.": "Hindi ibinebenta online, o lumang code. I-click ang keycode para kopyahin.",
   "{bay} was deleted from today’s board at the desk, so nothing was sent.": "Binura ng desk ang {bay} sa board ngayong araw, kaya walang naipadala.",
+  "Not in a stockroom bay on the report": "Wala sa anumang stockroom bay ayon sa report",
+  "report of {date}": "report noong {date}",
 };
