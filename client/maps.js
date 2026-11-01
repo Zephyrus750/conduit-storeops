@@ -33,5 +33,19 @@ export function createMaps({ transport, session, storage }) {
   async function info(storeNo) { return transport.request(`/v1/store/${storeNo}/map`, { token: await session.token() }); }
   async function publish(storeNo, body) { return transport.request(`/v1/store/${storeNo}/map`, { method: 'POST', body, token: await session.token() }); }
   async function forget(storeNo) { mem.delete(String(storeNo)); await storage.del(`map:${storeNo}`); }
-  return { get, info, publish, forget };
+  // The store plan a floor of the map names (the picture the map was traced
+  // from), as a Blob: fetched once per picture (its id is its hash, so it
+  // never changes) and kept for offline use; the device keeps the last few.
+  async function plan(storeNo, id) {
+    const no = String(storeNo), key = `plan:${no}:${id}`;
+    const have = await storage.get(key);
+    if (have) return have;
+    const blob = await transport.request(`/v1/store/${no}/plan/${encodeURIComponent(id)}`, { token: await session.token(), blob: true });
+    await storage.set(key, blob);
+    const kept = ((await storage.get(`plans:${no}`)) || []).filter(x => x !== id); kept.unshift(id);
+    for (const old of kept.splice(4)) await storage.del(`plan:${no}:${old}`);
+    await storage.set(`plans:${no}`, kept);
+    return blob;
+  }
+  return { get, info, publish, forget, plan };
 }

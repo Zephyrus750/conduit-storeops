@@ -550,4 +550,6 @@ export default {
   "Click the name for kmart.com.au, the keycode to copy it": "Clicca il nome per kmart.com.au, il keycode per copiarlo",
   "Not sold online, or a retired code. Click the keycode to copy it.": "Non in vendita online, o un codice ritirato. Clicca il keycode per copiarlo.",
   "{bay} was deleted from today’s board at the desk, so nothing was sent.": "{bay} è stato cancellato dalla bacheca di oggi alla scrivania, quindi non è stato inviato nulla.",
+  "Not in a stockroom bay on the report": "In nessuna ubicazione del magazzino secondo il report",
+  "report of {date}": "report del {date}",
 };

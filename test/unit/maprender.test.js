@@ -123,6 +123,12 @@ test('publishBody: the request the editor, console and script send, with the sou
   assert.equal(b.version, 'v9'); assert.equal(b.name, "Bus'selton"); assert.equal(b.metresPerUnit, 0.05);
   assert.deepEqual(b.floors.map(f => [f.id, f.level]), [['ground', 0], ['boh', -1]], 'an empty floor is left out; levels travel');
   assert.ok(b.floors[0].paths); assert.equal(b.source.floors.length, 3); assert.equal(b.source.floors[0].svg, undefined, 'the source keeps no drawing');
+  assert.ok(!('plan' in b.floors[0]), 'no store plan unless the editor names one');
+  // The map editor names a floor's store plan once its picture is uploaded.
+  const plan = { id: 'a'.repeat(64) + '.jpg', w: 4000, h: 2600, x: -40, y: 12, scale: 1.2 };
+  const withPlan = publishBody({ ...data, floors: data.floors.map(f => f.id === 'ground' ? { ...f, plan: { ...plan, underlay: 'data:image/jpeg;base64,AAAA' } } : f) }, { version: 'v10' });
+  assert.deepEqual(withPlan.floors[0].plan, plan, 'only the id and where it sits travel');
+  assert.ok(!('plan' in withPlan.floors[1]));
 });
 
 test('stairs and lifts: a link to the next floor wins over the nearest by position', () => {

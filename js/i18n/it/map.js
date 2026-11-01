@@ -444,4 +444,9 @@ export default {
   "a form or file from Resources": "un modulo o un file da Risorse",
   "All {n} resources matching “{q}”": "Tutte le {n} risorse per «{q}»",
   "Open Resources with this search": "Apri Risorse con questa ricerca",
+  "Store plan: off": "Planimetria: nascosta",
+  "Store plan: off, under the map or on its own": "Planimetria: nascosta, sotto la mappa o da sola",
+  "Store plan: on its own": "Planimetria: da sola",
+  "Store plan: under the map": "Planimetria: sotto la mappa",
+  "The store plan couldn’t be loaded.": "Impossibile caricare la planimetria.",
 };

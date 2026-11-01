@@ -93,6 +93,15 @@ async function openStore(no) {
   const draft = typeof getStoreSaveInfo === 'function' ? getStoreSaveInfo(no) : null;
   // The version this draft starts from: publish warns when the store has moved on.
   let base = null; try { base = (await api(`/v1/store/${encodeURIComponent(no)}/map`)).version; } catch {}
+  // The store plan each floor names comes back as that floor's underlay, where it sat.
+  for (const f of src.floors || []) {
+    const p = f.plan; if (!p || !p.id) continue;
+    try {
+      const blob = await api(`/v1/store/${encodeURIComponent(no)}/plan/${encodeURIComponent(p.id)}`, { blob: true });
+      f.underlay = await new Promise((ok, bad) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => bad(fr.error); fr.readAsDataURL(blob); });
+      f.underlayX = p.x; f.underlayY = p.y; f.underlayScale = p.scale;
+    } catch (e) { console.warn('store plan', e.message); }
+  }
   const open = () => { src.storeNumber = no; importMapData(src, `${no}-conduit`); setBase(no, base); document.querySelectorAll('.store-dropdown.open, .store-dropdown.visible').forEach(d => d.classList.remove('open', 'visible')); };
   if (draft && draft.shelfCount > 0) dialog(`<h3>Open ${esc(no)} from Conduit?</h3><p>This replaces the draft on this computer (${draft.shelfCount} shelves) with the map as last published.</p>`, { okText: 'Open', onOk: open });
   else open();
@@ -120,6 +129,47 @@ function checks(doc) {
   if (!doc.floors.some(f => (f.pathNodes || []).length >= 2)) out.push({ text: 'No walk paths: pick routes and evacuation will draw straight lines.' });
   return out;
 }
+// ── the store plan ───────────────────────────────────────────────────────
+// A floor's underlay (the official store plan the map was traced from) goes
+// up with the map: the picture first, at most PLAN_SIDE pixels on its long
+// side, then the floor names it and where it sits, so Conduit can show the
+// plan under the map or on its own.
+const PLAN_SIDE = 4096;
+const planFloors = () => (typeof state !== 'undefined' && Array.isArray(state.floors) ? state.floors : []).filter(f => f.data && f.data.underlay);
+function planPicture(src) {
+  return new Promise((ok, bad) => {
+    const img = new Image();
+    img.onload = () => {
+      // A picture already small enough (under 6 MB, at most PLAN_SIDE wide or
+      // tall) goes up as it is: the same plan keeps its id (its hash) from one
+      // publish to the next and loses nothing. Anything bigger becomes a JPEG.
+      const m = /^data:(image\/(?:jpeg|png|webp));base64,(.*)$/s.exec(src);
+      if (m && m[2].length * 0.75 <= 6_000_000 && Math.max(img.naturalWidth, img.naturalHeight) <= PLAN_SIDE) {
+        const bin = atob(m[2]), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return ok({ blob: new Blob([bytes], { type: m[1] }), w: img.naturalWidth, h: img.naturalHeight, r: 1 });
+      }
+      const r = Math.min(1, PLAN_SIDE / Math.max(img.naturalWidth, img.naturalHeight)), w = Math.max(1, Math.round(img.naturalWidth * r)), h = Math.max(1, Math.round(img.naturalHeight * r));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+      c.toBlob(b => b ? ok({ blob: b, w, h, r: w / img.naturalWidth }) : bad(new Error('the plan picture could not be read')), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => bad(new Error('the plan picture could not be read'));
+    img.src = src;
+  });
+}
+async function uploadPlans(no, doc) {
+  let n = 0;
+  for (const f of planFloors()) {
+    const df = doc.floors.find(x => x.id === f.id); if (!df) continue;
+    const pic = await planPicture(f.data.underlay);
+    const up = await api(`/v1/store/${encodeURIComponent(no)}/plan`, { method: 'POST', raw: pic.blob, rawType: pic.blob.type || 'image/jpeg' });
+    // The picture may have shrunk: the scale grows by as much, so it covers the same ground.
+    df.plan = { id: up.id, w: pic.w, h: pic.h, x: Number(f.data.underlayX) || 0, y: Number(f.data.underlayY) || 0, scale: (Number(f.data.underlayScale) || 1) / pic.r };
+    n++;
+  }
+  return n;
+}
+
 async function publish() {
   if (!isOwner()) return account();
   const doc = buildMapDocument(), no = String(doc.storeNumber || '').trim();
@@ -131,22 +181,28 @@ async function publish() {
   // The store's map changed after this draft was opened (Apply to map in the
   // console, or another computer): publishing this draft would undo that.
   if (info && base && info.version !== base) list.unshift({ text: `Store ${no} is now on version ${info.version}, published after this draft was opened from ${base} (suggestions applied from the owner console, or another computer). Publishing this draft puts those changes back: open the store from Conduit again first unless you mean to.` });
-  const shelves = doc.floors.reduce((n, f) => n + (f.shelves || []).filter(s => !s.inactive).length, 0);
+  const shelves = doc.floors.reduce((n, f) => n + (f.shelves || []).filter(s => !s.inactive).length, 0), plans = planFloors();
   dialog(`<h3>Publish ${esc(no)} ${esc(rec.name || '')}</h3>
     <p>${doc.floors.length} floor${doc.floors.length === 1 ? '' : 's'} · ${shelves} shelves in use${info ? ` · replaces version <b>${esc(info.version)}</b> (${esc(new Date(info.at).toLocaleString())})` : ' · the first map for this store'}.</p>
     ${list.length ? `<ul class="cd-checks">${list.map(c => `<li class="${c.bad ? 'bad' : ''}">${esc(c.text)}</li>`).join('')}</ul>` : '<p class="cd-ok-line">Checks passed.</p>'}
+    ${plans.length ? `<label class="cd-chk"><input type="checkbox" class="cd-plan" checked><span>Send the store plan (${esc(plans.map(f => f.name).join(', '))}): team members can show it under the map or on its own.</span></label>` : ''}
     <label>Version<input class="cd-ver" value="${esc(stamp())}" maxlength="32"></label>
     <p class="cd-note">Every device in the store gets the new map within a minute. Earlier versions stay listed in the owner console.</p>`, {
     okText: blocked ? 'Fix the red items first' : 'Publish', onOk: async w => {
       if (blocked) return false;
       const version = w.querySelector('.cd-ver').value.trim();
       if (!/^[\w.-]{1,32}$/.test(version) || version === 'latest') throw new Error('A version is 1 to 32 letters, digits, dots or dashes.');
+      let sent = 0;
+      if (w.querySelector('.cd-plan')?.checked) {
+        try { sent = await uploadPlans(no, doc); }
+        catch (e) { throw new Error(`The store plan didn't upload (${e.message}). Untick it to publish the map without it.`); }
+      }
       const body = publishBody(doc, { version, name: rec.name || doc.storeName });
       try {
         const r = await api(`/v1/store/${encodeURIComponent(no)}/map`, { method: 'POST', body });
         if (typeof markClean === 'function') try { markClean(); } catch {}
         setBase(no, r.version);
-        dialog(`<h3>Published</h3><p>Store ${esc(no)} is on version <b>${esc(r.version)}</b>: ${r.floors.map(f => `${esc(f.name)} ${f.shelves} shelves`).join(', ')}.${r.stripped ? ` The worker removed ${r.stripped} unsafe item${r.stripped === 1 ? '' : 's'} from the drawing.` : ''}</p>`, { cancel: false });
+        dialog(`<h3>Published</h3><p>Store ${esc(no)} is on version <b>${esc(r.version)}</b>: ${r.floors.map(f => `${esc(f.name)} ${f.shelves} shelves`).join(', ')}.${sent ? ` The store plan went with it (${sent} floor${sent === 1 ? '' : 's'}).` : ''}${r.stripped ? ` The worker removed ${r.stripped} unsafe item${r.stripped === 1 ? '' : 's'} from the drawing.` : ''}</p>`, { cancel: false });
       } catch (e) { throw new Error(e.code === 'exists' ? `Version ${version} is already published. Use a new version.` : e.message); }
     },
   });

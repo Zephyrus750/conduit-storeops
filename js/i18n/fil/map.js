@@ -444,4 +444,9 @@ export default {
   "a form or file from Resources": "isang form o file mula sa Resources",
   "All {n} resources matching “{q}”": "Lahat ng {n} resources na tugma sa “{q}”",
   "Open Resources with this search": "Buksan ang Resources gamit ang paghahanap na ito",
+  "Store plan: off": "Floor plan ng tindahan: off",
+  "Store plan: off, under the map or on its own": "Floor plan ng tindahan: off, sa ilalim ng mapa o mag-isa",
+  "Store plan: on its own": "Floor plan ng tindahan: mag-isa",
+  "Store plan: under the map": "Floor plan ng tindahan: sa ilalim ng mapa",
+  "The store plan couldn’t be loaded.": "Hindi ma-load ang floor plan ng tindahan.",
 };

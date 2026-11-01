@@ -1238,6 +1238,8 @@ input[type="range"]#propAngleSlider::-moz-range-thumb, input[type="range"]#propC
 .cd-ok-line { color: #4ade80 !important; }
 .cd-warn { color: #fbbf24 !important; }
 .cd-note { font-size: 12px; }
+.cd-box label.cd-chk { display: flex; gap: 8px; align-items: flex-start; color: inherit; font-size: 13px; line-height: 1.4; }
+.cd-box label.cd-chk input { width: auto; margin: 2px 0 0; flex: none; }
 .cd-err { color: #f87171; min-height: 18px; margin-top: 6px; }
 .cd-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .cd-acts button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border, #2a2f37); background: transparent; color: inherit; font: 600 13px var(--font-sans); cursor: pointer; }

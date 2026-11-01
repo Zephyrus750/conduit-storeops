@@ -1,7 +1,7 @@
 // Shared bits for the Stockroom views: ring colours, today's key, product
 // names from the catalogue with a repaint when they arrive.
 import { recallTagFor, recallFor, recallWord } from '../../recallflag.js';
-import { esc, ic, today, DEPTS_DEFAULT, DEPT_COLOUR } from '../../ui.js';
+import { esc, ic, today, fmtDate, DEPTS_DEFAULT, DEPT_COLOUR } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 
 export const RING = { 'new-lines': [tx('New lines'), '#7C3AED'], overstock: [tx('Overstock'), '#2563EB'], 'cant-work': [tx('Can’t work'), '#DC2626'], 'online-picks': [tx('Online picks'), '#16A34A'] };
@@ -112,17 +112,29 @@ export function installProductLinks(catalogue) {
 const CARD_ON = '[data-copykc], a[data-kcgo], [data-kccard]';
 const cardCode = el => el.dataset.copykc || el.dataset.kcgo || el.dataset.kccard || '';
 const money = v => '$' + Number(v).toFixed(2);
-function cardHtml(kc, it) {
+// The item's stockroom bays, from the latest inventory report (the worker's
+// /bays): bays only, no SOH, which the store's own devices show. Nothing
+// while it loads, nor for a store without the Stockroom or a report.
+function baysLine(w) {
+  if (!w?.date) return '';
+  return `<span class="pch-bays">${ic('box')}<span>${w.bays.length ? `${tx('Stockroom')} <b class="mono">${w.bays.map(esc).join(' · ')}</b>` : tx('Not in a stockroom bay on the report')}${w.date !== today() ? `<small>${tx('report of {date}', { date: fmtDate(w.date) })}</small>` : ''}</span></span>`;
+}
+function cardHtml(kc, it, w) {
   const rc = recallFor(null, kc);
   const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : it ? `<span class="pch-none">${tx('No price yet')}</span>` : '';
   return `<div class="pch-img">${it?.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ic('box')}</div>` +
-    `<div class="pch-b"><span class="mono pch-kc">${esc(kc)}</span><b>${it ? esc(it.name || tx('Verified product')) : tx('Not in the catalogue')}</b>${price}` +
+    `<div class="pch-b"><span class="mono pch-kc">${esc(kc)}</span><b>${it ? esc(it.name || tx('Verified product')) : tx('Not in the catalogue')}</b>${price}${baysLine(w)}` +
     (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') +
     `<small>${it?.url ? tx('Click the name for kmart.com.au, the keycode to copy it') : tx('Not sold online, or a retired code. Click the keycode to copy it.')}</small></div>`;
 }
-export function installProductCard(catalogue) {
+// opts.bays(kc) → the worker's /bays answer, or null where there is none to
+// ask (no store, no Stockroom); opts.scope() → the store, so a switch of
+// store starts its own cache. Answers are kept ten minutes.
+const BAYS_MS = 10 * 60_000, where = new Map();
+export function installProductCard(catalogue, opts = {}) {
   const fine = matchMedia('(hover: hover) and (pointer: fine)');
   let card = null, cur = null, timer = null;
+  const wkey = kc => `${opts.scope?.() || ''}:${kc}`, known = kc => { const w = where.get(wkey(kc)); return w && Date.now() - w.t < BAYS_MS ? w : null; };
   // The element's own tooltip steps aside while the card is up (the card says the same).
   const hide = () => { clearTimeout(timer); timer = null; if (cur?.dataset.tip0 != null) { cur.title = cur.dataset.tip0; delete cur.dataset.tip0; } cur = null; card?.classList.remove('on'); };
   document.addEventListener('mouseover', e => {
@@ -131,15 +143,21 @@ export function installProductCard(catalogue) {
     if (!el || el === cur || !/^\d{6,8}$/.test(kc)) return;
     hide(); cur = el; if (el.title) { el.dataset.tip0 = el.title; el.removeAttribute('title'); }
     timer = setTimeout(async () => {
+      // The bays are asked for alongside the catalogue; the card shows first and gains them when they land.
+      const ask = opts.bays && !known(kc) ? Promise.resolve(opts.bays(kc)).then(r => { where.set(wkey(kc), r ? { t: Date.now(), date: r.report?.date || null, bays: r.bays?.[kc] || [] } : { t: Date.now() }); }).catch(() => {}) : null;
       const it = await catalogue.lookup(kc).catch(() => null), fr = document.querySelector('.frame');
       if (cur !== el || !el.isConnected || !fr) return;
       if (!card || card.parentNode !== fr) { card?.remove(); card = document.createElement('div'); card.className = 'pch'; card.setAttribute('role', 'tooltip'); fr.appendChild(card); }
-      card.innerHTML = cardHtml(kc, it); card.classList.add('on');
-      // Under the code, or above it near the foot; kept inside the frame (which Display size may scale).
-      const r = el.getBoundingClientRect(), fb = fr.getBoundingClientRect(), sc = fb.width / fr.offsetWidth || 1, w = card.offsetWidth, h = card.offsetHeight;
-      const left = Math.min(Math.max(8, (r.left - fb.left) / sc), fr.offsetWidth - w - 8);
-      let top = (r.bottom - fb.top) / sc + 8; if (top + h > fr.offsetHeight - 8) top = Math.max(8, (r.top - fb.top) / sc - h - 8);
-      card.style.left = left + 'px'; card.style.top = top + 'px';
+      const paint = () => {
+        card.innerHTML = cardHtml(kc, it, known(kc)); card.classList.add('on');
+        // Under the code, or above it near the foot; kept inside the frame (which Display size may scale).
+        const r = el.getBoundingClientRect(), fb = fr.getBoundingClientRect(), sc = fb.width / fr.offsetWidth || 1, w = card.offsetWidth, h = card.offsetHeight;
+        const left = Math.min(Math.max(8, (r.left - fb.left) / sc), fr.offsetWidth - w - 8);
+        let top = (r.bottom - fb.top) / sc + 8; if (top + h > fr.offsetHeight - 8) top = Math.max(8, (r.top - fb.top) / sc - h - 8);
+        card.style.left = left + 'px'; card.style.top = top + 'px';
+      };
+      paint();
+      if (ask) { await ask; if (cur === el && el.isConnected && card.classList.contains('on')) paint(); }
     }, 350);
   });
   document.addEventListener('mouseout', e => { const el = e.target.closest?.(CARD_ON); if (el && el === cur && !(e.relatedTarget && el.contains(e.relatedTarget))) hide(); });

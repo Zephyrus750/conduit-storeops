@@ -6601,7 +6601,9 @@ function handleImport(event) {
         const pathEdges = Array.isArray(fd.pathEdges) ? fd.pathEdges.map(e => ({ a: e.a, b: e.b })) : [];
         return { shelves, landmarks, walls, toryLines, toryDocks, boundary, deptZoomBoxes, emergencyMarkers, priceChecks,
           pathNodes, pathEdges,
-          underlay: null, underlayOpacity: 0.3, underlayScale: 1.87, underlayX: 0, underlayY: 0,
+          // A map opened from Conduit brings its store plan back as the underlay (editor/conduit.js).
+          underlay: typeof fd.underlay === 'string' && fd.underlay.startsWith('data:image/') ? fd.underlay : null,
+          underlayOpacity: 0.3, underlayScale: Number(fd.underlayScale) > 0 ? Number(fd.underlayScale) : 1.87, underlayX: Number(fd.underlayX) || 0, underlayY: Number(fd.underlayY) || 0,
           zoom: 1, panX: 0, panY: 0 };
       }
 

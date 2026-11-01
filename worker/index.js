@@ -181,6 +181,11 @@ r.post('/v1/admin/actas/:no', async (req, env, _c, p) => {
 r.get('/v1/store/:no/map', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/map'));
 r.get('/v1/store/:no/map/:version', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/map/${p.version}`));
 r.get('/v1/store/:no/map/:version/source', (req, env, _c, p) => ownerStoreCall(req, env, p.no, `/map/${p.version}/source`));
+// The store plan (the picture a map was traced from): the map editor
+// uploads it with the owner session before it publishes; any device of the
+// store reads it by the id a floor of the map names.
+r.post('/v1/store/:no/plan', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/plan'));
+r.get('/v1/store/:no/plan/:id', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/plan/${p.id}`));
 r.post('/v1/store/:no/map', async (req, env, _c, p) => {
   const res = await ownerStoreCall(req, env, p.no, '/map');
   if (res.ok) { const { version } = await res.clone().json(); await registry(env, 'PATCH', `/stores/${p.no}`, { map_version: version }); }
@@ -364,6 +369,7 @@ r.get('/v1/store/:no/manifests', (req, env, _c, p) => anyStoreCall(req, env, p.n
 r.get('/v1/store/:no/manifests/stats', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/manifests/stats', new URL(req.url).search));
 r.get('/v1/store/:no/profiles', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/profiles'));
 r.get('/v1/store/:no/pull/find', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/pull/find', new URL(req.url).search));
+r.get('/v1/store/:no/bays', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/bays', new URL(req.url).search));
 // Issue photos: a store device adds one (JPEG bytes); any device of the
 // store, or the owner, reads it; the store or the owner deletes it.
 r.post('/v1/store/:no/photo', (req, env, _c, p) => storeCall(req, env, p.no, '/photo'));

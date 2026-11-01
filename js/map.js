@@ -27,13 +27,27 @@ export function setMap(doc) {
   floors = parseFloors(doc); mapMeta = { version: doc.version, at: doc.at, name: doc.name, floors: floors.map(f => ({ id: f.id, name: f.name, type: f.type })), departments: doc.departments || [], storeInfo: doc.storeInfo || null, metresPerUnit: Number(doc.metresPerUnit) || null };
   setDepartments(doc.departments);
 }
+// The store plan a floor names (the official plan the map was traced from,
+// uploaded from the map editor): its picture id and where it sits.
+const planOf = p => p && /^[0-9a-f]{64}\.(?:jpg|png|webp)$/.test(p.id) && [p.w, p.h, p.x, p.y, p.scale].every(n => Number.isFinite(Number(n))) && p.w > 0 && p.h > 0 && p.scale > 0
+  ? { id: p.id, w: +p.w, h: +p.h, x: +p.x, y: +p.y, scale: +p.scale } : null;
+// Where a plan's picture comes from (the shell hands in the maps client),
+// and each picture as an object URL, made once.
+let planSource = null;
+const planUrls = new Map();
+export function setPlanSource(fn) { planSource = fn; }
+export function hasPlan() { return floors.some(f => f.plan); }
+function planUrl(id) {
+  if (!planUrls.has(id)) planUrls.set(id, Promise.resolve().then(() => { if (!planSource) throw new Error('no store plan source'); return planSource(id); }).then(b => URL.createObjectURL(b)).catch(e => { planUrls.delete(id); throw e; }));
+  return planUrls.get(id);
+}
 export function parseFloors(doc) {
   const out = [], seen = {};
   for (const [i, f] of (doc.floors || []).entries()) {
     const m = /^\s*<svg\b([^>]*)>([\s\S]*)<\/svg>\s*$/i.exec(f.svg || ''); if (!m) continue;
     const vb = (/viewBox="([^"]+)"/.exec(m[1]) || [])[1] || '0 0 100 100';
     let name = String(f.name || f.id || tx('Floor {n}', { n: i + 1 })); if (seen[name]) name += ' ' + (++seen[name]); else seen[name] = 1;
-    out.push({ id: String(f.id || 'f' + i), name, type: f.type === 'boh' ? 'boh' : 'foh', level: Number(f.level) || 0, vb, inner: m[2], paths: pathsOf(f), graph: undefined });
+    out.push({ id: String(f.id || 'f' + i), name, type: f.type === 'boh' ? 'boh' : 'foh', level: Number(f.level) || 0, vb, inner: m[2], paths: pathsOf(f), graph: undefined, plan: planOf(f.plan) });
   }
   return out.sort((a, b) => (a.type === b.type ? 0 : a.type === 'foh' ? -1 : 1) || a.level - b.level);
 }
@@ -396,6 +410,15 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   if (!badges) svg.classList.add('nobadges');
   const graphFor = f => { if (!f) return null; if (f.graph === undefined) f.graph = f.paths ? buildGraph(f.paths) : null; return f.graph; };
   const floorEl = id => svg.querySelector(`.mfl[data-fid="${cssq(id)}"]`);
+  // A floor's plan picture, first in its floor so every shelf draws over it.
+  const drawPlan = f => {
+    const g = floorEl(f.id); if (!g || g.querySelector(':scope > .plan-img')) return;
+    const p = f.plan, img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    img.setAttribute('class', 'plan-img'); img.setAttribute('width', p.w); img.setAttribute('height', p.h); img.setAttribute('preserveAspectRatio', 'none');
+    img.setAttribute('transform', `translate(${p.x},${p.y}) scale(${p.scale})`);
+    g.insertBefore(img, g.firstChild);
+    planUrl(p.id).then(u => img.setAttribute('href', u)).catch(() => { img.remove(); toast(tx('The store plan couldn’t be loaded.'), 'bad'); });
+  };
   // A floor's authored viewBox can be tighter than what is drawn on it (the
   // Busselton stockroom rows sit above it). Measure the drawing once per
   // floor, the first time it shows, and widen the fit to take it all in.
@@ -788,6 +811,16 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // back-of-house floor when switched on.
     priceChecks(mode) { svg.classList.toggle('pc-off', mode === 'off'); svg.classList.toggle('pc-large', mode === 'large'); pcMode = mode; scaleMarkers(); },
     tory(on) { svg.classList.toggle('tory-on', on == null ? !svg.classList.contains('tory-on') : !!on); return svg.classList.contains('tory-on'); },
+    // The store plan: off, under the map (the shelves see-through over it)
+    // or on its own (the shelves hidden), a per-device preference. The
+    // picture is fetched the first time it shows, under its own floor.
+    plan(mode) {
+      mode = mode === 'under' || mode === 'only' ? mode : 'off';
+      svg.classList.toggle('plan-under', mode === 'under'); svg.classList.toggle('plan-only', mode === 'only');
+      if (mode !== 'off') for (const f of fl) if (f.plan) drawPlan(f);
+      return mode;
+    },
+    hasPlan() { return !!cur?.plan; },
     floorType() { return cur?.type; },
     hasTory() { return !!floorEl(cur?.id)?.querySelector('.tory-line-path'); },
     shelfInfo(g) { const id = g.getAttribute('data-shelf'), sub = g.getAttribute('data-subname') || ''; return { id, sub, code: canonCode(id + sub), dept: (g.getAttribute('data-dept') || '').toLowerCase(), full: segmentId(g), segments: api.groups(id).length }; },
@@ -800,6 +833,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   // first layout never lays out two thousand labels only to drop them.
   setLabelFade();
   api.priceChecks(pcMode);
+  api.plan(fl === floors ? prefs().planMode : 'off');   // a preview of another document has no plan source
   scaleMarkers();
 
   // pan, zoom, tap. Two fingers pinch and pan the map itself (the stage
@@ -936,9 +970,18 @@ export function mapbar() {
 }
 // Price-check size (small, large, hidden) when the map has any, and the
 // tory-line switch, shown only while a back-of-house floor with lines is up.
+// The store plan switch: off, under the map, on its own (a map whose floors
+// name no plan has none).
+const PLAN_NEXT = { off: 'under', under: 'only', only: 'off' };
+const planMode = () => PLAN_NEXT[prefs().planMode] ? prefs().planMode : 'off';
+function planButton() {
+  if (!hasPlan()) return '';
+  const m = planMode();
+  return `<span class="ibtn planbtn${m === 'off' ? '' : ' on'}" data-planmode="${m}" role="button" title="${tx('Store plan: off, under the map or on its own')}" aria-label="${tx('Store plan: off, under the map or on its own')}">${ic('plan')}</span>`;
+}
 function extraTools() {
   const syms = mapSymbols(), pc = syms.some(x => x.kind === 'pc' || x.kind === 'order'), tory = syms.some(x => x.kind === 'tory');
-  return (pc ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : '') + (tory ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Show the tory lines')}">${ic('route')}</span>` : '');
+  return planButton() + (pc ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : '') + (tory ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Show the tory lines')}">${ic('route')}</span>` : '');
 }
 export function crumbx(ctx, storeNo, storeName) { const f = mapFloors()[0]; return `<span class="crumbx">${ic('map')}<span data-crumbfloor>${f ? `${f.type.toUpperCase()} · ${esc(f.name)}` : tx('FOH · Ground')}</span> <b>${esc(storeNo)}</b>${ctx ? ' › ' + ctx : ''}<span data-crumbdept></span></span>`; }
 // The strip the shell adds under a phone map mode: the mode's summary and
@@ -958,7 +1001,7 @@ export const sx = {
 };
 export function mvMap(o = {}) {
   const fls = mapFloors();
-  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="${tx('Scan')}">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="${tx('Next level')}">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Tory lines')}">${ic('route')}</span>` : ''}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}" aria-label="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="${tx('Zoom in')}" aria-label="${tx('Zoom in')}">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="${tx('Zoom out')}" aria-label="${tx('Zoom out')}">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}" aria-label="${tx('Fit the map')}">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="${tx('Scan')}">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="${tx('Next level')}">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Tory lines')}">${ic('route')}</span>` : ''}${planButton()}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}" aria-label="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="${tx('Zoom in')}" aria-label="${tx('Zoom in')}">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="${tx('Zoom out')}" aria-label="${tx('Zoom out')}">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}" aria-label="${tx('Fit the map')}">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
 }
 
 // Wire zoom buttons and group chips on a mounted view.
@@ -967,6 +1010,11 @@ export function bindMapChrome(root, map) {
     const z = e.target.closest('[data-zoom]');
     if (z) { const k = z.getAttribute('data-zoom'); if (k === 'in') map.zoomBy(1 / 1.3, null, null, 300); else if (k === 'out') map.zoomBy(1.3, null, null, 300); else map.fit(400); return; }
     const pcb = e.target.closest('[data-pcmode]'); if (pcb) { const next = { small: 'large', large: 'off', off: 'small' }[prefs().priceChecks || 'small']; setPref('priceChecks', next); map.priceChecks(next); haptic('select'); for (const b of $$('[data-pcmode]', root)) b.setAttribute('data-pcmode', next); toast({ small: tx('Price checks: normal'), large: tx('Price checks: large'), off: tx('Price checks: hidden') }[next]); return; }
+    const plb = e.target.closest('[data-planmode]');
+    if (plb) {
+      const next = PLAN_NEXT[planMode()]; setPref('planMode', next); map.plan(next); haptic('select'); planBtn();
+      toast({ off: tx('Store plan: off'), under: tx('Store plan: under the map'), only: tx('Store plan: on its own') }[next]); return;
+    }
     const tb = e.target.closest('[data-tory]'); if (tb) { const on = map.tory(); tb.classList.toggle('on', on); toast(on ? tx('Tory lines shown') : tx('Tory lines hidden')); return; }
     const key = e.target.closest('[data-key]'); if (key) { key.parentNode.classList.toggle('open'); return; }
     const fb = e.target.closest('[data-mapfloor]');
@@ -1006,8 +1054,11 @@ export function bindMapChrome(root, map) {
   map.stage.addEventListener('mapfloor', e => {
     const f = e.detail; const el = root.querySelector('[data-crumbfloor]'); if (el) el.textContent = `${f.type.toUpperCase()} · ${f.name}`;
     for (const b of $$('[data-mapfloor]', root)) b.classList.toggle('on', b.getAttribute('data-mapfloor') === f.id);
-    toryBtn();
+    toryBtn(); planBtn();
   });
+  // The plan switch shows only on a floor that has a plan.
+  const planBtn = () => { const m = planMode(); for (const b of $$('[data-planmode]', root)) { b.hidden = !map.hasPlan(); b.setAttribute('data-planmode', m); b.classList.toggle('on', m !== 'off'); } };
+  planBtn();
   const toryBtn = () => { for (const b of $$('[data-tory]', root)) { b.hidden = !(map.floorType() === 'boh' && map.hasTory()); b.classList.toggle('on', map.svg.classList.contains('tory-on')); } };
   toryBtn();
   const find = root.querySelector('[data-mapfind]');

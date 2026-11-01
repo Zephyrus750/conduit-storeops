@@ -444,4 +444,9 @@ export default {
   "a form or file from Resources": "ein Formular oder eine Datei aus Unterlagen",
   "All {n} resources matching “{q}”": "Alle {n} Unterlagen zu „{q}“",
   "Open Resources with this search": "Unterlagen mit dieser Suche öffnen",
+  "Store plan: off": "Grundriss: aus",
+  "Store plan: off, under the map or on its own": "Grundriss: aus, unter dem Filialplan oder allein",
+  "Store plan: on its own": "Grundriss: allein",
+  "Store plan: under the map": "Grundriss: unter dem Filialplan",
+  "The store plan couldn’t be loaded.": "Der Grundriss konnte nicht geladen werden.",
 };

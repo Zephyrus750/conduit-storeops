@@ -14,7 +14,7 @@ import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEP
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
-import { loadMap, setMap, mapInfo, parkMap, liveIn, mapStats, shelfForLocation, splitCanon } from './map.js';
+import { loadMap, setMap, setPlanSource, mapInfo, parkMap, liveIn, mapStats, shelfForLocation, splitCanon } from './map.js';
 import { initSearch } from './search.js';
 import { voiceSupported, listenOnce } from './voice.js';
 import { resolveSpoken } from '../shared/voice.js';
@@ -72,7 +72,12 @@ document.addEventListener('change', e => { if (e.target.matches?.('#siLang, [dat
 installKeyboard();
 applyOrientation();
 installCameraButtons(document);
-installProductLinks(client.catalogue); installProductCard(client.catalogue);
+installProductLinks(client.catalogue);
+// The PC's product card also shows the item's stockroom bays, for a store with the Stockroom.
+installProductCard(client.catalogue, {
+  scope: () => client.session.current?.store || '',
+  bays: kc => { const s = client.session.current; if (!s?.store || !(s.caps || []).includes('stockroom')) return null; return client.session.token().then(token => client.transport.request(`/v1/store/${s.store}/bays?kc=${kc}`, { token })); },
+});
 let content = $('#content');
 const isMobile = () => frame.clientWidth <= 600;
 
@@ -187,6 +192,7 @@ async function loadStoreMap(no) {
   const version = store?.get('map')?.version || null;
   let doc = null;
   try { doc = await client.maps.get(no, { version }); } catch (e) { console.warn('map', e.message); }
+  setPlanSource(id => client.maps.plan(no, id));   // the store plan a floor names, fetched when first shown
   if (doc) { setMap(doc); search?.invalidate(); return; }
   try { await loadMap(`maps/${no}.svg`); } catch { setMap(null); }
   search?.invalidate();
