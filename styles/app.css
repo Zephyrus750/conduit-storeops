@@ -3869,8 +3869,8 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .dkg-key i.ac { background: var(--panel); box-shadow: inset 0 0 0 2px var(--accent); }
 
 /* Manifest upload preview: departments in words. Each micro-department is
-   its number and name with the department it sits in beneath, a colour
-   dot for that department; the mix by group as one bar; the tables scroll
+   its department's badge, then its number and name, the department's name
+   beneath; the mix by group as one bar; the tables scroll
    sideways inside the card when it is narrow. */
 .mp-card { width: min(1240px, 100%); }
 .mp-roll { display: flex; height: 22px; border-radius: 7px; overflow: hidden; gap: 2px; }
@@ -3878,8 +3878,8 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .mp-tw { overflow-x: auto; }
 .mp-tw .wb-t { width: 100%; }
 .mp-tw .wb-t td { vertical-align: middle; }
-.mp-mc { display: inline-flex; align-items: flex-start; gap: 7px; min-width: 0; }
-.mp-mc > i { flex: none; width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; }
+.mp-mc { display: inline-flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.mp-mc > .dep { flex: none; min-width: 28px; text-align: center; margin-top: 1px; }
 .mp-mcn { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
 .mp-mcn > span { white-space: nowrap; }
 .mp-mcn b.mono { font-family: ui-monospace, Menlo, monospace; font-weight: 700; margin-right: 2px; }
