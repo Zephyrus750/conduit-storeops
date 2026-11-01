@@ -87,7 +87,16 @@ export function setDepartments(list) {
   if (loose.length) DEPT_GROUPS.push(['Other', 'box', loose]);
   return true;
 }
-export function dep(code) { const c = String(code || '').toLowerCase(); return `<span class="dep" style="background:${DEPT_COLOUR[c] || '#64748B'}">${esc(c.toUpperCase())}</span>`; }
+// A department chip's text: dark on a light colour (Kitchen's orange, Toys'
+// red, the pinks and the sky blue), white on a dark one, whichever reads
+// better against it (WCAG contrast).
+export function depInk(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim()); if (!m) return '#fff';
+  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const n = parseInt(m[1], 16), L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return (L + 0.05) / 0.059 > 1.05 / (L + 0.05) ? '#111827' : '#fff';
+}
+export function dep(code) { const c = String(code || '').toLowerCase(), bg = DEPT_COLOUR[c] || '#64748B'; return `<span class="dep" style="background:${bg};color:${depInk(bg)}">${esc(c.toUpperCase())}</span>`; }
 
 // ── time ──────────────────────────────────────────────────────────────
 export function nowIso(d = new Date()) {

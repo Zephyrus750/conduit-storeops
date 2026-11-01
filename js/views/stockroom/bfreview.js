@@ -14,7 +14,7 @@
 
 import { haptic } from '../../device.js';
 import { recallFor, recallFlag } from '../../recallflag.js';
-import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, msteps, mlast, mrows, mbig, mghost, mfoot, camButton } from '../../ui.js';
+import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, mrows, mbig, mghost, mfoot, camButton } from '../../ui.js';
 import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
@@ -23,7 +23,7 @@ import { addDays } from '../../../shared/time.js';
 import { openScreenScan } from '../../screenscan.js';
 import { openLiveReader, warmReader, heldRows, resolveHeld } from '../../livescan.js';
 import { CLAIM_TTL_MS } from '../../../shared/reducers/stockroom.js';
-import { STATUS, todayKey, ensureNames, nameHtml, nameOf, catalogueVerdict, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge } from './common.js';
+import { STATUS, todayKey, ensureNames, nameHtml, nameOf, catalogueVerdict, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge, setProductActions, closeProduct } from './common.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { openPasteBox } from '../pastebox.js';
 import { tx, txn } from '../../i18n.js';
@@ -75,11 +75,16 @@ export default {
   mobile(ctx) {
     mineUse(ctx.storeNo);
     if (ctx.arg?.bay && st.mArg !== ctx.arg.bay) { st.mArg = ctx.arg.bay; st.mBay = String(ctx.arg.bay).toUpperCase(); st.mStep = 2; st.mLast = null; }
-    return `<div id="bfmob">${mobile(ctx)}</div>`;
+    return mobile(ctx);
   },
   mount(ctx, root) {
     loadReport(ctx).then(changed => { if (changed) ctx.rerender(); });
-    const repaint = () => { if (ctx.isMobile) { const h = $('#bfmob', root); if (h) h.innerHTML = mobile(ctx); } else ctx.rerender(); };
+    const repaint = () => {
+      if (!ctx.isMobile) return ctx.rerender();
+      const y = root.querySelector(':scope > .dk-body')?.scrollTop || 0;
+      root.innerHTML = mobile(ctx);
+      if (y) { const b = root.querySelector(':scope > .dk-body'); if (b) b.scrollTop = y; }
+    };
     ensureNames(ctx, allCodes(ctx), repaint);
     loadProfiles(ctx, repaint);
     root.addEventListener('click', e => onClick(e, ctx, root, repaint));
@@ -110,7 +115,22 @@ export default {
     const renew = setInterval(() => claimNow(ctx, true), CLAIM_TTL_MS / 4);
     const onHide = () => { if (document.visibilityState === 'hidden') releaseClaim(ctx); else if (st.sel && !st.claimed) select(ctx, st.sel); };
     document.addEventListener('visibilitychange', onHide);
-    return [ctx.store.on('settings', () => ctx.rerender()), ctx.store.on('backfill', () => { ensureNames(ctx, allCodes(ctx), repaint); repaint(); loadReport(ctx).then(c => { if (c) { ensureNames(ctx, allCodes(ctx), repaint); repaint(); } }); }), () => document.removeEventListener('keydown', onKey),
+    // A code tapped on the phone opens its pop-up; one in the open location
+    // can be removed from there, and a misread swapped for its near code.
+    const offActions = setProductActions(kc => {
+      if (!ctx.isMobile || st.mStep !== 2 || !st.mBay || !ctx.store.get('backfill').subs[`${st.mBay}:${todayKey()}`]?.codes[kc]?.scanned) return null;
+      const where = { bay: st.mBay, date: todayKey() };
+      return {
+        actions: [{ label: tx('Remove from {bay}', { bay: esc(st.mBay) }), danger: true, run: () => removeScan(ctx, kc, repaint) }],
+        use: async code => {
+          if (!await send(ctx, 'submission.update', where, { codes: { [code]: true } })) return;
+          await send(ctx, 'submission.update', where, { remove: [kc] });
+          if (st.mLast === kc) st.mLast = code;
+          ensureNames(ctx, [code], repaint); toast(tx('{code} swapped for {other}', { code: kc, other: code })); repaint();
+        },
+      };
+    });
+    return [offActions, closeProduct, ctx.store.on('settings', () => ctx.rerender()), ctx.store.on('backfill', () => { ensureNames(ctx, allCodes(ctx), repaint); repaint(); loadReport(ctx).then(c => { if (c) { ensureNames(ctx, allCodes(ctx), repaint); repaint(); } }); }), () => document.removeEventListener('keydown', onKey),
       () => { clearInterval(renew); document.removeEventListener('visibilitychange', onHide); clearTimeout(releaseSoon); releaseSoon = setTimeout(() => releaseClaim(ctx), 1500); }];
   },
 };
@@ -386,7 +406,10 @@ async function onClick(e, ctx, root, repaint) {
     const r = await send(ctx, 'adjustment.set', { keycode: kc, date }, { qty: Math.round(qty), location: s.bay, confirmed: true, name: nameOf(kc) || had?.name || '', source: 'review' });
     if (r) toast(tx('{code} flagged for Adjustments at {qty} · {bay}', { code: kc, qty: Math.round(qty), bay: s.bay }));
   }
-  // phone
+  // phone (any action closes the panel but its own toggle)
+  if (act.startsWith('m-') && act !== 'm-panel') st.mPanel = false;
+  if (act === 'm-panel') { st.mPanel = !st.mPanel; repaint(); }
+  else if (act === 'm-change') { st.mStep = 1; st.mBay = ''; repaint(); setTimeout(() => root.querySelector('[data-field="mbay"]')?.focus(), 30); }
   else if (act === 'm-start') { await startBay(ctx, root.querySelector('[data-field="mbay"]')?.value || a.dataset.bay || '', repaint); }
   else if (act === 'm-resume') { st.mBay = a.dataset.bay; st.mStep = 2; repaint(); focusScan(root); }
   else if (act === 'm-send') {
@@ -531,61 +554,101 @@ function finaliseReminder(ctx) {
   if (st.mRemind !== true) { try { if (sessionStorage.getItem('finalise_reminder_shown')) return ''; sessionStorage.setItem('finalise_reminder_shown', '1'); } catch {} st.mRemind = true; }
   return `<div class="mv-remind" role="dialog" aria-label="${tx('Ready to finalise')}"><b>${tx('Ready to finalise')}</b><span>${tx('These locations you submitted have been reviewed and are ready to finalise on the PDT.')}</span>${mrows(ready.map(r => [esc(r.bay), esc(r.date === todayKey() ? tx('today') : r.date), `<span class="btn sm primary" data-act="m-done" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">${tx('Submit')}</span>`, 'hot']))}<button class="btn" data-act="m-remind-close">${tx('Got it')}</button></div>`;
 }
-// The phone's three steps (bay → scan → send).
-const steps = () => [tx('Bay'), tx('Scan'), tx('Submit')];
+// The phone's three steps (location → scan → submit), laid out as the
+// dock's phone: the location bar with its steps on top, the work in the
+// middle, and the strip above the tabs with the count and the next step.
+// The strip opens the panel (held codes, Undo, another location, My
+// locations); Submit for review rises as a sheet over the board.
+const steps = () => [tx('Location'), tx('Scan'), tx('Submit')];
+const rangesOf = ctx => settingsOf(ctx.store.get()).deptRanges || [];
+function topBar(title, right, at) {
+  const names = steps();
+  return `<div class="dk-top bf-top"><div class="dk-tr">${title}<span class="dk-sp"></span>${right || ''}</div>` +
+    `<ol class="dk-steps s3" aria-label="${tx('Step {n} of 3: {step}', { n: at, step: names[at - 1] })}">${names.map((l, i) => `<li class="${i + 1 < at ? 'dn' : i + 1 === at ? 'on' : ''}"${i + 1 === at ? ' aria-current="step"' : ''}><i></i><span>${i + 1 < at ? `${l} ✓` : `${i + 1} ${l}`}</span></li>`).join('')}</ol></div>`;
+}
+const bfStrip = (inner, tog = true) => `<div class="dk-strip">${inner}${tog ? `<button class="dk-tog" data-act="m-panel" aria-expanded="${!!st.mPanel}" aria-label="${st.mPanel ? tx('Hide the details') : tx('Show the details')}">${ic('chev')}</button>` : ''}</div>`;
 function mobile(ctx) {
-  const m = model(ctx), date = todayKey();
+  const m = model(ctx);
   if (st.mView === 'mine') return mineView(ctx);
   if (st.mView === 'readd' && st.readd) return readdView(ctx);
   if (st.mView === 'check') return checkView(ctx);
-  if (st.mStep === 2 && st.mBay) {
-    // In scan order (each code's n, its place in the bay's scans; codes
-    // scanned before the order was kept come first, in no particular order).
-    const s = m.subs.find(x => x.bay === st.mBay), codes = s ? Object.entries(s.codes).filter(([, c]) => c.scanned).sort(([, a], [, b]) => (a.n || 0) - (b.n || 0)).map(([c]) => c) : [];
-    // Every code scanned here, newest first, each removable (K2B could
-    // delete any code, with undo); a pair one digit apart is flagged.
-    const all = codes.slice().reverse(), dsp = disputes(codes), nDsp = Object.keys(dsp).length, recallNow = st.mRecall ? ctx.store.get('recalls')?.items?.[st.mRecall.id] : null;
-    const row = c => [esc(c), dsp[c] ? `<span class="mv-dsp">${ic('alert')}${esc(disputeHint(c, dsp[c][0]))}</span>` : nameHtml(c),
-      `<button class="mv-x" data-act="m-del" data-code="${esc(c)}" aria-label="${tx('Remove {code}', { code: esc(c) })}" title="${tx('Remove {code}', { code: esc(c) })}">${ic('x')}</button>`, dsp[c] ? 'warn' : nameOf(c) === null || recallFor(ctx.store, c) ? 'bad' : ''];
-    warmReader();   // the reading engine loads while the bay is open, so Read the PDT starts quickly
-    return mhead(esc(st.mBay), tx('scanning'), `<span class="mv-cnt">${codes.length}<small>${tx('codes')}</small></span>`) + msteps(2, steps()) +
-      `<div class="mv-scan typed"><div class="cap">${tx('Scan each product on the shelf')}</div><div class="mv-field"><input data-field="mscan" inputmode="numeric" autocomplete="off" placeholder="${tx('Keycode or item barcode')}" enterkeyhint="done">${camButton('mscan')}</div><div class="tools"><button data-act="m-scan-btn">${ic('barcode')}${tx('Add')}</button></div></div>` +
-      `<button class="btn primary mv-read" data-act="m-read">${ic('camera')}${tx('Read the PDT’s list')}</button>` +
-      (heldFor(st.mBay).size ? `<div class="mv-held"><div class="mv-sub">${tx('Held: possible misreads')}</div>${heldRows(heldFor(st.mBay), nameHtml)}</div>` : '') +
-      (recallNow ? recallFlag(ctx.store, recallNow, st.mRecall.kc) : st.mLast ? mlast(esc(st.mLast), nameHtml(st.mLast), tx('just now')) : '') +
-      (nDsp ? `<div class="mv-note warn">${ic('alert')}${nDsp / 2 === 1 ? tx('Two codes are one digit apart: check which is on the shelf and remove the other.') : tx('{n} codes are one digit apart: check which is on the shelf and remove the other.', { n: nDsp })}</div>` : '') +
-      (all.length ? `<div class="mv-sub">${tx('Scanned here')}</div>` + mrows(all.map(row)) : '') +
-      mfoot(mbig(tx('Submit {bay} for review', { bay: esc(st.mBay) }), 'ok', 'listcheck', ' data-act="m-send"') + (st.mLast ? mghost(tx('Undo last scan'), ' data-act="m-undo"') : ''));
-  }
-  if (st.mStep === 3 && st.mBay) {
-    const s = m.subs.find(x => x.bay === st.mBay), n = s ? Object.values(s.codes).filter(c => c.scanned).length : 0;
-    const next = m.requested.slice(0, 3);
-    return mhead(tx('Submitted for review'), `${esc(st.mBay)} · ${txn(n, '{n} code', '{n} codes')} · ${fmtTime(s?.sentAt || new Date().toISOString())}`) + msteps(3, steps()) +
-      `<div class="mv-done"><span class="ck">${ic('check')}</span><b>${tx('{bay} is with review', { bay: esc(st.mBay) })}</b><span>${tx('{n} codes. Review compares it against the report; the sheet is free for the floor.', { n })}</span></div>` +
-      timeline(s, n) +
-      (next.length ? `<div class="mv-sub">${tx('up next::Next')}</div>` + mrows(next.map(b => [esc(b), tx('Requested'), `<span class="btn sm" data-act="m-resume" data-bay="${esc(b)}">${tx('Start')}</span>`, ''])) : '') +
-      mfoot(mbig(tx('Scan the next bay'), '', 'barcode', ' data-act="m-next"') + mghost(tx('Back to home'), ' data-go="mhome"'));
-  }
-  // Every bay on today's board, as Vector's phone: resume or mark ready the
-  // ones in progress, submit the reviewed ones, start the requested ones.
-  const board = [...m.pending.map(s => [esc(s.bay), tx('{n} codes · in progress', { n: s.c.scannedCount }), `<span class="btn sm" data-act="m-resume" data-bay="${esc(s.bay)}">${tx('Resume')}</span><span class="btn sm" data-act="m-ready" data-bay="${esc(s.bay)}">${tx('Ready')}</span>`, 'warn']),
-    ...m.ready.map(s => [esc(s.bay), s.metrics?.accuracy == null ? tx('Reviewed · no report: finalise it on the PDT') : tx('Reviewed · {acc}%: finalise it on the PDT', { acc: s.metrics.accuracy }), `<span class="btn sm primary" data-act="m-done" data-bay="${esc(s.bay)}" data-date="${esc(s.date)}">${tx('Submit')}</span>`, 'hot']),
-    ...m.requested.map(b => [esc(b), tx('Requested · not started'), `<span class="btn sm" data-act="m-resume" data-bay="${esc(b)}">${tx('Start')}</span>`, ''])];
-  const mine = myLocations(ctx), readyN = mine.filter(r => r.state === 'ready').length;
-  return (st.mRemind === false ? '' : finaliseReminder(ctx)) + mhead(tx('Backfill scan'), tx('Scan the bay label to start'), `<button class="mv-cnt mine" data-act="m-mine" title="${tx('My locations')}">${ic('listcheck')}${readyN ? `<b>${readyN}</b>` : ''}</button>`) + msteps(1, steps()) +
-    `<div class="mv-scan typed"><div class="cap">${tx('Scan the location barcode')}</div><div class="mv-field"><input data-field="mbay" inputmode="numeric" autocomplete="off" placeholder="${tx('Bay label or number')}" enterkeyhint="go">${camButton('mbay')}</div><div class="tools"><button data-act="m-start">${ic('arrow')}${tx('Start')}</button></div></div>` +
-    (board.length ? `<div class="mv-sub">${tx('On the board')}</div>` + mrows(board) : `<div class="mv-note">${ic('layers')}${tx('Nothing on the board yet. Scan a bay to start it.')}</div>`);
+  if (st.mStep === 2 && st.mBay) return scanView(ctx, m);
+  return boardView(ctx, m, st.mStep === 3 && st.mBay ? sentSheet(ctx, m) : '');
 }
-// Where a submitted bay is now: submitted, reviewed at the desk, finalised
-// on the PDT. It follows the desk live; a bay the desk removed says so.
+// Step 1: today's board, every location in its group with what can be done
+// next (resume or mark ready, finalise, start the requested ones); the strip
+// offers the next requested location as one tap.
+function boardView(ctx, m, sheet) {
+  const r = rangesOf(ctx), dep = b => deptBadge(deptForBay(r, b), { short: true });
+  const mine = myLocations(ctx), readyN = mine.filter(x => x.state === 'ready').length, next = m.requested[0];
+  const btn = (act, label, b) => `<button class="btn sm" data-act="${act}" data-bay="${esc(b)}">${label}</button>`;
+  const row = (b, small, acts, cls = '') => `<div class="bf-row${cls}"><span class="bf-loc"><b>${esc(b)}</b>${dep(b)}</span><small>${small}</small><span class="bf-acts">${acts}</span></div>`;
+  const codesOf = s => txn(s.c.scannedCount, '{n} code', '{n} codes');
+  const groups = [
+    [tx('In progress'), m.pending.filter(s => !s.sentAt).map(s => row(s.bay, codesOf(s), btn('m-resume', tx('Resume'), s.bay) + btn('m-ready', tx('Ready'), s.bay)))],
+    [tx('With review'), m.pending.filter(s => s.sentAt).map(s => row(s.bay, `${codesOf(s)} · ${fmtTime(s.sentAt)}`, btn('m-resume', tx('Resume'), s.bay) + btn('m-ready', tx('Ready'), s.bay)))],
+    [tx('Reviewed: finalise on the PDT'), m.ready.map(s => row(s.bay, s.metrics?.accuracy == null ? tx('no report') : tx('{acc}% accurate', { acc: s.metrics.accuracy }), `<button class="btn sm primary" data-act="m-done" data-bay="${esc(s.bay)}" data-date="${esc(s.date)}">${tx('Submit')}</button>`, ' hot'))],
+    [tx('Requested'), m.requested.map(b => row(b, tx('not started'), btn('m-resume', tx('Start'), b)))],
+  ].filter(([, rows]) => rows.length);
+  const board = groups.length ? `<div class="card bf-board">${groups.map(([h, rows]) => `<div class="bf-gh">${h}</div>${rows.join('')}`).join('')}</div>`
+    : `<div class="mv-note">${ic('layers')}${tx('Nothing on the board yet.')} ${tx('Scan a location label to start it.')}</div>`;
+  const mineBtn = `<button class="btn sm bf-mine" data-act="m-mine" aria-label="${readyN ? txn(readyN, 'My locations: {n} ready to finalise', 'My locations: {n} ready to finalise') : tx('My locations')}">${ic('listcheck')}${tx('Mine')}${readyN ? `<b>${readyN}</b>` : ''}</button>`;
+  const entry = `<div class="bf-entry"><input class="inp" data-field="mbay" inputmode="numeric" autocomplete="off" placeholder="${tx('Scan or type a location')}" aria-label="${tx('Location label or number')}" enterkeyhint="go">${camButton('mbay')}<button class="btn primary" data-act="m-start">${tx('Start')}</button></div>`;
+  const strip = next ? bfStrip(`<div class="dk-st"><div class="dk-l2">${tx('Up next')}</div><div class="dk-l1"><b>${esc(next)}</b>${dep(next)}<span>${txn(m.requested.length, '{n} requested', '{n} requested')}</span></div></div><button class="dk-go" data-act="m-resume" data-bay="${esc(next)}">${tx('Start {bay}', { bay: esc(next) })}</button>`, false)
+    : bfStrip(`<div class="dk-st"><div class="dk-l1"><b>${m.subs.length}</b><span>${txn(m.subs.length, 'location today', 'locations today')}</span></div><div class="dk-l2">${readyN ? txn(readyN, '{n} ready to finalise on the PDT', '{n} ready to finalise on the PDT') : tx('Scan a location label to start it.')}</div></div>`, false);
+  return (st.mRemind === false ? '' : finaliseReminder(ctx)) + topBar(`<span class="dk-tn">${tx('Pick a location')}</span>`, mineBtn, 1) + `<div class="dk-body">${entry}${board}</div>` + sheet + strip;
+}
+// Step 2: one row to scan or type a code beside Scan (the camera: the PDT's
+// list, or barcodes), the location's codes newest first, and the strip with
+// the count, the last code and Submit for review.
+function scanView(ctx, m) {
+  // In scan order (each code's n, its place in the bay's scans; codes
+  // scanned before the order was kept come first, in no particular order).
+  const bay = st.mBay, s = m.subs.find(x => x.bay === bay), codes = s ? Object.entries(s.codes).filter(([, c]) => c.scanned).sort(([, a], [, b]) => (a.n || 0) - (b.n || 0)).map(([c]) => c) : [];
+  // Every code scanned here, newest first, each removable (K2B could
+  // delete any code, with undo); a pair one digit apart is flagged.
+  const all = codes.slice().reverse(), dsp = disputes(codes), nDsp = Object.keys(dsp).length, recallNow = st.mRecall ? ctx.store.get('recalls')?.items?.[st.mRecall.id] : null;
+  const held = heldFor(bay), d = deptForBay(rangesOf(ctx), bay), last = st.mLast && codes.includes(st.mLast) ? st.mLast : null;
+  warmReader();   // the reading engine loads while the location is open, so Scan starts quickly
+  const row = (c, i) => `<div class="bf-code${i === 0 && c === last ? ' new' : ''}${dsp[c] ? ' warn' : nameOf(c) === null || recallFor(ctx.store, c) ? ' bad' : ''}"><b class="mono" data-kccard="${esc(c)}">${esc(c)}</b><span class="nm">${dsp[c] ? `<span class="mv-dsp">${ic('alert')}${esc(disputeHint(c, dsp[c][0]))}</span>` : nameHtml(c)}</span>${i === 0 && c === last ? `<em>${tx('just now')}</em>` : ''}` +
+    `<button class="mv-x" data-act="m-del" data-code="${esc(c)}" aria-label="${tx('Remove {code}', { code: esc(c) })}" title="${tx('Remove {code}', { code: esc(c) })}">${ic('x')}</button></div>`;
+  const title = `<button class="dk-tn" data-act="m-change" aria-label="${tx('Location {bay}: switch location or see the board', { bay: esc(bay) })}">${tx('Location {bay}', { bay: `<span class="mono">${esc(bay)}</span>` })}${ic('chev')}</button>`;
+  const entry = `<div class="bf-entry"><span class="bf-fw"><input data-field="mscan" inputmode="numeric" autocomplete="off" placeholder="${tx('Scan or type a code')}" aria-label="${tx('Keycode or item barcode')}" enterkeyhint="done"><button type="button" data-act="m-scan-btn" aria-label="${tx('Add the typed code')}">${ic('plus')}</button></span><button class="btn primary bf-scan" data-act="m-read">${ic('camera')}${tx('Scan')}</button></div>`;
+  const notes = (held.size ? `<button class="mv-note warn bf-heldnote" data-act="m-panel">${ic('alert')}${txn(held.size, '{n} code was held as a possible misread: tap to check it.', '{n} codes were held as possible misreads: tap to check them.')}</button>` : '') +
+    (recallNow ? recallFlag(ctx.store, recallNow, st.mRecall.kc) : '') +
+    (nDsp ? `<div class="mv-note warn">${ic('alert')}${nDsp / 2 === 1 ? tx('Two codes are one digit apart: check which is on the shelf and remove the other.') : tx('{n} codes are one digit apart: check which is on the shelf and remove the other.', { n: nDsp })}</div>` : '');
+  const list = `<div class="card bf-list"><div class="bf-lh">${tx('Scanned here')}<span>${tx('newest first')}</span></div>${all.length ? all.map(row).join('') : `<p class="bf-empty">${tx('Tap Scan to read the PDT’s list, or scan each product.')}</p>`}</div>`;
+  const strip = bfStrip(`<div class="dk-st"><div class="dk-l1"><b>${codes.length}</b><span>${txn(codes.length, 'code in {bay}', 'codes in {bay}', { bay: esc(bay) })}</span></div>` +
+    `<div class="dk-l2">${held.size ? `<b class="w">${txn(held.size, '{n} held', '{n} held')}</b> · ` : ''}${last ? `${tx('Last')} <b>${esc(last)}</b> ${esc(nameOf(last) || '')}` : tx('Nothing scanned yet')}</div></div>` +
+    `<button class="dk-go ok" data-act="m-send">${ic('check')}${tx('Submit for review')}</button>`);
+  return topBar(title, d ? deptBadge(d) : '', 2) + `<div class="dk-body">${entry}${notes}${list}</div>` + (st.mPanel ? scanPanel(bay) : '') + strip;
+}
+// The strip opened: held codes to settle, Undo, another location, My locations.
+function scanPanel(bay) {
+  const held = heldFor(bay), tool = (act, icon, label) => `<button class="dk-tool" data-act="${act}">${ic(icon)}<span>${label}</span></button>`;
+  return `<div class="dk-sheet pan bf-pan" role="dialog" aria-label="${tx('Location {bay}', { bay: esc(bay) })}">` +
+    (held.size ? `<div class="bf-pgh">${tx('Held: possible misreads')}</div><div class="mv-held">${heldRows(held, nameHtml)}</div>` : '') +
+    `<div class="dk-tools">${st.mLast ? tool('m-undo', 'undo', tx('Undo last scan')) : ''}${tool('m-change', 'swap', tx('Another location'))}${tool('m-mine', 'listcheck', tx('My locations'))}</div></div>`;
+}
+// Step 3: submitted. A sheet over the board says so, follows the location
+// through the review, and offers the next requested location.
+function sentSheet(ctx, m) {
+  const bay = st.mBay, s = m.subs.find(x => x.bay === bay), n = s ? Object.values(s.codes).filter(c => c.scanned).length : 0, next = m.requested[0], d = deptForBay(rangesOf(ctx), bay);
+  return `<div class="dk-sheet bf-sent" role="dialog" aria-label="${tx('{bay} submitted for review', { bay: esc(bay) })}"><div class="bf-ok"><span class="ck">${ic('check')}</span><div><b>${tx('{bay} submitted for review', { bay: `<span class="mono">${esc(bay)}</span>` })}</b>` +
+    `<small>${d ? deptBadge(d) : ''}<span>${txn(n, '{n} code', '{n} codes')} · ${tx('the sheet is free for the floor')}</span></small></div></div>` + timeline(s, n) +
+    `<div class="bf-sacts"><button class="btn" data-act="m-next">${tx('Done')}</button>${next ? `<button class="btn primary" data-act="m-resume" data-bay="${esc(next)}">${tx('Start {bay}', { bay: esc(next) })}<small>${tx('up next')}</small></button>` : `<button class="btn primary" data-act="m-next">${tx('Scan the next location')}</button>`}</div></div>`;
+}
+// Where a submitted location is now: submitted, reviewed at the desk,
+// finalised on the PDT. It follows the desk live; a location the desk
+// removed says so.
 function timeline(s, n) {
   if (!s) return `<div class="mv-note warn">${ic('alert')}${tx('{bay} was removed from today’s board at the desk.', { bay: esc(st.mBay) })}</div>`;
   const reviewed = s.status === 'corrected' || s.status === 'submitted', done = s.status === 'submitted';
   const row = (cls, title, small, btn = '') => `<div class="tl-r ${cls}"><i></i><b>${title}</b>${btn}<small>${small}</small></div>`;
   return `<div class="mv-tl">` +
     row('dn', tx('Submitted for review'), `${fmtTime(s.sentAt || s.updatedAt || new Date().toISOString())} · ${txn(n, '{n} code', '{n} codes')}`) +
-    row(reviewed ? 'dn' : 'now', tx('Reviewed at the desk'), !reviewed ? tx('Waiting for the desk') : s.metrics?.accuracy == null ? tx('Reviewed · no report') : tx('Reviewed · {acc}%', { acc: s.metrics.accuracy })) +
-    row(done ? 'dn' : reviewed ? 'now' : '', tx('Finalise on the PDT'), done ? tx('Submitted ✓') : reviewed ? tx('Finalise it on the PDT, then tap Submit') : tx('After the review'),
+    row(reviewed ? 'dn' : 'now', tx('Reviewed at the desk'), !reviewed ? tx('Waiting to be reviewed') : s.metrics?.accuracy == null ? tx('Reviewed · no report') : tx('Reviewed · {acc}%', { acc: s.metrics.accuracy })) +
+    row(done ? 'dn' : reviewed ? 'now' : '', tx('Finalise on the PDT'), done ? tx('Submitted ✓') : reviewed ? tx('Finalise it on the PDT') : tx('After the review'),
       reviewed && !done ? `<span class="btn sm primary" data-act="m-done" data-bay="${esc(s.bay)}" data-date="${esc(s.date)}">${tx('Submit')}</span>` : '') +
     `</div>`;
 }
@@ -596,7 +659,7 @@ const heldFor = bay => (st.held[bay] ||= new Map());
 function readPdt(ctx, repaint) {
   const bay = st.mBay, date = todayKey(), m = model(ctx);
   openLiveReader({
-    title: tx('Read the PDT · {bay}', { bay }),
+    title: tx('Scan · {bay}', { bay }),
     expected: m.sys?.[bay] || [],
     have: () => { const s = ctx.store.get('backfill').subs[`${bay}:${date}`]; return new Set(s ? Object.keys(s.codes).filter(c => s.codes[c].scanned) : []); },
     verify: kc => catalogueVerdict(ctx, kc),

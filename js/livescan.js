@@ -3,7 +3,7 @@
 // read by Tesseract (self-hosted, vendor/tesseract, the engine Screen scan
 // uses) and each keycode gets a box: amber while it is checked, green once
 // it is in, red when it is held as a possible misread. A product barcode in
-// the same camera goes straight in, so there is no mode to switch.
+// the same camera goes straight in.
 //
 // The rules are shared/livescan.js: a code on today's list for the bay goes
 // in on the first read, others on two reads (three when the catalogue does
@@ -13,7 +13,13 @@
 // it reads. The count and Done sit in a strip at the foot; the strip opens a
 // panel with every code read and why it went in.
 //
-//   openLiveReader({ title, expected, have, verify, add, label, held, onHeldChange, onClose }) → close()
+// A switch at the top picks what the camera reads: the PDT's list (the
+// default, where a product barcode in view still goes straight in) or
+// Barcode, one barcode at a time in a window shaped for it, with no text
+// reading (the phone's barcode reader, or ZXing where there is none).
+//
+//   openLiveReader({ title, mode, expected, have, verify, add, label, held, onHeldChange, onClose }) → close()
+//     mode       'pdt' (the default) or 'barcode': where the switch starts
 //     expected   codes on today's list (first read is enough); [] for none
 //     have()     the codes already in (a Set), asked fresh each time
 //     verify(code) → 'ok' | 'unknown' | 'error'   the catalogue's word on it
@@ -25,7 +31,7 @@
 //     the held codes' Use / Keep / Remove, for the screen behind the camera too
 
 import { ic, esc, toast } from './ui.js';
-import { feedback } from './scan.js';
+import { feedback, barcodeReader } from './scan.js';
 import { codesIn, preprocess, decide, misreadFix } from '../shared/livescan.js';
 import { tx, txn } from './i18n.js';
 
@@ -69,12 +75,12 @@ export function resolveHeld(held, code, how) {
 }
 
 let current = null;
-export function openLiveReader({ title = tx('Read the PDT'), expected = [], have = () => new Set(), verify = async () => 'error', add = async () => true, label = () => '', held = new Map(), onHeldChange = () => {}, onClose = () => {} } = {}) {
+export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = 'pdt', expected = [], have = () => new Set(), verify = async () => 'error', add = async () => true, label = () => '', held = new Map(), onHeldChange = () => {}, onClose = () => {} } = {}) {
   current?.close();
   const exp = new Set(expected);
   const el = document.createElement('div'); el.className = 'ls'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', title);
   el.innerHTML = `<div class="ls-top"><button type="button" class="ls-ib" data-ls="close" aria-label="${tx('Close')}">${ic('x')}</button><div class="ls-tt"><b>${esc(title)}</b><span class="ls-st"><i></i><span>${tx('Starting the camera…')}</span></span></div><button type="button" class="ls-ib" data-ls="torch" hidden aria-label="${tx('Torch')}">${ic('bolt')}</button></div>` +
-    `<div class="ls-view"><video playsinline muted></video><canvas class="ls-hl" aria-hidden="true"></canvas><div class="ls-win" aria-hidden="true"><i class="ls-line"></i></div><span class="ls-mode">${tx('Reading the PDT')}</span><span class="ls-hint" hidden></span><i class="ls-focus" hidden></i></div>` +
+    `<div class="ls-view"><video playsinline muted></video><canvas class="ls-hl" aria-hidden="true"></canvas><div class="ls-win" aria-hidden="true"><i class="ls-line"></i></div><div class="ls-seg" role="group" aria-label="${tx('What the camera reads')}"><button type="button" data-ls="mode" data-mode="pdt">${ic('file')}${tx('PDT list')}</button><button type="button" data-ls="mode" data-mode="barcode">${ic('barcode')}${tx('Barcode')}</button></div><span class="ls-hint" hidden></span><i class="ls-focus" hidden></i></div>` +
     `<div class="ls-zoom" hidden><span>1×</span><input type="range" aria-label="${tx('Zoom')}"><span class="ls-zmax"></span></div>` +
     `<div class="ls-chips" aria-live="polite"></div><div class="ls-panel" hidden></div>` +
     `<div class="ls-strip"><button type="button" class="ls-up" data-ls="panel" aria-label="${tx('Show what was read')}">${ic('chev')}</button><button type="button" class="ls-g" data-ls="panel"><b></b><span></span></button><button type="button" class="btn sm ls-check" data-ls="check" hidden></button><button type="button" class="btn sm primary ls-done" data-ls="close">${tx('Done')}</button></div>`;
@@ -82,7 +88,7 @@ export function openLiveReader({ title = tx('Read the PDT'), expected = [], have
   const $ = s => el.querySelector(s), video = $('video'), view = $('.ls-view'), hl = $('.ls-hl'), win = $('.ls-win'), panel = $('.ls-panel'), torchBtn = $('[data-ls="torch"]');
   const say = t => { $('.ls-st span').textContent = t; };
   const work = document.createElement('canvas'), w2d = work.getContext('2d', { willReadFrequently: true });
-  let stream = null, track = null, caps = {}, closed = false, timer = null, raf = 0, detector = null, ocrBusy = false, lastOcr = 0, pass = 0, torch = false, dark = 0, lock = null, crop = null, zoom = null;
+  let mode = 'pdt', zread = null, zLoading = null, stream = null, track = null, caps = {}, closed = false, timer = null, raf = 0, detector = null, ocrBusy = false, lastOcr = 0, pass = 0, torch = false, dark = 0, lock = null, crop = null, zoom = null;
   const reads = new Map(), dismissed = new Set(), session = [];
 
   // ── what was read: wait, add, hold ──
@@ -127,7 +133,7 @@ export function openLiveReader({ title = tx('Read the PDT'), expected = [], have
     if (closed) return;
     const n = have().size, h = held.size;
     $('.ls-g b').textContent = txn(n, '{n} code in', '{n} codes in');
-    $('.ls-g span').textContent = session.length ? txn(session.length, '{n} read now', '{n} read now') + (h ? ` · ${txn(h, '{n} held', '{n} held')}` : '') : tx('Hold the PDT’s list in the window');
+    $('.ls-g span').textContent = session.length ? txn(session.length, '{n} read now', '{n} read now') + (h ? ` · ${txn(h, '{n} held', '{n} held')}` : '') : mode === 'barcode' ? tx('Point the camera at the barcode') : tx('Hold the PDT’s list in the window');
     const chk = $('.ls-check'); chk.hidden = !h; chk.textContent = tx('Check {n}', { n: h });
     if (!panel.hidden) panel.innerHTML = panelHtml();
   }
@@ -167,8 +173,11 @@ export function openLiveReader({ title = tx('Read the PDT'), expected = [], have
     clearTimeout(timer); if (closed || !stream) return;
     timer = setTimeout(async () => {
       if (video.readyState >= 2) {
-        if (detector) try { for (const b of await detector.detect(video)) barcode(b.rawValue); } catch { /* a frame that fails to decode is normal */ }
-        if (!ocrBusy && Date.now() - lastOcr >= OCR_MS) readText();
+        if (mode === 'barcode') { if (zread) try { for (const c of await zread(video)) barcode(c); } catch { /* a frame that fails to decode is normal */ } }
+        else {
+          if (detector) try { for (const b of await detector.detect(video)) barcode(b.rawValue); } catch { /* a frame that fails to decode is normal */ }
+          if (!ocrBusy && Date.now() - lastOcr >= OCR_MS) readText();
+        }
       }
       loop();
     }, TICK_MS);
@@ -176,14 +185,27 @@ export function openLiveReader({ title = tx('Read the PDT'), expected = [], have
   function barcode(raw) {
     const d = String(raw || '').replace(/\D/g, '');
     if (!(d.length === 7 || d.length === 8 || (d.length === 13 && ean13(d)))) return;
-    flashMode(tx('Barcode')); consider(d, null, 'barcode');
+    if (mode === 'pdt') flashMode(); consider(d, null, 'barcode');
   }
+  // A barcode read while on the PDT's list lights the Barcode side of the switch for a moment.
   let modeT = 0;
-  const flashMode = t => { const m = $('.ls-mode'); m.textContent = t; clearTimeout(modeT); modeT = setTimeout(() => { m.textContent = tx('Reading the PDT'); }, 1200); };
+  const flashMode = () => { const b = $('.ls-seg [data-mode="barcode"]'); b.classList.add('ping'); clearTimeout(modeT); modeT = setTimeout(() => b.classList.remove('ping'), 1200); };
+  // The switch: the PDT's list, or one barcode at a time (the reader loads on first use).
+  function setMode(m) {
+    mode = m === 'barcode' ? 'barcode' : 'pdt';
+    el.classList.toggle('bc', mode === 'barcode');
+    for (const b of el.querySelectorAll('[data-ls="mode"]')) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+    if (mode === 'barcode') {
+      if (stream) { el.classList.add('live'); say(tx('Point the camera at the barcode')); }
+      if (!zread && !zLoading) zLoading = barcodeReader().then(r => { zread = r; }).catch(e => { zLoading = null; say(e.message); });
+    } else if (stream) say(tessP ? tx('Reading · hold the list in the window') : tx('Loading the reader…'));
+    paint();
+  }
   async function readText() {
+    if (mode !== 'pdt') return;
     ocrBusy = true; lastOcr = Date.now();
     try {
-      const w = await engine(); if (closed) return;
+      const w = await engine(); if (closed || mode !== 'pdt') return;
       el.classList.add('live'); say(tx('Reading · hold the list in the window'));
       const vw = video.videoWidth, vh = video.videoHeight; if (!vw || !vh) return;
       crop = { x: Math.floor(vw * 0.05), y: Math.floor(vh * 0.13), w: Math.floor(vw * 0.9), h: Math.floor(vh * 0.57) }; placeWindow();
@@ -192,7 +214,7 @@ export function openLiveReader({ title = tx('Read the PDT'), expected = [], have
       w2d.drawImage(video, crop.x, crop.y, crop.w, crop.h, 0, 0, work.width, work.height);
       const img = w2d.getImageData(0, 0, work.width, work.height), mean = preprocess(img.data, work.width, work.height, (++pass & 1) === 1);
       w2d.putImageData(img, 0, 0); lowLight(mean);
-      const res = await w.recognize(work, {}, { blocks: true }); if (closed) return;
+      const res = await w.recognize(work, {}, { blocks: true }); if (closed || mode !== 'pdt') return;
       const words = [];
       for (const b of res?.data?.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const x of l.words || []) words.push(x);
       for (const { code, bbox } of codesIn(words, res?.data?.text || '')) consider(code, bbox && { x0: bbox.x0 / sc + crop.x, y0: bbox.y0 / sc + crop.y, x1: bbox.x1 / sc + crop.x, y1: bbox.y1 / sc + crop.y });
@@ -223,7 +245,8 @@ export function openLiveReader({ title = tx('Read the PDT'), expected = [], have
         const z = $('.ls-zoom input'); Object.assign(z, { min: zoom.min, max: zoom.max, step: caps.zoom.step || 0.1, value: zoom.now }); $('.ls-zmax').textContent = `${Math.round(zoom.max)}×`; $('.ls-zoom').hidden = false;
       }
       if ('BarcodeDetector' in window) { const ok = await window.BarcodeDetector.getSupportedFormats?.().catch(() => FORMATS) || FORMATS; detector = new window.BarcodeDetector({ formats: FORMATS.filter(f => ok.includes(f)) }); }
-      say(tx('Loading the reader…')); wake(); loop(); if (!raf) raf = requestAnimationFrame(draw);
+      if (mode === 'barcode') { el.classList.add('live'); say(tx('Point the camera at the barcode')); } else say(tx('Loading the reader…'));
+      wake(); loop(); if (!raf) raf = requestAnimationFrame(draw);
       video.addEventListener('loadedmetadata', placeWindow);
     } catch (e) { say(e?.name === 'NotAllowedError' ? `${tx('Camera access was refused.')} ${tx('Allow it in the browser settings, or type the codes.')}` : `${tx('The camera did not start.')} ${tx('Type the codes instead.')}`); }
   }
@@ -264,12 +287,13 @@ export function openLiveReader({ title = tx('Read the PDT'), expected = [], have
     const b = e.target.closest('[data-ls]'); if (!b) return;
     const act = b.dataset.ls;
     if (act === 'close') close();
+    else if (act === 'mode') setMode(b.dataset.mode);
     else if (act === 'panel') togglePanel();
     else if (act === 'check') togglePanel(true);
     else if (act === 'torch' && track) { torch = !torch; try { await track.applyConstraints({ advanced: [{ torch }] }); b.classList.toggle('on', torch); if (torch) lowLight(255); } catch { torch = false; toast(tx('The torch is not available on this camera'), 'bad'); } }
   });
   el.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-  paint(); start(); engine().catch(e => say(e.message));
+  setMode(firstMode); start(); engine().catch(e => { if (mode === 'pdt') say(e.message); });
   current = { close };
   return close;
 }
