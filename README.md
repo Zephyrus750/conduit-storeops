@@ -447,9 +447,15 @@ the store).
 **Catalogue.** `GET /v1/catalogue?kc=` proxies two existing upstreams (the
 suite lookup worker for keycode → name and product URL; the details worker
 for price, was, image and clearance) and caches per keycode in the edge
-Cache API: links for a week, details for a day, misses for an hour. The
+Cache API: links for a week, details for a day, misses for an hour. Names
+never wait on product pages: a lookup waits 3.5 seconds for them and the
+rest finish in the background into the cache; a page that could not be read
+is tried again after an hour. A code the catalogue could not answer for is
+left out of `items` (unknown, not a miss) and nothing is cached. The
 device library (`client/catalogue.js`) batches lookups and keeps hits for a
-week. The shell's search palette (Ctrl K and the header)
+week (an answer with no picture or price for an hour); a lookup it could
+not make resolves `undefined`, which the views show as "Not checked yet"
+and ask again, never as "not in the catalogue". The shell's search palette (Ctrl K and the header)
 understands a keycode, a shelf such as A16 S2, a department and a tool, and
 the store's records (`shared/finder.js`): manifests, consolidation labels
 (the truck and bay a consol is on), cages, other loads and off-site

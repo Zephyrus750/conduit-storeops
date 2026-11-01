@@ -2695,6 +2695,10 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .bdept .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1px solid var(--line); }
 .bdept select { border: 0; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; min-width: 0; max-width: 220px; cursor: pointer; }
 
+/* The review list's sort box shrinks to its column (a long language at a
+   half-screen desk made it wider than the rail). */
+.srail-t .tb { flex: 0 1 auto; min-width: 0; }
+.srail-t .tb .sortb { width: 100%; min-width: 0; text-overflow: ellipsis; }
 /* Backfill review: the location's header. One line says what it is and what
    to do (number ▾, department chip, status, the counts strip with the
    report's clock, Re-check ▾, Ready); the next says how to look at it (the

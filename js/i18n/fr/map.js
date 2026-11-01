@@ -449,4 +449,5 @@ export default {
   "Store plan: on its own": "Plan officiel : seul",
   "Store plan: under the map": "Plan officiel : sous le plan du magasin",
   "The store plan couldn’t be loaded.": "Le plan officiel n’a pas pu être chargé.",
+  "The product catalogue did not answer. Try again in a moment.": "Le catalogue produits n’a pas répondu. Réessayez dans un instant.",
 };

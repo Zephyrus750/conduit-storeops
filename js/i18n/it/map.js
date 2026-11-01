@@ -449,4 +449,5 @@ export default {
   "Store plan: on its own": "Planimetria: da sola",
   "Store plan: under the map": "Planimetria: sotto la mappa",
   "The store plan couldn’t be loaded.": "Impossibile caricare la planimetria.",
+  "The product catalogue did not answer. Try again in a moment.": "Il catalogo prodotti non ha risposto. Riprova tra un momento.",
 };

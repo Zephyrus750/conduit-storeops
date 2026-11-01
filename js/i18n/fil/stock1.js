@@ -647,4 +647,5 @@ export default {
   "Use {other} instead of {code} in the report list for {bay}?": "Gamitin ang {other} sa halip na {code} sa listahan ng report para sa {bay}?",
   "Use {other} instead of {code} in the scans for {bay}?": "Gamitin ang {other} sa halip na {code} sa mga scan para sa {bay}?",
   "{name}: use it instead of {code}": "{name}: gamitin ito sa halip na {code}",
+  "The product catalogue did not answer. It is asked again in a couple of minutes.": "Hindi sumagot ang product catalogue. Tatanungin ulit sa loob ng ilang minuto.",
 };

@@ -449,4 +449,5 @@ export default {
   "Store plan: on its own": "Plano de la tienda: solo",
   "Store plan: under the map": "Plano de la tienda: bajo el mapa",
   "The store plan couldn’t be loaded.": "No se pudo cargar el plano de la tienda.",
+  "The product catalogue did not answer. Try again in a moment.": "El catálogo de productos no respondió. Inténtalo de nuevo en un momento.",
 };

@@ -449,4 +449,5 @@ export default {
   "Store plan: on its own": "Floor plan ng tindahan: mag-isa",
   "Store plan: under the map": "Floor plan ng tindahan: sa ilalim ng mapa",
   "The store plan couldn’t be loaded.": "Hindi ma-load ang floor plan ng tindahan.",
+  "The product catalogue did not answer. Try again in a moment.": "Hindi sumagot ang product catalogue. Subukan ulit maya-maya.",
 };

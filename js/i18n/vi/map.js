@@ -449,4 +449,5 @@ export default {
   "Store plan: on its own": "Bản vẽ mặt bằng: riêng",
   "Store plan: under the map": "Bản vẽ mặt bằng: dưới sơ đồ",
   "The store plan couldn’t be loaded.": "Không tải được bản vẽ mặt bằng.",
+  "The product catalogue did not answer. Try again in a moment.": "Danh mục sản phẩm không phản hồi. Hãy thử lại sau giây lát.",
 };

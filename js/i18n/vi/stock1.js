@@ -647,4 +647,5 @@ export default {
   "Use {other} instead of {code} in the report list for {bay}?": "Dùng {other} thay cho {code} trong danh sách báo cáo của {bay}?",
   "Use {other} instead of {code} in the scans for {bay}?": "Dùng {other} thay cho {code} trong các lần quét của {bay}?",
   "{name}: use it instead of {code}": "{name}: dùng mã này thay cho {code}",
+  "The product catalogue did not answer. It is asked again in a couple of minutes.": "Danh mục sản phẩm không phản hồi. Sẽ hỏi lại sau vài phút.",
 };
