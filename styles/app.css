@@ -1733,26 +1733,8 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 @container shell (max-width: 1100px) { .inv-body .card > .ch { flex-wrap: wrap; } .inv-body .card > .ch h3 { flex-basis: 100%; } .inv-row .cb input { max-width: 240px; } }
 .map.real.inv-heat .shelf-badges, .map.real.inv-paint .shelf-badges { opacity: .35; }
 
-/* ── Dashboard, Floor P2: Today at, logistics, the combined map ──────── */
-.dash2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
-.tdays .ch { flex-wrap: wrap; }
-.tday-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.tday { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 10px 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); text-align: left; cursor: pointer; min-width: 0; }
-.tday:hover { background: var(--hover); border-color: var(--accent-line); }
-.tday svg.i { width: 18px; height: 18px; color: var(--accent-ink); }
-.tday b { font-size: 24px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); line-height: 1.1; margin-top: 4px; }
-.tday span { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
-.tday small { font-size: 11px; color: var(--dim); line-height: 1.3; }
-.logis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.card.logi .rows .row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: 13px; color: var(--dim); }
-.card.logi .rows .row b { color: var(--ink); text-align: right; white-space: nowrap; }
-.card.logi .rows .row .l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink2); }
-.card.logi .hero { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 6px; } .card.logi .hero .n { font-size: 30px; font-weight: 800; } .card.logi .hero .d { color: var(--dim); font-size: 13px; }
-.card.logi .hl { font-size: 13px; color: var(--dim); margin-bottom: 6px; }
 .mono { font-family: ui-monospace, Menlo, monospace; }
 .c-red { color: #B91C1C !important; }
-@container shell (max-width: 1100px) { .logis { grid-template-columns: minmax(0, 1fr); } .tday-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@container shell (max-width: 600px) { .tday-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ── Help tour (js/tour.js) ──────────────────────────────────────────── */
 .tour { position: absolute; inset: 0; z-index: 60; background: rgba(17, 24, 39, .5); display: grid; place-items: center; padding: 16px; }
@@ -3750,3 +3732,10 @@ details.bf-g[open] > summary svg.cv { transform: rotate(180deg); }
 .cat-pr-img { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .cat-pr-img img, .cat-pr-img .pimg-off { flex: none; width: 96px; height: 96px; object-fit: contain; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .cat-pr-img small { color: var(--dim); overflow-wrap: anywhere; }
+
+/* Dashboard › Back dock: the dock's state as a chip under the title, always
+   (the truck's phase, or no truck / all cleared / no trucks today). */
+.kpi.dk .dk-chip { display: flex; align-items: center; gap: 8px; margin: -2px 0 8px; font-size: 13px; color: var(--ink2); }
+.phb-chip.dock-st.idle { background: var(--chip); color: var(--chip-ink); }
+.phb-chip.dock-st.ok { background: #DCFCE7; color: #166534; }
+.phb-chip.dock-st.none { background: #EEF2FF; color: #3730A3; }
