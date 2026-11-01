@@ -28,7 +28,7 @@ const num = n => Number(n).toLocaleString(locale());
 // (STRIP, RAIL_TOP, RAIL, RAIL_FOOT). The ids name a tab or row in the steps.
 const TABS = {
   floor: () => [['home', 'home', tx('Home')], ['refresh', 'm-refresh', tx('Refresh')], ['labels', 'm-labelint', tx('Labels')], ['route', 'm-picklist', tx('Route')], ['emergency', 'm-emergency', tx('Emergency')], ['more', 'dots', tx('More')]],
-  stock: () => [['home', 'home', tx('Home')], ['scan', 'barcode', tx('Scan')], ['cages', 'm-cages', tx('Cages')], ['adjust', 'm-adjust', tx('Adjust')], ['more', 'dots', tx('More')]],
+  stock: () => [['home', 'home', tx('Home')], ['scan', 'm-backfill', tx('Backfill')], ['cages', 'm-cages', tx('Cages')], ['adjust', 'm-adjust', tx('Adjust')], ['more', 'dots', tx('More')]],
 };
 const overlays = () => `<div class="scanov" hidden><div class="scan-card" data-tt><div class="bars"></div><b class="scan-code"></b><i class="laser"></i></div><span class="hint">${tx('Point the camera at the label')}</span></div><div class="dv-toast" hidden></div>`;
 const stat = () => `<div class="ph-stat"><b>9:41</b><span class="wf"><span class="yes">${ic('wifi')}</span><span class="no">${ic('nowifi')}</span></span></div>`;
@@ -261,37 +261,37 @@ export const SCENES = [
 },
 // ═══ Stockroom ═══
 {
-  id: 'bfscan', grp: 'stockroom', icon: 'barcode', title: tx('Backfill: scan a bay'), device: 'phone', where: tx('Phone · Stockroom › Scan'), for: ['stockroom'],
-  intro: tx('In the stockroom, scan the bay label, then every product in it, then submit the bay for review at the desk.'),
+  id: 'bfscan', grp: 'stockroom', icon: 'barcode', title: tx('Backfill: scan a location'), device: 'phone', where: tx('Phone · Stockroom › Backfill'), for: ['stockroom'],
+  intro: tx('In the stockroom, scan the location label, then every product in it, then submit the location for review at the desk.'),
   html: () => {
-    const steps = n => `<div class="bf-steps">${[tx('Bay'), tx('Scan'), tx('Submit')].map((l, i) => `<span class="${i + 1 < n ? 'done' : i + 1 === n ? 'cur' : ''}"><i>${i + 1 < n ? ic('check') : i + 1}</i>${l}</span>`).join('')}</div>`;
+    const steps = n => `<div class="bf-steps">${[tx('Location'), tx('Scan'), tx('Submit')].map((l, i) => `<span class="${i + 1 < n ? 'done' : i + 1 === n ? 'cur' : ''}"><i>${i + 1 < n ? ic('check') : i + 1}</i>${l}</span>`).join('')}</div>`;
     const tl = (cls, t, small) => `<div class="tl-r ${cls}"><i></i><b>${t}</b><small>${small}</small></div>`;
     return phone('b1', `
-    <div class="bf-start" style="display:flex;flex-direction:column;gap:8px">${steps(1)}<div class="card" style="align-items:center;text-align:center;padding:22px 12px">${ic('barcode')}<b>${tx('Scan the bay label to start')}</b><span style="color:#5B6472;font-size:12px">${tx('Bay label or number')}</span></div></div>
-    <div class="bf-bay" hidden style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0"><div class="ph-h"><span class="baybox"><small>${tx('BAY')}</small><b>7036</b></span><span><b>K2 Toys</b><small class="bf-n">${txn(0, '{n} code', '{n} codes')}</small></span><span class="pill acc bf-st" style="margin-left:auto">${tx('scanning')}</span></div>${steps(2)}
-      <span class="btnx bf-read">${ic('camera')}${tx('Read the PDT’s list')}</span>
+    <div class="bf-start" style="display:flex;flex-direction:column;gap:8px">${steps(1)}<div class="card" style="align-items:center;text-align:center;padding:22px 12px">${ic('barcode')}<b>${tx('Scan the location label to start.')}</b><span style="color:#5B6472;font-size:12px">${tx('Scan or type a location')}</span></div></div>
+    <div class="bf-bay" hidden style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0"><div class="ph-h"><span class="baybox"><small>${tx('Location')}</small><b>7036</b></span><span><b>K2 Toys</b><small class="bf-n">${txn(0, '{n} code', '{n} codes')}</small></span><span class="pill acc bf-st" style="margin-left:auto">${tx('scanning')}</span></div>${steps(2)}
+      <span class="btnx pri bf-read">${ic('camera')}${tx('Scan')}</span>
       <div class="card bf-list" style="gap:0;padding:4px 10px"></div>
       <div class="card bf-flag" hidden style="background:#FFF7E6;border-color:#F8D9A0"><b style="color:#92400E">${tx('{code} is one digit from {other}: check which is on the shelf', { code: '43648808', other: '43648803' })}</b><span style="font-size:12px;color:#92400E">${tx('Two codes are one digit apart: check which is on the shelf and remove the other.')}</span><div class="sh-acts"><span class="btnx bad bf-rm">${ic('x')}${tx('Remove {code}', { code: '43648808' })}</span></div></div>
-      <span class="btnx ok big bf-send" style="margin-top:auto">${ic('list')}${tx('Submit {bay} for review', { bay: '7036' })}</span></div>
+      <span class="btnx ok big bf-send" style="margin-top:auto">${ic('check')}${tx('Submit for review')}</span></div>
     <div class="bf-done" hidden style="display:flex;flex-direction:column;gap:8px"><div class="ph-h"><span><b>${tx('Submitted for review')}</b><small>7036 · ${txn(3, '{n} code', '{n} codes')} · 08:41</small></span></div>${steps(3)}
       <div class="card" style="align-items:center;text-align:center"><span style="color:#15803D">${ic('check')}</span><b>${tx('{bay} is with review', { bay: '7036' })}</b></div>
-      <div class="card bf-tl">${tl('dn', tx('Submitted for review'), `08:41 · ${txn(3, '{n} code', '{n} codes')}`)}${tl('now', tx('Reviewed at the desk'), tx('Waiting for the desk'))}${tl('', tx('Finalise on the PDT'), tx('After the review'))}</div></div>`, { tabs: 'stock', on: 'scan' });
+      <div class="card bf-tl">${tl('dn', tx('Submitted for review'), `08:41 · ${txn(3, '{n} code', '{n} codes')}`)}${tl('now', tx('Reviewed at the desk'), tx('Waiting to be reviewed'))}${tl('', tx('Finalise on the PDT'), tx('After the review'))}</div></div>`, { tabs: 'stock', on: 'scan' });
   },
   steps: [
-    { cap: tx('Scan the bay label to start.'), read: tx('Point the camera at the bay’s label, or type its number.'), dev: 'The bay and the store day are the entity, so each bay has one submission a day.',
+    { cap: tx('Scan the location label to start.'), read: tx('Point the camera at the location’s label, or type its number.'), dev: 'The bay and the store day are the entity, so each bay has one submission a day.',
       ev: [E('submission.open', 'stockroom', { bay: '7036', date: '2026-10-25' }, {})],
       run: async c => { await c.scan('7036'); c.hide('.bf-start'); c.show('.bf-bay'); } },
-    { cap: tx('Scan every product on the shelf.'), read: S(tx('Each scan adds the code with a short buzz.'), tx('A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly.'), tx('Read the PDT’s list takes the codes straight off the PDT’s screen with the camera.')), dev: 'One <b>submission.update</b> per scan, so a wifi drop loses nothing. The PDT reader is js/livescan.js.',
+    { cap: tx('Scan every product on the shelf.'), read: S(tx('Each scan adds the code with a short buzz.'), tx('A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly.'), tx('Scan opens the camera on the PDT’s list and takes the codes straight off its screen.'), tx('Switch it to Barcode to scan one item at a time.')), dev: 'One <b>submission.update</b> per scan, so a wifi drop loses nothing. The PDT reader is js/livescan.js.',
       ev: [E('submission.update', 'stockroom', { bay: '7036', date: '2026-10-25' }, { codes: { 43648803: true } }, { n: 4 })],
       run: async c => { for (const [k, n] of [['43648803', 'Lego set'], ['42977636', 'Puzzle 500pc'], ['43615502', 'Plush bear'], ['43648808', '']]) { await c.scan(k, true); c.add('.bf-list', `<div class="rw" style="padding:7px 0"><span class="mono">${k}</span><span class="g" style="text-align:right;color:#5B6472">${n}</span></div>`); } c.text('.bf-n', txn(4, '{n} code', '{n} codes')); } },
     { cap: tx('A code one digit off another is flagged.'), read: S(tx('Two codes one digit apart are probably one misread.'), tx('Keep the one on the shelf; Remove has an Undo.')), dev: 'The near-miss check (<b>disputes()</b> in shared/backfill.js) runs on the phone before anything is sent.',
       ev: [E('submission.update', 'stockroom', { bay: '7036', date: '2026-10-25' }, { remove: ['43648808'] })],
       run: async c => { c.show('.bf-flag'); await c.wait(700); await c.tap('.bf-rm'); c.hide('.bf-flag'); c.remove('.bf-list .rw:last-child'); c.text('.bf-n', txn(3, '{n} code', '{n} codes')); c.toast(`${tx('{code} removed', { code: '43648808' })} · ${tx('Undo')}`); } },
-    { cap: tx('Submit it for review when the bay is done.'), read: S(tx('The bay goes to Backfill review on the PC, where it is compared with the morning report.'), tx('The phone follows it: reviewed at the desk, then finalise on the PDT.')), dev: 'Stockroom events go to Stockroom devices and managers; the desk sees the bay at once.',
+    { cap: tx('Submit it for review when the location is done.'), read: S(tx('The location goes to Backfill review on the PC, where it is compared with the morning report.'), tx('The phone follows it: reviewed at the desk, then finalise on the PDT.')), dev: 'Stockroom events go to Stockroom devices and managers; the desk sees the bay at once.',
       ev: [E('submission.update', 'stockroom', { bay: '7036', date: '2026-10-25' }, { sent: true })],
       run: async c => { await c.tap('.bf-send'); c.hide('.bf-bay'); c.show('.bf-done'); } },
   ],
-  whatif: [[tx('Lost wifi mid-bay?'), S(tx('Every scan is kept on the phone and sends when it can.'), tx('Carry on scanning.'))], [tx('Both codes are real?'), tx('Leave both: the flag is a question, not an error.')], [tx('Submitted it too early?'), tx('Ask the desk to reopen the bay and scan the rest.')]],
+  whatif: [[tx('Lost wifi part-way through?'), S(tx('Every scan is kept on the phone and sends when it can.'), tx('Carry on scanning.'))], [tx('Both codes are real?'), tx('Leave both: the flag is a question, not an error.')], [tx('Submitted it too early?'), tx('Ask the desk to reopen the location and scan the rest.')]],
 },
 {
   id: 'bfreview', grp: 'stockroom', icon: 'list', title: tx('Backfill review at the desk'), device: 'pc', where: tx('PC · Stockroom › Backfill › Review'), for: ['stockroom', 'manager'],

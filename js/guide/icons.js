@@ -13,7 +13,7 @@ const APP = {
   // The app's area and screen icons, as its rail and tab strip draw them.
   'm-dashboard': 'm-dashboard', 'm-map': 'm-map', 'm-picklist': 'm-picklist', 'm-emergency': 'm-emergency', 'm-bfreview': 'm-bfreview',
   'm-adjust': 'm-adjust', 'm-cages': 'm-cages', 'm-receiving': 'm-receiving', 'm-planner': 'm-planner', 'm-settings': 'm-settings',
-  'm-refresh': 'm-refresh', 'm-labelint': 'm-labelint', 'm-maintenance': 'm-maintenance', 'm-equipment': 'm-equipment', listcheck: 'listcheck',
+  'm-backfill': 'm-backfill', 'm-refresh': 'm-refresh', 'm-labelint': 'm-labelint', 'm-maintenance': 'm-maintenance', 'm-equipment': 'm-equipment', listcheck: 'listcheck',
 };
 // 24-unit stroke paths the app has no icon for.
 const OWN = {

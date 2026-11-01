@@ -1,7 +1,7 @@
 // Shared bits for the Stockroom views: ring colours, today's key, product
 // names from the catalogue with a repaint when they arrive.
 import { recallTagFor, recallFor, recallWord } from '../../recallflag.js';
-import { esc, ic, today, fmtDate, DEPTS_DEFAULT, DEPT_COLOUR } from '../../ui.js';
+import { esc, ic, today, fmtDate, DEPTS_DEFAULT, DEPT_COLOUR, depInk } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 
 export const RING = { 'new-lines': [tx('New lines'), '#7C3AED'], overstock: [tx('Overstock'), '#2563EB'], 'cant-work': [tx('Can’t work'), '#DC2626'], 'online-picks': [tx('Online picks'), '#16A34A'] };
@@ -24,7 +24,7 @@ export const deptColour = id => DEPT_COLOUR[id] || srDept(id)?.color || '#64748B
 export function deptBadge(id, { short = false } = {}) {
   if (!id) return '';
   const d = srDept(id);
-  return `<span class="srdept" title="${esc(deptLabel(id))}"><span class="dep" style="background:${deptColour(id)}">${esc(String(id).toUpperCase())}</span>${short || !d ? '' : `<span class="nm">${esc(d.name)}</span>`}</span>`;
+  return `<span class="srdept" title="${esc(deptLabel(id))}"><span class="dep" style="background:${deptColour(id)};color:${depInk(deptColour(id))}">${esc(String(id).toUpperCase())}</span>${short || !d ? '' : `<span class="nm">${esc(d.name)}</span>`}</span>`;
 }
 export const ageOf = iso => { if (!iso) return '—'; const h = (Date.now() - new Date(iso)) / 3600000; return h < 1 ? tx('{n}m', { n: Math.max(1, Math.round(h * 60)) }) : h < 48 ? tx('{n}h', { n: Math.round(h) }) : tx('{n}d', { n: Math.round(h / 24) }); };
 
@@ -90,6 +90,11 @@ export function productHtml(kc, fallback = '') {
 // (open, toggle, select) never fires under a copy or a product link.
 export function installProductLinks(catalogue) {
   document.addEventListener('click', e => {
+    // A phone (no hover, so no card): the tap opens the product's pop-up instead.
+    if (popCtx && !fineMq.matches) {
+      const el = e.target.closest?.(CARD_ON), kc = el ? cardCode(el) : '';
+      if (el && !el.closest('.ppop') && /^\d{6,8}$/.test(kc)) { e.preventDefault(); e.stopPropagation(); openProduct(kc); return; }
+    }
     const c = e.target.closest?.('[data-copykc]');
     if (c) { e.preventDefault(); e.stopPropagation(); copyCode(c.dataset.copykc, c); return; }
     const a = e.target.closest?.('a[data-kcgo]'); if (!a) return;
@@ -132,9 +137,11 @@ function cardHtml(kc, it, w) {
 // store starts its own cache. Answers are kept ten minutes.
 const BAYS_MS = 10 * 60_000, where = new Map();
 export function installProductCard(catalogue, opts = {}) {
-  const fine = matchMedia('(hover: hover) and (pointer: fine)');
+  const fine = fineMq;
   let card = null, cur = null, timer = null;
   const wkey = kc => `${opts.scope?.() || ''}:${kc}`, known = kc => { const w = where.get(wkey(kc)); return w && Date.now() - w.t < BAYS_MS ? w : null; };
+  // The phone's pop-up asks the same two things: the catalogue and the bays.
+  popCtx = { catalogue, bays: kc => known(kc) ? Promise.resolve(known(kc)) : opts.bays ? Promise.resolve(opts.bays(kc)).then(r => { const w = r ? { t: Date.now(), date: r.report?.date || null, bays: r.bays?.[kc] || [] } : { t: Date.now() }; where.set(wkey(kc), w); return w; }).catch(() => null) : Promise.resolve(null) };
   // The element's own tooltip steps aside while the card is up (the card says the same).
   const hide = () => { clearTimeout(timer); timer = null; if (cur?.dataset.tip0 != null) { cur.title = cur.dataset.tip0; delete cur.dataset.tip0; } cur = null; card?.classList.remove('on'); };
   document.addEventListener('mouseover', e => {
@@ -167,6 +174,57 @@ async function copyCode(kc, el) {
   const { toast } = await import('../../ui.js');
   try { await navigator.clipboard.writeText(kc); el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 700); toast(tx('{what} copied', { what: kc })); }
   catch { toast(tx('Could not copy: check the clipboard permission'), 'bad'); }
+}
+// On a phone (no hover), a tap on a keycode or a product name opens the
+// product in a pop-up in the middle of the screen: its photo, the keycode
+// (tap to copy), the name and price, the stockroom bays it is in on the
+// latest report, and Open on kmart.com.au. A code the catalogue does not
+// know offers the codes one digit away and a search of the site. The screen
+// behind may add buttons of its own while it is open (Backfill: Remove from
+// the location, Use a near code): setProductActions(fn), where
+// fn(kc) → { actions: [{ label, danger, run }], use(code) } or nothing.
+const fineMq = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and (pointer: fine)') : { matches: true };
+let popCtx = null, popActions = null, pop = null;
+export function setProductActions(fn) { popActions = fn; return () => { if (popActions === fn) popActions = null; }; }
+export function closeProduct() { pop?.close(); }
+function popHtml(kc, it, w, nm, ext) {
+  const rc = recallFor(null, kc), url = it?.url || searchUrl(kc);
+  const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : '';
+  const img = `<div class="ppop-img${it?.img || it === undefined ? '' : ' none'}">${it?.img ? `<img src="${esc(it.img)}" alt="">` : `${ic('box')}${it === undefined ? '' : `<small>${tx('No photo')}</small>`}`}<button type="button" class="ppop-x" data-pp="close" aria-label="${tx('Close')}">${ic('x')}</button></div>`;
+  const near = it === null && nm.length ? `<div class="ppop-near"><small>${tx('Did you mean')}</small>${nm.slice(0, 2).map(x => `<div class="ppop-nr"><span><b class="mono">${esc(x.keycode)}</b> ${esc(x.name || '')}</span>${ext.use ? `<button type="button" class="btn sm primary" data-pp="use" data-code="${esc(x.keycode)}">${tx('Use it')}</button>` : `<button type="button" class="btn sm" data-pp="copy" data-code="${esc(x.keycode)}">${tx('Copy')}</button>`}</div>`).join('')}</div>` : '';
+  const body = `<div class="ppop-b"><div class="ppop-r1"><button type="button" class="ppop-kc" data-pp="copy" aria-label="${tx('Copy {code}', { code: esc(kc) })}">${esc(kc)}${ic('clip')}</button>${price}</div>` +
+    (it === undefined ? '<b class="ppop-nm">…</b>' : it ? `<b class="ppop-nm">${esc(it.name || tx('Verified product'))}</b>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
+    (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') + baysLine(w) + near + `</div>`;
+  const acts = `<div class="ppop-acts"><a class="btn primary ppop-go" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${it === null ? tx('Search kmart.com.au for {code}', { code: esc(kc) }) : tx('Open on kmart.com.au')}${ic('ext')}</a>` +
+    `<div class="ppop-row"><button type="button" class="btn" data-pp="copy">${tx('Copy keycode')}</button>${(ext.actions || []).map((a, i) => `<button type="button" class="btn${a.danger ? ' bad' : ''}" data-pp="act" data-i="${i}">${a.label}</button>`).join('')}</div></div>`;
+  return `<button type="button" class="ppop-scrim" data-pp="close" aria-label="${tx('Close')}" tabindex="-1"></button><div class="ppop-dlg">${img}${body}${acts}</div>`;
+}
+async function openProduct(kc) {
+  pop?.close();
+  const back = document.activeElement, host = document.createElement('div'), ext = popActions?.(kc) || {};
+  host.className = 'ppop'; host.setAttribute('role', 'dialog'); host.setAttribute('aria-modal', 'true'); host.setAttribute('aria-label', kc);
+  let it, w = null, nm = [], closed = false;
+  const paint = () => { if (!closed) host.innerHTML = popHtml(kc, it, w, nm, ext); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  function close() {
+    if (closed) return; closed = true; host.remove(); document.removeEventListener('keydown', onKey, true);
+    if (pop?.close === close) pop = null;
+    if (back?.isConnected && back.matches?.('input')) back.focus();
+  }
+  host.addEventListener('click', async e => {
+    const b = e.target.closest('[data-pp]'); if (!b) return;
+    const a = b.dataset.pp;
+    if (a === 'close') close();
+    else if (a === 'copy') copyCode(b.dataset.code || kc, b);
+    else if (a === 'use') { close(); await ext.use?.(b.dataset.code); }
+    else if (a === 'act') { close(); await ext.actions?.[Number(b.dataset.i)]?.run(); }
+  });
+  document.addEventListener('keydown', onKey, true);
+  (document.querySelector('.frame') || document.body).appendChild(host);
+  pop = { close }; paint(); host.querySelector('.ppop-x')?.focus();
+  it = await popCtx.catalogue.lookup(kc).catch(() => null); paint();
+  if (it === null) { nm = near.get(kc) || await popCtx.catalogue.nearMiss(kc).catch(() => []) || []; near.set(kc, nm); paint(); }
+  w = await popCtx.bays(kc); paint();
 }
 const NEAR_MAX = 30;
 // Run fn over items with at most n in flight.

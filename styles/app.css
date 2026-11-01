@@ -575,7 +575,14 @@ svg.map.real { background: #fff; }
 .ls-line { position: absolute; left: 6px; right: 6px; top: 6%; height: 2px; background: linear-gradient(90deg, transparent, #5CC4EA, transparent); box-shadow: 0 0 10px #5CC4EA; opacity: 0; }
 .ls.live .ls-line { opacity: 1; animation: ls-sweep 2.2s ease-in-out infinite; }
 @keyframes ls-sweep { 0%, 100% { top: 6%; } 50% { top: 92%; } }
-.ls-mode { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(17,24,39,.85); border: 1px solid rgba(255,255,255,.2); font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 999px; white-space: nowrap; }
+/* What the camera reads: the PDT's list (default) or one barcode at a time. */
+.ls-seg { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 2; display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(17,24,39,.88); border: 1px solid rgba(255,255,255,.2); }
+.ls-seg button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: #E5E7EB; font: inherit; font-size: 13.5px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.ls-seg button svg.i { width: 17px; height: 17px; }
+.ls-seg button[aria-pressed="true"] { background: #0E7CA8; color: #fff; }
+.ls-seg button.ping:not([aria-pressed="true"]) { background: rgba(92,196,234,.3); }
+.ls.bc .ls-win { left: 8% !important; width: 84% !important; top: 34% !important; height: 22% !important; }
+.ls.bc .ls-hl, .ls.bc .ls-hint { display: none; }
 .ls-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: #FACC15; color: #111827; font-size: 13px; font-weight: 800; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
 .ls-focus { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border: 2px solid #FACC15; border-radius: 10px; pointer-events: none; }
 .ls-focus.go { animation: ls-focus .6s ease-out forwards; }
@@ -3512,3 +3519,92 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 /* Help: the guide fills the view (its own styles are styles/guide.css, inside its shadow root). */
 .vg-host { display: block; margin-top: 14px; min-width: 0; }
 .content.mv .vg-host { margin: 14px 0 20px; }
+
+/* Backfill on the phone: the dock's bar, strip, panel and sheets (layout B),
+   with the location's three steps, its list and its department. */
+.dk-steps.s3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.dk-steps.s3 li span { font-size: 12px; }
+.bf-top .dk-tn .mono { font-family: ui-monospace, Menlo, monospace; }
+.bf-top .srdept { margin-right: 4px; }
+.bf-mine { flex: none; height: 38px; gap: 6px; }
+.bf-mine svg.i { color: var(--accent-ink); }
+.bf-mine b { min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 99px; background: var(--accent); color: #fff; font-size: 12px; display: grid; place-items: center; }
+.bf-entry { display: flex; align-items: center; gap: 8px; }
+.bf-entry > .inp { flex: 1; min-width: 0; height: 48px; font-size: 17px; }
+.bf-entry > .btn { flex: none; height: 48px; }
+.bf-entry > .mv-cam { flex: none; width: 48px; height: 48px; border-radius: 12px; }
+.bf-fw { flex: 1; min-width: 0; height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 3px 0 12px; border: 2px solid var(--accent); border-radius: 12px; background: var(--panel); }
+.bf-fw input { flex: 1; min-width: 0; height: 44px; padding: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 17px; color: var(--ink); }
+.bf-fw button { flex: none; width: 40px; height: 40px; border: 0; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; padding: 0; }
+.bf-fw button svg.i { width: 20px; height: 20px; }
+.bf-scan { padding: 0 16px; font-size: 15px; gap: 7px; }
+.bf-scan svg.i { width: 19px; height: 19px; }
+.bf-board, .bf-list { padding: 0; gap: 0; overflow: hidden; }
+.bf-gh, .bf-lh { padding: 9px 14px 4px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); border-top: 1px solid var(--line-soft); }
+.bf-gh:first-child, .bf-lh { border-top: 0; }
+.bf-lh { display: flex; align-items: baseline; gap: 8px; }
+.bf-lh span { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.bf-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 10px 6px 14px; }
+.bf-row.hot { background: var(--accent-soft); }
+.bf-loc { flex: none; display: inline-flex; align-items: center; gap: 8px; }
+.bf-loc b { font: 800 16px ui-monospace, Menlo, monospace; }
+.bf-row small { flex: 1; min-width: 0; font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bf-acts { flex: none; display: flex; gap: 6px; }
+.bf-acts .btn.sm { height: 38px; }
+.bf-code { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 10px 0 14px; border-top: 1px solid var(--line-soft); }
+.bf-code > b { flex: none; font: 800 15px ui-monospace, Menlo, monospace; cursor: pointer; }
+.bf-code .nm { flex: 1; min-width: 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bf-code.new { background: var(--accent-soft); }
+.bf-code.warn { background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.bf-code em { flex: none; font-style: normal; font-size: 11.5px; font-weight: 800; color: var(--green-ink); background: color-mix(in srgb, var(--green) 16%, transparent); border-radius: 99px; padding: 2px 8px; }
+.bf-code .mv-x { margin: 0; }
+.bf-empty { margin: 0; padding: 12px 14px 14px; font-size: 13.5px; color: var(--dim); }
+.bf-heldnote { width: 100%; text-align: left; font: inherit; cursor: pointer; }
+.dk-go.ok { background: #15803D; }
+.dk-go.ok svg.i { width: 17px; height: 17px; }
+.dk-l1 .srdept, .dk-l1 .dep { flex: none; align-self: center; }
+.bf-pgh { margin-bottom: 6px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #FCD34D; }
+.bf-pan .mv-held { margin: 0 0 12px; }
+.bf-sent .bf-ok { display: flex; align-items: center; gap: 12px; }
+.bf-sent .bf-ok .ck { flex: none; width: 44px; height: 44px; border-radius: 99px; background: #16A34A; color: #fff; display: grid; place-items: center; }
+.bf-sent .bf-ok .ck svg.i { width: 24px; height: 24px; stroke-width: 3; }
+.bf-sent .bf-ok b { display: block; font-size: 18px; font-weight: 800; }
+.bf-sent .bf-ok b .mono { font-family: ui-monospace, Menlo, monospace; }
+.bf-sent .bf-ok small { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 13px; color: var(--dim); }
+.bf-sent .mv-tl { margin: 12px 0 0; }
+.bf-sacts { display: flex; gap: 8px; margin-top: 12px; }
+.bf-sacts .btn { height: 50px; justify-content: center; }
+.bf-sacts .btn.primary { flex: 1; font-size: 15.5px; }
+.bf-sacts .btn small { font-weight: 500; opacity: .9; margin-left: 4px; }
+@container shell (max-width: 380px) { .bf-scan { padding: 0 12px; } .bf-acts .btn.sm { padding: 0 9px; } .dk-go.ok svg.i { display: none; } }
+
+/* A product tapped on a phone: a pop-up in the middle of the screen. */
+.ppop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; box-sizing: border-box; }
+.ppop-scrim { position: absolute; inset: 0; border: 0; padding: 0; background: rgba(17,24,39,.55); cursor: pointer; }
+.ppop-dlg { position: relative; width: min(400px, 100%); max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: 14px; box-sizing: border-box; background: var(--panel); color: var(--ink); border-radius: 20px; box-shadow: 0 24px 60px -12px rgba(0,0,0,.5); }
+.ppop-img { position: relative; flex: none; height: 180px; border-radius: 14px; background: #fff; border: 1px solid var(--line-soft); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #9CA3AF; overflow: hidden; }
+.ppop-img img { width: 100%; height: 100%; object-fit: contain; }
+.ppop-img.none { height: 96px; }
+.ppop-img > svg.i { width: 40px; height: 40px; }
+.ppop-img small { font-size: 12px; color: #6B7280; }
+.ppop-x { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; border-radius: 99px; border: 0; padding: 0; background: rgba(255,255,255,.94); color: #374151; display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.18); cursor: pointer; }
+.ppop-x svg.i { width: 18px; height: 18px; }
+.ppop-b { display: flex; flex-direction: column; gap: 6px; }
+.ppop-r1 { display: flex; align-items: center; gap: 8px; }
+.ppop-kc { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--ground); color: var(--ink); font: 800 15px ui-monospace, Menlo, monospace; cursor: pointer; }
+.ppop-kc svg.i { width: 15px; height: 15px; color: var(--dim); }
+.ppop-r1 .pch-price { margin-left: auto; }
+.ppop-nm { font-size: 19px; font-weight: 800; line-height: 1.25; }
+.ppop-miss { align-self: flex-start; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; background: #FEF3C7; color: #92400E; }
+.ppop-why { margin: 0; font-size: 13px; color: var(--ink2); }
+.ppop .pch-bays, .ppop .pch-rc { font-size: 13px; }
+.ppop-near { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); }
+.ppop-near small { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-ink); }
+.ppop-nr { display: flex; align-items: center; gap: 10px; }
+.ppop-nr span { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppop-acts { display: flex; flex-direction: column; gap: 8px; }
+.ppop-go { height: 50px; justify-content: center; font-size: 15.5px; text-decoration: none; gap: 8px; }
+.ppop-go svg.i { width: 17px; height: 17px; }
+.ppop-row { display: flex; gap: 8px; }
+.ppop-row .btn { flex: 1; min-width: 0; height: 46px; justify-content: center; }
+.ppop-row .btn.bad { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); }

@@ -109,6 +109,17 @@ export function feedback() {
   } catch {}
 }
 
+// A reader of video frames for the live PDT reader's Barcode mode: the
+// phone's own BarcodeDetector, else ZXing. → async (video) → [codes]
+export async function barcodeReader() {
+  if ('BarcodeDetector' in window) {
+    const supported = await window.BarcodeDetector.getSupportedFormats?.().catch(() => FORMATS) || FORMATS;
+    const d = new window.BarcodeDetector({ formats: FORMATS.filter(f => supported.includes(f)) });
+    return async video => (await d.detect(video)).map(c => c.rawValue).filter(Boolean);
+  }
+  const zx = await zxing();
+  return async video => { const c = zx(video); return c ? [c] : []; };
+}
 // ZXing fallback: loads vendor/zxing once, then decodes a video frame drawn
 // onto a canvas. Returns (video) → code | null.
 let zxLoading = null;
