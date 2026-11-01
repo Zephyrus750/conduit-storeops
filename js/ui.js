@@ -87,6 +87,19 @@ export function setDepartments(list) {
   if (loose.length) DEPT_GROUPS.push(['Other', 'box', loose]);
   return true;
 }
+// A product's picture from the catalogue (kmart.com.au's image servers).
+// No referrer goes with it, as Decant Visualiser had it: an image server
+// that refuses other sites' pages still serves a request that names none.
+// One that fails to load becomes a box (installProductImages).
+export function productImg(src, alt = '') {
+  return src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-pimg>` : '';
+}
+export function installProductImages(root = document) {
+  root.addEventListener('error', e => {
+    const t = e.target; if (t?.tagName !== 'IMG' || !t.hasAttribute('data-pimg')) return;
+    const s = document.createElement('span'); s.className = 'pimg-off'; s.innerHTML = ic('box'); t.replaceWith(s);
+  }, true);
+}
 // A department chip's text: dark on a light colour (Kitchen's orange, Toys'
 // red, the pinks and the sky blue), white on a dark one, whichever reads
 // better against it (WCAG contrast).

@@ -8,6 +8,12 @@
 // (audit 19 Oct P1). A chunk that fails is not asked again for a while.
 
 const TTL_MS = 7 * 86_400_000;
+// An answer without the product page's details (no picture and no price:
+// the worker had not read the page yet, or could not) is asked again after
+// an hour, so a picture arrives once the worker has it, not a week later.
+export const THIN_MS = 3_600_000;
+const thin = item => !!item && !item.img && !Number.isFinite(item.price);
+const fresh = (item, at) => Date.now() - at < (thin(item) ? THIN_MS : TTL_MS);
 const BATCH_MS = 40;
 export const CHUNK = 50;               // worker/catalogue.js MAX_CODES
 const FAIL_MS = 120_000;
@@ -19,9 +25,10 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
   const failed = new Map();  // keycode → when its request failed (unreachable, refused)
 
   async function cached(kc) {
-    if (mem.has(kc)) return mem.get(kc);
+    const m = mem.get(kc);
+    if (m && fresh(m.item, m.at)) return m.item;
     const v = await storage.get(`kc:${kc}`);
-    if (v && Date.now() - v.at < TTL_MS) { mem.set(kc, v.item); return v.item; }
+    if (v && fresh(v.item, v.at)) { mem.set(kc, { item: v.item, at: v.at }); return v.item; }
     return undefined;
   }
   function lookup(keycode) {
@@ -47,8 +54,8 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
       catch { const now = Date.now(); for (const kc of chunk) failed.set(kc, now); }
       for (const kc of chunk) {
         const item = items?.[kc] ?? null;
-        if (item) { mem.set(kc, item); failed.delete(kc); await storage.set(`kc:${kc}`, { at: Date.now(), item }); }
-        else if (items && kc in items) mem.set(kc, null);
+        if (item) { mem.set(kc, { item, at: Date.now() }); failed.delete(kc); await storage.set(`kc:${kc}`, { at: Date.now(), item }); }
+        else if (items && kc in items) mem.set(kc, { item: null, at: Date.now() });
         for (const r of q.get(kc)) r(item);
       }
     }

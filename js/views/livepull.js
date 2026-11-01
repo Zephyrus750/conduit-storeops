@@ -18,7 +18,7 @@
 
 import { searchBarcode, barcodeCard } from '../barcodesearch.js';
 import { recallFor, recallFlag, recallTagFor } from '../recallflag.js';
-import { ic, esc, vh, sub, toast, dep, DEPTS_DEFAULT, DEPT_NAME, today } from '../ui.js';
+import { ic, esc, vh, sub, toast, dep, DEPTS_DEFAULT, DEPT_NAME, today, productImg } from '../ui.js';
 import { hasArea, ensureArea } from '../unlock.js';
 import { openScanner } from '../scan.js';
 import { sx } from '../map.js';
@@ -168,7 +168,7 @@ function requester(ctx, ses, repaint) {
 const FROM = { apn: () => tx('found from the barcode'), paired: () => tx('found from the barcode'), web: () => tx('found on kmart.com.au from the barcode') };
 function productRow(f, bays) {
   const price = Number.isFinite(f.price) ? ` · $${Number(f.price).toFixed(2)}` : '';
-  return `<div class="card lp-prod"><span class="lp-pic">${f.img ? `<img src="${esc(f.img)}" alt="" loading="lazy">` : ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${FROM[f.via] ? `<small class="lp-from">${FROM[f.via]()}${f.via !== 'apn' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-wrong" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}</span>` +
+  return `<div class="card lp-prod"><span class="lp-pic">${productImg(f.img) || ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${FROM[f.via] ? `<small class="lp-from">${FROM[f.via]()}${f.via !== 'apn' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-wrong" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}</span>` +
     (bays && f.bays?.length ? `<span class="lp-bay"><small>${f.bays.length > 1 ? tx('BAYS') : tx('BAY')}</small><b class="mono">${esc(f.bays[0])}</b>${f.bays.length > 1 ? `<small class="mono">+ ${esc(f.bays.slice(1).join(', '))}</small>` : ''}</span>` : '') + `</div>`;
 }
 // What the requester is told before the pad: already asked for in this

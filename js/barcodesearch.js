@@ -13,7 +13,7 @@
 //                                        f = { state: 'searching' | 'choose' | 'manual', gtin, list, source, why }
 //                                        Its buttons: data-act="bc-pick" (data-kc), "bc-type", "bc-again".
 
-import { ic, esc } from './ui.js';
+import { ic, esc, productImg } from './ui.js';
 import { tx } from './i18n.js';
 
 // Rendering Kmart's search page takes 10 to 30 seconds; the worker allows 45
@@ -36,7 +36,7 @@ export function barcodeCard(f) {
   if (f.state === 'searching') return `<div class="card bcs-hint" role="status">${ic('search')}<p>${tx('Searching kmart.com.au for this barcode…')}<small>${tx('It can take up to half a minute.')}</small></p></div>`;
   if (f.state === 'choose') {
     return `<div class="bcs-ans info">${ic('search')}<span><b>${tx('Is this it?')}</b>${f.source === 'isbn' ? tx('Matched by the book’s title. Tap the right one.') : tx('Found on kmart.com.au from the barcode. Tap the right one.')}</span></div>` +
-      `<div class="bcs-picks">${f.list.map(c => `<button type="button" class="card bcs-pick" data-act="bc-pick" data-kc="${esc(c.kc)}"><span class="bcs-pic">${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : ic('box')}</span><span class="bcs-pn"><b>${esc(c.name || c.kc)}</b><small class="mono">${esc(c.kc)}</small></span>${ic('arrow')}</button>`).join('')}</div>` +
+      `<div class="bcs-picks">${f.list.map(c => `<button type="button" class="card bcs-pick" data-act="bc-pick" data-kc="${esc(c.kc)}"><span class="bcs-pic">${productImg(c.img) || ic('box')}</span><span class="bcs-pn"><b>${esc(c.name || c.kc)}</b><small class="mono">${esc(c.kc)}</small></span>${ic('arrow')}</button>`).join('')}</div>` +
       `<button type="button" class="bcs-a" data-act="bc-type">${tx('None of these: type the keycode')}</button>`;
   }
   return `<div class="bcs-ans warn">${ic('barcode')}<span><b>${f.why === 'none' ? tx('Not found on kmart.com.au') : f.why === 'failed' ? tx('Couldn’t search kmart.com.au') : tx('Type the keycode instead')}</b>${tx('Type its keycode in the box above, from the ticket, shelf label or carton.')}</span></div>` +

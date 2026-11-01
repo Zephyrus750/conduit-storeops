@@ -1,7 +1,7 @@
 // Shared bits for the Stockroom views: ring colours, today's key, product
 // names from the catalogue with a repaint when they arrive.
 import { recallTagFor, recallFor, recallWord } from '../../recallflag.js';
-import { esc, ic, today, fmtDate, DEPTS_DEFAULT, DEPT_COLOUR, depInk } from '../../ui.js';
+import { esc, ic, today, fmtDate, DEPTS_DEFAULT, DEPT_COLOUR, depInk, productImg } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 
 export const RING = { 'new-lines': [tx('New lines'), '#7C3AED'], overstock: [tx('Overstock'), '#2563EB'], 'cant-work': [tx('Can’t work'), '#DC2626'], 'online-picks': [tx('Online picks'), '#16A34A'] };
@@ -62,6 +62,8 @@ export function nameHtml(kc, missing = tx('Unverified · not in the catalogue'))
 // on kmart.com.au in a new tab. The page comes from the catalogue; a name
 // clicked before its lookup has landed asks on the click, and a code the
 // catalogue does not know opens the site's search for it.
+// The product's picture, once its name has been looked up (null: none, or not yet).
+export const imgOf = kc => names.get(String(kc))?.img || null;
 export const searchUrl = kc => `https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(kc)}`;
 export const urlOf = kc => names.get(String(kc))?.url || searchUrl(kc);
 export const kcCopy = kc => `<button type="button" class="kcopy mono" data-copykc="${esc(kc)}" title="${tx('Copy {code}', { code: esc(kc) })}">${esc(kc)}</button>`;
@@ -105,7 +107,7 @@ export function installProductLinks(catalogue) {
     e.preventDefault();
     const w = window.open('about:blank', '_blank');
     const send = u => { if (w && !w.closed) { try { w.opener = null; } catch {} w.location.replace(u); } else window.open(u, '_blank', 'noopener'); };
-    catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null } : null); send(urlOf(kc)); }).catch(() => send(searchUrl(kc)));
+    catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null, img: it.img || null } : null); send(urlOf(kc)); }).catch(() => send(searchUrl(kc)));
   }, true);
 }
 // On a PC, resting the pointer on a keycode or a product name for a moment
@@ -127,7 +129,7 @@ function baysLine(w) {
 function cardHtml(kc, it, w) {
   const rc = recallFor(null, kc);
   const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : it ? `<span class="pch-none">${tx('No price yet')}</span>` : '';
-  return `<div class="pch-img">${it?.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ic('box')}</div>` +
+  return `<div class="pch-img">${productImg(it?.img) || ic('box')}</div>` +
     `<div class="pch-b"><span class="mono pch-kc">${esc(kc)}</span><b>${it ? esc(it.name || tx('Verified product')) : tx('Not in the catalogue')}</b>${price}${baysLine(w)}` +
     (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') +
     `<small>${it?.url ? tx('Click the name for kmart.com.au, the keycode to copy it') : tx('Not sold online, or a retired code. Click the keycode to copy it.')}</small></div>`;
@@ -190,7 +192,7 @@ export function closeProduct() { pop?.close(); }
 function popHtml(kc, it, w, nm, ext) {
   const rc = recallFor(null, kc), url = it?.url || searchUrl(kc);
   const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : '';
-  const img = `<div class="ppop-img${it?.img || it === undefined ? '' : ' none'}">${it?.img ? `<img src="${esc(it.img)}" alt="">` : `${ic('box')}${it === undefined ? '' : `<small>${tx('No photo')}</small>`}`}<button type="button" class="ppop-x" data-pp="close" aria-label="${tx('Close')}">${ic('x')}</button></div>`;
+  const img = `<div class="ppop-img${it?.img || it === undefined ? '' : ' none'}">${it?.img ? productImg(it.img) : `${ic('box')}${it === undefined ? '' : `<small>${tx('No photo')}</small>`}`}<button type="button" class="ppop-x" data-pp="close" aria-label="${tx('Close')}">${ic('x')}</button></div>`;
   const near = it === null && nm.length ? `<div class="ppop-near"><small>${tx('Did you mean')}</small>${nm.slice(0, 2).map(x => `<div class="ppop-nr"><span><b class="mono">${esc(x.keycode)}</b> ${esc(x.name || '')}</span>${ext.use ? `<button type="button" class="btn sm primary" data-pp="use" data-code="${esc(x.keycode)}">${tx('Use it')}</button>` : `<button type="button" class="btn sm" data-pp="copy" data-code="${esc(x.keycode)}">${tx('Copy')}</button>`}</div>`).join('')}</div>` : '';
   const body = `<div class="ppop-b"><div class="ppop-r1"><button type="button" class="ppop-kc" data-pp="copy" aria-label="${tx('Copy {code}', { code: esc(kc) })}">${esc(kc)}${ic('clip')}</button>${price}</div>` +
     (it === undefined ? '<b class="ppop-nm">…</b>' : it ? `<b class="ppop-nm">${esc(it.name || tx('Verified product'))}</b>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
@@ -238,14 +240,14 @@ async function inTurn(items, n, fn) {
 export function catalogueVerdict(ctx, kc) {
   kc = String(kc);
   const had = names.get(kc); if (had) return Promise.resolve('ok'); if (had === null) return Promise.resolve('unknown');
-  const ask = ctx.catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null } : null); return it ? 'ok' : 'unknown'; });
+  const ask = ctx.catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null, img: it.img || null } : null); return it ? 'ok' : 'unknown'; });
   return Promise.race([ask, new Promise(r => setTimeout(() => r('error'), 2500))]).catch(() => 'error');
 }
 export function ensureNames(ctx, codes, repaint) {
   const want = [...new Set(codes.map(String))].filter(kc => !names.has(kc) && /^\d{6,12}$/.test(kc));
   if (!want.length) return;
   for (const kc of want) names.set(kc, undefined);
-  Promise.all(want.map(kc => ctx.catalogue.lookup(kc).then(it => names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null } : null)).catch(() => names.set(kc, null))))
+  Promise.all(want.map(kc => ctx.catalogue.lookup(kc).then(it => names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null, img: it.img || null } : null)).catch(() => names.set(kc, null))))
     .then(() => {
       paintSoon(repaint);
       // Unverified codes ask for their one-digit near misses.

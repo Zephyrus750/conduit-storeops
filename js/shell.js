@@ -10,7 +10,7 @@
 
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
-import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners, mgr } from './ui.js';
+import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners, mgr, installProductImages } from './ui.js';
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
@@ -72,6 +72,7 @@ document.addEventListener('change', e => { if (e.target.matches?.('#siLang, [dat
 installKeyboard();
 applyOrientation();
 installCameraButtons(document);
+installProductImages(document);
 installProductLinks(client.catalogue);
 // The PC's product card also shows the item's stockroom bays, for a store with the Stockroom.
 installProductCard(client.catalogue, {

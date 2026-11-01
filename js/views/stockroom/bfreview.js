@@ -14,7 +14,7 @@
 
 import { haptic } from '../../device.js';
 import { recallFor, recallFlag } from '../../recallflag.js';
-import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, mrows, mbig, mghost, mfoot, camButton } from '../../ui.js';
+import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, mrows, productImg, mbig, mghost, mfoot, camButton } from '../../ui.js';
 import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
@@ -23,7 +23,7 @@ import { addDays } from '../../../shared/time.js';
 import { openScreenScan } from '../../screenscan.js';
 import { openLiveReader, warmReader, heldRows, resolveHeld } from '../../livescan.js';
 import { CLAIM_TTL_MS } from '../../../shared/reducers/stockroom.js';
-import { STATUS, todayKey, ensureNames, nameHtml, nameOf, catalogueVerdict, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge, setProductActions, closeProduct } from './common.js';
+import { STATUS, todayKey, ensureNames, nameHtml, nameOf, catalogueVerdict, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge, setProductActions, closeProduct, imgOf } from './common.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { openPasteBox } from '../pastebox.js';
 import { tx, txn } from '../../i18n.js';
@@ -328,7 +328,8 @@ function focusView(s, rows) {
   const r = list[st.focusIdx];
   const verdict = r.status === 'add' || r.status === 'scanned' ? `<div class="fverdict add">${tx('Add to {bay}', { bay: esc(s.bay) })}</div>` : r.status === 'delete' ? `<div class="fverdict del">${tx('Delete from system')}</div>` : '';
   return `<div class="focus-card${r.incorrect ? ' bad' : ''}${done.has(r.code) ? ' done' : ''}">${cols}<div class="fcount"><b>${st.focusIdx + 1} / ${n}</b><span>${tx('{n} checked', { n: [...done].filter(c => list.some(x => x.code === c)).length })}</span></div>` +
-    (/^\d{6,13}$/.test(r.code) ? `<div class="fbar">${barcodeSvg(r.code, { module: 2.6, height: 74 })}</div>` : '') +
+    // The product's picture beside its barcode (K2B's focus had it), when the catalogue has one.
+    `<div class="fmain">${imgOf(r.code) ? `<span class="fpic">${productImg(imgOf(r.code), nameOf(r.code) || '')}</span>` : ''}${/^\d{6,13}$/.test(r.code) ? `<div class="fbar">${barcodeSvg(r.code, { module: 2.6, height: 74 })}</div>` : ''}</div>` +
     `<div class="fcode mono" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</div><div class="fname">${nameHtml(r.code)}${depthChip(r.code)}</div>${verdict}` +
     `<div class="fhint"><kbd>${tx('Space')}</kbd> ${tx('checked + next')} · <kbd>⌫</kbd> ${tx('incorrect + next')} · <kbd>←</kbd><kbd>→</kbd> ${tx('move')}</div></div>`;
 }
