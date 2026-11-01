@@ -649,4 +649,5 @@ export default {
   "{name}: use it instead of {code}": "{name}: dùng mã này thay cho {code}",
   "The product catalogue did not answer. It is asked again in a couple of minutes.": "Danh mục sản phẩm không phản hồi. Sẽ hỏi lại sau vài phút.",
   "Finalised today": "Đã hoàn tất hôm nay",
+  "Searching": "Đang tìm",
 };

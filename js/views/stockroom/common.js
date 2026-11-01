@@ -52,11 +52,14 @@ export function nearHtml(kc, swap = false) {
     : `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? tx('{name}: tap to copy', { name: x.name }) : tx('Tap to copy'))}">${esc(x.keycode)}</b>`);
   return `<span class="nm-near">${b ? tx('Did you mean {a} or {b}?', { a, b }) : tx('Did you mean {a}?', { a })}</span>`;
 }
+// A product being looked up: "Searching" with a spinner and a light that
+// sweeps the word (still, for a device that asks for less motion).
+export const searching = (label = tx('Searching')) => `<span class="nm-look" role="status"><i aria-hidden="true"></i><span>${label}</span></span>`;
 export function nameHtml(kc, missing = tx('Unverified · not in the catalogue'), { swap = false } = {}) {
   kc = String(kc);
   if (isItemBarcode(kc)) return `<span class="nm-apn" title="${tx('That is an item barcode (APN), not a keycode')}">${tx('Item barcode · not a keycode')}</span>`;
   const n = names.get(kc);
-  if (n === undefined) return '<span class="cs-dim">…</span>';
+  if (n === undefined) return searching();
   if (n === false) return `<span class="cs-dim nm-off" title="${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}">${tx('Not checked yet')}</span>`;
   const rc = recallTagFor(kc);   // a recalled or withdrawn product says so first, wherever it is listed
   if (n === null) return `${rc}<span class="warn nm-unv" title="${tx('Not found in the catalogue: double-check this code')}">⚠ ${esc(missing)}</span>${nearHtml(kc, swap)}`;
@@ -90,7 +93,7 @@ function itemLink(kc, n, fallback) {
 // to the site's search, marked not online, with any "Did you mean".
 export function productHtml(kc, fallback = '') {
   const n = names.get(String(kc));
-  if (n === undefined && !fallback) return '<span class="cs-dim">…</span>';
+  if (n === undefined && !fallback) return searching();
   return itemName(kc, fallback || tx('Search kmart.com.au')) + (n === null ? nearHtml(kc) : '');
 }
 // One listener for the whole app, in the capture phase so a row's own tap
@@ -200,7 +203,7 @@ function popHtml(kc, it, w, nm, ext) {
   const img = `<div class="ppop-img${it?.img || it === undefined ? '' : ' none'}">${it?.img ? productImg(it.img) : `${ic('box')}${it === undefined ? '' : `<small>${tx('No photo')}</small>`}`}<button type="button" class="ppop-x" data-pp="close" aria-label="${tx('Close')}">${ic('x')}</button></div>`;
   const near = it === null && nm.length ? `<div class="ppop-near"><small>${tx('Did you mean')}</small>${nm.slice(0, 2).map(x => `<div class="ppop-nr"><span><b class="mono">${esc(x.keycode)}</b> ${esc(x.name || '')}</span>${ext.use ? `<button type="button" class="btn sm primary" data-pp="use" data-code="${esc(x.keycode)}">${tx('Use it')}</button>` : `<button type="button" class="btn sm" data-pp="copy" data-code="${esc(x.keycode)}">${tx('Copy')}</button>`}</div>`).join('')}</div>` : '';
   const body = `<div class="ppop-b"><div class="ppop-r1"><button type="button" class="ppop-kc" data-pp="copy" aria-label="${tx('Copy {code}', { code: esc(kc) })}">${esc(kc)}${ic('clip')}</button>${price}</div>` +
-    (it === undefined ? '<b class="ppop-nm">…</b>' : it ? `<b class="ppop-nm">${esc(it.name || tx('Verified product'))}</b>` : it === false ? `<span class="ppop-miss">${tx('Not checked yet')}</span><p class="ppop-why">${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}</p>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
+    (it === undefined ? `<b class="ppop-nm">${searching()}</b>` : it ? `<b class="ppop-nm">${esc(it.name || tx('Verified product'))}</b>` : it === false ? `<span class="ppop-miss">${tx('Not checked yet')}</span><p class="ppop-why">${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}</p>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
     (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') + baysLine(w) + near + `</div>`;
   const acts = `<div class="ppop-acts"><a class="btn primary ppop-go" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${it === null || it === false ? tx('Search kmart.com.au for {code}', { code: esc(kc) }) : tx('Open on kmart.com.au')}${ic('ext')}</a>` +
     `<div class="ppop-row"><button type="button" class="btn" data-pp="copy">${tx('Copy keycode')}</button>${(ext.actions || []).map((a, i) => `<button type="button" class="btn${a.danger ? ' bad' : ''}" data-pp="act" data-i="${i}">${a.label}</button>`).join('')}</div></div>`;
@@ -254,6 +257,21 @@ export function catalogueVerdict(ctx, kc) {
 const RETRY_MS = 125_000;
 let retryT = null; const retryCodes = new Set();
 const info = it => it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null, img: it.img || null } : null;
+// A name that came without its picture or price (the worker was still
+// reading the product page): asked again while the view is open, a few
+// times, so the picture appears without a reload.
+const THIN_AGAIN_MS = 100_000, THIN_TRIES = 4, thinTries = new Map(), thinCodes = new Set();
+let thinT = null;
+const isThin = n => n && !n.img && n.price == null;
+function thinLater(ctx, codes, repaint) {
+  for (const kc of codes) if (isThin(names.get(kc)) && (thinTries.get(kc) || 0) < THIN_TRIES) { thinTries.set(kc, (thinTries.get(kc) || 0) + 1); thinCodes.add(kc); }
+  if (!thinCodes.size || thinT) return;
+  thinT = setTimeout(() => {
+    thinT = null; const again = [...thinCodes]; thinCodes.clear();
+    Promise.all(again.map(kc => ctx.catalogue.lookup(kc).then(it => { if (it && (it.img || Number.isFinite(it.price))) names.set(kc, info(it)); }).catch(() => {})))
+      .then(() => { paintSoon(repaint); thinLater(ctx, again, repaint); });
+  }, THIN_AGAIN_MS);
+}
 export function ensureNames(ctx, codes, repaint) {
   const want = [...new Set(codes.map(String))].filter(kc => (!names.has(kc) || names.get(kc) === false) && /^\d{6,12}$/.test(kc));
   if (!want.length) return;
@@ -261,6 +279,7 @@ export function ensureNames(ctx, codes, repaint) {
   Promise.all(want.map(kc => ctx.catalogue.lookup(kc).then(it => names.set(kc, it === undefined ? false : info(it))).catch(() => names.set(kc, false))))
     .then(() => {
       paintSoon(repaint);
+      thinLater(ctx, want, repaint);
       const unreached = want.filter(kc => names.get(kc) === false);
       if (unreached.length) {
         unreached.forEach(kc => retryCodes.add(kc));

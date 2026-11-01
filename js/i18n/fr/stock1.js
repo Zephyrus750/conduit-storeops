@@ -649,4 +649,5 @@ export default {
   "{name}: use it instead of {code}": "{name} : l’utiliser au lieu de {code}",
   "The product catalogue did not answer. It is asked again in a couple of minutes.": "Le catalogue produits n’a pas répondu. Il sera interrogé de nouveau dans quelques minutes.",
   "Finalised today": "Finalisés aujourd’hui",
+  "Searching": "Recherche",
 };

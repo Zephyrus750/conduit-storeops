@@ -11,7 +11,7 @@ export { CatalogueObject } from './catalogue-object.js';
 import { VERSION } from './version.js';
 import { ulid } from '../shared/ulid.js';
 import { fileKind, FILE_EXTS, FILE_MAX } from '../shared/resources.js';
-import { parseCodes, lookup, catalogueStub } from './catalogue.js';
+import { parseCodes, lookup, catalogueStub, probe } from './catalogue.js';
 import { gs1Parse } from '../shared/gs1.js';
 import { findByBarcode } from './apnlookup.js';
 import { importK2B } from './import.js';
@@ -230,6 +230,13 @@ r.get('/v1/admin/catalogue', async (req, env) => {
   const stub = catalogueStub(env); if (!stub) throw new HttpError(503, 'not_configured', 'the catalogue object is not bound');
   const status = await (await stub.fetch('https://catalogue/status')).json();
   return json({ ...status, details: { browserRendering: !!(env.CF_ACCOUNT_ID && env.BROWSER_TOKEN), legacy: !!env.DETAILS_URL }, legacyLookup: !!env.LOOKUP_URL });
+});
+// The owner's picture check: one keycode through each step its picture
+// takes (link, Browser Rendering, the legacy details worker, the image).
+r.get('/v1/admin/catalogue/probe', async (req, env) => {
+  await requireOwner(req, env);
+  const [kc] = parseCodes(new URL(req.url).searchParams.get('kc'));
+  return json(await probe(env, kc));
 });
 r.post('/v1/admin/catalogue/rebuild', async (req, env) => {
   await requireOwner(req, env);

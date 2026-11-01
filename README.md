@@ -126,6 +126,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/catalogue/barcode?code=` | any signed-in device | live: the keycode behind an item barcode nothing in the store links yet (a clearance ticket, a shelf talker): `{ gtin, source (kmart \| isbn \| null), sure, candidates: [{ kc, name, url }], why }`, from Kmart's site search (Browser Rendering) or, for a book, its title matched against the catalogue; cached a week per barcode (a miss a day) |
 | `GET /v1/admin/service` | owner | live: the console's Service page: worker version, bindings and secrets as set or not (never their values), the catalogue build, each store object (events, live data size, last event, nightly run, next alarm, sockets, photos) and the last 100 errors recorded |
 | `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
+| `GET /v1/admin/catalogue/probe?kc=` | owner | live: one keycode through each step of its picture (`{ kc, link, browser, legacy, image }`, each `{ ok, why?, ms?, price, img… }`): the catalogue link, Browser Rendering, the legacy details worker, and the image itself |
 | `GET /v1/admin/resources`, `POST …`, `PATCH …/:id`, `DELETE …/:id` | owner | live: the Resources library (`shared/resources.js`): `{ title, category, note, link, stores: 'all' \| ['1241', …] }`; a link is https only, stores must be registered; each change is an owner action (`resource.add`, `.edit`, `.file`, `.remove`); a delete takes the file with it |
 | `POST /v1/admin/resources/:id/file?name=`, `GET …/file` | owner | live: the entry's file, its bytes as the body (PDF, pictures, Word, Excel, PowerPoint, CSV or text by the name's extension, under 25 MB); a new one replaces the old. Kept in the `PHOTOS` R2 bucket under `resources/<id>/` (`501` until it is bound) |
 | `GET /v1/resources`, `GET /v1/resources/:id/file?download=` | a store's manager, or the owner acting as the store | live: the entries listed for the token's store that have a file or a link (`403 tool_off` when Resources is switched off for it), and a file: PDFs and pictures inline (to open and print), the rest, or `?download=1`, as an attachment |
@@ -449,11 +450,15 @@ suite lookup worker for keycode → name and product URL; the details worker
 for price, was, image and clearance) and caches per keycode in the edge
 Cache API: links for a week, details for a day, misses for an hour. Names
 never wait on product pages: a lookup waits 3.5 seconds for them and the
-rest finish in the background into the cache; a page that could not be read
-is tried again after an hour. A code the catalogue could not answer for is
+rest finish in the background, each cached as it is read; a page not
+reached is tried again two minutes later, one no reader could read after an
+hour. When Browser Rendering cannot read the pages (refused, or over the
+account's browser limit), the legacy details worker reads them. The owner
+console's catalogue card checks one keycode's picture step by step. A code the catalogue could not answer for is
 left out of `items` (unknown, not a miss) and nothing is cached. The
 device library (`client/catalogue.js`) batches lookups and keeps hits for a
-week (an answer with no picture or price for an hour); a lookup it could
+week (an answer with no picture or price for 90 seconds, and the views ask
+again for those a few times while they stay open); a lookup it could
 not make resolves `undefined`, which the views show as "Not checked yet"
 and ask again, never as "not in the catalogue". The shell's search palette (Ctrl K and the header)
 understands a keycode, a shelf such as A16 S2, a department and a tool, and

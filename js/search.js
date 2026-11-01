@@ -160,7 +160,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       out += grp(tx('Jump to')) + tools().slice(0, 6).map(t => orow('', t.icon, esc(t.title), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
       out += `<div class="ohint"><b>${tx('It understands')}</b><span>${tx('keycode 42977636')}</span><span>${tx('shelf A16 S2')}</span><span>${tx('bay A12')}</span><span>${tx('a manifest number')}</span><span>${tx('a consolidation label')}</span><span>${tx('a cage tag')}</span><span>${tx('an inventory load')}</span><span>${tx('a department like Toys')}</span><span>${tx('a tool like Refresh')}</span>${resources() ? `<span>${tx('a form or file from Resources')}</span>` : ''}</div>`;
     } else if (k === 'prod') {
-      out += grp(tx('Products')) + `<div class="ohint">${tx('Looking up {code}…', { code: esc(Q) })}</div>`;
+      out += grp(tx('Products')) + `<div class="ohint"><span class="nm-look" role="status"><i aria-hidden="true"></i><span>${tx('Looking up {code}…', { code: esc(Q) })}</span></span></div>`;
       body.innerHTML = out; prev.hidden = true; pal.classList.remove('wide');
       const item = await client.catalogue.lookup(Q);
       if (my !== seq) return;

@@ -28,7 +28,8 @@ export async function renderPage(url, env, fetchImpl = fetch) {
       body: JSON.stringify({ url, gotoOptions: { waitUntil: 'networkidle2', timeout: 35_000 }, rejectResourceTypes: ['image', 'media', 'font', 'stylesheet'] }),
     });
     const data = await res.json().catch(() => null);
-    return data?.success && typeof data.result === 'string' ? { html: data.result } : { err: `render ${res.status}` };
+    // The API says why it refused (a bad token, the account's browser limit): kept for the owner's picture check.
+    return data?.success && typeof data.result === 'string' ? { html: data.result } : { err: `render ${res.status}${data?.errors?.[0]?.message ? `: ${String(data.errors[0].message).slice(0, 120)}` : ''}` };
   } catch (e) { return { err: String(e?.name || e).slice(0, 60) }; }
   finally { clearTimeout(timer); }
 }
@@ -69,16 +70,21 @@ export function extractDetails(html) {
 }
 
 // items: [{ kc, u }] → { kc: { found, price, was, img, clr } }
-export async function renderDetails(env, items, fetchImpl = fetch) {
+// onItem(kc, details) as each page is read, so a caller can keep what it
+// has before the rest finish. stopOnRefusal: the first refused or failed
+// render stops the batch (Kmart refusing the browser, or the account over
+// its browser limit, refuses the next page too); the rest are left out.
+export async function renderDetails(env, items, fetchImpl = fetch, { onItem, stopOnRefusal = false } = {}) {
   const list = items.filter(it => it?.kc && okHost(it.u)), out = {};
-  let next = 0;
+  let next = 0, refused = false;
   const run = async () => {
-    while (next < list.length) {
+    while (next < list.length && !refused) {
       const it = list[next++];
       const r = await renderPage(it.u, env, fetchImpl);
-      if (!r.html || isAccessDenied(r.html)) { out[it.kc] = { found: false }; continue; }
-      const d = extractDetails(r.html);
-      out[it.kc] = { found: d.price !== null || d.img !== null, ...d };
+      if (!r.html || isAccessDenied(r.html)) { out[it.kc] = { found: false, why: r.html ? 'refused by kmart.com.au (Access Denied)' : r.err }; if (stopOnRefusal) refused = true; continue; }
+      const d = extractDetails(r.html), found = d.price !== null || d.img !== null;
+      out[it.kc] = { found, ...d, ...(found ? {} : { why: 'no price or picture on the page' }) };
+      if (found) onItem?.(it.kc, out[it.kc]);
     }
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, list.length) }, run));
