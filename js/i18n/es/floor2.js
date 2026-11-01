@@ -874,4 +874,9 @@ export default {
   "free bay": "hueco libre",
   "{n} pallet on the dock": "{n} palé en el muelle",
   "{n} pallets on the dock": "{n} palés en el muelle",
+  "Close to its estimate": "Cerca de lo estimado",
+  "Finished": "Terminado",
+  "On pace": "A buen ritmo",
+  "Under its estimate": "Por debajo de lo estimado",
+  "{n} verified on the manifest": "{n} verificados en el manifiesto",
 };

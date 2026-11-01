@@ -70,7 +70,7 @@ function dockGrid(t, desk) {
 // What a square needs from someone, most pressing first: labels off the
 // manifest, a late arrival, a consol planned for another truck, a label seen
 // before, no carton count. The square shows the first; its title lists all.
-function flags(t, p) {
+export function flags(t, p) {
   const off = (p.held || []).length + (t.manifest ? p.scanIds.filter(id => !p.consolIds.includes(id)).length : 0), out = [];
   if (off) out.push(['off', txn(off, '{n} label not on the manifest', '{n} labels not on the manifest'), tx('OFF')]);
   if (p.lateFrom) out.push(['late', tx('late: manifested {date}', { date: fmtDate(p.lateFrom.d) }), tx('LATE')]);
