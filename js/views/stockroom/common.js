@@ -174,6 +174,15 @@ async function inTurn(items, n, fn) {
   const queue = items.slice();
   await Promise.all(Array.from({ length: Math.min(n, queue.length) }, async () => { while (queue.length) await fn(queue.shift()); }));
 }
+// The catalogue's word on a code, for the live PDT reader: 'ok' (a
+// product), 'unknown' (not one) or 'error' (not reached in 2.5 s: offline
+// must never slow reading down). The name it brings is kept for the lists.
+export function catalogueVerdict(ctx, kc) {
+  kc = String(kc);
+  const had = names.get(kc); if (had) return Promise.resolve('ok'); if (had === null) return Promise.resolve('unknown');
+  const ask = ctx.catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null } : null); return it ? 'ok' : 'unknown'; });
+  return Promise.race([ask, new Promise(r => setTimeout(() => r('error'), 2500))]).catch(() => 'error');
+}
 export function ensureNames(ctx, codes, repaint) {
   const want = [...new Set(codes.map(String))].filter(kc => !names.has(kc) && /^\d{6,12}$/.test(kc));
   if (!want.length) return;

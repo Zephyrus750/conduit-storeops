@@ -5,9 +5,13 @@
 // list as a grid or one by one (Space or Enter: done and next; ← →: move;
 // Backspace: remove). The list is this device's scratch pad: it never
 // touches backfill and is not shared, so it stays in local storage.
+// On a phone, Quick Scan also reads the PDT's list through the camera
+// (js/livescan.js) and shows the codes one at a time, each as a big barcode
+// to scan into the PDT.
 
 import { $, ic, esc, vh, sub, toast, mhead, camButton } from '../../ui.js';
-import { ensureNames, nameHtml, copyText } from './common.js';
+import { ensureNames, nameHtml, catalogueVerdict, copyText } from './common.js';
+import { openLiveReader, heldRows, resolveHeld } from '../../livescan.js';
 import { extractCodes } from '../../../shared/screenscan.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { openScreenScan } from '../../screenscan.js';
@@ -22,6 +26,7 @@ function useStore(no) {
   try { const old = localStorage.getItem('codelist'); if (old != null) { if (localStorage.getItem(KEY()) == null) localStorage.setItem(KEY(), old); localStorage.removeItem('codelist'); } } catch {}
 }
 const st = { view: 'grid', at: 0, paste: false, text: '' };
+const held = new Map();   // codes the live reader held as possible misreads, until someone decides
 function load() { try { const v = JSON.parse(localStorage.getItem(KEY()) || 'null'); return Array.isArray(v?.codes) ? v.codes.filter(x => x && /^\d{6,13}$/.test(x.c)) : []; } catch { return []; } }
 function save(list) { try { localStorage.setItem(KEY(), JSON.stringify({ codes: list, at: new Date().toISOString() })); } catch { toast(tx('This device would not keep the list (storage is blocked)'), 'bad'); } }
 function add(codes, replace = false) {
@@ -62,6 +67,8 @@ export default {
     const doneNext = () => { const list = load(); if (!list.length) return; list[st.at].done = true; save(list); if (st.at < list.length - 1) st.at++; else toast(tx('That was the last code')); repaint(); setTimeout(() => document.querySelector('#content [data-focus]')?.focus(), 0); };
     const remove = i => { const list = load(); list.splice(i, 1); save(list); st.at = Math.min(st.at, Math.max(0, list.length - 1)); repaint(); setTimeout(() => document.querySelector('#content [data-focus]')?.focus(), 0); };
     root.addEventListener('click', e => {
+      const h = e.target.closest('[data-held]');
+      if (h) { const use = resolveHeld(held, h.dataset.code, h.dataset.held); if (use && add([use])) toast(tx('{code} added', { code: use })); repaint(); return; }
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
       if (act === 'cl-view') { st.view = a.dataset.v; repaint(); }
@@ -76,6 +83,13 @@ export default {
       else if (act === 'cl-prev') step(-1);
       else if (act === 'cl-next') doneNext();
       else if (act === 'cl-toggle') { const list = load(), i = Number(a.dataset.i); list[i].done = !list[i].done; save(list); repaint(); }
+      else if (act === 'cl-mview') { st.view = a.dataset.v; repaint(); }
+      else if (act === 'cl-skip') step(1);
+      else if (act === 'cl-read') openLiveReader({
+        title: tx('Read the PDT · Quick Scan'), have: () => new Set(load().map(x => x.c)),
+        verify: kc => catalogueVerdict(ctx, kc), add: kc => { add([kc]); ensureNames(ctx, [kc], repaint); repaint(); return true; },
+        label: kc => nameHtml(kc), held, onHeldChange: repaint, onClose: () => repaint(),
+      });
     });
     root.addEventListener('keydown', e => {
       if (e.target.matches('[data-field="cl-code"]')) { if (e.key === 'Enter') { e.preventDefault(); addTyped(); } return; }
@@ -90,13 +104,28 @@ export default {
   },
 };
 
-// Quick Scan on the phone: scan or type codes onto the list, show each as a
-// barcode, tick them off.
+// Quick Scan on the phone: read the PDT's list through the camera, or scan
+// and type codes; then work the list as barcodes, or one at a time to scan
+// each into the PDT (moved here from Backfill: the PDT step is the person's
+// own, so it lives on their scratch list).
 function mobile(ctx) {
-  const list = load();
-  ensureNames(ctx, list.map(x => x.c), () => { const h = document.querySelector('#clmob'); if (h) h.innerHTML = mobile(ctx); });
-  return mhead(tx('Quick Scan'), `${txn(list.length, '{n} code', '{n} codes')} · ${tx('{n} done', { n: list.filter(x => x.done).length })}`) +
+  const list = load(), done = list.filter(x => x.done).length, repaint = () => { const h = document.querySelector('#clmob'); if (h) h.innerHTML = mobile(ctx); };
+  ensureNames(ctx, list.map(x => x.c), repaint);
+  const tools = `<div class="cl-mtools"><button class="btn primary mv-read" data-act="cl-read">${ic('camera')}${tx('Read the PDT’s list')}</button>` +
+    (list.length ? `<div class="seg"><button class="${st.view === 'one' ? '' : 'on'}" data-act="cl-mview" data-v="grid">${tx('List')}</button><button class="${st.view === 'one' ? 'on' : ''}" data-act="cl-mview" data-v="one">${tx('One at a time')}</button></div>` : '') + `</div>`;
+  const heldHtml = held.size ? `<div class="mv-held"><div class="mv-sub">${tx('Held: possible misreads')}</div>${heldRows(held, nameHtml)}</div>` : '';
+  return mhead(tx('Quick Scan'), `${txn(list.length, '{n} code', '{n} codes')} · ${tx('{n} done', { n: done })}`) +
     `<div class="cl-add m"><input class="ad-in mono" data-field="cl-code" inputmode="numeric" placeholder="${tx('Scan or type a keycode')}" autocomplete="off">${camButton('cl-code', true)}<button class="btn sm" data-act="cl-add">${ic('plus')}</button></div>` +
-    (list.length ? `<div class="cl-mlist">${list.map((x, i) => `<div class="cl-mrow${x.done ? ' done' : ''}"><div class="cl-mbc">${barcodeSvg(x.c, { module: 1.8, height: 56 })}</div><div class="cl-mnm">${nameHtml(x.c)}</div><div class="cl-macts"><button class="sri-tick${x.done ? ' on' : ''}" data-act="cl-toggle" data-i="${i}" aria-pressed="${x.done}" title="${tx('Done')}">✓</button><button class="ibtn" data-act="cl-rm" data-i="${i}" aria-label="${tx('Remove')}">${ic('x')}</button></div></div>`).join('')}</div><div class="cl-mfoot"><button class="btn sm" data-act="cl-copy">${ic('checks')}${tx('Copy all')}</button><button class="btn sm" data-act="cl-clear">${ic('trash')}${tx('Clear')}</button></div>`
-      : `<div class="mv-note">${ic('barcode')}${tx('Scan or type codes to build a list. Each shows as a barcode the PDT can read off this screen.')}</div>`);
+    tools + heldHtml +
+    (!list.length ? `<div class="mv-note">${ic('barcode')}${tx('Scan or type codes to build a list. Each shows as a barcode the PDT can read off this screen.')}</div>`
+      : st.view === 'one' ? oneAtATime(list) : LIST_HTML(list));
 }
+// One code at a time, big enough for the PDT's trigger: Scanned · next marks it and moves on.
+function oneAtATime(list) {
+  st.at = Math.max(0, Math.min(list.length - 1, st.at));
+  const x = list[st.at], left = list.filter(y => !y.done).length, pct = Math.round(100 * (list.length - left) / list.length);
+  return `<div class="card cl-one${x.done ? ' done' : ''}"><div class="cl-pos">${tx('{i} of {n}', { i: st.at + 1, n: list.length })} · ${left ? txn(left, '{n} to scan into the PDT', '{n} to scan into the PDT') : tx('All scanned into the PDT')}</div>` +
+    `<div class="cl-prog"><i style="width:${pct}%"></i></div><div class="cl-bigbc">${barcodeSvg(x.c, { module: 2.4, height: 110 })}</div><div class="cl-code">${esc(x.c)}</div><div class="cl-mnm">${nameHtml(x.c)}</div>` +
+    `<div class="cl-onenav"><button class="btn primary" data-act="cl-next">${x.done ? tx('Next →') : tx('Scanned · next')}</button><button class="btn" data-act="cl-prev"${st.at ? '' : ' disabled'}>${tx('← Prev')}</button><button class="btn" data-act="cl-skip"${st.at < list.length - 1 ? '' : ' disabled'}>${tx('Skip')}</button></div></div>`;
+}
+const LIST_HTML = list => `<div class="cl-mlist">${list.map((x, i) => `<div class="cl-mrow${x.done ? ' done' : ''}"><div class="cl-mbc">${barcodeSvg(x.c, { module: 1.8, height: 56 })}</div><div class="cl-mnm">${nameHtml(x.c)}</div><div class="cl-macts"><button class="sri-tick${x.done ? ' on' : ''}" data-act="cl-toggle" data-i="${i}" aria-pressed="${x.done}" title="${tx('Done')}">✓</button><button class="ibtn" data-act="cl-rm" data-i="${i}" aria-label="${tx('Remove')}">${ic('x')}</button></div></div>`).join('')}</div><div class="cl-mfoot"><button class="btn sm" data-act="cl-copy">${ic('checks')}${tx('Copy all')}</button><button class="btn sm" data-act="cl-clear">${ic('trash')}${tx('Clear')}</button></div>`;
