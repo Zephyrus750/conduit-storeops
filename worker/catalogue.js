@@ -25,17 +25,23 @@
 // the catalogue. The lookup now waits DETAIL_BUDGET_MS for the pages; the
 // rest finish in the background and land in the edge cache for the next
 // ask (a device asks again within the hour when an answer has no picture or
-// price). A page that could not be read is not tried again for an hour.
+// price). Each page's answer is cached as soon as it is read, so the
+// background's time limit loses only the pages not reached; those are tried
+// again two minutes later. A page that could not be read waits an hour.
+// When Browser Rendering cannot read the pages (Kmart refusing it, or the
+// account over its browser limit), the legacy details worker reads them.
+// GET /v1/admin/catalogue/probe?kc= (probe below) shows the owner each step.
 
 import { HttpError } from './http.js';
 import { upstream } from './upstream.js';
-import { detailsConfigured, renderDetails } from './details.js';
+import { detailsConfigured, renderDetails, renderPage, extractDetails, isAccessDenied } from './details.js';
 
 export const MAX_CODES = 50;
 const LINK_TTL_S = 7 * 86400;       // name and URL do not change
 const DETAIL_TTL_S = 86400;         // price and clearance refresh daily
 const MISS_TTL_S = 3600;
 const RETRY_TTL_S = 3600;           // a product page that could not be read waits this long before another try
+const PENDING_TTL_S = 120;          // a page being read now is not started again by another ask for this long
 const UPSTREAM_TIMEOUT_MS = 8000;
 export const DETAIL_BUDGET_MS = 3500;
 
@@ -56,7 +62,7 @@ export async function lookup(env, ctx, codes, { details = true, upstream: fetchU
     const hit = cache ? await cacheGet(cache, kc) : null;
     if (hit === undefined) { needLink.push(kc); continue; }
     items[kc] = hit;
-    if (hit && details && !fresh(hit.at, DETAIL_TTL_S, now()) && !fresh(hit.tried, RETRY_TTL_S, now())) needDetail.push(kc);
+    if (hit && details && !fresh(hit.at, DETAIL_TTL_S, now()) && !fresh(hit.tried, RETRY_TTL_S, now()) && !fresh(hit.pending, PENDING_TTL_S, now())) needDetail.push(kc);
   }
   // 2. links for the unknown codes; a code the catalogue could not answer
   // for stays out of items and out of the cache.
@@ -70,23 +76,26 @@ export async function lookup(env, ctx, codes, { details = true, upstream: fetchU
     }
   }
   // 3. price, was, image, clearance for the ones that have a product page:
-  // marked as tried and cached first, so a slow page is not started again
-  // by every ask; then waited for up to the budget, the rest in the background.
+  // marked as being read and cached first, so another ask does not start the
+  // same pages; each answer is cached as it lands; waited for up to the
+  // budget, the rest in the background. A page no reader could read waits
+  // an hour; one never reached (the background's time ran out) two minutes.
   if (details && fetchUp && needDetail.length) {
-    const t0 = now();
-    for (const kc of needDetail) items[kc] = { ...items[kc], tried: t0 };
+    const t0 = now(), got = {}, saves = [];
+    const save = (kc, item) => { if (cache) saves.push(cachePut(cache, kc, item, now())); };
+    const plain = kc => { const { pending, ...rest } = items[kc]; return rest; };
+    const base = Object.fromEntries(needDetail.map(kc => [kc, plain(kc)]));
+    for (const kc of needDetail) items[kc] = { ...base[kc], pending: t0 };
     if (cache) await Promise.all(needDetail.map(kc => cachePut(cache, kc, items[kc], t0)));
-    const base = Object.fromEntries(needDetail.map(kc => [kc, items[kc]]));
-    const job = fetchDetails(env, needDetail.map(kc => ({ kc, u: base[kc].url })), fetchImpl).then(det => {
-      const t = now(), out = {};
-      for (const kc of needDetail) { const d = det[kc]; out[kc] = d ? { ...base[kc], price: d.price ?? null, was: d.was ?? null, img: d.img || null, clr: !!d.clr, at: t } : base[kc]; }
-      return out;
-    });
-    const saved = job.then(out => cache && Promise.all(needDetail.filter(kc => out[kc].at).map(kc => cachePut(cache, kc, out[kc], now())))).catch(() => {});
-    if (ctx?.waitUntil) ctx.waitUntil(saved);
-    let timer; const done = await Promise.race([job.catch(() => null), new Promise(r => { timer = setTimeout(() => r(null), budgetMs); })]); clearTimeout(timer);
-    if (done) Object.assign(items, done);
-    if (!ctx?.waitUntil) await saved;
+    const onItem = (kc, d) => { got[kc] = { ...base[kc], price: d.price ?? null, was: d.was ?? null, img: d.img || null, clr: !!d.clr, at: now() }; save(kc, got[kc]); };
+    const job = fetchDetails(env, needDetail.map(kc => ({ kc, u: base[kc].url })), fetchImpl, onItem)
+      .then(() => { const t = now(); for (const kc of needDetail) if (!got[kc]) save(kc, { ...base[kc], tried: t }); })
+      .catch(() => {})
+      .then(() => Promise.all(saves));
+    if (ctx?.waitUntil) ctx.waitUntil(job);
+    let timer; await Promise.race([job, new Promise(r => { timer = setTimeout(r, budgetMs); })]); clearTimeout(timer);
+    for (const kc of needDetail) if (got[kc]) items[kc] = got[kc];
+    if (!ctx?.waitUntil) await job;
   } else puts.push(...needDetail.filter(kc => needLink.includes(kc)));
   // 4. write back the links and misses that changed
   if (cache && puts.length) {
@@ -138,25 +147,63 @@ async function fetchLinks(env, codes, fetchImpl) {
   }
   return { found: out, failed };
 }
-async function fetchDetails(env, items, fetchImpl) {
+// Price, was, image and clearance for [{ kc, u }]: Browser Rendering first,
+// then the legacy details worker for what it could not read (or all of
+// them when Browser Rendering is not configured). onItem(kc, details) as
+// each one lands. Only found answers are returned.
+async function fetchDetails(env, items, fetchImpl, onItem = () => {}) {
   if (!items.length) return {};
+  const out = {}, take = (kc, d) => { if (d?.found && !out[kc]) { out[kc] = d; onItem(kc, d); } };
   if (detailsConfigured(env)) {
-    const out = {};
-    for (let i = 0; i < items.length; i += 20) { try { Object.assign(out, await renderDetails(env, items.slice(i, i + 20), fetchImpl)); } catch { /* details are optional */ } }
-    for (const kc of Object.keys(out)) if (!out[kc].found) delete out[kc];
-    return out;
+    for (let i = 0; i < items.length; i += 20) {
+      let refused = false;
+      try { const r = await renderDetails(env, items.slice(i, i + 20), fetchImpl, { onItem: take, stopOnRefusal: !!env.DETAILS_URL }); refused = Object.values(r).some(d => !d.found && d.why && d.why !== 'no price or picture on the page'); }
+      catch { refused = true; }
+      if (refused && env.DETAILS_URL) break;   // the legacy worker reads the rest
+    }
   }
-  const url = env.DETAILS_URL; if (!url) return {};
+  const rest = items.filter(it => !out[it.kc]), url = env.DETAILS_URL;
+  if (!url || !rest.length) return out;
   const doFetch = upstream(env, 'DETAILS', fetchImpl);
-  const out = {};
-  for (let i = 0; i < items.length; i += 20) {
-    const chunk = items.slice(i, i + 20);
+  for (let i = 0; i < rest.length; i += 20) {
+    const chunk = rest.slice(i, i + 20);
     try {
       const r = await timed(doFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: chunk }) }));
       if (!r.ok) continue;
       const j = await r.json();
-      for (const it of chunk) if (j?.[it.kc]?.found) out[it.kc] = j[it.kc];
+      for (const it of chunk) take(it.kc, j?.[it.kc]);
     } catch { /* details are optional; the link still answers */ }
+  }
+  return out;
+}
+
+// The owner's picture check for one keycode: each step a product's picture
+// takes, and what came back. { kc, link, browser, legacy, image }; a step
+// is { ok, why?, ... } or null when it was not reached.
+export async function probe(env, kc, fetchImpl = fetch) {
+  const out = { kc, link: null, browser: null, legacy: null, image: null };
+  const { found, failed } = await fetchLinks(env, [kc], fetchImpl);
+  out.link = failed.has(kc) ? { ok: false, why: 'the catalogue could not answer' } : found[kc] ? { ok: true, name: found[kc].name, url: found[kc].url } : { ok: false, why: 'not in the catalogue' };
+  if (!out.link.ok) return out;
+  const it = { kc, u: found[kc].url }, fields = d => ({ price: d.price ?? null, was: d.was ?? null, img: d.img || null, clr: !!d.clr });
+  if (detailsConfigured(env)) {
+    const t = Date.now(), r = await renderPage(it.u, env, fetchImpl), ms = Date.now() - t;
+    if (!r.html) out.browser = { ok: false, ms, why: r.err };
+    else if (isAccessDenied(r.html)) out.browser = { ok: false, ms, why: 'refused by kmart.com.au (Access Denied)' };
+    else { const d = extractDetails(r.html), ok = d.price !== null || d.img !== null; out.browser = { ok, ms, bytes: r.html.length, ...fields(d), ...(ok ? {} : { why: 'no price or picture on the page' }) }; }
+  } else out.browser = { ok: false, why: 'not configured (CF_ACCOUNT_ID and BROWSER_TOKEN)' };
+  if (env.DETAILS_URL) {
+    const t = Date.now();
+    try {
+      const r = await timed(upstream(env, 'DETAILS', fetchImpl)(env.DETAILS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: [it] }) }), 30_000), ms = Date.now() - t;
+      const j = r.ok ? await r.json().catch(() => null) : null, d = j?.[kc];
+      out.legacy = !r.ok ? { ok: false, ms, why: `answered ${r.status}` } : d?.found ? { ok: true, ms, ...fields(d) } : { ok: false, ms, why: d?.error || 'no price or picture' };
+    } catch (e) { out.legacy = { ok: false, ms: Date.now() - t, why: String(e?.message || e).slice(0, 120) }; }
+  } else out.legacy = { ok: false, why: 'not configured (DETAILS_URL)' };
+  const img = out.browser?.img || out.legacy?.img;
+  if (img) {
+    try { const r = await timed(fetchImpl(img, { headers: { Accept: 'image/*' } }), 15_000); out.image = { ok: r.ok && /^image\//.test(r.headers.get('content-type') || ''), url: img, status: r.status, type: r.headers.get('content-type') || '' }; }
+    catch (e) { out.image = { ok: false, url: img, why: String(e?.message || e).slice(0, 120) }; }
   }
   return out;
 }

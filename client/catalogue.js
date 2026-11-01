@@ -12,8 +12,10 @@
 const TTL_MS = 7 * 86_400_000;
 // An answer without the product page's details (no picture and no price:
 // the worker had not read the page yet, or could not) is asked again after
-// an hour, so a picture arrives once the worker has it, not a week later.
-export const THIN_MS = 3_600_000;
+// 90 seconds, so a picture arrives once the worker has it (it reads pages
+// in the background and keeps each one). Asking again costs the worker an
+// edge-cache read: it does not re-read a page it is reading or that failed.
+export const THIN_MS = 90_000;
 const thin = item => !!item && !item.img && !Number.isFinite(item.price);
 const fresh = (item, at) => Date.now() - at < (thin(item) ? THIN_MS : TTL_MS);
 const BATCH_MS = 40;

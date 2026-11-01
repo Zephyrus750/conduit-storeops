@@ -7,7 +7,7 @@
 // Reads are cached per store while the console is open; a Refresh button
 // or any write clears the relevant cache.
 
-import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName, DEPTS_DEFAULT } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, fmtTime, ago, status, toast, deptCommonName, DEPTS_DEFAULT, productImg } from '../ui.js';
 import { parseMapFile, renderMap, publishBody } from '../../shared/maprender.js';
 import { applyEdit, parseCode } from '../../shared/mapedits.js';
 import { mountMap, bindMapChrome } from '../map.js';
@@ -85,7 +85,27 @@ function catalogueCard(c) {
     `<span>${tx('Last build')}</span><b>${lb ? `${fmtTime(new Date(lb.at).toISOString())} · ${esc(lb.trigger || '')} · ${esc(lb.discovery || '')}${lb.errors ? ` · ${txn(lb.errors, '{n} error', '{n} errors')}` : ''}` : '—'}</b>` +
     `${lb?.reason ? `<span>${tx('Reason')}</span><b>${esc(lb.reason)}</b>` : ''}${lb?.sweepHeld ? `<span>${tx('Held')}</span><b>${tx('{n} files looked gone at once; kept as a suspected outage', { n: lb.sweepHeld })}</b>` : ''}` +
     `<span>${tx('Next weekly read')}</span><b>${c.next ? fmtTime(new Date(c.next).toISOString()) : '—'}</b></div>` +
-    (legacy.length ? `<div class="cs-dim" style="margin-top:10px">${legacy.map(esc).join('<br>')}</div>` : '') + `</div>`;
+    (legacy.length ? `<div class="cs-dim" style="margin-top:10px">${legacy.map(esc).join('<br>')}</div>` : '') + probeBox() + `</div>`;
+}
+// The picture check: one keycode through each step its picture takes
+// (GET /v1/admin/catalogue/probe). The reasons are the worker's, in English.
+function probeBox() {
+  const p = st.probe;
+  const step = (label, r, okText) => `<span>${label}</span><b class="${r ? (r.ok ? 'c-green' : 'c-red') : 'cs-dim'}">${r ? `${r.ok ? '✓' : '✕'} ${r.ok ? okText(r) : esc(r.why || '')}${r.ms != null ? ` <small class="cs-dim">${tx('{ms} ms', { ms: r.ms })}</small>` : ''}` : '—'}</b>`;
+  const got = r => [r.img ? tx('picture') : '', r.price != null ? tx('price {price}', { price: `$${r.price}` }) : ''].filter(Boolean).join(' · ');
+  const body = !p ? '' : p.loading ? `<div class="cat-pr-r"><span class="nm-look" role="status"><i aria-hidden="true"></i><span>${tx('Checking {code}…', { code: esc(p.kc) })}</span></span></div>`
+    : p.error ? `<div class="cat-pr-r c-red">${esc(p.error)}</div>`
+    : `<div class="cat-pr-r"><div class="ad-kv">${step(tx('In the catalogue'), p.link, r => esc(r.name || p.kc))}${step(tx('Browser Rendering'), p.browser, got)}${step(tx('Legacy details worker'), p.legacy, got)}${step(tx('The picture loads'), p.image, r => esc(r.type || ''))}</div>` +
+      (p.image?.url ? `<div class="cat-pr-img">${productImg(p.image.url, p.link?.name || '')}<small class="mono">${esc(p.image.url)}</small></div>` : '') + `</div>`;
+  return `<div class="cat-pr"><b>${tx('Check a product’s picture')}</b><div class="cat-pr-f"><input class="inp" data-field="cat-kc" inputmode="numeric" placeholder="${tx('Keycode')}" value="${esc(p?.kc || '')}" aria-label="${tx('Keycode')}"><button class="btn sm" data-act="cat-probe"${p?.loading ? ' disabled' : ''}>${ic('search')}${tx('Check')}</button></div>${body}</div>`;
+}
+async function runProbe(ctx, root) {
+  const kc = String(root.querySelector('[data-field="cat-kc"]')?.value || '').replace(/\D/g, '');
+  if (!/^\d{6,9}$/.test(kc)) return toast(tx('Type a keycode of 6 to 9 digits'), 'bad');
+  st.probe = { kc, loading: true }; ctx.rerender();
+  try { st.probe = { kc, ...(await ctx.admin.api(`/v1/admin/catalogue/probe?kc=${kc}`, { timeoutMs: 90_000 })) }; }
+  catch (e) { st.probe = { kc, error: e.message }; }
+  ctx.rerender();
 }
 
 // ── the console's numbers and the fleet ───────────────────────────────
@@ -161,11 +181,13 @@ const overview = {
       if (a.dataset.act === 'open-editor') return openEditor();
       if (a.dataset.act === 'reg-export') return exportRegistry(ctx.admin.stores || []);
       if (a.dataset.act === 'refresh') { invalidate(); st.health = null; st.cat = null; st.kpis = null; try { await ctx.admin.refreshStores(); } catch (err) { return fail(err); } ctx.rerender(); }
+      if (a.dataset.act === 'cat-probe') return runProbe(ctx, root);
       if (a.dataset.act === 'cat-rebuild') {
         try { const r = await ctx.admin.api('/v1/admin/catalogue/rebuild', { method: 'POST', body: {} }); toast(r.started ? tx('Catalogue rebuild started') : r.reason || tx('Not started')); await loadCatalogue(ctx); ctx.rerender(); }
         catch (err) { fail(err); }
       }
     });
+    root.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-field="cat-kc"]')) { e.preventDefault(); runProbe(ctx, root); } });
     return [() => clearTimeout(poll)];
   },
 };
@@ -541,7 +563,15 @@ const service = {
   },
   mount(ctx, root) {
     if (!st.service) ctx.admin.api('/v1/admin/service').then(r => { st.service = r; ctx.rerender(); }).catch(e => { st.service = { error: e.message }; ctx.rerender(); });
-    root.addEventListener('click', e => { if (e.target.closest('[data-act="svc-refresh"]')) { st.service = null; ctx.rerender(); } });
+    root.addEventListener('click', async e => {
+      if (e.target.closest('[data-act="svc-refresh"]')) { st.service = null; ctx.rerender(); }
+      if (e.target.closest('[data-act="cat-probe"]')) runProbe(ctx, root);
+      if (e.target.closest('[data-act="cat-rebuild"]')) {
+        try { const r = await ctx.admin.api('/v1/admin/catalogue/rebuild', { method: 'POST', body: {} }); toast(r.started ? tx('Catalogue rebuild started') : r.reason || tx('Not started')); st.service = null; ctx.rerender(); }
+        catch (err) { toast(err.message, 'bad'); }
+      }
+    });
+    root.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-field="cat-kc"]')) { e.preventDefault(); runProbe(ctx, root); } });
     return [];
   },
 };

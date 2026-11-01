@@ -895,6 +895,16 @@ kbd { display: inline-block; min-width: 18px; padding: 1px 6px; border: 1px soli
 .nm-ok { color: inherit; text-decoration: none; }
 a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .nm-unv { font-weight: 600; }
+/* A product being looked up: a small spinner and "Searching" with a light
+   sweeping across it, so a row plainly says it is working. Both move only
+   by transform and background position; the shell stills them for a device
+   that asks for less motion. */
+.nm-look { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; vertical-align: middle; font-weight: 600; color: var(--accent-ink); }
+.nm-look > i { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent-line); border-top-color: var(--accent); animation: nm-spin .8s linear infinite; }
+.nm-look > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: linear-gradient(90deg, var(--accent-ink) 0 35%, var(--accent-line) 50%, var(--accent-ink) 65% 100%) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: nm-sweep 1.6s linear infinite; }
+@keyframes nm-spin { to { transform: rotate(360deg); } }
+@keyframes nm-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .nm-look > span { color: var(--accent-ink); background: none; } }
 /* "Did you mean" on its own line under the unverified name. In the backfill
    review each suggestion is a button that puts it in place of the code. */
 .nm-near { display: block; margin-top: 2px; color: var(--dim); font-size: 12px; font-weight: 400; }
@@ -3637,8 +3647,27 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .bf-gh:first-child, .bf-lh { border-top: 0; }
 .bf-lh { display: flex; align-items: baseline; gap: 8px; }
 .bf-lh span { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 600; }
+/* The backfill board's stages, one colour each on the phone: in progress
+   blue, with review amber, reviewed (finalise on the PDT) purple, requested
+   grey, finalised green. A tinted heading with a dot and its count, and a
+   coloured edge on every row; My locations uses the same edges. */
+.bf-g, .mv-row.bfs { --sc: #94A3B8; --si: #475569; --sb: #F8FAFC; }
+.bf-g.bfst-prog { --sc: #2563EB; --si: #1D4ED8; --sb: #EFF6FF; }
+.bf-g.bfst-rev, .mv-row.bfs.bfst-rev { --sc: #F59E0B; --si: #B45309; --sb: #FFFBEB; }
+.bf-g.bfst-fin, .mv-row.bfs.bfst-fin { --sc: #7C3AED; --si: #6D28D9; --sb: #F5F3FF; }
+.bf-g.bfst-done, .mv-row.bfs.bfst-done { --sc: #16A34A; --si: #15803D; --sb: #F0FDF4; }
+.bf-g + .bf-g { border-top: 1px solid var(--line); }
+.bf-g .bf-gh { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 14px; border-top: 0; color: var(--si); background: var(--sb); }
+.bf-gh .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--sc); }
+.bf-gh .ct { margin-left: auto; min-width: 22px; height: 20px; padding: 0 7px; border-radius: 999px; background: var(--si); color: #fff; font-size: 11.5px; letter-spacing: 0; display: inline-grid; place-items: center; }
+.bf-g .bf-row { box-shadow: inset 4px 0 0 var(--sc); }
+.bf-g .bf-row + .bf-row { border-top: 1px solid var(--line-soft); }
+details.bf-g > summary { list-style: none; cursor: pointer; min-height: 40px; }
+details.bf-g > summary::-webkit-details-marker { display: none; }
+details.bf-g > summary svg.cv { width: 16px; height: 16px; transition: transform .15s; }
+details.bf-g[open] > summary svg.cv { transform: rotate(180deg); }
+.mv-row.bfs { box-shadow: inset 4px 0 0 var(--sc); }
 .bf-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 10px 6px 14px; }
-.bf-row.hot { background: var(--accent-soft); }
 .bf-loc { flex: none; display: inline-flex; align-items: center; gap: 8px; }
 .bf-loc b { font: 800 16px ui-monospace, Menlo, monospace; }
 .bf-row small { flex: 1; min-width: 0; font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3714,3 +3743,12 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .fpic { flex: none; width: 120px; height: 120px; border-radius: 12px; background: #fff; border: 1px solid var(--line-soft); display: grid; place-items: center; overflow: hidden; }
 @container smid (max-width: 520px) { .finfo { gap: 12px; } .fpic { width: 84px; height: 84px; } .finfo .fcode { font-size: 26px; } }
 .fpic img { width: 100%; height: 100%; object-fit: contain; }
+
+/* Owner console: the product picture check under the catalogue card. */
+.cat-pr { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 8px; }
+.cat-pr-f { display: flex; gap: 8px; max-width: 360px; }
+.cat-pr-f .inp { flex: 1; min-width: 0; }
+.cat-pr-r .ad-kv b { font-weight: 600; overflow-wrap: anywhere; }
+.cat-pr-img { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.cat-pr-img img, .cat-pr-img .pimg-off { flex: none; width: 96px; height: 96px; object-fit: contain; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.cat-pr-img small { color: var(--dim); overflow-wrap: anywhere; }

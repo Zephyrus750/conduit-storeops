@@ -66,7 +66,7 @@ test('device lookups go in chunks of 50: a screen asking for 120 names gets them
   assert.equal(down.n, 1);
 });
 
-test('device cache: an answer with no picture and no price is asked again after an hour; a full one keeps a week', async () => {
+test('device cache: an answer with no picture and no price is asked again after THIN_MS; a full one keeps a week', async () => {
   const { createCatalogue, THIN_MS } = await import('../../client/catalogue.js');
   const { memoryStorage } = await import('../../client/storage.js');
   const storage = memoryStorage(), asked = [], old = Date.now() - THIN_MS - 60_000;
@@ -132,4 +132,56 @@ test('worker: a page that cannot be read waits an hour; a catalogue that cannot 
   assert.equal(second['43307685'].name, 'Mug'); assert.equal(details, 1, 'the refused page is not asked again within the hour');
   const later = await lookup(env, bg(), ['43307685'], { fetchImpl, cache, budgetMs: 50, now: () => Date.now() + 3_700_000 });
   assert.equal(later['43307685'].name, 'Mug'); assert.equal(details, 2, 'and is tried again after it'); assert.equal(lookups, 2);
+});
+
+test('worker: when Browser Rendering is refused, the legacy details worker reads the pages; one refusal stops the batch', async () => {
+  const { lookup } = await import('../../worker/catalogue.js');
+  const calls = { render: 0, legacy: 0 }, cache = edge(), ctx = bg();
+  const codes = ['42977636', '43302210', '43307685'];
+  const fetchImpl = async (url, init) => {
+    const u = String(url);
+    if (u.startsWith('https://lookup.test')) return Response.json(Object.fromEntries(codes.map(kc => [kc, { found: true, url: `https://www.kmart.com.au/product/x-${kc}/`, name: 'P' + kc }])));
+    if (u.startsWith('https://api.cloudflare.com')) { calls.render += 1; return Response.json({ success: true, result: '<html><h1>Access Denied</h1></html>' }); }
+    calls.legacy += 1; const b = JSON.parse(init.body);
+    return Response.json(Object.fromEntries(b.items.map(i => [i.kc, { found: true, price: 5, img: `https://img.test/${i.kc}.jpg` }])));
+  };
+  const env = { LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', CF_ACCOUNT_ID: 'acc', BROWSER_TOKEN: 'tok' };
+  const items = await lookup(env, ctx, codes, { fetchImpl, cache, budgetMs: 2000 });
+  await ctx.settle();
+  assert.deepEqual(codes.map(kc => items[kc].img), codes.map(kc => `https://img.test/${kc}.jpg`));
+  assert.ok(calls.render <= 2, 'a refusal stops Browser Rendering for the batch (two in flight at most)'); assert.equal(calls.legacy, 1);
+});
+
+test('worker: a page still being read is not started again; one never reached is tried two minutes later', async () => {
+  const { lookup } = await import('../../worker/catalogue.js');
+  let details = 0; const cache = edge();
+  const fetchImpl = async url => {
+    if (String(url).startsWith('https://lookup.test')) return Response.json({ 43350121: { found: true, url: 'https://www.kmart.com.au/product/z-43350121/', name: 'Lamp' } });
+    details += 1; return new Promise(() => {});   // the background time runs out before it answers
+  };
+  const env = { LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test' };
+  await lookup(env, bg(), ['43350121'], { fetchImpl, cache, budgetMs: 10 });
+  await lookup(env, bg(), ['43350121'], { fetchImpl, cache, budgetMs: 10 });
+  assert.equal(details, 1, 'not started twice while it is being read');
+  await lookup(env, bg(), ['43350121'], { fetchImpl, cache, budgetMs: 10, now: () => Date.now() + 130_000 });
+  assert.equal(details, 2, 'started again once the two minutes have passed');
+});
+
+test('worker: the owner picture check reports each step', async () => {
+  const { probe } = await import('../../worker/catalogue.js');
+  const page = '<script type="application/ld+json">{"@type":"Product","image":"https://img.test/a.jpg","offers":{"price":"12.00"}}</script>';
+  const fetchImpl = async (url, init) => {
+    const u = String(url);
+    if (u.startsWith('https://lookup.test')) return Response.json({ 42977636: { found: true, url: 'https://www.kmart.com.au/product/x-42977636/', name: 'Diecast' } });
+    if (u.startsWith('https://api.cloudflare.com')) return Response.json({ success: true, result: page });
+    if (u.startsWith('https://details.test')) return new Response('down', { status: 503 });
+    if (u === 'https://img.test/a.jpg') return new Response('x', { headers: { 'Content-Type': 'image/jpeg' } });
+    return new Response('?', { status: 404 });
+  };
+  const p = await probe({ LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', CF_ACCOUNT_ID: 'acc', BROWSER_TOKEN: 'tok' }, '42977636', fetchImpl);
+  assert.equal(p.link.ok, true); assert.equal(p.browser.ok, true); assert.equal(p.browser.img, 'https://img.test/a.jpg'); assert.equal(p.browser.price, 12);
+  assert.deepEqual([p.legacy.ok, p.legacy.why], [false, 'answered 503']);
+  assert.deepEqual([p.image.ok, p.image.type], [true, 'image/jpeg']);
+  const refused = await probe({ LOOKUP_URL: 'https://lookup.test', CF_ACCOUNT_ID: 'acc', BROWSER_TOKEN: 'tok' }, '42977636', async (url, init) => String(url).startsWith('https://api.cloudflare.com') ? Response.json({ success: false, errors: [{ message: 'Rate limit exceeded' }] }, { status: 429 }) : fetchImpl(url, init));
+  assert.equal(refused.browser.why, 'render 429: Rate limit exceeded'); assert.equal(refused.legacy.why, 'not configured (DETAILS_URL)'); assert.equal(refused.image, null);
 });
