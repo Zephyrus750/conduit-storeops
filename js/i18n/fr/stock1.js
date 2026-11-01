@@ -647,4 +647,5 @@ export default {
   "Use {other} instead of {code} in the report list for {bay}?": "Utiliser {other} au lieu de {code} dans la liste du rapport de {bay} ?",
   "Use {other} instead of {code} in the scans for {bay}?": "Utiliser {other} au lieu de {code} dans les scans de {bay} ?",
   "{name}: use it instead of {code}": "{name} : l’utiliser au lieu de {code}",
+  "The product catalogue did not answer. It is asked again in a couple of minutes.": "Le catalogue produits n’a pas répondu. Il sera interrogé de nouveau dans quelques minutes.",
 };

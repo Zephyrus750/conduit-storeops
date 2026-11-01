@@ -57,6 +57,7 @@ export function nameHtml(kc, missing = tx('Unverified · not in the catalogue'),
   if (isItemBarcode(kc)) return `<span class="nm-apn" title="${tx('That is an item barcode (APN), not a keycode')}">${tx('Item barcode · not a keycode')}</span>`;
   const n = names.get(kc);
   if (n === undefined) return '<span class="cs-dim">…</span>';
+  if (n === false) return `<span class="cs-dim nm-off" title="${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}">${tx('Not checked yet')}</span>`;
   const rc = recallTagFor(kc);   // a recalled or withdrawn product says so first, wherever it is listed
   if (n === null) return `${rc}<span class="warn nm-unv" title="${tx('Not found in the catalogue: double-check this code')}">⚠ ${esc(missing)}</span>${nearHtml(kc, swap)}`;
   return rc + (n.url ? `<a class="nm-ok" ${goAttrs(kc)} title="${tx('Open the product page on kmart.com.au')}">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`);
@@ -111,7 +112,7 @@ export function installProductLinks(catalogue) {
     e.preventDefault();
     const w = window.open('about:blank', '_blank');
     const send = u => { if (w && !w.closed) { try { w.opener = null; } catch {} w.location.replace(u); } else window.open(u, '_blank', 'noopener'); };
-    catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null, img: it.img || null } : null); send(urlOf(kc)); }).catch(() => send(searchUrl(kc)));
+    catalogue.lookup(kc).then(it => { if (it !== undefined) names.set(kc, info(it)); send(urlOf(kc)); }).catch(() => send(searchUrl(kc)));
   }, true);
 }
 // On a PC, resting the pointer on a keycode or a product name for a moment
@@ -134,9 +135,9 @@ function cardHtml(kc, it, w) {
   const rc = recallFor(null, kc);
   const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : it ? `<span class="pch-none">${tx('No price yet')}</span>` : '';
   return `<div class="pch-img">${productImg(it?.img) || ic('box')}</div>` +
-    `<div class="pch-b"><span class="mono pch-kc">${esc(kc)}</span><b>${it ? esc(it.name || tx('Verified product')) : tx('Not in the catalogue')}</b>${price}${baysLine(w)}` +
+    `<div class="pch-b"><span class="mono pch-kc">${esc(kc)}</span><b>${it ? esc(it.name || tx('Verified product')) : it === undefined ? tx('Not checked yet') : tx('Not in the catalogue')}</b>${price}${baysLine(w)}` +
     (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') +
-    `<small>${it?.url ? tx('Click the name for kmart.com.au, the keycode to copy it') : tx('Not sold online, or a retired code. Click the keycode to copy it.')}</small></div>`;
+    `<small>${it?.url ? tx('Click the name for kmart.com.au, the keycode to copy it') : it === undefined ? tx('The product catalogue did not answer. It is asked again in a couple of minutes.') : tx('Not sold online, or a retired code. Click the keycode to copy it.')}</small></div>`;
 }
 // opts.bays(kc) → the worker's /bays answer, or null where there is none to
 // ask (no store, no Stockroom); opts.scope() → the store, so a switch of
@@ -199,9 +200,9 @@ function popHtml(kc, it, w, nm, ext) {
   const img = `<div class="ppop-img${it?.img || it === undefined ? '' : ' none'}">${it?.img ? productImg(it.img) : `${ic('box')}${it === undefined ? '' : `<small>${tx('No photo')}</small>`}`}<button type="button" class="ppop-x" data-pp="close" aria-label="${tx('Close')}">${ic('x')}</button></div>`;
   const near = it === null && nm.length ? `<div class="ppop-near"><small>${tx('Did you mean')}</small>${nm.slice(0, 2).map(x => `<div class="ppop-nr"><span><b class="mono">${esc(x.keycode)}</b> ${esc(x.name || '')}</span>${ext.use ? `<button type="button" class="btn sm primary" data-pp="use" data-code="${esc(x.keycode)}">${tx('Use it')}</button>` : `<button type="button" class="btn sm" data-pp="copy" data-code="${esc(x.keycode)}">${tx('Copy')}</button>`}</div>`).join('')}</div>` : '';
   const body = `<div class="ppop-b"><div class="ppop-r1"><button type="button" class="ppop-kc" data-pp="copy" aria-label="${tx('Copy {code}', { code: esc(kc) })}">${esc(kc)}${ic('clip')}</button>${price}</div>` +
-    (it === undefined ? '<b class="ppop-nm">…</b>' : it ? `<b class="ppop-nm">${esc(it.name || tx('Verified product'))}</b>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
+    (it === undefined ? '<b class="ppop-nm">…</b>' : it ? `<b class="ppop-nm">${esc(it.name || tx('Verified product'))}</b>` : it === false ? `<span class="ppop-miss">${tx('Not checked yet')}</span><p class="ppop-why">${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}</p>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
     (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') + baysLine(w) + near + `</div>`;
-  const acts = `<div class="ppop-acts"><a class="btn primary ppop-go" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${it === null ? tx('Search kmart.com.au for {code}', { code: esc(kc) }) : tx('Open on kmart.com.au')}${ic('ext')}</a>` +
+  const acts = `<div class="ppop-acts"><a class="btn primary ppop-go" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${it === null || it === false ? tx('Search kmart.com.au for {code}', { code: esc(kc) }) : tx('Open on kmart.com.au')}${ic('ext')}</a>` +
     `<div class="ppop-row"><button type="button" class="btn" data-pp="copy">${tx('Copy keycode')}</button>${(ext.actions || []).map((a, i) => `<button type="button" class="btn${a.danger ? ' bad' : ''}" data-pp="act" data-i="${i}">${a.label}</button>`).join('')}</div></div>`;
   return `<button type="button" class="ppop-scrim" data-pp="close" aria-label="${tx('Close')}" tabindex="-1"></button><div class="ppop-dlg">${img}${body}${acts}</div>`;
 }
@@ -228,7 +229,7 @@ async function openProduct(kc) {
   document.addEventListener('keydown', onKey, true);
   (document.querySelector('.frame') || document.body).appendChild(host);
   pop = { close }; paint(); host.querySelector('.ppop-x')?.focus();
-  it = await popCtx.catalogue.lookup(kc).catch(() => null); paint();
+  it = await popCtx.catalogue.lookup(kc).catch(() => undefined); if (it === undefined) it = false; paint();
   if (it === null) { nm = near.get(kc) || await popCtx.catalogue.nearMiss(kc).catch(() => []) || []; near.set(kc, nm); paint(); }
   w = await popCtx.bays(kc); paint();
 }
@@ -244,16 +245,27 @@ async function inTurn(items, n, fn) {
 export function catalogueVerdict(ctx, kc) {
   kc = String(kc);
   const had = names.get(kc); if (had) return Promise.resolve('ok'); if (had === null) return Promise.resolve('unknown');
-  const ask = ctx.catalogue.lookup(kc).then(it => { names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null, img: it.img || null } : null); return it ? 'ok' : 'unknown'; });
+  const ask = ctx.catalogue.lookup(kc).then(it => { if (it === undefined) return 'error'; names.set(kc, info(it)); return it ? 'ok' : 'unknown'; });
   return Promise.race([ask, new Promise(r => setTimeout(() => r('error'), 2500))]).catch(() => 'error');
 }
+// A code the catalogue could not be asked about (offline, timed out) is
+// "not checked yet" (false), never "not in the catalogue", and is asked
+// again once the device's back-off has passed.
+const RETRY_MS = 125_000;
+let retryT = null; const retryCodes = new Set();
+const info = it => it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null, img: it.img || null } : null;
 export function ensureNames(ctx, codes, repaint) {
-  const want = [...new Set(codes.map(String))].filter(kc => !names.has(kc) && /^\d{6,12}$/.test(kc));
+  const want = [...new Set(codes.map(String))].filter(kc => (!names.has(kc) || names.get(kc) === false) && /^\d{6,12}$/.test(kc));
   if (!want.length) return;
   for (const kc of want) names.set(kc, undefined);
-  Promise.all(want.map(kc => ctx.catalogue.lookup(kc).then(it => names.set(kc, it ? { name: it.name || tx('Verified product'), url: it.url || null, price: Number.isFinite(it.price) ? it.price : null, img: it.img || null } : null)).catch(() => names.set(kc, null))))
+  Promise.all(want.map(kc => ctx.catalogue.lookup(kc).then(it => names.set(kc, it === undefined ? false : info(it))).catch(() => names.set(kc, false))))
     .then(() => {
       paintSoon(repaint);
+      const unreached = want.filter(kc => names.get(kc) === false);
+      if (unreached.length) {
+        unreached.forEach(kc => retryCodes.add(kc));
+        retryT ||= setTimeout(() => { retryT = null; const again = [...retryCodes]; retryCodes.clear(); ensureNames(ctx, again, repaint); }, RETRY_MS);
+      }
       // Unverified codes ask for their one-digit near misses.
       // At most NEAR_MAX per screen, four at a time: a list of codes the
       // catalogue does not know is a list to check by hand, not 200 requests.

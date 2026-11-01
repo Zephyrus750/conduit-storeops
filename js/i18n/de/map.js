@@ -449,4 +449,5 @@ export default {
   "Store plan: on its own": "Grundriss: allein",
   "Store plan: under the map": "Grundriss: unter dem Filialplan",
   "The store plan couldn’t be loaded.": "Der Grundriss konnte nicht geladen werden.",
+  "The product catalogue did not answer. Try again in a moment.": "Der Produktkatalog hat nicht geantwortet. Versuchen Sie es gleich noch einmal.",
 };

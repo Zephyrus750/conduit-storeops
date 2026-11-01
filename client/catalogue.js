@@ -1,8 +1,10 @@
 // Keycode lookups with a cache and batching against GET /v1/catalogue?kc=.
-// An item is { kc, name, url, price, was, img, clr, at } or null when no
-// upstream knows the code. Hits are kept for a week under `kc:<code>`; a
-// miss is remembered in memory for the session so a mistyped code is asked
-// once. When the worker is unreachable, lookups resolve null without throwing.
+// An item is { kc, name, url, price, was, img, clr, at }, null when the
+// catalogue answered that it does not know the code, or undefined when it
+// could not be asked (offline, timed out, refused, or the worker could not
+// answer for that code): not knowing is not "not in the catalogue". Hits are
+// kept for a week under `kc:<code>`; a miss is remembered in memory for the
+// session so a mistyped code is asked once. Lookups never throw.
 // Requests go in chunks of the worker's limit (50 codes): one screen asking
 // for 200 names used to be refused whole, so every product read as unknown
 // (audit 19 Oct P1). A chunk that fails is not asked again for a while.
@@ -36,7 +38,7 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
     return new Promise(async (resolve) => {
       const hit = await cached(kc);
       if (hit !== undefined) return resolve(hit);
-      if (Date.now() - (failed.get(kc) || 0) < FAIL_MS) return resolve(null);
+      if (Date.now() - (failed.get(kc) || 0) < FAIL_MS) return resolve(undefined);
       if (!queue.has(kc)) queue.set(kc, []);
       queue.get(kc).push(resolve);
       timers.clearTimeout(timer); timer = timers.setTimeout(flush, BATCH_MS);
@@ -53,9 +55,10 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
       try { items = (await transport.request(`/v1/catalogue?kc=${chunk.join(',')}`, t ? { token: t } : {})).items || {}; }
       catch { const now = Date.now(); for (const kc of chunk) failed.set(kc, now); }
       for (const kc of chunk) {
-        const item = items?.[kc] ?? null;
+        // Left out of the answer: the worker could not tell (its catalogue was down).
+        const item = items && kc in items ? items[kc] ?? null : undefined;
         if (item) { mem.set(kc, { item, at: Date.now() }); failed.delete(kc); await storage.set(`kc:${kc}`, { at: Date.now(), item }); }
-        else if (items && kc in items) mem.set(kc, { item: null, at: Date.now() });
+        else if (item === null) mem.set(kc, { item: null, at: Date.now() });
         for (const r of q.get(kc)) r(item);
       }
     }

@@ -57,11 +57,12 @@ test('device lookups go in chunks of 50: a screen asking for 120 names gets them
   assert.equal(CHUNK, 50); assert.deepEqual(calls, [50, 50, 20]);
   assert.equal(got.filter(Boolean).length, 108); assert.equal(got[0].name, 'Item 43000000');
   assert.equal(got[7], null, 'a code no upstream knows');
-  // An unreachable worker: those codes answer null and are not asked again straight away.
+  // An unreachable worker: those codes are unknown (undefined, never "not in
+  // the catalogue") and are not asked again straight away.
   const down = { n: 0, request: async () => { down.n += 1; throw new Error('offline'); } };
   const cat2 = createCatalogue({ transport: down, storage: memoryStorage() });
-  assert.deepEqual(await cat2.lookupMany(['42977636', '43307685']), [null, null]);
-  assert.deepEqual(await cat2.lookupMany(['42977636']), [null]);
+  assert.deepEqual(await cat2.lookupMany(['42977636', '43307685']), [undefined, undefined]);
+  assert.deepEqual(await cat2.lookupMany(['42977636']), [undefined]);
   assert.equal(down.n, 1);
 });
 
@@ -77,4 +78,58 @@ test('device cache: an answer with no picture and no price is asked again after 
   const [a, b, c] = await cat.lookupMany(['41000001', '41000002', '41000003']);
   assert.deepEqual(asked, ['41000001'], 'only the stale thin answer is asked again');
   assert.equal(a.img, 'https://img.test/41000001.jpg'); assert.equal(b.name, 'Full'); assert.equal(c.name, 'Thin, fresh');
+});
+
+test('device: null only when the worker says so; a code it left out is unknown and asked again', async () => {
+  const { createCatalogue } = await import('../../client/catalogue.js');
+  const { memoryStorage } = await import('../../client/storage.js');
+  let n = 0;
+  // The worker's catalogue was down for 43000002: it is left out of items.
+  const transport = { request: async () => { n += 1; return { items: { 43000001: null, ...(n > 1 ? { 43000002: { kc: '43000002', name: 'Back', url: 'u' } } : {}) } }; } };
+  const cat = createCatalogue({ transport, storage: memoryStorage() });
+  assert.deepEqual(await cat.lookupMany(['43000001', '43000002']), [null, undefined]);
+  const [miss, back] = await cat.lookupMany(['43000001', '43000002']);
+  assert.equal(miss, null); assert.equal(back.name, 'Back');
+  assert.equal(n, 2, 'the miss is remembered; the unknown code is asked again');
+});
+
+// The worker's lookup with a stand-in edge cache and upstreams.
+const edge = () => { const m = new Map(); return { m, match: async q => m.has(q.url) ? new Response(m.get(q.url)) : undefined, put: async (q, r) => { m.set(q.url, await r.text()); } }; };
+const bg = () => { const jobs = []; return { jobs, waitUntil: p => jobs.push(p), settle: () => Promise.all(jobs) }; };
+
+test('worker: names never wait on product pages; slow pages land in the cache for the next ask', async () => {
+  const { lookup } = await import('../../worker/catalogue.js');
+  const calls = { lookup: 0, details: 0 }, cache = edge(), ctx = bg();
+  const fetchImpl = async (url, init) => {
+    if (String(url).startsWith('https://lookup.test')) { calls.lookup += 1; return Response.json({ 42977636: { found: true, url: 'https://www.kmart.com.au/product/x-42977636/', name: 'Diecast' }, 99999999: { found: false } }); }
+    calls.details += 1; await new Promise(r => setTimeout(r, 800));
+    return Response.json({ 42977636: { found: true, price: 12, img: 'https://img.test/a.jpg' } });
+  };
+  const env = { LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test' };
+  const t0 = Date.now(), items = await lookup(env, ctx, ['42977636', '99999999'], { fetchImpl, cache, budgetMs: 20 });
+  assert.ok(Date.now() - t0 < 500, 'answered before the page was read');
+  assert.equal(items['42977636'].name, 'Diecast'); assert.equal(items['42977636'].price, null); assert.equal(items['99999999'], null);
+  await ctx.settle();
+  const again = await lookup(env, bg(), ['42977636', '99999999'], { fetchImpl, cache, budgetMs: 20 });
+  assert.equal(again['42977636'].price, 12); assert.equal(again['42977636'].img, 'https://img.test/a.jpg');
+  assert.deepEqual(calls, { lookup: 1, details: 1 }, 'the second ask is the cache');
+});
+
+test('worker: a page that cannot be read waits an hour; a catalogue that cannot answer is unknown, not a miss', async () => {
+  const { lookup } = await import('../../worker/catalogue.js');
+  let details = 0, lookups = 0, up = false;
+  const fetchImpl = async url => {
+    if (String(url).startsWith('https://lookup.test')) { lookups += 1; if (!up) throw new Error('down'); return Response.json({ 43307685: { found: true, url: 'https://www.kmart.com.au/product/y-43307685/', name: 'Mug' } }); }
+    details += 1; return new Response('refused', { status: 500 });
+  };
+  const env = { LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test' }, cache = edge();
+  const down = await lookup(env, bg(), ['43307685'], { fetchImpl, cache, budgetMs: 50 });
+  assert.ok(!('43307685' in down), 'left out: not "not in the catalogue"'); assert.equal(cache.m.size, 0, 'and nothing cached');
+  up = true;
+  const a = bg(), first = await lookup(env, a, ['43307685'], { fetchImpl, cache, budgetMs: 50 }); await a.settle();
+  assert.equal(first['43307685'].name, 'Mug'); assert.equal(details, 1);
+  const second = await lookup(env, bg(), ['43307685'], { fetchImpl, cache, budgetMs: 50 });
+  assert.equal(second['43307685'].name, 'Mug'); assert.equal(details, 1, 'the refused page is not asked again within the hour');
+  const later = await lookup(env, bg(), ['43307685'], { fetchImpl, cache, budgetMs: 50, now: () => Date.now() + 3_700_000 });
+  assert.equal(later['43307685'].name, 'Mug'); assert.equal(details, 2, 'and is tried again after it'); assert.equal(lookups, 2);
 });
