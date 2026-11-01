@@ -385,7 +385,13 @@ async function onClick(e, ctx, root, repaint) {
   // phone
   else if (act === 'm-start') { await startBay(ctx, root.querySelector('[data-field="mbay"]')?.value || a.dataset.bay || '', repaint); }
   else if (act === 'm-resume') { st.mBay = a.dataset.bay; st.mStep = 2; repaint(); focusScan(root); }
-  else if (act === 'm-send') { mineAdd(st.mBay, date); if (ctx.store.get('backfill').subs[`${st.mBay}:${date}`]) await send(ctx, 'submission.update', { bay: st.mBay, date }, { sent: true }); st.mStep = 3; repaint(); }
+  else if (act === 'm-send') {
+    // The desk may have deleted the bay from today's board while it was
+    // being scanned: say so instead of showing Sent, and go back to the bays.
+    if (!ctx.store.get('backfill').subs[`${st.mBay}:${date}`]) { toast(tx('{bay} was deleted from today’s board at the desk, so nothing was sent.', { bay: st.mBay }), 'bad'); st.mBay = null; st.mStep = 1; return repaint(); }
+    if (!await send(ctx, 'submission.update', { bay: st.mBay, date }, { sent: true })) return;
+    mineAdd(st.mBay, date); st.mStep = 3; repaint();
+  }
   else if (act === 'm-mine') { st.mView = 'mine'; repaint(); }
   else if (act === 'm-home') { st.mView = null; st.mStep = 1; repaint(); }
   else if (act === 'm-check') { st.mView = 'check'; repaint(); }
@@ -525,7 +531,9 @@ function mobile(ctx) {
   if (st.mView === 'readd' && st.readd) return readdView(ctx);
   if (st.mView === 'check') return checkView(ctx);
   if (st.mStep === 2 && st.mBay) {
-    const s = m.subs.find(x => x.bay === st.mBay), codes = s ? Object.entries(s.codes).filter(([, c]) => c.scanned).map(([c]) => c) : [];
+    // In scan order (each code's n, its place in the bay's scans; codes
+    // scanned before the order was kept come first, in no particular order).
+    const s = m.subs.find(x => x.bay === st.mBay), codes = s ? Object.entries(s.codes).filter(([, c]) => c.scanned).sort(([, a], [, b]) => (a.n || 0) - (b.n || 0)).map(([c]) => c) : [];
     // Every code scanned here, newest first, each removable (K2B could
     // delete any code, with undo); a pair one digit apart is flagged.
     const all = codes.slice().reverse(), dsp = disputes(codes), nDsp = Object.keys(dsp).length, recallNow = st.mRecall ? ctx.store.get('recalls')?.items?.[st.mRecall.id] : null;

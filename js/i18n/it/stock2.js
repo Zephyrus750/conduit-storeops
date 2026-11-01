@@ -78,7 +78,6 @@ export default {
   "Add to {date}": "Aggiungi al {date}",
   "Stored as below zero either way. The name fills in from the catalogue.": "Salvato comunque come sotto zero. Il nome arriva dal catalogo.",
   "Last 14 days": "Ultimi 14 giorni",
-  "That is an item barcode: type the keycode from the shelf label": "Questo è un codice a barre articolo: digita il keycode dall’etichetta dello scaffale",
   "Keycode needed": "Serve il keycode",
   "{n} added to today's adjustments": "{n} aggiunti alle rettifiche di oggi",
   "{n} already listed": "{n} già in elenco",
@@ -563,4 +562,5 @@ export default {
   "NEW · first snapshot": "NEW · prima istantanea",
   "MOVING": "MOVING",
   "Scan another": "Scansiona un altro",
+  "{code} is {kc} on kmart.com.au": "{code} è {kc} su kmart.com.au",
 };

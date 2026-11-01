@@ -549,4 +549,5 @@ export default {
   "No price yet": "Pas encore de prix",
   "Click the name for kmart.com.au, the keycode to copy it": "Cliquez sur le nom pour kmart.com.au, sur le keycode pour le copier",
   "Not sold online, or a retired code. Click the keycode to copy it.": "Pas vendu en ligne, ou un code retiré. Cliquez sur le keycode pour le copier.",
+  "{bay} was deleted from today’s board at the desk, so nothing was sent.": "{bay} a été supprimé du tableau du jour au bureau, donc rien n’a été envoyé.",
 };

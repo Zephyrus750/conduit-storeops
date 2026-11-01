@@ -19,7 +19,7 @@ import { searchBarcode, barcodeCard } from '../../barcodesearch.js';
 import { haptic } from '../../device.js';
 import { tx, txn } from '../../i18n.js';
 
-const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '', bc: null };
+const st = { filter: 'all', group: 'all', dept: 'all', date: null, mSoh: 0, mQty: 1, mKc: '', bc: null, dbc: null };   // dbc: the PC add box's barcode search
 const NONE = '\u0000none', OTHER = '\u0000other';
 const SOURCE = { report: tx('Morning report'), review: tx('Backfill review'), phone: tx('Phone'), desk: tx('Typed'), screen: tx('Screen scan'), import: 'K2B' };
 function model(ctx) {
@@ -106,7 +106,7 @@ export default {
       (list.map(it => { const pr = priceFor(it), loss = pr ? shrinkValue(it.qty, pr.v) : 0; return `<div class="adj-row adj-cols${it.done ? ' done' : ''}"><span class="adj-qty${it.qty === 0 ? ' zero' : ''}">${it.qty}</span><span class="adj-kc">${kcCopy(it.kc)}</span><span class="adj-desc">${productHtml(it.kc, it.name)}<span class="adj-chips">${ghostChip(it.kc, it.qty)}${depthChip(it.kc)}</span></span><span class="adj-dept">${it.dept === NONE || it.dept === OTHER ? '<span class="cs-dim">—</span>' : deptBadge(it.dept)}</span><span class="adj-price n"${pr ? ` title="${pr.from === 'the report' ? tx('Price from the report') : tx('Price from {site}', { site: pr.from })}"` : ''}>${pr ? money(pr.v) : '<span class="cs-dim">—</span>'}</span><span class="adj-shrink n${loss ? ' loss' : ''}"${pr && loss ? ` title="${tx('{n} below zero × {price}', { n: -it.qty, price: money(pr.v) })}"` : ''}>${loss ? `${money(loss)}<small>${txn(-it.qty, '{n} unit', '{n} units')}</small>` : it.qty < 0 && !pr ? `<span class="cs-dim" title="${tx('No price for this item yet')}">?</span>` : '<span class="cs-dim">—</span>'}</span><span class="adj-ctn n">${cartonCell(it, pr)}</span><span class="adj-where">${it.location ? `<span class="adj-loc${it.confirmed ? ' ok' : ''}">${esc(it.location)}${it.confirmed ? ' ✓' : ''}</span>` : `<span class="cs-dim">${tx('no location')}</span>`}</span><span class="cs-dim">${fmtTime(it.addedAt)}</span><span class="cs-dim">${it.done ? `<button class="adj-done on" data-act="undone" data-kc="${esc(it.kc)}" title="${tx('Adjusted {time}: tap to put it back', { time: esc(fmtTime(it.done.at)) })}">✓ ${tx('Adjusted')}</button>` : `<button class="adj-done" data-act="done" data-kc="${esc(it.kc)}" title="${tx('Adjusted in the system: tick it off')}">${tx('Mark adjusted')}</button>`}<br>${esc(SOURCE[it.source] || (it.confirmed ? tx('Backfill review') : it.counted != null ? tx('Phone') : tx('Typed')))}${it.counted != null ? ` · ${tx('{n} found', { n: it.counted })}` : ''}</span><span class="adj-x" title="${tx('Remove from today’s list')}" data-act="remove" data-kc="${esc(it.kc)}">${ic('x')}</span></div>`; }).join('') || `<div class="cs-dim" style="padding:14px 2px">${tx('Nothing recorded today. Flag a code from Backfill review, or add one on the right.')}</div>`) +
       `<div class="cs-dim" style="padding:10px 2px 0">${tx('A ✓ location means the item was confirmed present when that bay was backfilled.')}</div></div>` +
       `<div class="sidecol"><div class="card"><div class="ch"><h3>${tx('Tick off by scanning')}</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="tick" placeholder="${tx('Scan a keycode once it is adjusted')}" inputmode="numeric" autocomplete="off"></div><div class="cs-dim">${m.today ? tx("{done} of {total} adjusted today. A scanner's Enter ticks it off.", { done: m.done.length, total: m.items.length }) : tx("{done} of {total} adjusted. A scanner's Enter ticks it off.", { done: m.done.length, total: m.items.length })}</div></div></div>` +
-      `<div class="card"><div class="ch"><h3>${tx('Add an item')}</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="kc" placeholder="${tx('Keycode')}" inputmode="numeric" autocomplete="off"></div><div class="adj-form2"><input class="ad-in" data-field="qty" placeholder="${tx('SOH (report)')}" aria-label="${tx('SOH from the report')}" inputmode="numeric"><input class="ad-in mono" data-field="loc" placeholder="${tx('Location (optional)')}"></div><button class="btn primary" style="justify-content:center" data-act="add">${ic('plus')}${m.today ? tx('Add to today') : tx('Add to {date}', { date: esc(m.date) })}</button><div class="cs-dim">${tx('Stored as below zero either way. The name fills in from the catalogue.')}</div></div></div>` +
+      `<div class="card"><div class="ch"><h3>${tx('Add an item')}</h3></div><div class="adj-form"><div class="search">${ic('barcode')}<input data-field="kc" placeholder="${tx('Keycode or item barcode')}" inputmode="numeric" autocomplete="off"></div><div class="adj-form2"><input class="ad-in" data-field="qty" placeholder="${tx('SOH (report)')}" aria-label="${tx('SOH from the report')}" inputmode="numeric" value="${esc(st.dbc?.qty ?? '')}"><input class="ad-in mono" data-field="loc" placeholder="${tx('Location (optional)')}" value="${esc(st.dbc?.loc ?? '')}"></div><button class="btn primary" style="justify-content:center" data-act="add">${ic('plus')}${m.today ? tx('Add to today') : tx('Add to {date}', { date: esc(m.date) })}</button><div class="cs-dim">${tx('Stored as below zero either way. The name fills in from the catalogue.')}</div>${st.dbc ? `<div class="adj-dbc" data-dbc>${barcodeCard(st.dbc)}</div>` : ''}</div></div>` +
       `<div class="card"><div class="ch"><h3>${tx('Last 14 days')}</h3></div><div class="bars" style="height:64px">${m.days.map(([d, x], i) => `<div class="${d === m.date ? 'hi' : ''}" style="height:${Object.keys(x).length ? Math.round(Object.keys(x).length / max * 100) : 3}%" title="${esc(d)}"></div>`).join('') || '<div style="height:3%"></div>'}</div><div class="cs-dim" style="margin-top:8px">${txn(recorded, '{n} item recorded', '{n} items recorded')}</div></div></div></div>`;
   },
   mobile(ctx) { return `<div id="adjmob">${mobile(ctx)}</div>`; },
@@ -128,7 +128,13 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'dept') { st.dept = a.dataset.v; ctx.rerender(); }
   else if (act === 'done' || act === 'undone') await send(ctx, 'adjustment.done', { keycode: a.dataset.kc, date: m.date }, act === 'undone' ? { undo: true } : {});
   else if (act === 'remove') await send(ctx, 'adjustment.remove', { keycode: a.dataset.kc, date: m.date });
-  else if (act === 'add') { const raw = root.querySelector('[data-field="kc"]')?.value || '', g = barcodeOf(raw), kc = g ? ctx.store.get('apnPairs')?.[g]?.kc : keycodeOf(raw); if (g && !kc) return toast(tx('That is an item barcode: type the keycode from the shelf label'), 'bad'); const qty = Number(root.querySelector('[data-field="qty"]')?.value) || 0; const loc = root.querySelector('[data-field="loc"]')?.value.trim() || ''; if (!kc) return toast(tx('Keycode needed'), 'bad'); const r = await send(ctx, 'adjustment.set', { keycode: kc, date: m.date }, { qty, location: loc, confirmed: false, name: nameOf(kc) || '', source: 'desk' }); if (r) { for (const f of ['kc', 'qty', 'loc']) { const i = root.querySelector(`[data-field="${f}"]`); if (i) i.value = ''; } root.querySelector('[data-field="kc"]')?.focus(); } }
+  else if (act === 'add') {
+    const raw = root.querySelector('[data-field="kc"]')?.value || '', g = barcodeOf(raw), kc = g ? ctx.store.get('apnPairs')?.[g]?.kc : keycodeOf(raw);
+    const qty = root.querySelector('[data-field="qty"]')?.value || '', loc = root.querySelector('[data-field="loc"]')?.value.trim() || '';
+    if (g && !kc) return deskSearch(ctx, g, qty, loc, repaint);
+    if (!kc) return toast(tx('Keycode needed'), 'bad');
+    await deskAdd(ctx, kc, qty, loc);
+  }
   else if (act === 'screen') openScreenScan(ctx, { mode: 'soh', onUse: async ({ codes, locs }) => {
     // Each code read off the report becomes a below-zero item (SOH 0: the report lists stock at zero or less), at the location it was read at.
     const have = new Set(model(ctx).items.map(i => i.kc)); let ok = 0, dup = 0;
@@ -141,6 +147,10 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-soh') { st.mSoh = Math.min(0, st.mSoh + Number(a.dataset.d)); repaint(); }
   else if (act === 'm-flag') { if (!st.mKc) return; const r = await send(ctx, 'adjustment.set', { keycode: st.mKc, date: m.date }, { qty: st.mSoh, counted: st.mQty, location: '', confirmed: false, name: nameOf(st.mKc) || '', source: 'phone' }); if (r) { toast(tx('{kc} flagged', { kc: st.mKc })); st.mKc = ''; st.mSoh = 0; st.mQty = 1; repaint(); } }
   else if (act === 'm-clear') { st.mKc = ''; st.bc = null; repaint(); }
+  // The PC add box's search answers (data-dbc) and the phone's.
+  else if (act === 'bc-pick' && a.closest('[data-dbc]')) { if (st.dbc) await deskAdd(ctx, a.dataset.kc, st.dbc.qty, st.dbc.loc); }
+  else if (act === 'bc-type' && a.closest('[data-dbc]')) { if (st.dbc) { st.dbc = { ...st.dbc, state: 'manual', why: 'pick' }; repaint(); root.querySelector('[data-field="kc"]')?.focus(); } }
+  else if (act === 'bc-again' && a.closest('[data-dbc]')) { if (st.dbc) deskSearch(ctx, st.dbc.gtin, st.dbc.qty, st.dbc.loc, repaint); }
   else if (act === 'bc-pick') { if (st.bc) useKc(ctx, a.dataset.kc, repaint); }
   else if (act === 'bc-type') { if (st.bc) { st.bc = { state: 'manual', gtin: st.bc.gtin, why: 'pick' }; repaint(); focusKc(); } }
   else if (act === 'bc-again') { if (st.bc) search(ctx, st.bc.gtin, repaint); }
@@ -182,6 +192,26 @@ async function search(ctx, gtin, repaint) {
   st.bc = res.list ? { state: 'choose', gtin, list: res.list, source: res.source } : { state: 'manual', gtin, why: res.why };
   haptic('warning'); repaint();
   if (!res.list) focusKc();
+}
+// The PC add box: an item barcode no pair links is searched on
+// kmart.com.au (js/barcodesearch.js), as on the phone. One sure match is
+// added at once; a choice shows under the box; else the keycode is typed.
+// The SOH and location typed with it wait in st.dbc meanwhile.
+async function deskSearch(ctx, gtin, qty, loc, repaint) {
+  st.dbc = { state: 'searching', gtin, qty, loc }; repaint();
+  let res = null;
+  res = await searchBarcode(ctx, gtin, () => { if (st.dbc?.list && st.dbc.list === res?.list) repaint(); });
+  if (st.dbc?.gtin !== gtin || st.dbc.state !== 'searching') return;   // another barcode came first
+  if (res.kc) { toast(tx('{code} is {kc} on kmart.com.au', { code: gtin, kc: res.kc })); return deskAdd(ctx, res.kc, qty, loc); }
+  st.dbc = res.list ? { state: 'choose', gtin, list: res.list, source: res.source, qty, loc } : { state: 'manual', gtin, why: res.why, qty, loc };
+  repaint();
+  if (!res.list) setTimeout(() => document.querySelector('#content [data-field="kc"]')?.focus(), 30);
+}
+async function deskAdd(ctx, kc, qty, loc) {
+  const m = model(ctx), r = await send(ctx, 'adjustment.set', { keycode: kc, date: m.date }, { qty: Number(qty) || 0, location: loc, confirmed: false, name: nameOf(kc) || '', source: 'desk' });
+  if (!r) return;
+  st.dbc = null; ctx.rerender();
+  setTimeout(() => document.querySelector('#content [data-field="kc"]')?.focus(), 30);
 }
 function useKc(ctx, kc, repaint) {
   st.bc = null; st.mKc = kc;

@@ -549,4 +549,5 @@ export default {
   "No price yet": "Chưa có giá",
   "Click the name for kmart.com.au, the keycode to copy it": "Bấm vào tên để mở kmart.com.au, bấm vào keycode để sao chép",
   "Not sold online, or a retired code. Click the keycode to copy it.": "Không bán trực tuyến, hoặc mã đã ngừng. Bấm vào keycode để sao chép.",
+  "{bay} was deleted from today’s board at the desk, so nothing was sent.": "{bay} đã bị bàn làm việc xóa khỏi bảng hôm nay, nên không có gì được gửi.",
 };

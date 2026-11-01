@@ -211,3 +211,18 @@ test('an adjustment keeps the report’s price; a later flag without one keeps i
   assert.equal(apply(s, ev('adjustment.set', { keycode: '43199310', date: d }, { qty: -1, price: -5 })), null);
   assert.equal(s.adjustments[d]['43199310'].price, undefined, 'a negative price is not a price');
 });
+
+test('submission: each code keeps when it was first scanned (time and order), so a bay lists newest first', () => {
+  const s = initialState(), at = t => ({ at: `2026-09-07T08:0${t}:00+08:00` });
+  assert.equal(apply(s, ev('submission.update', k, { codes: { 43307685: true } }, at(1))), null);
+  assert.equal(apply(s, ev('submission.update', k, { codes: { 42977636: true } }, at(2))), null);
+  assert.equal(apply(s, ev('submission.update', k, { codes: { 41000001: true } }, at(2))), null);   // the same second
+  assert.equal(apply(s, ev('submission.update', k, { codes: { 43307685: true, 43307690: false } }, at(3))), null);
+  const codes = s.backfill.subs['7023:2026-09-07'].codes;
+  assert.deepEqual(Object.keys(codes), ['41000001', '42977636', '43307685', '43307690'], 'the object itself comes back in number order');
+  assert.deepEqual(codes['43307685'], { scanned: true, at: at(1).at, n: 1 }, 'a code scanned again keeps its first time and place');
+  assert.deepEqual([codes['42977636'].n, codes['41000001'].n], [2, 3], 'two scans in one second keep their order');
+  assert.deepEqual(codes['43307690'], { scanned: false }, 'an unscanned code carries neither');
+  const newest = Object.entries(codes).filter(([, c]) => c.scanned).sort(([, a], [, b]) => b.n - a.n).map(([c]) => c);
+  assert.deepEqual(newest, ['41000001', '42977636', '43307685']);
+});

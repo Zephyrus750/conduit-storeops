@@ -78,7 +78,6 @@ export default {
   "Add to {date}": "Thêm vào {date}",
   "Stored as below zero either way. The name fills in from the catalogue.": "Luôn được lưu là dưới 0. Tên sẽ tự điền từ danh mục.",
   "Last 14 days": "14 ngày qua",
-  "That is an item barcode: type the keycode from the shelf label": "Đó là mã vạch sản phẩm: nhập keycode trên nhãn kệ",
   "Keycode needed": "Cần keycode",
   "{n} added to today's adjustments": "Đã thêm {n} vào điều chỉnh hôm nay",
   "{n} already listed": "{n} đã có trong danh sách",
@@ -563,4 +562,5 @@ export default {
   "NEW · first snapshot": "NEW · bản chụp đầu",
   "MOVING": "MOVING",
   "Scan another": "Quét mã khác",
+  "{code} is {kc} on kmart.com.au": "{code} là {kc} trên kmart.com.au",
 };
