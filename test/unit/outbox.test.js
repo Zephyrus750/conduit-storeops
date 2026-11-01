@@ -153,3 +153,13 @@ test('a change of a type this app does not know (from a newer app) is reported o
   assert.equal(s.seq, 2, 'the device still moves on');
   s.close();
 });
+
+test('a change not yet confirmed is this device’s: a hold on a bay is not read as another device’s while it waits', async () => {
+  const day = storeDay(Date.now(), DEFAULT_TZ);
+  // Offline: the change waits in the outbox, so state shows it only through the replay of pending changes.
+  const s = open({ session: fakeSession(['stockroom']), transport: { wsBase: 'ws://none', request: async () => { throw Object.assign(new Error('offline'), { status: 0 }); } }, online: () => false });
+  await s.load?.();
+  await s.dispatch({ type: 'submission.open', entity: { bay: '7000', date: day }, payload: {} });
+  await s.dispatch({ type: 'submission.claim', entity: { bay: '7000', date: day }, payload: {} });
+  assert.equal(s.get('backfill').claims['7000']?.by, 'dev-1');
+});

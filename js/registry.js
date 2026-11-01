@@ -58,7 +58,7 @@ export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refre
 // tab of their own (Print map and Suggest edits open from the Store map).
 const G = (label, icon, tabs, also = []) => ({ label, icon, tabs: tabs.map(t => typeof t === 'string' ? [t, null] : t), also });
 export const GROUPS = {
-  today: G(tx('Today'), 'm-dashboard', [['dashboard', tx('Today')]]),
+  today: G(tx('Dashboard'), 'm-dashboard', ['dashboard']),
   inputs: G(tx('Reports & files'), 'file', ['inputs']),
   resources: G(tx('Resources'), 'stack', ['resources']),
   map: G(tx('Store map'), 'm-map', ['map'], ['printmap', 'mapedits', 'fieldmode']),

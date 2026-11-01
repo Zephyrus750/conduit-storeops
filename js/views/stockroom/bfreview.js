@@ -272,9 +272,10 @@ function helpSheet() {
     k([tx('Space')], tx('Focus: checked, next code')) + k(['⌫'], tx('Focus: incorrect, next code')) + k(['←', '→'], tx('Focus: move between codes')) + k(['?'], tx('this sheet')) + k(['Esc'], tx('close a sheet')) + '</div></div>';
 }
 // The location's header: what it is and what to do on one line (the
-// number opens its barcode for the PDT, rename, the map and delete; the
-// counts sit in one strip with the report's time on its clock), then how to
-// look at it: the views, one filter every view follows, and Export.
+// number opens its barcode for the PDT, rename, the map and delete; its
+// department, its status, the counts in one compact strip, Re-check and
+// Ready), then how to look at it: the views, one filter every view follows,
+// the report's time on its clock, and Export.
 function middle(ctx, m) {
   if (!st.sel) return `<div class="bf-empty"><span class="ic">${ic('m-backfill')}</span><b>${tx('Nothing on the board yet')}</b><small>${tx('Phones send bays here as they scan. Request a bay on the left to put it on the day list.')}</small></div>`;
   if (st.sel.startsWith('req:')) {
@@ -288,17 +289,17 @@ function middle(ctx, m) {
   const ro = s.status === 'submitted', sw = { swap: !ro };
   const stat = STATUS[s.status];
   const adds = rows.filter(r => r.status === 'add' || r.status === 'scanned'), dels = rows.filter(r => r.status === 'delete'), matches = rows.filter(r => r.status === 'match');
-  const stats = hstats([[c.expected, tx('expected')], [c.scannedCount, tx('scanned')], [c.match, tx('match'), 'c-green'], [c.pct == null ? '—' : c.pct + '%', tx('accuracy'), '', `color:${pcol(c.pct)}`], [c.incorrect, tx('incorrect'), c.incorrect ? 'c-red' : '']], reportClock(s, sys));
+  const stats = hstats([[c.expected, tx('expected')], [c.scannedCount, tx('scanned')], [c.match, tx('match'), 'c-green'], [c.pct == null ? '—' : c.pct + '%', tx('accuracy'), '', `color:${pcol(c.pct)}`], [c.incorrect, tx('incorrect'), c.incorrect ? 'c-red' : '']]);
   const recheck = ro ? '' : hmenu('recheck', mbtn('recheck', `${ic('clip')}${sys ? tx('Re-check') : tx('Paste list')}`, 'btn'),
     mitem('bay-paste', 'clip', tx('Paste the list'), tx('Copied from SIM for {bay}', { bay: esc(s.bay) })) + mitem('bay-screen', 'expand', tx('Screen scan'), tx('Read it off the SIM screen')), { right: true });
   const state = s.status === 'pending' ? `<button class="btn ready" data-act="ready" title="${tx('Mark ready: writes these metrics to History and frees the bay (Enter)')}">${ic('check')}${tx('Ready')}</button>` : s.status === 'corrected' ? `<button class="btn submitb" data-act="submit">${ic('checks')}${tx('Submit')}</button><button class="btn" data-act="reopen">${ic('refresh')}${tx('Reopen')}</button>` : `<button class="btn" data-act="unfinalise" title="${tx('Back to Ready: it was not finalised on the PDT after all')}">${ic('refresh')}${tx('Unfinalise')}</button><button class="btn" data-act="reopen" title="${tx('Back into review')}">${tx('Reopen')}</button>`;
-  const head = `<div class="smid-h hc"><span class="hc-id">${locMenu(s.bay, !ro, true)}${deptPick(ctx, s.bay)}<span class="status ${stat[1]}">${ro ? ic('check') : ''}${stat[0]}</span>${ro ? `<span class="cs-dim subat">${tx('at {time}', { time: fmtTime(s.submittedDoneAt) })}${s.autoSubmitted ? ` · ${tx('auto')}` : ''}</span>` : ''}</span>${stats}<span class="sp"></span><span class="hc-acts">${recheck}${state}</span></div>`;
+  const head = `<div class="smid-h hc"><span class="hc-id">${locMenu(s.bay, !ro, true)}${deptPick(ctx, s.bay)}<span class="status ${stat[1]}">${ro ? ic('check') : ''}${s.status === 'pending' ? tx('backfill stage::Review') : stat[0]}</span>${ro ? `<span class="cs-dim subat">${tx('at {time}', { time: fmtTime(s.submittedDoneAt) })}${s.autoSubmitted ? ` · ${tx('auto')}` : ''}</span>` : ''}</span>${stats}<span class="sp"></span><span class="hc-acts">${recheck}${state}</span></div>`;
   const n = { all: rows.length, add: adds.length, delete: dels.length, match: matches.length };
   const filt = `<span class="hflt" role="group" aria-label="${tx('Show')}">${[['all', tx('All')], ['add', tx('Add')], ['delete', tx('Delete')], ['match', tx('Match')]].map(([k, l]) => `<button class="${k}${st.filt === k ? ' on' : ''}" data-act="filt" data-v="${k}" aria-pressed="${st.filt === k}"${!n[k] && st.filt !== k ? ' disabled' : ''}>${l} <b>${n[k]}</b></button>`).join('')}</span>`;
   const exp = hmenu('export', mbtn('export', `${ic('file')}${tx('Export')}`, 'btn sm'),
     mitem('print-sheet', 'print', tx('Worksheet'), tx('Print the To add / To remove worksheet')) + mitem('copy-all', 'file', tx('Copy all'), tx('Copy every code to add or remove, one a line')), { right: true });
   const view = (v, label, title = '') => `<button class="${st.view === v ? 'on' : ''}" data-act="view" data-v="${v}"${title ? ` title="${title}"` : ''}>${label}</button>`;
-  const ctl = `<div class="smid-ctl"><span class="pills">${view('list', tx('List'))}${view('detail', tx('Detail'))}${view('codes', tx('Barcodes'), tx('Each code to add or remove as a barcode, to scan into the PDT'))}${view('focus', tx('Focus'), tx('One code at a time, keyboard first (F)'))}</span>${filt}${ro ? `<span class="cpill lock">${ic('lock')}${tx('read only')}</span>` : ''}${!sys ? `<span class="cpill lock">${ic('alert')}${tx('no report for this bay')}</span>` : ''}<span class="sp"></span>${exp}</div>`;
+  const ctl = `<div class="smid-ctl"><span class="pills">${view('list', tx('List'))}${view('detail', tx('Detail'))}${view('codes', tx('Barcodes'), tx('Each code to add or remove as a barcode, to scan into the PDT'))}${view('focus', tx('Focus'), tx('One code at a time, keyboard first (F)'))}</span>${filt}${ro ? `<span class="cpill lock">${ic('lock')}${tx('read only')}</span>` : ''}${!sys ? `<span class="cpill lock">${ic('alert')}${tx('no report for this bay')}</span>` : ''}<span class="sp"></span>${reportClock(s, sys)}${exp}</div>`;
   const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</span><span class="nm">${nameHtml(r.code, undefined, sw)}${sohTag(r.code)}${depthChip(r.code)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span>${ro ? '' : `<span class="acts"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? tx('Clear incorrect') : tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove this code')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
   // K2B's scan columns: every code to add or remove as a barcode the reviewer
   // scans straight into the PDT, with its name to check against.

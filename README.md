@@ -332,7 +332,7 @@ check passes, with a Maintenance issue logged alongside if asked. Only a
 manager removes an item (`equip.remove` with a reason, `equip.restore` to
 bring it back); its history stays. The due list takes in Emergency's
 serviced markers too, the rail counts what is overdue or out of service, the
-Today page has a row, and QR labels (`?store=…&equip=…`) open an item's card
+Dashboard has a row, and QR labels (`?store=…&equip=…`) open an item's card
 on a store PC or a manager's phone. Search finds an item by its code.
 
 **Recalls and withdrawals** (`recalls`, `shared/reducers/recall.js`) are the
@@ -352,7 +352,7 @@ Anyone records stock they moved (`recall.found`: how many of which keycode,
 and where it was), which starts the removal and counts up on the recall; stock
 found after All removed puts it back to Removing. A closed recall flags
 nothing and leaves the live state 180 days after closing; its events stay.
-The rail and the Today page count what still needs someone.
+The rail and the Dashboard count what still needs someone.
 
 A Stockroom view asks for the crew code once per device (`js/unlock.js`,
 `session.unlock`), and the client store reconnects its socket when the

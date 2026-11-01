@@ -272,8 +272,11 @@ function thinLater(ctx, codes, repaint) {
       .then(() => { paintSoon(repaint); thinLater(ctx, again, repaint); });
   }, THIN_AGAIN_MS);
 }
-export function ensureNames(ctx, codes, repaint) {
-  const want = [...new Set(codes.map(String))].filter(kc => (!names.has(kc) || names.get(kc) === false) && /^\d{6,12}$/.test(kc));
+// again: the retry asks for the codes it could not ask before; an ordinary
+// call (every repaint makes one) never does, or a view whose codes the
+// catalogue cannot answer repainted and asked again without end.
+export function ensureNames(ctx, codes, repaint, again = false) {
+  const want = [...new Set(codes.map(String))].filter(kc => (!names.has(kc) || (again && names.get(kc) === false)) && /^\d{6,12}$/.test(kc));
   if (!want.length) return;
   for (const kc of want) names.set(kc, undefined);
   Promise.all(want.map(kc => ctx.catalogue.lookup(kc).then(it => names.set(kc, it === undefined ? false : info(it))).catch(() => names.set(kc, false))))
@@ -283,7 +286,7 @@ export function ensureNames(ctx, codes, repaint) {
       const unreached = want.filter(kc => names.get(kc) === false);
       if (unreached.length) {
         unreached.forEach(kc => retryCodes.add(kc));
-        retryT ||= setTimeout(() => { retryT = null; const again = [...retryCodes]; retryCodes.clear(); ensureNames(ctx, again, repaint); }, RETRY_MS);
+        retryT ||= setTimeout(() => { retryT = null; const list = [...retryCodes]; retryCodes.clear(); ensureNames(ctx, list, repaint, true); }, RETRY_MS);
       }
       // Unverified codes ask for their one-digit near misses.
       // At most NEAR_MAX per screen, four at a time: a list of codes the

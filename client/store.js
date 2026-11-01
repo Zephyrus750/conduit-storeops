@@ -84,9 +84,13 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // Each part of the state is turned to text once per rebuild and compared
   // with the text it had last time (not the old and new both, every time).
   const lastJson = {};
+  // This device's own changes not yet confirmed are folded as this device
+  // (as dispatch judged them): without an actor a hold on a bay read as
+  // another device's, and Backfill review flashed "Open on another device"
+  // until the worker's copy came back. The worker still sets the real actor.
   function rebuild() {
     state = structuredClone(base);
-    replay(state, pending);
+    replay(state, pending.map(e => ({ ...e, actor: actorFor(e) })));
     changed(Object.keys(state).filter(k => { const j = JSON.stringify(state[k]); if (j === lastJson[k]) return false; lastJson[k] = j; return true; }));
   }
   function remember(id) { applied.add(id); appliedOrder.push(id); if (appliedOrder.length > APPLIED_KEEP) applied.delete(appliedOrder.shift()); }

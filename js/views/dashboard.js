@@ -231,13 +231,16 @@ const fmtDay = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(locale(), {
 const CODE_NAME = new Map(); for (const list of Object.values(MICRO)) for (const e of list) if (!CODE_NAME.has(microCode(e))) CODE_NAME.set(microCode(e), microName(e));
 const codeName = c => CODE_NAME.get(c) || '';
 
+// The title row: the team message and today's briefing, and the period
+// tabs. Kept out of #dashTop: with the title bar (Settings › Display) the
+// shell lifts this row into the top bar once, and a repaint of #dashTop
+// that carried its own copy showed the row twice.
+const dashActs = ctx => teamChip({ store: ctx.store, session: ctx.session, storeNo: ctx.storeNo, today }) +
+  `<div class="tabs" id="ptabs">${PERIODS.map(([k, l]) => `<button class="${period === k ? 'on' : ''}" data-period="${k}">${l}</button>`).join('')}</div>`;
+const dashHead = ctx => vh(`<span class="greet">${greeting()}</span><span id="dashTitle">${tx('How we’re tracking')}</span>`, '', dashActs(ctx), 'm-dashboard');
 function dashTop(ctx) {
     const r = range(), reg = register(ctx, r);
-    const tabs = `<div class="tabs" id="ptabs">${PERIODS.map(([k, l]) => `<button class="${period === k ? 'on' : ''}" data-period="${k}">${l}</button>`).join('')}</div>`;
-    // The team message and today's briefing sit in the title row on a PC.
-    const team = teamChip({ store: ctx.store, session: ctx.session, storeNo: ctx.storeNo, today });
-    return vh(`<span class="greet">${greeting()}</span><span id="dashTitle">${tx('How we’re tracking')}</span>`, '', team + tabs, 'm-dashboard') +
-      `<div class="dash"><div class="kpis">${backfillCard(ctx, r)}${refreshCard(ctx, r)}${labelsCard(ctx, r)}</div><div class="side2">${dockCard(ctx, r)}${maintCard(ctx, r)}</div>` +
+    return `<div class="dash"><div class="kpis">${backfillCard(ctx, r)}${refreshCard(ctx, r)}${labelsCard(ctx, r)}</div><div class="side2">${dockCard(ctx, r)}${maintCard(ctx, r)}</div>` +
       `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>${tx('Operations register')}</h3></div><div class="hl">${tx('{n} tools', { n: reg.count })} · <b style="color:var(--ink);font-weight:600">${tx('{n} need attention', { n: reg.need })}</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">${tx('Modules')}</div>${reg.html}</div></div>` +
       `<div class="dash2">${todayAt(ctx)}${logistics(ctx)}</div>`;
 }
@@ -246,10 +249,15 @@ export default {
   id: 'dashboard', title: tx('Dashboard'), icon: 'm-dashboard',
   deskOnly: true,   // a phone's Home is the store map (or its area's home); a link here goes there
   desktop(ctx) {
-    return `<div id="dashTop">${dashTop(ctx)}</div>`;
+    return `${dashHead(ctx)}<div id="dashTop">${dashTop(ctx)}</div>`;
   },
   mount(ctx, root) {
-    const re = () => { const top = root.querySelector('#dashTop'); if (top) top.innerHTML = dashTop(ctx); };
+    // The body repaints in place; the title row's buttons are refreshed
+    // wherever the row is (the page, or the top bar it was lifted into).
+    const re = () => {
+      const top = root.querySelector('#dashTop'); if (top) top.innerHTML = dashTop(ctx);
+      const acts = document.getElementById('dashTitle')?.closest('.vh')?.querySelector(':scope > .acts'); if (acts) acts.innerHTML = dashActs(ctx);
+    };
     root.addEventListener('click', e => { const b = e.target.closest('[data-period]'); if (b) { period = b.dataset.period; re(); } });
     root.addEventListener('click', e => { if (e.target.closest('[data-team="open"]')) openTeamFor({ store: ctx.store, session: ctx.session, storeNo: ctx.storeNo, today, onClose: re }); });
     // Today's pasted report lives on the desk that pasted it (bfreview).
