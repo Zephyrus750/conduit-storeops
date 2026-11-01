@@ -3,7 +3,6 @@
 // own settings, as store.settings.set events a manager sends, and the refresh
 // focus for the coming weeks). Device preferences persist under suite_prefs.
 
-import { openTour } from '../tour.js';
 import { haptic, applyOrientation, isPhone } from '../device.js';
 import { $, ic, esc, vh, sub, toast, ago, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR, mgr } from '../ui.js';
 import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/reducers/store.js';
@@ -14,7 +13,6 @@ import { updates } from '../updates.js';
 import { retailPeriod } from '../../shared/time.js';
 import { bundle, storagePots, releaseCache, fmtBytes } from '../diag.js';
 import { SUBS, MICRO, microId, microCode, microName } from '../data/micros.js';
-import { printSheet, section } from '../print.js';
 import { ulid } from '../../shared/ulid.js';
 
 let sec = 'general';
@@ -38,7 +36,7 @@ export default {
   // Store settings, the refresh focus and target, and the price-check size
   // are set on a store PC. A manager sees Field Mode first, under Manager.
   // Help and feedback sit together at the foot.
-  mobile(ctx) { return `<div class="mv-head"><div><h2>${tx('Settings')}</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}${mgr()}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${howtoBody(true)}</div>`; },
+  mobile(ctx) { return `<div class="mv-head"><div><h2>${tx('Settings')}</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}${mgr()}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${helpCard()}</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
@@ -62,8 +60,6 @@ export default {
       else if (act === 'copy-diag') { const t = await bundle(ctx, 'settings'); try { await navigator.clipboard.writeText(t); toast(tx('Diagnostics copied')); } catch { prompt(tx('Copy the diagnostics:'), t); } }
       else if (act === 'send-feedback') await sendFeedback(ctx, root);
       else if (act === 'assign-micro') ctx.go('labelint', { micro: a.dataset.micro });
-      else if (act === 'print-howto') printHowto();
-      else if (act === 'tour') openTour();
       else if (act === 'check-update') { a.textContent = tx('Checking…'); await updates.check(); ctx.rerender(); if (!updates.state.waiting) toast(tx('You are on the current release')); }
       else if (act === 'update-now') updates.apply();
       else if (act === 'resync') ctx.store?.resync();
@@ -89,7 +85,7 @@ function body(ctx, sec = currentSec()) {
   if (sec === 'depts') return deptsBody(ctx);
   if (sec === 'storage') return `<div id="stgStorage"><div class="stg-card"><div class="stg-h">${tx('Storage')}</div><p class="stg-p">${tx('Working it out…')}</p></div></div>`;
   if (sec === 'feedback') return feedbackBody(ctx);
-  if (sec === 'howto') return howtoBody();
+  if (sec === 'howto') return helpCard();
   if (sec === 'about') return `<div class="stg-card"><div class="stg-h">Conduit</div>${row(tx('Version'), tx('{v} · one shell, one worker, one event log per store', { v: VERSION }), '')}${row(tx('Design of record'), tx('The Conduit Backend Design doc and the Conduit Shell Swap showcase'), '')}</div>`;
   const s = ctx.store?.status, cur = ctx.session.current;
   const who = ctx.store ? row(tx('Store'), cur?.actas ? tx('{no} {name} · verified against the worker · acting as the store as owner', { no: esc(ctx.storeNo), name: esc(ctx.storeName) }) : tx('{no} {name} · verified against the worker', { no: esc(ctx.storeNo), name: esc(ctx.storeName) }), `<span class="chip">${tx('Signed in')}</span>`) : row(tx('Owner'), tx('Signed in with the owner key · every action is logged in the registry'), `<span class="chip">${tx('Owner')}</span>`);
@@ -204,24 +200,5 @@ async function sendFeedback(ctx, root) {
 }
 
 // ── How to use ────────────────────────────────────────────────────────
-const HOWTO = [
-  [tx('The shell'), [tx('The rail on the left has a few rows for each area: Floor, Stockroom, Back dock. A row with several screens shows them as tabs at the top; Screens, Settings and Help sit at the foot.'), tx('Search (Ctrl K) finds a shelf, a bay, a keycode, a manifest or a tool.'), tx('The store chip opens the store’s details and the other stores on this device.')]],
-  [tx('Floor'), [tx('Store map: tap a shelf for its card; Share gives a QR code and a link.'), tx('Location refresh: tap or scan shelf labels as they are refreshed. The week counts toward 100 in the focus departments.'), tx('Label integrity: pick a micro-department, check its labels, log the wrong ones; print the marking sheet.'), tx('Pick list: add shelves, then Plan route for the shortest walk, stairs included.'), tx('Stocktake, Maintenance and Emergency each keep their own map marks.')]],
-  [tx('Stockroom'), [tx('On the phone: scan the bay label, scan each product, Send to review.'), tx('At the desk: paste the SIM report, review each bay (F for Focus), Enter marks it ready.'), tx('Back on the phone: My locations shows Submit once the bay is finalised on the PDT.')]],
-  [tx('Back dock'), [tx('Land a truck, attach its manifest, start the decant.'), tx('Crew work pallets by D-number; hold-ups and breaks stop the clock.'), tx('The Dock screen and Team Board show progress on a big screen.')]],
-  [tx('On the phone'), [tx('The strip at the bottom holds the area’s main views; More holds the rest and Switch area.'), tx('The grid button on the Floor picks a department.'), tx('Everything keeps working offline; changes send when the connection is back.')]],
-];
-// The phone's guide: the same workspaces, only what a phone does.
-const HOWTO_PHONE = [
-  [tx('Getting around'), [tx('The strip at the bottom holds the area’s main views; More holds the rest and Switch area.'), tx('Search finds a shelf, a bay, a keycode or a consolidation. The barcode button scans a label straight in; the microphone takes a spoken shelf.'), tx('The store chip opens the store’s details and the other stores on this device.'), tx('Everything keeps working offline; changes send when the connection is back.')]],
-  [tx('Floor'), [tx('Store map: tap a shelf for its card; Share gives a QR code and a link.'), tx('Location refresh: tap or scan shelf labels as they are refreshed. The week counts toward 100 in the focus departments.'), tx('Label integrity: tap a shelf to open its micro-department and check its labels.'), tx('Pick list: add shelves, or say them, and follow the route.'), tx('Report an issue from More, with a photo.')]],
-  [tx('Stockroom'), [tx('Scan the bay label, scan each product, then Send to review.'), tx('My locations shows Submit once the bay is reviewed and finalised on the PDT.'), tx('Cages, Adjust, the day list and Quick Scan are in the strip and More.')]],
-  [tx('Back dock'), [tx('Land a truck, land each pallet on its square, start the decant.'), tx('Crew work pallets by D-number; hold-ups and breaks stop the clock.'), tx('Team & plan sets the crew, roles, breaks and the decant plan.')]],
-];
-export function howtoBody(phone = false) {
-  const HOWTO_ = phone ? HOWTO_PHONE : HOWTO;
-  return `<div class="stg-card"><div class="stg-h">${tx('How to use')}</div><p class="stg-p">${phone ? tx('A short walk through the app and each workspace.') : tx('A short walk through the shell, the map views and each workspace.')}</p><div class="stg-acts"><span class="btn sm primary" data-act="tour">${ic('star')}${tx('Take the tour')}</span><span class="btn sm" data-act="print-howto">${ic('print')}${tx('Print the one-pager')}</span></div>${HOWTO_.map(([h, ls]) => `<div class="stg-howto"><b>${esc(h)}</b><ul>${ls.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>`).join('')}</div>`;
-}
-function printHowto() {
-  printSheet({ title: tx('Conduit · how to use'), subtitle: `${VERSION}`, body: HOWTO.map(([h, ls]) => section(esc(h), `<ul>${ls.map(l => `<li>${esc(l)}</li>`).join('')}</ul>`)).join('') });
-}
+// The written how-to became the Visual Guide in Help (js/guide/).
+const helpCard = () => `<div class="stg-card"><div class="stg-h">${tx('How to use')}</div><p class="stg-p">${tx('Help has the Visual Guide: every task played on the device it’s done on, to watch, try, read or print.')}</p><div class="stg-acts"><span class="btn sm primary" data-go="help">${ic('star')}${tx('Open Help')}</span></div></div>`;

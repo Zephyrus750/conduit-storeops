@@ -22,7 +22,7 @@ import { takeDeepLink } from './share.js';
 import { installLog } from './diag.js';
 installLog();
 import { updates, initUpdates } from './updates.js';
-import { VIEWS, RAIL, RAIL_TOP, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES } from './registry.js';
+import { VIEWS, RAIL, RAIL_TOP, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_STORE, ADMIN_RAIL, HOME, WORKSPACES, guideFor } from './registry.js';
 import { toolForView, toolOff } from '../shared/tools.js';
 import { loadResources, cachedResources, useResource } from './resourcelib.js';
 import { openFound, useRecallStore } from './recallflag.js';
@@ -105,12 +105,12 @@ client.session.on('change', snap => {
 });
 client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: tx('Owner session expired. Sign in again.') } : { error: tx('This device was signed out. Sign in again.') }); });
 // A shared shelf link (?store=…&shelf=…): open the map on that shelf once
-// signed in to that store. A store parked on this device is switched to; a
+// signed in to that store (a guide link, ?guide=…, opens Help in any store). A store parked on this device is switched to; a
 // device that is not signed in gets the sign-in with that store chosen.
 let pendingLink = takeDeepLink();
 (async () => {
   let s = await client.session.load();
-  if (pendingLink && s?.store && !s.actas && s.store !== pendingLink.store) {
+  if (pendingLink && !pendingLink.guide && s?.store && !s.actas && s.store !== pendingLink.store) {
     try { if ((await client.session.parked()).some(p => p.store === pendingLink.store)) s = await client.session.switchTo(pendingLink.store); } catch {}
   }
   // A saved session whose token has run out is renewed before anything
@@ -132,6 +132,8 @@ let pendingLink = takeDeepLink();
 function reloaded() { try { return performance.getEntriesByType('navigation')[0]?.type === 'reload'; } catch { return false; } }
 function openPendingLink(s) {
   const l = pendingLink; pendingLink = null; if (!l) return false;
+  // The guide is the same in every store: a printed page's QR code opens its chapter here.
+  if (l.guide) { show('help', { chapter: l.guide }); return true; }
   if (l.store !== s.store) { toast(l.equip ? tx('That equipment label is for store {store}. Add that store from Store details to open it.', { store: l.store }) : l.issue ? tx('That work order is for store {store}. Add that store from Store details to open it.', { store: l.store }) : tx('That shelf link is for store {store}. Add that store from Store details to open it.', { store: l.store })); return false; }
   if (l.issue) { if (isMobile() && deskOnly(VIEWS.maintenance)) { toast(tx('Work orders open on a store PC')); return false; } show('maintenance', { issue: l.issue }); return true; }
   if (l.equip) { if (isMobile() && deskOnly(VIEWS.equipment)) { toast(tx('Equipment checks open on a store PC, or a manager’s phone')); return false; } show('equipment', { equip: l.equip }); return true; }
@@ -341,7 +343,7 @@ async function showSignin({ error, owner } = {}) {
     `<div class="si-err" id="siErr">${error ? esc(error) : WORKER_NOTE ? esc(WORKER_NOTE) : ''}</div>${workerLine()}<button class="si-cta" type="submit"></button>` +
     `<div class="si-foot"><span>${tx('Works offline')}</span><a class="si-owner-link" data-shell-act="owner-signin">${tx('Owner sign-in')}</a>${langSelect(`class="si-lang" id="siLang" aria-label="${tx('Language')}"`)}<span class="ver">${VERSION}</span></div></form>`;
   const el = cover(polyBackground() + siCard(form)); signinTitle();
-  const linkTo = list => { if (pendingLink && list.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.equip ? tx('Sign in to open the equipment card.') : pendingLink.issue ? tx('Sign in to open the work order.') : tx('Sign in to open shelf {shelf}.', { shelf: pendingLink.shelf })); } };
+  const linkTo = list => { if (pendingLink && list.some(x => String(x.no) === pendingLink.store)) { $('#siForm select[name="store"]', el).value = pendingLink.store; $('#siErr', el).textContent = error || (pendingLink.guide ? tx('Sign in to open the guide.') : pendingLink.equip ? tx('Sign in to open the equipment card.') : pendingLink.issue ? tx('Sign in to open the work order.') : tx('Sign in to open shelf {shelf}.', { shelf: pendingLink.shelf })); } };
   linkTo(stores);
   client.transport.request('/v1/stores').then(r => {
     const list = r.stores || []; try { localStorage.setItem('store_list', JSON.stringify(list)); } catch {}
@@ -404,7 +406,7 @@ async function showContinue(s) {
   // store opened here) is asked for here, before the store opens.
   const ask = codeNeeded(s);
   const area = s.screen ? tx('Dock screen') : (s.roles || []).includes('manager') ? tx('Manager') : ask ? tx('Manager code needed') : areaName(last);
-  const link = pendingLink && pendingLink.store === s.store ? (pendingLink.equip ? tx('Continue and open the equipment card.') : pendingLink.issue ? tx('Continue and open the work order.') : tx('Continue and open shelf {shelf}.', { shelf: esc(pendingLink.shelf) })) : '';
+  const link = pendingLink && (pendingLink.guide || pendingLink.store === s.store) ? (pendingLink.guide ? tx('Continue and open the guide.') : pendingLink.equip ? tx('Continue and open the equipment card.') : pendingLink.issue ? tx('Continue and open the work order.') : tx('Continue and open shelf {shelf}.', { shelf: esc(pendingLink.shelf) })) : '';
   const code = ask ? `<label for="siMgr">${tx('Manager code')}</label><input class="si-pin si-code" id="siMgr" name="code" type="password" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MG-······" required><div class="si-err" id="siErr"></div>` : '';
   const form = `<form class="si-form" id="siCont"><div class="si-brand si-mbrand">${mark()}<b>Conduit</b></div><h2>${tx('Welcome back')}</h2><div class="si-sub">${ask ? managerReason(s.lapsed) : mobile ? tx('This device is signed in.') : tx('This PC is signed in.')}${link ? ' ' + link : ''}</div>` +
     `<div class="si-store"><span class="si-sav">${esc(s.store)}</span><div><b>${esc(name)}</b><small>${tx('Store {no}', { no: esc(s.store) })} · ${area}</small></div>${ready ? `<span class="si-ready">${ic('check')}${tx('Ready')}</span>` : ''}</div>` + code +
@@ -798,6 +800,8 @@ document.addEventListener('click', e => {
     else if (act === 'sheet') { sheetOpen = !sheetOpen; try { localStorage.setItem(SHEET_KEY, sheetOpen ? '1' : '0'); } catch {} paintSheet(); haptic('tap'); }
     else if (act === 'sync') openSync();
     else if (act === 'update-now') updates.apply();
+    // The ? in the top bar and the phone's app bar: Help, at this screen's chapter of the guide.
+    else if (act === 'guide') { if (store) show('help', { chapter: guideFor(current, isMobile()) }); }
     else if (act === 'update-later') $('#updBar')?.remove();
     else if (act === 'reload') location.reload();
     else if (act === 'owner-signin') showSignin({ owner: true });

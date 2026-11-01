@@ -374,4 +374,7 @@ export default {
   "Recalls and withdrawals": "Retiradas de producto y de venta",
   "This device was signed out. Sign in again.": "Se cerró la sesión en este dispositivo. Vuelve a iniciar sesión.",
   "Zones": "Regiones",
+  "Continue and open the guide.": "Continúa y abre la guía.",
+  "Help for this screen": "Ayuda para esta pantalla",
+  "Sign in to open the guide.": "Inicia sesión para abrir la guía.",
 };

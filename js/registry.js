@@ -84,6 +84,15 @@ export const RAIL_TOP = ['today', 'inputs', 'resources'];
 export const RAIL_FOOT = ['screens', 'settings', 'help'];
 // The row a screen belongs to, by view id.
 export const GROUP_OF = Object.fromEntries(Object.entries(GROUPS).flatMap(([g, x]) => [...x.tabs.map(t => [t[0], g]), ...x.also.map(v => [v, g])]));
+// The Visual Guide's chapter for a screen (js/guide/scenes.js), which the ?
+// in the top bar and the phone's app bar opens Help at. [phone, desk] where
+// one view is two tasks (Backfill review scans on a phone, reviews at a desk).
+// A screen with none opens the guide at the first chapter for the reader.
+export const GUIDE_OF = {
+  dashboard: 'around', help: 'around', settings: 'settings', map: 'find', refresh: 'refresh', labelint: 'labels', maintenance: 'fault', equipment: 'equip',
+  bfreview: ['bfscan', 'bfreview'], livepull: 'pull', cages: 'cages', manifests: 'manifests', receiving: 'receive', decant: 'receive',
+};
+export const guideFor = (view, mobile) => { const g = GUIDE_OF[view]; return Array.isArray(g) ? g[mobile ? 0 : 1] : g || null; };
 export const STRIP = {
   floor: [['mhome', 'home', tx('Home')], ['refresh', 'm-refresh', tx('Refresh')], ['labelint', 'm-labelint', tx('Labels')], ['picklist', 'm-picklist', tx('Route')], ['emergency', 'm-emergency', tx('Emergency')], ['more', 'dots', tx('More')]],
   stockroom: [['mhome', 'home', tx('Home')], ['bfreview', 'barcode', tx('Scan')], ['cages', 'm-cages', tx('Cages')], ['adjust', 'm-adjust', tx('Adjust')], ['more', 'dots', tx('More')]],
