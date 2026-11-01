@@ -874,4 +874,9 @@ export default {
   "free bay": "posto libero",
   "{n} pallet on the dock": "{n} pallet al ricevimento",
   "{n} pallets on the dock": "{n} pallet al ricevimento",
+  "Close to its estimate": "Vicino alla stima",
+  "Finished": "Finito",
+  "On pace": "In linea",
+  "Under its estimate": "Sotto la stima",
+  "{n} verified on the manifest": "{n} verificati sul manifesto",
 };

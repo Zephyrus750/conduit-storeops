@@ -874,4 +874,9 @@ export default {
   "free bay": "bakanteng bay",
   "{n} pallet on the dock": "{n} pallet sa dock",
   "{n} pallets on the dock": "{n} pallet sa dock",
+  "Close to its estimate": "Malapit na sa tantiya",
+  "Finished": "Natapos",
+  "On pace": "Nasa tamang bilis",
+  "Under its estimate": "Mas mabilis sa tantiya",
+  "{n} verified on the manifest": "{n} na-verify sa manifest",
 };

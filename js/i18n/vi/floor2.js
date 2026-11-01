@@ -874,4 +874,9 @@ export default {
   "free bay": "ô trống",
   "{n} pallet on the dock": "{n} pallet ở khu nhận hàng",
   "{n} pallets on the dock": "{n} pallet ở khu nhận hàng",
+  "Close to its estimate": "Gần chạm ước tính",
+  "Finished": "Xong lúc",
+  "On pace": "Đúng tiến độ",
+  "Under its estimate": "Dưới ước tính",
+  "{n} verified on the manifest": "{n} đã xác minh trên phiếu kê",
 };

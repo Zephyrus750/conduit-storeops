@@ -874,4 +874,9 @@ export default {
   "free bay": "freier Platz",
   "{n} pallet on the dock": "{n} Palette in der Annahme",
   "{n} pallets on the dock": "{n} Paletten in der Annahme",
+  "Close to its estimate": "Nahe an der Schätzung",
+  "Finished": "Fertig",
+  "On pace": "Im Plan",
+  "Under its estimate": "Unter der Schätzung",
+  "{n} verified on the manifest": "{n} im Lieferschein bestätigt",
 };

@@ -12,7 +12,8 @@ import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, 
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
-import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex, grid, PTYPES, PT_LETTER, PT_NAME, PT_SHORT, PALLET_STATE } from './backdock/common.js';
+import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex, grid, PTYPES, PT_LETTER, PT_ONE, PT_SHORT, PALLET_STATE, openSegs, pace, workedMin } from './backdock/common.js';
+import { flags as palletFlags } from './backdock/receiving.js';
 import { settingsOf } from '../../shared/reducers/store.js';
 import { phaseChip, phaseLine, PHASE_NAME } from './backdock/phase.js';
 import { PHASES, truckPhase } from '../../shared/dockphase.js';
@@ -76,24 +77,74 @@ function labelsCard(ctx, r) {
   if (done >= total) return kpi('done', 'tag', tx('Label integrity'), 'labelint', total, `/ ${total}`, tx('This cycle is complete ✓'), [[tx('Labels wrong this cycle'), String(wrong), wrong ? 'c-red' : ''], [tx('Cycle'), esc(cyc)], [tx('Next cycle opens in'), txn(daysLeftInCycle(L.cycleLen), '{n} day', '{n} days')]], 100);
   return kpi('', 'tag', tx('Label integrity'), 'labelint', done, `/ ${total}`, period === 'today' ? tx('Micro-departments checked this cycle · {n} today', { n: inP }) : r.label === 'this week' ? tx('Micro-departments checked this cycle · {n} this week', { n: inP }) : tx('Micro-departments checked this cycle · {n} in {month}', { n: inP, month: r.label }), [[tx('Labels wrong this cycle'), String(wrong), wrong ? 'c-red' : ''], [tx('Days left in cycle'), String(daysLeftInCycle(L.cycleLen))], [tx('Still to check'), String(total - done)]], done / total * 100);
 }
-// The dock itself, read-only: Receiving's bays with each pallet's type and
-// state in Receiving's colours. With no truck on it, the dock's own grid
-// (Settings › Dock grid), every bay free.
+// The dock itself, read-only: Receiving's squares (bay, cartons, the
+// pallet's mark, its worked time and crew, the first thing it needs) in
+// Receiving's colours; hovering or focusing a pallet shows its details.
+// With no truck on the dock, the dock's own grid (Settings › Dock grid),
+// every bay free.
+const PACE = { over: tx('Over its estimate'), near: tx('Close to its estimate'), on: tx('On pace'), under: tx('Under its estimate') };
 function dockMini(ctx, t) {
-  const g = grid(t || { grid: settingsOf(ctx.store.get('settings')).dockGrid }), byRef = {};
+  const g = grid(t || { grid: settingsOf(ctx.store.get('settings')).dockGrid }), byRef = {}, now = Date.now(), rows = Math.ceil(g.refs.length / g.cols);
   for (const p of Object.values(t?.pallets || {})) if (p.ref) byRef[p.ref] = p;
-  const n = Object.keys(byRef).length;
-  const cells = g.refs.map(ref => {
+  const n = Object.keys(byRef).length, last = g.refs.length - 1;
+  const cells = g.refs.map((ref, i) => {
+    const corner = i === 0 ? ' c-tl' : i === g.cols - 1 ? ' c-tr' : i === last - g.cols + 1 && rows > 1 ? ' c-bl' : i === last ? ' c-br' : '';
     const p = byRef[ref];
-    if (!p) return `<span class="dkg-c" title="${ref} · ${tx('free bay')}"><b>${ref}</b></span>`;
-    const s = p.status || 'landed', name = PT_NAME[p.ptype] || p.ptype || '';
-    if (p.excluded) return `<span class="dkg-c p out" title="${ref} · ${tx('not in this session')}"><b>${ref}</b><em>${tx('OUT')}</em></span>`;
-    return `<span class="dkg-c p t-${PT_LETTER[p.ptype] || 'c'} st-${s}" title="${ref} · ${esc(name)} · ${tx('{n} cartons', { n: p.cartons ?? '–' })} · ${PALLET_STATE[s] || esc(s)}"><b>${ref}</b><em>${p.cartons ?? '–'}</em></span>`;
+    if (!p) return `<div class="dkg-c${corner}" title="${ref} · ${tx('free bay')}"><span class="dkg-ref">${ref}</span></div>`;
+    if (p.excluded) return `<div class="dkg-c p out${corner}" tabindex="0" data-dkg="${ref}"><span class="dkg-ref">${ref}</span><span class="dkg-ct">${tx('OUT')}</span>${palTip(t, p, now)}</div>`;
+    const s = p.status || 'landed', pc = pace(t, p, now), crew = openSegs(p).map(x => x.pid).join('+'), fl = palletFlags(t, p)[0];
+    const mark = p.suspect ? '⚠' : s === 'active' ? '▶' : s === 'done' ? '✓' : s === 'paused' ? '⏸' : '';
+    const live = s === 'active' || s === 'paused';
+    return `<div class="dkg-c p t-${PT_LETTER[p.ptype] || 'c'} st-${s}${p.carryover ? ' co' : ''}${pc && s !== 'done' ? ' pc-' + pc : ''}${s === 'done' && pc === 'over' ? ' pc-over' : ''}${p.suspect ? ' sus' : ''}${corner}" tabindex="0" data-dkg="${ref}">` +
+      `<span class="dkg-ref">${ref}</span><span class="dkg-ct">${p.cartons ?? '–'}</span>${mark ? `<span class="dkg-mk">${mark}</span>` : ''}` +
+      `${fl ? `<span class="dkg-fl ${fl[0]}">${esc(fl[2])}</span>` : ''}${live ? `<span class="dkg-tm" data-dktick="${ref}">${fmtMins(workedMin(t, p, now))}</span>` : ''}${crew ? `<span class="dkg-who">${esc(crew)}</span>` : ''}` +
+      `${palTip(t, p, now)}</div>`;
   }).join('');
   const key = PTYPES.map(p => `<span><i style="background:${p[2]}"></i>${PT_SHORT[p[0]]}</span>`).join('') +
     `<span><i class="dn"></i>${tx('Done')}</span><span><i class="ac"></i>${tx('Decanting')}</span>`;
   return `<div class="dkg"><div class="dkg-h"><b>${tx('The dock')}</b><span>${n ? txn(n, '{n} pallet on the dock', '{n} pallets on the dock') : tx('Every bay free')}</span></div>` +
-    `<div class="dkg-grid" style="grid-template-columns:repeat(${g.cols},minmax(0,1fr))">${cells}</div><div class="dkg-key">${key}</div></div>`;
+    `<div class="dkg-grid" style="grid-template-columns:repeat(${g.cols},minmax(0,1fr));max-width:${g.cols * 80}px">${cells}</div><div class="dkg-key">${key}</div></div>`;
+}
+// A pallet's details, kept in its square and shown by the floating card
+// on hover or focus (a card in the page would be cut off by the card's edge).
+function palTip(t, p, now) {
+  const s = p.excluded ? 'out' : p.status || 'landed', segs = p.segments || [], pc = pace(t, p, now);
+  const people = [...new Set(segs.map(x => x.pid))].join(', '), worked = segs.length ? workedMin(t, p, s === 'done' ? Date.parse(p.doneAt) || now : now) : 0;
+  const row = (k, v) => v ? `<span>${k}</span><b>${v}</b>` : '';
+  const state = s === 'out' ? tx('not in this session') : PALLET_STATE[s] || esc(s);
+  const extras = [pc && PACE[pc] ? `<li class="pc-${pc}">${PACE[pc]}</li>` : '', p.carryover ? `<li>${tx('carried over')}</li>` : '', p.suspect ? `<li class="warn">${tx('done very fast: check the times')}</li>` : '',
+    ...palletFlags(t, p).map(f => `<li class="warn">${esc(f[1])}</li>`)].join('');
+  return `<template class="dkg-tip"><div class="dkt-h"><b>${tx('Pallet {ref}', { ref: esc(p.ref) })}</b><span class="dkt-st st-${s}">${state}</span></div><div class="dkt-kv">` +
+    row(tx('Type'), esc(PT_ONE[p.ptype] || p.ptype || '')) + row(tx('Cartons'), p.cartons ?? '–') + row(tx('Landed'), p.landedAt ? fmtHM(p.landedAt) : '') +
+    row(tx('Started'), segs[0] ? fmtHM(segs[0].start) : '') + row(tx('Finished'), p.doneAt ? fmtHM(p.doneAt) : '') +
+    row(tx('Worked'), segs.length ? fmtMins(worked) + (p.expectedMins ? ' · ' + tx('est {n} min', { n: p.expectedMins }) : '') : p.expectedMins ? tx('est {n} min', { n: p.expectedMins }) : '') +
+    row(tx('Crew'), esc(people)) + row(tx('Consols'), (p.consolIds || []).length ? txn(p.consolIds.length, '{n} verified on the manifest', '{n} verified on the manifest') : tx('No consol verified yet')) +
+    `</div>${extras ? `<ul class="dkt-x">${extras}</ul>` : ''}</template>`;
+}
+// The floating card: one element on the page, filled from the square's
+// template and placed beside it, inside the window.
+function dockTips(ctx, root) {
+  let tip = null, on = null;
+  const hide = () => { tip?.remove(); tip = null; on = null; };
+  const show = cell => {
+    if (on === cell) return; hide(); const tpl = cell.querySelector('template.dkg-tip'); if (!tpl) return;
+    on = cell; tip = document.createElement('div'); tip.className = 'dkg-float'; tip.setAttribute('role', 'tooltip'); tip.appendChild(tpl.content.cloneNode(true)); document.body.appendChild(tip);
+    const r = cell.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, pad = 8;
+    let x = r.left + r.width / 2 - w / 2, y = r.bottom + 8;
+    if (y + h > innerHeight - pad) y = r.top - h - 8;
+    tip.style.left = `${Math.max(pad, Math.min(innerWidth - w - pad, x))}px`; tip.style.top = `${Math.max(pad, y)}px`;
+  };
+  root.addEventListener('mouseover', e => { const c = e.target.closest('.dkg-c[data-dkg]'); if (c) show(c); else if (on) hide(); });
+  root.addEventListener('mouseleave', hide);
+  root.addEventListener('focusin', e => { const c = e.target.closest('.dkg-c[data-dkg]'); if (c) show(c); });
+  root.addEventListener('focusout', e => { if (e.target.closest('.dkg-c[data-dkg]')) hide(); });
+  addEventListener('scroll', hide, true);
+  // Worked time on the running pallets, each half minute, without a repaint.
+  const timer = setInterval(() => {
+    const t = openTrucks(ctx.store.get('dock'))[0], now = Date.now(); if (!t) return;
+    for (const el of root.querySelectorAll('[data-dktick]')) { const p = t.pallets?.[el.dataset.dktick]; if (p) el.textContent = fmtMins(workedMin(t, p, now)); }
+  }, 30_000);
+  return { hide, off: () => { hide(); clearInterval(timer); removeEventListener('scroll', hide, true); } };
 }
 function dockCard(ctx, r) {
   const caps = ctx.session.current?.caps || [];
@@ -263,7 +314,9 @@ export default {
   mount(ctx, root) {
     // The body repaints in place; the title row's buttons are refreshed
     // wherever the row is (the page, or the top bar it was lifted into).
+    const tips = dockTips(ctx, root);
     const re = () => {
+      tips.hide();
       const top = root.querySelector('#dashTop'); if (top) top.innerHTML = dashTop(ctx);
       const acts = document.getElementById('dashTitle')?.closest('.vh')?.querySelector(':scope > .acts'); if (acts) acts.innerHTML = dashActs(ctx);
     };
@@ -273,6 +326,6 @@ export default {
     const mine = () => { if (ctx.storage && ctx.storeNo) ctx.storage.get(`simreport:${ctx.storeNo}:${today()}`).then(v => { const had = !!report; report = v || null; if (report || had) re(); }).catch(() => {}); };
     mine();
     root.addEventListener('click', e => { if (e.target.closest('[data-paste]')) { e.preventDefault(); openPasteBox(ctx, { want: 'report', after: mine }); } });
-    return ['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock', 'plan', 'inventory', 'comms'].map(k => ctx.store.on(k, re));
+    return [...['refresh', 'labels', 'issues', 'stocktake', 'assets', 'backfill', 'cages', 'adjustments', 'dock', 'plan', 'inventory', 'comms'].map(k => ctx.store.on(k, re)), tips.off];
   },
 };
