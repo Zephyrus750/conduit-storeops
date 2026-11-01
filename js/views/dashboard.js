@@ -13,8 +13,8 @@ import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
 import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex } from './backdock/common.js';
+import { phaseChip } from './backdock/phase.js';
 import { ratesFor } from './backdock/plan.js';
-import { registerSummary, isFixture, consolidate } from '../../shared/inventory.js';
 import { toolOff } from '../../shared/tools.js';
 import { openPasteBox } from './pastebox.js';
 import { tx, txn, locale } from '../i18n.js';
@@ -25,7 +25,6 @@ const TARGET = 100, DAILY = 20;
 const PERIODS = [['today', tx('Today')], ['week', tx('This week')], ['month', tx('This month')]];
 let period = 'today', report = null;          // report: this device's copy of today's SIM report (the store's is in state.backfill.report)
 const SEV = [[tx('Low'), '#6B7280'], [tx('Medium'), '#D97706'], [tx('High'), '#DC2626'], [tx('Urgent'), '#7F1D1D']];
-const LOAD_ST = { incoming: tx('incoming'), received: tx('received'), offsite: tx('off-site') };
 // An issue's status word ("Open" alone is the verb on every link and button).
 const OPEN = tx('issue status::Open');
 
@@ -81,12 +80,33 @@ function dockCard(ctx, r) {
   if (!hasArea(ctx.session, 'backdock')) return lockedCard(tx('Back dock'), 'm-receiving', 'receiving');
   const dock = ctx.store.get('dock');
   if (period === 'today') {
-    const t = openTrucks(dock)[0];
-    if (!t) { const closed = (dock.history || []).filter(h => h.id.slice(0, 10) === r.to); return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3><a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${closed.length}</span><span class="d">${txn(closed.length, 'truck cleared today', 'trucks cleared today')}</span></div><div class="hl">${closed.length ? closed.map(h => txn(h.cartons, 'T{truck} · {n} carton · {time}', 'T{truck} · {n} cartons · {time}', { truck: esc(truckNo(h.id)), time: fmtMins(h.clearMins || 0) })).join(' · ') : tx('Nothing on the dock. Land a truck from Receiving.')}</div></div>`; }
+    // Always the dock's state, even with nothing on it: the truck on the
+    // dock and its phase, else what the day holds (planned slots, trucks
+    // cleared, a day confirmed with no trucks), and the rows that say so.
+    const day = r.to, plan = ctx.store.get('plan')?.days?.[day] || {}, t = openTrucks(dock)[0];
+    const done = (dock.history || []).filter(h => h.id.slice(0, 10) === day).sort((a, b) => a.id.localeCompare(b.id));
+    const onDock = openTrucks(dock).filter(x => x.id.slice(0, 10) === day), nos = x => Number(truckNo(x.id));
+    const taken = new Set([...done.map(nos), ...onDock.map(nos)]);
+    const slots = Object.entries(plan.slots || {}).map(([n, sl]) => [Number(n), sl]).sort((a, b) => a[0] - b[0]);
+    const planned = new Set([...slots.map(([n]) => n), ...taken]).size, next = slots.find(([n]) => !taken.has(n));
+    const last = done.at(-1), none = !planned && !!plan.noTrucks;
+    const chip = t ? `${phaseChip(t)} <b>${tx('Truck {no}', { no: esc(truckNo(t.id)) })}</b>` : `<span class="phb-chip dock-st ${none ? 'none' : done.length && !next ? 'ok' : 'idle'}">${none ? tx('No trucks today') : done.length && !next ? tx('All trucks cleared') : tx('No truck on the dock')}</span>`;
+    const cartons = done.reduce((n, h) => n + (h.cartons || 0), 0) + onDock.reduce((n, x) => n + progress(x).done, 0);
+    const row = (label, value) => `<div class="row">${label}<b>${value}</b></div>`;
+    const common = row(tx('Trucks today'), planned ? tx('{done} of {n} cleared', { done: done.length, n: planned }) : none ? tx('none · confirmed in the Planner') : '—') +
+      row(tx('Next truck'), next ? `T${next[0]}${next[1].eta ? ' · ' + esc(next[1].eta) : ''}${next[1].manifest?.manNo ? ' · ' + esc(next[1].manifest.manNo) : ''}` : '—') +
+      row(tx('Cartons decanted today'), cartons.toLocaleString()) +
+      row(tx('Last cleared'), last ? `T${esc(truckNo(last.id))}${last.clearedAt ? ' · ' + fmtHM(last.clearedAt) : ''}${last.clearMins ? ' · ' + fmtMins(last.clearMins) : ''}` : '—');
+    const open = `<a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a>`;
+    if (!t) {
+      const line = none ? tx('No trucks today · confirmed in the Planner') : next ? tx('Waiting for truck {no}', { no: next[0] }) : done.length ? tx('Every truck today is cleared.') : tx('Nothing on the dock. Land a truck from Receiving.');
+      return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${open}</div><div class="dk-chip">${chip}</div><div class="hero"><span class="n">${done.length}</span><span class="d">${planned ? tx('/ {n} trucks cleared today', { n: planned }) : txn(done.length, 'truck cleared today', 'trucks cleared today')}</span></div><div class="hl">${line}</div><div class="rows">${common}</div>` +
+        (planned ? `<div class="prog"><div class="track"><i style="width:${Math.round(done.length / planned * 100)}%"></i></div><b>${Math.round(done.length / planned * 100)}%</b></div>` : '') + `</div>`;
+    }
     const pr = progress(t), halt = openHalt(t), fc = forecast(t, Date.now(), ratesFor(ctx.store.get('dock'))), crew = (t.team || []).length;
-    const facts = [tx('Truck {no}', { no: esc(truckNo(t.id)) }), t.landedAt ? fmtHM(t.landedAt) : tx('staged'), txn(pr.count, '{n} pallet', '{n} pallets'), tx('{n} decanting', { n: pr.active }), t.goalAt ? tx('goal {time}', { time: fmtHM(t.goalAt) }) : '', crew ? tx('{n} crew', { n: crew }) : ''].filter(Boolean);
-    return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3><a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${pr.done}</span><span class="d">${tx('/ {total} cartons decanted', { total: pr.total })}</span></div><div class="hl">${facts.join(' · ')}</div>` +
-      `<div class="rows">${halt ? `<div class="row">${tx('On hold')}<b class="c-red">${tx('{hold} since {time}', { hold: esc(holdName(halt)), time: fmtHM(halt.start) })}</b></div>` : ''}<div class="row">${tx('Pallets done')}<b>${pr.doneCount} / ${pr.count}</b></div><div class="row">${tx('Forecast finish')}<b>${fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}</b></div></div><div class="prog"><div class="track"><i style="width:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
+    const facts = [t.landedAt ? fmtHM(t.landedAt) : tx('staged'), txn(pr.count, '{n} pallet', '{n} pallets'), tx('{n} decanting', { n: pr.active }), t.goalAt ? tx('goal {time}', { time: fmtHM(t.goalAt) }) : '', crew ? tx('{n} crew', { n: crew }) : ''].filter(Boolean);
+    return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${open}</div><div class="dk-chip">${chip}</div><div class="hero"><span class="n">${pr.done}</span><span class="d">${tx('/ {total} cartons decanted', { total: pr.total })}</span></div><div class="hl">${facts.join(' · ')}</div>` +
+      `<div class="rows">${halt ? `<div class="row">${tx('On hold')}<b class="c-red">${tx('{hold} since {time}', { hold: esc(holdName(halt)), time: fmtHM(halt.start) })}</b></div>` : ''}${row(tx('Pallets done'), `${pr.doneCount} / ${pr.count}`)}${row(tx('Forecast finish'), fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—')}${common}</div><div class="prog"><div class="track"><i style="width:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
   }
   const rows = (dock.history || []).filter(h => inRange(h.id.slice(0, 10), r)), cartons = rows.reduce((n, h) => n + (h.cartons || 0), 0);
   const trucks = period === 'week' ? txn(rows.length, 'truck this week', 'trucks this week') : txn(rows.length, 'truck in {month}', 'trucks in {month}', { month: esc(r.label) });
@@ -189,45 +209,6 @@ function register(ctx, r) {
   const html = `<div class="rows">${rows.map(([go, icon, name, verb, chips]) => `<div class="row"><span class="l">${ic(icon)}<span class="t"><b>${name}</b></span></span><a data-go="${go}">${verb} ${ic('arrow')}</a><span class="st">${chips.join('')}</span></div>`).join('')}</div>`;
   return { html, count: rows.length, need: need.length };
 }
-
-// ── Today at the store and logistics (Floor P2) ─────────────────────────
-// Five tiles for what the floor did today (ShelfSearcher's "Today at") and
-// three logistics cards: other loads (Manifests), off-site pallets and the
-// latest load, in a store with the Back dock and the off-site tool on. The store map left the
-// dashboard (2026-10-14); it has its own view.
-function todayAt(ctx) {
-  const t = today(), wk = weekId(), R = ctx.store.get('refresh'), marks = Object.values(R.weeks[wk] || {});
-  const rToday = marks.filter(m => dayOf(m.at) === t).length;
-  const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen), checks = Object.values(L.checks[cyc] || {}), lToday = checks.filter(c => dayOf(c.at) === t).length;
-  const issues = Object.values(ctx.store.get('issues')).filter(i => !i.removed), logged = issues.filter(i => dayOf(i.created) === t).length;
-  const serviced = Object.values(ctx.store.get('assets') || {}).reduce((n, a) => n + (a.log || []).filter(l => l.a === 'Serviced' && dayOf(l.t) === t).length, 0);
-  const sess = Object.entries(ctx.store.get('stocktake').sessions).find(([, x]) => !x.ended), counted = sess ? Object.values(sess[1].shelves).filter(x => x.state === 'counted' || x.state === 'verified').length : null;
-  const tile = (go, icon, n, label, small) => `<button class="tday" data-go="${go}">${ic(icon)}<b>${n}</b><span>${label}</span><small>${small}</small></button>`;
-  return `<div class="card tdays"><div class="ch"><h3>${ctx.storeName ? tx('Today at {store}', { store: esc(ctx.storeName) }) : tx('Today at the store')}</h3><span class="cs-dim">${esc(new Date().toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }))} · ${esc(ctx.storeNo || '')}</span></div><div class="tday-row">` +
-    tile('refresh', 'm-refresh', rToday, tx('Refreshes'), tx('today · {n} this week', { n: marks.length })) + tile('labelint', 'm-labelint', lToday, tx('Label checks'), tx('today · {n} this cycle', { n: checks.length })) +
-    tile('maintenance', 'tool', logged, tx('Maintenance'), txn(logged, 'new log today', 'new logs today')) + tile('emergency', 'm-emergency', serviced, tx('Em. service'), tx('serviced today')) +
-    tile('stocktake', 'm-stocktake', counted == null ? '—' : counted, tx('Stocktake'), sess ? tx('counted · session {id}', { id: esc(sess[0]) }) : tx('no session')) + `</div></div>`;
-}
-function logistics(ctx) {
-  if (!(ctx.session.current?.caps || []).includes('backdock') || toolOff(ctx.store.get('tools')?.off, 'inventory')) return '';
-  const I = ctx.store.get('inventory') || { offsite: {}, loads: {} }, t = today(), sum = registerSummary(I.offsite, t);
-  const loads = Object.values(I.loads).sort((a, b) => (b.recvDate || b.date || '').localeCompare(a.recvDate || a.date || '')), units = l => l.pallets.reduce((n, p) => n + p.items.reduce((k, i) => k + i.q, 0), 0);
-  const next = loads.filter(l => l.status === 'incoming').sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0], latest = loads.find(l => l.status === 'received') || loads[0];
-  let clr = null; try { const c = JSON.parse(localStorage.getItem(`inventory_prices:${ctx.storeNo}`) || 'null'); if (c) { const on = new Set(Object.entries(c.items || {}).filter(([, v]) => v.clr).map(([k]) => k)); clr = { items: on.size, pallets: Object.values(I.offsite).filter(r => !r.rec && r.products.some(p => on.has(p.kc))).length }; } } catch {}
-  const pallets = loads.reduce((n, l) => n + l.pallets.length, 0);
-  const inv = `<div class="card kpi logi"><div class="kh">${ic('packages')}<h3>${tx('Other loads')}</h3><a class="open" data-go="manifests">${tx('Open')} ${ic('arrow')}</a></div><div class="rows">` +
-    `<div class="row">${tx('Loads')}<b>${txn(pallets, '{loads} · {n} pallet', '{loads} · {n} pallets', { loads: loads.length })}</b></div>` +
-    `<div class="row">${tx('Next in')}<b>${next ? `${esc(next.label)} · ${esc(fmtDay(next.date))}` : loads.length ? tx('All loads received') : '—'}</b></div>` +
-    `<div class="row">${tx('Off-site')}<b>${txn(sum.live, '{n} pallet', '{n} pallets')}${sum.nextCallback ? ' · ' + tx('callback {date}', { date: esc(fmtDay(sum.nextCallback)) }) : ''}</b></div>` +
-    (clr ? `<div class="row go" data-go="offsite">${tx('Clearance')}<b class="${clr.items ? 'c-red' : ''}">${clr.items ? tx('▼ {items} · {pallets} worth calling back', { items: txn(clr.items, '{n} item', '{n} items'), pallets: txn(clr.pallets, '{n} pallet', '{n} pallets') }) : tx('nothing held is marked down')}</b></div>` : '') + `</div></div>`;
-  const live = sum.byCallback.slice(0, 4);
-  const off = `<div class="card kpi logi"><div class="kh">${ic('m-inventory')}<h3>${tx('Off-site pallets')}</h3><a class="open" data-go="offsite">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${sum.live}</span><span class="d">${tx('{n} fixtures', { n: sum.fixtures })}${sum.overdue.length ? ` · <b class="c-red">${tx('{n} overdue', { n: sum.overdue.length })}</b>` : ''}</span></div><div class="rows">` +
-    (live.length ? live.map(r => `<div class="row go" data-go="offsite" data-pid="${esc(r.pid)}"><span class="l"><b class="mono">${esc(r.pid)}</b> ${esc((r.title || r.desc || '').slice(0, 28))}${isFixture(r) ? ` <span class="inv-pill fx">${tx('Fixtures')}</span>` : ''}</span><b class="${r.cb && r.cb < t ? 'c-red' : ''}">${r.cb ? tx('cb {date}', { date: esc(fmtDay(r.cb)) }) : '—'}</b></div>`).join('') + (sum.live > 4 ? `<div class="row cs-dim">${tx('+{n} more off-site', { n: sum.live - 4 })}</div>` : '') : `<div class="row">${tx('No pallets off-site')}<b>✓</b></div>`) + `</div></div>`;
-  const top = latest ? consolidate(latest.pallets).slice(0, 4) : [];
-  const lt = `<div class="card kpi logi"><div class="kh">${ic('truck')}<h3>${tx('Latest load')}</h3><a class="open" data-go="manifests"${latest ? ` data-load="${esc(latest.id)}"` : ''}>${tx('Open')} ${ic('arrow')}</a></div>` + (latest ? `<div class="hl"><b style="color:var(--ink)">${esc(latest.label)}</b> · ${esc(LOAD_ST[latest.status] || latest.status)}${latest.recvDate ? ' ' + esc(fmtDay(latest.recvDate)) : ''}</div><div class="rows"><div class="row">${tx('Pallets · units')}<b>${latest.pallets.length} · ${units(latest).toLocaleString('en-AU')}</b></div>${top.map(([d, u]) => `<div class="row"><span class="l"><b class="mono">${esc(d)}</b> ${esc(codeName(d))}</span><b>${u.toLocaleString('en-AU')}</b></div>`).join('')}</div>` : `<div class="hl">${tx('No loads yet. Add one in Manifests.')}</div>`) + `</div>`;
-  return `<div class="logis">${inv}${off}${lt}</div>`;
-}
-const fmtDay = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) : '';
 const CODE_NAME = new Map(); for (const list of Object.values(MICRO)) for (const e of list) if (!CODE_NAME.has(microCode(e))) CODE_NAME.set(microCode(e), microName(e));
 const codeName = c => CODE_NAME.get(c) || '';
 
@@ -241,8 +222,7 @@ const dashHead = ctx => vh(`<span class="greet">${greeting()}</span><span id="da
 function dashTop(ctx) {
     const r = range(), reg = register(ctx, r);
     return `<div class="dash"><div class="kpis">${backfillCard(ctx, r)}${refreshCard(ctx, r)}${labelsCard(ctx, r)}</div><div class="side2">${dockCard(ctx, r)}${maintCard(ctx, r)}</div>` +
-      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>${tx('Operations register')}</h3></div><div class="hl">${tx('{n} tools', { n: reg.count })} · <b style="color:var(--ink);font-weight:600">${tx('{n} need attention', { n: reg.need })}</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">${tx('Modules')}</div>${reg.html}</div></div>` +
-      `<div class="dash2">${todayAt(ctx)}${logistics(ctx)}</div>`;
+      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>${tx('Operations register')}</h3></div><div class="hl">${tx('{n} tools', { n: reg.count })} · <b style="color:var(--ink);font-weight:600">${tx('{n} need attention', { n: reg.need })}</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">${tx('Modules')}</div>${reg.html}</div></div>`;
 }
 
 export default {

@@ -577,8 +577,10 @@ The owner console keeps charcoal with Signal orange. Display size and the
 collapsed rail are the only per-device appearance settings.
 
 Floor views live on real data: Store map, Pick list, Location refresh, Label
-integrity, Emergency, Maintenance, Stocktake, plus Dashboard (with the
-Today at and logistics cards), Settings, Help (the tour) and Field Mode (a
+integrity, Emergency, Maintenance, Stocktake, plus Dashboard (its Back dock
+card always shows the dock's state: the truck on it and its phase, or none,
+with today's trucks, the next one, cartons and the last cleared), Settings,
+Help (the tour) and Field Mode (a
 manager checks each shelf against its label, names shelves the map has none
 for, and sends the differences to the owner as suggested map edits with
 `src: 'field'`; the export still writes a `field-capture/1` file).
