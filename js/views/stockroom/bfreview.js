@@ -281,11 +281,11 @@ function middle(ctx, m) {
     const bay = st.sel.slice(4), sys = m.sys?.[bay] || null;
     return `<div class="smid-h hc"><span class="hc-id">${locMenu(bay, false, false)}${deptPick(ctx, bay)}<span class="status req">${ic('clock')}${tx('Requested')}</span></span>${hstats([[sys ? sys.length : '—', tx('expected')], [0, tx('scanned')]])}<span class="sp"></span><span class="hc-acts"><button class="btn" data-act="cancel-req" data-bay="${esc(bay)}">${ic('x')}${tx('Cancel request')}</button></span></div>` +
       `<div class="reqgrid"><div class="reqcard">${ic('phone')}<b>${tx('Waiting for the floor')}</b><p>${sys ? tx('Send someone to <b>{bay}</b> with a phone: the first scan turns this into a review and compares it against the pasted report on the spot.', { bay: esc(bay) }) : tx('Send someone to <b>{bay}</b> with a phone: the first scan turns this into a review.', { bay: esc(bay) })}</p><a class="btn" data-go="daylist">${ic('listcheck')}${tx('Day list')}</a></div>` +
-      `<div class="reqlist"><div class="scol-t">${sys ? tx('In the report') : tx('No report covers this bay')}<span class="ct">${sys ? sys.length : 0}</span></div>${(sys || []).map(c => `<div class="reqrow"><span class="kc">${esc(c)}</span><span class="nm">${nameHtml(c)}</span></div>`).join('')}</div></div>`;
+      `<div class="reqlist"><div class="scol-t">${sys ? tx('In the report') : tx('No report covers this bay')}<span class="ct">${sys ? sys.length : 0}</span></div>${(sys || []).map(c => `<div class="reqrow"><span class="kc">${esc(c)}</span><span class="nm">${nameHtml(c, undefined, { swap: true })}</span></div>`).join('')}</div></div>`;
   }
   const s = m.subs.find(x => key(x) === st.sel); if (!s) return '';
   const sys = m.sys ? m.sys[s.bay] || null : null, rows = reviewRows(s, sys), c = compareCounts(s, sys);
-  const ro = s.status === 'submitted';
+  const ro = s.status === 'submitted', sw = { swap: !ro };
   const stat = STATUS[s.status];
   const adds = rows.filter(r => r.status === 'add' || r.status === 'scanned'), dels = rows.filter(r => r.status === 'delete'), matches = rows.filter(r => r.status === 'match');
   const stats = hstats([[c.expected, tx('expected')], [c.scannedCount, tx('scanned')], [c.match, tx('match'), 'c-green'], [c.pct == null ? '—' : c.pct + '%', tx('accuracy'), '', `color:${pcol(c.pct)}`], [c.incorrect, tx('incorrect'), c.incorrect ? 'c-red' : '']], reportClock(s, sys));
@@ -299,10 +299,10 @@ function middle(ctx, m) {
     mitem('print-sheet', 'print', tx('Worksheet'), tx('Print the To add / To remove worksheet')) + mitem('copy-all', 'file', tx('Copy all'), tx('Copy every code to add or remove, one a line')), { right: true });
   const view = (v, label, title = '') => `<button class="${st.view === v ? 'on' : ''}" data-act="view" data-v="${v}"${title ? ` title="${title}"` : ''}>${label}</button>`;
   const ctl = `<div class="smid-ctl"><span class="pills">${view('list', tx('List'))}${view('detail', tx('Detail'))}${view('codes', tx('Barcodes'), tx('Each code to add or remove as a barcode, to scan into the PDT'))}${view('focus', tx('Focus'), tx('One code at a time, keyboard first (F)'))}</span>${filt}${ro ? `<span class="cpill lock">${ic('lock')}${tx('read only')}</span>` : ''}${!sys ? `<span class="cpill lock">${ic('alert')}${tx('no report for this bay')}</span>` : ''}<span class="sp"></span>${exp}</div>`;
-  const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</span><span class="nm">${nameHtml(r.code)}${sohTag(r.code)}${depthChip(r.code)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span>${ro ? '' : `<span class="acts"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? tx('Clear incorrect') : tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove this code')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
+  const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</span><span class="nm">${nameHtml(r.code, undefined, sw)}${sohTag(r.code)}${depthChip(r.code)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span>${ro ? '' : `<span class="acts"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? tx('Clear incorrect') : tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove this code')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
   // K2B's scan columns: every code to add or remove as a barcode the reviewer
   // scans straight into the PDT, with its name to check against.
-  const bcRow = r => `<div class="bcrow${r.incorrect ? ' inc' : ''}">${barcodeSvg(r.code, { module: 1.6, height: 44 })}<span class="nm">${nameHtml(r.code)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span></div>`;
+  const bcRow = r => `<div class="bcrow${r.incorrect ? ' inc' : ''}">${barcodeSvg(r.code, { module: 1.6, height: 44 })}<span class="nm">${nameHtml(r.code, undefined, sw)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span></div>`;
   // The filter picks the columns: All shows Add and Delete side by side
   // (matches need nothing and are counted below), one kind shows its own.
   const COL = {
@@ -313,8 +313,8 @@ function middle(ctx, m) {
   const shown = st.filt === 'all' ? ['add', 'delete'] : [st.filt];
   const cols = (row, why, cls = '') => `<div class="scols${cls}${shown.length === 1 ? ' one' : ''}">${shown.map(k => { const [t, tc, list, none, sub] = COL[k]; return `<div class="scol"><div class="scol-t ${tc}">${t}<span class="ct">${list.length}</span></div>${list.map(row).join('') || `<div class="scol-empty">${why ? ic('check') : ''}<b>${none}</b>${why ? `<small>${sub}</small>` : ''}</div>`}</div>`; }).join('')}</div>`;
   const drows = rows.filter(want);
-  const body = st.view === 'focus' ? focusView(s, rows, COL[st.filt]?.[3]) : st.view === 'codes' ? cols(bcRow, false, ' bcols') : st.view === 'detail'
-    ? `<div class="dlist"><div class="drow dhead"><span>${tx('Keycode')}</span><span></span><span>${tx('Verdict')}</span><span>${tx('Product')}</span><span>${tx('Backfilled')}</span><span>${tx('Inventory')}</span><span></span></div>${drows.map(r => `<div class="drow${r.incorrect ? ' bad' : ''}"><span class="kc">${esc(r.code)}</span><span class="dc-icos">${r.status !== 'delete' ? `<span class="dc-ico" title="${tx('Scanned')}">${ic('barcode')}</span>` : ''}</span><span class="cpill ${r.status === 'delete' ? 'del' : r.status === 'match' ? 'match' : 'add'}">${r.status === 'delete' ? tx('Remove') : r.status === 'match' ? tx('Match') : tx('Add to {bay}', { bay: esc(s.bay) })}</span><span class="dc-name">${nameHtml(r.code)}</span><span class="tick2${r.status !== 'delete' ? ' yes' : ''}">${ic(r.status !== 'delete' ? 'check' : 'x')}</span><span class="tick2${r.status !== 'add' && r.status !== 'scanned' ? ' yes' : ''}">${ic(r.status !== 'add' && r.status !== 'scanned' ? 'check' : 'x')}</span>${ro ? '<span></span>' : `<span class="dc-edit"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`).join('') || `<div class="scol-empty"><b>${COL[st.filt]?.[3] || tx('Nothing in this column')}</b></div>`}</div>`
+  const body = st.view === 'focus' ? focusView(s, rows, COL[st.filt]?.[3], sw) : st.view === 'codes' ? cols(bcRow, false, ' bcols') : st.view === 'detail'
+    ? `<div class="dlist"><div class="drow dhead"><span>${tx('Keycode')}</span><span></span><span>${tx('Verdict')}</span><span>${tx('Product')}</span><span>${tx('Backfilled')}</span><span>${tx('Inventory')}</span><span></span></div>${drows.map(r => `<div class="drow${r.incorrect ? ' bad' : ''}"><span class="kc">${esc(r.code)}</span><span class="dc-icos">${r.status !== 'delete' ? `<span class="dc-ico" title="${tx('Scanned')}">${ic('barcode')}</span>` : ''}</span><span class="cpill ${r.status === 'delete' ? 'del' : r.status === 'match' ? 'match' : 'add'}">${r.status === 'delete' ? tx('Remove') : r.status === 'match' ? tx('Match') : tx('Add to {bay}', { bay: esc(s.bay) })}</span><span class="dc-name">${nameHtml(r.code, undefined, sw)}</span><span class="tick2${r.status !== 'delete' ? ' yes' : ''}">${ic(r.status !== 'delete' ? 'check' : 'x')}</span><span class="tick2${r.status !== 'add' && r.status !== 'scanned' ? ' yes' : ''}">${ic(r.status !== 'add' && r.status !== 'scanned' ? 'check' : 'x')}</span>${ro ? '<span></span>' : `<span class="dc-edit"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`).join('') || `<div class="scol-empty"><b>${COL[st.filt]?.[3] || tx('Nothing in this column')}</b></div>`}</div>`
     : cols(crow, true);
   const hist = m.history.filter(h => h.bay === s.bay && h.metrics).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
   const tail = `<div class="matches">${sys ? tx('<b>{n} codes match</b> the pasted report and need nothing', { n: matches.length }) : tx('<b>{n} codes match</b> · no report pasted for this bay yet', { n: matches.length })}${s.readyAt ? ` · ${tx('marked ready {time}', { time: fmtTime(s.readyAt) })}` : ''}</div>` +
@@ -385,10 +385,28 @@ function reportClock(s, sys) {
     `<div class="hclk-note">${lines.map(l => `<span>${l}</span>`).join('')}${d ? `<b class="gap-delta" title="${esc([...d.added.map(c => '+' + c), ...d.removed.map(c => '−' + c)].join(' '))}">${delta}</b>` : ''}</div>${g.warn ? `<button class="btn sm" data-act="paste">${ic('clip')}${tx('Re-paste report')}</button>` : ''}`,
     { right: true, role: 'dialog', label: tx('The report and the scans') });
 }
+// A "Did you mean" suggestion used in place of a code the catalogue does
+// not know: a scanned code is swapped in the location's scans (as the
+// phone's pop-up does), a code only in the report in its report list.
+async function useNear(ctx, m, code, other) {
+  const s = m.subs.find(x => key(x) === st.sel), bay = s ? s.bay : st.sel?.startsWith('req:') ? st.sel.slice(4) : null;
+  if (!bay || !other || s?.status === 'submitted') return;
+  if (s?.codes[code]?.scanned) {
+    if (!confirm(tx('Use {other} instead of {code} in the scans for {bay}?', { other, code, bay }))) return;
+    const where = { bay: s.bay, date: s.date };
+    if (!s.codes[other]?.scanned && !await send(ctx, 'submission.update', where, { codes: { [other]: true } })) return;
+    if (!await send(ctx, 'submission.update', where, { remove: [code] })) return;
+  } else if ((st.report?.byLoc?.[bay] || []).includes(code)) {
+    if (!confirm(tx('Use {other} instead of {code} in the report list for {bay}?', { other, code, bay }))) return;
+    await saveReport(ctx, { ...st.report, byLoc: { ...st.report.byLoc, [bay]: [...new Set(st.report.byLoc[bay].map(c => c === code ? other : c))] }, unsent: undefined });
+  } else return;
+  ensureNames(ctx, [other], () => ctx.rerender());
+  toast(tx('{code} swapped for {other}', { code, other })); ctx.rerender();
+}
 // Focus (Vector's desk fast path): one code at a time with a big barcode for
 // the PDT. Space or Enter: checked and next. Backspace: incorrect and next.
 // ← →: move (wraps). The header's filter narrows it.
-function focusView(s, rows, none) {
+function focusView(s, rows, none, sw) {
   const list = rows.filter(want), n = list.length, done = st.processed.get(key(s)) || new Set();
   if (!n) return `<div class="focus-card empty"><b>${none || tx('Nothing in this column')}</b></div>`;
   st.focusIdx = ((st.focusIdx % n) + n) % n;
@@ -398,7 +416,7 @@ function focusView(s, rows, none) {
     // The barcode on its own line for the PDT; under it the product's picture
     // (K2B's focus had it, when the catalogue has one) beside its keycode and name.
     (/^\d{6,13}$/.test(r.code) ? `<div class="fbar">${barcodeSvg(r.code, { module: 2.6, height: 74 })}</div>` : '') +
-    `<div class="finfo${imgOf(r.code) ? '' : ' nopic'}">${imgOf(r.code) ? `<span class="fpic">${productImg(imgOf(r.code), nameOf(r.code) || '')}</span>` : ''}<div class="ftext"><div class="fcode mono" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</div><div class="fname">${nameHtml(r.code)}${depthChip(r.code)}</div></div></div>${verdict}` +
+    `<div class="finfo${imgOf(r.code) ? '' : ' nopic'}">${imgOf(r.code) ? `<span class="fpic">${productImg(imgOf(r.code), nameOf(r.code) || '')}</span>` : ''}<div class="ftext"><div class="fcode mono" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</div><div class="fname">${nameHtml(r.code, undefined, sw)}${depthChip(r.code)}</div></div></div>${verdict}` +
     `<div class="fhint"><kbd>${tx('Space')}</kbd> ${tx('checked + next')} · <kbd>⌫</kbd> ${tx('incorrect + next')} · <kbd>←</kbd><kbd>→</kbd> ${tx('move')}</div></div>`;
 }
 
@@ -443,6 +461,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'help') { st.help = !st.help; ctx.rerender(); }
   else if (act === 'filt') { st.filt = a.dataset.v; st.focusIdx = 0; ctx.rerender(); }
   else if (act === 'copy') copyText(a.dataset.code, a.dataset.code);
+  else if (act === 'use-near') await useNear(ctx, m, a.dataset.code, a.dataset.near);
   else if (act === 'copy-all') { const s = cur(); if (!s) return; const rows = reviewRows(s, m.sys?.[s.bay] || null).filter(r => r.status !== 'match'); copyText(rows.map(r => r.code).join('\n'), tx('{n} keycodes', { n: rows.length })); }
   else if (act === 'mappin') { const shelf = shelfForLocation(a.dataset.bay); if (shelf) ctx.go('map', { select: shelf }); else toast(tx('{bay} is not on the published map', { bay: a.dataset.bay }), 'bad'); }
   else if (act === 'unfinalise') { const s = cur(); if (s) { await send(ctx, 'submission.ready', { bay: s.bay, date: s.date }); toast(tx('{bay} moved back to Ready', { bay: s.bay })); } }

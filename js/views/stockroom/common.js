@@ -42,19 +42,23 @@ export function nameOf(kc) { const n = names.get(String(kc)); return n ? n.name 
 // The catalogue's price for a code (kmart.com.au), or null.
 export function priceOf(kc) { return names.get(String(kc))?.price ?? null; }
 // "Did you mean": the one-digit near misses of a code the catalogue does
-// not know (a tap copies one); empty while unknown or none.
-export function nearHtml(kc) {
+// not know, on their own line under it; empty while unknown or none. A tap
+// copies one, or, where the view can use it (swap: the backfill review),
+// replaces the code with it.
+export function nearHtml(kc, swap = false) {
   const dm = near.get(String(kc)); if (!dm?.length) return '';
-  const [a, b] = dm.slice(0, 2).map(x => `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? tx('{name}: tap to copy', { name: x.name }) : tx('Tap to copy'))}">${esc(x.keycode)}</b>`);
-  return ` <span class="nm-near">${b ? tx('Did you mean {a} or {b}?', { a, b }) : tx('Did you mean {a}?', { a })}</span>`;
+  const [a, b] = dm.slice(0, 2).map(x => swap
+    ? `<button class="nm-use mono" data-act="use-near" data-code="${esc(kc)}" data-near="${esc(x.keycode)}" title="${esc(x.name ? tx('{name}: use it instead of {code}', { name: x.name, code: kc }) : tx('Use it instead of {code}', { code: kc }))}">${esc(x.keycode)}</button>`
+    : `<b class="mono" data-act="near" data-code="${esc(x.keycode)}" title="${esc(x.name ? tx('{name}: tap to copy', { name: x.name }) : tx('Tap to copy'))}">${esc(x.keycode)}</b>`);
+  return `<span class="nm-near">${b ? tx('Did you mean {a} or {b}?', { a, b }) : tx('Did you mean {a}?', { a })}</span>`;
 }
-export function nameHtml(kc, missing = tx('Unverified · not in the catalogue')) {
+export function nameHtml(kc, missing = tx('Unverified · not in the catalogue'), { swap = false } = {}) {
   kc = String(kc);
   if (isItemBarcode(kc)) return `<span class="nm-apn" title="${tx('That is an item barcode (APN), not a keycode')}">${tx('Item barcode · not a keycode')}</span>`;
   const n = names.get(kc);
   if (n === undefined) return '<span class="cs-dim">…</span>';
   const rc = recallTagFor(kc);   // a recalled or withdrawn product says so first, wherever it is listed
-  if (n === null) return `${rc}<span class="warn nm-unv" title="${tx('Not found in the catalogue: double-check this code')}">⚠ ${esc(missing)}</span>${nearHtml(kc)}`;
+  if (n === null) return `${rc}<span class="warn nm-unv" title="${tx('Not found in the catalogue: double-check this code')}">⚠ ${esc(missing)}</span>${nearHtml(kc, swap)}`;
   return rc + (n.url ? `<a class="nm-ok" ${goAttrs(kc)} title="${tx('Open the product page on kmart.com.au')}">${esc(n.name)} ↗</a>` : `<span class="nm-ok">${esc(n.name)}</span>`);
 }
 // Keycodes and product names (K2B's review, Decant Visualiser's klink): a

@@ -643,4 +643,8 @@ export default {
   "Scan {bay} into the PDT": "{bay} in den PDT scannen",
   "Scanned {gap} after the report": "{gap} nach dem Bericht gescannt",
   "The report and the scans": "Der Bericht und die Scans",
+  "Use it instead of {code}": "Statt {code} verwenden",
+  "Use {other} instead of {code} in the report list for {bay}?": "{other} statt {code} in der Berichtsliste für {bay} verwenden?",
+  "Use {other} instead of {code} in the scans for {bay}?": "{other} statt {code} in den Scans für {bay} verwenden?",
+  "{name}: use it instead of {code}": "{name}: statt {code} verwenden",
 };

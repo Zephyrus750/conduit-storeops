@@ -643,4 +643,8 @@ export default {
   "Scan {bay} into the PDT": "I-scan ang {bay} sa PDT",
   "Scanned {gap} after the report": "Na-scan {gap} pagkatapos ng report",
   "The report and the scans": "Ang report at ang mga scan",
+  "Use it instead of {code}": "Gamitin ito sa halip na {code}",
+  "Use {other} instead of {code} in the report list for {bay}?": "Gamitin ang {other} sa halip na {code} sa listahan ng report para sa {bay}?",
+  "Use {other} instead of {code} in the scans for {bay}?": "Gamitin ang {other} sa halip na {code} sa mga scan para sa {bay}?",
+  "{name}: use it instead of {code}": "{name}: gamitin ito sa halip na {code}",
 };

@@ -643,4 +643,8 @@ export default {
   "Scan {bay} into the PDT": "Quét {bay} vào PDT",
   "Scanned {gap} after the report": "Quét {gap} sau báo cáo",
   "The report and the scans": "Báo cáo và các lần quét",
+  "Use it instead of {code}": "Dùng mã này thay cho {code}",
+  "Use {other} instead of {code} in the report list for {bay}?": "Dùng {other} thay cho {code} trong danh sách báo cáo của {bay}?",
+  "Use {other} instead of {code} in the scans for {bay}?": "Dùng {other} thay cho {code} trong các lần quét của {bay}?",
+  "{name}: use it instead of {code}": "{name}: dùng mã này thay cho {code}",
 };
