@@ -80,7 +80,7 @@ test('device cache: an answer with no picture and no price is asked again after 
   assert.equal(a.img, 'https://img.test/41000001.jpg'); assert.equal(b.name, 'Full'); assert.equal(c.name, 'Thin, fresh');
 });
 
-test('device: null only when the worker says so; a code it left out is unknown and asked again', async () => {
+test('device: null only when the worker says so; a code it left out is unknown, asked again after the back-off', async () => {
   const { createCatalogue } = await import('../../client/catalogue.js');
   const { memoryStorage } = await import('../../client/storage.js');
   let n = 0;
@@ -88,9 +88,14 @@ test('device: null only when the worker says so; a code it left out is unknown a
   const transport = { request: async () => { n += 1; return { items: { 43000001: null, ...(n > 1 ? { 43000002: { kc: '43000002', name: 'Back', url: 'u' } } : {}) } }; } };
   const cat = createCatalogue({ transport, storage: memoryStorage() });
   assert.deepEqual(await cat.lookupMany(['43000001', '43000002']), [null, undefined]);
-  const [miss, back] = await cat.lookupMany(['43000001', '43000002']);
-  assert.equal(miss, null); assert.equal(back.name, 'Back');
-  assert.equal(n, 2, 'the miss is remembered; the unknown code is asked again');
+  assert.deepEqual(await cat.lookupMany(['43000001', '43000002']), [null, undefined]);
+  assert.equal(n, 1, 'neither is asked again at once (a view repainting would ask without end)');
+  const real = Date.now; Date.now = () => real() + 130_000;
+  try { const [miss, back] = await cat.lookupMany(['43000001', '43000002']); assert.equal(miss, null); assert.equal(back.name, 'Back'); }
+  finally { Date.now = real; }
+  assert.equal(n, 2, 'the miss is remembered; the unknown code is asked again after the back-off');
+  // Not a keycode (the worker takes 6 to 9 digits): not in the catalogue, never asked.
+  assert.deepEqual(await cat.lookupMany(['4300000123', '930012345678']), [null, null]); assert.equal(n, 2);
 });
 
 // The worker's lookup with a stand-in edge cache and upstreams.

@@ -37,6 +37,9 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
   }
   function lookup(keycode) {
     const kc = String(keycode);
+    // Only keycodes (6 to 9 digits) are the catalogue's; anything else is
+    // not in it, and asking would only be left out of the answer.
+    if (!/^\d{6,9}$/.test(kc)) return Promise.resolve(null);
     return new Promise(async (resolve) => {
       const hit = await cached(kc);
       if (hit !== undefined) return resolve(hit);
@@ -61,6 +64,7 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
         const item = items && kc in items ? items[kc] ?? null : undefined;
         if (item) { mem.set(kc, { item, at: Date.now() }); failed.delete(kc); await storage.set(`kc:${kc}`, { at: Date.now(), item }); }
         else if (item === null) mem.set(kc, { item: null, at: Date.now() });
+        else if (items) failed.set(kc, Date.now());   // left out: not asked again until the back-off has passed
         for (const r of q.get(kc)) r(item);
       }
     }

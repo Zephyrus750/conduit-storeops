@@ -85,7 +85,7 @@ const isMobile = () => frame.clientWidth <= 600;
 // ── boot ──────────────────────────────────────────────────────────────
 applyPrefs(frame);
 // Footer: the date and the retail week, kept current across midnight.
-const paintFootDate = () => { $('#footDate').textContent = `${fmtLong()} · ${retailPeriod(new Date())}`; };
+const paintFootDate = () => { $('#footDate').innerHTML = `${esc(fmtLong())} · <b>${esc(retailPeriod(new Date()))}</b>`; };
 paintFootDate(); setInterval(paintFootDate, 60_000);
 $('#footVer').textContent = 'Conduit ' + VERSION;
 // The token's areas changed (the owner switched one, and the device renewed):
