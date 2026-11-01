@@ -14,7 +14,7 @@
 
 import { haptic } from '../../device.js';
 import { recallFor, recallFlag } from '../../recallflag.js';
-import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, mrows, productImg, mbig, mghost, mfoot, camButton } from '../../ui.js';
+import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, mrows, productImg, mbig, mghost, mfoot, camButton, depInk } from '../../ui.js';
 import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
@@ -31,7 +31,7 @@ import { tx, txn } from '../../i18n.js';
 // Desk state. report: the pasted SIM report { at, byLoc, range, delta, bayAt }
 // (delta: what changed per bay since the previous paste; bayAt: when one
 // bay's list was pasted on its own). focus: the one-code-at-a-time view.
-const st = { sel: null, sort: 'pct', view: 'list', bayPaste: false, reqPaste: false, help: false, report: null, reportFor: null, focusIdx: 0, focusCol: 'all', processed: new Map(), mStep: 1, mBay: '', mLast: null, claimed: null, held: {} };
+const st = { sel: null, sort: 'pct', view: 'list', bayPaste: false, reqPaste: false, help: false, report: null, reportFor: null, focusIdx: 0, filt: 'all', processed: new Map(), mStep: 1, mBay: '', mLast: null, claimed: null, held: {} };
 const SORTS = { pct: tx('Match, best first'), loc: tx('By location'), when: tx('Most recent') };
 const reportKey = ctx => `simreport:${ctx.storeNo}:${todayKey()}`;
 
@@ -49,12 +49,12 @@ const pcol = p => p == null ? 'var(--dim)' : p >= 90 ? '#16A34A' : p >= 70 ? '#C
 const key = s => `${s.bay}:${s.date}`;
 
 export default {
-  id: 'bfreview', title: tx('Backfill review'), icon: 'm-bfreview', area: 'stockroom',
+  id: 'bfreview', title: tx('Backfill review'), icon: 'm-backfill', area: 'stockroom',
   desktop(ctx) {
     mineUse(ctx.storeNo);
     const m = model(ctx);
     if (!st.sel || (!m.subs.some(s => key(s) === st.sel) && !m.requested.some(b => 'req:' + b === st.sel))) st.sel = m.pending[0] ? key(m.pending[0]) : m.ready[0] ? key(m.ready[0]) : null;
-    const head = vh(tx('Backfill review'), sub(tx('Today’s board'), tx('{pending} to review · {requested} requested · {ready} ready · {submitted} submitted', { pending: m.pending.length, requested: m.requested.length, ready: m.ready.length, submitted: m.submitted.length })), `${freshChip()}${st.report?.range ? `<span class="rs-range" title="${tx('The bays the pasted report covers')}">${tx('covers <b>{from}–{to}</b>', { from: esc(st.report.range.from), to: esc(st.report.range.to) })}</span>` : ''}<button class="btn" data-act="paste">${ic('clip')}${tx('Paste whole report')}</button><button class="btn" data-act="req-paste" title="${tx("Paste or clear today's requested list")}">${ic('listcheck')}${tx('Requested list')}</button><button class="btn" data-go="srdepts" title="${tx('Which bays belong to which department, for the whole store')}">${ic('tag')}${tx('Departments')}</button><button class="ibtn" data-act="help" title="${tx('Keyboard shortcuts (?)')}" aria-label="${tx('Keyboard shortcuts')}">?</button>`, 'm-bfreview');
+    const head = vh(tx('Backfill review'), sub(tx('Today’s board'), tx('{pending} to review · {requested} requested · {ready} ready · {submitted} submitted', { pending: m.pending.length, requested: m.requested.length, ready: m.ready.length, submitted: m.submitted.length })), `${freshChip()}${st.report?.range ? `<span class="rs-range" title="${tx('The bays the pasted report covers')}">${tx('covers <b>{from}–{to}</b>', { from: esc(st.report.range.from), to: esc(st.report.range.to) })}</span>` : ''}<button class="btn" data-act="paste">${ic('clip')}${tx('Paste whole report')}</button><button class="btn" data-act="req-paste" title="${tx("Paste or clear today's requested list")}">${ic('listcheck')}${tx('Requested list')}</button><button class="btn" data-go="srdepts" title="${tx('Which bays belong to which department, for the whole store')}">${ic('tag')}${tx('Departments')}</button><button class="ibtn" data-act="help" title="${tx('Keyboard shortcuts (?)')}" aria-label="${tx('Keyboard shortcuts')}">?</button>`, 'm-backfill');
     const reqd = new Set(ctx.store.get('backfill').requested[m.date] || []), band = st.report ? freshBand((Date.now() - st.report.at) / 60000) : 'r';
     // REQ: on today's requested list. PRE: in the pasted report but not
     // requested (banked ahead). The diff mark: the report covers the bay and
@@ -94,6 +94,9 @@ export default {
     });
     const onKey = e => deskKey(e, ctx);
     if (!ctx.isMobile) document.addEventListener('keydown', onKey);
+    // A click anywhere outside the header's menus closes them.
+    const offMenus = e => { if (!e.target.closest?.('.hm-wrap')) closeMenus(root); };
+    document.addEventListener('click', offMenus);
     root.addEventListener('change', async e => {
       if (e.target.matches('[data-act="sort"]')) { st.sort = e.target.value; ctx.rerender(); }
       // A bay's department, changed here (the Stockroom code is enough): a pin that beats its range.
@@ -130,7 +133,7 @@ export default {
         },
       };
     });
-    return [offActions, closeProduct, ctx.store.on('settings', () => ctx.rerender()), ctx.store.on('backfill', () => { ensureNames(ctx, allCodes(ctx), repaint); repaint(); loadReport(ctx).then(c => { if (c) { ensureNames(ctx, allCodes(ctx), repaint); repaint(); } }); }), () => document.removeEventListener('keydown', onKey),
+    return [offActions, closeProduct, ctx.store.on('settings', () => ctx.rerender()), ctx.store.on('backfill', () => { ensureNames(ctx, allCodes(ctx), repaint); repaint(); loadReport(ctx).then(c => { if (c) { ensureNames(ctx, allCodes(ctx), repaint); repaint(); } }); }), () => document.removeEventListener('keydown', onKey), () => document.removeEventListener('click', offMenus),
       () => { clearInterval(renew); document.removeEventListener('visibilitychange', onHide); clearTimeout(releaseSoon); releaseSoon = setTimeout(() => releaseClaim(ctx), 1500); }];
   },
 };
@@ -139,13 +142,16 @@ export default {
 // in a field. In Focus with a bay open, the keys work its codes; otherwise
 // they move between bays.
 async function deskKey(e, ctx) {
+  const mn = document.querySelector('#content .hmenu:not([hidden])');
+  if (mn) return menuKey(e, mn);
   if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]') || document.getElementById('pbox')) return;
+  if (e.key === 'Enter' && e.target.closest?.('[data-act="menu"]')) return;   // Enter on a menu's button opens it, never marks ready
   const m = model(ctx), s = m.subs.find(x => key(x) === st.sel), k = e.key;
   if (k === 'Escape' && (st.help || st.bayPaste || st.reqPaste)) { st.help = st.bayPaste = st.reqPaste = false; e.preventDefault(); return ctx.rerender(); }
   if (k === '?') { e.preventDefault(); st.help = !st.help; return ctx.rerender(); }
   if (st.bayPaste || st.reqPaste) return;
   if (st.view === 'focus' && s) {
-    const list = focusList(reviewRows(s, m.sys?.[s.bay] || null)), n = list.length; if (!n) return;
+    const list = reviewRows(s, m.sys?.[s.bay] || null).filter(want), n = list.length; if (!n) return;
     const r = list[((st.focusIdx % n) + n) % n], done = st.processed.get(key(s)) || new Set();
     if (k === ' ' || k === 'Enter') { e.preventDefault(); done.add(r.code); st.processed.set(key(s), done); if (st.focusIdx < n - 1) st.focusIdx += 1; return ctx.rerender(); }
     if (k === 'Backspace' || k === 'Delete') {
@@ -190,12 +196,15 @@ async function syncReport(ctx) {
 // A bay's department: its own pin if it has one, else the bay range it
 // falls in. The picker changes it here (bay.dept.set); "use the bay range"
 // takes the pin out. Ranges as a whole are set in Settings › Store.
+// A location's department as its chip: the badge, with the native select
+// laid over it so the keyboard and screen readers keep a real picker.
 function deptPick(ctx, bay) {
   const m = /\d{3,6}/.exec(String(bay)); if (!m) return '';
   const ranges = settingsOf(ctx.store.get()).deptRanges || [], n = Number(m[0]);
   const pin = ranges.find(r => r.from === n && r.to === n), fromRange = deptForBay(ranges.filter(r => r !== pin), bay), cur = pin?.dept || fromRange || '';
   const none = pin ? (fromRange ? tx('Use the bay range ({dept})', { dept: deptLabel(fromRange) }) : tx('Use the bay range (none)')) : fromRange ? tx('{dept} · bay range', { dept: deptLabel(fromRange) }) : tx('No department yet');
-  return `<label class="bdept" title="${tx('The department bay {bay} belongs to: Adjustments and History group by it', { bay: esc(bay) })}"><span class="dot" style="background:${cur ? deptColour(cur) : 'transparent'}"></span><select data-field="bdept" data-bay="${esc(bay)}" aria-label="${tx('Department for bay {bay}', { bay: esc(bay) })}"><option value="">${esc(none)}</option>` +
+  const face = cur ? `<span class="dep" style="background:${deptColour(cur)};color:${depInk(deptColour(cur))}">${esc(String(cur).toUpperCase())}</span>` : `<span class="nodep">${tx('Department')}</span>`;
+  return `<label class="hdept${cur ? '' : ' none'}" title="${cur ? `${esc(deptLabel(cur))} · ` : ''}${tx('The department bay {bay} belongs to: Adjustments and History group by it', { bay: esc(bay) })}">${face}${ic('chev', 'cv')}<select data-field="bdept" data-bay="${esc(bay)}" aria-label="${tx('Department for bay {bay}', { bay: esc(bay) })}"><option value="">${esc(none)}</option>` +
     SR_GROUPS.map(([g, gl]) => `<optgroup label="${gl}">${SR_DEPTS.filter(d => d.group === g).map(d => `<option value="${d.id}"${pin?.dept === d.id ? ' selected' : ''}>${esc(deptLabel(d.id))}</option>`).join('')}</optgroup>`).join('') + `</select></label>`;
 }
 // The report's SOH for a code, beside its name in the review (red at 0 or less).
@@ -262,11 +271,15 @@ function helpSheet() {
     k(['↓', 'j'], tx('next bay to review')) + k(['↑', 'k'], tx('previous bay')) + k(['Enter'], tx('mark ready and open the next bay')) + k(['F'], tx('Focus: one code at a time')) +
     k([tx('Space')], tx('Focus: checked, next code')) + k(['⌫'], tx('Focus: incorrect, next code')) + k(['←', '→'], tx('Focus: move between codes')) + k(['?'], tx('this sheet')) + k(['Esc'], tx('close a sheet')) + '</div></div>';
 }
+// The location's header: what it is and what to do on one line (the
+// number opens its barcode for the PDT, rename, the map and delete; the
+// counts sit in one strip with the report's time on its clock), then how to
+// look at it: the views, one filter every view follows, and Export.
 function middle(ctx, m) {
-  if (!st.sel) return `<div class="bf-empty"><span class="ic">${ic('m-bfreview')}</span><b>${tx('Nothing on the board yet')}</b><small>${tx('Phones send bays here as they scan. Request a bay on the left to put it on the day list.')}</small></div>`;
+  if (!st.sel) return `<div class="bf-empty"><span class="ic">${ic('m-backfill')}</span><b>${tx('Nothing on the board yet')}</b><small>${tx('Phones send bays here as they scan. Request a bay on the left to put it on the day list.')}</small></div>`;
   if (st.sel.startsWith('req:')) {
     const bay = st.sel.slice(4), sys = m.sys?.[bay] || null;
-    return `<div class="smid-h"><span class="bigloc">${esc(bay)}</span>${deptPick(ctx, bay)}<span class="bc" title="${tx('Bay {bay}: scan into the PDT', { bay: esc(bay) })}">${barcodeSvg(bay, { module: 1.3, height: 30, text: false })}</span><span class="status req">${ic('clock')}${tx('Requested')}</span>${pin(bay)}<span class="hm"><span><b>${sys ? sys.length : '—'}</b>${tx('expected')}</span><span><b>0</b>${tx('scanned')}</span></span><span class="sp"></span><button class="btn" data-act="cancel-req" data-bay="${esc(bay)}">${ic('x')}${tx('Cancel request')}</button></div>` +
+    return `<div class="smid-h hc"><span class="hc-id">${locMenu(bay, false, false)}${deptPick(ctx, bay)}<span class="status req">${ic('clock')}${tx('Requested')}</span></span>${hstats([[sys ? sys.length : '—', tx('expected')], [0, tx('scanned')]])}<span class="sp"></span><span class="hc-acts"><button class="btn" data-act="cancel-req" data-bay="${esc(bay)}">${ic('x')}${tx('Cancel request')}</button></span></div>` +
       `<div class="reqgrid"><div class="reqcard">${ic('phone')}<b>${tx('Waiting for the floor')}</b><p>${sys ? tx('Send someone to <b>{bay}</b> with a phone: the first scan turns this into a review and compares it against the pasted report on the spot.', { bay: esc(bay) }) : tx('Send someone to <b>{bay}</b> with a phone: the first scan turns this into a review.', { bay: esc(bay) })}</p><a class="btn" data-go="daylist">${ic('listcheck')}${tx('Day list')}</a></div>` +
       `<div class="reqlist"><div class="scol-t">${sys ? tx('In the report') : tx('No report covers this bay')}<span class="ct">${sys ? sys.length : 0}</span></div>${(sys || []).map(c => `<div class="reqrow"><span class="kc">${esc(c)}</span><span class="nm">${nameHtml(c)}</span></div>`).join('')}</div></div>`;
   }
@@ -274,63 +287,118 @@ function middle(ctx, m) {
   const sys = m.sys ? m.sys[s.bay] || null : null, rows = reviewRows(s, sys), c = compareCounts(s, sys);
   const ro = s.status === 'submitted';
   const stat = STATUS[s.status];
-  const head = `<div class="smid-h"><span class="bigloc">${esc(s.bay)}</span>${ro ? '' : `<span class="ico" title="${tx('Correct this bay number')}" data-act="rename">${ic('edit')}</span>`}${deptPick(ctx, s.bay)}<span class="bc" title="${tx('Bay {bay}: scan into the PDT', { bay: esc(s.bay) })}">${barcodeSvg(s.bay, { module: 1.3, height: 30, text: false })}</span><span class="status ${stat[1]}">${ro ? ic('check') : ''}${stat[0]}</span>${ro ? `<span class="cs-dim subat">${tx('at {time}', { time: fmtTime(s.submittedDoneAt) })}${s.autoSubmitted ? ` · ${tx('auto')}` : ''}</span>` : ''}<span class="hm"><span><b>${c.expected}</b>${tx('expected')}</span><span><b>${c.scannedCount}</b>${tx('scanned')}</span><span><b class="c-green">${c.match}</b>${tx('match')}</span><span><b style="color:${pcol(c.pct)}">${c.pct == null ? '—' : c.pct + '%'}</b>${tx('accuracy')}</span><span><b class="${c.incorrect ? 'c-red' : ''}">${c.incorrect}</b>${tx('incorrect')}</span></span><span class="sp"></span>` +
-    (ro ? '' : `<button class="btn" data-act="bay-paste" title="${tx("Paste this bay's inventory list from SIM")}">${ic('clip')}${sys ? tx('Re-check') : tx('Paste list')}</button><button class="btn" data-act="bay-screen" title="${tx("Read this bay's list off the SIM screen")}">${ic('expand')}${tx('Screen scan')}</button>`) + pin(s.bay) +
-    (s.status === 'pending' ? `<button class="btn ready" data-act="ready" title="${tx('Mark ready: writes these metrics to History and frees the bay (Enter)')}">${ic('check')}${tx('Ready')}</button>` : s.status === 'corrected' ? `<button class="btn submitb" data-act="submit">${ic('checks')}${tx('Submit')}</button><button class="btn" data-act="reopen">${ic('refresh')}${tx('Reopen')}</button>` : `<button class="btn" data-act="unfinalise" title="${tx('Back to Ready: it was not finalised on the PDT after all')}">${ic('refresh')}${tx('Unfinalise')}</button><button class="btn" data-act="reopen" title="${tx('Back into review')}">${tx('Reopen')}</button>`) +
-    `<span class="ico bin" title="${tx('Delete this bay')}" data-act="delete">${ic('trash')}</span></div>`;
-  const ctl = `<div class="smid-ctl"><span class="pills"><button class="${st.view === 'list' ? 'on' : ''}" data-act="view" data-v="list">${tx('List')}</button><button class="${st.view === 'detail' ? 'on' : ''}" data-act="view" data-v="detail">${tx('Detail')}</button><button class="${st.view === 'codes' ? 'on' : ''}" data-act="view" data-v="codes" title="${tx('Each code to add or remove as a barcode, to scan into the PDT')}">${tx('Barcodes')}</button><button class="${st.view === 'focus' ? 'on' : ''}" data-act="view" data-v="focus" title="${tx('One code at a time, keyboard first (F)')}">${tx('Focus')}</button></span><button class="btn sm" data-act="print-sheet" title="${tx('Print the To add / To remove worksheet')}">${ic('print')}${tx('Worksheet')}</button><button class="btn sm" data-act="copy-all" title="${tx('Copy every code to add or remove, one a line')}">${ic('file')}${tx('Copy all')}</button><span class="cpill match">${tx('{n} match', { n: c.match })}</span><span class="cpill add">${tx('{n} add', { n: c.add + c.scanned })}</span><span class="cpill del">${tx('{n} delete', { n: c.delete })}</span>${ro ? `<span class="cpill lock">${ic('lock')}${tx('read only')}</span>` : ''}${!sys ? `<span class="cpill lock">${ic('alert')}${tx('no report for this bay')}</span>` : ''}</div>`;
-  const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</span><span class="nm">${nameHtml(r.code)}${sohTag(r.code)}${depthChip(r.code)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span>${ro ? '' : `<span class="acts"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? tx('Clear incorrect') : tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove this code')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
   const adds = rows.filter(r => r.status === 'add' || r.status === 'scanned'), dels = rows.filter(r => r.status === 'delete'), matches = rows.filter(r => r.status === 'match');
+  const stats = hstats([[c.expected, tx('expected')], [c.scannedCount, tx('scanned')], [c.match, tx('match'), 'c-green'], [c.pct == null ? '—' : c.pct + '%', tx('accuracy'), '', `color:${pcol(c.pct)}`], [c.incorrect, tx('incorrect'), c.incorrect ? 'c-red' : '']], reportClock(s, sys));
+  const recheck = ro ? '' : hmenu('recheck', mbtn('recheck', `${ic('clip')}${sys ? tx('Re-check') : tx('Paste list')}`, 'btn'),
+    mitem('bay-paste', 'clip', tx('Paste the list'), tx('Copied from SIM for {bay}', { bay: esc(s.bay) })) + mitem('bay-screen', 'expand', tx('Screen scan'), tx('Read it off the SIM screen')), { right: true });
+  const state = s.status === 'pending' ? `<button class="btn ready" data-act="ready" title="${tx('Mark ready: writes these metrics to History and frees the bay (Enter)')}">${ic('check')}${tx('Ready')}</button>` : s.status === 'corrected' ? `<button class="btn submitb" data-act="submit">${ic('checks')}${tx('Submit')}</button><button class="btn" data-act="reopen">${ic('refresh')}${tx('Reopen')}</button>` : `<button class="btn" data-act="unfinalise" title="${tx('Back to Ready: it was not finalised on the PDT after all')}">${ic('refresh')}${tx('Unfinalise')}</button><button class="btn" data-act="reopen" title="${tx('Back into review')}">${tx('Reopen')}</button>`;
+  const head = `<div class="smid-h hc"><span class="hc-id">${locMenu(s.bay, !ro, true)}${deptPick(ctx, s.bay)}<span class="status ${stat[1]}">${ro ? ic('check') : ''}${stat[0]}</span>${ro ? `<span class="cs-dim subat">${tx('at {time}', { time: fmtTime(s.submittedDoneAt) })}${s.autoSubmitted ? ` · ${tx('auto')}` : ''}</span>` : ''}</span>${stats}<span class="sp"></span><span class="hc-acts">${recheck}${state}</span></div>`;
+  const n = { all: rows.length, add: adds.length, delete: dels.length, match: matches.length };
+  const filt = `<span class="hflt" role="group" aria-label="${tx('Show')}">${[['all', tx('All')], ['add', tx('Add')], ['delete', tx('Delete')], ['match', tx('Match')]].map(([k, l]) => `<button class="${k}${st.filt === k ? ' on' : ''}" data-act="filt" data-v="${k}" aria-pressed="${st.filt === k}"${!n[k] && st.filt !== k ? ' disabled' : ''}>${l} <b>${n[k]}</b></button>`).join('')}</span>`;
+  const exp = hmenu('export', mbtn('export', `${ic('file')}${tx('Export')}`, 'btn sm'),
+    mitem('print-sheet', 'print', tx('Worksheet'), tx('Print the To add / To remove worksheet')) + mitem('copy-all', 'file', tx('Copy all'), tx('Copy every code to add or remove, one a line')), { right: true });
+  const view = (v, label, title = '') => `<button class="${st.view === v ? 'on' : ''}" data-act="view" data-v="${v}"${title ? ` title="${title}"` : ''}>${label}</button>`;
+  const ctl = `<div class="smid-ctl"><span class="pills">${view('list', tx('List'))}${view('detail', tx('Detail'))}${view('codes', tx('Barcodes'), tx('Each code to add or remove as a barcode, to scan into the PDT'))}${view('focus', tx('Focus'), tx('One code at a time, keyboard first (F)'))}</span>${filt}${ro ? `<span class="cpill lock">${ic('lock')}${tx('read only')}</span>` : ''}${!sys ? `<span class="cpill lock">${ic('alert')}${tx('no report for this bay')}</span>` : ''}<span class="sp"></span>${exp}</div>`;
+  const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</span><span class="nm">${nameHtml(r.code)}${sohTag(r.code)}${depthChip(r.code)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span>${ro ? '' : `<span class="acts"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? tx('Clear incorrect') : tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove this code')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
   // K2B's scan columns: every code to add or remove as a barcode the reviewer
   // scans straight into the PDT, with its name to check against.
   const bcRow = r => `<div class="bcrow${r.incorrect ? ' inc' : ''}">${barcodeSvg(r.code, { module: 1.6, height: 44 })}<span class="nm">${nameHtml(r.code)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span></div>`;
-  const codesView = `<div class="scols bcols"><div class="scol"><div class="scol-t add">${tx('Add to {bay}', { bay: esc(s.bay) })}<span class="ct">${adds.length}</span></div>${adds.map(bcRow).join('') || `<div class="scol-empty"><b>${tx('Nothing to add')}</b></div>`}</div><div class="scol"><div class="scol-t del">${tx('Delete from system')}<span class="ct">${dels.length}</span></div>${dels.map(bcRow).join('') || `<div class="scol-empty"><b>${tx('Nothing to delete')}</b></div>`}</div></div>`;
-  const body = st.view === 'focus' ? focusView(s, rows) : st.view === 'codes' ? codesView : st.view === 'detail'
-    ? `<div class="dlist"><div class="drow dhead"><span>${tx('Keycode')}</span><span></span><span>${tx('Verdict')}</span><span>${tx('Product')}</span><span>${tx('Backfilled')}</span><span>${tx('Inventory')}</span><span></span></div>${rows.map(r => `<div class="drow${r.incorrect ? ' bad' : ''}"><span class="kc">${esc(r.code)}</span><span class="dc-icos">${r.status !== 'delete' ? `<span class="dc-ico" title="${tx('Scanned')}">${ic('barcode')}</span>` : ''}</span><span class="cpill ${r.status === 'delete' ? 'del' : r.status === 'match' ? 'match' : 'add'}">${r.status === 'delete' ? tx('Remove') : r.status === 'match' ? tx('Match') : tx('Add to {bay}', { bay: esc(s.bay) })}</span><span class="dc-name">${nameHtml(r.code)}</span><span class="tick2${r.status !== 'delete' ? ' yes' : ''}">${ic(r.status !== 'delete' ? 'check' : 'x')}</span><span class="tick2${r.status !== 'add' && r.status !== 'scanned' ? ' yes' : ''}">${ic(r.status !== 'add' && r.status !== 'scanned' ? 'check' : 'x')}</span>${ro ? '<span></span>' : `<span class="dc-edit"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`).join('')}</div>`
-    : `<div class="scols"><div class="scol"><div class="scol-t add">${tx('Add to {bay}', { bay: esc(s.bay) })}<span class="ct">${adds.length}</span></div>${adds.map(crow).join('') || `<div class="scol-empty">${ic('check')}<b>${tx('Nothing to add')}</b><small>${sys ? tx('Everything scanned is in the system') : tx('Paste the report to compare')}</small></div>`}</div><div class="scol"><div class="scol-t del">${tx('Delete from system')}<span class="ct">${dels.length}</span></div>${dels.map(crow).join('') || `<div class="scol-empty">${ic('check')}<b>${tx('Nothing to delete')}</b><small>${sys ? tx('Every system code was scanned') : tx('Paste the report to compare')}</small></div>`}</div></div>`;
+  // The filter picks the columns: All shows Add and Delete side by side
+  // (matches need nothing and are counted below), one kind shows its own.
+  const COL = {
+    add: [tx('Add to {bay}', { bay: esc(s.bay) }), 'add', adds, tx('Nothing to add'), sys ? tx('Everything scanned is in the system') : tx('Paste the report to compare')],
+    delete: [tx('Delete from system'), 'del', dels, tx('Nothing to delete'), sys ? tx('Every system code was scanned') : tx('Paste the report to compare')],
+    match: [tx('Match'), 'match', matches, tx('Nothing matches yet'), sys ? tx('No scanned code is in the report for this bay') : tx('Paste the report to compare')],
+  };
+  const shown = st.filt === 'all' ? ['add', 'delete'] : [st.filt];
+  const cols = (row, why, cls = '') => `<div class="scols${cls}${shown.length === 1 ? ' one' : ''}">${shown.map(k => { const [t, tc, list, none, sub] = COL[k]; return `<div class="scol"><div class="scol-t ${tc}">${t}<span class="ct">${list.length}</span></div>${list.map(row).join('') || `<div class="scol-empty">${why ? ic('check') : ''}<b>${none}</b>${why ? `<small>${sub}</small>` : ''}</div>`}</div>`; }).join('')}</div>`;
+  const drows = rows.filter(want);
+  const body = st.view === 'focus' ? focusView(s, rows, COL[st.filt]?.[3]) : st.view === 'codes' ? cols(bcRow, false, ' bcols') : st.view === 'detail'
+    ? `<div class="dlist"><div class="drow dhead"><span>${tx('Keycode')}</span><span></span><span>${tx('Verdict')}</span><span>${tx('Product')}</span><span>${tx('Backfilled')}</span><span>${tx('Inventory')}</span><span></span></div>${drows.map(r => `<div class="drow${r.incorrect ? ' bad' : ''}"><span class="kc">${esc(r.code)}</span><span class="dc-icos">${r.status !== 'delete' ? `<span class="dc-ico" title="${tx('Scanned')}">${ic('barcode')}</span>` : ''}</span><span class="cpill ${r.status === 'delete' ? 'del' : r.status === 'match' ? 'match' : 'add'}">${r.status === 'delete' ? tx('Remove') : r.status === 'match' ? tx('Match') : tx('Add to {bay}', { bay: esc(s.bay) })}</span><span class="dc-name">${nameHtml(r.code)}</span><span class="tick2${r.status !== 'delete' ? ' yes' : ''}">${ic(r.status !== 'delete' ? 'check' : 'x')}</span><span class="tick2${r.status !== 'add' && r.status !== 'scanned' ? ' yes' : ''}">${ic(r.status !== 'add' && r.status !== 'scanned' ? 'check' : 'x')}</span>${ro ? '<span></span>' : `<span class="dc-edit"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`).join('') || `<div class="scol-empty"><b>${COL[st.filt]?.[3] || tx('Nothing in this column')}</b></div>`}</div>`
+    : cols(crow, true);
   const hist = m.history.filter(h => h.bay === s.bay && h.metrics).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
   const tail = `<div class="matches">${sys ? tx('<b>{n} codes match</b> the pasted report and need nothing', { n: matches.length }) : tx('<b>{n} codes match</b> · no report pasted for this bay yet', { n: matches.length })}${s.readyAt ? ` · ${tx('marked ready {time}', { time: fmtTime(s.readyAt) })}` : ''}</div>` +
     (Object.keys(s.readd || {}).length ? `<div class="lochist readd"><span class="lh-t">${tx('Re-add · found after finalising')}</span>${Object.entries(s.readd).map(([c, r]) => `<span><b class="mono">${esc(c)}</b> ${r.doneAt ? tx('scanned back {time}', { time: fmtTime(r.doneAt) }) : tx('to scan back in')}${r.by ? ` · ${esc(r.by)}` : ''}</span>`).join('')}</div>` : '') +
     (hist.length ? `<div class="lochist"><span class="lh-t">${tx('{bay} before today', { bay: esc(s.bay) })}</span>${hist.map(h => `<span><b>${esc(h.date)}</b> ${h.metrics.accuracy == null ? tx('{n} scanned · no report', { n: h.metrics.scanned }) : `${h.metrics.scanned}/${h.metrics.expected} · ${h.metrics.accuracy}%`}</span>`).join('')}<a data-go="srhistory">${tx('Open in History')}</a></div>` : '');
   const held = !ro && heldElsewhere(ctx, m, s.bay);
   const claimNote = held ? `<div class="bp-claim">${ic('lock')}<span>${tx('<b>Open on another device</b> since {time}. Changes made on both will cross.', { time: fmtTime(held.at) })}</span><button class="btn sm" data-act="takeover">${tx('Take over')}</button></div>` : '';
-  return head + claimNote + ctl + gapNote(s, sys) + (st.bayPaste ? bayPasteSheet(s) : '') + body + tail;
+  return head + claimNote + ctl + (st.bayPaste ? bayPasteSheet(s) : '') + body + tail;
 }
 
-const pin = bay => hasMap() ? `<button class="ibtn" data-act="mappin" data-bay="${esc(bay)}" title="${tx('Show {bay} on the map', { bay: esc(bay) })}">${ic('pin')}</button>` : '';
+// The filter every view follows (Focus's own column switch folded in).
+const want = r => st.filt === 'all' || (st.filt === 'add' ? r.status === 'add' || r.status === 'scanned' : r.status === st.filt);
+// The counts as one strip: big numbers with their names under them.
+const hstats = (cells, tail = '') => `<div class="hstats">${cells.map(([v, l, cls = '', style = '']) => `<span><b${cls ? ` class="${cls}"` : ''}${style ? ` style="${style}"` : ''}>${v}</b><small>${l}</small></span>`).join('')}${tail}</div>`;
+// The header's menus: one open at a time; a click outside, Esc or choosing
+// an item closes it, and the arrow keys move between its items.
+const hmenu = (id, button, items, { right = false, role = 'menu', label = '' } = {}) => `<span class="hm-wrap">${button}<div class="hmenu${right ? ' r' : ''}" role="${role}" id="hm-${id}"${label ? ` aria-label="${label}"` : ''} hidden>${items}</div></span>`;
+const mbtn = (id, inner, cls, attrs = '') => `<button class="${cls}" data-act="menu" aria-haspopup="menu" aria-expanded="false" aria-controls="hm-${id}"${attrs}>${inner}${ic('chev', 'cv')}</button>`;
+const mitem = (act, icon, label, small = '', attrs = '', cls = '') => `<button class="hmi${cls}" role="menuitem" data-act="${act}"${attrs}>${ic(icon)}<span><b>${label}</b>${small ? `<small>${small}</small>` : ''}</span></button>`;
+// The location number opens its barcode (to scan into the PDT), rename,
+// the map and delete: delete in red at the foot, never beside Ready.
+function locMenu(bay, rename, del) {
+  const items = `<div class="hmbc">${barcodeSvg(bay, { module: 1.6, height: 46, text: false })}<small>${tx('Scan {bay} into the PDT', { bay: esc(bay) })}</small></div>` +
+    (rename ? mitem('rename', 'edit', tx('Correct the location number')) : '') +
+    (hasMap() ? mitem('mappin', 'pin', tx('Show {bay} on the map', { bay: esc(bay) }), '', ` data-bay="${esc(bay)}"`) : '') +
+    (del ? `<span class="hmsep" role="separator"></span>${mitem('delete', 'trash', tx('Delete {bay} from today’s board', { bay: esc(bay) }), '', '', ' bad')}` : '');
+  return hmenu('loc', mbtn('loc', esc(bay), 'hloc', ` aria-label="${tx('Location {bay}: its barcode, rename, the map and delete', { bay: esc(bay) })}"`), items, { label: tx('Location {bay}', { bay: esc(bay) }) });
+}
+function closeMenus(root, back = false) {
+  root.querySelectorAll('.hmenu:not([hidden])').forEach(mn => { mn.hidden = true; const b = mn.parentElement.querySelector(':scope > [data-act="menu"]'); b?.setAttribute('aria-expanded', 'false'); if (back) b?.focus(); });
+}
+function toggleMenu(root, btn) {
+  const mn = btn.parentElement.querySelector(':scope > .hmenu'), open = mn.hidden;
+  closeMenus(root); if (!open) return;
+  mn.hidden = false; btn.setAttribute('aria-expanded', 'true');
+  mn.querySelector('[role="menuitem"]')?.focus();
+}
+function menuKey(e, mn) {
+  const items = [...mn.querySelectorAll('[role="menuitem"]')], i = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.preventDefault(); closeMenus(mn.closest('#content') || document, true); }
+  else if (e.key === 'Tab') closeMenus(mn.closest('#content') || document);
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && items.length) { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); }
+}
+
 function freshChip() {
   if (!st.report) return `<span class="rs-gap">${ic('alert')}${tx('No report pasted')}</span>`;
   const mins = (Date.now() - st.report.at) / 60000;
   // freshLabel (shared/backfill.js) in words: just now, or minutes ago.
   return `<span class="rs-fresh ${freshBand(mins)}" title="${tx('SIM report pasted {time} · {n} bays · re-paste if the room has moved since', { time: fmtTime(new Date(st.report.at).toISOString()), n: Object.keys(st.report.byLoc).length })}"><span class="dot"></span>${mins < 1 ? tx('report just now') : tx('report {n}m ago', { n: Math.round(mins) })}</span>`;
 }
-// The gap note (Vector's): the report against this bay's scans. Scanned 3+
-// minutes after the report, or a report 30+ minutes old: re-paste. And what
+// The report's clock (Vector's gap note) at the end of the counts: hover
+// for when the list and the scans were taken, click for the whole note.
+// Scanned 3+ minutes after the report, or a report 30+ minutes old, turns
+// it amber with the reason on it, and the note offers a re-paste. And what
 // the last re-paste changed for this bay.
-function gapNote(s, sys) {
+function reportClock(s, sys) {
   if (!sys || !st.report) return '';
   const at = st.report.bayAt?.[s.bay] || st.report.at, g = reportGap(at, s.updatedAt), rel = m => m < 1 ? tx('under a minute') : m < 60 ? tx('{n} min', { n: Math.round(m) }) : tx('{h}h {m}m', { h: Math.floor(m / 60), m: Math.round(m % 60) });
   const d = st.report.delta?.[s.bay], when = { time: fmtTime(new Date(at).toISOString()), ago: rel(g.ageMin) };
-  let msg = `${st.report.bayAt?.[s.bay] ? tx('Report list for this bay {time} ({ago} ago)', when) : tx('Report uploaded {time} ({ago} ago)', when)}${s.updatedAt ? ` · ${tx('{bay} scanned {time}', { bay: esc(s.bay), time: fmtTime(s.updatedAt) })}` : ''}`;
-  if (g.afterBy >= 1) msg += ` · ${g.warn ? tx('scanned {gap} after the report. Stock received since then won’t be in it: re-paste to be sure.', { gap: rel(g.afterBy) }) : tx('scanned {gap} after the report', { gap: rel(g.afterBy) })}`;
-  else if (g.ageMin >= 30) msg += ` · ${tx('the report has aged; re-paste if stock has moved.')}`;
-  return `<div class="gapnote${g.warn ? ' warn' : ''}">${ic('clock')}<span>${msg}${d ? ` <b class="gap-delta" title="${esc([...d.added.map(c => '+' + c), ...d.removed.map(c => '−' + c)].join(' '))}">${tx('Since the last paste: {changes}', { changes: [d.added.length ? tx('+{n} new', { n: d.added.length }) : '', d.removed.length ? tx('−{n} gone', { n: d.removed.length }) : ''].filter(Boolean).join(', ') })}</b>` : ''}</span>${g.warn ? `<button class="btn sm" data-act="paste">${ic('clip')}${tx('Re-paste report')}</button>` : ''}</div>`;
+  const lines = [st.report.bayAt?.[s.bay] ? tx('Report list for this bay {time} ({ago} ago)', when) : tx('Report uploaded {time} ({ago} ago)', when)];
+  if (s.updatedAt) lines.push(tx('{bay} scanned {time}', { bay: esc(s.bay), time: fmtTime(s.updatedAt) }));
+  if (g.afterBy >= 1) lines.push(g.warn ? tx('scanned {gap} after the report. Stock received since then won’t be in it: re-paste to be sure.', { gap: rel(g.afterBy) }) : tx('scanned {gap} after the report', { gap: rel(g.afterBy) }));
+  else if (g.ageMin >= 30) lines.push(tx('the report has aged; re-paste if stock has moved.'));
+  const delta = d ? tx('Since the last paste: {changes}', { changes: [d.added.length ? tx('+{n} new', { n: d.added.length }) : '', d.removed.length ? tx('−{n} gone', { n: d.removed.length }) : ''].filter(Boolean).join(', ') }) : '';
+  const why = g.afterBy >= 3 ? tx('Scanned {gap} after the report', { gap: rel(g.afterBy) }) : g.ageMin >= 30 ? tx('Report {ago} old', { ago: rel(g.ageMin) }) : '';
+  const plain = [...lines, delta].filter(Boolean).join(' · ');
+  return hmenu('clock', `<button class="hclk${g.warn ? ' warn' : ''}" data-act="menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="hm-clock" title="${plain.replace(/"/g, '&quot;')}" aria-label="${plain.replace(/"/g, '&quot;')}">${ic('clock')}${why ? `<span>${why}</span>` : ''}</button>`,
+    `<div class="hclk-note">${lines.map(l => `<span>${l}</span>`).join('')}${d ? `<b class="gap-delta" title="${esc([...d.added.map(c => '+' + c), ...d.removed.map(c => '−' + c)].join(' '))}">${delta}</b>` : ''}</div>${g.warn ? `<button class="btn sm" data-act="paste">${ic('clip')}${tx('Re-paste report')}</button>` : ''}`,
+    { right: true, role: 'dialog', label: tx('The report and the scans') });
 }
 // Focus (Vector's desk fast path): one code at a time with a big barcode for
 // the PDT. Space or Enter: checked and next. Backspace: incorrect and next.
-// ← →: move (wraps). A column switch narrows it to what to add or delete.
-function focusList(rows) { return st.focusCol === 'add' ? rows.filter(r => r.status === 'add' || r.status === 'scanned') : st.focusCol === 'delete' ? rows.filter(r => r.status === 'delete') : rows; }
-function focusView(s, rows) {
-  const list = focusList(rows), n = list.length, done = st.processed.get(key(s)) || new Set();
-  const cols = rows.some(r => r.status === 'delete' || r.status === 'add') ? `<span class="pills fcols">${[['all', tx('All')], ['add', tx('Add')], ['delete', tx('Delete')]].map(([k, l]) => `<button class="${st.focusCol === k ? 'on' : ''}" data-act="focus-col" data-v="${k}">${l}</button>`).join('')}</span>` : '';
-  if (!n) return `<div class="focus-card empty">${cols}<b>${tx('Nothing in this column')}</b></div>`;
+// ← →: move (wraps). The header's filter narrows it.
+function focusView(s, rows, none) {
+  const list = rows.filter(want), n = list.length, done = st.processed.get(key(s)) || new Set();
+  if (!n) return `<div class="focus-card empty"><b>${none || tx('Nothing in this column')}</b></div>`;
   st.focusIdx = ((st.focusIdx % n) + n) % n;
   const r = list[st.focusIdx];
   const verdict = r.status === 'add' || r.status === 'scanned' ? `<div class="fverdict add">${tx('Add to {bay}', { bay: esc(s.bay) })}</div>` : r.status === 'delete' ? `<div class="fverdict del">${tx('Delete from system')}</div>` : '';
-  return `<div class="focus-card${r.incorrect ? ' bad' : ''}${done.has(r.code) ? ' done' : ''}">${cols}<div class="fcount"><b>${st.focusIdx + 1} / ${n}</b><span>${tx('{n} checked', { n: [...done].filter(c => list.some(x => x.code === c)).length })}</span></div>` +
-    // The product's picture beside its barcode (K2B's focus had it), when the catalogue has one.
-    `<div class="fmain">${imgOf(r.code) ? `<span class="fpic">${productImg(imgOf(r.code), nameOf(r.code) || '')}</span>` : ''}${/^\d{6,13}$/.test(r.code) ? `<div class="fbar">${barcodeSvg(r.code, { module: 2.6, height: 74 })}</div>` : ''}</div>` +
-    `<div class="fcode mono" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</div><div class="fname">${nameHtml(r.code)}${depthChip(r.code)}</div>${verdict}` +
+  return `<div class="focus-card${r.incorrect ? ' bad' : ''}${done.has(r.code) ? ' done' : ''}"><div class="fcount"><b>${st.focusIdx + 1} / ${n}</b><span>${tx('{n} checked', { n: [...done].filter(c => list.some(x => x.code === c)).length })}</span></div>` +
+    // The barcode on its own line for the PDT; under it the product's picture
+    // (K2B's focus had it, when the catalogue has one) beside its keycode and name.
+    (/^\d{6,13}$/.test(r.code) ? `<div class="fbar">${barcodeSvg(r.code, { module: 2.6, height: 74 })}</div>` : '') +
+    `<div class="finfo${imgOf(r.code) ? '' : ' nopic'}">${imgOf(r.code) ? `<span class="fpic">${productImg(imgOf(r.code), nameOf(r.code) || '')}</span>` : ''}<div class="ftext"><div class="fcode mono" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</div><div class="fname">${nameHtml(r.code)}${depthChip(r.code)}</div></div></div>${verdict}` +
     `<div class="fhint"><kbd>${tx('Space')}</kbd> ${tx('checked + next')} · <kbd>⌫</kbd> ${tx('incorrect + next')} · <kbd>←</kbd><kbd>→</kbd> ${tx('move')}</div></div>`;
 }
 
@@ -341,6 +409,8 @@ async function onClick(e, ctx, root, repaint) {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act, m = model(ctx), date = todayKey();
   const cur = () => m.subs.find(x => key(x) === st.sel);
+  if (act === 'menu') return toggleMenu(root, a);
+  if (a.closest('.hmenu')) closeMenus(root);
   if (act === 'sel') { await select(ctx, a.dataset.sel); ctx.rerender(); }
   else if (act === 'view') { st.view = a.dataset.v; ctx.rerender(); }
   else if (act === 'paste') openPasteBox(ctx, { want: 'report', after: () => { ensureNames(ctx, allCodes(ctx), repaint); ctx.rerender(); } });
@@ -371,7 +441,7 @@ async function onClick(e, ctx, root, repaint) {
     st.reqPaste = false; toast(act === 'req-clear' ? tx('Requested list cleared') : tx('Requested list: {n} bays', { n: want.length })); ctx.rerender();
   }
   else if (act === 'help') { st.help = !st.help; ctx.rerender(); }
-  else if (act === 'focus-col') { st.focusCol = a.dataset.v; st.focusIdx = 0; ctx.rerender(); }
+  else if (act === 'filt') { st.filt = a.dataset.v; st.focusIdx = 0; ctx.rerender(); }
   else if (act === 'copy') copyText(a.dataset.code, a.dataset.code);
   else if (act === 'copy-all') { const s = cur(); if (!s) return; const rows = reviewRows(s, m.sys?.[s.bay] || null).filter(r => r.status !== 'match'); copyText(rows.map(r => r.code).join('\n'), tx('{n} keycodes', { n: rows.length })); }
   else if (act === 'mappin') { const shelf = shelfForLocation(a.dataset.bay); if (shelf) ctx.go('map', { select: shelf }); else toast(tx('{bay} is not on the published map', { bay: a.dataset.bay }), 'bad'); }

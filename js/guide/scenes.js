@@ -38,7 +38,7 @@ function phone(id, body, { tabs = 'floor', on = 'home', strip = '', bare = false
     `<div class="ph-body">${body}</div>${strip ? `<div class="ph-strip">${strip}</div>` : ''}<div class="ph-tabs">${TABS[tabs]().map(([k, i, l]) => `<span class="${k === on ? 'on' : ''}" data-tab="${k}">${ic(i)}${l}</span>`).join('')}</div>${overlays()}<i class="fg"></i></div></div>`;
 }
 const RAIL = () => [['today', 'm-dashboard', tx('Today')], ['inputs', 'file', tx('Reports & files')], ['resources', 'stack', tx('Resources')], ['#', tx('Floor')], ['map', 'm-map', tx('Store map')], ['floorchecks', 'listcheck', tx('Floor checks')], ['picklist', 'm-picklist', tx('Pick list')], ['safety', 'm-emergency', tx('Safety & upkeep')],
-  ['#', tx('Stockroom')], ['backfill', 'm-bfreview', tx('Backfill')], ['accuracy', 'm-adjust', tx('Stock accuracy')], ['cages', 'm-cages', tx('Cages')], ['#', tx('Back dock')], ['receiving', 'm-receiving', tx('Receiving')], ['plan', 'm-planner', tx('Plan')], ['results', 'bars', tx('Results')]];
+  ['#', tx('Stockroom')], ['backfill', 'm-backfill', tx('Backfill')], ['accuracy', 'm-adjust', tx('Stock accuracy')], ['cages', 'm-cages', tx('Cages')], ['#', tx('Back dock')], ['receiving', 'm-receiving', tx('Receiving')], ['plan', 'm-planner', tx('Plan')], ['results', 'bars', tx('Results')]];
 const FOOT = () => [['screens', 'expand', tx('Screens')], ['settings', 'm-settings', tx('Settings')], ['help', 'star', tx('Help')]];
 function pc(id, main, { on = 'today', badge = {}, top = '' } = {}) {
   const row = ([k, i, l]) => k === '#' ? `<span class="pc-sec">${i}</span>` : `<span class="pc-row${k === on ? ' on' : ''}" data-r="${k}">${ic(i)}<span>${l}</span>${badge[k] ? `<span class="bdg">${badge[k]}</span>` : ''}</span>`;

@@ -65,7 +65,7 @@ export const GROUPS = {
   floorchecks: G(tx('Floor checks'), 'listcheck', ['refresh', 'labelint', 'stocktake']),
   picklist: G(tx('Pick list'), 'm-picklist', ['picklist']),
   safety: G(tx('Safety & upkeep'), 'm-emergency', ['emergency', 'maintenance', ['equipment', tx('Equipment')], 'recalls']),
-  backfill: G(tx('Backfill'), 'm-bfreview', [['bfreview', tx('Review')], 'daylist', ['srhistory', tx('History')], 'srtrends', 'livepull']),
+  backfill: G(tx('Backfill'), 'm-backfill', [['bfreview', tx('Review')], 'daylist', ['srhistory', tx('History')], 'srtrends', 'livepull']),
   accuracy: G(tx('Stock accuracy'), 'm-adjust', ['adjust', 'srintel', ['codelist', tx('Quick Scan')]], ['srloc']),
   cages: G(tx('Cages'), 'm-cages', ['cages']),
   receiving: G(tx('Receiving'), 'm-receiving', [['receiving', tx('Truck')], 'teamboard']),

@@ -2689,6 +2689,89 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .bdept .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1px solid var(--line); }
 .bdept select { border: 0; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; min-width: 0; max-width: 220px; cursor: pointer; }
 
+/* Backfill review: the location's header. One line says what it is and what
+   to do (number ▾, department chip, status, the counts strip with the
+   report's clock, Re-check ▾, Ready); the next says how to look at it (the
+   views, one filter every view follows, Export ▾). Below 1200px of middle
+   (a 1080p desk is about 985) the counts take their own line under it. */
+.smid { container: smid / inline-size; }
+.smid-h.hc { gap: 10px; padding: 10px 16px; }
+.hc .hc-id, .hc .hc-acts { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.hc .sp { flex: 1 1 0; }
+.hm-wrap { position: relative; display: inline-flex; }
+.hloc { display: inline-flex; align-items: center; gap: 4px; height: 44px; padding: 0 6px; margin-left: -6px; border: 0; border-radius: 10px; background: none; color: var(--ink); font-size: 30px; font-weight: 800; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.hloc:hover, .hloc[aria-expanded="true"] { background: var(--chip); }
+.hloc svg.cv { width: 18px; height: 18px; color: var(--dim); }
+.hdept { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 5px 0 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); cursor: pointer; }
+.hdept.none { border-style: dashed; }
+.hdept .nodep { font-size: 12.5px; font-weight: 600; color: var(--dim); white-space: nowrap; }
+.hdept svg.cv { width: 14px; height: 14px; color: var(--dim); }
+.hdept select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 14px; }
+.hdept:hover { border-color: var(--dim); }
+.hdept:focus-within { box-shadow: 0 0 0 2px var(--accent); }
+.hstats { display: flex; align-items: center; flex: none; background: var(--chip); border-radius: 12px; padding: 6px 4px; }
+.hstats > span:not(.hm-wrap) { display: flex; flex-direction: column; padding: 0 14px; border-left: 1px solid var(--line); line-height: 1.15; }
+.hstats > span:first-child { border-left: 0; }
+.hstats b { font-size: 19px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.hstats small { font-size: 12px; color: var(--chip-ink); white-space: nowrap; }
+.hstats > .hm-wrap { margin: 0 4px 0 auto; padding-left: 6px; }
+.hclk { height: 32px; min-width: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--panel); color: var(--chip-ink); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.hclk svg.i { width: 16px; height: 16px; flex: none; }
+.hclk:hover, .hclk[aria-expanded="true"] { color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.hclk.warn { background: #FEF3C7; color: #92400E; }
+.frame.dark .hclk.warn { background: #4A3410; color: #FCD34D; }
+.hmenu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; min-width: 250px; display: flex; flex-direction: column; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 36px -10px rgba(17, 24, 39, .35); }
+.hmenu[hidden] { display: none; }
+.hmenu.r { left: auto; right: 0; }
+.hmi { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; border: 0; border-radius: 8px; background: none; color: var(--ink); text-align: left; font-size: 14px; white-space: nowrap; }
+.hmi:hover, .hmi:focus-visible { background: var(--accent-soft); outline: none; }
+.hmi svg.i { flex: none; width: 19px; height: 19px; color: var(--accent-ink); }
+.hmi b { display: block; font-weight: 700; }
+.hmi small { display: block; font-size: 12px; font-weight: 400; color: var(--dim); }
+.hmi.bad, .hmi.bad svg.i { color: #B91C1C; }
+.hmi.bad:hover, .hmi.bad:focus-visible { background: #FEF2F2; }
+.frame.dark .hmi.bad, .frame.dark .hmi.bad svg.i { color: #F19C9C; }
+.frame.dark .hmi.bad:hover, .frame.dark .hmi.bad:focus-visible { background: #3A1515; }
+.hmsep { height: 1px; background: var(--line); margin: 4px 6px; }
+.hmbc { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 12px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.hmbc svg.barcode { height: 46px; width: auto; background: #fff; padding: 4px 8px; border-radius: 6px; }
+.hmbc small { font-size: 12px; color: var(--dim); }
+.hmenu[role="dialog"] { min-width: 300px; max-width: 380px; }
+.hclk-note { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; font-size: 13px; color: var(--ink2); }
+.hclk-note .gap-delta { color: var(--ink); }
+.hmenu[role="dialog"] > .btn { align-self: flex-start; margin: 4px 8px 6px; }
+.hflt { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.hflt button { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink2); font-size: 12.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.hflt button b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.hflt .add { background: #DBEAFE; border-color: #BFDBFE; color: #1E40AF; }
+.hflt .delete { background: #FEE2E2; border-color: #FECACA; color: #991B1B; }
+.hflt .match { background: #DCFCE7; border-color: #BBF7D0; color: #166534; }
+.frame.dark .hflt .add { background: #153256; border-color: #1E3A8A; color: #A9BCF5; }
+.frame.dark .hflt .delete { background: #561515; border-color: #7F1D1D; color: #F3B0B0; }
+.frame.dark .hflt .match { background: #14391F; border-color: #166534; color: #9BE7B4; }
+.hflt button.on { box-shadow: 0 0 0 2px var(--accent); }
+.hflt button:disabled { opacity: .45; cursor: default; }
+.smid-ctl .sp { flex: 1; }
+.btn svg.cv { width: 14px; height: 14px; margin: 0 -3px 0 -1px; }
+.scols.one { grid-template-columns: 1fr; }
+.scol-t.match { background: #F0FDF4; color: #166534; }
+.frame.dark .scol-t.match { background: #14391F; color: #9BE7B4; }
+@container smid (max-width: 1200px) {
+  .hc .hstats { order: 3; flex: 1 1 100%; }
+  .hc .hstats > span:not(.hm-wrap) { flex: 1 1 0; }
+}
+/* A half-screen desk (a middle of about 330px): the counts share the strip
+   and the clock, with its reason, takes the strip's last line. */
+@container smid (max-width: 520px) {
+  .hc .hc-id { flex-wrap: wrap; min-width: 0; flex: 0 1 auto; }
+  .hc .hstats { flex-wrap: wrap; row-gap: 6px; padding: 6px; }
+  .hc .hstats > span:not(.hm-wrap) { flex: 1 1 auto; padding: 0 6px; }
+  .hc .hstats b { font-size: 16px; }
+  .hc .hstats small { font-size: 11px; }
+  .hc .hstats > .hm-wrap { flex: 1 1 100%; margin: 0; padding: 0; }
+  .hc .hstats > .hm-wrap > .hclk { flex: 1; justify-content: flex-start; white-space: normal; text-align: left; height: auto; min-height: 30px; padding: 4px 8px; }
+}
+
 /* Departments (K2B's builder): one card per department under its main
    department, the bays as chips (a single bay dashed: it beats ranges), and
    a from–to box. The unsaved bar stays in view while the cards scroll. */
@@ -3613,6 +3696,11 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
    picture beside the barcode, as K2B's focus did. */
 .pimg-off { display: grid; place-items: center; width: 100%; height: 100%; color: var(--faint); }
 .pimg-off svg.i { width: 40%; height: 40%; max-width: 40px; max-height: 40px; }
-.fmain { display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; max-width: 100%; }
-.fpic { flex: none; width: 150px; height: 150px; border-radius: 12px; background: #fff; border: 1px solid var(--line-soft); display: grid; place-items: center; overflow: hidden; }
+/* Focus: the barcode alone and centred, then the picture beside the
+   keycode and name (centred on their own when there is no picture). */
+.finfo { display: flex; align-items: center; justify-content: center; gap: 18px; max-width: 100%; text-align: left; }
+.finfo.nopic { text-align: center; }
+.finfo .ftext { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.fpic { flex: none; width: 120px; height: 120px; border-radius: 12px; background: #fff; border: 1px solid var(--line-soft); display: grid; place-items: center; overflow: hidden; }
+@container smid (max-width: 520px) { .finfo { gap: 12px; } .fpic { width: 84px; height: 84px; } .finfo .fcode { font-size: 26px; } }
 .fpic img { width: 100%; height: 100%; object-fit: contain; }
