@@ -62,4 +62,18 @@ export function translateStatic(root = document) {
 }
 
 // The language choice as a <select>, for Settings and the sign-in card.
+// Each language's flag, drawn here (emoji flags show as two letters on
+// Windows, where the store PCs run). English is the store's: Australia.
+const FLAGS = {
+  en: '<rect width="30" height="20" fill="#012169"/><path d="M0 0l15 10M15 0L0 10" stroke="#fff" stroke-width="2.4"/><path d="M0 0l15 10M15 0L0 10" stroke="#E4002B" stroke-width="1"/><path d="M7.5 0v10M0 5h15" stroke="#fff" stroke-width="3.4"/><path d="M7.5 0v10M0 5h15" stroke="#E4002B" stroke-width="1.8"/><g fill="#fff"><circle cx="7.5" cy="15" r="2"/><circle cx="22.5" cy="16.5" r="1.2"/><circle cx="18.6" cy="9.2" r="1.1"/><circle cx="22.5" cy="4" r="1.1"/><circle cx="26" cy="8.2" r="1.1"/><circle cx="24.3" cy="11.2" r=".6"/></g>',
+  de: '<rect width="30" height="20" fill="#FFCE00"/><rect width="30" height="13.34" fill="#DD0000"/><rect width="30" height="6.67" fill="#000"/>',
+  fr: '<rect width="30" height="20" fill="#EF4135"/><rect width="20" height="20" fill="#fff"/><rect width="10" height="20" fill="#0055A4"/>',
+  fil: '<rect width="30" height="20" fill="#CE1126"/><rect width="30" height="10" fill="#0038A8"/><path d="M0 0l17.3 10L0 20z" fill="#fff"/><circle cx="6.2" cy="10" r="2.2" fill="#FCD116"/><g fill="#FCD116"><circle cx="2" cy="3" r=".9"/><circle cx="2" cy="17" r=".9"/><circle cx="14" cy="10" r=".9"/></g>',
+  vi: '<rect width="30" height="20" fill="#DA251D"/><path d="M15 4.2l1.4 4.2h4.4l-3.6 2.6 1.4 4.2-3.6-2.6-3.6 2.6 1.4-4.2-3.6-2.6h4.4z" fill="#FFFF00"/>',
+  es: '<rect width="30" height="20" fill="#AA151B"/><rect y="5" width="30" height="10" fill="#F1BF00"/>',
+  it: '<rect width="30" height="20" fill="#CE2B37"/><rect width="20" height="20" fill="#fff"/><rect width="10" height="20" fill="#009246"/>',
+};
+export const flagSvg = c => FLAGS[c] ? `<svg class="flag" viewBox="0 0 30 20" aria-hidden="true">${FLAGS[c]}</svg>` : '';
+// The languages as buttons, each with its flag (Settings): data-setlang.
+export const langPicker = () => `<div class="lang-pick" role="radiogroup">${LANGS.map(([c, n]) => `<button type="button" role="radio" aria-checked="${c === code}" class="${c === code ? 'on' : ''}" data-setlang="${c}">${flagSvg(c)}<span>${n}</span></button>`).join('')}</div>`;
 export const langSelect = (attrs = '') => `<select ${attrs}>${LANGS.map(([c, n]) => `<option value="${c}"${c === code ? ' selected' : ''}>${n}</option>`).join('')}</select>`;

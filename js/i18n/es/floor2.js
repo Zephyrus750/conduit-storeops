@@ -862,7 +862,6 @@ export default {
   "{n} resources": "{n} recursos",
   "{name} is for managers: sign in with the manager code": "{name} es para gerentes: inicia sesión con el código de gerente",
   "/ {n} trucks cleared today": "/ {n} camiones despachados hoy",
-  "All trucks cleared": "Todos los camiones despachados",
   "Cartons decanted today": "Cajas desconsolidadas hoy",
   "Every truck today is cleared.": "Todos los camiones de hoy están despachados.",
   "Last cleared": "Último despachado",
@@ -871,4 +870,8 @@ export default {
   "Waiting for truck {no}": "Esperando el camión {no}",
   "none · confirmed in the Planner": "ninguno · confirmado en el Planificador",
   "{done} of {n} cleared": "{done} de {n} despachados",
+  "Every bay free": "Todos los huecos libres",
+  "free bay": "hueco libre",
+  "{n} pallet on the dock": "{n} palé en el muelle",
+  "{n} pallets on the dock": "{n} palés en el muelle",
 };

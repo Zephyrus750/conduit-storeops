@@ -377,4 +377,6 @@ export default {
   "Continue and open the guide.": "Magpatuloy at buksan ang guide.",
   "Help for this screen": "Tulong para sa screen na ito",
   "Sign in to open the guide.": "Mag-sign in para buksan ang guide.",
+  "Layouts": "Mga layout",
+  "Soon": "Malapit na",
 };

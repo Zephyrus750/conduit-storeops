@@ -231,7 +231,7 @@ export default {
     }).join('');
     const loadRows = loads.length ? `<div class="pt3 mfx-wk">${tx('Other loads')}</div>` + loads.map(l => `<div class="mfl-row${l.id === st.load ? ' on' : ''}" data-act="open-load" data-id="${esc(l.id)}"><span class="mfl-main"><span class="mfl-top"><b>${esc(l.label)}</b>${statusPill(l.status)}</span><small>${esc(fmtDate(l.recvDate || l.date))}</small></span><span class="mfl-facts"><span>${txn(l.pallets.length, '<b>{n}</b> pallet', '<b>{n}</b> pallets')}</span><span class="cs-dim">${txn(loadUnits(l), '<b>{n}</b> unit', '<b>{n}</b> units', { n: loadUnits(l).toLocaleString('en-AU') })}</span></span>${ic('chev')}</div>`).join('') : '';
     const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">${tx("Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.")}</div>`}${loadRows}</div>`;
-    return head + stagePanel(ctx, st.stage) + `<div class="mgrid">${side}${open ? loadPane(ctx, open) : detail(ctx, list)}</div>`;
+    return head + stagePanel(ctx, st.stage) + `<div class="mgrid mf-grid">${side}${open ? loadPane(ctx, open) : detail(ctx, list)}</div>`;
   },
   mount(ctx, root) {
     // From search: open that manifest (and filter to a consolidation).

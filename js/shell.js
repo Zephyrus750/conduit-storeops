@@ -523,7 +523,7 @@ const rowTarget = (g, tabs) => tabs.some(t => t[0] === lastTabs[g]) ? lastTabs[g
 function railRow(g, tabs) {
   // A row with several counted tabs (Safety & upkeep: Equipment and Recalls) shows their sum.
   const G = GROUPS[g], one = G.tabs.length === 1, badged = tabs.map(t => t[0]).filter(v => BADGED.includes(v)).join('+');
-  return `<button class="rrow" data-view="${rowTarget(g, tabs)}" data-group="${g}">${ic(G.icon)}<span class="rl">${one ? tabs[0][1] : G.label}</span>${badged ? `<span class="badge" data-badge="${badged}" hidden></span>` : ''}</button>`;
+  return `<button class="rrow${G.soon ? ' soon' : ''}" data-view="${rowTarget(g, tabs)}" data-group="${g}">${ic(G.icon)}<span class="rl">${one ? tabs[0][1] : G.label}</span>${badged ? `<span class="badge" data-badge="${badged}" hidden></span>` : ''}${G.soon ? `<span class="soon">${tx('Soon')}</span>` : ''}</button>`;
 }
 // Above a grouped screen on a PC: its row's other screens, as tabs.
 function groupTabs(id) {
