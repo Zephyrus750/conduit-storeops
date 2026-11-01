@@ -12,7 +12,7 @@
 //
 //   previewManifest(ctx, file, { attachTo, dating }) → { manNo, consols, totalCartons, attached } | null (cancelled)
 
-import { ic, esc, toast, today, DEPT_COLOUR } from '../../ui.js';
+import { ic, esc, toast, today, dep } from '../../ui.js';
 import { tx, txn, locale } from '../../i18n.js';
 import { readManifestFile, publishParsed, attachManifest, manifestIndex, microDept, microName, truckNo, STD_MINS_PER_CARTON, todayKey } from './common.js';
 import { SUBS } from '../../data/micros.js';
@@ -24,11 +24,12 @@ import { placeIndex, suggestPlace, usualGap } from '../../../shared/manifeststat
 const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'Kids', '#F59E0B'], ['flex', 'Flex', '#64748B'], ['?', tx('Unknown'), '#94A3B8']];
 const SUB = Object.fromEntries(SUBS.map(x => [x[0], x]));
 const groupOf = code => { const d = microDept(code); return !d ? '?' : d === 'flex' ? 'flex' : d[0]; };
-// A micro-department in words: its number and name, and (sub) the
-// department it sits in, "H2 · Bed, Bath, Laundry", in that one's colour.
+// A micro-department in words: its department's badge, its number and
+// name, and (sub) that department's name beneath, "Bed, Bath, Laundry".
 function micro(code, sub = true) {
   const c = String(code || '???'), sd = microDept(c), d = SUB[sd], name = microName(c);
-  return `<span class="mp-mc"><i style="background:${d ? DEPT_COLOUR[sd] || '#64748B' : '#94A3B8'}"></i><span class="mp-mcn"><span><b class="mono">${esc(c)}</b> ${esc(name || tx('Unknown micro-department'))}</span>${sub ? `<small>${d ? `${esc(d[1])} · ${esc(d[2])}` : tx('Not in the department list')}</small>` : ''}</span></span>`;
+  const badge = d ? dep(sd) : `<span class="dep" style="background:#94A3B8;color:#fff">?</span>`;
+  return `<span class="mp-mc">${badge}<span class="mp-mcn"><span><b class="mono">${esc(c)}</b> ${esc(name || tx('Unknown micro-department'))}</span>${sub ? `<small>${d ? esc(d[2]) : tx('Not in the department list')}</small>` : ''}</span></span>`;
 }
 // Every micro-department on the report: cartons as the report's mix counts
 // them (a carton goes to the micro-department with most units in it, so
