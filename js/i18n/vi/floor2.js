@@ -862,7 +862,6 @@ export default {
   "{n} resources": "{n} tài liệu",
   "{name} is for managers: sign in with the manager code": "{name} dành cho quản lý: hãy đăng nhập bằng mã quản lý",
   "/ {n} trucks cleared today": "/ {n} xe đã xong hôm nay",
-  "All trucks cleared": "Đã xong tất cả xe",
   "Cartons decanted today": "Thùng đã dỡ hôm nay",
   "Every truck today is cleared.": "Đã xong tất cả xe hôm nay.",
   "Last cleared": "Xe xong gần nhất",
@@ -871,4 +870,8 @@ export default {
   "Waiting for truck {no}": "Đang chờ xe {no}",
   "none · confirmed in the Planner": "không có · đã xác nhận trong Lập kế hoạch",
   "{done} of {n} cleared": "Xong {done}/{n}",
+  "Every bay free": "Tất cả các ô đều trống",
+  "free bay": "ô trống",
+  "{n} pallet on the dock": "{n} pallet ở khu nhận hàng",
+  "{n} pallets on the dock": "{n} pallet ở khu nhận hàng",
 };

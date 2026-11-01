@@ -8,7 +8,7 @@ import { $, ic, esc, vh, sub, toast, ago, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT
 import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/reducers/store.js';
 import { SCALES, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
-import { tx, txn, langSelect } from '../i18n.js';
+import { tx, txn, langPicker, setLang } from '../i18n.js';
 import { updates } from '../updates.js';
 import { retailPeriod } from '../../shared/time.js';
 import { bundle, storagePots, releaseCache, fmtBytes } from '../diag.js';
@@ -38,6 +38,7 @@ export default {
   // Help and feedback sit together at the foot.
   mobile(ctx) { return `<div class="mv-head"><div><h2>${tx('Settings')}</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}${mgr()}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${helpCard()}</div>`; },
   mount(ctx, root) {
+    root.addEventListener('click', e => { const b = e.target.closest('[data-setlang]'); if (b) setLang(b.dataset.setlang); });
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act');
@@ -78,7 +79,7 @@ function body(ctx, sec = currentSec()) {
   const p = prefs();
   if (sec === 'appearance') {
     const seg = (act, opts, cur) => `<span class="seg stg-seg">${opts.map(o => `<button class="${cur === o[0] ? 'on' : ''}" data-act="${act}" data-v="${o[0]}">${o[1]}</button>`).join('')}</span>`;
-    return `<div class="stg-card"><div class="stg-h">${tx('Display')}</div><p class="stg-p">${tx('Every store device shares one colour scheme. Size, the title bar and the rail are set on each device.')}</p>${row(tx('Language'), tx('Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.'), langSelect(`class="stg-in" data-field="lang" aria-label="${tx('Language')}"`))}${row(tx('Display size'), tx('How large the whole app renders on this device. Small is 80%, Compact 95%, Large 115%.'), seg('scale', SCALES.map(([v, l]) => [v, tx(l)]), String(p.scale)))}${ctx.isMobile ? '' : row(tx('Title bar'), tx('Move each view’s title into the header and fold search into the logo.'), tgl(p.hdr === 'title', 'hdr')) + row(tx('Rail'), tx('Start with the rail collapsed to icons'), tgl(p.railmin, 'railmin'))}</div>`;
+    return `<div class="stg-card"><div class="stg-h">${tx('Display')}</div><p class="stg-p">${tx('Every store device shares one colour scheme. Size, the title bar and the rail are set on each device.')}</p>${row(tx('Language'), tx('Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.'), langPicker())}${row(tx('Display size'), tx('How large the whole app renders on this device. Small is 80%, Compact 95%, Large 115%.'), seg('scale', SCALES.map(([v, l]) => [v, tx(l)]), String(p.scale)))}${ctx.isMobile ? '' : row(tx('Title bar'), tx('Move each view’s title into the header and fold search into the logo.'), tgl(p.hdr === 'title', 'hdr')) + row(tx('Rail'), tx('Start with the rail collapsed to icons'), tgl(p.railmin, 'railmin'))}</div>`;
   }
   if (sec === 'store') return storeBody(ctx);
   if (sec === 'refresh') return refreshBody(ctx);

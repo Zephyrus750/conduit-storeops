@@ -44,11 +44,12 @@ import livepull from './views/livepull.js';
 import equipment from './views/equipment.js';
 import recalls from './views/recalls.js';
 import resources from './views/resources.js';
+import layouts from './views/layouts.js';
 import adminresources from './views/adminresources.js';
 import adminzones from './views/adminzones.js';
 import { tx } from './i18n.js';
 
-export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refresh, labelint, emergency, maintenance, equipment, recalls, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, decant, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS, livepull, resources, adminresources, adminzones].map(v => [v.id, v]));
+export const VIEWS = Object.fromEntries([dashboard, inputs, map, layouts, picklist, refresh, labelint, emergency, maintenance, equipment, recalls, mapedits, stocktake, printmap, help, fieldmode, settings, storeinfo, bfreview, cages, adjust, daylist, srhistory, srhome, srloc, srdepts, srintel, srtrends, codelist, receiving, decant, bdhome, manifests, planner, rhistory, profiles, dockscreen, teamboard, wallboard, danalytics, offsite, screens, ...ADMIN_VIEWS, livepull, resources, adminresources, adminzones].map(v => [v.id, v]));
 
 // The desktop rail (Version A, 23 Oct 2026): Today, Reports & files and
 // Resources (managers) on top, then a few rows per area, then the foot. A row is one screen or a group of screens
@@ -56,12 +57,15 @@ export const VIEWS = Object.fromEntries([dashboard, inputs, map, picklist, refre
 // (the first at the start). A tab's label is the screen's own name unless
 // the group gives a shorter one. `also`: screens the row stands for with no
 // tab of their own (Print map and Suggest edits open from the Store map).
-const G = (label, icon, tabs, also = []) => ({ label, icon, tabs: tabs.map(t => typeof t === 'string' ? [t, null] : t), also });
+// `soon`: a row for a screen still being built, shown faded with SOON; it
+// opens a page that says so (Layouts).
+const G = (label, icon, tabs, also = [], soon = false) => ({ label, icon, tabs: tabs.map(t => typeof t === 'string' ? [t, null] : t), also, soon });
 export const GROUPS = {
   today: G(tx('Dashboard'), 'm-dashboard', ['dashboard']),
   inputs: G(tx('Reports & files'), 'file', ['inputs']),
   resources: G(tx('Resources'), 'stack', ['resources']),
   map: G(tx('Store map'), 'm-map', ['map'], ['printmap', 'mapedits', 'fieldmode']),
+  layouts: G(tx('Layouts'), 'layers', ['layouts'], [], true),
   floorchecks: G(tx('Floor checks'), 'listcheck', ['refresh', 'labelint', 'stocktake']),
   picklist: G(tx('Pick list'), 'm-picklist', ['picklist']),
   safety: G(tx('Safety & upkeep'), 'm-emergency', ['emergency', 'maintenance', ['equipment', tx('Equipment')], 'recalls']),
@@ -76,7 +80,7 @@ export const GROUPS = {
   help: G(tx('Help'), 'star', ['help']),
 };
 export const RAIL = [
-  { sec: tx('Floor'), rows: ['map', 'floorchecks', 'picklist', 'safety'] },
+  { sec: tx('Floor'), rows: ['map', 'layouts', 'floorchecks', 'picklist', 'safety'] },
   { sec: tx('Stockroom'), rows: ['backfill', 'accuracy', 'cages'] },
   { sec: tx('Back dock'), rows: ['receiving', 'plan', 'results'] },
 ];

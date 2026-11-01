@@ -377,4 +377,6 @@ export default {
   "Continue and open the guide.": "Tiếp tục và mở hướng dẫn.",
   "Help for this screen": "Trợ giúp cho màn hình này",
   "Sign in to open the guide.": "Đăng nhập để mở hướng dẫn.",
+  "Layouts": "Bố cục",
+  "Soon": "Sắp có",
 };

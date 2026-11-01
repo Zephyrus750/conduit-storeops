@@ -1176,9 +1176,11 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .ll .ll-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ll .ll-row .nm { flex: 1; min-width: 140px; }
 .ll .ll-row select { flex: 0 1 360px; min-width: 220px; width: auto; }
-/* The explorer needs the room: the list goes above it below 1400px of shell. */
-/* The manifest list is a picker: narrower than the shell's 440px so the explorer gets the room. */
-.mgrid:has(.mfx-col) { grid-template-columns: 340px minmax(0, 1fr); }
+/* The manifest list is a picker, one width whatever the main area shows (a
+   manifest, another load, nothing open): narrower than the shell's 440px so
+   the explorer gets the room. It used to follow the pane (440px, or 340px
+   only beside the explorer), so the list jumped as rows were opened. */
+.mgrid.mf-grid { grid-template-columns: 340px minmax(0, 1fr); }
 /* A manifest or another load with the map under it (Departments tab, loads). */
 .mfx-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .mfx-t tr.mfx-paint { cursor: pointer; } .mfx-t tr.mfx-paint:hover td { background: var(--hover); } .mfx-t tr.mfx-paint.on td { background: var(--accent-soft); }
@@ -1194,7 +1196,8 @@ a.nm-go { color: inherit; text-decoration: none; }
 a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .nm-tick { color: #16A34A; font-weight: 700; margin-right: 4px; }
 .nm-off { color: var(--dim); font-size: 11px; }
-@container shell (max-width: 1400px) { .mgrid:has(.mfx-col) { grid-template-columns: 1fr; } .mgrid:has(.mfx-col) .mfl { max-height: 260px; overflow: auto; } }
+/* A half-screen desk: the list above whatever is open, the same for every pane. */
+@container shell (max-width: 1100px) { .mgrid.mf-grid { grid-template-columns: minmax(0, 1fr); } .mgrid.mf-grid .mfl { max-height: 260px; overflow: auto; } }
 @container shell (max-width: 760px) { .mfx-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* Dock phone search, manifest info, pallet contents */
@@ -3739,3 +3742,93 @@ details.bf-g[open] > summary svg.cv { transform: rotate(180deg); }
 .phb-chip.dock-st.idle { background: var(--chip); color: var(--chip-ink); }
 .phb-chip.dock-st.ok { background: #DCFCE7; color: #166534; }
 .phb-chip.dock-st.none { background: #EEF2FF; color: #3730A3; }
+
+/* A rail row for a screen still being built (Layouts): faded, SOON at its
+   end, and it still opens the page that says so. */
+.rrow.soon[data-view] { cursor: pointer; }
+.rrow.soon[data-view]:hover, .rrow.soon.on { opacity: .85; }
+.rrow.soon > .soon { margin-left: auto; text-transform: uppercase; }
+
+/* Layouts: the coming-soon page, with what it will do. */
+.lyt { max-width: 960px; margin: 24px auto 32px; display: flex; flex-direction: column; align-items: center; gap: 22px; text-align: center; }
+.lyt-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.lyt-ic { width: 76px; height: 76px; border-radius: 22px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); margin-bottom: 6px; }
+.lyt-ic svg.i { width: 38px; height: 38px; }
+.lyt-soon { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 999px; padding: 3px 10px; }
+.lyt-hero h2 { margin: 2px 0 0; font-size: 28px; letter-spacing: -.01em; }
+.lyt-hero p { margin: 0; font-size: 15px; color: var(--dim); max-width: 52ch; }
+.lyt-show { width: min(560px, 100%); padding: 18px 20px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.lyt-map { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 10px; background: var(--ground); }
+.lyt-run { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.lyt-sh { display: block; height: 22px; border-radius: 4px; border: 1px solid rgba(17, 24, 39, .12); }
+.lyt-sh.cur { background: #86EFAC; }
+.lyt-sh.old { background: #FCD34D; }
+.lyt-sh.none { background: #E5E7EB; }
+.lyt-key { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-top: 12px; font-size: 12.5px; color: var(--ink2); }
+.lyt-key span { display: inline-flex; align-items: center; gap: 7px; }
+.lyt-key .lyt-sh { width: 18px; height: 12px; }
+.lyt-feats { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; text-align: left; }
+.lyt-f { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.lyt-fi { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); }
+.lyt-fi svg.i { width: 18px; height: 18px; }
+.lyt-f b { font-size: 14px; }
+.lyt-f small { font-size: 12.5px; color: var(--dim); line-height: 1.45; }
+@container shell (max-width: 600px) { .lyt { margin-top: 8px; } .lyt-hero h2 { font-size: 24px; } }
+/* The truck's six phases under the chip: done ones filled, this one strong. */
+.kpi.dk .dk-steps6 { list-style: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0 0 12px; padding: 0; }
+.dk-steps6 li { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.dk-steps6 li i { display: block; height: 5px; border-radius: 3px; background: var(--line); }
+.dk-steps6 li.dn i { background: color-mix(in srgb, var(--accent) 45%, var(--panel)); }
+.dk-steps6 li.on i { background: var(--accent); }
+.dk-steps6 li span { font-size: 10.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-steps6 li.dn span { color: var(--dim); }
+.dk-steps6 li.on span { color: var(--ink); font-weight: 800; }
+@container shell (max-width: 1100px) { .dk-steps6 li:not(.on) span { visibility: hidden; } }
+
+/* Settings › Language: each language a button with its flag. */
+.lang-pick { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 520px; }
+.lang-pick button { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px 0 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.lang-pick button:hover { border-color: var(--accent-line); background: var(--hover); }
+.lang-pick button.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(17, 24, 39, .14); }
+/* The language row lets its buttons wrap under the words: its control may
+   shrink (the shell's .stg-ctl does not), and on a phone it takes a line of
+   its own, two buttons across. */
+.stg-item:has(.lang-pick) .stg-ctl { flex: 0 1 auto; min-width: 0; }
+@container shell (max-width: 900px) { .stg-item:has(.lang-pick) { flex-wrap: wrap; } .stg-item:has(.lang-pick) .stg-ctl { flex: 1 1 100%; } .lang-pick { justify-content: flex-start; max-width: none; } }
+@container shell (max-width: 600px) { .lang-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .lang-pick button { min-height: 44px; } .lang-pick button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+
+/* The loading screen: a turning ring instead of the sliding line. The
+   markup is the shell's (.ld-bar > i, in index.html and the store and owner
+   covers); the track is the ring's faint inner edge, the arc fades in to
+   its head and turns. Still for a device that asks for less motion. */
+.ld-bar { width: 52px; height: 52px; margin-top: 18px; border: 0; border-radius: 50%; background: none; box-shadow: inset 0 0 0 5px color-mix(in srgb, var(--accent) 14%, transparent); overflow: visible; }
+.ld-bar i { inset: 0; left: 0; width: auto; border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 18%, color-mix(in srgb, var(--accent) 35%, transparent) 50%, var(--accent) 100%); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px)); animation: ld-turn .9s linear infinite; }
+@keyframes ld-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ld-bar i { width: auto; left: 0; } }
+
+/* Dashboard › Back dock: the dock's bays, read-only, in Receiving's colours
+   (pallet type; done green; decanting ringed in the accent, paused amber). */
+.dkg { margin: 10px 0 12px; }
+.dkg-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--dim); }
+.dkg-h b { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.dkg-grid { display: grid; gap: 3px; }
+.dkg-c { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; height: 30px; border-radius: 5px; border: 1px dashed var(--line); background: var(--ground); line-height: 1; overflow: hidden; }
+.dkg-c b { font-size: 9.5px; font-weight: 700; color: var(--faint); }
+.dkg-c em { font-style: normal; font-size: 11.5px; font-weight: 800; margin-top: 2px; }
+.dkg-c.p { border: 0; color: #fff; }
+.dkg-c.p b { color: rgba(255, 255, 255, .78); }
+.dkg-c.t-c { background: #2953D6; }
+.dkg-c.t-l { background: #B3261E; }
+.dkg-c.t-b { background: #69787F; }
+.dkg-c.st-done { background: #C9F0D8; color: #14532D; }
+.dkg-c.st-done b { color: #3F7D57; }
+.dkg-c.st-active { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px var(--accent); }
+.dkg-c.st-paused { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px #D97706; }
+.dkg-c.out { background: repeating-linear-gradient(135deg, #E5E7EB 0 5px, #F3F4F6 5px 10px); color: var(--dim); }
+.dkg-c.out b { color: var(--faint); }
+.dkg-key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 7px; font-size: 11px; color: var(--dim); }
+.dkg-key span { display: inline-flex; align-items: center; gap: 5px; }
+.dkg-key i { width: 11px; height: 11px; border-radius: 3px; }
+.dkg-key i.dn { background: #C9F0D8; box-shadow: inset 0 0 0 1px #86D9A8; }
+.dkg-key i.ac { background: var(--panel); box-shadow: inset 0 0 0 2px var(--accent); }

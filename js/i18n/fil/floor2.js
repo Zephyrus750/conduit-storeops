@@ -862,7 +862,6 @@ export default {
   "{n} resources": "{n} resources",
   "{name} is for managers: sign in with the manager code": "Para sa mga manager ang {name}: mag-sign in gamit ang manager code",
   "/ {n} trucks cleared today": "/ {n} truck na tapos ngayon",
-  "All trucks cleared": "Lahat ng truck tapos na",
   "Cartons decanted today": "Mga kartong na-decant ngayon",
   "Every truck today is cleared.": "Tapos na ang lahat ng truck ngayon.",
   "Last cleared": "Huling natapos",
@@ -871,4 +870,8 @@ export default {
   "Waiting for truck {no}": "Hinihintay ang truck {no}",
   "none · confirmed in the Planner": "wala · kumpirmado sa Planner",
   "{done} of {n} cleared": "{done} sa {n} tapos na",
+  "Every bay free": "Bakante lahat ng bay",
+  "free bay": "bakanteng bay",
+  "{n} pallet on the dock": "{n} pallet sa dock",
+  "{n} pallets on the dock": "{n} pallet sa dock",
 };

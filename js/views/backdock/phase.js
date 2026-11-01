@@ -33,6 +33,8 @@ function line(t, ph) {
   if (ph === 'cleared') return tx('Every pallet done: close the truck');
   return tx('Finalised {time}', { time: fmtHM(t.clearedAt) });
 }
+// The same sentence for any truck (the Dashboard's Back dock card).
+export const phaseLine = t => line(t, truckPhase(t));
 // The next step: what a person does to move the truck on.
 export function nextStep(t) {
   const ph = truckPhase(t);

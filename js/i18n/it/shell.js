@@ -377,4 +377,6 @@ export default {
   "Continue and open the guide.": "Continua e apri la guida.",
   "Help for this screen": "Aiuto per questa schermata",
   "Sign in to open the guide.": "Accedi per aprire la guida.",
+  "Layouts": "Layout",
+  "Soon": "Presto",
 };

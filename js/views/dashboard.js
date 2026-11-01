@@ -12,8 +12,10 @@ import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, 
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
-import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex } from './backdock/common.js';
-import { phaseChip } from './backdock/phase.js';
+import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex, grid, PTYPES, PT_LETTER, PT_NAME, PT_SHORT, PALLET_STATE } from './backdock/common.js';
+import { settingsOf } from '../../shared/reducers/store.js';
+import { phaseChip, phaseLine, PHASE_NAME } from './backdock/phase.js';
+import { PHASES, truckPhase } from '../../shared/dockphase.js';
 import { ratesFor } from './backdock/plan.js';
 import { toolOff } from '../../shared/tools.js';
 import { openPasteBox } from './pastebox.js';
@@ -74,6 +76,25 @@ function labelsCard(ctx, r) {
   if (done >= total) return kpi('done', 'tag', tx('Label integrity'), 'labelint', total, `/ ${total}`, tx('This cycle is complete ✓'), [[tx('Labels wrong this cycle'), String(wrong), wrong ? 'c-red' : ''], [tx('Cycle'), esc(cyc)], [tx('Next cycle opens in'), txn(daysLeftInCycle(L.cycleLen), '{n} day', '{n} days')]], 100);
   return kpi('', 'tag', tx('Label integrity'), 'labelint', done, `/ ${total}`, period === 'today' ? tx('Micro-departments checked this cycle · {n} today', { n: inP }) : r.label === 'this week' ? tx('Micro-departments checked this cycle · {n} this week', { n: inP }) : tx('Micro-departments checked this cycle · {n} in {month}', { n: inP, month: r.label }), [[tx('Labels wrong this cycle'), String(wrong), wrong ? 'c-red' : ''], [tx('Days left in cycle'), String(daysLeftInCycle(L.cycleLen))], [tx('Still to check'), String(total - done)]], done / total * 100);
 }
+// The dock itself, read-only: Receiving's bays with each pallet's type and
+// state in Receiving's colours. With no truck on it, the dock's own grid
+// (Settings › Dock grid), every bay free.
+function dockMini(ctx, t) {
+  const g = grid(t || { grid: settingsOf(ctx.store.get('settings')).dockGrid }), byRef = {};
+  for (const p of Object.values(t?.pallets || {})) if (p.ref) byRef[p.ref] = p;
+  const n = Object.keys(byRef).length;
+  const cells = g.refs.map(ref => {
+    const p = byRef[ref];
+    if (!p) return `<span class="dkg-c" title="${ref} · ${tx('free bay')}"><b>${ref}</b></span>`;
+    const s = p.status || 'landed', name = PT_NAME[p.ptype] || p.ptype || '';
+    if (p.excluded) return `<span class="dkg-c p out" title="${ref} · ${tx('not in this session')}"><b>${ref}</b><em>${tx('OUT')}</em></span>`;
+    return `<span class="dkg-c p t-${PT_LETTER[p.ptype] || 'c'} st-${s}" title="${ref} · ${esc(name)} · ${tx('{n} cartons', { n: p.cartons ?? '–' })} · ${PALLET_STATE[s] || esc(s)}"><b>${ref}</b><em>${p.cartons ?? '–'}</em></span>`;
+  }).join('');
+  const key = PTYPES.map(p => `<span><i style="background:${p[2]}"></i>${PT_SHORT[p[0]]}</span>`).join('') +
+    `<span><i class="dn"></i>${tx('Done')}</span><span><i class="ac"></i>${tx('Decanting')}</span>`;
+  return `<div class="dkg"><div class="dkg-h"><b>${tx('The dock')}</b><span>${n ? txn(n, '{n} pallet on the dock', '{n} pallets on the dock') : tx('Every bay free')}</span></div>` +
+    `<div class="dkg-grid" style="grid-template-columns:repeat(${g.cols},minmax(0,1fr))">${cells}</div><div class="dkg-key">${key}</div></div>`;
+}
 function dockCard(ctx, r) {
   const caps = ctx.session.current?.caps || [];
   if (!caps.includes('backdock')) return '';
@@ -90,22 +111,30 @@ function dockCard(ctx, r) {
     const slots = Object.entries(plan.slots || {}).map(([n, sl]) => [Number(n), sl]).sort((a, b) => a[0] - b[0]);
     const planned = new Set([...slots.map(([n]) => n), ...taken]).size, next = slots.find(([n]) => !taken.has(n));
     const last = done.at(-1), none = !planned && !!plan.noTrucks;
-    const chip = t ? `${phaseChip(t)} <b>${tx('Truck {no}', { no: esc(truckNo(t.id)) })}</b>` : `<span class="phb-chip dock-st ${none ? 'none' : done.length && !next ? 'ok' : 'idle'}">${none ? tx('No trucks today') : done.length && !next ? tx('All trucks cleared') : tx('No truck on the dock')}</span>`;
+    // The truck the card follows: the one on the dock, else the last one
+    // closed today (shown as Closed until the next truck lands).
+    const ph = t ? truckPhase(t) : last ? 'closed' : null, shown = t || last;
+    const steps = ph ? `<ol class="dk-steps6" aria-label="${tx('Truck phase')}">${PHASES.map((x, i) => `<li class="${i < PHASES.indexOf(ph) ? 'dn' : x === ph ? 'on' : ''}"${x === ph ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[x]}</span></li>`).join('')}</ol>` : '';
+    const chip = shown ? `<span class="phb-chip ph-${ph}">${PHASE_NAME[ph]}</span> <b>${tx('Truck {no}', { no: esc(truckNo(shown.id)) })}</b>` : `<span class="phb-chip dock-st ${none ? 'none' : 'idle'}">${none ? tx('No trucks today') : tx('No truck on the dock')}</span>`;
     const cartons = done.reduce((n, h) => n + (h.cartons || 0), 0) + onDock.reduce((n, x) => n + progress(x).done, 0);
     const row = (label, value) => `<div class="row">${label}<b>${value}</b></div>`;
     const common = row(tx('Trucks today'), planned ? tx('{done} of {n} cleared', { done: done.length, n: planned }) : none ? tx('none · confirmed in the Planner') : '—') +
       row(tx('Next truck'), next ? `T${next[0]}${next[1].eta ? ' · ' + esc(next[1].eta) : ''}${next[1].manifest?.manNo ? ' · ' + esc(next[1].manifest.manNo) : ''}` : '—') +
       row(tx('Cartons decanted today'), cartons.toLocaleString()) +
       row(tx('Last cleared'), last ? `T${esc(truckNo(last.id))}${last.clearedAt ? ' · ' + fmtHM(last.clearedAt) : ''}${last.clearMins ? ' · ' + fmtMins(last.clearMins) : ''}` : '—');
-    const open = `<a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a>`;
-    if (!t) {
-      const line = none ? tx('No trucks today · confirmed in the Planner') : next ? tx('Waiting for truck {no}', { no: next[0] }) : done.length ? tx('Every truck today is cleared.') : tx('Nothing on the dock. Land a truck from Receiving.');
-      return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${open}</div><div class="dk-chip">${chip}</div><div class="hero"><span class="n">${done.length}</span><span class="d">${planned ? tx('/ {n} trucks cleared today', { n: planned }) : txn(done.length, 'truck cleared today', 'trucks cleared today')}</span></div><div class="hl">${line}</div><div class="rows">${common}</div>` +
-        (planned ? `<div class="prog"><div class="track"><i style="width:${Math.round(done.length / planned * 100)}%"></i></div><b>${Math.round(done.length / planned * 100)}%</b></div>` : '') + `</div>`;
+    const open = `<a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a>`, head = `<div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${open}</div><div class="dk-chip">${chip}</div>${steps}`;
+    const dayHero = `<div class="hero"><span class="n">${done.length}</span><span class="d">${planned ? tx('/ {n} trucks cleared today', { n: planned }) : txn(done.length, 'truck cleared today', 'trucks cleared today')}</span></div>`;
+    const dayBar = planned ? `<div class="prog"><div class="track"><i style="width:${Math.round(done.length / planned * 100)}%"></i></div><b>${Math.round(done.length / planned * 100)}%</b></div>` : '';
+    // No truck on the dock, or one planned but not landed: the day's trucks.
+    if (!t || ph === 'planned') {
+      const wait = next ? tx('Waiting for truck {no}', { no: next[0] }) : '';
+      const line = t ? phaseLine(t)
+        : none ? tx('No trucks today · confirmed in the Planner') : last ? [tx('Finalised {time}', { time: last.clearedAt ? fmtHM(last.clearedAt) : '—' }), wait || tx('Every truck today is cleared.')].join(' · ') : wait || tx('Nothing on the dock. Land a truck from Receiving.');
+      return `<div class="card kpi dk">${head}${dayHero}<div class="hl">${line}</div>${dockMini(ctx, t)}<div class="rows">${common}</div>${dayBar}</div>`;
     }
     const pr = progress(t), halt = openHalt(t), fc = forecast(t, Date.now(), ratesFor(ctx.store.get('dock'))), crew = (t.team || []).length;
-    const facts = [t.landedAt ? fmtHM(t.landedAt) : tx('staged'), txn(pr.count, '{n} pallet', '{n} pallets'), tx('{n} decanting', { n: pr.active }), t.goalAt ? tx('goal {time}', { time: fmtHM(t.goalAt) }) : '', crew ? tx('{n} crew', { n: crew }) : ''].filter(Boolean);
-    return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${open}</div><div class="dk-chip">${chip}</div><div class="hero"><span class="n">${pr.done}</span><span class="d">${tx('/ {total} cartons decanted', { total: pr.total })}</span></div><div class="hl">${facts.join(' · ')}</div>` +
+    const facts = [t.landedAt ? tx('landed {time}', { time: fmtHM(t.landedAt) }) : '', crew ? tx('{n} crew', { n: crew }) : '', t.goalAt ? tx('goal {time}', { time: fmtHM(t.goalAt) }) : ''].filter(Boolean).join(' · ');
+    return `<div class="card kpi dk">${head}<div class="hero"><span class="n">${pr.done}</span><span class="d">${tx('/ {total} cartons decanted', { total: pr.total })}</span></div><div class="hl">${phaseLine(t)}${facts ? ` · ${facts}` : ''}</div>${dockMini(ctx, t)}` +
       `<div class="rows">${halt ? `<div class="row">${tx('On hold')}<b class="c-red">${tx('{hold} since {time}', { hold: esc(holdName(halt)), time: fmtHM(halt.start) })}</b></div>` : ''}${row(tx('Pallets done'), `${pr.doneCount} / ${pr.count}`)}${row(tx('Forecast finish'), fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—')}${common}</div><div class="prog"><div class="track"><i style="width:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
   }
   const rows = (dock.history || []).filter(h => inRange(h.id.slice(0, 10), r)), cartons = rows.reduce((n, h) => n + (h.cartons || 0), 0);
