@@ -444,4 +444,9 @@ export default {
   "a form or file from Resources": "một biểu mẫu hoặc tệp trong Tài liệu",
   "All {n} resources matching “{q}”": "Tất cả {n} tài liệu khớp “{q}”",
   "Open Resources with this search": "Mở Tài liệu với tìm kiếm này",
+  "Store plan: off": "Bản vẽ mặt bằng: tắt",
+  "Store plan: off, under the map or on its own": "Bản vẽ mặt bằng: tắt, dưới sơ đồ hoặc riêng",
+  "Store plan: on its own": "Bản vẽ mặt bằng: riêng",
+  "Store plan: under the map": "Bản vẽ mặt bằng: dưới sơ đồ",
+  "The store plan couldn’t be loaded.": "Không tải được bản vẽ mặt bằng.",
 };

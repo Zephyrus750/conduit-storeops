@@ -115,8 +115,11 @@ export function renderMap(data) {
 // The map editor, the owner console and scripts/publish-map.js all use it.
 export function publishBody(data, { version, name } = {}) {
   const doc = renderMap(data);
+  // The store plan a floor names (the map editor sets it once the picture
+  // is uploaded): its id and where it sits, passed through as the worker checks it.
+  const plan = id => { const p = (data.floors || []).find(f => f.id === id)?.plan; return p && typeof p === 'object' ? { plan: { id: p.id, w: p.w, h: p.h, x: p.x, y: p.y, scale: p.scale } } : {}; };
   const floors = doc.floors.filter(f => f.shelves || f.markers || /landmark-group/.test(f.svg))
-    .map(f => ({ id: f.id, name: f.name, type: f.type, level: f.level, svg: f.svg, ...(f.paths ? { paths: f.paths } : {}) }));
+    .map(f => ({ id: f.id, name: f.name, type: f.type, level: f.level, svg: f.svg, ...(f.paths ? { paths: f.paths } : {}), ...plan(f.id) }));
   const source = { ...data, floors: (data.floors || []).map(({ svg, ...f }) => f) };
   return { version, name: name || doc.name, departments: doc.departments, floors, ...(doc.storeInfo ? { storeInfo: doc.storeInfo } : {}), ...(doc.metresPerUnit ? { metresPerUnit: doc.metresPerUnit } : {}), source };
 }

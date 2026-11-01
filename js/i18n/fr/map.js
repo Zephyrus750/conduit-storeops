@@ -444,4 +444,9 @@ export default {
   "a form or file from Resources": "un formulaire ou un fichier des Ressources",
   "All {n} resources matching “{q}”": "Les {n} ressources pour « {q} »",
   "Open Resources with this search": "Ouvrir Ressources avec cette recherche",
+  "Store plan: off": "Plan officiel : masqué",
+  "Store plan: off, under the map or on its own": "Plan officiel : masqué, sous le plan du magasin ou seul",
+  "Store plan: on its own": "Plan officiel : seul",
+  "Store plan: under the map": "Plan officiel : sous le plan du magasin",
+  "The store plan couldn’t be loaded.": "Le plan officiel n’a pas pu être chargé.",
 };

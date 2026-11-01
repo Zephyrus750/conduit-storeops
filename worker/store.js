@@ -61,6 +61,16 @@ const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
 // an issue is completed or removed (a photo can show people; it is kept no
 // longer than it helps).
 const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
+// The store plan: the official floor plan a map was traced from, the
+// picture the map editor holds under the drawing. The editor uploads it
+// before it publishes and each floor names its picture and where it sits.
+// Kept in R2 (PHOTOS, under plans/<store>/) by its SHA-256, so publishing
+// the same plan again stores nothing new; a version's floors keep naming it.
+const PLAN_MAX = 8_000_000, PLAN_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+const PLAN_ID = /^[0-9a-f]{64}\.(?:jpg|png|webp)$/;
+const planKind = b => b.length > 12 && (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff ? 'jpg'
+  : b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 ? 'png'
+  : String.fromCharCode(...b.slice(0, 4)) === 'RIFF' && String.fromCharCode(...b.slice(8, 12)) === 'WEBP' ? 'webp' : null) || null;
 const WORKER_ONLY = new Set(['map.publish', 'manifest.publish', 'manifest.remove', 'soh.publish', 'soh.remove', 'backfill.report.publish', 'store.retain', 'store.areas.set']);
 const SNAPSHOT_MAX = 1_900_000;       // the state is saved as one row, and a Durable Object row holds 2 MB
 const FUTURE_MS = 10 * 60_000, PAST_MS = 30 * 86_400_000;   // how far a device's clock may stray     // above this gap a hello gets a snapshot instead of a delta
@@ -168,13 +178,16 @@ export class StoreObject extends DurableObject {
         case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readJson(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true, now: Date.now() }); }
         case '/kpis': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
         case '/tail': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
-        case '/map': return request.method === 'POST' ? this.publishMap(await readJson(request, MAP_BODY_MAX), claims) : json(this.mapInfo());
+        case '/map': return request.method === 'POST' ? await this.publishMap(await readJson(request, MAP_BODY_MAX), claims) : json(this.mapInfo());
         default: {
           const m = url.pathname.match(/^\/map\/([\w.-]+)$/);
           if (m) return this.mapDoc(m[1], request.headers.get('If-None-Match'));
           const ms = url.pathname.match(/^\/map\/([\w.-]+)\/source$/);
           if (ms) return this.mapSource(ms[1], claims);
           if (url.pathname === '/photo' && request.method === 'POST') return await this.putPhoto(request, claims);
+          if (url.pathname === '/plan' && request.method === 'POST') return await this.putPlan(request, claims);
+          const pl = url.pathname.match(/^\/plan\/([0-9a-f]{64}\.(?:jpg|png|webp))$/);
+          if (pl) return await this.getPlan(pl[1]);
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1], claims));
           if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readJson(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12), url.searchParams.get('weekly') === '1'); }
@@ -363,6 +376,38 @@ export class StoreObject extends DurableObject {
   // (an old epoch) cannot fetch them.
   photos() { if (!this.env.PHOTOS) throw new HttpError(501, 'not_implemented', 'issue photos need the PHOTOS R2 bucket bound to the worker'); return this.env.PHOTOS; }
   photoKey(id) { return `${this.storeNo}/${id}.jpg`; }
+  // ── the store plan ──
+  planBucket() { if (!this.env.PHOTOS) throw new HttpError(501, 'not_implemented', 'the store plan needs the PHOTOS R2 bucket bound to the worker'); return this.env.PHOTOS; }
+  planKey(id) { return `plans/${this.storeNo}/${id}`; }
+  async putPlan(request, claims) {
+    if (!claims.owner) throw new HttpError(403, 'unauthorised', 'the store plan is added by the owner, from the map editor');
+    const bucket = this.planBucket();
+    if (Number(request.headers.get('Content-Length') || 0) > PLAN_MAX) throw new HttpError(413, 'payload_too_large', `a store plan must be under ${PLAN_MAX / 1_000_000} MB`);
+    const buf = new Uint8Array(await request.arrayBuffer());
+    if (buf.length > PLAN_MAX) throw new HttpError(413, 'payload_too_large', `a store plan must be under ${PLAN_MAX / 1_000_000} MB`);
+    const kind = planKind(buf);
+    if (!kind) throw new HttpError(415, 'unsupported_media', 'a store plan must be a JPEG, PNG or WebP picture');
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', buf))].map(x => x.toString(16).padStart(2, '0')).join('');
+    const id = `${hash}.${kind}`, key = this.planKey(id);
+    if (!(await bucket.head(key))) await bucket.put(key, buf, { httpMetadata: { contentType: PLAN_TYPES[kind] }, customMetadata: { store: String(this.storeNo), at: new Date().toISOString() } });
+    return json({ id, size: buf.length }, 201);
+  }
+  // Any device of the store reads it: the map is everyone's. The id is the
+  // picture's hash, so the answer never changes.
+  async getPlan(id) {
+    const obj = await this.planBucket().get(this.planKey(id));
+    if (!obj) throw new HttpError(404, 'not_found', 'no such store plan');
+    return new Response(obj.body, { headers: { 'Content-Type': PLAN_TYPES[id.split('.').pop()], 'Cache-Control': 'private, max-age=31536000, immutable', ETag: `"${id}"`, ...CORS } });
+  }
+  // A floor's plan as a publish names it: an uploaded picture, its size in
+  // pixels and where it sits on the floor (the editor's underlay position).
+  static cleanPlan(p, floor) {
+    if (p == null) return null;
+    const o = { id: String(p.id ?? ''), w: Number(p.w), h: Number(p.h), x: Number(p.x), y: Number(p.y), scale: Number(p.scale) };
+    const ok = PLAN_ID.test(o.id) && o.w > 0 && o.w <= 20000 && o.h > 0 && o.h <= 20000 && Math.abs(o.x) <= 1e7 && Math.abs(o.y) <= 1e7 && o.scale > 0 && o.scale < 1000;
+    if (!ok) throw new HttpError(400, 'invalid_request', `floor ${floor}: plan needs an uploaded picture id and numeric w, h, x, y and scale`);
+    return o;
+  }
   async putPhoto(request, claims) {
     const bucket = this.photos();
     if (!claims.store || claims.store !== this.storeNo) throw new HttpError(403, 'unauthorised', 'a photo is added by a device of this store');
@@ -746,13 +791,23 @@ export class StoreObject extends DurableObject {
     if (!row) throw new HttpError(404, 'not_found', version ? `map version ${version} has no editor source (published from a file)` : 'no map has been published for this store');
     return new Response(row.doc, { headers: { 'Content-Type': 'application/json', ...CORS } });
   }
-  publishMap(body, claims) {
+  async publishMap(body, claims) {
     if (!claims.owner) throw new HttpError(403, 'unauthorised', 'publishing a map needs the owner');
     const version = String(body?.version ?? '').trim();
     if (!/^[\w.-]{1,32}$/.test(version) || version === 'latest') throw new HttpError(400, 'invalid_request', 'version must be 1 to 32 letters, digits, dots or dashes');
     if (this.sql.exec('SELECT 1 FROM maps WHERE version = ?', version).toArray().length) throw new HttpError(409, 'exists', `map version ${version} is already published; publish a new version`);
     const floors = Array.isArray(body.floors) ? body.floors : [];
     if (!floors.length) throw new HttpError(400, 'invalid_request', 'floors must list at least one floor with its svg');
+    // A floor's store plan must already be uploaded; checked before anything
+    // is written, so the rest of the publish runs without waiting.
+    const plans = new Map();
+    for (const f of floors) {
+      const plan = StoreObject.cleanPlan(f?.plan, String(f?.id ?? ''));
+      if (!plan) continue;
+      if (!(await this.planBucket().head(this.planKey(plan.id)))) throw new HttpError(400, 'invalid_request', `floor ${f.id}: its store plan ${plan.id} was not uploaded`);
+      plans.set(f, plan);
+    }
+    if (plans.size && this.sql.exec('SELECT 1 FROM maps WHERE version = ?', version).toArray().length) throw new HttpError(409, 'exists', `map version ${version} is already published; publish a new version`);
     const metaFloors = [], clean = [];
     let stripped = 0;
     for (const f of floors) {
@@ -777,7 +832,7 @@ export class StoreObject extends DurableObject {
         if (ns.length >= 2 && es.length) paths = { nodes: ns, edges: es };
       }
       const level = Number(f.level);
-      metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), ...(Number.isInteger(level) && Math.abs(level) <= 10 ? { level } : {}), shelves: (svg.match(/class="shelf-group"(?![^>]*data-inactive)/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}) });
+      metaFloors.push({ id, name: String(f.name || id).slice(0, 64), type: String(f.type || 'foh').slice(0, 16), ...(Number.isInteger(level) && Math.abs(level) <= 10 ? { level } : {}), shelves: (svg.match(/class="shelf-group"(?![^>]*data-inactive)/g) || []).length, bytes: svg.length, ...(paths ? { paths } : {}), ...(plans.get(f) ? { plan: plans.get(f) } : {}) });
     }
     const departments = Array.isArray(body.departments) ? body.departments.slice(0, 64).map(d => ({ id: String(d.id || '').slice(0, 16), name: String(d.name || '').slice(0, 64), color: String(d.color || '').slice(0, 16), parent: String(d.parent || '').slice(0, 16) })) : [];
     const info = cleanStoreInfo(body.storeInfo), mpu = Number(body.metresPerUnit);

@@ -181,6 +181,11 @@ r.post('/v1/admin/actas/:no', async (req, env, _c, p) => {
 r.get('/v1/store/:no/map', (req, env, _c, p) => anyStoreCall(req, env, p.no, '/map'));
 r.get('/v1/store/:no/map/:version', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/map/${p.version}`));
 r.get('/v1/store/:no/map/:version/source', (req, env, _c, p) => ownerStoreCall(req, env, p.no, `/map/${p.version}/source`));
+// The store plan (the picture a map was traced from): the map editor
+// uploads it with the owner session before it publishes; any device of the
+// store reads it by the id a floor of the map names.
+r.post('/v1/store/:no/plan', (req, env, _c, p) => ownerStoreCall(req, env, p.no, '/plan'));
+r.get('/v1/store/:no/plan/:id', (req, env, _c, p) => anyStoreCall(req, env, p.no, `/plan/${p.id}`));
 r.post('/v1/store/:no/map', async (req, env, _c, p) => {
   const res = await ownerStoreCall(req, env, p.no, '/map');
   if (res.ok) { const { version } = await res.clone().json(); await registry(env, 'PATCH', `/stores/${p.no}`, { map_version: version }); }

@@ -1262,3 +1262,42 @@ test('item bays: any device of a store with the Stockroom reads an item’s stoc
   const other = (await api('POST', '/v1/auth/signin', { store: '2151', pin: '135790', device: 'bays-2151' })).body.token;
   assert.equal((await api('GET', '/v1/store/2151/bays?kc=43648803', undefined, other)).body.code, 'not_entitled', 'a store without the Stockroom has no bays to read');
 });
+
+test('store plan: the owner uploads the picture a map was traced from, a publish names it per floor, and any device of the store reads it', async () => {
+  assert.equal((await reg2('2152')).status, 201);
+  const dev = (await api('POST', '/v1/auth/signin', { store: '2152', pin: '135790', device: 'plan-ph' })).body.token;
+  const other = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'plan-other' })).body.token;
+  const raw = (method, path, token, body, type = 'image/png') => mf.dispatchFetch('http://conduit.test' + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': type } : {}) }, body });
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new Array(400).fill(3)]);
+  assert.equal((await raw('POST', '/v1/store/2152/plan', dev, png)).status, 403, 'a store device cannot add the plan');
+  assert.equal((await raw('POST', '/v1/store/2152/plan', ownerToken, new Uint8Array(40).fill(1))).status, 415, 'not a picture');
+  assert.equal((await raw('POST', '/v1/store/2152/plan', ownerToken, new Uint8Array(8_100_000).fill(0xff), 'image/jpeg')).status, 413, 'too big');
+  const up = await raw('POST', '/v1/store/2152/plan', ownerToken, png);
+  assert.equal(up.status, 201);
+  const { id } = await up.json();
+  assert.match(id, /^[0-9a-f]{64}\.png$/);
+  assert.equal((await (await raw('POST', '/v1/store/2152/plan', ownerToken, png)).json()).id, id, 'the same picture keeps its id');
+
+  const svg = '<svg class="map real" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g class="shelf-group" data-shelf="A1" data-dept="h1"><rect class="shelf" x="1" y="1" width="10" height="10"/></g></svg>';
+  const plan = { id, w: 2400, h: 1600, x: -120, y: 40.5, scale: 1.87 };
+  assert.equal((await api('POST', '/v1/store/2152/map', { version: 'p1', floors: [{ id: 'ground', svg, plan: { ...plan, id: 'f'.repeat(64) + '.png' } }] }, ownerToken)).status, 400, 'a plan that was never uploaded');
+  assert.equal((await api('POST', '/v1/store/2152/map', { version: 'p1', floors: [{ id: 'ground', svg, plan: { ...plan, scale: 0 } }] }, ownerToken)).status, 400, 'a plan needs its scale');
+  const pub = await api('POST', '/v1/store/2152/map', { version: 'p1', floors: [{ id: 'ground', name: 'Ground', svg, plan: { ...plan, extra: 'dropped' } }] }, ownerToken);
+  assert.equal(pub.status, 201, JSON.stringify(pub.body));
+  const doc = await api('GET', '/v1/store/2152/map/latest', undefined, dev);
+  assert.deepEqual(doc.body.floors[0].plan, plan, 'the floor names its plan and where it sits');
+  assert.deepEqual((await api('GET', '/v1/store/2152/map', undefined, dev)).body.floors[0].plan, plan);
+
+  const got = await raw('GET', `/v1/store/2152/plan/${id}`, dev);
+  assert.equal(got.status, 200);
+  assert.equal(got.headers.get('Content-Type'), 'image/png');
+  assert.match(got.headers.get('Cache-Control'), /immutable/);
+  assert.equal((await got.arrayBuffer()).byteLength, png.length);
+  assert.equal((await raw('GET', `/v1/store/2152/plan/${id}`, other)).status, 403, 'another store');
+  assert.equal((await raw('GET', `/v1/store/2152/plan/${id}`, null)).status, 401);
+  assert.equal((await raw('GET', `/v1/store/2152/plan/${'0'.repeat(64)}.png`, dev)).status, 404);
+  // A map without a plan publishes as before.
+  const plain = await api('POST', '/v1/store/2152/map', { version: 'p2', floors: [{ id: 'ground', svg }] }, ownerToken);
+  assert.equal(plain.status, 201);
+  assert.ok(!('plan' in (await api('GET', '/v1/store/2152/map/latest', undefined, dev)).body.floors[0]));
+});

@@ -1502,6 +1502,14 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .ibtn.pcbtn[data-pcmode="large"] { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-line); }
 .ibtn.pcbtn[data-pcmode="off"] { opacity: .5; }
 .ibtn.torybtn.on { background: #FCE7F3; color: #BE185D; border-color: #F9A8D4; }
+/* The store plan (js/map.js plan()): under the map with the shelves
+   see-through over it, or on its own with the shelves hidden. */
+.map.real .plan-img { display: none; pointer-events: none; }
+.map.real.plan-under .plan-img, .map.real.plan-only .plan-img { display: inline; }
+.map.real.plan-under .shelf { fill-opacity: .55; }
+.map.real.plan-only .shelf-group, .map.real.plan-only .shelf-badges, .map.real.plan-only .badges-layer { display: none; }
+.ibtn.planbtn.on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-line); }
+.ibtn.planbtn[data-planmode="only"] { background: var(--accent); color: #fff; border-color: var(--accent); }
 /* Marker and landmark tips: the symbol on the left, the words on the right. */
 .mtip .md.mk { justify-content: center; }
 .mtip .md.mk svg { display: block; }
