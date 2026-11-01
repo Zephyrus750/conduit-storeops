@@ -67,7 +67,8 @@ function gauge(pct) {
 // As DV's: what was decanted, each person's personal breaks, and what the
 // decant plan has them on next (estimated starts from the queues, faint),
 // so Fit runs from the start to the plan's last finish.
-// Shared with the phone's Board tab (screens.js), zoom and pan included.
+// Shared with the phone's Board tab (screens.js) and the phone Wallboard,
+// zoom and pan included.
 export function timeline(t, now, rates) {
   const sched = schedule(t, now, planOpts(t, rates)), ahead = {};
   for (const [pid, sc] of Object.entries(sched)) ahead[pid] = (sc.items || []).filter(x => x.tag === 'queued' && x.end > now);
@@ -152,7 +153,8 @@ function board(ctx) {
 export default {
   id: 'wallboard', title: tx('Wallboard'), icon: 'chart', area: 'backdock',
   desktop(ctx) { return board(ctx); },
-  mobile(ctx) { const { t } = current(ctx), pr = t ? progress(t) : null; return mhead(tx('Wallboard'), t ? tx('Truck {no}', { no: esc(truckNo(t.id)) }) : tx('No truck')) + (t ? `<div class="wb-kpis">${tile(tx('Decanted'), `${pr.done}/${pr.total}`, `${pr.pct}%`)}${tile(tx('Pallets'), `${pr.doneCount}/${pr.count}`, '')}</div>` : ''); },
+  // The phone: the two headline tiles, then the timeline (shared with the Board tab).
+  mobile(ctx) { const { dock, t } = current(ctx), pr = t ? progress(t) : null; return mhead(tx('Wallboard'), t ? tx('Truck {no}', { no: esc(truckNo(t.id)) }) : tx('No truck')) + (t ? `<div class="wb-kpis">${tile(tx('Decanted'), `${pr.done}/${pr.total}`, `${pr.pct}%`)}${tile(tx('Pallets'), `${pr.doneCount}/${pr.count}`, '')}</div>` + timeline(t, Date.now(), ratesFor(dock)) : ''); },
   mount(ctx, root) {
     root.addEventListener('click', e => {
       const a = e.target.closest('[data-act]'); if (a && timelineAct(a)) ctx.rerender();
