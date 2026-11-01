@@ -3637,8 +3637,27 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .bf-gh:first-child, .bf-lh { border-top: 0; }
 .bf-lh { display: flex; align-items: baseline; gap: 8px; }
 .bf-lh span { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 600; }
+/* The backfill board's stages, one colour each on the phone: in progress
+   blue, with review amber, reviewed (finalise on the PDT) purple, requested
+   grey, finalised green. A tinted heading with a dot and its count, and a
+   coloured edge on every row; My locations uses the same edges. */
+.bf-g, .mv-row.bfs { --sc: #94A3B8; --si: #475569; --sb: #F8FAFC; }
+.bf-g.bfst-prog { --sc: #2563EB; --si: #1D4ED8; --sb: #EFF6FF; }
+.bf-g.bfst-rev, .mv-row.bfs.bfst-rev { --sc: #F59E0B; --si: #B45309; --sb: #FFFBEB; }
+.bf-g.bfst-fin, .mv-row.bfs.bfst-fin { --sc: #7C3AED; --si: #6D28D9; --sb: #F5F3FF; }
+.bf-g.bfst-done, .mv-row.bfs.bfst-done { --sc: #16A34A; --si: #15803D; --sb: #F0FDF4; }
+.bf-g + .bf-g { border-top: 1px solid var(--line); }
+.bf-g .bf-gh { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 14px; border-top: 0; color: var(--si); background: var(--sb); }
+.bf-gh .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--sc); }
+.bf-gh .ct { margin-left: auto; min-width: 22px; height: 20px; padding: 0 7px; border-radius: 999px; background: var(--si); color: #fff; font-size: 11.5px; letter-spacing: 0; display: inline-grid; place-items: center; }
+.bf-g .bf-row { box-shadow: inset 4px 0 0 var(--sc); }
+.bf-g .bf-row + .bf-row { border-top: 1px solid var(--line-soft); }
+details.bf-g > summary { list-style: none; cursor: pointer; min-height: 40px; }
+details.bf-g > summary::-webkit-details-marker { display: none; }
+details.bf-g > summary svg.cv { width: 16px; height: 16px; transition: transform .15s; }
+details.bf-g[open] > summary svg.cv { transform: rotate(180deg); }
+.mv-row.bfs { box-shadow: inset 4px 0 0 var(--sc); }
 .bf-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 10px 6px 14px; }
-.bf-row.hot { background: var(--accent-soft); }
 .bf-loc { flex: none; display: inline-flex; align-items: center; gap: 8px; }
 .bf-loc b { font: 800 16px ui-monospace, Menlo, monospace; }
 .bf-row small { flex: 1; min-width: 0; font-size: 13px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -648,4 +648,5 @@ export default {
   "Use {other} instead of {code} in the scans for {bay}?": "¿Usar {other} en lugar de {code} en los escaneos de {bay}?",
   "{name}: use it instead of {code}": "{name}: usarlo en lugar de {code}",
   "The product catalogue did not answer. It is asked again in a couple of minutes.": "El catálogo de productos no respondió. Se vuelve a consultar en un par de minutos.",
+  "Finalised today": "Finalizadas hoy",
 };

@@ -612,7 +612,7 @@ function mineView(ctx) {
   // items wait (WAITING) and come up to scan back once it is submitted.
   const readdBtn = r => `<span class="btn sm" data-act="m-readd" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">${tx('Re-add')}</span>`;
   const chip = r => r.state === 'ready' ? `<span class="btn sm primary" data-act="m-done" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">${tx('Submit')}</span>` : r.state === 'gone' ? `<span class="btn sm" data-act="m-dismiss" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">${tx('Removed · clear')}</span>` : `<span class="status warn">${tx('backfill stage::Review')}</span>`;
-  const line = r => [esc(r.bay) + (r.date !== todayKey() ? ` <small class="cs-dim">${esc(r.date.slice(5))}</small>` : ''), r.state === 'ready' ? tx('Reviewed: finalise it on the PDT, then tap Submit') : r.state === 'gone' ? tx('Removed from today’s board') : r.state === 'done' ? `${tx('Submitted ✓')}${readdOpen(r.sub).length ? ` · ${tx('{n} to scan back', { n: readdOpen(r.sub).length })}` : ''}` : tx('In review'), r.state === 'gone' ? chip(r) : (r.state === 'done' ? '' : chip(r)) + readdBtn(r), r.state === 'ready' ? 'hot' : r.state === 'gone' ? 'warn' : ''];
+  const line = r => [esc(r.bay) + (r.date !== todayKey() ? ` <small class="cs-dim">${esc(r.date.slice(5))}</small>` : ''), r.state === 'ready' ? tx('Reviewed: finalise it on the PDT, then tap Submit') : r.state === 'gone' ? tx('Removed from today’s board') : r.state === 'done' ? `${tx('Submitted ✓')}${readdOpen(r.sub).length ? ` · ${tx('{n} to scan back', { n: readdOpen(r.sub).length })}` : ''}` : tx('In review'), r.state === 'gone' ? chip(r) : (r.state === 'done' ? '' : chip(r)) + readdBtn(r), r.state === 'ready' ? 'bfs bfst-fin' : r.state === 'gone' ? 'warn' : r.state === 'done' ? 'bfs bfst-done' : 'bfs bfst-rev'];
   const items = rows.reduce((n, r) => n + readdOpen(r.sub).length, 0);
   return mhead(tx('My locations'), txn(rows.length, '{n} bay from this phone · last 2 days', '{n} bays from this phone · last 2 days')) +
     (open.length ? mrows(open.map(line)) : `<div class="mv-note">${ic('layers')}${tx('No locations submitted yet.')} ${tx('Scan a location’s codes and submit it for review.')}</div>`) +
@@ -642,7 +642,7 @@ function finaliseReminder(ctx) {
   // Shown once a session: it stays up through repaints until "Got it".
   const ready = myLocations(ctx).filter(r => r.state === 'ready'); if (!ready.length) return '';
   if (st.mRemind !== true) { try { if (sessionStorage.getItem('finalise_reminder_shown')) return ''; sessionStorage.setItem('finalise_reminder_shown', '1'); } catch {} st.mRemind = true; }
-  return `<div class="mv-remind" role="dialog" aria-label="${tx('Ready to finalise')}"><b>${tx('Ready to finalise')}</b><span>${tx('These locations you submitted have been reviewed and are ready to finalise on the PDT.')}</span>${mrows(ready.map(r => [esc(r.bay), esc(r.date === todayKey() ? tx('today') : r.date), `<span class="btn sm primary" data-act="m-done" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">${tx('Submit')}</span>`, 'hot']))}<button class="btn" data-act="m-remind-close">${tx('Got it')}</button></div>`;
+  return `<div class="mv-remind" role="dialog" aria-label="${tx('Ready to finalise')}"><b>${tx('Ready to finalise')}</b><span>${tx('These locations you submitted have been reviewed and are ready to finalise on the PDT.')}</span>${mrows(ready.map(r => [esc(r.bay), esc(r.date === todayKey() ? tx('today') : r.date), `<span class="btn sm primary" data-act="m-done" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}">${tx('Submit')}</span>`, 'bfs bfst-fin']))}<button class="btn" data-act="m-remind-close">${tx('Got it')}</button></div>`;
 }
 // The phone's three steps (location → scan → submit), laid out as the
 // dock's phone: the location bar with its steps on top, the work in the
@@ -674,13 +674,19 @@ function boardView(ctx, m, sheet) {
   const btn = (act, label, b) => `<button class="btn sm" data-act="${act}" data-bay="${esc(b)}">${label}</button>`;
   const row = (b, small, acts, cls = '') => `<div class="bf-row${cls}"><span class="bf-loc"><b>${esc(b)}</b>${dep(b)}</span><small>${small}</small><span class="bf-acts">${acts}</span></div>`;
   const codesOf = s => txn(s.c.scannedCount, '{n} code', '{n} codes');
+  const acc = s => s.metrics?.accuracy == null ? tx('no report') : tx('{acc}% accurate', { acc: s.metrics.accuracy });
+  // Each stage its colour (bf-g in app.css): in progress blue, with review
+  // amber, reviewed (finalise on the PDT) purple, requested grey, finalised
+  // green. Finalised today is folded: it is done, and only counted.
   const groups = [
-    [tx('In progress'), m.pending.filter(s => !s.sentAt).map(s => row(s.bay, codesOf(s), btn('m-resume', tx('Resume'), s.bay) + btn('m-ready', tx('Ready'), s.bay)))],
-    [tx('With review'), m.pending.filter(s => s.sentAt).map(s => row(s.bay, `${codesOf(s)} · ${fmtTime(s.sentAt)}`, btn('m-resume', tx('Resume'), s.bay) + btn('m-ready', tx('Ready'), s.bay)))],
-    [tx('Reviewed: finalise on the PDT'), m.ready.map(s => row(s.bay, s.metrics?.accuracy == null ? tx('no report') : tx('{acc}% accurate', { acc: s.metrics.accuracy }), `<button class="btn sm primary" data-act="m-done" data-bay="${esc(s.bay)}" data-date="${esc(s.date)}">${tx('Submit')}</button>`, ' hot'))],
-    [tx('Requested'), m.requested.map(b => row(b, tx('not started'), btn('m-resume', tx('Start'), b)))],
-  ].filter(([, rows]) => rows.length);
-  const board = groups.length ? `<div class="card bf-board">${groups.map(([h, rows]) => `<div class="bf-gh">${h}</div>${rows.join('')}`).join('')}</div>`
+    ['bfst-prog', tx('In progress'), m.pending.filter(s => !s.sentAt).map(s => row(s.bay, codesOf(s), btn('m-resume', tx('Resume'), s.bay) + btn('m-ready', tx('Ready'), s.bay)))],
+    ['bfst-rev', tx('With review'), m.pending.filter(s => s.sentAt).map(s => row(s.bay, `${codesOf(s)} · ${fmtTime(s.sentAt)}`, btn('m-resume', tx('Resume'), s.bay) + btn('m-ready', tx('Ready'), s.bay)))],
+    ['bfst-fin', tx('Reviewed: finalise on the PDT'), m.ready.map(s => row(s.bay, acc(s), `<button class="btn sm primary" data-act="m-done" data-bay="${esc(s.bay)}" data-date="${esc(s.date)}">${tx('Submit')}</button>`))],
+    ['bfst-req', tx('Requested'), m.requested.map(b => row(b, tx('not started'), btn('m-resume', tx('Start'), b)))],
+    ['bfst-done', tx('Finalised today'), m.submitted.map(s => row(s.bay, [acc(s), s.submittedDoneAt ? fmtTime(s.submittedDoneAt) : ''].filter(Boolean).join(' · '), ''))],
+  ].filter(([, , rows]) => rows.length);
+  const gh = (h, n, tag = 'div') => `<${tag} class="bf-gh"><i class="dot"></i>${h}<span class="ct">${n}</span>${tag === 'summary' ? ic('chev', 'cv') : ''}</${tag}>`;
+  const board = groups.length ? `<div class="card bf-board">${groups.map(([k, h, rows]) => k === 'bfst-done' ? `<details class="bf-g bfst-done">${gh(h, rows.length, 'summary')}${rows.join('')}</details>` : `<div class="bf-g ${k}">${gh(h, rows.length)}${rows.join('')}</div>`).join('')}</div>`
     : `<div class="mv-note">${ic('layers')}${tx('Nothing on the board yet.')} ${tx('Scan a location label to start it.')}</div>`;
   const mineBtn = `<button class="btn sm bf-mine" data-act="m-mine" aria-label="${readyN ? txn(readyN, 'My locations: {n} ready to finalise', 'My locations: {n} ready to finalise') : tx('My locations')}">${ic('listcheck')}${tx('Mine')}${readyN ? `<b>${readyN}</b>` : ''}</button>`;
   const entry = `<div class="bf-entry"><input class="inp" data-field="mbay" inputmode="numeric" autocomplete="off" placeholder="${tx('Scan or type a location')}" aria-label="${tx('Location label or number')}" enterkeyhint="go">${camButton('mbay')}<button class="btn primary" data-act="m-start">${tx('Start')}</button></div>`;
