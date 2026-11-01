@@ -12,6 +12,8 @@ export const shelfLink = (storeNo, shelf) => `${location.origin}${location.pathn
 export const issueLink = (storeNo, issue) => `${location.origin}${location.pathname}?store=${encodeURIComponent(storeNo)}&issue=${encodeURIComponent(issue)}`;
 // A piece of equipment (its QR label): ?store=1241&equip=q… opens its card in Equipment checks.
 export const equipLink = (storeNo, equip) => `${location.origin}${location.pathname}?store=${encodeURIComponent(storeNo)}&equip=${encodeURIComponent(equip)}`;
+// A chapter of the Visual Guide (its printed page's QR code): ?store=1241&guide=cages opens Help on it.
+export const guideLink = (storeNo, chapter) => `${location.origin}${location.pathname}?store=${encodeURIComponent(storeNo)}&guide=${encodeURIComponent(chapter)}`;
 
 export function openShare({ storeNo, storeName, shelf, dept }) {
   document.getElementById('sharesheet')?.remove();
@@ -36,13 +38,14 @@ export function openShare({ storeNo, storeName, shelf, dept }) {
   el.querySelector('[data-sh="copy"]')?.focus();
 }
 
-// The link a device was opened with: { store, shelf }, { store, issue } or { store, equip }
-// once, then the query is cleared so a reload does not repeat it.
+// The link a device was opened with: { store, shelf }, { store, issue }, { store, equip }
+// or { store, guide } once, then the query is cleared so a reload does not repeat it.
 export function takeDeepLink() {
-  const q = new URLSearchParams(location.search), store = q.get('store'), shelf = q.get('shelf'), issue = q.get('issue'), equip = q.get('equip');
-  if (!store || (!shelf && !issue && !equip)) return null;
-  q.delete('store'); q.delete('shelf'); q.delete('issue'); q.delete('equip'); q.delete('cachebust');
+  const q = new URLSearchParams(location.search), store = q.get('store'), shelf = q.get('shelf'), issue = q.get('issue'), equip = q.get('equip'), guide = q.get('guide');
+  if (!store || (!shelf && !issue && !equip && !guide)) return null;
+  q.delete('store'); q.delete('shelf'); q.delete('issue'); q.delete('equip'); q.delete('guide'); q.delete('cachebust');
   history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+  if (guide) return { store: String(store).slice(0, 12), guide: String(guide).replace(/[^\w-]/g, '').slice(0, 40) };
   if (equip) return { store: String(store).slice(0, 12), equip: String(equip).replace(/[^\w-]/g, '').slice(0, 40) };
   return issue ? { store: String(store).slice(0, 12), issue: String(issue).replace(/[^\w-]/g, '').slice(0, 40) } : { store: String(store).slice(0, 12), shelf: String(shelf).toUpperCase().slice(0, 24) };
 }

@@ -374,4 +374,7 @@ export default {
   "Recalls and withdrawals": "Richiami e ritiri",
   "This device was signed out. Sign in again.": "Questo dispositivo è stato disconnesso. Accedi di nuovo.",
   "Zones": "Zone",
+  "Continue and open the guide.": "Continua e apri la guida.",
+  "Help for this screen": "Aiuto per questa schermata",
+  "Sign in to open the guide.": "Accedi per aprire la guida.",
 };

@@ -374,4 +374,7 @@ export default {
   "Recalls and withdrawals": "Thu hồi và ngừng bán",
   "This device was signed out. Sign in again.": "Thiết bị này đã bị đăng xuất. Hãy đăng nhập lại.",
   "Zones": "Vùng",
+  "Continue and open the guide.": "Tiếp tục và mở hướng dẫn.",
+  "Help for this screen": "Trợ giúp cho màn hình này",
+  "Sign in to open the guide.": "Đăng nhập để mở hướng dẫn.",
 };

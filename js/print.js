@@ -14,7 +14,10 @@ import { barcodeSvg } from '../shared/barcode.js';
 //   page   the paper, as CSS @page size ('A4 landscape', 'A3 portrait'); a
 //          landscape sheet defaults to 'A4 landscape'
 //   bare   no header: the body brings its own (the map composer's title strip)
-export function printSheet({ title, subtitle = '', body, landscape = false, page = null, bare = false }) {
+//   mount  (root) → promise: fills the sheet once it is in the page (the
+//          Visual Guide's pages, in a shadow root with their own stylesheet);
+//          the print waits for it
+export function printSheet({ title, subtitle = '', body, landscape = false, page = null, bare = false, mount = null }) {
   document.getElementById('printroot')?.remove(); document.getElementById('printpage')?.remove();
   const root = document.createElement('div'); root.id = 'printroot'; if (landscape) root.className = 'landscape';
   const size = page || (landscape ? 'A4 landscape' : null);
@@ -24,7 +27,8 @@ export function printSheet({ title, subtitle = '', body, landscape = false, page
   document.body.appendChild(root); document.body.classList.add('printing');
   const done = () => { root.remove(); document.getElementById('printpage')?.remove(); document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
   window.addEventListener('afterprint', done);
-  setTimeout(() => { window.print(); setTimeout(() => { if (root.isConnected && !matchMedia('print').matches) done(); }, 1500); }, 60);
+  const go = () => setTimeout(() => { window.print(); setTimeout(() => { if (root.isConnected && !matchMedia('print').matches) done(); }, 1500); }, 60);
+  if (mount) Promise.resolve().then(() => mount(root)).catch(e => console.warn('print', e)).then(go); else go();
 }
 
 // A scannable barcode for paper: black on white, a little larger than on screen.

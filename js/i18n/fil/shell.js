@@ -374,4 +374,7 @@ export default {
   "Recalls and withdrawals": "Mga recall at withdrawal",
   "This device was signed out. Sign in again.": "Na-sign out ang device na ito. Mag-sign in ulit.",
   "Zones": "Mga zone",
+  "Continue and open the guide.": "Magpatuloy at buksan ang guide.",
+  "Help for this screen": "Tulong para sa screen na ito",
+  "Sign in to open the guide.": "Mag-sign in para buksan ang guide.",
 };

@@ -3501,3 +3501,14 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .pch-bays svg.i { width: 15px; height: 15px; margin-top: 1px; color: var(--accent-ink); flex: none; }
 .pch-bays b { color: var(--ink); }
 .pch-bays small { display: block; font-size: 11px; color: var(--dim); }
+/* The ? beside Show map and in the phone's app bar: Help, opened at this
+   screen's chapter of the Visual Guide (js/guide/, GUIDE_OF in js/registry.js). */
+.top .btn.hhelp { width: 38px; padding: 8px 0; justify-content: center; font-weight: 800; font-size: 16px; line-height: 1; color: var(--accent-ink); background: var(--accent-soft); border-color: var(--accent-line); flex: none; }
+.frame.adm .top .btn.hhelp { display: none; }
+.m-appbar .mhelp { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); font-weight: 800; font-size: 18px; }
+.frame.adm .m-appbar .mhelp { display: none; }
+.frame.rail-ink .m-appbar .mhelp { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); color: #fff; }
+@container shell (max-width: 380px) { .m-appbar .mhelp { width: 40px; height: 40px; } }
+/* Help: the guide fills the view (its own styles are styles/guide.css, inside its shadow root). */
+.vg-host { display: block; margin-top: 14px; min-width: 0; }
+.content.mv .vg-host { margin: 14px 0 20px; }

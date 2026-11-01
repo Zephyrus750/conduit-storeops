@@ -374,4 +374,7 @@ export default {
   "Recalls and withdrawals": "Rappels et retraits",
   "This device was signed out. Sign in again.": "Cet appareil a été déconnecté. Reconnectez-vous.",
   "Zones": "Secteurs",
+  "Continue and open the guide.": "Continuez pour ouvrir le guide.",
+  "Help for this screen": "Aide pour cet écran",
+  "Sign in to open the guide.": "Connectez-vous pour ouvrir le guide.",
 };
