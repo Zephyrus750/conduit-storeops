@@ -64,3 +64,17 @@ test('device lookups go in chunks of 50: a screen asking for 120 names gets them
   assert.deepEqual(await cat2.lookupMany(['42977636']), [null]);
   assert.equal(down.n, 1);
 });
+
+test('device cache: an answer with no picture and no price is asked again after an hour; a full one keeps a week', async () => {
+  const { createCatalogue, THIN_MS } = await import('../../client/catalogue.js');
+  const { memoryStorage } = await import('../../client/storage.js');
+  const storage = memoryStorage(), asked = [], old = Date.now() - THIN_MS - 60_000;
+  await storage.set('kc:41000001', { at: old, item: { kc: '41000001', name: 'Thin', url: 'u', img: null, price: null } });
+  await storage.set('kc:41000002', { at: old, item: { kc: '41000002', name: 'Full', url: 'u', img: 'https://img.test/a.jpg', price: 9 } });
+  await storage.set('kc:41000003', { at: Date.now() - 60_000, item: { kc: '41000003', name: 'Thin, fresh', url: 'u', img: null, price: null } });
+  const transport = { request: async path => { const kcs = new URL('https://x' + path).searchParams.get('kc').split(','); asked.push(...kcs); return { items: Object.fromEntries(kcs.map(kc => [kc, { kc, name: 'Now with a picture', url: 'u', img: 'https://img.test/' + kc + '.jpg', price: 5 }])) }; } };
+  const cat = createCatalogue({ transport, storage });
+  const [a, b, c] = await cat.lookupMany(['41000001', '41000002', '41000003']);
+  assert.deepEqual(asked, ['41000001'], 'only the stale thin answer is asked again');
+  assert.equal(a.img, 'https://img.test/41000001.jpg'); assert.equal(b.name, 'Full'); assert.equal(c.name, 'Thin, fresh');
+});
