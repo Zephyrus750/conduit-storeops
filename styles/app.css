@@ -3398,3 +3398,16 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .pp-act small { font-size: 12px; color: var(--dim); }
 .pp-act.red b, .pp-act.red svg.i { color: #B91C1C; }
 .frame.dark .pp-act.red b, .frame.dark .pp-act.red svg.i { color: #FCA5A5; }
+/* Owner console › Zones (adminzones.js): add, rename, remove; each zone's stores as links. */
+.zn-add { display: flex; align-items: flex-end; gap: 10px; }
+.zn-add .ad-field { flex: 1; max-width: 360px; margin: 0; }
+.zn-t td { vertical-align: middle; }
+.zn-stores { display: flex; flex-wrap: wrap; gap: 6px; }
+.zn-st { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink); font-size: 12.5px; text-decoration: none; cursor: pointer; }
+.zn-st:hover { border-color: var(--accent); }
+.zn-st small { color: var(--dim); }
+.zn-acts { white-space: nowrap; text-align: right; }
+.zn-acts .btn + .btn { margin-left: 6px; }
+.zn-ren { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zn-ren .ad-in { max-width: 280px; }
+.zn-link { color: var(--accent-ink); cursor: pointer; text-decoration: underline; }
