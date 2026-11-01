@@ -7,7 +7,7 @@
 //                retag, close), missing: { since, n } | null, lost }
 //   cageSweeps   current: { id, at, by, seen: cage → at, moved, found, open } | null, history: [summary] (last 20)
 //   apnPairs     item barcode (GTIN, 13 or 14 digits) → { kc, at, by }
-//   backfill     subs: `${bay}:${date}` → { bay, date, status, codes: code → { scanned }, incorrect: [],
+//   backfill     subs: `${bay}:${date}` → { bay, date, status, codes: code → { scanned, at, n (first scanned: time and order) }, incorrect: [],
 //                system: [codes] | null, removed: code → at (tombstones), metrics, statusAt, reopenedAt, readyAt, submittedDoneAt, autoSubmitted,
 //                devices: [device ids that scanned it] (a phone's "My locations"),
 //                readd: code → { at, by, doneAt } (K2B's Re-add: stock found after the bay was finalised, scanned back in) }
@@ -192,7 +192,13 @@ export const stockroomReducers = {
     if (dev && incoming.some(([, v]) => v)) { sub.devices ||= []; if (!sub.devices.includes(dev)) sub.devices.push(dev); }
     for (const [code, scanned] of incoming) {
       if (stale.includes(code)) continue;
-      sub.codes[code] = { scanned: !!scanned };
+      // A code keeps when it was first scanned: its time, and n, its
+      // place in the bay's scan order (event times are to the second, and
+      // two scans can share one). The phone lists the bay newest first;
+      // codes are integer-like keys, so the object itself always comes
+      // back in number order.
+      const was = sub.codes[code];
+      sub.codes[code] = !scanned ? { scanned: false } : was?.scanned && was.n ? was : { scanned: true, at: e.at, n: 1 + Math.max(0, ...Object.values(sub.codes).map(c => c.n || 0)) };
       if (sub.removed) delete sub.removed[code];
       if (sub.removedBy) delete sub.removedBy[code];
     }

@@ -78,7 +78,6 @@ export default {
   "Add to {date}": "Idagdag sa {date}",
   "Stored as below zero either way. The name fills in from the catalogue.": "Ise-save bilang below zero kahit ano pa. Kusang lalabas ang pangalan mula sa catalogue.",
   "Last 14 days": "Huling 14 araw",
-  "That is an item barcode: type the keycode from the shelf label": "Item barcode iyan: i-type ang keycode mula sa shelf label",
   "Keycode needed": "Kailangan ang keycode",
   "{n} added to today's adjustments": "{n} naidagdag sa adjustments ngayon",
   "{n} already listed": "{n} nasa listahan na",
@@ -563,4 +562,5 @@ export default {
   "NEW · first snapshot": "NEW · unang snapshot",
   "MOVING": "MOVING",
   "Scan another": "Mag-scan ng iba",
+  "{code} is {kc} on kmart.com.au": "Ang {code} ay {kc} sa kmart.com.au",
 };
