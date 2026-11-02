@@ -8,11 +8,14 @@
 
 import { focusDone } from '../../shared/reducers/floor.js';
 import { addDays, retailPeriod } from '../../shared/time.js';
-import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, ago, dep } from '../ui.js';
+import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, ago, dep, DEPT_COLOUR } from '../ui.js';
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
-import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex, grid, PTYPES, PT_LETTER, PT_ONE, PT_SHORT, PALLET_STATE, openSegs, pace, workedMin } from './backdock/common.js';
+import { openTrucks, progress, truckNo, fmtHM, fmtMins, openHalt, holdName, forecast, manifestIndex, grid, PTYPES, PT_LETTER, PT_ONE, PT_SHORT, PT_COLOUR, openSegs, pace, workedMin, microDept, microName as microTitle } from './backdock/common.js';
+import { consolsOf } from '../../shared/reducers/backdock.js';
+import { itemCartons } from './backdock/manifests.js';
+import { nameOf, ensureNames } from './stockroom/common.js';
 import { flags as palletFlags } from './backdock/receiving.js';
 import { settingsOf } from '../../shared/reducers/store.js';
 import { phaseChip, phaseLine, PHASE_NAME } from './backdock/phase.js';
@@ -91,48 +94,139 @@ function dockMini(ctx, t) {
     const corner = i === 0 ? ' c-tl' : i === g.cols - 1 ? ' c-tr' : i === last - g.cols + 1 && rows > 1 ? ' c-bl' : i === last ? ' c-br' : '';
     const p = byRef[ref];
     if (!p) return `<div class="dkg-c${corner}" title="${ref} · ${tx('free bay')}"><span class="dkg-ref">${ref}</span></div>`;
-    if (p.excluded) return `<div class="dkg-c p out${corner}" tabindex="0" data-dkg="${ref}"><span class="dkg-ref">${ref}</span><span class="dkg-ct">${tx('OUT')}</span>${palTip(t, p, now)}</div>`;
+    if (p.excluded) return `<div class="dkg-c p out${corner}" tabindex="0" data-dkg="${ref}"><span class="dkg-ref">${ref}</span><span class="dkg-ct">${tx('OUT')}</span></div>`;
     const s = p.status || 'landed', pc = pace(t, p, now), crew = openSegs(p).map(x => x.pid).join('+'), fl = palletFlags(t, p)[0];
     const mark = p.suspect ? '⚠' : s === 'active' ? '▶' : s === 'done' ? '✓' : s === 'paused' ? '⏸' : '';
     const live = s === 'active' || s === 'paused';
     return `<div class="dkg-c p t-${PT_LETTER[p.ptype] || 'c'} st-${s}${p.carryover ? ' co' : ''}${pc && s !== 'done' ? ' pc-' + pc : ''}${s === 'done' && pc === 'over' ? ' pc-over' : ''}${p.suspect ? ' sus' : ''}${corner}" tabindex="0" data-dkg="${ref}">` +
       `<span class="dkg-ref">${ref}</span><span class="dkg-ct">${p.cartons ?? '–'}</span>${mark ? `<span class="dkg-mk">${mark}</span>` : ''}` +
       `${fl ? `<span class="dkg-fl ${fl[0]}">${esc(fl[2])}</span>` : ''}${live ? `<span class="dkg-tm" data-dktick="${ref}">${fmtMins(workedMin(t, p, now))}</span>` : ''}${crew ? `<span class="dkg-who">${esc(crew)}</span>` : ''}` +
-      `${palTip(t, p, now)}</div>`;
+      `</div>`;
   }).join('');
   const key = PTYPES.map(p => `<span><i style="background:${p[2]}"></i>${PT_SHORT[p[0]]}</span>`).join('') +
     `<span><i class="dn"></i>${tx('Done')}</span><span><i class="ac"></i>${tx('Decanting')}</span>`;
   return `<div class="dkg"><div class="dkg-h"><b>${tx('The dock')}</b><span>${n ? txn(n, '{n} pallet on the dock', '{n} pallets on the dock') : tx('Every bay free')}</span></div>` +
     `<div class="dkg-grid" style="grid-template-columns:repeat(${g.cols},minmax(0,1fr));max-width:${g.cols * 80}px">${cells}</div><div class="dkg-key">${key}</div></div>`;
 }
-// A pallet's details, kept in its square and shown by the floating card
-// on hover or focus (a card in the page would be cut off by the card's edge).
-function palTip(t, p, now) {
-  const s = p.excluded ? 'out' : p.status || 'landed', segs = p.segments || [], pc = pace(t, p, now);
-  const people = [...new Set(segs.map(x => x.pid))].join(', '), worked = segs.length ? workedMin(t, p, s === 'done' ? Date.parse(p.doneAt) || now : now) : 0;
-  const row = (k, v) => v ? `<span>${k}</span><b>${v}</b>` : '';
-  const state = s === 'out' ? tx('not in this session') : PALLET_STATE[s] || esc(s);
-  const extras = [pc && PACE[pc] ? `<li class="pc-${pc}">${PACE[pc]}</li>` : '', p.carryover ? `<li>${tx('carried over')}</li>` : '', p.suspect ? `<li class="warn">${tx('done very fast: check the times')}</li>` : '',
-    ...palletFlags(t, p).map(f => `<li class="warn">${esc(f[1])}</li>`)].join('');
-  return `<template class="dkg-tip"><div class="dkt-h"><b>${tx('Pallet {ref}', { ref: esc(p.ref) })}</b><span class="dkt-st st-${s}">${state}</span></div><div class="dkt-kv">` +
-    row(tx('Type'), esc(PT_ONE[p.ptype] || p.ptype || '')) + row(tx('Cartons'), p.cartons ?? '–') + row(tx('Landed'), p.landedAt ? fmtHM(p.landedAt) : '') +
-    row(tx('Started'), segs[0] ? fmtHM(segs[0].start) : '') + row(tx('Finished'), p.doneAt ? fmtHM(p.doneAt) : '') +
-    row(tx('Worked'), segs.length ? fmtMins(worked) + (p.expectedMins ? ' · ' + tx('est {n} min', { n: p.expectedMins }) : '') : p.expectedMins ? tx('est {n} min', { n: p.expectedMins }) : '') +
-    row(tx('Crew'), esc(people)) + row(tx('Consols'), (p.consolIds || []).length ? txn(p.consolIds.length, '{n} verified on the manifest', '{n} verified on the manifest') : tx('No consol verified yet')) +
-    `</div>${extras ? `<ul class="dkt-x">${extras}</ul>` : ''}</template>`;
+// ── the pallet card ────────────────────────────────────────────────────
+// Hovering or focusing a pallet shows what is on it (its consols verified
+// on the manifest: micro-departments with their cartons and units, the
+// largest products) and its decant (landed, started or finished, crew,
+// worked against its estimate, pace, what needs a look). Built when shown,
+// in one of three sizes by the room there is: the full card, a compact one
+// of icons with values, or two lines of icons.
+const SVG = d => `<svg class="dkt-i" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const I = {
+  box: SVG('<path d="M12 3l8 4.5v9l-8 4.5l-8-4.5v-9z"/><path d="M12 12l8-4.5"/><path d="M12 12v9"/><path d="M12 12l-8-4.5"/>'),
+  landed: SVG('<path d="M12 4v12"/><path d="M7 11l5 5l5-5"/><path d="M5 20h14"/>'),
+  start: SVG('<path d="M7 4v16l13-8z"/>'),
+  done: SVG('<path d="M5 12l5 5l10-10"/>'),
+  crew: SVG('<path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0-8 0"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>'),
+  clock: SVG('<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0"/><path d="M12 7v5l3 3"/>'),
+  scan: SVG('<path d="M4 7v-1a2 2 0 0 1 2-2h2"/><path d="M4 17v1a2 2 0 0 0 2 2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v1"/><path d="M16 20h2a2 2 0 0 0 2-2v-1"/><path d="M5 11h1v2h-1z"/><path d="M10 11v2"/><path d="M14 11h1v2h-1z"/><path d="M19 11v2"/>'),
+  lines: SVG('<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M5 6v.01"/><path d="M5 12v.01"/><path d="M5 18v.01"/>'),
+  back: SVG('<path d="M9 14l-5-5l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/>'),
+};
+const MARK = { active: '▶', paused: '⏸', done: '✓', sus: '⚠' };
+const STATE_CHIP = { landed: tx('Landed'), assigned: tx('Up next'), active: tx('Decanting'), paused: tx('Paused'), done: tx('Done'), out: tx('Left out') };
+const microBadge = code => microDept(code) ? dep(microDept(code)) : '<span class="dep" style="background:#94A3B8;color:#fff">?</span>';
+const badgeColour = code => DEPT_COLOUR[microDept(code)] || '#94A3B8';
+// Everything the card shows, worked out once for the size it is drawn in.
+function palData(t, p, now) {
+  const cons = consolsOf(t).filter(c => (p.consolIds || []).includes(c.id)), md = new Map(), prods = new Map();
+  const row = d => { const k = String(d || '???'); if (!md.has(k)) md.set(k, { code: k, ctn: 0, u: 0 }); return md.get(k); };
+  for (const c of cons) {
+    for (const [d, ctn] of c.mix?.length ? c.mix : []) row(d).ctn += Number(ctn) || 0;
+    for (const it of c.items || []) {
+      const r = row(it.dept); r.u += Number(it.q) || 0; if (!c.mix?.length) r.ctn += itemCartons(c, it);
+      const q = prods.get(it.k) || { k: it.k, u: 0 }; q.u += Number(it.q) || 0; prods.set(it.k, q);
+    }
+  }
+  const micros = [...md.values()].map(r => ({ ...r, ctn: Math.round(r.ctn) })).sort((a, b) => b.ctn - a.ctn || b.u - a.u);
+  const items = [...prods.values()].sort((a, b) => b.u - a.u), units = items.reduce((n, x) => n + x.u, 0);
+  const s = p.excluded ? 'out' : p.status || 'landed', segs = p.segments || [], live = s === 'active' || s === 'paused';
+  const worked = segs.length ? workedMin(t, p, s === 'done' ? Date.parse(p.doneAt) || now : now) : 0, est = p.expectedMins || 0, pc = pace(t, p, now);
+  const paceKey = !segs.length ? 'wait' : pc || 'on';
+  return { p, s, cons, micros, items, units, segs, live, worked, est, paceKey,
+    people: [...new Set(segs.map(x => x.pid))].join('+'), crewNow: openSegs(p).map(x => x.pid).join('+'),
+    flags: palletFlags(t, p), scanned: (p.scanIds || []).length, verified: (p.consolIds || []).length };
 }
-// The floating card: one element on the page, filled from the square's
-// template and placed beside it, inside the window.
+const PACE_INK = { over: '#B91C1C', near: '#B45309', on: '#15803D', under: '#15803D', wait: '#6B7280' };
+const workedText = d => d.segs.length ? (d.est ? tx('{time} worked of est {n} min', { time: fmtMins(d.worked), n: d.est }) : tx('{time} worked', { time: fmtMins(d.worked) })) : d.est ? tx('Not started · est {n} min', { n: d.est }) : tx('Not started');
+const clockText = d => d.est ? `${d.segs.length ? Math.round(d.worked) : 0}/${d.est}m` : d.segs.length ? fmtMins(d.worked) : '—';
+const scanText = d => d.scanned > d.verified ? `${d.verified}/${d.scanned}` : String(d.verified);
+const flagChips = d => `${d.p.carryover ? `<span class="dkt-fc co">↩ ${tx('carried over')}</span>` : ''}${d.flags.map(f => `<span class="dkt-fc ${f[0]}" title="${esc(f[1])}">${esc(f[2])}</span>`).join('')}`;
+const head = (d, big) => `<div class="dkt-h"><i class="dkt-sw" style="background:${PT_COLOUR[d.p.ptype] || '#69787F'}"></i><b>${big ? tx('Pallet {ref}', { ref: esc(d.p.ref) }) : esc(d.p.ref)}</b><span class="dkt-sub">${esc(big ? PT_ONE[d.p.ptype] || d.p.ptype || '' : PT_SHORT[d.p.ptype] || '')} · ${big ? txn(d.p.cartons || 0, '{n} carton', '{n} cartons') : tx('{n} ctn', { n: d.p.cartons ?? '–' })}</span><span class="dkt-st st-${d.s}">${STATE_CHIP[d.s] || esc(d.s)}</span></div>`;
+function cardFull(d) {
+  const top = d.micros.slice(0, 4), max = Math.max(1, ...top.map(m => m.ctn)), pr = d.items.slice(0, 3);
+  const ver = d.verified ? `<span class="dkt-ver">${I.scan}${d.verified === 1 ? `<span class="mono">${esc(d.cons[0]?.id || d.p.consolIds[0])}</span> ${tx('verified')}` : txn(d.verified, '{n} consol verified', '{n} consols verified')}</span>` : `<span class="dkt-ver no">${tx('No consol verified yet')}</span>`;
+  const on = d.cons.length ? `<div class="dkt-mx">${top.map(m => `${microBadge(m.code)}<span class="dkt-mn"><b class="mono">${esc(m.code)}</b> ${esc(microTitle(m.code) || tx('Unknown micro-department'))}</span><span class="dkt-bar"><i style="width:${Math.round(m.ctn / max * 100)}%"></i></span><span class="dkt-nu">${tx('{n} ctn', { n: m.ctn })} · ${tx('{n}u', { n: m.u })}</span>`).join('')}</div>` +
+      (d.micros.length > 4 ? `<div class="dkt-more">${tx('{n} more micro-departments', { n: d.micros.length - 4 })}</div>` : '') +
+      (pr.length ? `<div class="dkt-pr">${pr.map(x => `<div><span class="mono">${esc(x.k)}</span><span class="dkt-pn">${esc(nameOf(x.k) || '')}</span><b>${x.u}</b></div>`).join('')}<div class="dkt-more">${d.items.length > 3 ? tx('+{n} more lines · {u} units in all', { n: d.items.length - 3, u: d.units }) : txn(d.units, '{n} unit in all', '{n} units in all')}</div></div>` : '')
+    : `<div class="dkt-more">${tx('Scan its label at Receiving to see what is on it.')}</div>`;
+  const pace = d.paceKey === 'wait' ? tx('Waiting') : PACE[d.paceKey];
+  const bar = d.est ? Math.min(100, Math.round(d.worked / d.est * 100)) : 0;
+  return `<div class="dkt-full">${head(d, true)}${d.p.carryover ? `<div class="dkt-co">${I.back}${tx('carried over')}</div>` : ''}` +
+    `<div class="dkt-sec"><div class="dkt-lbl"><span>${tx('On this pallet')}</span>${ver}</div>${on}</div><div class="dkt-div"></div>` +
+    `<div class="dkt-sec"><div class="dkt-lbl"><span>${tx('Decant')}</span></div><div class="dkt-kv"><div><span>${tx('Landed')}</span><b>${d.p.landedAt ? fmtHM(d.p.landedAt) : '—'}</b></div>` +
+    `<div><span>${d.p.doneAt ? tx('Finished') : tx('Started')}</span><b>${d.p.doneAt ? fmtHM(d.p.doneAt) : d.segs[0] ? fmtHM(d.segs[0].start) : '—'}</b></div><div><span>${tx('Crew')}</span><b>${esc(d.crewNow || d.people) || '—'}</b></div></div>` +
+    `<div class="dkt-wk"><span>${workedText(d)}</span><b style="color:${PACE_INK[d.paceKey]}">${pace}</b></div><div class="dkt-bar wide"><i style="width:${bar}%;background:${PACE_INK[d.paceKey]}"></i></div></div>` +
+    (d.flags.length ? `<div class="dkt-sec dkt-fl"><div class="dkt-lbl"><span>${tx('Needs a look')}</span></div>${d.flags.map(f => `<div><span class="dkt-fc ${f[0]}">${esc(f[2])}</span>${esc(f[1])}</div>`).join('')}</div>` : '') + `</div>`;
+}
+const iv = (icon, v, label, ink = '') => `<span class="dkt-iv" title="${label}"${ink ? ` style="color:${ink}"` : ''}>${icon}<span class="sr">${label}</span>${v}</span>`;
+function cardCompact(d) {
+  const top = d.micros.slice(0, 4), first = d.items[0];
+  return `<div class="dkt-cmp">${head(d, false)}` +
+    (d.cons.length ? `<div class="dkt-mixbar">${d.micros.map(m => `<i style="flex:${Math.max(1, m.ctn)};background:${badgeColour(m.code)}"></i>`).join('')}</div>` +
+      `<div class="dkt-chips">${top.map(m => `<span>${microBadge(m.code)}<span class="mono">${esc(m.code)}</span>${m.ctn}</span>`).join('')}${d.micros.length > 4 ? `<span class="dkt-more">+${d.micros.length - 4}</span>` : ''}</div>` +
+      (first ? `<div class="dkt-top">${esc(nameOf(first.k) || first.k)} <b>×${first.u}</b>${d.items.length > 1 ? ` <span class="dkt-more">· ${tx('+{n} more', { n: d.items.length - 1 })}</span>` : ''}</div>` : '')
+    : `<div class="dkt-more">${tx('No consol verified yet')}</div>`) +
+    `<div class="dkt-ig">${iv(I.landed, d.p.landedAt ? fmtHM(d.p.landedAt) : '—', tx('Landed'))}${d.p.doneAt ? iv(I.done, fmtHM(d.p.doneAt), tx('Finished'), '#15803D') : iv(I.start, d.segs[0] ? fmtHM(d.segs[0].start) : '—', tx('Started'))}` +
+    `${iv(I.crew, esc(d.crewNow || d.people) || '—', tx('Crew'))}${iv(I.clock, clockText(d), tx('Worked of its estimate'), PACE_INK[d.paceKey])}${iv(I.scan, scanText(d), tx('Consols verified'), d.verified ? '#15803D' : '')}${iv(I.lines, `${d.items.length} · ${tx('{n}u', { n: d.units })}`, tx('Lines and units'))}</div>` +
+    (d.flags.length || d.p.carryover ? `<div class="dkt-fcs">${flagChips(d)}</div>` : '') + `</div>`;
+}
+function cardMini(d) {
+  return `<div class="dkt-mini"><div class="dkt-ml"><span class="dkt-iv"><i class="dkt-sw" style="background:${PT_COLOUR[d.p.ptype] || '#69787F'}"></i><b>${esc(d.p.ref)}</b>${MARK[d.p.suspect ? 'sus' : d.s] ? `<span class="dkt-mk st-${d.s}" title="${STATE_CHIP[d.s] || ''}">${MARK[d.p.suspect ? 'sus' : d.s]}</span>` : ''}</span>${iv(I.box, d.p.cartons ?? '–', tx('Cartons'))}${iv(I.clock, clockText(d), tx('Worked of its estimate'), PACE_INK[d.paceKey])}${d.crewNow || d.people ? iv(I.crew, esc(d.crewNow || d.people), tx('Crew')) : ''}</div>` +
+    `<div class="dkt-ml">${d.micros.slice(0, 3).map(m => `<span class="dkt-iv">${microBadge(m.code)}${m.ctn}</span>`).join('')}${d.micros.length > 3 ? `<span class="dkt-more">+${d.micros.length - 3}</span>` : ''}${iv(I.scan, scanText(d), tx('Consols verified'), d.verified ? '#15803D' : '')}</div>` +
+    (d.flags.length || d.p.carryover ? `<div class="dkt-fcs">${flagChips(d)}</div>` : '') + `</div>`;
+}
+const CARDS = { full: cardFull, compact: cardCompact, mini: cardMini };
+// The floating card: one element on the page beside the square, inside the
+// window. The full card on a wide window when it fits beside the square
+// and stays under half the window's height; else the compact one when it
+// fits; else the two lines of icons.
 function dockTips(ctx, root) {
   let tip = null, on = null;
-  const hide = () => { tip?.remove(); tip = null; on = null; };
+  const hide = () => { tip?.remove(); tip = null; on?.removeAttribute('aria-describedby'); on = null; };
+  const place = (r, w, h, pad = 8, gap = 8) => {
+    const cy = Math.max(pad, Math.min(innerHeight - h - pad, r.top + r.height / 2 - h / 2)), cx = Math.max(pad, Math.min(innerWidth - w - pad, r.left + r.width / 2 - w / 2));
+    if (h > innerHeight - 2 * pad) return null;
+    if (r.right + gap + w <= innerWidth - pad) return { x: r.right + gap, y: cy };
+    if (r.left - gap - w >= pad) return { x: r.left - gap - w, y: cy };
+    if (r.bottom + gap + h <= innerHeight - pad) return { x: cx, y: r.bottom + gap };
+    if (r.top - gap - h >= pad) return { x: cx, y: r.top - gap - h };
+    return null;
+  };
+  const fill = cell => {
+    const t = openTrucks(ctx.store.get('dock'))[0], p = t?.pallets?.[cell.dataset.dkg]; if (!p) return hide();
+    const d = palData(t, p, Date.now()), r = cell.getBoundingClientRect();
+    const sizes = innerWidth >= 1500 ? ['full', 'compact', 'mini'] : innerWidth >= 1100 ? ['compact', 'mini'] : ['mini'];
+    let at = null;
+    for (const sz of sizes) {
+      tip.className = `dkg-float ${sz}`; tip.innerHTML = CARDS[sz](d);
+      at = place(r, tip.offsetWidth, tip.offsetHeight);
+      if (at && (sz !== 'full' || tip.offsetHeight <= innerHeight * 0.45)) break;
+      at = null;
+    }
+    at ||= { x: Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, r.left)), y: Math.min(innerHeight - tip.offsetHeight - 8, r.bottom + 8) };
+    tip.style.left = `${at.x}px`; tip.style.top = `${Math.max(8, at.y)}px`;
+    // Product names arrive from the catalogue: the card fills them in.
+    if (ctx.catalogue && d.items.length) ensureNames(ctx, d.items.slice(0, 3).map(x => x.k), () => { if (on === cell && tip) fill(cell); });
+  };
   const show = cell => {
-    if (on === cell) return; hide(); const tpl = cell.querySelector('template.dkg-tip'); if (!tpl) return;
-    on = cell; tip = document.createElement('div'); tip.className = 'dkg-float'; tip.setAttribute('role', 'tooltip'); tip.appendChild(tpl.content.cloneNode(true)); document.body.appendChild(tip);
-    const r = cell.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, pad = 8;
-    let x = r.left + r.width / 2 - w / 2, y = r.bottom + 8;
-    if (y + h > innerHeight - pad) y = r.top - h - 8;
-    tip.style.left = `${Math.max(pad, Math.min(innerWidth - w - pad, x))}px`; tip.style.top = `${Math.max(pad, y)}px`;
+    if (on === cell) return; hide();
+    on = cell; tip = document.createElement('div'); tip.id = 'dkgTip'; tip.setAttribute('role', 'tooltip'); tip.style.left = '-9999px'; document.body.appendChild(tip);
+    cell.setAttribute('aria-describedby', 'dkgTip'); fill(cell);
   };
   root.addEventListener('mouseover', e => { const c = e.target.closest('.dkg-c[data-dkg]'); if (c) show(c); else if (on) hide(); });
   root.addEventListener('mouseleave', hide);
