@@ -232,7 +232,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null } = 
     try {
       for (let i = 0; i < s.steps.length; i++) {
         const step = s.steps[i];
-        book.insertAdjacentHTML('beforeend', `<article class="frame"><div class="shot"><div class="fitbox" data-max="0.9"><div class="fit" data-fr="${i}"></div></div></div><div class="txt"><h3><span>${i + 1}</span>${step.cap}</h3><p>${step.read}</p><div class="dev" ${st.dev ? '' : 'hidden'}>${step.dev}${(step.ev || []).length ? `<br>Sends: ${step.ev.map(e => `<b>${esc(e.type || e.route)}</b>`).join(', ')}` : ''}</div></div></article>`);
+        book.insertAdjacentHTML('beforeend', `<article class="frame${s.device === 'pc' ? ' wide' : ''}"><div class="shot"><div class="fitbox" data-max="0.9"><div class="fit" data-fr="${i}"></div></div></div><div class="txt"><h3><span>${i + 1}</span>${step.cap}</h3><p>${step.read}</p><div class="dev" ${st.dev ? '' : 'hidden'}>${step.dev}${(step.ev || []).length ? `<br>Sends: ${step.ev.map(e => `<b>${esc(e.type || e.route)}</b>`).join(', ')}` : ''}</div></div></article>`);
         const box = book.querySelector(`[data-fr="${i}"]`);
         await build(box, s, i, tk);
         const fb = box.closest('.fitbox'); observe(fb); fitIn(fb, 0.9);
@@ -243,7 +243,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null } = 
   // Paper: a chapter as the A4 page it prints as.
   const printedOn = () => tx('Printed {when}', { when: esc(new Date().toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })) });
   async function paperPage(s, into, tk) {
-    const phoneish = s.device === 'phone', cols = phoneish ? 4 : s.device === 'duo' || s.steps.length > 4 ? 3 : 2, max = phoneish ? 0.5 : 1;
+    const phoneish = s.device === 'phone', cols = phoneish ? 4 : s.device === 'pc' ? 2 : s.device === 'duo' || s.steps.length > 4 ? 3 : 2, max = phoneish ? 0.5 : 1;
     const qr = qrSvg(guideLink(storeNo, s.id), { cell: 3 });
     into.insertAdjacentHTML('beforeend', `<div class="a4"><div class="a4-h"><span class="mk"></span><div><small>Conduit · ${GROUPS.find(g => g[0] === s.grp)[1]} · ${DEVICE[s.device]}</small><h2>${s.title}</h2></div><span class="pg">${esc(storeName)} ${esc(storeNo)}</span></div>` +
       `<p class="a4-i">${s.intro}</p><div class="a4-g" style="--cols:${cols}"></div>` +
