@@ -5,25 +5,49 @@
 // file, open it, remove it. The registry keeps the entries
 // (shared/resources.js) and the worker the files; each change is an owner
 // action. A store with Resources switched off (its Access tab) sees none.
+// Requests: what stores' managers asked for that the library lacks, waiting
+// ones first; Add it opens the form with the request's words and marks it
+// added with the new entry; Decline asks for a word why; the store sees the
+// answer on its Resources page.
 
 import { ic, esc, vh, sub, toast, fmtDate } from '../ui.js';
 import { tx, txn } from '../i18n.js';
-import { fileKind, matches, FILE_EXTS, FILE_MAX } from '../../shared/resources.js';
+import { fileKind, matches, sameTitle, FILE_EXTS, FILE_MAX } from '../../shared/resources.js';
 import { invalidate } from './admin.js';
 
-const st = { list: null, error: null, q: '', edit: null, busy: false };
+const st = { list: null, error: null, q: '', edit: null, busy: false, reqs: null, from: null, allReqs: false };
 const ACCEPT = FILE_EXTS.map(x => '.' + x).join(',');
 const kb = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
 const fail = e => toast(e.code === 'unauthorised' ? tx('Owner session expired. Sign in again.') : e.message, 'bad');
 const storesText = (e, all) => e.stores === 'all' ? tx('Every store') : e.stores.map(no => { const s = all.find(x => String(x.no) === no); return s ? `${no} ${s.name}` : no; }).join(', ');
 
-function form(ctx, e) {
+const storeName = (no, all) => { const x = all.find(s => String(s.no) === String(no)); return x ? `${no} ${x.name}` : String(no); };
+const REQ_ST = { open: [tx('Waiting'), 'warn'], added: [tx('Added'), 'good'], declined: [tx('Declined'), 'bad'] };
+
+// Stores' requests: waiting ones first, then the latest answers.
+function requests(ctx) {
+  const all = ctx.admin.stores || [], reqs = st.reqs || [], open = reqs.filter(q => q.status === 'open'), done = reqs.filter(q => q.status !== 'open');
+  if (!reqs.length) return '';
+  const shown = [...open.sort((a, b) => a.created.localeCompare(b.created)), ...(st.allReqs ? done : done.slice(0, 5))];
+  const row = q => {
+    const [label, cls] = REQ_ST[q.status], res = q.resource && (st.list || []).find(e => e.id === q.resource);
+    const acts = q.status === 'open'
+      ? `<button class="btn sm primary" data-act="rq-add" data-id="${esc(q.id)}">${ic('plus')}${tx('Add it')}</button><button class="btn sm" data-act="rq-done" data-id="${esc(q.id)}" title="${tx('It is in the library already: mark it added')}">${ic('check')}${tx('Mark added')}</button><button class="btn sm" data-act="rq-no" data-id="${esc(q.id)}">${ic('x')}${tx('Decline')}</button>`
+      : `<button class="btn sm" data-act="rq-open" data-id="${esc(q.id)}">${ic('refresh')}${tx('Reopen')}</button>`;
+    return `<tr class="rq-${q.status}"><td><b>${esc(q.title)}</b>${q.note ? `<div class="cs-dim">${esc(q.note)}</div>` : ''}${q.reply ? `<div class="rq-reply">${tx('Answer: {reply}', { reply: esc(q.reply) })}</div>` : ''}${res ? `<div class="cs-dim">${tx('Added as {title}', { title: esc(res.title) })}</div>` : ''}</td><td>${esc(storeName(q.store, all))}</td><td class="mono">${esc(fmtDate(q.created))}</td><td><span class="status ${cls}">${label}</span></td><td class="rsa-acts">${acts}</td></tr>`;
+  };
+  return `<div class="card rq-card"><div class="ch"><h3>${tx('Requests from stores')}</h3><span class="cs-dim">${open.length ? txn(open.length, '{n} waiting', '{n} waiting') : tx('All answered')}</span>${done.length > 5 ? `<button class="btn sm" data-act="rq-more" style="margin-left:auto">${st.allReqs ? tx('Latest answers only') : txn(done.length, 'Show all {n} answered', 'Show all {n} answered')}</button>` : ''}</div>` +
+    `<table class="wb-t rsa-t"><thead><tr><th>${tx('Document asked for')}</th><th>${tx('Store')}</th><th>${tx('Asked')}</th><th>${tx('State')}</th><th></th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table></div>`;
+}
+
+function form(ctx, e, pre = null) {
   const all = ctx.admin.stores || [], cats = [...new Set((st.list || []).map(x => x.category).filter(Boolean))].sort();
-  const some = e && e.stores !== 'all', picked = new Set(some ? e.stores : []);
-  return `<form class="card rsa-form" data-form="resource"><div class="ch"><h3>${e ? tx('Edit {title}', { title: esc(e.title) }) : tx('Add a resource')}</h3></div>` +
-    `<div class="ad-grid2"><label class="ad-field"><span>${tx('Title')}</span><input class="ad-in" name="title" value="${esc(e?.title || '')}" maxlength="80" required placeholder="${tx('e.g. {example}', { example: tx('Daily opening checklist') })}"></label>` +
+  // A request opens for every store, with the store that asked ticked should it be for that store only.
+  const some = e && e.stores !== 'all', picked = new Set(some ? e.stores : pre ? [String(pre.store)] : []);
+  return `<form class="card rsa-form" data-form="resource"><div class="ch"><h3>${e ? tx('Edit {title}', { title: esc(e.title) }) : tx('Add a resource')}</h3>${pre ? `<span class="cs-dim">${tx('Asked for by {store}', { store: esc(storeName(pre.store, all)) })}</span>` : ''}</div>` +
+    `<div class="ad-grid2"><label class="ad-field"><span>${tx('Title')}</span><input class="ad-in" name="title" value="${esc(e?.title || pre?.title || '')}" maxlength="80" required placeholder="${tx('e.g. {example}', { example: tx('Daily opening checklist') })}"></label>` +
     `<label class="ad-field"><span>${tx('Category')}</span><input class="ad-in" name="category" value="${esc(e?.category || '')}" maxlength="40" list="rsaCats" placeholder="${tx('e.g. {example}', { example: tx('Forms') })}"><datalist id="rsaCats">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label></div>` +
-    `<label class="ad-field"><span>${tx('Note')}</span><input class="ad-in" name="note" value="${esc(e?.note || '')}" maxlength="200" placeholder="${tx('What it is for, or how to print it (optional)')}"></label>` +
+    `<label class="ad-field"><span>${tx('Note')}</span><input class="ad-in" name="note" value="${esc(e?.note || pre?.note || '')}" maxlength="200" placeholder="${tx('What it is for, or how to print it (optional)')}"></label>` +
     `<div class="ad-grid2"><label class="ad-field"><span>${e?.file ? tx('Replace the file (optional)') : tx('File')}</span><input class="ad-in" type="file" name="file" accept="${ACCEPT}"><small class="cs-dim">${e?.file ? tx('Now: {name} · {size}', { name: esc(e.file.name), size: kb(e.file.size) }) : tx('PDF, pictures, Word, Excel, PowerPoint, CSV or text, up to {mb} MB', { mb: FILE_MAX / 1e6 })}</small></label>` +
     `<label class="ad-field"><span>${tx('or a link')}</span><input class="ad-in" name="link" value="${esc(e?.link || '')}" maxlength="500" placeholder="https://"><small class="cs-dim">${tx('A web page to open instead of a file')}</small></label></div>` +
     `<fieldset class="rsa-stores"><legend>${tx('Stores')}</legend><label class="rsa-radio"><input type="radio" name="scope" value="all"${some ? '' : ' checked'}> ${tx('Every store')}</label><label class="rsa-radio"><input type="radio" name="scope" value="some"${some ? ' checked' : ''}> ${tx('Only the stores picked')}</label>` +
@@ -33,8 +57,9 @@ function form(ctx, e) {
 
 function page(ctx) {
   const all = ctx.admin.stores || [], list = st.list || [], shown = list.filter(e => matches(e, st.q));
-  const head = vh(tx('Resources'), sub(tx('files and links for every store’s managers'), txn(list.length, '{n} resource', '{n} resources')), `<button class="btn" data-act="rsa-reload">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button>`, 'stack');
-  const editing = st.edit === 'new' ? form(ctx, null) : st.edit ? form(ctx, list.find(e => e.id === st.edit)) : '';
+  const waiting = (st.reqs || []).filter(q => q.status === 'open').length;
+  const head = vh(tx('Resources'), sub(tx('files and links for every store’s managers'), txn(list.length, '{n} resource', '{n} resources'), waiting ? txn(waiting, '{n} request waiting', '{n} requests waiting') : ''), `<button class="btn" data-act="rsa-reload">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button>`, 'stack');
+  const editing = st.edit === 'new' ? form(ctx, null, st.from && (st.reqs || []).find(q => q.id === st.from)) : st.edit ? form(ctx, list.find(e => e.id === st.edit)) : '';
   if (st.error && !st.list) return head + `<div class="card"><p class="lbl">${esc(st.error)}</p></div>`;
   if (!st.list) return head + `<div class="card"><div class="ohint">${tx('Loading…')}</div></div>`;
   const rows = shown.map(e => {
@@ -45,7 +70,7 @@ function page(ctx) {
   }).join('');
   const table = list.length ? `<div class="card"><div class="rs-bar"><div class="search rs-search">${ic('search')}<input data-field="rsa-q" value="${esc(st.q)}" placeholder="${tx('Search the library')}" aria-label="${tx('Search the library')}"></div></div><table class="wb-t rsa-t"><thead><tr><th>${tx('Title')}</th><th>${tx('Category')}</th><th>${tx('File or link')}</th><th>${tx('Stores')}</th><th>${tx('Updated')}</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="cs-dim">${tx('Nothing matches.')}</td></tr>`}</tbody></table></div>`
     : st.edit ? '' : `<div class="card rs-empty">${ic('stack')}<p>${tx('Nothing in the library yet. Add the forms, procedures and links managers reach for most: every store’s PC lists them under Resources.')}</p><button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button></div>`;
-  return head + editing + table + `<p class="lbl">${tx('Managers see these on a store PC under Resources, searchable and by category. Switch Resources off for a store on its Access tab.')}</p>`;
+  return head + editing + requests(ctx) + table + `<p class="lbl">${tx('Managers see these on a store PC under Resources, searchable and by category. Switch Resources off for a store on its Access tab.')}</p>`;
 }
 
 async function upload(ctx, id, file) {
@@ -61,13 +86,22 @@ export default {
   mount(ctx, root) {
     const load = () => ctx.admin.api('/v1/admin/resources').then(r => { st.list = r.resources || []; st.error = null; ctx.rerender(); }).catch(e => { st.error = e.message; fail(e); ctx.rerender(); });
     if (!st.list && !st.error) load();
+    const loadReqs = () => ctx.admin.api('/v1/admin/resources/requests').then(r => { st.reqs = r.requests || []; ctx.rerender(); }).catch(() => {});
+    if (!st.reqs) loadReqs();
+    const answer = async (q, body, msg) => { try { const n = await ctx.admin.api(`/v1/admin/resources/requests/${encodeURIComponent(q.id)}`, { method: 'PATCH', body }); st.reqs = st.reqs.map(x => x.id === n.id ? n : x); if (msg) toast(msg); ctx.rerender(); return n; } catch (err) { fail(err); return null; } };
     root.addEventListener('click', async ev => {
       const a = ev.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act, e = a.dataset.id && (st.list || []).find(x => x.id === a.dataset.id);
-      if (act === 'rsa-reload') { st.list = null; st.error = null; load(); ctx.rerender(); }
-      else if (act === 'rsa-new') { st.edit = 'new'; ctx.rerender(); root.querySelector('[name="title"]')?.focus(); }
+      const q = a.dataset.id && (st.reqs || []).find(x => x.id === a.dataset.id);
+      if (act === 'rsa-reload') { st.list = null; st.error = null; load(); loadReqs(); ctx.rerender(); }
+      else if (act === 'rq-more') { st.allReqs = !st.allReqs; ctx.rerender(); }
+      else if (act === 'rq-add' && q) { st.edit = 'new'; st.from = q.id; ctx.rerender(); root.querySelector('[data-form="resource"]')?.scrollIntoView({ block: 'nearest' }); root.querySelector('[name="title"]')?.focus(); }
+      else if (act === 'rq-done' && q) { const have = (st.list || []).find(e => sameTitle(e.title, q.title)); await answer(q, { status: 'added', ...(have ? { resource: have.id } : {}) }, tx('{title} marked added', { title: q.title })); }
+      else if (act === 'rq-no' && q) { const why = prompt(tx('Decline {title}? A word why, for the store (optional):', { title: q.title }), ''); if (why === null) return; await answer(q, { status: 'declined', reply: why }, tx('{title} declined', { title: q.title })); }
+      else if (act === 'rq-open' && q) await answer(q, { status: 'open' }, tx('{title} is waiting again', { title: q.title }));
+      else if (act === 'rsa-new') { st.edit = 'new'; st.from = null; ctx.rerender(); root.querySelector('[name="title"]')?.focus(); }
       else if (act === 'rsa-edit') { st.edit = a.dataset.id; ctx.rerender(); root.querySelector('[name="title"]')?.focus(); }
-      else if (act === 'rsa-cancel') { st.edit = null; ctx.rerender(); }
+      else if (act === 'rsa-cancel') { st.edit = null; st.from = null; ctx.rerender(); }
       else if (act === 'rsa-del' && e) {
         if (!confirm(tx('Remove {title} from every store? Its file is deleted too.', { title: e.title }))) return;
         try { await ctx.admin.api(`/v1/admin/resources/${encodeURIComponent(e.id)}`, { method: 'DELETE' }); st.list = st.list.filter(x => x.id !== e.id); invalidate(); toast(tx('{title} removed', { title: e.title })); ctx.rerender(); } catch (err) { fail(err); }
@@ -97,7 +131,9 @@ export default {
         st.list = [e, ...(st.list || []).filter(x => x.id !== e.id)]; st.edit = e.id;   // kept open on this entry if the upload fails
         if (file) { toast(tx('Uploading {name}…', { name: file.name })); e = await upload(ctx, e.id, file); st.list = st.list.map(x => x.id === e.id ? e : x); }
         st.edit = null; invalidate();
-        toast(editing ? tx('{title} saved', { title: e.title }) : tx('{title} added', { title: e.title }));
+        const asked = !editing && st.from && (st.reqs || []).find(x => x.id === st.from); st.from = null;
+        if (asked) await answer(asked, { status: 'added', resource: e.id });
+        toast(editing ? tx('{title} saved', { title: e.title }) : asked ? tx('{title} added: {store} sees it, and the answer', { title: e.title, store: asked.store }) : tx('{title} added', { title: e.title }));
       } catch (err) { fail(err); }
       st.busy = false; ctx.rerender();
     });

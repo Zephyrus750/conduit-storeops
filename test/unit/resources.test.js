@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileKind, cleanEntry, visibleTo, ready, matches, FILE_EXTS } from '../../shared/resources.js';
+import { fileKind, cleanEntry, visibleTo, ready, matches, FILE_EXTS, cleanRequest, cleanAnswer, sameTitle } from '../../shared/resources.js';
 import { TOOLS, toolForView } from '../../shared/tools.js';
 
 test('fileKind: the allowed kinds by name; PDFs and pictures open in the browser, the rest download', () => {
@@ -37,3 +37,17 @@ test('Resources is a store-wide tool the owner can switch off, with its one page
   const t = TOOLS.find(x => x.id === 'resources');
   assert.equal(t.area, 'store'); assert.deepEqual(t.events, []); assert.equal(toolForView('resources'), t);
 });
+
+test('requests: a title is needed, text tidied and capped; an answer is open, added or declined', () => {
+  assert.deepEqual(cleanRequest({ title: '  Forklift  licence form ', note: 'for\nnew starters' }), { title: 'Forklift licence form', note: 'for new starters' });
+  assert.match(cleanRequest({ title: ' ' }).error, /title/);
+  assert.match(cleanRequest(null).error, /title/);
+  assert.equal(cleanRequest({ title: 'x'.repeat(200), note: 'y'.repeat(500) }).title.length, 80);
+  assert.equal(cleanRequest({ title: 'x', note: 'y'.repeat(500) }).note.length, 300);
+  assert.deepEqual(cleanAnswer({ status: 'added', resource: 'R1', reply: ' Under  Forms ', extra: 1 }), { status: 'added', resource: 'R1', reply: 'Under Forms' });
+  assert.deepEqual(cleanAnswer({ status: 'declined' }), { status: 'declined' });
+  assert.match(cleanAnswer({ status: 'done' }).error, /open, added, declined/);
+  assert.equal(sameTitle('Forklift licence form', ' forklift  LICENCE form'), true);
+  assert.equal(sameTitle('Forklift licence form', 'Forklift licence'), false);
+});
+

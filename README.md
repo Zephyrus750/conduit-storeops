@@ -130,6 +130,8 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/admin/resources`, `POST …`, `PATCH …/:id`, `DELETE …/:id` | owner | live: the Resources library (`shared/resources.js`): `{ title, category, note, link, stores: 'all' \| ['1241', …] }`; a link is https only, stores must be registered; each change is an owner action (`resource.add`, `.edit`, `.file`, `.remove`); a delete takes the file with it |
 | `POST /v1/admin/resources/:id/file?name=`, `GET …/file` | owner | live: the entry's file, its bytes as the body (PDF, pictures, Word, Excel, PowerPoint, CSV or text by the name's extension, under 25 MB); a new one replaces the old. Kept in the `PHOTOS` R2 bucket under `resources/<id>/` (`501` until it is bound) |
 | `GET /v1/resources`, `GET /v1/resources/:id/file?download=` | a store's manager, or the owner acting as the store | live: the entries listed for the token's store that have a file or a link (`403 tool_off` when Resources is switched off for it), and a file: PDFs and pictures inline (to open and print), the rest, or `?download=1`, as an attachment |
+| `GET /v1/resources/requests`, `POST …` | a store's manager, or the owner acting as the store | live: ask the owner for a document the library lacks, `{ title, note? }` (the store comes from the token; an open request of the same title is returned with `existing: true`, `200`, not doubled; at most 20 open per store, `409 too_many_open`), and list the store's requests with the owner's answers (`403 tool_off` when Resources is off) |
+| `GET /v1/admin/resources/requests`, `PATCH …/:id` | owner | live: every store's requests, newest first; answer one `{ status: 'open' \| 'added' \| 'declined', reply?, resource? }` (`resource` names the entry it became; reopening clears the answer); each answer is an owner action (`resource.request`) |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
 | `GET /v1/store/:no/history/:kind`, `GET …/export/:kind` (`backfill`, `cages`, `adjustments`, `receiving`) | store token or owner, entitled to the kind's area | live: the area's records, paged (`offset`, `limit` ≤ 500) or as CSV; `only=archive` pages just the rows retention moved out of the live state |
 | `POST /v1/store/:no/manifest` | dock code or manager | live: publish a parsed DC Manifest Report (v 1, kind report, ≤ 8 MB, 1 to 500 consols); logs `manifest.publish` so every device lists it |
@@ -247,6 +249,17 @@ downloaded copy, so the site's CSP allows `frame-src blob:`); Word, Excel and
 the rest download. Resources is a store-wide tool: the store's Access tab
 switches it off (**Whole store**). The registry keeps the entries; the files
 share the photos bucket under their own prefix, so nothing new is set up.
+
+Something missing? A manager presses **Request a document** (or, when a
+search finds nothing, **Request “…”**) and says what it is and where it's
+used. The owner sees every store's requests at the top of the console's
+Resources page, waiting ones first: **Add it** opens the add form with the
+request's words and marks the request added with the new entry, **Mark
+added** links one already in the library, and **Decline** takes a word why.
+The store's Resources page lists its requests with each answer, and an
+added one opens from there. Requests live in the registry
+(`resource_requests`); an open request of the same title is not doubled,
+and a store has at most 20 open.
 
 ## Install and updates
 
