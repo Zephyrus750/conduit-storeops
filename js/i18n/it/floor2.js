@@ -18,9 +18,7 @@ export default {
   "Enter the code": "Inserisci il codice",
   "Average accuracy": "Precisione media",
   "Backfill review": "Verifica rifornimento",
-  "Locations pending on today’s board": "Ubicazioni in attesa sulla bacheca di oggi",
   "Keycodes scanned": "Keycode scansionati",
-  "Ready · submitted": "Pronte · inviate",
   "Locations reviewed this week": "Ubicazioni verificate questa settimana",
   "Locations reviewed in {month}": "Ubicazioni verificate a {month}",
   "Submitted · ready": "Inviate · pronte",
@@ -892,4 +890,6 @@ export default {
   "{n} unit in all": "{n} unità in tutto",
   "{n} units in all": "{n} unità in tutto",
   "{time} worked of est {n} min": "{time} lavorati su stima {n} min",
+  "Locations reviewed on today’s board": "Ubicazioni verificate nella bacheca di oggi",
+  "Pending · ready · submitted": "In attesa · pronti · inviati",
 };

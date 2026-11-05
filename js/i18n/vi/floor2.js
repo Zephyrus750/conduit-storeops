@@ -18,9 +18,7 @@ export default {
   "Enter the code": "Nhập mã",
   "Average accuracy": "Độ chính xác trung bình",
   "Backfill review": "Duyệt bổ sung hàng",
-  "Locations pending on today’s board": "Vị trí đang chờ trên bảng hôm nay",
   "Keycodes scanned": "Keycode đã quét",
-  "Ready · submitted": "Sẵn sàng · đã gửi",
   "Locations reviewed this week": "Vị trí đã duyệt tuần này",
   "Locations reviewed in {month}": "Vị trí đã duyệt trong {month}",
   "Submitted · ready": "Đã gửi · sẵn sàng",
@@ -892,4 +890,6 @@ export default {
   "{n} unit in all": "tổng {n} đơn vị",
   "{n} units in all": "tổng {n} đơn vị",
   "{time} worked of est {n} min": "Đã làm {time} trên ước tính {n} phút",
+  "Locations reviewed on today’s board": "Vị trí đã duyệt trên bảng hôm nay",
+  "Pending · ready · submitted": "Đang chờ · sẵn sàng · đã gửi",
 };

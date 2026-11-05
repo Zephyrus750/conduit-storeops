@@ -2,7 +2,7 @@
 // the contrast step, and when a read code goes in, waits or is held.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { codesIn, adjacent, preprocess, diffAt, twinOf, decide, misreadFix, readsNeeded } from '../../shared/livescan.js';
+import { codesIn, adjacent, preprocess, diffAt, twinOf, decide, misreadFix, readsNeeded, regulars, regularTwin } from '../../shared/livescan.js';
 
 const w = (text, x0, y0, x1 = x0 + text.length * 10, y1 = y0 + 20, confidence = 90) => ({ text, confidence, bbox: { x0, y0, x1, y1 } });
 
@@ -74,4 +74,48 @@ test('misreadFix: the list code not yet in first, then one already in, with the 
   assert.deepEqual(misreadFix('43307763', { have, expected }), { use: '43307753', at: 6 });
   assert.deepEqual(misreadFix('41000002', { have, expected }), { use: '41000001', at: 7 });
   assert.equal(misreadFix('99999999', { have, expected }), null);
+});
+
+test('regulars: scanned on two or more days in four weeks, dropped after three scans without it', () => {
+  const scan = (date, ...codes) => ({ date, codes });
+  const scans = [
+    scan('2026-11-04', '41000001', '41000002'), scan('2026-11-03', '41000001', '41000002'), scan('2026-11-02', '41000001'),
+    scan('2026-11-01', '41000003', '41000004'), scan('2026-10-31', '41000003', '41000004'),
+    scan('2026-10-01', '41000005'), scan('2026-09-30', '41000005'),   // over four weeks ago
+    scan('2026-11-05', '41000006'), scan('2026-11-05', '41000006'),   // today: not history
+    scan('2026-10-30'),                                               // an empty scan counts for nothing
+  ];
+  const r = regulars(scans, { today: '2026-11-05' });
+  assert.ok(r.has('41000001') && r.has('41000002'), 'two or more days, still there');
+  assert.ok(!r.has('41000003') && !r.has('41000004'), 'missing from the last three scans: dropped');
+  assert.ok(!r.has('41000005'), 'only the last four weeks count');
+  assert.ok(!r.has('41000006'), 'today is not history');
+  assert.equal(regulars([scan('2026-11-04', '41000009')], { today: '2026-11-05' }).size, 0, 'one day is not a regular');
+  // Fewer than three scans: a code cannot have been missing from three.
+  assert.ok(regulars([scan('2026-11-04', '41000007'), scan('2026-11-03'), scan('2026-11-01', '41000007')].filter(x => x.codes.length), { today: '2026-11-05' }).has('41000007'));
+});
+
+test('decide: a regular goes in on one read; its safeguards hold or slow it', () => {
+  const regular = new Set(['43240180', '43084470', '43084471']), none = new Set();
+  assert.equal(decide({ code: '43240180', reads: 1, verdict: 'checking', regular }), 'add', 'a regular: first read, even before the catalogue answers');
+  assert.equal(decide({ code: '43084470', reads: 1, verdict: 'ok', regular }), 'wait', 'a regular with a regular a digit away takes the usual reads');
+  assert.equal(decide({ code: '43084470', reads: 2, verdict: 'ok', regular, seen: new Set(['43084470', '43084471']) }), 'add', 'two regulars a digit apart are not held');
+  assert.equal(decide({ code: '43240180', reads: 1, verdict: 'checking', regular, expected: new Set(['43240181']) }), 'wait', 'a report code a digit away: the usual reads');
+  // A regular and a code one digit from it, both read in this reading: neither on its own.
+  const seen = new Set(['43240180', '43240181']);
+  assert.equal(regularTwin('43240180', { regular, seen }), '43240181');
+  assert.equal(regularTwin('43240181', { regular, seen }), '43240180');
+  assert.equal(decide({ code: '43240180', reads: 1, verdict: 'ok', regular, seen }), 'wait', 'no shortcut with a twin read');
+  assert.equal(decide({ code: '43240180', reads: 2, verdict: 'ok', regular, seen }), 'hold', 'the regular is held');
+  assert.equal(decide({ code: '43240181', reads: 2, verdict: 'ok', regular, seen }), 'hold', 'and so is the other, even though the catalogue knows it');
+  // The twin is on today's report: the report wins, the regular takes the usual reads and is not held for it.
+  assert.equal(regularTwin('43240180', { regular, seen, expected: new Set(['43240181']) }), null);
+  assert.equal(decide({ code: '43240181', reads: 1, verdict: 'checking', regular, seen, expected: new Set(['43240181']) }), 'add');
+  // Without regulars everything is as before.
+  assert.equal(decide({ code: '43240180', reads: 1, verdict: 'ok', regular: none }), 'wait');
+});
+
+test('misreadFix: a twin read alongside it, when nothing on the list or in is one digit away', () => {
+  assert.deepEqual(misreadFix('43240180', { also: ['43240180', '43240181'] }), { use: '43240181', at: 7 });
+  assert.deepEqual(misreadFix('43240180', { have: new Set(['43240188']), also: ['43240181'] }), { use: '43240188', at: 7 }, 'one already in comes first');
 });

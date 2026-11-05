@@ -583,6 +583,14 @@ svg.map.real { background: #fff; }
 .ls-seg button.ping:not([aria-pressed="true"]) { background: rgba(92,196,234,.3); }
 .ls.bc .ls-win { left: 8% !important; width: 84% !important; top: 34% !important; height: 22% !important; }
 .ls.bc .ls-hl, .ls.bc .ls-hint { display: none; }
+/* Under the switch: what goes in on the first read here (today's report for
+   the bay, the bay's regulars), or that each code needs two reads. Green for
+   a moment when a report arrives while the camera is open. */
+.ls-lists { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); z-index: 2; max-width: calc(100% - 24px); box-sizing: border-box; padding: 5px 12px; border-radius: 999px; background: rgba(17,24,39,.82); color: #E5E7EB; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ls-lists.slow { color: #FCD34D; }
+.ls-lists.flash { background: #15803D; color: #fff; }
+.ls.bc .ls-lists { display: none; }
+.ls-rate { margin-left: auto; margin-right: 8px; font-size: 12px; color: var(--dim); }
 .ls-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: #FACC15; color: #111827; font-size: 13px; font-weight: 800; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
 .ls-focus { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border: 2px solid #FACC15; border-radius: 10px; pointer-events: none; }
 .ls-focus.go { animation: ls-focus .6s ease-out forwards; }
@@ -1165,6 +1173,7 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .mfx-t th.on { color: var(--ink); }
 .mfx-t td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
 .mfx-t td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.mfx-t th.n { text-align: right; }
 .mfx-t tr.mfx-c { cursor: pointer; }
 .mfx-t tr.mfx-c:hover td { background: var(--chip); }
 .mfx-items .mfc-it { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
@@ -3944,3 +3953,21 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .mp-pd { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (min-width: 861px) and (max-width: 1100px) { .mp-body { grid-template-columns: minmax(0, 1fr) 300px; } }
 @media (max-width: 860px) { .mp-side { order: -1; } }
+
+/* Backfill review: the location's barcode beside its number in the header,
+   always in view for the PDT. */
+.hc-bc { display: inline-flex; align-items: center; flex: none; padding: 3px 6px; border-radius: 6px; background: #fff; border: 1px solid var(--line); }
+.hc-bc svg.barcode { display: block; height: 30px; width: auto; }
+
+/* Focus with All: Add and Delete side by side, each its own card; the one
+   the keys work on is ringed. A narrow middle stacks them. */
+.fpair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.fpair .focus-card { margin-top: 8px; cursor: pointer; min-width: 0; }
+.fpair .focus-card.act { box-shadow: 0 0 0 3px var(--accent); }
+.fpair .focus-card:not(.act) { opacity: .78; }
+.fpair .focus-card:not(.act):hover { opacity: 1; }
+.fside-t { align-self: stretch; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.fside-t.add { color: #166534; } .fside-t.del { color: #991B1B; }
+.fside-t .ct { margin-left: auto; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--chip); color: var(--ink2); }
+.fpair + .fhint { text-align: center; margin-top: 10px; }
+@container smid (max-width: 540px) { .fpair { grid-template-columns: minmax(0, 1fr); } }

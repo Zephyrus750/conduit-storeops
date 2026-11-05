@@ -3,8 +3,11 @@
 // catalogue answered that it does not know the code, or undefined when it
 // could not be asked (offline, timed out, refused, or the worker could not
 // answer for that code): not knowing is not "not in the catalogue". Hits are
-// kept for a week under `kc:<code>`; a miss is remembered in memory for the
-// session so a mistyped code is asked once. Lookups never throw.
+// kept for a week under `kc:<code>`; a miss (a code not sold online, or a
+// mistyped one) is kept for the rest of the device's day, so a reload does
+// not ask about it again and the live reader does not wait on it. The
+// catalogue itself is rebuilt weekly, so a miss cannot turn into a hit
+// within the day. Lookups never throw.
 // Requests go in chunks of the worker's limit (50 codes): one screen asking
 // for 200 names used to be refused whole, so every product read as unknown
 // (audit 19 Oct P1). A chunk that fails is not asked again for a while.
@@ -18,6 +21,8 @@ const TTL_MS = 7 * 86_400_000;
 export const THIN_MS = 90_000;
 const thin = item => !!item && !item.img && !Number.isFinite(item.price);
 const fresh = (item, at) => Date.now() - at < (thin(item) ? THIN_MS : TTL_MS);
+// The device's own calendar day: a kept miss counts until local midnight.
+export const deviceDay = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const BATCH_MS = 40;
 export const CHUNK = 50;               // worker/catalogue.js MAX_CODES
 const FAIL_MS = 120_000;
@@ -32,6 +37,7 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
     const m = mem.get(kc);
     if (m && fresh(m.item, m.at)) return m.item;
     const v = await storage.get(`kc:${kc}`);
+    if (v && v.item === null) { if (v.day !== deviceDay()) return undefined; mem.set(kc, { item: null, at: v.at }); return null; }
     if (v && fresh(v.item, v.at)) { mem.set(kc, { item: v.item, at: v.at }); return v.item; }
     return undefined;
   }
@@ -63,7 +69,7 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
         // Left out of the answer: the worker could not tell (its catalogue was down).
         const item = items && kc in items ? items[kc] ?? null : undefined;
         if (item) { mem.set(kc, { item, at: Date.now() }); failed.delete(kc); await storage.set(`kc:${kc}`, { at: Date.now(), item }); }
-        else if (item === null) mem.set(kc, { item: null, at: Date.now() });
+        else if (item === null) { mem.set(kc, { item: null, at: Date.now() }); await storage.set(`kc:${kc}`, { at: Date.now(), item: null, day: deviceDay() }); }
         else if (items) failed.set(kc, Date.now());   // left out: not asked again until the back-off has passed
         for (const r of q.get(kc)) r(item);
       }
