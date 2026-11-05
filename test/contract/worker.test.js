@@ -681,6 +681,46 @@ test('resources: the owner adds files and links for every store or some; manager
   for (const t of ['resource.add', 'resource.file', 'resource.edit', 'resource.remove']) assert.ok(acts.includes(t), t);
 });
 
+test('resource requests: managers ask for a missing document; the owner sees every store’s and answers', async () => {
+  assert.equal((await reg2('2161')).status, 201); assert.equal((await reg2('2162')).status, 201);
+  const mgr = async no => (await api('POST', '/v1/auth/signin', { store: no, managerCode: `MG-${no}`, device: `rq-${no}` })).body.token;
+  const m61 = await mgr('2161'), m62 = await mgr('2162'), floor = (await api('POST', '/v1/auth/signin', { store: '2161', pin: '135790', device: 'rq-floor' })).body.token;
+  assert.equal((await api('POST', '/v1/resources/requests', { title: 'Forklift licence form' }, floor)).status, 403, 'the store PIN alone cannot ask');
+  assert.equal((await api('POST', '/v1/resources/requests', { title: '  ' }, m61)).status, 400);
+  const a = await api('POST', '/v1/resources/requests', { title: 'Forklift licence form', note: 'for new starters' }, m61);
+  assert.equal(a.status, 201); assert.equal(a.body.existing, false); assert.equal(a.body.request.store, '2161'); assert.equal(a.body.request.status, 'open'); assert.equal(a.body.request.by, 'rq-2161');
+  const again = await api('POST', '/v1/resources/requests', { title: 'forklift  LICENCE form' }, m61);
+  assert.equal(again.status, 200); assert.equal(again.body.existing, true); assert.equal(again.body.request.id, a.body.request.id, 'the same title, still open, is not asked twice');
+  const b = (await api('POST', '/v1/resources/requests', { title: 'Christmas roster template', store: '2161' }, m62)).body.request;
+  assert.equal(b.store, '2162', 'the store comes from the token, never the body');
+  // Each store sees its own; the owner sees every store's.
+  assert.deepEqual((await api('GET', '/v1/resources/requests', undefined, m61)).body.requests.map(q => q.title), ['Forklift licence form']);
+  assert.deepEqual((await api('GET', '/v1/resources/requests', undefined, m62)).body.requests.map(q => q.title), ['Christmas roster template']);
+  assert.equal((await api('GET', '/v1/admin/resources/requests', undefined, m61)).status, 403);
+  assert.deepEqual((await api('GET', '/v1/admin/resources/requests', undefined, ownerToken)).body.requests.map(q => q.store).sort(), ['2161', '2162']);
+  // The owner answers: added (with the resource it became) or declined with a word why.
+  const res = (await api('POST', '/v1/admin/resources', { title: 'Forklift licence form', link: 'https://forms.example/forklift' }, ownerToken)).body;
+  assert.equal((await api('PATCH', `/v1/admin/resources/requests/${a.body.request.id}`, { status: 'added' }, m61)).status, 403);
+  assert.equal((await api('PATCH', `/v1/admin/resources/requests/${a.body.request.id}`, { status: 'maybe' }, ownerToken)).status, 400);
+  assert.equal((await api('PATCH', `/v1/admin/resources/requests/${a.body.request.id}`, { status: 'added', resource: 'NOPE' }, ownerToken)).status, 404);
+  assert.equal((await api('PATCH', '/v1/admin/resources/requests/NOPE', { status: 'added' }, ownerToken)).status, 404);
+  const done = await api('PATCH', `/v1/admin/resources/requests/${a.body.request.id}`, { status: 'added', resource: res.id, reply: 'Under Forms' }, ownerToken);
+  assert.equal(done.status, 200); assert.equal(done.body.status, 'added'); assert.equal(done.body.resource, res.id); assert.equal(done.body.reply, 'Under Forms');
+  const no = await api('PATCH', `/v1/admin/resources/requests/${b.id}`, { status: 'declined', reply: 'Rosters come from Workforce' }, ownerToken);
+  assert.equal(no.body.status, 'declined');
+  const mine = (await api('GET', '/v1/resources/requests', undefined, m62)).body.requests[0];
+  assert.equal(mine.status, 'declined'); assert.equal(mine.reply, 'Rosters come from Workforce', 'the store sees the answer');
+  // Answered, the same title can be asked again; reopened, it waits once more.
+  assert.equal((await api('POST', '/v1/resources/requests', { title: 'Forklift licence form' }, m61)).status, 201);
+  const re = await api('PATCH', `/v1/admin/resources/requests/${b.id}`, { status: 'open' }, ownerToken);
+  assert.equal(re.body.status, 'open'); assert.equal(re.body.reply, ''); assert.equal(re.body.resource, '');
+  // Switched off: no asking and no list.
+  assert.equal((await api('PATCH', '/v1/admin/stores/2162', { tools: { resources: false } }, ownerToken)).status, 200);
+  const off = await api('POST', '/v1/resources/requests', { title: 'Anything' }, m62); assert.equal(off.status, 403); assert.equal(off.body.code, 'tool_off');
+  assert.equal((await api('GET', '/v1/resources/requests', undefined, m62)).status, 403);
+  assert.ok((await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions.some(x => x.type === 'resource.request'), 'each answer is an owner action');
+});
+
 test('manifests list and stats: every report with its counts; a day set by hand places one; a period against the one before', async () => {
   assert.equal((await reg2('2121')).status, 201);
   const floor = (await api('POST', '/v1/auth/signin', { store: '2121', pin: '135790', device: 'ms1' })).body.token;

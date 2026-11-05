@@ -23,6 +23,10 @@
 //   POST /resources    { title, category?, note?, link?, stores? }  → the new entry
 //   PATCH /resources/:id { title?, category?, note?, link?, stores?, file? } → { entry, oldKey } (file: set by the worker after the upload)
 //   DELETE /resources/:id                                  → { key } (the worker deletes the file)
+//   GET  /resource-requests                                → every store's requests for documents (owner)
+//   GET  /resource-requests/for/:store                     → that store's requests (403 tool_off when Resources is off)
+//   POST /resource-requests { store, title, note?, by? }   → { request, existing } (an open request of the same title is returned, not doubled)
+//   PATCH /resource-requests/:id { status, reply?, resource? } → the request, answered (owner)
 //   GET  /zones                                            → { zones: [{ name, stores: [no…] }] } (owner)
 //   POST /zones        { name }                            → the list, with the new zone
 //   PATCH /zones/:name { name }                            → the list; its stores move to the new name
@@ -35,7 +39,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { hashSecret, verifySecret, randomToken, sha256, pinOk, cleanText, b64u, unb64u } from './auth.js';
 import { HttpError, json } from './http.js';
 import { TOOL_IDS } from '../shared/tools.js';
-import { cleanEntry, visibleTo, ready } from '../shared/resources.js';
+import { cleanEntry, visibleTo, ready, cleanRequest, cleanAnswer, sameTitle, REQUEST_OPEN_MAX } from '../shared/resources.js';
 import { ulid } from '../shared/ulid.js';
 
 const ALL_AREAS = ['floor', 'stockroom', 'backdock'];
@@ -77,6 +81,7 @@ export class RegistryObject extends DurableObject {
         seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, type TEXT NOT NULL, store TEXT, detail TEXT
       );
       CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, doc TEXT NOT NULL, updated TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS resource_requests (id TEXT PRIMARY KEY, store TEXT NOT NULL, doc TEXT NOT NULL, updated TEXT NOT NULL);
     `);
     // Columns added after first deploy: a lockout window start, the store's
     // credential epoch (bumped to revoke every session), the tools
@@ -139,6 +144,10 @@ export class RegistryObject extends DurableObject {
       case 'POST /resources': return this.addResource(body);
       case 'PATCH /resources/*': return this.editResource(p[1], body);
       case 'DELETE /resources/*': return this.removeResource(p[1]);
+      case 'GET /resource-requests': return { requests: this.requests() };
+      case 'GET /resource-requests/*': if (p[1] !== 'for') throw new HttpError(404, 'not_found', `registry has no ${key}`); this.resourcesOn(p[2]); return { requests: this.requests(p[2]) };
+      case 'POST /resource-requests': return this.addRequest(body);
+      case 'PATCH /resource-requests/*': return this.answerRequest(p[1], body);
       case 'GET /zones': return this.zones();
       case 'POST /zones': return this.addZone(body);
       case 'PATCH /zones/*': return this.renameZone(decodeURIComponent(p[1]), body);
@@ -489,9 +498,12 @@ export class RegistryObject extends DurableObject {
     if (!row) throw new HttpError(404, 'not_found', `no resource ${id}`);
     return JSON.parse(row.doc);
   }
-  resourcesFor(no) {
+  resourcesOn(no) {
     const row = this.get(no); if (!row) throw new HttpError(404, 'not_registered', `store ${no} is not registered`);
     if (JSON.parse(row.tools || '{}').resources === false) throw new HttpError(403, 'tool_off', 'Resources is switched off for this store');
+  }
+  resourcesFor(no) {
+    this.resourcesOn(no);
     return { resources: this.resources().filter(e => ready(e) && visibleTo(e, no)) };
   }
   storeNos() { return this.sql.exec('SELECT no FROM stores').toArray().map(r => String(r.no)); }
@@ -524,6 +536,32 @@ export class RegistryObject extends DurableObject {
     this.sql.exec('DELETE FROM resources WHERE id = ?', cur.id);
     this.log('resource.remove', null, { id: cur.id, title: cur.title });
     return { key: cur.file?.key || null };
+  }
+  // A store's managers ask for a document the library lacks; the owner
+  // answers (added, with the resource it became, or declined, with a word
+  // why). Requests are kept, answered or not: the store sees the answer.
+  requests(store) {
+    const rows = store ? this.sql.exec('SELECT doc FROM resource_requests WHERE store = ? ORDER BY updated DESC', String(store)) : this.sql.exec('SELECT doc FROM resource_requests ORDER BY updated DESC');
+    return rows.toArray().map(r => JSON.parse(r.doc));
+  }
+  saveRequest(q) { this.sql.exec('INSERT OR REPLACE INTO resource_requests (id, store, doc, updated) VALUES (?, ?, ?, ?)', q.id, q.store, JSON.stringify(q), q.updated); return q; }
+  addRequest(body) {
+    const no = String(body.store || ''); this.resourcesOn(no);
+    const c = cleanRequest(body); if (c.error) throw new HttpError(400, 'invalid_request', c.error);
+    const open = this.requests(no).filter(q => q.status === 'open'), same = open.find(q => sameTitle(q.title, c.title));
+    if (same) return { request: same, existing: true };
+    if (open.length >= REQUEST_OPEN_MAX) throw new HttpError(409, 'too_many_open', `store ${no} already has ${REQUEST_OPEN_MAX} requests waiting on the owner`);
+    const at = new Date().toISOString();
+    return { request: this.saveRequest({ id: ulid(), store: no, title: c.title, note: c.note, status: 'open', reply: '', resource: '', by: String(body.by || '').slice(0, 64), created: at, updated: at }), existing: false };
+  }
+  answerRequest(id, body) {
+    const row = this.sql.exec('SELECT doc FROM resource_requests WHERE id = ?', String(id)).toArray()[0];
+    if (!row) throw new HttpError(404, 'not_found', `no request ${id}`);
+    const c = cleanAnswer(body); if (c.error) throw new HttpError(400, 'invalid_request', c.error);
+    if (c.resource) this.resource(c.resource);   // 404 when it names no resource
+    const cur = JSON.parse(row.doc), q = this.saveRequest({ ...cur, ...c, ...(c.status === 'open' ? { reply: c.reply ?? '', resource: '' } : {}), updated: new Date().toISOString() });
+    this.log('resource.request', q.store, { id: q.id, title: q.title, status: q.status });
+    return q;
   }
 
   log(type, store, detail) {

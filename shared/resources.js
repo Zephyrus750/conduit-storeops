@@ -13,6 +13,14 @@
 //   visibleTo(entry, store)      the store may see it: listed for every store or for this one
 //   ready(entry)                 it has a file or a link to open
 //   matches(entry, q)            a search: every word of q in its title, category, note, file or link
+//
+// Requests: a store's managers ask the owner for a document the library
+// does not have; the owner answers in the console.
+//   request { id, store, title, note, status: 'open' | 'added' | 'declined', reply, resource, by, created, updated }
+//   REQUEST_OPEN_MAX              how many requests a store can have open at once
+//   cleanRequest(body)            { title, note } checked → | { error }
+//   cleanAnswer(body)             the owner's { status, reply?, resource? } checked → | { error }
+//   sameTitle(a, b)               two titles name the same document (case and spacing aside)
 
 export const FILE_MAX = 25_000_000;
 const KINDS = {
@@ -62,3 +70,20 @@ export function matches(e, q) {
   const hay = [e.title, e.category, e.note, e.file?.name, e.link, fileKind(e.file?.name)?.label].filter(Boolean).join(' ').toLowerCase();
   return words.every(w => hay.includes(w));
 }
+
+export const REQUEST_OPEN_MAX = 20;
+export const REQUEST_STATUS = ['open', 'added', 'declined'];
+export function cleanRequest(body) {
+  const b = body && typeof body === 'object' ? body : {}, title = text(b.title, 80);
+  if (!title) return { error: 'a request needs a title: what is the document?' };
+  return { title, note: text(b.note, 300) };
+}
+export function cleanAnswer(body) {
+  const b = body && typeof body === 'object' ? body : {}, out = {};
+  if (!REQUEST_STATUS.includes(b.status)) return { error: `status is one of: ${REQUEST_STATUS.join(', ')}` };
+  out.status = b.status;
+  if ('reply' in b) out.reply = text(b.reply, 200);
+  if ('resource' in b) out.resource = b.resource ? text(b.resource, 40) : '';
+  return out;
+}
+export const sameTitle = (a, b) => text(a, 80).toLowerCase() === text(b, 80).toLowerCase();

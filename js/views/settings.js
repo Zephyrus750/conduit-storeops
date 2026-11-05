@@ -202,4 +202,4 @@ async function sendFeedback(ctx, root) {
 
 // ── How to use ────────────────────────────────────────────────────────
 // The written how-to became the Visual Guide in Help (js/guide/).
-const helpCard = () => `<div class="stg-card"><div class="stg-h">${tx('How to use')}</div><p class="stg-p">${tx('Help has the Visual Guide: every task played on the device it’s done on, to watch, try, read or print.')}</p><div class="stg-acts"><span class="btn sm primary" data-go="help">${ic('star')}${tx('Open Help')}</span></div></div>`;
+const helpCard = () => `<div class="stg-card"><div class="stg-h">${tx('How to use')}</div><p class="stg-p">${tx('Help has the Visual Guide: every task played on the device it’s done on, to watch, try, read or print.')}</p><div class="stg-acts"><span class="btn sm primary" data-go="help">${ic('help')}${tx('Open Help')}</span></div></div>`;

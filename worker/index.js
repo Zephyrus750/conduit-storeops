@@ -308,6 +308,8 @@ r.post('/v1/admin/zones', async (req, env) => { await requireOwner(req, env); re
 r.patch('/v1/admin/zones/:name', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'PATCH', `/zones/${encodeURIComponent(p.name)}`, await readJson(req))); });
 r.delete('/v1/admin/zones/:name', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'DELETE', `/zones/${encodeURIComponent(p.name)}`)); });
 r.get('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/resources')); });
+r.get('/v1/admin/resources/requests', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/resource-requests')); });
+r.patch('/v1/admin/resources/requests/:id', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'PATCH', `/resource-requests/${p.id}`, await readJson(req))); });
 r.post('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; return json(await registry(env, 'POST', '/resources', b), 201); });
 r.patch('/v1/admin/resources/:id', async (req, env, _c, p) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; return json((await registry(env, 'PATCH', `/resources/${p.id}`, b)).entry); });
 r.delete('/v1/admin/resources/:id', async (req, env, _c, p) => {
@@ -351,6 +353,10 @@ async function managerOfStore(req, env) {
   return c;
 }
 r.get('/v1/resources', async (req, env) => { const c = await managerOfStore(req, env); return json(await registry(env, 'GET', `/resources/for/${c.store}`)); });
+// Requests for a document the library lacks: a store's managers ask and see
+// their store's answers; the owner lists every store's and answers them.
+r.get('/v1/resources/requests', async (req, env) => { const c = await managerOfStore(req, env); return json(await registry(env, 'GET', `/resource-requests/for/${c.store}`)); });
+r.post('/v1/resources/requests', async (req, env) => { const c = await managerOfStore(req, env), b = await readJson(req); const out = await registry(env, 'POST', '/resource-requests', { store: c.store, title: b.title, note: b.note, by: c.device || '' }); return json(out, out.existing ? 200 : 201); });
 r.get('/v1/resources/:id/file', async (req, env, _c, p) => {
   const c = await managerOfStore(req, env), { resources } = await registry(env, 'GET', `/resources/for/${c.store}`), e = resources.find(x => x.id === p.id);
   if (!e) throw new HttpError(404, 'not_found', 'no such resource for this store');

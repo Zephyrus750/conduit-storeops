@@ -39,7 +39,7 @@ function phone(id, body, { tabs = 'floor', on = 'home', strip = '', bare = false
 }
 const RAIL = () => [['today', 'm-dashboard', tx('Dashboard')], ['inputs', 'file', tx('Reports & files')], ['resources', 'stack', tx('Resources')], ['#', tx('Floor')], ['map', 'm-map', tx('Store map')], ['floorchecks', 'listcheck', tx('Floor checks')], ['picklist', 'm-picklist', tx('Pick list')], ['safety', 'm-emergency', tx('Safety & upkeep')],
   ['#', tx('Stockroom')], ['backfill', 'm-backfill', tx('Backfill')], ['accuracy', 'm-adjust', tx('Stock accuracy')], ['cages', 'm-cages', tx('Cages')], ['#', tx('Back dock')], ['receiving', 'm-receiving', tx('Receiving')], ['plan', 'm-planner', tx('Plan')], ['results', 'bars', tx('Results')]];
-const FOOT = () => [['screens', 'expand', tx('Screens')], ['settings', 'm-settings', tx('Settings')], ['help', 'star', tx('Help')]];
+const FOOT = () => [['screens', 'expand', tx('Screens')], ['settings', 'm-settings', tx('Settings')], ['help', 'help', tx('Help')]];
 function pc(id, main, { on = 'today', badge = {}, top = '' } = {}) {
   const row = ([k, i, l]) => k === '#' ? `<span class="pc-sec">${i}</span>` : `<span class="pc-row${k === on ? ' on' : ''}" data-r="${k}">${ic(i)}<span>${l}</span>${badge[k] ? `<span class="bdg">${badge[k]}</span>` : ''}</span>`;
   return `<div class="dv pcf" id="${id}"><div class="dvs pc-scr"><nav class="pc-rail"><div class="pc-brand"><i></i>Conduit</div><div class="pc-store">Busselton<small>${tx('Store {no}', { no: '1241' })}</small></div>${RAIL().map(row).join('')}` +
