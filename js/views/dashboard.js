@@ -34,8 +34,12 @@ const SEV = [[tx('Low'), '#6B7280'], [tx('Medium'), '#D97706'], [tx('High'), '#D
 // An issue's status word ("Open" alone is the verb on every link and button).
 const OPEN = tx('issue status::Open');
 
-function kpi(cls, icon, title, go, n, d, hl, rows, pct) {
-  return `<div class="card kpi${cls ? ' ' + cls : ''}"><div class="kh">${ic(icon)}<h3>${title}</h3><a class="open" data-go="${go}">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${n}</span><span class="d">${d}</span></div><div class="hl">${hl}</div><div class="rows">${rows.map(r => `<div class="row">${r[0]}<b${r[2] ? ` class="${r[2]}"` : ''}>${r[1]}</b></div>`).join('')}</div>${pct != null ? `<div class="prog"><div class="track"><i style="width:${Math.min(100, Math.round(pct))}%"></i></div><b>${Math.min(100, Math.round(pct))}%</b></div>` : ''}</div>`;
+// A card that can finish is 'todo' until it is 'done': a done card steps
+// back in soft green with a Done chip, and while any card is done the ones
+// still to do take the accent ring (styles/app.css).
+const doneTag = (cls, tag) => /\bdone\b/.test(cls || '') ? `<span class="status good donetag" title="${tag || tx('Done')}">${ic('check')}${tag || tx('Done')}</span>` : '';
+function kpi(cls, icon, title, go, n, d, hl, rows, pct, tag) {
+  return `<div class="card kpi${cls ? ' ' + cls : ''}"><div class="kh">${ic(icon)}<h3>${title}</h3>${doneTag(cls, tag)}<a class="open" data-go="${go}">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${n}</span><span class="d">${d}</span></div><div class="hl">${hl}</div><div class="rows">${rows.map(r => `<div class="row">${r[0]}<b${r[2] ? ` class="${r[2]}"` : ''}>${r[1]}</b></div>`).join('')}</div>${pct != null ? `<div class="prog"><div class="track"><i style="width:${Math.min(100, Math.round(pct))}%"></i></div><b>${Math.min(100, Math.round(pct))}%</b></div>` : ''}</div>`;
 }
 const lockedCard = (name, icon, view) => `<div class="card kpi locked"><div class="kh">${ic(icon)}<h3>${name}</h3></div><div class="hero"><span class="n">${ic('lock')}</span><span class="d">${tx('Needs the {area} code', { area: name })}</span></div><div class="hl">${tx('{area} figures stay on the worker until this device has the {area} or manager code.', { area: name })}</div><button type="button" class="btn" data-go="${view}">${ic('lock')}${tx('Enter the code')}</button></div>`;
 const chip = (t, k = '') => `<span class="status${k ? ' ' + k : ''}">${t}</span>`;
@@ -60,25 +64,27 @@ function backfillCard(ctx, r) {
   const reviewed = subs.filter(x => x.status !== 'pending'), scored = reviewed.filter(x => Number.isFinite(x.metrics?.accuracy)), acc = scored.length ? Math.round(scored.reduce((n, x) => n + x.metrics.accuracy, 0) / scored.length) : null;   // bays with no report are not scored
   const codes = subs.reduce((n, x) => n + Object.values(x.codes || {}).filter(c => c.scanned).length, 0);
   const accRow = [tx('Average accuracy'), accChip(acc)];
-  if (period === 'today') return kpi('hot', 'm-backfill', tx('Backfill review'), 'bfreview', reviewed.length, `/ ${subs.length}`, tx('Locations reviewed on today’s board'), [accRow, [tx('Keycodes scanned'), codes.toLocaleString()], [tx('Pending · ready · submitted'), `${pend} · ${ready} · ${done}`]], subs.length ? (ready + done) / subs.length * 100 : 0);
-  return kpi('hot', 'm-backfill', tx('Backfill review'), 'bfreview', reviewed.length, `/ ${subs.length}`, period === 'week' ? tx('Locations reviewed this week') : tx('Locations reviewed in {month}', { month: r.label }), [accRow, [tx('Keycodes scanned'), codes.toLocaleString()], [tx('Submitted · ready'), `${done} · ${ready}`]], subs.length ? reviewed.length / subs.length * 100 : 0);
+  const fin = subs.length > 0 && done === subs.length, cls = fin ? 'done' : subs.length ? 'hot todo' : 'hot';
+  if (period === 'today') return kpi(cls, 'm-backfill', tx('Backfill review'), 'bfreview', reviewed.length, `/ ${subs.length}`, fin ? tx('Every location on today’s board submitted') : tx('Locations reviewed on today’s board'), [accRow, [tx('Keycodes scanned'), codes.toLocaleString()], [tx('Pending · ready · submitted'), `${pend} · ${ready} · ${done}`]], subs.length ? (ready + done) / subs.length * 100 : 0);
+  return kpi(cls, 'm-backfill', tx('Backfill review'), 'bfreview', reviewed.length, `/ ${subs.length}`, period === 'week' ? tx('Locations reviewed this week') : tx('Locations reviewed in {month}', { month: r.label }), [accRow, [tx('Keycodes scanned'), codes.toLocaleString()], [tx('Submitted · ready'), `${done} · ${ready}`]], subs.length ? reviewed.length / subs.length * 100 : 0);
 }
 function refreshCard(ctx, r) {
   const s = ctx.store.get('refresh'), week = weekId(), focus = s.focus[week] || [];
   const allMarks = Object.entries(s.weeks).flatMap(([w, marks]) => Object.values(marks).map(m => ({ ...m, w })));
   const focusRow = [tx('Focus departments'), focus.length ? focus.map(d => dep(d)).join(' ') : tx('none set')];
-  if (period === 'today') { const n = allMarks.filter(m => dayOf(m.at) === r.to).length; return kpi('', 'pin', tx('Location refresh'), 'refresh', n, `/ ${DAILY}`, tx('Shelves refreshed today · daily pace'), [focusRow, [tx('This week'), `${focusDone(s.weeks[week] || {}, focus)} / ${TARGET}`], [tx('Left today'), String(Math.max(0, DAILY - n))]], n / DAILY * 100); }
-  if (period === 'week') { const n = focusDone(s.weeks[week] || {}, focus); return kpi('', 'pin', tx('Location refresh'), 'refresh', n, `/ ${TARGET}`, tx('Weekly target · {period}', { period: esc(retailPeriod(new Date())) }), [focusRow, [tx('Shelves left to go'), String(Math.max(0, TARGET - n))], [tx('Marked outside the focus'), String(Object.keys(s.weeks[week] || {}).length - n)]], n / TARGET * 100); }
+  const fin = (n, of) => n >= of ? 'done' : 'todo';
+  if (period === 'today') { const n = allMarks.filter(m => dayOf(m.at) === r.to).length; return kpi(fin(n, DAILY), 'pin', tx('Location refresh'), 'refresh', n, `/ ${DAILY}`, tx('Shelves refreshed today · daily pace'), [focusRow, [tx('This week'), `${focusDone(s.weeks[week] || {}, focus)} / ${TARGET}`], [tx('Left today'), String(Math.max(0, DAILY - n))]], n / DAILY * 100); }
+  if (period === 'week') { const n = focusDone(s.weeks[week] || {}, focus); return kpi(fin(n, TARGET), 'pin', tx('Location refresh'), 'refresh', n, `/ ${TARGET}`, tx('Weekly target · {period}', { period: esc(retailPeriod(new Date())) }), [focusRow, [tx('Shelves left to go'), String(Math.max(0, TARGET - n))], [tx('Marked outside the focus'), String(Object.keys(s.weeks[week] || {}).length - n)]], n / TARGET * 100); }
   const inMonth = allMarks.filter(m => inRange(dayOf(m.at), r)), byWeek = {};
   for (const m of inMonth) byWeek[m.w] = (byWeek[m.w] || 0) + 1;
   const best = Object.entries(byWeek).sort((a, b) => b[1] - a[1])[0];
-  return kpi('', 'pin', tx('Location refresh'), 'refresh', inMonth.length, `/ ${TARGET * 4}`, tx('4-week target · {month}', { month: esc(r.label) }), [focusRow, [tx('Shelves left to go'), String(Math.max(0, TARGET * 4 - inMonth.length))], [tx('Best week'), best ? `${esc(best[0])} · ${best[1]}` : '—']], inMonth.length / (TARGET * 4) * 100);
+  return kpi(fin(inMonth.length, TARGET * 4), 'pin', tx('Location refresh'), 'refresh', inMonth.length, `/ ${TARGET * 4}`, tx('4-week target · {month}', { month: esc(r.label) }), [focusRow, [tx('Shelves left to go'), String(Math.max(0, TARGET * 4 - inMonth.length))], [tx('Best week'), best ? `${esc(best[0])} · ${best[1]}` : '—']], inMonth.length / (TARGET * 4) * 100);
 }
 function labelsCard(ctx, r) {
   const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen), checks = L.checks[cyc] || {}, total = microCount(), done = Object.keys(checks).length, wrong = (L.variances[cyc] || []).length;
   const inP = Object.values(checks).filter(c => inRange(dayOf(c.at), r)).length;
-  if (done >= total) return kpi('done', 'tag', tx('Label integrity'), 'labelint', total, `/ ${total}`, tx('This cycle is complete ✓'), [[tx('Labels wrong this cycle'), String(wrong), wrong ? 'c-red' : ''], [tx('Cycle'), esc(cyc)], [tx('Next cycle opens in'), txn(daysLeftInCycle(L.cycleLen), '{n} day', '{n} days')]], 100);
-  return kpi('', 'tag', tx('Label integrity'), 'labelint', done, `/ ${total}`, period === 'today' ? tx('Micro-departments checked this cycle · {n} today', { n: inP }) : r.label === 'this week' ? tx('Micro-departments checked this cycle · {n} this week', { n: inP }) : tx('Micro-departments checked this cycle · {n} in {month}', { n: inP, month: r.label }), [[tx('Labels wrong this cycle'), String(wrong), wrong ? 'c-red' : ''], [tx('Days left in cycle'), String(daysLeftInCycle(L.cycleLen))], [tx('Still to check'), String(total - done)]], done / total * 100);
+  if (done >= total) return kpi('done', 'tag', tx('Label integrity'), 'labelint', total, `/ ${total}`, tx('This cycle is complete'), [[tx('Labels wrong this cycle'), String(wrong), wrong ? 'c-red' : ''], [tx('Cycle'), esc(cyc)], [tx('Next cycle opens in'), txn(daysLeftInCycle(L.cycleLen), '{n} day', '{n} days')]], 100);
+  return kpi('todo', 'tag', tx('Label integrity'), 'labelint', done, `/ ${total}`, period === 'today' ? tx('Micro-departments checked this cycle · {n} today', { n: inP }) : r.label === 'this week' ? tx('Micro-departments checked this cycle · {n} this week', { n: inP }) : tx('Micro-departments checked this cycle · {n} in {month}', { n: inP, month: r.label }), [[tx('Labels wrong this cycle'), String(wrong), wrong ? 'c-red' : ''], [tx('Days left in cycle'), String(daysLeftInCycle(L.cycleLen))], [tx('Still to check'), String(total - done)]], done / total * 100);
 }
 // The dock itself, read-only: Receiving's squares (bay, cartons, the
 // pallet's mark, its worked time and crew, the first thing it needs) in
@@ -267,7 +273,8 @@ function dockCard(ctx, r) {
       row(tx('Next truck'), next ? `T${next[0]}${next[1].eta ? ' · ' + esc(next[1].eta) : ''}${next[1].manifest?.manNo ? ' · ' + esc(next[1].manifest.manNo) : ''}` : '—') +
       row(tx('Cartons decanted today'), cartons.toLocaleString()) +
       row(tx('Last cleared'), last ? `T${esc(truckNo(last.id))}${last.clearedAt ? ' · ' + fmtHM(last.clearedAt) : ''}${last.clearMins ? ' · ' + fmtMins(last.clearMins) : ''}` : '—');
-    const open = `<a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a>`, head = `<div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${open}</div><div class="dk-chip">${chip}</div>${steps}`;
+    const fin = !t && (planned ? done.length >= planned : none), cls = fin ? 'done' : planned ? 'todo' : '';
+    const open = `<a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a>`, head = `<div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${doneTag(cls)}${open}</div><div class="dk-chip">${chip}</div>${steps}`;
     const dayHero = `<div class="hero"><span class="n">${done.length}</span><span class="d">${planned ? tx('/ {n} trucks cleared today', { n: planned }) : txn(done.length, 'truck cleared today', 'trucks cleared today')}</span></div>`;
     const dayBar = planned ? `<div class="prog"><div class="track"><i style="width:${Math.round(done.length / planned * 100)}%"></i></div><b>${Math.round(done.length / planned * 100)}%</b></div>` : '';
     // No truck on the dock, or one planned but not landed: the day's trucks.
@@ -275,11 +282,11 @@ function dockCard(ctx, r) {
       const wait = next ? tx('Waiting for truck {no}', { no: next[0] }) : '';
       const line = t ? phaseLine(t)
         : none ? tx('No trucks today · confirmed in the Planner') : last ? [tx('Finalised {time}', { time: last.clearedAt ? fmtHM(last.clearedAt) : '—' }), wait || tx('Every truck today is cleared.')].join(' · ') : wait || tx('Nothing on the dock. Land a truck from Receiving.');
-      return `<div class="card kpi dk">${head}${dayHero}<div class="hl">${line}</div>${dockMini(ctx, t)}<div class="rows">${common}</div>${dayBar}</div>`;
+      return `<div class="card kpi dk${cls ? ' ' + cls : ''}">${head}${dayHero}<div class="hl">${line}</div>${dockMini(ctx, t)}<div class="rows">${common}</div>${dayBar}</div>`;
     }
     const pr = progress(t), halt = openHalt(t), fc = forecast(t, Date.now(), ratesFor(ctx.store.get('dock'))), crew = (t.team || []).length;
     const facts = [t.landedAt ? tx('landed {time}', { time: fmtHM(t.landedAt) }) : '', crew ? tx('{n} crew', { n: crew }) : '', t.goalAt ? tx('goal {time}', { time: fmtHM(t.goalAt) }) : ''].filter(Boolean).join(' · ');
-    return `<div class="card kpi dk">${head}<div class="hero"><span class="n">${pr.done}</span><span class="d">${tx('/ {total} cartons decanted', { total: pr.total })}</span></div><div class="hl">${phaseLine(t)}${facts ? ` · ${facts}` : ''}</div>${dockMini(ctx, t)}` +
+    return `<div class="card kpi dk todo">${head}<div class="hero"><span class="n">${pr.done}</span><span class="d">${tx('/ {total} cartons decanted', { total: pr.total })}</span></div><div class="hl">${phaseLine(t)}${facts ? ` · ${facts}` : ''}</div>${dockMini(ctx, t)}` +
       `<div class="rows">${halt ? `<div class="row">${tx('On hold')}<b class="c-red">${tx('{hold} since {time}', { hold: esc(holdName(halt)), time: fmtHM(halt.start) })}</b></div>` : ''}${row(tx('Pallets done'), `${pr.doneCount} / ${pr.count}`)}${row(tx('Forecast finish'), fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—')}${common}</div><div class="prog"><div class="track"><i style="width:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
   }
   const rows = (dock.history || []).filter(h => inRange(h.id.slice(0, 10), r)), cartons = rows.reduce((n, h) => n + (h.cartons || 0), 0);
@@ -291,7 +298,8 @@ function maintCard(ctx, r) {
   const logged = all.filter(i => inRange(dayOf(i.created), r)).length, waiting = open.filter(i => i.status === 'progress').length;
   const list = open.slice().sort((a, b) => (b.sev - a.sev) || (a.created < b.created ? -1 : 1)).slice(0, 4);
   const hs = period === 'today' ? tx('open · {logged} logged today · {waiting} done, waiting for sign-off', { logged, waiting }) : period === 'week' ? tx('open · {logged} logged this week · {waiting} done, waiting for sign-off', { logged, waiting }) : tx('open · {logged} logged in {month} · {waiting} done, waiting for sign-off', { logged, waiting, month: esc(r.label) });
-  return `<div class="card kpi mt"><div class="kh">${ic('tool')}<h3>${tx('Maintenance')}</h3><a class="open" data-go="maintenance">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${open.length}</span><span class="hs">${hs}</span></div>` +
+  const cls = open.length ? 'todo' : 'done';
+  return `<div class="card kpi mt ${cls}"><div class="kh">${ic('tool')}<h3>${tx('Maintenance')}</h3>${doneTag(cls, tx('All clear'))}<a class="open" data-go="maintenance">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${open.length}</span><span class="hs">${hs}</span></div>` +
     `<div class="rows">${list.map(i => `<div class="row"><span class="l"><span class="pt" style="background:${i.status === 'open' ? '#DC2626' : '#D97706'}"></span><span><b>${esc(i.title)}</b><span class="where">${esc(i.loc || '')}${i.dept ? ' ' + dep(i.dept) : ''} · ${ago(i.created)}</span></span></span><span class="r"><span class="pri p${Math.min(3, (i.sev ?? 1) + 1)}" title="${tx('{sev} severity', { sev: SEV[i.sev ?? 1][0] })}"><i></i><i></i><i></i></span>${chip(i.status === 'open' ? OPEN : tx('Done, to check'), i.status === 'open' ? 'warn' : 'info')}</span></div>`).join('') || `<div class="row">${tx('Nothing open')}<b>✓</b></div>`}</div></div>`;
 }
 
