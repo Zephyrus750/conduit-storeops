@@ -95,6 +95,10 @@ form.li { margin: 0; }
 .mv-scan.typed .cs-step button { padding: 6px 8px; }
 .mv-scan.typed .cs-step b { min-width: 24px; text-align: center; }
 .sr3 { height: calc(100cqh - 150px); min-height: 480px; }
+/* Review and Ready 10% narrower than the shell's 250px, their titles a step larger. */
+.sr3 { grid-template-columns: 225px minmax(0, 1fr) 225px; }
+.sr3 .srail-t:not(.sub) { font-size: 15.5px; }
+.sr3 .srail-t:not(.sub) .ct { font-size: 12px; }
 .sr3 .srail-list { overflow: auto; flex: 1; }
 .srail-t .sortb { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; background: var(--panel); color: var(--ink2); }
 .slc .lock { display: inline-flex; color: var(--amber, #B45309); }
@@ -111,7 +115,7 @@ form.li { margin: 0; }
 .swp-row .cg { white-space: nowrap; }
 .unlock .si-form input.si-pin { letter-spacing: .12em; font-size: 20px; text-transform: uppercase; }
 .unlock .si-foot a { cursor: pointer; font-weight: 600; color: var(--accent-ink); }
-@container shell (max-width:1100px) { .sr3 { grid-template-columns: 220px minmax(0,1fr) 220px; } }
+@container shell (max-width:1100px) { .sr3 { grid-template-columns: 198px minmax(0,1fr) 198px; } }
 @container shell (max-width:600px) { .sr3 { grid-template-columns: 1fr; height: auto; } .srail.right { display: none; } .hgrid, .grid2 { grid-template-columns: 1fr; } }
 @media print { .rail, .top, .foot, .m-tabs, .m-appbar, .vh .acts { display: none !important; } .content { overflow: visible !important; } }
 
@@ -477,8 +481,10 @@ svg.map.real { background: #fff; }
 /* Backfill review on a 1080p desk: the same type size as the rest of the
    program, wider rails, and the board's columns not stretched thin. */
 @container shell (min-width: 1600px) {
-  .sr3 { grid-template-columns: 340px minmax(0, 1fr) 340px; }
+  .sr3 { grid-template-columns: 306px minmax(0, 1fr) 306px; }
   .srail-t { font-size: 15px; padding: 13px 14px; }
+  .sr3 .srail-t:not(.sub) { font-size: 17.5px; }
+  .sr3 .srail-t:not(.sub) .ct { font-size: 13px; padding: 1px 9px; }
   .slc { padding: 11px 14px; }
   .slc .loc { font-size: 16px; }
   .slc .meta, .slc .sr .dc { font-size: 12.5px; }

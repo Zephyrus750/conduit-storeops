@@ -9,7 +9,7 @@ const APP = {
   dots: 'dots', box: 'box', check: 'check', truck: 'truck', map: 'map', list: 'listcheck', ladder: 'm-equipment', share: 'qr',
   clip: 'clip', barcode: 'barcode', cal: 'cal', chart: 'chart', updown: 'm-adjust', cage: 'cage', expand: 'expand', gear: 'settings',
   clipboard: 'clip', pkg: 'packages', lock: 'lock', wrench: 'tool', camera: 'camera', shield: 'shield', arrow: 'arrow', pause: 'pause',
-  print: 'print', x: 'x', plus: 'plus', star: 'star', file: 'file', stack: 'stack', bars: 'bars', users: 'users', pin: 'pin',
+  print: 'print', x: 'x', plus: 'plus', star: 'star', help: 'help', file: 'file', stack: 'stack', bars: 'bars', users: 'users', pin: 'pin',
   // The app's area and screen icons, as its rail and tab strip draw them.
   'm-dashboard': 'm-dashboard', 'm-map': 'm-map', 'm-picklist': 'm-picklist', 'm-emergency': 'm-emergency', 'm-bfreview': 'm-bfreview',
   'm-adjust': 'm-adjust', 'm-cages': 'm-cages', 'm-receiving': 'm-receiving', 'm-planner': 'm-planner', 'm-settings': 'm-settings',
@@ -17,7 +17,6 @@ const APP = {
 };
 // 24-unit stroke paths the app has no icon for.
 const OWN = {
-  help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"/>',
   wifi: '<path d="M2.5 9a14 14 0 0119 0M5.5 12.5a9.5 9.5 0 0113 0M8.5 16a5 5 0 017 0M12 19.5h.01"/>',
   nowifi: '<path d="M3 3l18 18M8.5 16a5 5 0 017 0M12 19.5h.01M5.5 12.5a9.5 9.5 0 014.5-2.4M2.5 9a14 14 0 015-3M14 6.2a14 14 0 017.5 2.8"/>',
   book: '<path d="M5 4h9a4 4 0 014 4v12H9a4 4 0 01-4-4z"/><path d="M5 16a4 4 0 014-4h9"/>',
