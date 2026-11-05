@@ -183,10 +183,11 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null } = 
     list.innerHTML = out.join('') || '<p class="evp">Nothing sent yet. Looking, searching and opening screens send nothing.</p>';
   }
   function caption() {
-    const s = scene(), step = s.steps[st.stepIx], n = $('.cap-n'); if (!n) return;
-    n.textContent = `${st.stepIx + 1} / ${s.steps.length}`;
+    // Replay parks the step at -1 until step 1 shows: caption step 1 meanwhile.
+    const s = scene(), ix = Math.max(0, st.stepIx), step = s.steps[ix], n = $('.cap-n'); if (!n || !step) return;
+    n.textContent = `${ix + 1} / ${s.steps.length}`;
     $('.cap-t').innerHTML = (st.mode === 'try' ? `<span class="yt">${tx('Your turn')}</span>` : '') + step.cap; $('.capd').innerHTML = step.dev;
-    stage.querySelectorAll('.dots button').forEach((b, i) => { b.classList.toggle('on', i === st.stepIx); b.classList.toggle('done', i < st.stepIx); });
+    stage.querySelectorAll('.dots button').forEach((b, i) => { b.classList.toggle('on', i === ix); b.classList.toggle('done', i < ix); });
     const bp = $('[data-c="play"]'); if (bp) bp.innerHTML = playing ? `${ic('pause')}${tx('Pause')}` : st.stepIx === s.steps.length - 1 ? `${ic('again')}${tx('Replay')}` : `${ic('play')}${tx('Play')}`;
   }
   // Shows step i: the steps before it instantly, step i itself in the mode given.
