@@ -4,8 +4,9 @@
 //
 //   codesIn(words, text)   8-digit keycodes in one OCR pass, each with its box
 //   preprocess(px, w, h, banded)   K2B's adaptive contrast; returns the mean luma
-//   decide({ code, reads, verdict, have, expected })   'already' | 'add' | 'wait' | 'hold'
-//   misreadFix(code, { have, expected })   { use, at } | null: the code a held one probably is
+//   regulars(scans, { today })   the bay's regular codes from its past scans
+//   decide({ code, reads, verdict, have, expected, regular, seen })   'already' | 'add' | 'wait' | 'hold'
+//   misreadFix(code, { have, expected, also })   { use, at } | null: the code a held one probably is
 //
 // The acceptance rules, from K2B and the October showcase:
 //  - a code already on today's list for the bay goes in on the first read
@@ -15,7 +16,15 @@
 //    it slower: two reads;
 //  - a code one digit from one already in, or from one on today's list, is
 //    held (not added) unless the catalogue knows it: real keycodes on one
-//    list can differ by a digit, a misread is never a product.
+//    list can differ by a digit, a misread is never a product;
+//  - a regular in the bay (scanned there on two or more days in the last
+//    four weeks, and not missing from its last three scans) also goes in on
+//    the first read, before the day's report is pasted. Its safeguards: a
+//    regular with a regular or report code one digit away takes the usual
+//    reads, and when a regular and a code one digit from it are both read
+//    in one reading, neither goes in on its own: both are held.
+
+import { addDays } from './time.js';
 
 // Words from Tesseract (text, bbox {x0,y0,x1,y1}, confidence) and the page
 // text; 8-digit codes found three ways, as K2B: a word that is the code, two
@@ -87,21 +96,53 @@ export function diffAt(a, b) {
 }
 export const twinOf = (code, codes) => { for (const c of codes) if (c !== code && diffAt(code, c) >= 0) return c; return null; };
 
+// The bay's regulars, from its past scans ([{ date, codes }], the codes the
+// phone scanned there that day): codes scanned on at least minDays days in
+// the last `days`, less any missing from each of the bay's last missRun
+// scans (sold out or ranged out: it stops counting until it is back).
+export function regulars(scans = [], { today, days = 28, minDays = 2, missRun = 3 } = {}) {
+  const from = addDays(today, -days);
+  const recent = scans.filter(s => s.date < today && s.date >= from && s.codes?.length).sort((a, b) => b.date.localeCompare(a.date));
+  const seenOn = new Map();
+  for (const s of recent) for (const c of new Set(s.codes)) seenOn.set(c, (seenOn.get(c) || 0) + 1);
+  const last = recent.slice(0, missRun), out = new Set();
+  for (const [c, n] of seenOn) {
+    if (n < minDays) continue;
+    if (last.length >= missRun && last.every(s => !s.codes.includes(c))) continue;
+    out.add(c);
+  }
+  return out;
+}
+
 // The reads a code needs: 2, or 3 when the catalogue says it is no product.
 export const readsNeeded = verdict => (verdict === 'unknown' ? 3 : 2);
-export function decide({ code, reads = 0, verdict = 'checking', have = new Set(), expected = new Set() }) {
+// regular: the bay's regulars; seen: every code read in this reading so far.
+export function decide({ code, reads = 0, verdict = 'checking', have = new Set(), expected = new Set(), regular = new Set(), seen = new Set() }) {
   if (have.has(code)) return 'already';
   if (expected.has(code)) return 'add';
+  const twin = regularTwin(code, { expected, regular, seen });
+  if (regular.has(code) && !twin && !twinOf(code, [...regular, ...expected])) return 'add';
   if (verdict === 'checking') return 'wait';
   if (reads < readsNeeded(verdict)) return 'wait';
+  if (twin) return 'hold';
   if (verdict !== 'ok' && twinOf(code, [...expected, ...have])) return 'hold';
   return 'add';
 }
+// A code read in this reading one digit from this one, where exactly one of
+// the two is a regular (and the other is not on today's report): one of
+// them may be the other misread, so neither goes in on its own.
+export function regularTwin(code, { expected = new Set(), regular = new Set(), seen = new Set() } = {}) {
+  const isReg = regular.has(code);
+  for (const c of seen) if (c !== code && !expected.has(c) && regular.has(c) !== isReg && diffAt(code, c) >= 0) return c;
+  return null;
+}
 // What a held code probably is: the code one digit away on today's list
-// that is not in yet, else one already in. at is the differing digit.
-export function misreadFix(code, { have = new Set(), expected = new Set() } = {}) {
+// that is not in yet, else one already in, else (also) one read alongside
+// it. at is the differing digit.
+export function misreadFix(code, { have = new Set(), expected = new Set(), also = [] } = {}) {
   const pick = c => ({ use: c, at: diffAt(code, c) });
   for (const c of expected) if (!have.has(c) && diffAt(code, c) >= 0) return pick(c);
   for (const c of [...expected, ...have]) if (diffAt(code, c) >= 0) return pick(c);
+  for (const c of also) if (c !== code && diffAt(code, c) >= 0) return pick(c);
   return null;
 }

@@ -18,9 +18,7 @@ export default {
   "Enter the code": "Code eingeben",
   "Average accuracy": "Durchschnittliche Genauigkeit",
   "Backfill review": "Auffüll-Prüfung",
-  "Locations pending on today’s board": "Offene Lagerplätze auf der heutigen Tafel",
   "Keycodes scanned": "Gescannte Keycodes",
-  "Ready · submitted": "Bereit · gesendet",
   "Locations reviewed this week": "Diese Woche geprüfte Lagerplätze",
   "Locations reviewed in {month}": "Im {month} geprüfte Lagerplätze",
   "Submitted · ready": "Gesendet · bereit",
@@ -892,4 +890,6 @@ export default {
   "{n} unit in all": "insgesamt {n} Stück",
   "{n} units in all": "insgesamt {n} Stück",
   "{time} worked of est {n} min": "{time} gearbeitet von ca. {n} Min.",
+  "Locations reviewed on today’s board": "Auf der heutigen Tafel geprüfte Lagerplätze",
+  "Pending · ready · submitted": "Offen · bereit · eingereicht",
 };

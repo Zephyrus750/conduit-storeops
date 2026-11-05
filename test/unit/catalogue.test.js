@@ -190,3 +190,22 @@ test('worker: the owner picture check reports each step', async () => {
   const refused = await probe({ LOOKUP_URL: 'https://lookup.test', CF_ACCOUNT_ID: 'acc', BROWSER_TOKEN: 'tok' }, '42977636', async (url, init) => String(url).startsWith('https://api.cloudflare.com') ? Response.json({ success: false, errors: [{ message: 'Rate limit exceeded' }] }, { status: 429 }) : fetchImpl(url, init));
   assert.equal(refused.browser.why, 'render 429: Rate limit exceeded'); assert.equal(refused.legacy.why, 'not configured (DETAILS_URL)'); assert.equal(refused.image, null);
 });
+
+test('device: a code not in the catalogue is kept for the rest of the day, across a reload', async () => {
+  const { createCatalogue, deviceDay } = await import('../../client/catalogue.js');
+  const { memoryStorage } = await import('../../client/storage.js');
+  let n = 0;
+  const transport = { request: async () => { n += 1; return { items: { 43000001: null } }; } };
+  const storage = memoryStorage();
+  assert.equal(await createCatalogue({ transport, storage }).lookup('43000001'), null);
+  assert.equal(n, 1);
+  // A reload: a new catalogue on the same device storage answers without asking.
+  assert.equal(await createCatalogue({ transport, storage }).lookup('43000001'), null);
+  assert.equal(n, 1, 'the miss was kept on the device');
+  assert.equal((await storage.get('kc:43000001')).day, deviceDay());
+  // The next day it is asked again.
+  const real = Date.now; Date.now = () => real() + 86_400_000;
+  try { assert.equal(await createCatalogue({ transport, storage }).lookup('43000001'), null); }
+  finally { Date.now = real; }
+  assert.equal(n, 2, 'asked again the next day');
+});

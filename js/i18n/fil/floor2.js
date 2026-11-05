@@ -18,9 +18,7 @@ export default {
   "Enter the code": "Ilagay ang code",
   "Average accuracy": "Average na accuracy",
   "Backfill review": "Backfill review",
-  "Locations pending on today’s board": "Mga location na naghihintay sa board ngayon",
   "Keycodes scanned": "Mga keycode na na-scan",
-  "Ready · submitted": "Handa · naipasa",
   "Locations reviewed this week": "Mga location na na-review ngayong linggo",
   "Locations reviewed in {month}": "Mga location na na-review noong {month}",
   "Submitted · ready": "Naipasa · handa",
@@ -892,4 +890,6 @@ export default {
   "{n} unit in all": "{n} unit lahat",
   "{n} units in all": "{n} unit lahat",
   "{time} worked of est {n} min": "{time} nagawa sa tantiyang {n} min",
+  "Locations reviewed on today’s board": "Mga location na na-review sa board ngayong araw",
+  "Pending · ready · submitted": "Naghihintay · handa · naipasa",
 };

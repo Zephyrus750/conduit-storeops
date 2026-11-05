@@ -145,6 +145,7 @@ function rows(doc, landed) {
   if (q) list = list.filter(c => c.id.includes(q) || String(c.cons || '').includes(q) || String(c.dept || '').includes(q) || (c.items || []).some(i => String(i.k).startsWith(q) || (nameOf(i.k) || i.d || '').toLowerCase().includes(q) || String(i.dept || '').includes(q)));
   return list;
 }
+const NUM_COLS = new Set(['cartons', 'units', 'keycodes', 'n', 'consols']);
 const COLS = {
   consols: [['', null], [tx('Consol'), 'id'], [tx('Departments'), null], [tx('Cartons'), 'cartons'], [tx('Units'), 'units'], [tx('Keycodes'), 'keycodes']],
   products: [[tx('Keycode'), 'k'], [tx('Product'), 'name'], [tx('Dept'), 'dept'], [tx('Units'), 'units'], [tx('Cartons'), 'cartons'], [tx('Consols'), 'n'], [tx('Landed'), 'landed']],
@@ -165,7 +166,8 @@ function explorer(ctx, e, doc) {
   const gs = [...GROUPS, ['?', tx('Unknown'), '#94A3B8']].filter(g => gc[g[0]] > 0), gt = Object.values(gc).reduce((a, b) => a + b, 0) || 1;
   const roll = `<div class="mfx-roll">${gs.map(g => `<button class="mfx-seg${st.group === g[0] ? ' on' : ''}${st.group && st.group !== g[0] ? ' dim' : ''}" data-act="group" data-g="${g[0]}" style="flex:${gc[g[0]]};background:${g[2]}" title="${g[1]}: ${tx('{n} cartons', { n: Math.round(gc[g[0]]) })}">${gc[g[0]] / gt > 0.08 ? `${g[1]} ${Math.round(gc[g[0]] / gt * 100)}%` : ''}</button>`).join('')}</div>${st.group ? `<div class="cs-dim" style="margin:-4px 0 8px">${tx('Showing {group} only', { group: esc(GROUPS.find(g => g[0] === st.group)?.[1] || tx('Unknown')) })} · <span class="go" data-act="group" data-g="${esc(st.group)}">${tx('show all')}</span></div>` : ''}`;
   const list = sorted(rows(doc, landed)), cols = COLS[st.tab];
-  const th = cols.map(([label, key]) => key ? `<th data-act="sort" data-k="${key}" class="${st.sort === key ? 'on' : ''}">${label}${st.sort === key ? (st.dir > 0 ? ' ▲' : ' ▼') : ''}</th>` : `<th>${label}</th>`).join('');
+  // Number columns: their headings sit right, over the numbers.
+  const th = cols.map(([label, key]) => key ? `<th data-act="sort" data-k="${key}" class="${[st.sort === key ? 'on' : '', NUM_COLS.has(key) ? 'n' : ''].filter(Boolean).join(' ')}">${label}${st.sort === key ? (st.dir > 0 ? ' ▲' : ' ▼') : ''}</th>` : `<th>${label}</th>`).join('');
     const body = st.tab === 'products' ? list.slice(0, 200).map(r => `<tr><td class="mono">${kcCopy(r.k)}</td><td>${itemName(r.k, r.d)}</td><td>${chip(r.dept)}</td><td class="n">${r.units}</td><td class="n">${r.cartons}</td><td class="n">${r.consols.length}</td><td>${r.consols.slice(0, 6).map(id => sq(landed[id])).join('')}</td></tr>`).join('')
     : st.tab === 'depts' ? list.map(r => `<tr class="mfx-paint${st.paint?.mode === 'dept' && st.paint.code === r.dept ? ' on' : ''}" data-act="paint" data-code="${esc(r.dept)}"><td>${chip(r.dept)} <span class="mfx-dn"><small class="cs-dim mono">${esc(r.dept)}</small> ${esc(r.name || tx('Unknown department'))}</span></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td class="n">${r.keycodes}</td><td class="n">${r.consols}</td><td><span class="mfx-pct"><i style="width:${r.pct}%"></i></span> ${r.pct}%</td></tr>`).join('')
     : list.slice(0, 120).map(c => {

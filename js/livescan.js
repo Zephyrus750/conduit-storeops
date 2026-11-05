@@ -21,6 +21,9 @@
 //   openLiveReader({ title, mode, expected, have, verify, add, label, held, onHeldChange, onClose }) → close()
 //     mode       'pdt' (the default) or 'barcode': where the switch starts
 //     expected   codes on today's list (first read is enough); [] for none
+//     lists()    → { report: codes | null (no report today), rev, regular: Set }: today's
+//                report for the bay and the bay's regulars, asked again while the camera
+//                is open so a report pasted mid-reading counts at once (takes over expected)
 //     have()     the codes already in (a Set), asked fresh each time
 //     verify(code) → 'ok' | 'unknown' | 'error'   the catalogue's word on it
 //     add(code)  → true when it went in; false refuses it for this reading
@@ -32,7 +35,7 @@
 
 import { ic, esc, toast } from './ui.js';
 import { feedback, barcodeReader } from './scan.js';
-import { codesIn, preprocess, decide, misreadFix } from '../shared/livescan.js';
+import { codesIn, preprocess, decide, misreadFix, readsNeeded } from '../shared/livescan.js';
 import { tx, txn } from './i18n.js';
 
 const TICK_MS = 180, OCR_MS = 900, PENDING_MS = 12000, BOX_MS = 2500;
@@ -62,7 +65,7 @@ export function warmReader() {
 const digitsWithMark = (code, at) => at < 0 ? esc(code) : `${esc(code.slice(0, at))}<mark>${esc(code[at])}</mark>${esc(code.slice(at + 1))}`;
 export function heldRows(held, label = () => '') {
   return [...held].map(([code, h]) => {
-    const fix = h.fix, why = fix ? (h.onList ? tx('One digit from {code} on today’s list.', { code: `<b class="mono">${esc(fix.use)}</b>` }) : tx('One digit from {code}, already in.', { code: `<b class="mono">${esc(fix.use)}</b>` })) : tx('Not in the catalogue.');
+    const fix = h.fix, c = fix && { code: `<b class="mono">${esc(fix.use)}</b>` }, why = !fix ? tx('Not in the catalogue.') : h.onList ? tx('One digit from {code} on today’s list.', c) : h.alsoRead ? tx('One digit from {code}, also read: check which one the PDT shows.', c) : h.regularIn ? tx('One digit from {code}, already in as a regular here: check which one the PDT shows.', c) : tx('One digit from {code}, already in.', c);
     return `<div class="ls-held"><div class="ls-hc"><span class="mono">${digitsWithMark(code, fix ? fix.at : -1)}</span><span class="ls-hw">${why} ${label(code)}</span></div><div class="ls-ha">` +
       (fix ? `<button type="button" class="btn sm primary" data-held="use" data-code="${esc(code)}">${tx('Use {code}', { code: esc(fix.use) })}</button>` : '') +
       `<button type="button" class="btn sm" data-held="keep" data-code="${esc(code)}">${tx('It’s right: keep it')}</button><button type="button" class="btn sm" data-held="drop" data-code="${esc(code)}">${tx('Remove it')}</button></div></div>`;
@@ -75,12 +78,11 @@ export function resolveHeld(held, code, how) {
 }
 
 let current = null;
-export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = 'pdt', expected = [], have = () => new Set(), verify = async () => 'error', add = async () => true, label = () => '', held = new Map(), onHeldChange = () => {}, onClose = () => {} } = {}) {
+export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = 'pdt', expected = [], lists = null, have = () => new Set(), verify = async () => 'error', add = async () => true, label = () => '', held = new Map(), onHeldChange = () => {}, onClose = () => {} } = {}) {
   current?.close();
-  const exp = new Set(expected);
   const el = document.createElement('div'); el.className = 'ls'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', title);
   el.innerHTML = `<div class="ls-top"><button type="button" class="ls-ib" data-ls="close" aria-label="${tx('Close')}">${ic('x')}</button><div class="ls-tt"><b>${esc(title)}</b><span class="ls-st"><i></i><span>${tx('Starting the camera…')}</span></span></div><button type="button" class="ls-ib" data-ls="torch" hidden aria-label="${tx('Torch')}">${ic('bolt')}</button></div>` +
-    `<div class="ls-view"><video playsinline muted></video><canvas class="ls-hl" aria-hidden="true"></canvas><div class="ls-win" aria-hidden="true"><i class="ls-line"></i></div><div class="ls-seg" role="group" aria-label="${tx('What the camera reads')}"><button type="button" data-ls="mode" data-mode="pdt">${ic('file')}${tx('PDT list')}</button><button type="button" data-ls="mode" data-mode="barcode">${ic('barcode')}${tx('Barcode')}</button></div><span class="ls-hint" hidden></span><i class="ls-focus" hidden></i></div>` +
+    `<div class="ls-view"><video playsinline muted></video><canvas class="ls-hl" aria-hidden="true"></canvas><div class="ls-win" aria-hidden="true"><i class="ls-line"></i></div><div class="ls-seg" role="group" aria-label="${tx('What the camera reads')}"><button type="button" data-ls="mode" data-mode="pdt">${ic('file')}${tx('PDT list')}</button><button type="button" data-ls="mode" data-mode="barcode">${ic('barcode')}${tx('Barcode')}</button></div><span class="ls-lists" hidden></span><span class="ls-hint" hidden></span><i class="ls-focus" hidden></i></div>` +
     `<div class="ls-zoom" hidden><span>1×</span><input type="range" aria-label="${tx('Zoom')}"><span class="ls-zmax"></span></div>` +
     `<div class="ls-chips" aria-live="polite"></div><div class="ls-panel" hidden></div>` +
     `<div class="ls-strip"><button type="button" class="ls-up" data-ls="panel" aria-label="${tx('Show what was read')}">${ic('chev')}</button><button type="button" class="ls-g" data-ls="panel"><b></b><span></span></button><button type="button" class="btn sm ls-check" data-ls="check" hidden></button><button type="button" class="btn sm primary ls-done" data-ls="close">${tx('Done')}</button></div>`;
@@ -90,9 +92,34 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
   const work = document.createElement('canvas'), w2d = work.getContext('2d', { willReadFrequently: true });
   let mode = 'pdt', zread = null, zLoading = null, stream = null, track = null, caps = {}, closed = false, timer = null, raf = 0, detector = null, ocrBusy = false, lastOcr = 0, pass = 0, torch = false, dark = 0, lock = null, crop = null, zoom = null;
   const reads = new Map(), dismissed = new Set(), session = [];
+  // Today's report for the bay and the bay's regulars: both go in on the
+  // first read. Asked again on every pass, so a report pasted while the
+  // camera is open counts at once and the codes waiting on it go in.
+  // seen: every code read in this reading (the regulars' safeguard).
+  let exp = new Set(expected), reg = new Set(), listSig = null, reportIn = null, noteT = 0;
+  const seen = new Set(), passes = [];
+  function refreshLists() {
+    if (!lists) return;
+    const l = lists() || {}, rep = l.report || [], rg = l.regular || [];
+    const sig = `${l.rev ?? ''}|${l.report ? rep.length : '-'}|${rg.size ?? rg.length}`;
+    if (sig === listSig) return;
+    const first = listSig === null, had = exp.size;
+    listSig = sig; exp = new Set(rep); reg = new Set(rg); reportIn = !!l.report;
+    showLists(!first && exp.size && exp.size !== had ? txn(exp.size, 'Today’s report arrived · {n} code for this bay', 'Today’s report arrived · {n} codes for this bay') : '');
+    if (!first) for (const r of reads.values()) if (r.state === 'wait') { if (exp.has(r.code)) r.verdict = 'ok'; settle(r); }
+  }
+  function showLists(flash = '') {
+    const b = $('.ls-lists'); if (!b || !lists) return;
+    const regs = reg.size ? txn(reg.size, '{n} regular goes in on one read', '{n} regulars go in on one read') : '';
+    const text = exp.size ? [txn(exp.size, 'Today’s report · {n} code here', 'Today’s report · {n} codes here'), regs]
+      : [reportIn ? tx('Today’s report has nothing for this bay') : tx('No report yet today'), regs || tx('two reads each')];
+    b.hidden = mode === 'barcode'; b.textContent = flash || text.filter(Boolean).join(' · ');
+    b.classList.toggle('flash', !!flash); b.classList.toggle('slow', !flash && !exp.size && !reg.size);
+    clearTimeout(noteT); if (flash) noteT = setTimeout(() => { if (!closed) showLists(); }, 4000);
+  }
 
   // ── what was read: wait, add, hold ──
-  const why = r => r.src === 'barcode' ? tx('Barcode') : exp.has(r.code) ? tx('On today’s list') : r.verdict === 'ok' ? tx('Read twice · a product') : r.verdict === 'unknown' ? tx('Read 3 times · not in the catalogue') : tx('Read twice · catalogue not reached');
+  const why = r => r.src === 'barcode' ? tx('Barcode') : r.rule === 'list' ? tx('On today’s list') : r.rule === 'regular' ? tx('A regular in this bay') : r.verdict === 'ok' ? tx('Read twice · a product') : r.verdict === 'unknown' ? tx('Read 3 times · not in the catalogue') : tx('Read twice · catalogue not reached');
   function consider(code, box, src = 'text') {
     if (dismissed.has(code)) return;
     const now = Date.now();
@@ -108,12 +135,12 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
   function settle(r) {
     if (closed || r.state === 'in' || r.state === 'adding') return;
     if (held.has(r.code)) { r.look = 'held'; return; }
-    const d = decide({ code: r.code, reads: r.n, verdict: r.verdict, have: have(), expected: exp });
+    const hv = have(), d = decide({ code: r.code, reads: r.n, verdict: r.verdict, have: hv, expected: exp, regular: reg, seen });
     if (d === 'already') { r.state = 'in'; r.look = 'already'; }
-    else if (d === 'add') accept(r, r.code);
+    else if (d === 'add') { r.rule = exp.has(r.code) ? 'list' : reg.has(r.code) && r.n < readsNeeded(r.verdict) ? 'regular' : null; accept(r, r.code); }
     else if (d === 'hold') {
-      const fix = misreadFix(r.code, { have: have(), expected: exp });
-      held.set(r.code, { fix, onList: !!fix && exp.has(fix.use) && !have().has(fix.use) }); r.look = 'held';
+      const fix = misreadFix(r.code, { have: hv, expected: exp, also: [...seen] }), other = fix?.use;
+      held.set(r.code, { fix, onList: !!fix && exp.has(other) && !hv.has(other), alsoRead: !!fix && !exp.has(other) && !hv.has(other), regularIn: !!fix && hv.has(other) && reg.has(other) }); r.look = 'held';
       try { navigator.vibrate?.([40, 60, 40]); } catch {}
       onHeldChange(); paint();
     } else r.look = 'wait';
@@ -123,7 +150,7 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
     Promise.resolve(add(code)).then(ok => {
       if (closed) return;
       if (ok === false) { r.state = 'out'; dismissed.add(r.code); return paint(); }
-      r.state = 'in'; session.unshift({ code, why: reason || why(r) }); feedback(); chip(code); paint();
+      r.state = 'in'; session.unshift({ code, why: reason || why(r), n: r.src === 'barcode' ? 0 : r.n, ms: Date.now() - r.first }); feedback(); chip(code); paint();
     }).catch(e => { r.state = 'wait'; toast(e.message, 'bad'); });
   }
   const chip = code => { const c = $('.ls-chips'), s = document.createElement('span'); s.className = 'ls-chip mono'; s.textContent = code; c.prepend(s); while (c.children.length > 6) c.lastChild.remove(); };
@@ -137,9 +164,11 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
     const chk = $('.ls-check'); chk.hidden = !h; chk.textContent = tx('Check {n}', { n: h });
     if (!panel.hidden) panel.innerHTML = panelHtml();
   }
-  const panelHtml = () => `<div class="ls-ph"><b>${tx('Read this time')}</b><button type="button" class="btn sm" data-ls="panel">${tx('Close')}</button></div>` +
+  // How often the screen is read: the time between the last few passes.
+  const rate = () => passes.length < 2 ? '' : tx('One read every {s} s', { s: ((passes.at(-1) - passes[0]) / (passes.length - 1) / 1000).toFixed(1) });
+  const panelHtml = () => `<div class="ls-ph"><b>${tx('Read this time')}</b>${rate() ? `<span class="ls-rate">${rate()}</span>` : ''}<button type="button" class="btn sm" data-ls="panel">${tx('Close')}</button></div>` +
     (held.size ? `<div class="ls-sub">${tx('Held: check each one')}</div>${heldRows(held, label)}` : '') +
-    (session.length ? session.map(s => `<div class="ls-row"><span class="mono">${esc(s.code)}</span><span class="ls-nm">${label(s.code)}</span><small>${esc(s.why)}</small></div>`).join('') : `<p class="ls-none">${tx('Nothing read yet.')} ${tx('Hold the list steady in the window, about a hand away.')}</p>`);
+    (session.length ? session.map(s => `<div class="ls-row"><span class="mono">${esc(s.code)}</span><span class="ls-nm">${label(s.code)}</span><small>${esc(s.why)}${s.n ? ` · ${txn(s.n, '{n} read', '{n} reads')}` : ''}${s.ms != null ? ` · ${tx('{s} s', { s: (s.ms / 1000).toFixed(1) })}` : ''}</small></div>`).join('') : `<p class="ls-none">${tx('Nothing read yet.')} ${tx('Hold the list steady in the window, about a hand away.')}</p>`);
   const togglePanel = (open = panel.hidden) => { panel.hidden = !open; el.classList.toggle('open', open); if (open) panel.innerHTML = panelHtml(); };
 
   // ── boxes over the codes: the frame's pixels to the screen ──
@@ -199,11 +228,12 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
       if (stream) { el.classList.add('live'); say(tx('Point the camera at the barcode')); }
       if (!zread && !zLoading) zLoading = barcodeReader().then(r => { zread = r; }).catch(e => { zLoading = null; say(e.message); });
     } else if (stream) say(tessP ? tx('Reading · hold the list in the window') : tx('Loading the reader…'));
-    paint();
+    showLists(); paint();
   }
   async function readText() {
     if (mode !== 'pdt') return;
-    ocrBusy = true; lastOcr = Date.now();
+    ocrBusy = true; lastOcr = Date.now(); passes.push(lastOcr); if (passes.length > 6) passes.shift();
+    refreshLists();
     try {
       const w = await engine(); if (closed || mode !== 'pdt') return;
       el.classList.add('live'); say(tx('Reading · hold the list in the window'));
@@ -217,7 +247,10 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
       const res = await w.recognize(work, {}, { blocks: true }); if (closed || mode !== 'pdt') return;
       const words = [];
       for (const b of res?.data?.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const x of l.words || []) words.push(x);
-      for (const { code, bbox } of codesIn(words, res?.data?.text || '')) consider(code, bbox && { x0: bbox.x0 / sc + crop.x, y0: bbox.y0 / sc + crop.y, x1: bbox.x1 / sc + crop.x, y1: bbox.y1 / sc + crop.y });
+      // Every code in this pass counts as seen before any of them is decided,
+      // so a regular and a code one digit from it in one frame both wait.
+      const found = codesIn(words, res?.data?.text || ''); for (const f of found) seen.add(f.code);
+      for (const { code, bbox } of found) consider(code, bbox && { x0: bbox.x0 / sc + crop.x, y0: bbox.y0 / sc + crop.y, x1: bbox.x1 / sc + crop.x, y1: bbox.y1 / sc + crop.y });
     } catch (e) { if (!closed) say(e.message || tx('The reader did not load: check the connection.')); }
     finally { ocrBusy = false; }
   }
@@ -293,7 +326,7 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
     else if (act === 'torch' && track) { torch = !torch; try { await track.applyConstraints({ advanced: [{ torch }] }); b.classList.toggle('on', torch); if (torch) lowLight(255); } catch { torch = false; toast(tx('The torch is not available on this camera'), 'bad'); } }
   });
   el.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-  setMode(firstMode); start(); engine().catch(e => { if (mode === 'pdt') say(e.message); });
+  refreshLists(); setMode(firstMode); start(); engine().catch(e => { if (mode === 'pdt') say(e.message); });
   current = { close };
   return close;
 }
