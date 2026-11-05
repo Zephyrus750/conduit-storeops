@@ -8,7 +8,7 @@
 
 import { focusDone } from '../../shared/reducers/floor.js';
 import { addDays, retailPeriod } from '../../shared/time.js';
-import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, ago, dep, DEPT_COLOUR } from '../ui.js';
+import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, ago, dep, DEPT_COLOUR, accChip } from '../ui.js';
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
@@ -59,7 +59,7 @@ function backfillCard(ctx, r) {
   const pend = subs.filter(x => x.status === 'pending').length, ready = subs.filter(x => x.status === 'corrected').length, done = subs.filter(x => x.status === 'submitted').length;
   const reviewed = subs.filter(x => x.status !== 'pending'), scored = reviewed.filter(x => Number.isFinite(x.metrics?.accuracy)), acc = scored.length ? Math.round(scored.reduce((n, x) => n + x.metrics.accuracy, 0) / scored.length) : null;   // bays with no report are not scored
   const codes = subs.reduce((n, x) => n + Object.values(x.codes || {}).filter(c => c.scanned).length, 0);
-  const accRow = [tx('Average accuracy'), acc == null ? '—' : acc + '%', acc == null ? '' : acc >= 90 ? 'c-green' : acc >= 75 ? '' : 'c-red'];
+  const accRow = [tx('Average accuracy'), accChip(acc)];
   if (period === 'today') return kpi('hot', 'm-backfill', tx('Backfill review'), 'bfreview', reviewed.length, `/ ${subs.length}`, tx('Locations reviewed on today’s board'), [accRow, [tx('Keycodes scanned'), codes.toLocaleString()], [tx('Pending · ready · submitted'), `${pend} · ${ready} · ${done}`]], subs.length ? (ready + done) / subs.length * 100 : 0);
   return kpi('hot', 'm-backfill', tx('Backfill review'), 'bfreview', reviewed.length, `/ ${subs.length}`, period === 'week' ? tx('Locations reviewed this week') : tx('Locations reviewed in {month}', { month: r.label }), [accRow, [tx('Keycodes scanned'), codes.toLocaleString()], [tx('Submitted · ready'), `${done} · ${ready}`]], subs.length ? reviewed.length / subs.length * 100 : 0);
 }

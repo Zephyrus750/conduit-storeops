@@ -10,7 +10,7 @@
 
 import { addDays } from '../../../shared/time.js';
 import { csvLines } from '../../../shared/records.js';
-import { $, ic, esc, vh, sub, fmtTime, toast, mhead, mrows, DEPT_NAME } from '../../ui.js';
+import { $, ic, esc, vh, sub, fmtTime, toast, mhead, mrows, DEPT_NAME, accChip } from '../../ui.js';
 import { ensureNames, nameHtml, todayKey, send, copyText, loadArchive, archivedRecs, archiveState } from './common.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { tx, txn, lang, locale } from '../../i18n.js';
@@ -41,7 +41,7 @@ function model(ctx) {
 }
 const row = (s, o) => s.requestedOnly
   ? `<div class="hist-row req${o === s ? ' on' : ''}" data-act="open" data-k="${esc(s.bay)}:${esc(s.date)}"><span class="cs-dim">${esc(s.date)}</span><span class="hist-loc">${esc(s.bay)}</span><span class="hist-deps"><span class="status warn">${tx('Requested')}</span></span><span class="cs-dim">${tx('not verified')}</span><span class="hist-met">—</span><span class="cs-dim">—</span></div>`
-  : `<div class="hist-row${o === s ? ' on' : ''}" data-act="open" data-k="${esc(s.bay)}:${esc(s.date)}"><span class="cs-dim">${esc(s.date)}</span><span class="hist-loc">${esc(s.bay)}</span><span class="hist-deps"><span class="status ${s.status === 'submitted' ? 'good' : 'info'}">${s.status === 'submitted' ? tx('Submitted') : tx('Ready')}</span></span><span>${s.metrics.expected == null ? tx('{n} scanned', { n: s.metrics.scanned }) : txn(s.metrics.expected, '{n} code', '{n} codes')}${s.autoSubmitted ? ` <span class="hist-tag">${tx('auto')}</span>` : ''}${s.archived ? ` <span class="hist-tag">${tx('archived')}</span>` : ''}</span><span class="hist-met${s.metrics.accuracy != null && s.metrics.accuracy < 100 ? ' low' : ''}">${s.metrics.accuracy == null ? `<span class="cs-dim" title="${tx('No report was pasted for this bay, so it has no score')}">${tx('no report')}</span>` : `${s.metrics.scanned}/${s.metrics.expected} · ${s.metrics.accuracy}%`}</span><span class="cs-dim">${fmtTime(s.readyAt)}</span></div>`;
+  : `<div class="hist-row${o === s ? ' on' : ''}" data-act="open" data-k="${esc(s.bay)}:${esc(s.date)}"><span class="cs-dim">${esc(s.date)}</span><span class="hist-loc">${esc(s.bay)}</span><span class="hist-deps"><span class="status ${s.status === 'submitted' ? 'good' : 'info'}">${s.status === 'submitted' ? tx('Submitted') : tx('Ready')}</span></span><span>${s.metrics.expected == null ? tx('{n} scanned', { n: s.metrics.scanned }) : txn(s.metrics.expected, '{n} code', '{n} codes')}${s.autoSubmitted ? ` <span class="hist-tag">${tx('auto')}</span>` : ''}${s.archived ? ` <span class="hist-tag">${tx('archived')}</span>` : ''}</span><span class="hist-met">${s.metrics.accuracy == null ? `<span class="cs-dim" title="${tx('No report was pasted for this bay, so it has no score')}">${tx('no report')}</span>` : `${s.metrics.scanned}/${s.metrics.expected} · ${accChip(s.metrics.accuracy)}`}</span><span class="cs-dim">${fmtTime(s.readyAt)}</span></div>`;
 function rowsHtml(m) {
   const list = m.recs.slice(0, st.sort === 'time' ? 60 : 400);
   if (st.sort !== 'dept') return list.map(s => row(s, m.open)).join('');

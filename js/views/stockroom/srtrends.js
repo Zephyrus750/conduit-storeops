@@ -5,7 +5,7 @@
 // every department and location with its accuracy and cadence. "All time"
 // adds the bays retention archived after 60 days (decision 29).
 
-import { ic, esc, vh, sub, mhead, DEPT_NAME, dep } from '../../ui.js';
+import { ic, esc, vh, sub, mhead, DEPT_NAME, dep, accChip, accBand } from '../../ui.js';
 import { todayKey, loadArchive, archivedRecs, archiveState } from './common.js';
 import { visitsOf, trendsOf, BANDS, DAYS, GOAL } from '../../../shared/trends.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
@@ -14,7 +14,7 @@ import { tx, txn } from '../../i18n.js';
 const WINDOWS = [[7, tx('7 days')], [14, tx('Fortnight')], [30, tx('Month')], [0, tx('All time')]];
 const KEY = 'stockroom_trends_window';
 const st = { days: (() => { try { const raw = localStorage.getItem(KEY), v = raw == null ? NaN : Number(raw); return WINDOWS.some(w => w[0] === v) ? v : 14; } catch { return 14; } })() };
-const accCls = a => a == null ? '' : a >= 90 ? 'good' : a >= 75 ? 'mid' : 'bad';
+const accCls = a => ({ vg: 'good', g: 'good', av: 'mid', bad: 'bad' })[accBand(a)] || '';
 const cell = (n, max) => `<td class="tr-c" style="background:rgba(20,184,166,${n ? (0.12 + 0.78 * n / max).toFixed(2) : 0})">${n || ''}</td>`;
 const arrow = t => !t ? '<span class="cs-dim">—</span>' : t.dir === 'up' ? `<span class="up">▲ ${t.d}</span>` : t.dir === 'down' ? `<span class="down">▼ ${Math.abs(t.d)}</span>` : `<span class="cs-dim">● ${tx('steady')}</span>`;
 const deptLabel = d => d ? `${dep(d)} <span class="cs-dim">${esc(DEPT_NAME[d] || '')}</span>` : `<span class="cs-dim">${tx('Unmapped locations')}</span>`;
@@ -50,9 +50,9 @@ function page(ctx) {
   const timeBars = `<div class="card"><div class="ch"><h3>${tx('By time of day')}</h3></div>${bars(BANDS.map((b, i) => [tx(b[0]), t.byBand[i], t.timed ? `${Math.round(t.byBand[i] / t.timed * 100)}%` : '']), Math.max(...t.byBand))}</div>`;
   const acc = `<div class="card"><div class="ch"><h3>${tx('Accuracy per day')}</h3><span class="cs-dim">${tx('goal {n}% dashed', { n: GOAL })}</span></div>${accChart(t.accPerDay)}</div>`;
   const vmax = Math.max(1, ...t.byDept.map(d => d.visits));
-  const depts = `<div class="card"><div class="ch"><h3>${tx('By department')}</h3><span class="cs-dim">${tx('from the bay ranges in Departments')}</span></div>${t.byDept.map(d => `<div class="tr-dept-row"><span>${deptLabel(d.dept)}</span><div class="tr-bar1"><i style="width:${Math.round(d.visits / vmax * 100)}%"></i></div><b class="${accCls(d.acc)}">${d.acc ?? '—'}%</b><small class="cs-dim">${tx('{visits} visits · {locs} locations', { visits: d.visits, locs: d.locs })} · ${d.gap == null ? tx('once') : tx('every ~{n}d', { n: d.gap })}</small></div>`).join('')}</div>`;
+  const depts = `<div class="card"><div class="ch"><h3>${tx('By department')}</h3><span class="cs-dim">${tx('from the bay ranges in Departments')}</span></div>${t.byDept.map(d => `<div class="tr-dept-row"><span>${deptLabel(d.dept)}</span><div class="tr-bar1"><i style="width:${Math.round(d.visits / vmax * 100)}%"></i></div><b>${accChip(d.acc)}</b><small class="cs-dim">${tx('{visits} visits · {locs} locations', { visits: d.visits, locs: d.locs })} · ${d.gap == null ? tx('once') : tx('every ~{n}d', { n: d.gap })}</small></div>`).join('')}</div>`;
   const lmax = Math.max(1, ...t.byLoc.map(l => l.times));
-  const locs = `<div class="card"><div class="ch"><h3>${tx('By location')}</h3><span class="cs-dim">${tx('{repeat} repeat, {once} seen once', { repeat: t.repeat, once: t.once })}</span></div><div class="mfx-scroll"><table class="wb-t tr-loc"><thead><tr><th>${tx('Location')}</th><th>${tx('Times')}</th><th>${tx('Mon–Sun')}</th><th>${tx('Peak')}</th><th>${tx('Accuracy')}</th><th class="n">${tx('Avg')}</th><th>${tx('Trend')}</th><th>${tx('Cadence')}</th></tr></thead><tbody>${t.byLoc.slice(0, 200).map(l => `<tr><td class="mono"><b>${esc(l.loc)}</b>${l.dept ? ' ' + dep(l.dept) : ''}</td><td><span class="tr-times"><i style="width:${Math.round(l.times / lmax * 100)}%"></i></span> ×${l.times}</td><td><span class="tr-strip">${l.week.map((n, i) => `<i class="${n ? 'on' : ''}" title="${tx(DAYS[i])}: ${n}"></i>`).join('')}</span></td><td>${l.peak ? tx(DAYS[l.peak.day]) : '<span class="cs-dim">—</span>'}</td><td>${spark(l.accs)}</td><td class="n ${accCls(l.avg)}">${l.avg ?? '—'}%</td><td>${arrow(l.trend)}</td><td>${cadence(l.gap, l.lastDays)}</td></tr>`).join('')}</tbody></table></div></div>`;
+  const locs = `<div class="card"><div class="ch"><h3>${tx('By location')}</h3><span class="cs-dim">${tx('{repeat} repeat, {once} seen once', { repeat: t.repeat, once: t.once })}</span></div><div class="mfx-scroll"><table class="wb-t tr-loc"><thead><tr><th>${tx('Location')}</th><th>${tx('Times')}</th><th>${tx('Mon–Sun')}</th><th>${tx('Peak')}</th><th>${tx('Accuracy')}</th><th class="n">${tx('Avg')}</th><th>${tx('Trend')}</th><th>${tx('Cadence')}</th></tr></thead><tbody>${t.byLoc.slice(0, 200).map(l => `<tr><td class="mono"><b>${esc(l.loc)}</b>${l.dept ? ' ' + dep(l.dept) : ''}</td><td><span class="tr-times"><i style="width:${Math.round(l.times / lmax * 100)}%"></i></span> ×${l.times}</td><td><span class="tr-strip">${l.week.map((n, i) => `<i class="${n ? 'on' : ''}" title="${tx(DAYS[i])}: ${n}"></i>`).join('')}</span></td><td>${l.peak ? tx(DAYS[l.peak.day]) : '<span class="cs-dim">—</span>'}</td><td>${spark(l.accs)}</td><td class="n">${accChip(l.avg)}</td><td>${arrow(l.trend)}</td><td>${cadence(l.gap, l.lastDays)}</td></tr>`).join('')}</tbody></table></div></div>`;
   return head + tiles + `<div class="tr-grid">${heat}${week}</div><div class="tr-grid3">${dayBars}${timeBars}${acc}</div>${depts}${locs}`;
 }
 

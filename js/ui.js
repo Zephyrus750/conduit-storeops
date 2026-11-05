@@ -109,6 +109,10 @@ export function depInk(hex) {
   const n = parseInt(m[1], 16), L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
   return (L + 0.05) / 0.059 > 1.05 / (L + 0.05) ? '#111827' : '#fff';
 }
+// Accuracy in four bands wherever a score shows: 95 and over, 85 to 94,
+// 70 to 84, under 70. Only the number is shown, in its band's colour.
+export const accBand = p => p == null || !Number.isFinite(Number(p)) ? '' : p >= 95 ? 'vg' : p >= 85 ? 'g' : p >= 70 ? 'av' : 'bad';
+export const accChip = p => p == null || !Number.isFinite(Number(p)) ? '—' : `<span class="acc acc-${accBand(p)}">${Math.round(p)}%</span>`;
 export function dep(code) { const c = String(code || '').toLowerCase(), bg = DEPT_COLOUR[c] || '#64748B'; return `<span class="dep" style="background:${bg};color:${depInk(bg)}">${esc(c.toUpperCase())}</span>`; }
 
 // ── time ──────────────────────────────────────────────────────────────

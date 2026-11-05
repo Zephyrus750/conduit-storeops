@@ -3994,3 +3994,20 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .rq-card tr.rq-open td:first-child b { color: var(--ink); }
 .rq-card tr:not(.rq-open) td { color: var(--ink2); }
 .rq-reply { font-size: 12.5px; color: var(--ink2); margin-top: 2px; }
+
+/* Accuracy in four bands (accChip in js/ui.js): 95+ solid green, 85–94
+   green tint, 70–84 amber, under 70 red. The number only. */
+.acc { display: inline-block; border-radius: 7px; padding: 1px 7px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.35; white-space: nowrap; }
+.acc-vg { background: #15803D; color: #fff; }
+.acc-g { background: #DCFCE7; color: #166534; }
+.acc-av { background: #FEF3C7; color: #92400E; }
+.acc-bad { background: #FEE2E2; color: #991B1B; }
+.frame.dark .acc-g { background: #15562C; color: #92E7B2; }
+.frame.dark .acc-av { background: #564915; color: #F3AF86; }
+.frame.dark .acc-bad { background: #5A1D1D; color: #FCA5A5; }
+/* The desk header's accuracy cell takes its band's colour. */
+.hstats > span.acc-cell { border-radius: 8px; border-left-color: transparent; margin: -2px 2px; padding-top: 3px; padding-bottom: 3px; }
+.hstats > span.acc-cell + span { border-left-color: transparent; }
+.hstats > span.acc-cell b, .hstats > span.acc-cell small { color: inherit; }
+.slc .sr .pc .acc { font-size: inherit; }
+.kpi .row b .acc { font-size: 15px; padding: 1px 8px; }
