@@ -762,4 +762,7 @@ export default {
   "Remove pallet": "Palette entfernen",
   "Take off the truck": "Vom LKW nehmen",
   "{pid} is on {ref}. Their time on it is kept.": "{pid} ist auf {ref}. Die Zeit darauf bleibt erhalten.",
+  "A manager attaches it": "Ein Manager ordnet ihn zu",
+  "A manager attaches the manifest.": "Den Lieferschein ordnet ein Manager zu.",
+  "No manifest yet: a manager attaches it.": "Noch kein Lieferschein: Ein Manager ordnet ihn zu.",
 };

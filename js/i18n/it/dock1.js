@@ -762,4 +762,7 @@ export default {
   "Remove pallet": "Rimuovi il pallet",
   "Take off the truck": "Togli dal camion",
   "{pid} is on {ref}. Their time on it is kept.": "{pid} è su {ref}. Il tempo già fatto resta.",
+  "A manager attaches it": "Lo allega un responsabile",
+  "A manager attaches the manifest.": "Il manifesto lo allega un responsabile.",
+  "No manifest yet: a manager attaches it.": "Ancora nessun manifesto: lo allega un responsabile.",
 };

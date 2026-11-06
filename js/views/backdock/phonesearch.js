@@ -77,13 +77,13 @@ export function searchSheet(ctx, t) {
 
 // Manifest info: what has landed and been decanted, as two donuts.
 const donut = (v, total, colour, label) => { const f = total ? Math.min(1, v / total) : 0, r = 34, C = 2 * Math.PI * r; return `<div class="ps-donut"><svg viewBox="0 0 84 84" width="96" height="96"><circle cx="42" cy="42" r="${r}" fill="none" stroke="var(--line-soft)" stroke-width="10"/><circle cx="42" cy="42" r="${r}" fill="none" stroke="${colour}" stroke-width="10" stroke-dasharray="${(f * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 42 42)"/><text x="42" y="47" text-anchor="middle" font-size="16" font-weight="700" fill="currentColor">${Math.round(f * 100)}%</text></svg><b>${v}/${total}</b><small>${label}</small></div>`; };
-export function infoSheet(t) {
+export function infoSheet(t, canChange = true) {
   if (!ss.info) return '';
   const cons = consolsOf(t), at = where(t), m = t.manifest;
   if (!m) return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest')}</b><button class="ibtn" data-act="ps-info" title="${tx('Close')}">${ic('x')}</button></div><div class="mv-note">${ic('packages')}${tx('No manifest on this truck yet.')}</div></div>`;
   const total = cons.reduce((n, c) => n + c.cartons, 0), landed = cons.filter(c => at[c.id]), done = landed.filter(c => at[c.id].status === 'done');
   const sum = xs => xs.reduce((n, c) => n + c.cartons, 0);
-  return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest {no}', { no: esc(m.manNo) })}</b><button class="btn sm" data-act="manpick" style="margin-left:auto">${ic('file')}${tx('Change')}</button><button class="ibtn" data-act="ps-info" title="${tx('Close')}" style="margin-left:0">${ic('x')}</button></div><p class="lbl">${m.dcNo ? tx('DC {no}', { no: esc(m.dcNo) }) + ' · ' : ''}${m.despatch ? tx('despatch {d}', { d: esc(m.despatch) }) + ' · ' : ''}${tx('{n} consols · {c} cartons', { n: cons.length, c: total })}</p>` +
+  return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest {no}', { no: esc(m.manNo) })}</b>${canChange ? `<button class="btn sm" data-act="manpick" style="margin-left:auto">${ic('file')}${tx('Change')}</button>` : ''}<button class="ibtn" data-act="ps-info" title="${tx('Close')}"${canChange ? ' style="margin-left:0"' : ''}>${ic('x')}</button></div><p class="lbl">${m.dcNo ? tx('DC {no}', { no: esc(m.dcNo) }) + ' · ' : ''}${m.despatch ? tx('despatch {d}', { d: esc(m.despatch) }) + ' · ' : ''}${tx('{n} consols · {c} cartons', { n: cons.length, c: total })}</p>` +
     `<div class="ps-donuts">${donut(landed.length, cons.length, '#3B82F6', tx('consols landed'))}${donut(sum(landed), total, '#F59E0B', tx('cartons landed'))}${donut(sum(done), total, '#16A34A', tx('cartons decanted'))}</div></div>`;
 }
 

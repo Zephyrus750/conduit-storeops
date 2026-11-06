@@ -4,7 +4,7 @@
 // the decant: start, pause, done, halts). Ported from Vector's
 // backdock-receiving and backdock-decant over the backdock reducers.
 
-import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton } from '../../ui.js';
+import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton, mgr } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { sheetHtml, ask } from '../../sheet.js';
 import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
@@ -21,6 +21,11 @@ import { PHASES, begun, phaseCounts, truckPhase } from '../../../shared/dockphas
 const st = { truck: null, land: { ref: '', ptype: null, cartons: '', note: '', codes: [] }, sheet: null, moving: null, manConfirm: null, panel: false, trucks: false, typing: {}, view: 'receive', arm: null, sel: null, halting: false, holdKind: null, fix: null, manPick: false, linking: false, finalising: false, more: false, nt: null, finishing: false, roles: false, roleAsk: null, person: null };
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const dispatch = (ctx, type, entity, payload) => ctx.store.dispatch({ type, entity, payload });
+// On a phone only managers attach or change a truck's manifest (2026-11-06);
+// the crew sees which one is on and what it expects.
+const isMgr = ctx => { const c = ctx.session?.current; return !!c && (!!c.owner || (c.roles || []).includes('manager')); };
+const canAttach = ctx => !ctx.isMobile || isMgr(ctx);
+let attachOk = true;   // this paint's canAttach, for the phone's pieces
 // The hold-up buttons, a role inside a sentence (lower case in English), and
 // a pallet's or truck's status as shown.
 const START_KIND = { halt: tx('Start halt'), huddle: tx('Start huddle'), transition: tx('Start transition'), break: tx('Start team break') };
@@ -133,7 +138,7 @@ function desktop(ctx) {
 
 // One pallet's controls: type, cartons, note, decant verbs, scanned
 // consolidations. Desktop and phone share it.
-function palletPanel(t, p, desk) {
+function palletPanel(t, p, desk, decant = true) {
   const team = t.team || [], s = p.status || 'landed', on = openSegs(p).map(x => x.pid), run = running(t);
   // The picker offers who can take it: on the team, not on a break, not on another pallet.
   const free = team.filter(m => !onBreak(t, m.pid) && (!run[m.pid] || run[m.pid] === p.ref) && !on.includes(m.pid));
@@ -154,8 +159,8 @@ function palletPanel(t, p, desk) {
     `<div class="bdk-pal-b">${desk ? `<div class="bdk-ptrow">${PTYPES.map(x => `<button class="bdr-pt${p.ptype === x[0] ? ' on' : ''}" data-act="pal-pt" data-pt="${x[0]}"><i style="background:${x[2]}"></i>${x[1]}</button>`).join('')}</div>` : typeButtons(p.ptype, 'pal-pt')}` +
     `<div class="bdk-fields"><label>${tx('Cartons')}<input class="bdr-in mono" data-field="pcartons" inputmode="numeric" maxlength="3" value="${p.cartons ?? ''}"></label><label>${tx('Est. mins')}<input class="bdr-in mono${p.expectedBasis === 'manual' ? '' : ' auto'}" data-field="pexp" inputmode="numeric" maxlength="4" value="${p.expectedMins ?? ''}" title="${p.expectedBasis === 'manual' ? tx('set by hand') : tx('auto · {n} min per carton', { n: t.minsPerCarton ?? STD_MINS_PER_CARTON })}"></label><label>${tx('Note')}<input class="bdr-in" data-field="pnote" maxlength="120" placeholder="${tx('optional')}" value="${esc(p.note || '')}"></label></div>` +
     (desk ? `<div class="bdk-scanrow"><input class="bdr-in mono" data-field="pscan" inputmode="numeric" enterkeyhint="done" placeholder="${tx('Scan or type a pallet label')}" autocomplete="off">${camButton('pscan')}<button class="btn sm" data-act="pscan">${ic('barcode')}${tx('Add')}</button></div>` : scanRow('pscan', 'pscan', tx('Scan a label'), st.typing.pscan)) + `${scans ? `<div class="bdk-verified">${scans}</div>` : ''}` +
-    palletContents(t, p) + `<div class="bdk-decant"><div class="bdk-declab">${tx('Decant')}${on.length ? ` · ${esc(on.join(' + '))}` : p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}</div>${worked}${sus}${s !== 'done' ? picker : ''}${desk ? queuePicker(t, p) : ''}<div class="bdk-verbs">${verbs}</div>${st.fix === p.ref ? fixTimes(p) : ''}</div>` +
-    `<div class="bdk-palacts"><button class="btn sm" data-act="pal-save">${ic('check')}${tx('Update')}</button>${p.segments.length && st.fix !== p.ref ? `<button class="btn sm" data-act="dec" data-dec="fix">${ic('clock')}${tx('Fix times')}</button>` : ''}${s !== 'done' ? `<button class="btn sm" data-act="dec" data-dec="move">⇲ ${tx('Move')}</button>` : ''}${s !== 'done' && !on.length ? `<button class="btn sm" data-act="${p.excluded ? 'pal-in' : 'pal-out'}" title="${p.excluded ? tx('Count it again') : tx('Leave it on its bay, out of this decant’s totals, plan and rollover')}">${p.excluded ? '↩ ' + tx('Include in this session') : '🚫 ' + tx('Not in this session')}</button>` : ''}<button class="btn sm" data-act="pal-remove">${ic('trash')}${tx('Remove')}</button></div></div></div>`;
+    palletContents(t, p) + (decant ? `<div class="bdk-decant"><div class="bdk-declab">${tx('Decant')}${on.length ? ` · ${esc(on.join(' + '))}` : p.assignedTo ? ` · ${esc(p.assignedTo)}` : ''}</div>${worked}${sus}${s !== 'done' ? picker : ''}${desk ? queuePicker(t, p) : ''}<div class="bdk-verbs">${verbs}</div>${st.fix === p.ref ? fixTimes(p) : ''}</div>` : '') +
+    `<div class="bdk-palacts"><button class="btn sm" data-act="pal-save">${ic('check')}${tx('Update')}</button>${decant && p.segments.length && st.fix !== p.ref ? `<button class="btn sm" data-act="dec" data-dec="fix">${ic('clock')}${tx('Fix times')}</button>` : ''}${s !== 'done' ? `<button class="btn sm" data-act="dec" data-dec="move">⇲ ${tx('Move')}</button>` : ''}${s !== 'done' && !on.length ? `<button class="btn sm" data-act="${p.excluded ? 'pal-in' : 'pal-out'}" title="${p.excluded ? tx('Count it again') : tx('Leave it on its bay, out of this decant’s totals, plan and rollover')}">${p.excluded ? '↩ ' + tx('Include in this session') : '🚫 ' + tx('Not in this session')}</button>` : ''}<button class="btn sm" data-act="pal-remove">${ic('trash')}${tx('Remove')}</button></div></div></div>`;
 }
 // Fix times: each stretch of work (who, from, to) and the done time, as
 // times of day on the day they happened.
@@ -217,7 +222,7 @@ function mobile(ctx, mode) {
   // A tab switch closes what the other tab had open (a pallet chosen for it stays).
   if (lastMode && lastMode !== mode) { st.more = st.panel = st.trucks = st.halting = st.finishing = st.finalising = st.manPick = st.roles = false; st.sheet = st.roleAsk = st.person = null; ss.open = ss.info = false; st.arm = null; st.moving = null; if (!st.keepSel) st.sel = null; }
   st.keepSel = false; lastMode = mode;
-  st.view = mode; const run = mode === 'run';
+  st.view = mode; const run = mode === 'run'; attachOk = canAttach(ctx);
   const m = model(ctx), t = m.t, plan = ctx.store.get('plan'), sheet = phoneSheet(ctx, m, t, plan, run);
   if (!t) return `<div class="dk-top"><div class="dk-tr"><b class="dk-tn">${tx('No truck on the dock')}</b>${phaseChip(null)}</div></div>` +
     `<div class="dk-body">${clockNote(ctx)}${decantBoard(m.dock, plan, todayKey(), { act: true })}${heldCard(m.dock)}</div>` + sheet +
@@ -239,6 +244,7 @@ function truckBar(t, run) {
 // manifest), or a way to attach one.
 function manBox(t) {
   const man = t.manifest;
+  if (!man && !attachOk) return `<div class="dk-man none"><b>${ic('file')}${tx('No manifest')}</b><small>${t.plannedManifest ? tx('{no} attaching', { no: esc(t.plannedManifest) }) : tx('A manager attaches it')}</small></div>`;
   if (!man) return `<button class="dk-man none" data-act="manpick"><b>${ic('file')}${tx('No manifest')}</b><small>${t.plannedManifest ? tx('{no} attaching', { no: esc(t.plannedManifest) }) : tx('Tap to attach one')}</small></button>`;
   const ctn = man.consols.reduce((n, c) => n + (Number(c.cartons) || 0), 0);
   return `<button class="dk-man" data-act="ps-info" aria-label="${tx('Manifest {no}', { no: esc(man.manNo) })}"><b>${ic('file')}${esc(man.manNo)}</b><small>${tx('{c} ctn · {n} consols expected', { c: ctn.toLocaleString(), n: man.consols.length })}</small></button>`;
@@ -250,7 +256,7 @@ const nextBtn = t => { const n = nextStep(t); return n ? `<button class="dk-go" 
 function receiveStrip(t) {
   const a = liveAudit(t), c = phaseCounts(t);
   const info = a ? `<div class="dk-l1"><b>${a.matched}/${a.total}</b><span>${tx('consols matched')}</span></div><div class="dk-bar"><i style="width:${Math.round(a.matched / Math.max(1, a.total) * 100)}%"></i></div><div class="dk-l2"><b class="w">${a.missing}</b> ${tx('to land')} · <b class="${a.extra ? 'r' : ''}">${a.extra}</b> ${tx('off-manifest')}</div>`
-    : `<div class="dk-l1"><b>${c.pallets}</b><span>${txn(c.pallets, 'pallet landed', 'pallets landed')} · ${tx('{n} ctn', { n: c.cartons })}</span></div><div class="dk-l2">${t.status === 'live' ? tx('No manifest yet: open the panel to attach one.') : tx('Not landed yet')}</div>`;
+    : `<div class="dk-l1"><b>${c.pallets}</b><span>${txn(c.pallets, 'pallet landed', 'pallets landed')} · ${tx('{n} ctn', { n: c.cartons })}</span></div><div class="dk-l2">${t.status !== 'live' ? tx('Not landed yet') : attachOk ? tx('No manifest yet: open the panel to attach one.') : tx('No manifest yet: a manager attaches it.')}</div>`;
   return strip(`<div class="dk-st">${info}</div>${nextBtn(t)}`);
 }
 // Decant: Ready to start until Take 5, then cartons done, the pace against
@@ -275,12 +281,13 @@ function receivePanel(t) {
   const a = liveAudit(t), c = phaseCounts(t);
   return `<div class="dk-pan rcv">${phaseBar(t)}<div class="dk-tiles"><span class="dk-tile"><b>${c.pallets}</b>${txn(c.pallets, 'pallet', 'pallets')}</span><span class="dk-tile"><b>${c.cartons}</b>${tx('ctn counted')}</span>` +
     (a ? `<span class="dk-tile w"><b>${a.missing}</b>${tx('to land')}</span><span class="dk-tile${a.extra ? ' r' : ''}"><b>${a.extra}</b>${tx('off-manifest')}</span>` : `<span class="dk-tile w"><b>—</b>${tx('no manifest')}</span>`) + `</div>` +
-    `<div class="dk-tools">${tool('ps-open', 'search', tx('Search'))}${tool(t.manifest ? 'ps-info' : 'manpick', 'file', t.manifest ? tx('Manifest {no}', { no: esc(t.manifest.manNo) }) : tx('Attach a manifest'), t.manifest ? '' : ' lit')}${tool('more', 'users', tx('Team &amp; plan'))}` +
-    `${tool('setstart', 'clock', tx('Decant start'))}${tool('newtruck', 'plus', tx('New truck'))}</div></div>`;
+    // Receiving lands pallets: the team, the plan and the decant start are the Decant tab's.
+    `<div class="dk-tools">${tool('ps-open', 'search', tx('Search'))}${t.manifest ? tool('ps-info', 'file', tx('Manifest {no}', { no: esc(t.manifest.manNo) })) : attachOk ? tool('manpick', 'file', tx('Attach a manifest') + mgr(), ' lit') : ''}` +
+    `${tool('newtruck', 'plus', tx('New truck'))}</div></div>`;
 }
 function runPanel(t, m) {
   const fc = forecast(t, Date.now(), ratesFor(m.dock)), late = fc.at && t.goalAt && fc.at > Date.parse(t.goalAt), pr = m.pr;
-  return `<div class="dk-pan">${phaseBar(t)}<div class="dk-tiles"><span class="dk-tile${late ? ' r' : ''}"><b>${m.halt ? '—' : fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}</b>${tx('est. clear')}</span><button class="dk-tile" data-act="goal"><b>${t.goalAt ? fmtHM(t.goalAt) : tx('Set')}</b>${tx('goal')}</button><span class="dk-tile"><b>${pr.doneCount}/${pr.count}</b>${tx('pallets done')}</span><span class="dk-tile"><b>${fmtHM(startOf(t))}</b>${tx('decant start')}</span></div>` + noCartonNote(t) +
+  return `<div class="dk-pan">${phaseBar(t)}<div class="dk-tiles"><span class="dk-tile${late ? ' r' : ''}"><b>${m.halt ? '—' : fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—'}</b>${tx('est. clear')}</span><button class="dk-tile" data-act="goal"><b>${t.goalAt ? fmtHM(t.goalAt) : tx('Set')}</b>${tx('goal')}</button><span class="dk-tile"><b>${pr.doneCount}/${pr.count}</b>${tx('pallets done')}</span><button class="dk-tile" data-act="setstart"><b>${fmtHM(startOf(t))}</b>${tx('decant start')}</button></div>` + noCartonNote(t) +
     `<div class="dk-tools">${tool('goal', 'clock', tx('Goal'))}${tool('huddleplan', 'users', tx('Book huddle'))}${tool('more', 'users', tx('Team &amp; plan'))}${tool('ps-open', 'search', tx('Search'))}${tool('halt', 'alert', tx('Hold-up'))}${tool('finalise', 'check', tx('Complete decant'))}</div></div>`;
 }
 // The truck menu: the trucks on the dock, and New truck.
@@ -303,7 +310,7 @@ function phoneSheet(ctx, m, t, plan, run) {
   if (st.manPick) return wrap(manPicker(m, t));
   if (st.halting && !m.halt) return wrap(`<div class="dk-sh-h"><h3>${tx('Hold-up')}</h3><button class="ibtn" data-act="halt" aria-label="${tx('Close')}">${ic('x')}</button></div><p class="lbl">${tx('The decant clock stops until it ends.')}</p>${holdPicker(t)}`);
   if (ss.open) return wrap(searchSheet(ctx, t));
-  if (ss.info) return wrap(infoSheet(t));
+  if (ss.info) return wrap(infoSheet(t, attachOk));
   if (st.more) return wrap(moreSheet(m, t));
   if (st.trucks) return wrap(trucksSheet(m, t));
   // A pallet (landed or about to be), a person or the crew's roles: the
@@ -314,7 +321,7 @@ function phoneSheet(ctx, m, t, plan, run) {
   };
   if (st.person && (t.team || []).some(x => x.pid === st.person)) return modal(esc(st.person), personPanel(t, m, st.person), 'person-close');
   if (st.roles && (t.team || []).length) return modal(tx('Crew roles'), rolesPanel(t, m), 'roles-close');
-  if (st.sel && !(run && !begun(t))) return t.pallets[st.sel] ? modal(tx('Pallet {ref}', { ref: esc(st.sel) }), palletPanel(t, t.pallets[st.sel], false)) : modal(landTitle(t, st.sel), landPanel(t, st.sel));
+  if (st.sel && !(run && !begun(t))) return t.pallets[st.sel] ? modal(tx('Pallet {ref}', { ref: esc(st.sel) }), palletPanel(t, t.pallets[st.sel], false, run)) : modal(landTitle(t, st.sel), landPanel(t, st.sel));
   if (st.panel) return `<div class="dk-sheet pan" role="dialog">${run ? runPanel(t, m) : receivePanel(t)}</div>`;
   return '';
 }
@@ -519,6 +526,7 @@ async function onAct(ctx, a, root) {
     if (act === 't5-start' && t && t.status !== 'live') return toast(tx('Start receiving first: the decant starts once the truck is on the dock.'), 'bad');
     if (t && await onPlanAct(ctx, t, a, rates)) return;
     if (act === 'pick') { st.truck = a.dataset.id; st.sel = null; st.arm = null; st.manPick = false; st.moving = null; st.sheet = null; st.finishing = false; st.trucks = false; return ctx.rerender(); }
+    if (act === 'manpick' && !st.manPick && !canAttach(ctx)) return toast(tx('A manager attaches the manifest.'), 'bad');
     if (act === 'manpick') { st.manPick = !st.manPick; st.manConfirm = null; if (st.manPick) { ss.info = false; ss.open = false; } ctx.rerender(); return st.manPick && show('.bdr-manpick'); }
     if (act === 'manattach' || act === 'manreplace') {
       const no = act === 'manreplace' ? st.manConfirm?.manNo : a.dataset.man, file = act === 'manreplace' ? st.manConfirm?.f : null;
