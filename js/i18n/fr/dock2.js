@@ -821,4 +821,6 @@ export default {
   "{n} pallets · layout confirmed {time}": "{n} palettes · disposition confirmée à {time}",
   "{n} went on with its pallet": "{n} est partie avec sa palette",
   "{n} went on with their pallets": "{n} sont parties avec leurs palettes",
+  "<b>{n}</b> consols": "<b>{n}</b> consolidations",
+  "Planned · {time}": "Prévu · {time}",
 };

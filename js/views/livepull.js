@@ -28,7 +28,7 @@ import { fmtHM } from './backdock/common.js';
 import { ulid } from '../../shared/ulid.js';
 import { settingsOf } from '../../shared/reducers/store.js';
 import { sessionCounts, sessionPeople, inZone, lineInZone, uncovered, pulledToday, gotOf } from '../../shared/reducers/pull.js';
-import { tx, txn } from '../i18n.js';
+import { tx, txn, locale } from '../i18n.js';
 
 // screen: null (the session this phone is in, or home) | new | zones | cage | past
 // find: the last scan's answer { state: busy | found | none | noreport | error, code, kc, bays, soh, carton, truck, name, img }
@@ -261,13 +261,24 @@ function desk(ctx) {
   const all = sessions(ctx), open = all.filter(s => !s.closedAt), earlier = all.filter(s => s.closedAt);
   const ses = (st.desk && pulls(ctx).sessions?.[st.desk]) || open[0] || earlier[0] || null;
   const repaint = () => ctx.rerender();
-  const item = s => { const c = sessionCounts(s), p = sessionPeople(s); return `<button class="lp-dsl${ses?.id === s.id ? ' on' : ''}" data-act="lp-desk" data-sid="${esc(s.id)}"><span>${s.dept ? dep(s.dept) : ''}<b>${esc(s.name)}</b>${s.closedAt ? '' : '<i class="lp-live"></i>'}</span><small>${s.closedAt ? esc(new Date(s.at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })) + ' · ' : ''}${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers'), countsLine(c)].join(' · ')}</small></button>`; };
+  // Each session as the Manifests list draws a manifest: in full on its own lines.
+  const item = s => {
+    const c = sessionCounts(s), p = sessionPeople(s), of = c.asked || 1, w = n => `${(n / of * 100).toFixed(1)}%`;
+    const when = s.closedAt ? `${esc(new Date(s.at).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' }))} · ${hm(s.at)}–${hm(s.closedAt)}` : tx('since {time}', { time: hm(s.at) });
+    const n = (cls, key, v) => `<span class="${cls}">${tx(key, { n: `<b>${v}</b>` })}</span>`;
+    return `<button class="lp-dsl a2${ses?.id === s.id ? ' on' : ''}" data-act="lp-desk" data-sid="${esc(s.id)}">` +
+      `<span class="lp-dsl-h">${s.dept ? dep(s.dept) : ''}<b>${esc(s.name)}</b>${s.closedAt ? '' : `<span class="lp-run"><i class="lp-live"></i>${tx('Running')}</span>`}<span class="lp-dsl-t">${when}</span></span>` +
+      `<span class="lp-sbar" aria-hidden="true">${c.pulled ? `<i class="p" style="width:${w(c.pulled)}"></i>` : ''}${c.short ? `<i class="s" style="width:${w(c.short)}"></i>` : ''}${c.gone ? `<i class="g" style="width:${w(c.gone)}"></i>` : ''}</span>` +
+      `<span class="lp-dsl-n">${n('p', '{n} pulled', c.pulled)}${n('w', '{n} waiting', c.todo)}${n('s', '{n} short', c.short)}${n('g', '{n} not there', c.gone)}<span class="of">${tx('of {n}', { n: `<b>${c.asked}</b>` })}</span></span>` +
+      `<small>${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers')].join(' · ')}</small></button>`;
+  };
+  const hd = (label, list) => `<div class="lp-dhd"><b>${label}</b><span>${txn(list.length, '{n} session', '{n} sessions')}</span></div>`;
   const head = vh(tx('Live pull'), sub(tx('What the floor asked for and what the stockroom pulled'), tx('today’s sessions and the last 7 days')), '', 'packages');
   if (!ses) return head + `<div class="card"><b>${tx('No sessions this week')}</b><p class="lbl">${tx('Start one from a phone: Live pull is in More, on the Floor and in the Stockroom.')}</p></div>`;
   const c = sessionCounts(ses), p = sessionPeople(ses), who = pullerNames(ctx, ses), lines = liveLines(ses);
   const groups = [...Object.entries(ses.cages || {}).map(([n, cg]) => [tx('Cage {n} · sent down {time} · {lines}', { n, time: hm(cg.at), lines: txn(cg.lines, '{n} line', '{n} lines') }) + (cg.tag ? ` · ${esc(cg.tag)}` : ''), lines.filter(l => l.cage === Number(n))]), [tx('Still to send · cage {n}', { n: ses.cage }), lines.filter(l => l.cage == null)]].filter(([, ls]) => ls.length);
   const zones = Object.entries(ses.people || {}).filter(([, x]) => x.part === 'pull').map(([d, x]) => `${who(d) === tx('This phone') ? tx('this PC') : who(d)} ${zoneText(x.bays)}`);
-  return head + `<div class="lp-desk"><div class="card lp-dside"><span class="lbl">${tx('Running now')}</span>${open.map(item).join('') || `<p class="lbl">${tx('None')}</p>`}<span class="lbl">${tx('Earlier · listed for 7 days')}</span>${earlier.map(item).join('') || `<p class="lbl">${tx('None')}</p>`}</div>` +
+  return head + `<div class="lp-desk"><div class="card lp-dside">${hd(tx('Running now'), open)}${open.map(item).join('') || `<p class="lbl">${tx('None')}</p>`}${hd(tx('Earlier · listed for 7 days'), earlier)}${earlier.map(item).join('') || `<p class="lbl">${tx('None')}</p>`}</div>` +
     `<div class="card lp-dmain"><div class="lp-dh">${ses.dept ? dep(ses.dept) : ''}<h2>${esc(ses.name)}</h2>${ses.closedAt ? `<span class="chip">${tx('Ended {time}', { time: hm(ses.closedAt) })}</span>` : `<button class="btn sm" data-act="lp-end" data-sid="${esc(ses.id)}">${tx('End session')}</button>`}</div>` +
     `<p class="lbl">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers') + (zones.length ? ` (${esc(zones.join('; '))})` : ''), tx('since {time}', { time: hm(ses.at) }), ses.shelves ? tx('shelf scan on') : tx('shelf scan off')].join(' · ')}</p>` +
     `<div class="lp-kpis"><div><b>${c.asked}</b><span>${tx('Asked')}</span></div><div><b class="ok">${c.pulled}</b><span>${tx('Pulled')}</span></div><div><b>${c.todo}</b><span>${tx('Waiting')}</span></div><div><b class="warn">${c.short}</b><span>${tx('Short')}</span></div><div><b class="bad">${c.gone}</b><span>${tx('Not there')}</span></div></div>` +

@@ -1298,7 +1298,10 @@ test('item bays: any device of a store with the Stockroom reads an item’s stoc
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual(r.body.bays, { 43648803: ['7036', '7041'], 43652214: ['7041'], 41000001: [] }, 'every bay in order; an item the report does not list has none');
   assert.equal(r.body.report.date, today);
-  assert.ok(!('soh' in r.body) && !JSON.stringify(r.body).includes('34'), 'no SOH');
+  // No SOH: no soh field, and the report's 34 is nowhere as a value (a
+  // timestamp that happens to contain the digits 34 is not it).
+  const values = o => o && typeof o === 'object' ? Object.values(o).flatMap(values) : [o];
+  assert.ok(!('soh' in r.body) && !values(r.body).some(v => v === 34 || v === '34'), 'no SOH');
   assert.equal((await api('GET', '/v1/store/1241/bays?kc=12', undefined, floor)).status, 400);
   assert.equal((await api('GET', '/v1/store/1241/bays?kc=43648803')).status >= 400, true, 'a signed-in device only');
   assert.equal((await reg2('2151', { entitlements: { floor: true, stockroom: false, backdock: false } })).status, 201);

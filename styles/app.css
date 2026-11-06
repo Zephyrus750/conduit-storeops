@@ -1192,10 +1192,10 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .ll .ll-row .nm { flex: 1; min-width: 140px; }
 .ll .ll-row select { flex: 0 1 360px; min-width: 220px; width: auto; }
 /* The manifest list is a picker, one width whatever the main area shows (a
-   manifest, another load, nothing open): narrower than the shell's 440px so
-   the explorer gets the room. It used to follow the pane (440px, or 340px
-   only beside the explorer), so the list jumped as rows were opened. */
-.mgrid.mf-grid { grid-template-columns: 340px minmax(0, 1fr); }
+   manifest, another load, nothing open), so it never jumps as rows open:
+   440px, the width Live pull's session list shares, so every row reads in
+   full on two lines (showcase A). */
+.mgrid.mf-grid { grid-template-columns: 440px minmax(0, 1fr); }
 /* A manifest or another load with the map under it (Departments tab, loads). */
 .mfx-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .mfx-t tr.mfx-paint { cursor: pointer; } .mfx-t tr.mfx-paint:hover td { background: var(--hover); } .mfx-t tr.mfx-paint.on td { background: var(--accent-soft); }
@@ -3030,7 +3030,30 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .lp-cr { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: 13.5px; }
 .lp-cr > span:first-child { flex: 1; min-width: 0; } .lp-cr b { display: block; } .lp-cr small { display: block; color: var(--dim); font-size: 12px; }
 .lp-desk { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
-.lp-dside { flex: 1 1 280px; max-width: 360px; display: flex; flex-direction: column; gap: 4px; }
+.lp-dside { flex: 0 0 440px; max-width: 440px; display: flex; flex-direction: column; gap: 4px; }
+@container shell (max-width: 1100px) { .lp-dside { flex: 1 1 100%; max-width: none; } }
+/* The session list, as the Manifests list: a heading with its count, then
+   each session in full: name, running or its times, a bar of what was
+   pulled, short and not there, and the labelled counts. */
+.lp-dhd { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; }
+.lp-dhd b { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+.lp-dhd span { margin-left: auto; font-size: 12.5px; color: var(--dim); }
+.lp-dsl.a2 { gap: 7px; padding: 10px 12px; border-radius: 12px; }
+.lp-dsl.a2.on { border-color: var(--accent-line); }
+.lp-dsl.a2 > .lp-dsl-h { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lp-dsl.a2 > .lp-dsl-h b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-dsl-t { margin-left: auto; flex: none; font-size: 12.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.lp-run { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: 11.5px; font-weight: 700; color: #166534; background: #DCFCE7; border-radius: 999px; padding: 1px 8px 1px 6px; }
+.lp-run .lp-live { width: 6px; height: 6px; box-shadow: none; }
+.lp-sbar { display: flex; height: 6px; border-radius: 4px; background: var(--chip); overflow: hidden; gap: 2px; }
+.lp-sbar i { display: block; height: 100%; }
+.lp-sbar .p { background: #16A34A; } .lp-sbar .s { background: #F59E0B; } .lp-sbar .g { background: #DC2626; }
+.lp-dsl-n { display: flex; align-items: baseline; gap: 14px; font-size: 12.5px; color: var(--dim); white-space: nowrap; }
+.lp-dsl-n b { font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lp-dsl-n .p b { color: #15803D; } .lp-dsl-n .s b { color: #B45309; } .lp-dsl-n .g b { color: #B91C1C; }
+.lp-dsl-n .of { margin-left: auto; }
+.frame.dark .lp-run { background: #15562C; color: #92E7B2; }
+.frame.dark .lp-dsl-n .p b { color: #4ADE80; } .frame.dark .lp-dsl-n .s b { color: #FBBF24; } .frame.dark .lp-dsl-n .g b { color: #F87171; }
 .lp-dside .lbl { padding: 8px 10px 2px; }
 .lp-dmain { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .lp-dsl { display: flex; flex-direction: column; gap: 3px; text-align: left; font: inherit; color: var(--ink); background: none; border: 1px solid transparent; border-radius: 10px; padding: 9px 10px; cursor: pointer; }
@@ -3184,11 +3207,19 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .frame.dark .bcs-ans.warn { background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .35); color: #FCD34D; }
 
 /* Manifests by week, day and truck; several published at once; stats. */
-.mfl-row.tk { grid-template-columns: 46px minmax(0, 1fr) 14px; }
-.mfl-row.tk .mfl-main small { white-space: normal; line-height: 1.35; }
-.mfl-dd { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 42px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-ink); line-height: 1.05; }
-.mfl-dd small { font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.mfl-dd b { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mfl-row.tk { grid-template-columns: 48px minmax(0, 1fr) 14px; gap: 12px; padding: 9px 8px 9px 6px; border: 1px solid transparent; border-bottom-color: transparent; border-radius: 12px; }
+.mfl-row.tk.on { border-color: var(--accent-line); }
+.mfl-row.tk .mfl-top { gap: 8px; }
+.mfl-row.tk .mfl-top > b { font-size: 16px; font-weight: 700; letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; }
+.mfl-row.tk .mfl-top > .status { margin-left: auto; flex: none; }
+.mfl-fig { display: flex; align-items: baseline; margin-top: 6px; font-size: 12.5px; color: var(--dim); white-space: nowrap; min-width: 0; }
+.mfl-fig > span:nth-child(1) { flex: none; width: 80px; }
+.mfl-fig > span:nth-child(2) { flex: none; width: 92px; }
+.mfl-fig b { font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.mfl-fig .mfl-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mfl-dd { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); line-height: 1.05; }
+.mfl-dd small { font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.mfl-dd b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .mfl-dd.now { background: var(--accent); color: #fff; }
 .mfl-dd.none { background: var(--ground); color: var(--faint); }
 .mfl-dd.none svg.i { width: 18px; height: 18px; }

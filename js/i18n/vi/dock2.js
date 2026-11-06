@@ -821,4 +821,6 @@ export default {
   "{n} pallets · layout confirmed {time}": "{n} pallet · đã xác nhận sơ đồ {time}",
   "{n} went on with its pallet": "{n} đi tiếp cùng pallet",
   "{n} went on with their pallets": "{n} đi tiếp cùng pallet",
+  "<b>{n}</b> consols": "<b>{n}</b> lô hàng gộp",
+  "Planned · {time}": "Đã lên kế hoạch · {time}",
 };

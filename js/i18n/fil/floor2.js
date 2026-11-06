@@ -913,4 +913,8 @@ export default {
   "All clear": "Ayos na lahat",
   "Every location on today’s board submitted": "Naipasa na ang bawat location sa board ngayong araw",
   "This cycle is complete": "Kumpleto na ang cycle na ito",
+  "Running": "Tumatakbo",
+  "of {n}": "sa {n}",
+  "{n} session": "{n} session",
+  "{n} sessions": "{n} na session",
 };

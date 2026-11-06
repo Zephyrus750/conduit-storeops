@@ -913,4 +913,8 @@ export default {
   "All clear": "Alles erledigt",
   "Every location on today’s board submitted": "Jeder Lagerplatz auf der heutigen Tafel eingereicht",
   "This cycle is complete": "Dieser Zyklus ist abgeschlossen",
+  "Running": "Läuft",
+  "of {n}": "von {n}",
+  "{n} session": "{n} Sitzung",
+  "{n} sessions": "{n} Sitzungen",
 };
