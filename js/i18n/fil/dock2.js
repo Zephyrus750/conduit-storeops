@@ -821,4 +821,6 @@ export default {
   "{n} pallets · layout confirmed {time}": "{n} pallet · nakumpirma ang layout {time}",
   "{n} went on with its pallet": "{n} ang sumama sa pallet nito",
   "{n} went on with their pallets": "{n} ang sumama sa mga pallet nila",
+  "<b>{n}</b> consols": "<b>{n}</b> consol",
+  "Planned · {time}": "Naka-plan · {time}",
 };

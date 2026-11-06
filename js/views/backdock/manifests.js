@@ -91,13 +91,26 @@ function dayName(d) {
   const t = today(), w = new Date(d + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
   return d === t ? tx('Today · {date}', { date: w }) : d === addDays(t, 1) ? tx('Tomorrow · {date}', { date: w }) : d === addDays(t, -1) ? tx('Yesterday · {date}', { date: w }) : w;
 }
-// Each row: its weekday and date, its truck, where it stands.
+// The row's day tile: weekday and date (today's in the accent), or a
+// calendar when the manifest has no day yet.
+const dayTile = d => { const day = /^\d{4}-\d{2}-\d{2}/.test(d || '') ? d.slice(0, 10) : ''; return day ? `<span class="mfl-dd${day === today() ? ' now' : ''}" title="${esc(dayName(day))}"><small>${esc(new Date(day + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short' }))}</small><b>${Number(day.slice(8))}</b></span>` : `<span class="mfl-dd none" title="${tx('No day yet')}">${ic('cal')}</span>`; };
+// A despatch date as the report writes it (30/10/2026, or 2026-10-30) read
+// as "Fri 30 Oct"; anything else as written.
+function despatchDay(raw) {
+  const v = String(raw || '').trim(), m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/) || v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return v;
+  const [y, mo, d] = m[1].length === 4 ? [m[1], m[2], m[3]] : [m[3], m[2], m[1]], dt = new Date(Number(y), Number(mo) - 1, Number(d));
+  return Number.isNaN(dt.getTime()) ? v : dt.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+}
+// Each row in two lines: the number, its truck and where it stands; then
+// its cartons and consols, labelled, and when it was despatched.
 function listRow(x) {
   const [label, cls] = STATUS[x.status];
-  const facts = [tx('<b>{cartons}</b> ctn · <b>{consols}</b> consols', { cartons: x.totalCartons ?? '–', consols: x.consols ?? '–' }), x.status === 'planned' && x.eta ? tx('due {time}', { time: esc(x.eta) }) : '', !x.day && x.publishedAt ? tx('published {date}', { date: esc(fmtDate(x.publishedAt.slice(0, 10))) }) : '', x.despatch ? tx('despatch {date}', { date: esc(x.despatch) }) : ''].filter(Boolean).join(' · ');
-  const dd = x.day ? `<span class="mfl-dd${x.day === today() ? ' now' : ''}" title="${esc(dayName(x.day))}"><small>${esc(new Date(x.day + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short' }))}</small><b>${Number(x.day.slice(8))}</b></span>` : `<span class="mfl-dd none" title="${tx('No day yet')}">${ic('cal')}</span>`;
-  return `<div class="mfl-row tk${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}">${dd}` +
-    `<span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b>${x.n ? `<span class="mfl-tn">${ic('truck')}${tx('Truck {no}', { no: x.n })}</span>` : ''}<span class="status ${cls}">${label}</span></span><small>${facts}</small></span>${ic('chev')}</div>`;
+  const status = x.status === 'planned' && x.eta ? tx('Planned · {time}', { time: esc(x.eta) }) : label;
+  const meta = x.despatch ? tx('despatched {date}', { date: esc(despatchDay(x.despatch)) }) : !x.day && x.publishedAt ? tx('published {date}', { date: esc(fmtDate(x.publishedAt.slice(0, 10))) }) : '';
+  return `<div class="mfl-row tk${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}">${dayTile(x.day)}` +
+    `<span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b>${x.n ? `<span class="mfl-tn">${ic('truck')}${tx('Truck {no}', { no: x.n })}</span>` : ''}<span class="status ${cls}">${status}</span></span>` +
+    `<span class="mfl-fig"><span>${tx('<b>{n}</b> ctn', { n: x.totalCartons ?? '–' })}</span><span>${tx('<b>{n}</b> consols', { n: x.consols ?? '–' })}</span><span class="mfl-meta">${meta}</span></span></span>${ic('chev')}</div>`;
 }
 
 // Consol id → how far it has got on the truck that carries the manifest.
@@ -231,7 +244,7 @@ export default {
       const ctn = g.xs.reduce((n, x) => n + (Number(x.totalCartons) || 0), 0), dateable = g.key === 'free' && g.xs.some(x => x.despatch);
       return `<div class="pt3 mfx-wk">${esc(g.title)}${g.key === 'free' ? '' : `<small class="mfx-rp">${esc(retailPeriod(g.key))}</small>`}<span class="cs-dim">${txn(g.xs.length, '{n} manifest', '{n} manifests')}${g.key === 'free' ? '' : ` · ${tx('{n} ctn', { n: ctn.toLocaleString() })}`}</span>${dateable ? `<button class="btn sm" data-act="date-all" title="${tx('Suggest each one’s day and truck from the Planner and the despatch dates, to check and save')}">${ic('cal')}${tx('Give them days')}</button>` : ''}</div>` + g.xs.map(listRow).join('');
     }).join('');
-    const loadRows = loads.length ? `<div class="pt3 mfx-wk">${tx('Other loads')}</div>` + loads.map(l => `<div class="mfl-row${l.id === st.load ? ' on' : ''}" data-act="open-load" data-id="${esc(l.id)}"><span class="mfl-main"><span class="mfl-top"><b>${esc(l.label)}</b>${statusPill(l.status)}</span><small>${esc(fmtDate(l.recvDate || l.date))}</small></span><span class="mfl-facts"><span>${txn(l.pallets.length, '<b>{n}</b> pallet', '<b>{n}</b> pallets')}</span><span class="cs-dim">${txn(loadUnits(l), '<b>{n}</b> unit', '<b>{n}</b> units', { n: loadUnits(l).toLocaleString('en-AU') })}</span></span>${ic('chev')}</div>`).join('') : '';
+    const loadRows = loads.length ? `<div class="pt3 mfx-wk">${tx('Other loads')}</div>` + loads.map(l => `<div class="mfl-row tk${l.id === st.load ? ' on' : ''}" data-act="open-load" data-id="${esc(l.id)}">${dayTile(l.recvDate || l.date)}<span class="mfl-main"><span class="mfl-top"><b>${esc(l.label)}</b>${statusPill(l.status)}</span><span class="mfl-fig"><span>${txn(l.pallets.length, '<b>{n}</b> pallet', '<b>{n}</b> pallets')}</span><span>${txn(loadUnits(l), '<b>{n}</b> unit', '<b>{n}</b> units', { n: loadUnits(l).toLocaleString('en-AU') })}</span></span></span>${ic('chev')}</div>`).join('') : '';
     const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">${tx("Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.")}</div>`}${loadRows}</div>`;
     return head + stagePanel(ctx, st.stage) + `<div class="mgrid mf-grid">${side}${open ? loadPane(ctx, open) : detail(ctx, list)}</div>`;
   },

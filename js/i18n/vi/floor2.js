@@ -913,4 +913,8 @@ export default {
   "All clear": "Đã xử lý hết",
   "Every location on today’s board submitted": "Mọi vị trí trên bảng hôm nay đã được gửi",
   "This cycle is complete": "Chu kỳ này đã hoàn tất",
+  "Running": "Đang chạy",
+  "of {n}": "trên {n}",
+  "{n} session": "{n} phiên",
+  "{n} sessions": "{n} phiên",
 };

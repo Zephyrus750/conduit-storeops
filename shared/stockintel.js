@@ -99,6 +99,18 @@ export function cartonShrink(qty, ctn, price) {
   const u = cartonUnits(qty, ctn), p = Number(price);
   return u && p > 0 ? Math.round(u * p * 100) / 100 : 0;
 }
+// An item's three shrink figures, as the Adjustments list adds them up:
+//   toZero        below zero back to zero: units below zero × price;
+//   zeroToCarton  from zero up to one carton: a carton × price (for any
+//                 item at zero or below whose carton size is known);
+//   combined      both: below zero back to zero, then up to one carton;
+//                 back to zero only when no carton size is recorded yet.
+// combined is toZero + zeroToCarton. All 0 above zero or without a price.
+export function shrinkParts(qty, ctn, price) {
+  const q = Number(qty), c = Number(ctn) > 0 ? Number(ctn) : 0;
+  const toZero = shrinkValue(q, price), zeroToCarton = q <= 0 && c ? cartonShrink(0, c, price) : 0;
+  return { toZero, zeroToCarton, combined: q <= 0 ? (c ? cartonShrink(q, c, price) : toZero) : 0 };
+}
 export function flagOf(soh, ctn) {
   if (!(Number.isFinite(soh))) return null;
   if (soh <= 0) return 'adjust';
