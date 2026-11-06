@@ -273,3 +273,28 @@ test('worker: a picture once found is kept, and fills answers when the cache is 
   assert.equal((await lookup(env, bg(), ['43350140'], { fetchImpl, cache: edge(), upstream: false }))['43350140'].img, 'https://img.test/rug.jpg');
   assert.equal(posts.length, 1, 'nothing new to keep');
 });
+
+test('details: a page drawn by its scripts still gives its picture (the file carries the keycode) and a marked-up price', async () => {
+  const { extractDetails, keycodePictures } = await import('../../worker/details.js');
+  const rendered = '<html><head><title>1.7L Cordless Kettle | Kmart</title></head><body><img src="https://assets.example/logo.svg"><img alt="" src="https://assets.kmart.example/transform/v1/41989326_1.jpg?w=600"><span itemprop="price" content="29.00">$29</span></body></html>';
+  assert.deepEqual(extractDetails(rendered, '41989326'), { price: 29, was: null, img: 'https://assets.kmart.example/transform/v1/41989326_1.jpg?w=600', clr: false });
+  // In the page's own data, with escaped slashes; the product page link itself is not a picture.
+  const data = '<a href="https://www.kmart.com.au/product/kettle-41989326/">x</a><script id="__NEXT_DATA__">{"images":[{"url":"https:\\/\\/media.kmart.example\\/images\\/41989326-2.webp"}]}</script>';
+  assert.deepEqual(keycodePictures(data, '41989326'), ['https://media.kmart.example/images/41989326-2.webp']);
+  assert.equal(extractDetails(data, '41989326').img, 'https://media.kmart.example/images/41989326-2.webp');
+  assert.equal(extractDetails(data).img, null, 'without the keycode there is nothing to match');
+  // A root-relative og:image is completed on kmart.com.au.
+  assert.equal(extractDetails('<meta property="og:image" content="/images/41989326.jpg">').img, 'https://www.kmart.com.au/images/41989326.jpg');
+});
+
+test('details: the picture check names a block page, and says what an ordinary page was missing', async () => {
+  const { describePage, pageSummary, blockedBy } = await import('../../worker/details.js');
+  const block = '<html><head><title>Pardon Our Interruption</title></head><body>As you were browsing something about your browser made us think you were a bot.</body></html>';
+  assert.equal(blockedBy(block), 'Pardon Our Interruption');
+  assert.match(pageSummary(describePage(block, '41989326')), /^blocked by kmart\.com\.au: a Pardon Our Interruption page/);
+  const big = '<title>Kettle | Kmart</title><script src="https://www.google.com/recaptcha/api.js"></script>' + 'x'.repeat(250_000);
+  assert.equal(blockedBy(big), null, 'a full page that loads a captcha script for its sign-in is not a block page');
+  const p = describePage('<title>Kettle | Kmart</title><script id="__NEXT_DATA__">{}</script><p>$29</p>', '41989326');
+  assert.deepEqual([p.title, p.jsonLd, p.ogImage, p.nextData, p.keycodePictures, p.priceText, p.blocked], ['Kettle | Kmart', 'none', false, true, 0, true, null]);
+  assert.match(pageSummary(p), /no price or picture on the page \(title “Kettle \| Kmart”.*JSON-LD: none; og:image: none; Next\.js data: yes; pictures named with the keycode: 0; a \$ price in the text: yes\)/);
+});

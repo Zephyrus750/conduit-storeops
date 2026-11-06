@@ -204,6 +204,16 @@ minutes, doubling to a day, rather than kept for the day; devices ask again
 after 30 minutes for an answer without a picture, and never drop a picture
 they already have.
 
+The owner console's picture check (Product catalogue › Check a product's
+picture) runs one keycode through each step. When a page read finds no
+price or picture it says what the page was: a named block page (Access
+Denied, Pardon Our Interruption, a captcha and the like), or the page's
+title and size and which of the things the reader looks for were missing
+(JSON-LD, og:image, Next.js data, pictures named with the keycode, a $
+price). Beyond the tags, the reader takes any picture whose file name
+carries the keycode, from the rendered images or the page's data, and an
+`itemprop="price"` or `product:price:amount` price.
+
 The same rendering answers a barcode with its keycode (`worker/apnlookup.js`):
 Kmart's site search finds a product by its barcode, so a clearance ticket or
 shelf talker, which carries the item's own barcode, needs no keycode typed.
