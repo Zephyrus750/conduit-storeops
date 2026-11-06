@@ -32,8 +32,12 @@ if (!PEOPLE.some(p => p[0] === st.who)) st.who = 'all';
 let usedArg = null;   // the shell's argument is applied once, not on every re-render
 
 const mine = s => st.who === 'all' || s.for.includes(st.who);
+// On a phone the PC chapters are left out: the team on the floor never sees
+// the PC screens, so a phone shows only what is done on a phone.
+let onPhone = false;
+const seen = s => !(onPhone && s.device === 'pc');
 // The chapters in the index's order: the chosen person's, by group, then the rest.
-const ordered = () => [...GROUPS.flatMap(([g]) => SCENES.filter(s => s.grp === g && mine(s))), ...SCENES.filter(s => !mine(s))];
+const ordered = () => [...GROUPS.flatMap(([g]) => SCENES.filter(s => s.grp === g && mine(s) && seen(s))), ...SCENES.filter(s => !mine(s) && seen(s))];
 
 // ── the event log (developer notes: English, like the map editor) ────
 const TO = { floor: 'Every device in the store', stockroom: 'Stockroom devices and managers', backdock: 'Back dock devices and managers', store: 'Every device in the store' };
@@ -53,7 +57,9 @@ function fitIn(box, maxScale = 1) {
 // Toasts and the scanner belong to one step only.
 const clearTransient = root => { root.querySelectorAll('.dv-toast, .scanov').forEach(e => { e.hidden = true; }); root.querySelectorAll('.fg').forEach(f => f.classList.remove('try')); };
 
-export function mountGuide(host, { storeNo = '', storeName = '', arg = null } = {}) {
+export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mobile = false } = {}) {
+  onPhone = !!mobile;
+  if (!seen(SCENES[st.sceneIx])) { st.sceneIx = SCENES.indexOf(ordered()[0]); st.stepIx = 0; }
   const sr = host.shadowRoot || host.attachShadow({ mode: 'open' });
   const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'styles/guide.css';
   const vg = document.createElement('div'); vg.className = 'vg loading';
@@ -66,7 +72,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null } = 
   // The shell's ? and ?guide= links name a chapter (or none: the first for this person).
   if (arg && arg !== usedArg && 'chapter' in arg) {
     usedArg = arg;
-    const i = SCENES.findIndex(s => s.id === arg.chapter);
+    const i = SCENES.findIndex(s => s.id === arg.chapter && seen(s));
     st.sceneIx = i >= 0 ? i : SCENES.indexOf(ordered()[0]); st.stepIx = 0;
     if (st.mode !== 'try') st.mode = 'watch';
   }
@@ -152,8 +158,8 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null } = 
   function paintChapters() {
     const row = s => `<button type="button" class="chap${mine(s) ? '' : ' other'}" data-i="${SCENES.indexOf(s)}"><span class="ci">${ic(s.icon)}</span><b>${s.title}</b><small>${txn(s.steps.length, '{device} · {n} step', '{device} · {n} steps', { device: DEVICE[s.device] })}</small></button>`;
     let h = '';
-    for (const [g, label] of GROUPS) { const list = SCENES.filter(s => s.grp === g && mine(s)); if (list.length) h += `<span class="cgrp">${label}</span>` + list.map(row).join(''); }
-    const rest = SCENES.filter(s => !mine(s));
+    for (const [g, label] of GROUPS) { const list = SCENES.filter(s => s.grp === g && mine(s) && seen(s)); if (list.length) h += `<span class="cgrp">${label}</span>` + list.map(row).join(''); }
+    const rest = SCENES.filter(s => !mine(s) && seen(s));
     if (rest.length) h += `<span class="cgrp">${tx('Other chapters')}</span>` + rest.map(row).join('');
     chapters.innerHTML = h; markChapter();
   }
