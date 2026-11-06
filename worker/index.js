@@ -10,7 +10,7 @@ export { RegistryObject } from './registry.js';
 export { CatalogueObject } from './catalogue-object.js';
 import { VERSION } from './version.js';
 import { ulid } from '../shared/ulid.js';
-import { fileKind, FILE_EXTS, FILE_MAX } from '../shared/resources.js';
+import { fileKind, FILE_EXTS, FILE_MAX, THUMB_MAX, THUMB_TYPES, cleanThumb } from '../shared/resources.js';
 import { parseCodes, lookup, catalogueStub, probe } from './catalogue.js';
 import { gs1Parse } from '../shared/gs1.js';
 import { findByBarcode } from './apnlookup.js';
@@ -310,16 +310,54 @@ r.delete('/v1/admin/zones/:name', async (req, env, _c, p) => { await requireOwne
 r.get('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/resources')); });
 r.get('/v1/admin/resources/requests', async (req, env) => { await requireOwner(req, env); return json(await registry(env, 'GET', '/resource-requests')); });
 r.patch('/v1/admin/resources/requests/:id', async (req, env, _c, p) => { await requireOwner(req, env); return json(await registry(env, 'PATCH', `/resource-requests/${p.id}`, await readJson(req))); });
-r.post('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; return json(await registry(env, 'POST', '/resources', b), 201); });
-r.patch('/v1/admin/resources/:id', async (req, env, _c, p) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; return json((await registry(env, 'PATCH', `/resources/${p.id}`, b)).entry); });
+r.post('/v1/admin/resources', async (req, env) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; delete b.thumb; return json(await registry(env, 'POST', '/resources', b), 201); });
+r.patch('/v1/admin/resources/:id', async (req, env, _c, p) => { await requireOwner(req, env); const b = await readJson(req); delete b.file; delete b.thumb; delete b.pages; return json((await registry(env, 'PATCH', `/resources/${p.id}`, b)).entry); });
 r.delete('/v1/admin/resources/:id', async (req, env, _c, p) => {
   await requireOwner(req, env);
-  const { key } = await registry(env, 'DELETE', `/resources/${p.id}`);
-  if (key && env.PHOTOS) await env.PHOTOS.delete(key);
+  const { key, thumb } = await registry(env, 'DELETE', `/resources/${p.id}`);
+  if (env.PHOTOS) for (const k of [key, thumb]) if (k) await env.PHOTOS.delete(k);
   return json({ ok: true, id: p.id });
 });
+// The picture the stores see of a document: the body is the image (JPEG,
+// WebP or PNG, made in the console), the query where it came from
+// (shared/resources.js cleanThumb). A new one replaces the old; DELETE
+// leaves the kind's cover.
+r.post('/v1/admin/resources/:id/thumb', async (req, env, _c, p) => {
+  const c = await requireOwner(req, env), bucket = files(env), q = cleanThumb(new URL(req.url).searchParams);
+  if (q.error) throw new HttpError(400, 'invalid_request', q.error);
+  const type = (req.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), ext = THUMB_TYPES[type];
+  if (!ext) throw new HttpError(415, 'unsupported_media', `a picture is one of: ${Object.keys(THUMB_TYPES).join(', ')}`);
+  if (Number(req.headers.get('Content-Length') || 0) > THUMB_MAX) throw new HttpError(413, 'payload_too_large', `a picture must be under ${THUMB_MAX / 1_000_000} MB`);
+  const cur = await registry(env, 'GET', `/resources/${p.id}`);
+  if (!cur.file) throw new HttpError(409, 'no_file', 'a picture shows the resource’s file: upload the file first');
+  const buf = new Uint8Array(await req.arrayBuffer());
+  if (!buf.length) throw new HttpError(400, 'invalid_request', 'the picture is empty');
+  if (buf.length > THUMB_MAX) throw new HttpError(413, 'payload_too_large', `a picture must be under ${THUMB_MAX / 1_000_000} MB`);
+  const at = new Date().toISOString(), key = `resources/${p.id}/thumb-${ulid()}.${ext}`;
+  await bucket.put(key, buf, { httpMetadata: { contentType: type }, customMetadata: { by: String(c.device || 'owner').slice(0, 64), at } });
+  let out;
+  try { out = await registry(env, 'PATCH', `/resources/${p.id}`, { thumb: { key, type, size: buf.length, w: q.w, h: q.h, from: q.from, page: q.page, at }, ...(q.pages ? { pages: q.pages } : {}) }); }
+  catch (e) { await bucket.delete(key); throw e; }
+  if (out.oldThumb) await bucket.delete(out.oldThumb);
+  return json(out.entry, 201);
+});
+r.delete('/v1/admin/resources/:id/thumb', async (req, env, _c, p) => {
+  await requireOwner(req, env);
+  const out = await registry(env, 'PATCH', `/resources/${p.id}`, { thumb: null });
+  if (out.oldThumb && env.PHOTOS) await env.PHOTOS.delete(out.oldThumb);
+  return json(out.entry);
+});
+async function resourceThumb(env, entry) {
+  if (!entry.thumb) throw new HttpError(404, 'not_found', 'this resource has no picture');
+  const obj = await files(env).get(entry.thumb.key);
+  if (!obj) throw new HttpError(404, 'not_found', 'the picture is gone');
+  // The address carries the picture's time (?v=), so a new picture is a new address.
+  return new Response(obj.body, { headers: { 'Content-Type': entry.thumb.type, 'Content-Length': String(entry.thumb.size), 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=2592000, immutable', ...CORS } });
+}
+r.get('/v1/admin/resources/:id/thumb', async (req, env, _c, p) => { await requireOwner(req, env); return resourceThumb(env, await registry(env, 'GET', `/resources/${p.id}`)); });
 // The file: the body is its bytes, ?name= its file name (the type follows
-// the name, from the allowed kinds). A new file replaces the old one.
+// the name, from the allowed kinds), ?pages= a PDF's page count (the
+// console reads it). A new file replaces the old one, and its picture.
 r.post('/v1/admin/resources/:id/file', async (req, env, _c, p) => {
   const c = await requireOwner(req, env), bucket = files(env);
   const name = (new URL(req.url).searchParams.get('name') || '').replace(/[\u0000-\u001f\u007f/\\]+/g, ' ').trim().slice(0, 120), kind = fileKind(name);
@@ -332,9 +370,10 @@ r.post('/v1/admin/resources/:id/file', async (req, env, _c, p) => {
   const at = new Date().toISOString(), key = `resources/${p.id}/${ulid()}.${kind.ext}`;
   await bucket.put(key, buf, { httpMetadata: { contentType: kind.type }, customMetadata: { name, by: String(c.device || 'owner').slice(0, 64), at } });
   let out;
-  try { out = await registry(env, 'PATCH', `/resources/${p.id}`, { file: { name, type: kind.type, size: buf.length, key, at } }); }
+  const pages = Number(new URL(req.url).searchParams.get('pages')) || 0;
+  try { out = await registry(env, 'PATCH', `/resources/${p.id}`, { file: { name, type: kind.type, size: buf.length, key, at, ...(Number.isInteger(pages) && pages >= 1 && pages <= 9999 ? { pages } : {}) } }); }
   catch (e) { await bucket.delete(key); throw e; }
-  if (out.oldKey) await bucket.delete(out.oldKey);
+  for (const k of [out.oldKey, out.oldThumb]) if (k) await bucket.delete(k);
   return json(out.entry, 201);
 });
 async function resourceFile(env, entry, download) {
@@ -357,6 +396,11 @@ r.get('/v1/resources', async (req, env) => { const c = await managerOfStore(req,
 // their store's answers; the owner lists every store's and answers them.
 r.get('/v1/resources/requests', async (req, env) => { const c = await managerOfStore(req, env); return json(await registry(env, 'GET', `/resource-requests/for/${c.store}`)); });
 r.post('/v1/resources/requests', async (req, env) => { const c = await managerOfStore(req, env), b = await readJson(req); const out = await registry(env, 'POST', '/resource-requests', { store: c.store, title: b.title, note: b.note, by: c.device || '' }); return json(out, out.existing ? 200 : 201); });
+r.get('/v1/resources/:id/thumb', async (req, env, _c, p) => {
+  const c = await managerOfStore(req, env), { resources } = await registry(env, 'GET', `/resources/for/${c.store}`), e = resources.find(x => x.id === p.id);
+  if (!e) throw new HttpError(404, 'not_found', 'no such resource for this store');
+  return resourceThumb(env, e);
+});
 r.get('/v1/resources/:id/file', async (req, env, _c, p) => {
   const c = await managerOfStore(req, env), { resources } = await registry(env, 'GET', `/resources/for/${c.store}`), e = resources.find(x => x.id === p.id);
   if (!e) throw new HttpError(404, 'not_found', 'no such resource for this store');

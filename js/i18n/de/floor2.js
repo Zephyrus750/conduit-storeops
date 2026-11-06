@@ -917,4 +917,13 @@ export default {
   "of {n}": "von {n}",
   "{n} session": "{n} Sitzung",
   "{n} sessions": "{n} Sitzungen",
+  "Esc to close": "Esc zum Schließen",
+  "Open full size": "In voller Größe öffnen",
+  "Pages": "Seiten",
+  "Preview {title}": "Vorschau: {title}",
+  "Shown": "Gezeigt",
+  "page {n}": "Seite {n}",
+  "{n} page": "{n} Seite",
+  "{n} pages": "{n} Seiten",
+  "← → for the next resource · Esc to close": "← → für die nächste Unterlage · Esc zum Schließen",
 };

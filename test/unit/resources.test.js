@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileKind, cleanEntry, visibleTo, ready, matches, FILE_EXTS, cleanRequest, cleanAnswer, sameTitle } from '../../shared/resources.js';
+import { fileKind, cleanEntry, visibleTo, ready, matches, FILE_EXTS, cleanRequest, cleanAnswer, sameTitle, cleanThumb } from '../../shared/resources.js';
 import { TOOLS, toolForView } from '../../shared/tools.js';
 
 test('fileKind: the allowed kinds by name; PDFs and pictures open in the browser, the rest download', () => {
@@ -51,3 +51,14 @@ test('requests: a title is needed, text tidied and capped; an answer is open, ad
   assert.equal(sameTitle('Forklift licence form', 'Forklift licence'), false);
 });
 
+
+test('cleanThumb: a picture of a document says where it came from and its size; a page picture names its page', () => {
+  const q = o => new URLSearchParams(o);
+  assert.deepEqual(cleanThumb(q({ from: 'page', page: '2', w: '800', h: '1131', pages: '3' })), { from: 'page', page: 2, w: 800, h: 1131, pages: 3 });
+  assert.deepEqual(cleanThumb(q({ from: 'file', w: '640', h: '480' })), { from: 'file', page: null, w: 640, h: 480 });
+  assert.deepEqual(cleanThumb({ from: 'picture', w: 800, h: 600, page: 4 }), { from: 'picture', page: null, w: 800, h: 600 }, 'a page only for a page picture');
+  assert.match(cleanThumb(q({ from: 'page', w: '800', h: '1131' })).error, /page/);
+  assert.match(cleanThumb(q({ from: 'screenshot', w: '800', h: '600' })).error, /page, file, picture/);
+  assert.match(cleanThumb(q({ from: 'file', w: '0', h: '600' })).error, /size/);
+  assert.match(cleanThumb(q({ from: 'file', w: '800', h: '600', pages: 'two' })).error, /pages/);
+});

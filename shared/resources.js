@@ -5,8 +5,14 @@
 // and the console and the store's Resources page search with it.
 //
 //   entry   { id, title, category, note, stores: 'all' | ['1241', …], link: '' | 'https://…',
-//             file: { name, type, size, key, at } | null, created, updated, by }
+//             file: { name, type, size, key, at, pages? } | null,
+//             thumb: { key, type, size, w, h, from, page, at } | null, created, updated, by }
+//   The thumb is the picture of the document the stores see (made in the
+//   console when the file is added): from 'page' (a PDF's page, page n),
+//   'file' (a picture file, scaled) or 'picture' (one the owner picked).
 //   FILE_MAX                     the largest file the owner can upload (bytes)
+//   THUMB_MAX, THUMB_TYPES       the largest picture of a document, and the kinds it can be
+//   cleanThumb(params)           a picture's { from, page, w, h, pages? } from the upload's query → | { error }
 //   fileKind(name)               { ext, type, label, inline } for an allowed file name, else null:
 //                                inline ones (PDF, pictures) open and print in the browser
 //   cleanEntry(body, { stores }) the fields a create or an edit sets, checked → { title, … } | { error }
@@ -23,6 +29,20 @@
 //   sameTitle(a, b)               two titles name the same document (case and spacing aside)
 
 export const FILE_MAX = 25_000_000;
+export const THUMB_MAX = 1_000_000;
+export const THUMB_TYPES = { 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/png': 'png' };
+const THUMB_FROM = ['page', 'file', 'picture'];
+// The query of a picture's upload: where it came from, its size in pixels,
+// and (for a PDF) how many pages the file has.
+export function cleanThumb(q) {
+  const get = k => (q && typeof q.get === 'function' ? q.get(k) : q?.[k]), int = (k, lo, hi) => { const v = Number(get(k)); return Number.isInteger(v) && v >= lo && v <= hi ? v : null; };
+  const from = get('from'); if (!THUMB_FROM.includes(from)) return { error: `from is one of: ${THUMB_FROM.join(', ')}` };
+  const w = int('w', 16, 4000), h = int('h', 16, 4000); if (!w || !h) return { error: 'w and h are the picture’s size in pixels' };
+  const page = from === 'page' ? int('page', 1, 9999) : null; if (from === 'page' && !page) return { error: 'page is the page the picture shows' };
+  const pages = get('pages') == null || get('pages') === '' ? null : int('pages', 1, 9999);
+  if (get('pages') != null && get('pages') !== '' && !pages) return { error: 'pages is the number of pages in the file' };
+  return { from, page, w, h, ...(pages ? { pages } : {}) };
+}
 const KINDS = {
   pdf: ['application/pdf', 'PDF', true],
   png: ['image/png', 'Picture', true], jpg: ['image/jpeg', 'Picture', true], jpeg: ['image/jpeg', 'Picture', true], gif: ['image/gif', 'Picture', true], webp: ['image/webp', 'Picture', true],

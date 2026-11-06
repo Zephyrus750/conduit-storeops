@@ -21,8 +21,9 @@
 //   GET  /resources                                        → every resource (owner)
 //   GET  /resources/for/:store                             → the ones that store's managers see (403 tool_off when switched off)
 //   POST /resources    { title, category?, note?, link?, stores? }  → the new entry
-//   PATCH /resources/:id { title?, category?, note?, link?, stores?, file? } → { entry, oldKey } (file: set by the worker after the upload)
-//   DELETE /resources/:id                                  → { key } (the worker deletes the file)
+//   PATCH /resources/:id { title?, category?, note?, link?, stores?, file?, thumb?, pages? } → { entry, oldKey, oldThumb }
+//                        (file and thumb: set by the worker after the upload; a new file drops the old picture)
+//   DELETE /resources/:id                                  → { key, thumb } (the worker deletes both)
 //   GET  /resource-requests                                → every store's requests for documents (owner)
 //   GET  /resource-requests/for/:store                     → that store's requests (403 tool_off when Resources is off)
 //   POST /resource-requests { store, title, note?, by? }   → { request, existing } (an open request of the same title is returned, not doubled)
@@ -512,30 +513,42 @@ export class RegistryObject extends DurableObject {
     const c = cleanEntry({ stores: 'all', ...body }, { stores: this.storeNos() });
     if (c.error) throw new HttpError(400, 'invalid_request', c.error);
     if (!c.title) throw new HttpError(400, 'invalid_request', 'a resource needs a title');
-    const at = new Date().toISOString(), e = this.saveResource({ id: ulid(), title: c.title, category: c.category || '', note: c.note || '', stores: c.stores, link: c.link || '', file: null, created: at, updated: at });
+    const at = new Date().toISOString(), e = this.saveResource({ id: ulid(), title: c.title, category: c.category || '', note: c.note || '', stores: c.stores, link: c.link || '', file: null, thumb: null, created: at, updated: at });
     this.log('resource.add', null, { id: e.id, title: e.title, stores: e.stores });
     return e;
   }
   editResource(id, body) {
     const cur = this.resource(id), c = cleanEntry(body, { stores: this.storeNos() });
     if (c.error) throw new HttpError(400, 'invalid_request', c.error);
-    let oldKey = null;
+    let oldKey = null, oldThumb = null;
+    const pages = n => Number.isInteger(n) && n >= 1 && n <= 9999 ? n : undefined;
     if (body.file !== undefined) {
       const f = body.file;
       if (f !== null && !(f && typeof f.key === 'string' && f.key.startsWith(`resources/${id}/`) && f.name && f.type && Number.isFinite(f.size))) throw new HttpError(400, 'invalid_request', 'not a stored file');
       oldKey = cur.file?.key || null;
-      c.file = f && { name: String(f.name).slice(0, 120), type: String(f.type), size: Number(f.size), key: f.key, at: f.at || new Date().toISOString() };
+      c.file = f && { name: String(f.name).slice(0, 120), type: String(f.type), size: Number(f.size), key: f.key, at: f.at || new Date().toISOString(), ...(pages(f.pages) ? { pages: f.pages } : {}) };
+      // The old picture showed the old file: the console makes the new one.
+      if (cur.thumb) { oldThumb = cur.thumb.key; c.thumb = null; }
     }
-    if (!Object.keys(c).length) return { entry: cur, oldKey: null };
+    if (body.thumb !== undefined) {
+      const t = body.thumb;
+      if (t !== null && !(t && typeof t.key === 'string' && t.key.startsWith(`resources/${id}/thumb-`) && t.type && Number.isFinite(t.size) && t.w && t.h && t.from)) throw new HttpError(400, 'invalid_request', 'not a stored picture');
+      if (t && !cur.file) throw new HttpError(409, 'no_file', 'a picture shows the resource’s file: upload the file first');
+      oldThumb = cur.thumb?.key || null;
+      c.thumb = t && { key: t.key, type: String(t.type), size: Number(t.size), w: Number(t.w), h: Number(t.h), from: String(t.from), page: t.page || null, at: t.at || new Date().toISOString() };
+      if (t && pages(body.pages) && cur.file) c.file = { ...cur.file, pages: body.pages };
+    }
+    if (!Object.keys(c).length) return { entry: cur, oldKey: null, oldThumb: null };
     const e = this.saveResource({ ...cur, ...c, updated: new Date().toISOString() });
-    this.log(body.file !== undefined ? 'resource.file' : 'resource.edit', null, { id, title: e.title, ...(body.file !== undefined ? { file: e.file?.name || null } : { fields: Object.keys(c) }) });
-    return { entry: e, oldKey: oldKey !== e.file?.key ? oldKey : null };
+    const what = body.file !== undefined ? 'resource.file' : body.thumb !== undefined ? 'resource.picture' : 'resource.edit';
+    this.log(what, null, { id, title: e.title, ...(body.file !== undefined ? { file: e.file?.name || null } : body.thumb !== undefined ? { picture: e.thumb ? `${e.thumb.from}${e.thumb.page ? ' ' + e.thumb.page : ''}` : null } : { fields: Object.keys(c) }) });
+    return { entry: e, oldKey: oldKey !== e.file?.key ? oldKey : null, oldThumb: oldThumb !== e.thumb?.key ? oldThumb : null };
   }
   removeResource(id) {
     const cur = this.resource(id);
     this.sql.exec('DELETE FROM resources WHERE id = ?', cur.id);
     this.log('resource.remove', null, { id: cur.id, title: cur.title });
-    return { key: cur.file?.key || null };
+    return { key: cur.file?.key || null, thumb: cur.thumb?.key || null };
   }
   // A store's managers ask for a document the library lacks; the owner
   // answers (added, with the resource it became, or declined, with a word

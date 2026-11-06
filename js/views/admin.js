@@ -666,6 +666,7 @@ function actionText(a) {
     case 'resource.add': return tx('added the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
     case 'resource.edit': return tx('edited the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
     case 'resource.file': return d.file ? tx('uploaded {file} to the resource {title}', { file: esc(d.file), title: `<b>${esc(d.title || '')}</b>` }) : tx('took the file off the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
+    case 'resource.picture': return d.picture ? tx('made the picture of the resource {title} ({from})', { title: `<b>${esc(d.title || '')}</b>`, from: esc(d.picture) }) : tx('took the picture off the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
     case 'resource.remove': return tx('removed the resource {title}', { title: `<b>${esc(d.title || '')}</b>` });
     default: return `${s}${esc(a.type)} ${esc(short(d))}`;
   }
