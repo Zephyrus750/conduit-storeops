@@ -4,7 +4,7 @@
 // focus for the coming weeks). Device preferences persist under suite_prefs.
 
 import { haptic, applyOrientation, isPhone } from '../device.js';
-import { $, ic, esc, vh, sub, toast, ago, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, toast, timePassed, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR, mgr } from '../ui.js';
 import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/reducers/store.js';
 import { SCALES, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
@@ -114,7 +114,7 @@ function storeBody(ctx) {
   const raw = ctx.store.get('settings'), cfg = settingsOf(raw), edit = canEdit(ctx), dis = edit ? '' : ' disabled';
   const zones = ZONES.some(z => z[0] === cfg.tz) ? ZONES : [[cfg.tz, cfg.tz], ...ZONES];
   const sel = (field, list, cur, label) => `<select class="stg-in" data-field="${field}" aria-label="${label}"${dis}>${opts(list, cur)}</select>`;
-  const changed = raw?.at ? (raw.by ? tx('Last changed {ago} from {by}.', { ago: esc(ago(raw.at)), by: esc(raw.by) }) : tx('Last changed {ago}.', { ago: esc(ago(raw.at)) })) : tx('Every value is the default.');
+  const changed = raw?.at ? (raw.by ? tx('Last changed {ago} from {by}.', { ago: esc(timePassed(raw.at)), by: esc(raw.by) }) : tx('Last changed {ago}.', { ago: esc(timePassed(raw.at)) })) : tx('Every value is the default.');
   const settings = `<div class="stg-card stg-store"><div class="stg-h">${tx('Store settings')}</div><p class="stg-p">${edit ? tx('These apply to every device in the store.') : tx('A manager code changes these.')} ${changed}</p>` +
     row(tx('Time zone'), tx('The store’s day, week and cycle, and the end-of-day backfill rollover, follow this clock.'), sel('tz', zones.map(z => [z[0], z[1]]), cfg.tz, tx('Time zone'))) +
     row(tx('Dock grid'), tx('Pallet bays on the back dock: rows (A, B, C…) by bays per row. Trucks created afterwards use it. Default {rows} × {cols}.', { rows: SETTINGS_DEFAULTS.dockGrid.rows, cols: SETTINGS_DEFAULTS.dockGrid.cols }), `<span class="stg-pair">${sel('rows', range(1, 8), cfg.dockGrid.rows, tx('Dock rows'))}<span>×</span>${sel('cols', range(1, 12), cfg.dockGrid.cols, tx('Bays per row'))}</span>`) +
@@ -190,7 +190,7 @@ function deptsBody(ctx) {
 function feedbackBody(ctx) {
   return `<div class="stg-card"><div class="stg-h">${tx('Feedback and report')}</div><p class="stg-p">${tx('Goes to the developer with the store number, the version and a diagnostics summary from this device. No names; write the D-number if it matters.')}</p>` +
     `<div class="stg-fb"><select class="stg-in" data-field="fbkind" aria-label="${tx('Kind of feedback')}"><option value="wrong">${tx('Something is wrong')}</option><option value="idea">${tx('An idea')}</option><option value="question">${tx('A question')}</option><option value="other">${tx('Other')}</option></select><textarea class="stg-in" data-field="fbtext" rows="4" maxlength="2000" placeholder="${tx('What happened, and what did you expect?')}" aria-label="${tx('What happened')}"></textarea><label class="stg-chk"><input type="checkbox" data-field="fbdiag" checked> ${tx('Attach diagnostics')}</label><span class="btn sm primary" data-act="send-feedback">${ic('arrow')}${tx('Send')}</span></div>` +
-    row(tx('Diagnostic bundle'), tx('Device, version, sync, storage and the last 50 log lines, for pasting into a message.'), `<span class="btn sm" data-act="copy-diag">${ic('file')}${tx('Copy')}</span>`) + `</div>`;
+    row(tx('Diagnostic bundle'), tx('Device, version, sync, storage and the last 50 log lines, for pasting into a message.'), `<span class="btn sm" data-act="copy-diag">${ic('clip')}${tx('Copy')}</span>`) + `</div>`;
 }
 async function sendFeedback(ctx, root) {
   const v = f => root.querySelector(`[data-field="${f}"]`), text = v('fbtext')?.value.trim();

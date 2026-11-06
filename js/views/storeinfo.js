@@ -4,16 +4,16 @@
 // device is signed in to, with switching. Details come from the map
 // editor's Store Info, published with the map (cleanStoreInfo).
 
-import { ic, esc, vh, sub, status, toast, fmtTime, mhead } from '../ui.js';
+import { ic, esc, vh, sub, status, toast, fmtTime, mhead, fmtDay } from '../ui.js';
 import { mapInfo, mapStats, mapSymbols, symbolsHtml } from '../map.js';
-import { tx, txn, locale } from '../i18n.js';
+import { tx, txn } from '../i18n.js';
 
 const gmaps = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 const dirGoogle = si => si.directionsGoogle || (si.lat != null && si.lng != null ? `https://www.google.com/maps/dir/?api=1&destination=${si.lat},${si.lng}` : '');
 const dirApple = (si, name) => si.directionsApple || (si.lat != null && si.lng != null ? `https://maps.apple.com/?daddr=${si.lat},${si.lng}&q=${encodeURIComponent(name)}` : '');
 const link = (href, label, icon = 'arrow') => href ? `<a class="btn sm" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${ic(icon)}${label}</a>` : '';
 const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const dayLabel = iso => new Date(iso + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const dayLabel = iso => fmtDay(iso, { year: true });
 
 let parked = [], adding = false;
 

@@ -13,15 +13,15 @@
 // can be changed or cleared; a report already on a truck or staged on a
 // slot keeps that, and says so.
 
-import { ic, esc, toast, today } from '../../ui.js';
-import { tx, txn, locale } from '../../i18n.js';
+import { ic, esc, toast, today, fmtDay } from '../../ui.js';
+import { tx, txn } from '../../i18n.js';
 import { readManifestFile, publishParsed, STD_MINS_PER_CARTON } from './common.js';
 import { manifestCheck } from '../../../shared/manifest.js';
 import { placeIndex, usualGap, suggestPlace, despatchDay } from '../../../shared/manifeststats.js';
 
 const VIA = { plan: tx('from the Planner'), label: tx('set by hand') };
 const stateOf = ctx => ({ dock: ctx.store.get('dock'), plan: ctx.store.get('plan') || { days: {} } });
-const dayText = d => new Date(d + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+const dayText = d => fmtDay(d);
 // Where a report already is, when the dock placed it: on a truck, finalised, or staged.
 const fixedText = p => p.via === 'plan' ? tx('Planned for Truck {no} · {day}', { no: p.truck, day: dayText(p.day) }) : tx('On Truck {no} · {day}', { no: p.truck, day: dayText(p.day) });
 

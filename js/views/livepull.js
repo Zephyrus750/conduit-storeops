@@ -18,7 +18,7 @@
 
 import { searchBarcode, barcodeCard } from '../barcodesearch.js';
 import { recallFor, recallFlag, recallTagFor } from '../recallflag.js';
-import { ic, esc, vh, sub, toast, dep, DEPTS_DEFAULT, DEPT_NAME, today, productImg } from '../ui.js';
+import { ic, esc, vh, sub, toast, dep, DEPTS_DEFAULT, DEPT_NAME, today, productImg, fmtDay } from '../ui.js';
 import { hasArea, ensureArea } from '../unlock.js';
 import { openScanner } from '../scan.js';
 import { sx } from '../map.js';
@@ -28,7 +28,7 @@ import { fmtHM } from './backdock/common.js';
 import { ulid } from '../../shared/ulid.js';
 import { settingsOf } from '../../shared/reducers/store.js';
 import { sessionCounts, sessionPeople, inZone, lineInZone, uncovered, pulledToday, gotOf } from '../../shared/reducers/pull.js';
-import { tx, txn, locale } from '../i18n.js';
+import { tx, txn } from '../i18n.js';
 
 // screen: null (the session this phone is in, or home) | new | zones | cage | past
 // find: the last scan's answer { state: busy | found | none | noreport | error, code, kc, bays, soh, carton, truck, name, img }
@@ -94,7 +94,7 @@ function home(ctx) {
   return `<div class="lp-body">` + `<div class="mv-head"><div><h2>${tx('Live pull')}</h2><span>${tx('Ask the stockroom for stock from the floor')}</span></div></div>` +
     (open.length ? `<div class="card lp-card"><span class="lbl">${txn(open.length, 'Running now · {n}', 'Running now · {n}')}</span>${open.map(row).join('')}</div>` : `<div class="card lp-card"><b>${tx('No session is running')}</b><p class="lp-dim">${tx('Start one for your department: one person scans on the floor, the others pull in the stockroom.')}</p></div>`) +
     `<button class="mv-big" data-act="lp-new">${ic('plus')}${tx('Start a session')}</button>` +
-    (past.length ? `<div class="card lp-card"><span class="lbl">${tx('Earlier · listed for 7 days')}</span>${past.map(s => `<button class="lp-hist" data-act="lp-past" data-sid="${esc(s.id)}">${s.dept ? dep(s.dept) : ''}<span><b>${esc(s.name)}</b><small>${esc(new Date(s.at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }))} · ${countsLine(sessionCounts(s))}</small></span>${ic('arrow')}</button>`).join('')}</div>` : '') +
+    (past.length ? `<div class="card lp-card"><span class="lbl">${tx('Earlier · listed for 7 days')}</span>${past.map(s => `<button class="lp-hist" data-act="lp-past" data-sid="${esc(s.id)}">${s.dept ? dep(s.dept) : ''}<span><b>${esc(s.name)}</b><small>${esc(fmtDay(s.at))} · ${countsLine(sessionCounts(s))}</small></span>${ic('arrow')}</button>`).join('')}</div>` : '') +
     `<p class="lp-dim">${tx('Each session keeps its own list, so two departments can work at the same time.')}</p></div>`;
 }
 
@@ -248,7 +248,7 @@ function cage(ctx, ses, repaint) {
 function past(ctx, ses, repaint) {
   const c = sessionCounts(ses), p = sessionPeople(ses), lines = liveLines(ses).sort((a, b) => String(a.at).localeCompare(String(b.at)));
   const again = lines.filter(l => l.st === 'short' || l.st === 'gone');
-  return `<div class="lp-body"><div class="mv-head"><div><h2>${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)}</h2><span>${esc(new Date(ses.at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }))} ${hm(ses.at)}–${hm(ses.closedAt)}</span></div></div>` +
+  return `<div class="lp-body"><div class="mv-head"><div><h2>${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)}</h2><span>${esc(fmtDay(ses.at))} ${hm(ses.at)}–${hm(ses.closedAt)}</span></div></div>` +
     `<p class="lp-dim">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers')].join(' · ')}</p>` +
     `<div class="lp-sum four"><div><b>${c.asked}</b><span>${tx('asked')}</span></div><div><b class="ok">${c.pulled}</b><span>${tx('pulled')}</span></div><div><b class="warn">${c.short}</b><span>${tx('short')}</span></div><div><b class="bad">${c.gone}</b><span>${tx('not there')}</span></div></div>` +
     `<div class="mv-rows">${lines.map(l => { const [t, tone] = stateText(l); return `<div class="mv-row ${tone === 'ok' ? 'ok' : tone ? 'warn' : ''}"><span class="a">${hm(l.at)}</span><span class="b">${esc(nameOf(ctx, l, repaint))} · ${esc(qtyText(l))}<br><small class="mono">${esc(l.kc)} · ${esc(baysText(l))}</small></span><span class="c">${t}</span></div>`; }).join('')}</div>` +
@@ -264,7 +264,7 @@ function desk(ctx) {
   // Each session as the Manifests list draws a manifest: in full on its own lines.
   const item = s => {
     const c = sessionCounts(s), p = sessionPeople(s), of = c.asked || 1, w = n => `${(n / of * 100).toFixed(1)}%`;
-    const when = s.closedAt ? `${esc(new Date(s.at).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' }))} · ${hm(s.at)}–${hm(s.closedAt)}` : tx('since {time}', { time: hm(s.at) });
+    const when = s.closedAt ? `${esc(fmtDay(s.at))} · ${hm(s.at)}–${hm(s.closedAt)}` : tx('since {time}', { time: hm(s.at) });
     const n = (cls, key, v) => `<span class="${cls}">${tx(key, { n: `<b>${v}</b>` })}</span>`;
     return `<button class="lp-dsl a2${ses?.id === s.id ? ' on' : ''}" data-act="lp-desk" data-sid="${esc(s.id)}">` +
       `<span class="lp-dsl-h">${s.dept ? dep(s.dept) : ''}<b>${esc(s.name)}</b>${s.closedAt ? '' : `<span class="lp-run"><i class="lp-live"></i>${tx('Running')}</span>`}<span class="lp-dsl-t">${when}</span></span>` +

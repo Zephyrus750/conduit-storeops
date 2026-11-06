@@ -23,7 +23,7 @@ export function openShare({ storeNo, storeName, shelf, dept }) {
   el.innerHTML = `<div class="sh-card"><div class="sh-h"><b>${tx('Share {shelf}', { shelf: esc(shelf) })}</b><button class="ibtn" data-sh="close" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
     `<div class="sh-where">${dept ? dep(dept) + `<span>${esc(DEPT_NAME[dept] || dept)}</span>` : ''}<span class="cs-dim">${esc(storeName || '')} #${esc(storeNo)}</span></div>` +
     `<div class="sh-qr">${qr || `<p class="lbl">${tx('This link is too long for a QR code.')}</p>`}</div><p class="lbl">${tx('Scan with another phone to open the map on this shelf. Signed-in devices of this store open it straight away.')}</p>` +
-    `<div class="sh-url mono">${esc(url)}</div><div class="sh-acts"><button class="btn primary sm" data-sh="copy">${ic('file')}${tx('Copy link')}</button>${navigator.share ? `<button class="btn sm" data-sh="share">${ic('arrow')}${tx('Share…')}</button>` : ''}</div></div>`;
+    `<div class="sh-url mono">${esc(url)}</div><div class="sh-acts"><button class="btn primary sm" data-sh="copy">${ic('clip')}${tx('Copy link')}</button>${navigator.share ? `<button class="btn sm" data-sh="share">${ic('arrow')}${tx('Share…')}</button>` : ''}</div></div>`;
   const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   el.addEventListener('click', async e => {

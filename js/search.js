@@ -10,14 +10,15 @@
 // before anything is typed. Opens from the header search, the rail search, Ctrl K,
 // and the phone's search bar (a compact list under the bar; see bar()).
 
+import { despatchDay } from '../shared/manifeststats.js';
 import { recallTag } from './recallflag.js';
-import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip } from './ui.js';
+import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip, fmtDate, fmtDay } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
 import { VIEWS } from './registry.js';
 import { findRecords } from '../shared/finder.js';
 import { RING } from './views/stockroom/common.js';
 import { SUBS, MICRO, microId, microCode, microName } from './data/micros.js';
-import { tx, txn, lang, locale } from './i18n.js';
+import { tx, txn } from './i18n.js';
 import { matches, fileKind } from '../shared/resources.js';
 import { mostUsed } from './resourcelib.js';
 
@@ -54,7 +55,7 @@ function recordsHtml(r, Q) {
   if (r.consols.length) out += grp(tx('Consolidations'), r.consols.length) + r.consols.map(c => c.seen
     ? orow('d', 'packages', tx('Consolidation <span class="mono">{id}</span>', { id: esc(c.id) }), c.seen.k === 'man' ? tx('Manifested on Truck {truck} · {day}', { truck: esc(tNo(c.seen.t)), day: esc(c.seen.d) }) : tx('Scanned on Truck {truck} · {day}', { truck: esc(tNo(c.seen.t)), day: esc(c.seen.d) }), tx('History'), `data-view="rhistory"`)
     : orow('d', 'packages', tx('Consolidation <span class="mono">{id}</span>', { id: esc(c.id) }) + (c.cartons ? ' · ' + tx('{n} ctn', { n: c.cartons }) : ''), [c.manNo ? tx('Manifest {no}', { no: esc(c.manNo) }) : '', c.closed ? tx('Truck {truck} (finalised)', { truck: esc(tNo(c.truck)) }) : tx('Truck {truck}', { truck: esc(tNo(c.truck)) }), c.bay ? tx('on <b>{bay}</b>, {status}', { bay: esc(c.bay), status: esc(where(c.status)) }) : esc(where(c.status)), c.dept ? tx('dept {dept}', { dept: esc(c.dept) }) : ''].filter(Boolean).join(' · '), tx('Open'), c.closed ? `data-view="rhistory"` : `data-view="receiving" data-truck="${esc(c.truck)}"${c.bay ? ` data-bay="${esc(c.bay)}"` : ''}`)).join('');
-  if (r.manifests.length) out += grp(tx('Manifests'), r.manifests.length) + r.manifests.map(m => orow('d', 'file', tx('Manifest {no}', { no: hi(m.manNo, Q) }), [txn(m.consols, '{n} consol', '{n} consols'), txn(m.cartons, '{n} carton', '{n} cartons'), m.despatch ? tx('despatch {date}', { date: esc(m.despatch) }) : '', m.truck ? tx('on Truck {truck}', { truck: esc(tNo(m.truck)) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="manifests" data-man="${esc(m.manNo)}"`)).join('');
+  if (r.manifests.length) out += grp(tx('Manifests'), r.manifests.length) + r.manifests.map(m => orow('d', 'file', tx('Manifest {no}', { no: hi(m.manNo, Q) }), [txn(m.consols, '{n} consol', '{n} consols'), txn(m.cartons, '{n} carton', '{n} cartons'), m.despatch ? tx('despatch {date}', { date: esc(despatchDay(m.despatch) ? fmtDay(despatchDay(m.despatch)) : m.despatch) }) : '', m.truck ? tx('on Truck {truck}', { truck: esc(tNo(m.truck)) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="manifests" data-man="${esc(m.manNo)}"`)).join('');
   if (r.cages.length) out += grp(tx('Cages'), r.cages.length) + r.cages.map(c => orow('s', 'm-cages', tx('Cage {id}', { id: hi(c.id, Q) }), [esc(ringName(c.ring)), c.location ? tx('at {place}', { place: esc(c.location) }) : tx('not parked'), txn(c.lines, '{n} line', '{n} lines'), c.has ? `<b>${tx('{n} of this keycode', { n: c.has })}</b>` : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="cages" data-cage="${esc(c.id)}"`)).join('');
   if (r.loads.length) out += grp(tx('Other loads'), r.loads.length) + r.loads.map(l => orow('', 'box', tx('Load {label}', { label: hi(l.label, Q) }), [esc(where(l.status)), txn(l.pallets, '{n} pallet', '{n} pallets'), l.has.length ? tx('on pallet {pallets}', { pallets: esc(l.has.slice(0, 3).join(', ')) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="manifests" data-load="${esc(l.id)}"`)).join('');
   if (r.offsite.length) out += grp(tx('Off-site pallets'), r.offsite.length) + r.offsite.map(o => orow('', 'truck', tx('Off-site pallet {pid}', { pid: hi(String(o.pid), Q) }), [o.title ? esc(o.title) : tx('no description'), o.has ? `<b>${tx('{n} of this keycode', { n: o.has })}</b>` : '', o.rec ? tx('back') : o.cb ? tx('callback {date}', { date: esc(o.cb) }) : ''].filter(Boolean).join(' · '), tx('Open'), `data-view="offsite" data-pid="${esc(o.pid)}"`)).join('');
@@ -168,7 +169,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       out = grp(tx('Products'), item ? 1 : 0);
       if (item) {
         out += orow('p', 'barcode', `${hi(Q, Q)} · ${esc(item.name || tx('Product'))}`, [item.price != null ? money(item.price) : '', item.was != null && item.was !== item.price ? tx('was {price}', { price: money(item.was) }) : '', item.clr ? tx('clearance') : ''].filter(Boolean).join(' · ') || tx('On kmart.com.au'), tx('Open'), `data-url="${esc(item.url)}"`);
-        preview = `<div class="pcardx">${item.img ? `<img src="${esc(item.img)}" alt="" referrerpolicy="no-referrer" data-pimg style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:#fff;margin-bottom:8px">` : ''}<div class="kc">${esc(Q)}</div><div class="nm">${esc(item.name || '')}</div><div class="fx">${item.price != null ? `<span class="soh g">${money(item.price)}</span>` : ''}${item.was != null && item.was !== item.price ? `<span>${tx('was {price}', { price: money(item.was) })}</span>` : ''}${item.clr ? `<span class="status warn">${tx('Clearance')}</span>` : ''}</div></div><div class="pfacts"><span>${ic('clock')}${item.at ? tx('Price checked {date}', { date: new Date(item.at).toLocaleDateString(lang() === 'en' ? undefined : locale()) }) : tx('Price checked never')}</span><span>${ic('m-product')}${tx('From the public product page')}</span></div><a class="btn accent sm" href="${esc(item.url)}" target="_blank" rel="noopener">${ic('arrow')}${tx('Open on kmart.com.au')}</a>`;
+        preview = `<div class="pcardx">${item.img ? `<img src="${esc(item.img)}" alt="" referrerpolicy="no-referrer" data-pimg style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:#fff;margin-bottom:8px">` : ''}<div class="kc">${esc(Q)}</div><div class="nm">${esc(item.name || '')}</div><div class="fx">${item.price != null ? `<span class="soh g">${money(item.price)}</span>` : ''}${item.was != null && item.was !== item.price ? `<span>${tx('was {price}', { price: money(item.was) })}</span>` : ''}${item.clr ? `<span class="status warn">${tx('Clearance')}</span>` : ''}</div></div><div class="pfacts"><span>${ic('clock')}${item.at ? tx('Price checked {date}', { date: fmtDate(item.at) }) : tx('Price checked never')}</span><span>${ic('m-product')}${tx('From the public product page')}</span></div><a class="btn accent sm" href="${esc(item.url)}" target="_blank" rel="noopener">${ic('ext')}${tx('Open on kmart.com.au')}</a>`;
       } else {
         // A code nobody knows is often one digit off: offer the catalogue's near-misses.
         const near = await client.catalogue.nearMiss?.(Q) || [];
@@ -211,7 +212,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   // A keycode's life in the store: bays it was backfilled at, SOH
   // adjustments, cages holding it (K2B's code lookup, with more detail).
   function lifeHtml(L) {
-    const day = d => d ? new Date(d.length > 10 ? d : d + 'T00:00:00').toLocaleDateString(lang() === 'en' ? [] : locale(), { day: 'numeric', month: 'short' }) : '';
+    const day = d => fmtDate(d);
     const st = v => v.status === 'submitted' ? tx('Submitted') : v.status === 'corrected' ? tx('Ready') : tx('Needs review');
     const rows = [
       ...L.visits.slice(0, 8).map(v => `<div class="li"><span class="loc">${esc(v.bay)}</span><span class="nm">${st(v)}${v.expected != null ? ' · ' + txn(v.expected, '{n} code', '{n} codes') : ''}${v.accuracy != null ? ` · ${accChip(v.accuracy)}` : ''}${v.incorrect ? ` · <b class="bad">${tx('not on the report')}</b>` : v.scanned ? '' : ` · <b class="warn">${tx('not scanned')}</b>`}</span><span class="rt">${day(v.date)}</span></div>`),

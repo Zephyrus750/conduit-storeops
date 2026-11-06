@@ -1,7 +1,7 @@
 // Maintenance: log issues with a map pin, work them open → progress →
 // completed, reopen as recurring. Reads store.get('issues').
 
-import { $, ic, esc, vh, sub, status, fmtTime, ago, toast, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, status, fmtTime, timePassed, toast, mgr, fmtDay } from '../ui.js';
 import { mountMap, mapbar, crumbx, bindMapChrome, segmentId, mvMap, setStrip, sx } from '../map.js';
 import { ISSUE_CATS } from '../../shared/reducers/floor.js';
 import { printSheet, table, signoff } from '../print.js';
@@ -9,7 +9,7 @@ import { paperMap } from '../printmap.js';
 import { issueLink } from '../share.js';
 import { qrSvg } from '../../shared/qr.js';
 import { mapFloors } from '../map.js';
-import { tx, txn, locale } from '../i18n.js';
+import { tx, txn } from '../i18n.js';
 
 const SEV = [[tx('Low'), '#6B7280'], [tx('Medium'), '#D97706'], [tx('High'), '#DC2626'], [tx('Urgent'), '#7F1D1D']];
 // An issue's status word ("Open" alone is the verb on every link and button).
@@ -224,7 +224,7 @@ function draftForm(m) {
 }
 function sidebar(m) {
   const pills = [['active', tx('Open {n}', { n: m.open.length })], ['overdue', tx('Overdue {n}', { n: m.overdue })], ['recurring', tx('Recurring {n}', { n: m.recurring })], ['month', tx('Done this month {n}', { n: m.month.length })], ['done', tx('Completed {n}', { n: m.all.length - m.open.length })], ['all', tx('All')]];
-  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map((i, n) => `<div class="li mt-li${selected === i.id ? ' sel' : ''}" data-act="select" data-id="${esc(i.id)}"><span class="mt-pin" style="border-color:${colour(i)}">${glyphSvg(i.cat, colour(i))}</span><span class="nm" style="white-space:normal"><b style="font-weight:600">${esc(i.title)}${i.recur ? ` <span class="recur" title="${txn(i.recur, 'Reopened {n} time', 'Reopened {n} times')}">↻ ×${i.recur}</span>` : ''}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)"><i class="sevdot" style="background:${SEV[i.sev][1]}"></i>${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${ago(i.created)}${overdue(i) ? ` · <b class="mt-od">${tx('overdue')}</b>` : ''}</span></span>${status(i.status === 'open' ? 'warn' : i.status === 'progress' ? 'info' : 'good', stName(i))}</div>`).join('') || `<div class="li" style="color:var(--dim)">${tx('Nothing here.')}</div>`}</div></div>`;
+  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map((i, n) => `<div class="li mt-li${selected === i.id ? ' sel' : ''}" data-act="select" data-id="${esc(i.id)}"><span class="mt-pin" style="border-color:${colour(i)}">${glyphSvg(i.cat, colour(i))}</span><span class="nm" style="white-space:normal"><b style="font-weight:600">${esc(i.title)}${i.recur ? ` <span class="recur" title="${txn(i.recur, 'Reopened {n} time', 'Reopened {n} times')}">↻ ×${i.recur}</span>` : ''}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)"><i class="sevdot" style="background:${SEV[i.sev][1]}"></i>${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${timePassed(i.created)}${overdue(i) ? ` · <b class="mt-od">${tx('overdue')}</b>` : ''}</span></span>${status(i.status === 'open' ? 'warn' : i.status === 'progress' ? 'info' : 'good', stName(i))}</div>`).join('') || `<div class="li" style="color:var(--dim)">${tx('Nothing here.')}</div>`}</div></div>`;
   if (draft) return list + draftForm(m);
   const i = m.all.find(x => x.id === selected);
   if (!i) return list;
@@ -288,13 +288,13 @@ function phone(m) {
       sx.sec(tx('Log'), sx.rows([...i.log].reverse().map(l => sx.row('history', esc(tx(l.a)), l.n ? esc(l.n) : '', esc(fmtTime(l.t)))))) +
       sx.acts([sx.btn('x', tx('Back to the list'), 'data-act="back"')]) + `</div>`;
   }
-  const row = i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), `${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${ago(i.created)}`, overdue(i) ? tx('Overdue') : i.status === 'progress' ? tx('To check') : OPEN, overdue(i) ? 'bad' : i.status === 'progress' ? 'warn' : 'dim', `data-act="select" data-id="${esc(i.id)}"`);
+  const row = i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), `${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${timePassed(i.created)}`, overdue(i) ? tx('Overdue') : i.status === 'progress' ? tx('To check') : OPEN, overdue(i) ? 'bad' : i.status === 'progress' ? 'warn' : 'dim', `data-act="select" data-id="${esc(i.id)}"`);
   const open = [...m.open].sort((a, b) => (overdue(b) - overdue(a)) || (a.updated < b.updated ? 1 : -1));
   const done = m.all.filter(i => i.status === 'completed').sort((a, b) => (doneAt(a) < doneAt(b) ? 1 : -1)).slice(0, 5);
   return `<div class="sx"><div class="sx-h">${ic('m-maintenance')}${tx('Maintenance')}<span class="n${m.overdue ? ' red' : ''}">${tx('{n} open', { n: m.open.length })}</span></div>` +
     sx.acts([sx.btn('plus', tx('Report an issue'), 'data-act="new"', true)]) +
     sx.sec(OPEN, open.length ? sx.rows(open.slice(0, 40).map(row)) : sx.rows([sx.row('check', tx('Nothing open'))]), m.overdue ? tx('{n} overdue', { n: m.overdue }) : tx('tap one to open it')) +
-    (done.length ? sx.sec(tx('Recently completed'), sx.rows(done.map(i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), tx('{where} · done {ago}', { where: esc(i.loc || CAT_NAME[i.cat]), ago: ago(doneAt(i)) }), '', '', `data-act="select" data-id="${esc(i.id)}"`)))) : '') + `</div>`;
+    (done.length ? sx.sec(tx('Recently completed'), sx.rows(done.map(i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), tx('{where} · done {ago}', { where: esc(i.loc || CAT_NAME[i.cat]), ago: timePassed(doneAt(i)) }), '', '', `data-act="select" data-id="${esc(i.id)}"`)))) : '') + `</div>`;
 }
 
 // The shelf nearest a point on the shown floor, by the centre of its box.
@@ -337,7 +337,7 @@ function printWorkOrder(ctx, i) {
   const url = issueLink(ctx.storeNo, i.id), qr = qrSvg(url, { cell: 3 });
   const fact = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
   const body = `<div class="ps-facts">${fact(tx('Issue'), esc(i.title))}${fact(tx('Type'), esc(CAT_NAME[i.cat] || tx('Other')))}${fact(tx('Severity'), esc(SEV[i.sev ?? 1][0]))}${fact(tx('Status'), esc(stName(i)))}` +
-    `${fact(tx('Where'), esc(i.loc || '—') + (fl ? ` · ${esc(fl.name)}` : ''))}${fact(tx('Logged'), esc(fmtTime(i.created)))}${fact(tx('repair::Target'), esc(due.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' })) + (overdue(i) ? ' · ' + tx('overdue') : ''))}${fact(tx('Reference'), `<span class="mono">${esc(i.id)}</span>`)}</div>` +
+    `${fact(tx('Where'), esc(i.loc || '—') + (fl ? ` · ${esc(fl.name)}` : ''))}${fact(tx('Logged'), esc(fmtTime(i.created)))}${fact(tx('repair::Target'), esc(fmtDay(due)) + (overdue(i) ? ' · ' + tx('overdue') : ''))}${fact(tx('Reference'), `<span class="mono">${esc(i.id)}</span>`)}</div>` +
     (i.note ? `<p class="ps-note">${tx('<b>Details:</b> {note}', { note: esc(i.note) })}</p>` : '') +
     `<div class="ps-wo">${pm ? `<div class="ps-wo-map">${pm.svg}</div>` : `<div class="ps-wo-map ps-none">${tx('Not pinned on the map')}</div>`}<div class="ps-wo-qr">${qr || ''}<span>${tx('Scan on a store device to open this issue in Conduit')}</span></div></div>` +
     `<h2>${tx('Log so far')}</h2>` + table([tx('When'), tx('What'), tx('Note')], i.log.slice(-5).map(l => [esc(fmtTime(l.t)), esc(tx(l.a)), esc(l.n || '')]), ['w20', 'w20', '']) +

@@ -6,7 +6,7 @@
 // (dept.ranges.set) with the Stockroom or manager code. Backfill review,
 // History and Adjustments group by it.
 
-import { $, ic, esc, vh, sub, toast, ago } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, timePassed } from '../../ui.js';
 import { SR_DEPTS, SR_GROUPS, deptLabel, deptColour, send } from './common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
 import { tx, txn } from '../../i18n.js';
@@ -50,7 +50,7 @@ function body(ctx) {
   if (st.store !== ctx.storeNo) Object.assign(st, { store: ctx.storeNo, draft: null, paste: false, text: '' });
   const list = current(ctx), raw = ctx.store.get('settings'), dirty = !!st.draft;
   const pins = list.filter(r => r.from === r.to).length, odd = list.map((r, i) => ({ r, i })).filter(x => !KNOWN.has(x.r.dept));
-  const head = vh(tx('Departments'), sub(tx('Stockroom bays by department'), list.length ? `${txn(list.length - pins, '{n} range', '{n} ranges')} · ${txn(pins, '{n} single bay', '{n} single bays')}` : tx('none set yet'), !dirty && raw?.at ? tx('saved {ago}', { ago: esc(ago(raw.at)) }) : ''),
+  const head = vh(tx('Departments'), sub(tx('Stockroom bays by department'), list.length ? `${txn(list.length - pins, '{n} range', '{n} ranges')} · ${txn(pins, '{n} single bay', '{n} single bays')}` : tx('none set yet'), !dirty && raw?.at ? tx('saved {ago}', { ago: esc(timePassed(raw.at)) }) : ''),
     `<button class="btn" data-act="dpt-paste">${ic('clip')}${tx('Paste a list')}</button>` + (dirty ? `<span class="dpt-state dirty">${tx('Not saved yet')}</span>` : `<span class="dpt-state">${ic('check')}${tx('Saved')}</span>`), 'tag');
   const help = `<p class="dpt-help">${tx('Departments and their colours are the same in every store: add the stockroom bay numbers that belong to each one, a <b>from–to</b> range, or one bay with <b>To</b> left empty. One bay beats any range around it, so an odd bay in another department’s run is one entry. You can set a department before the team reaches it. Saved for the whole store; Backfill review, History and Adjustments group by it.')}</p>`;
   const paste = st.paste ? `<div class="card dpt-pastecard"><div class="ch"><h3>${tx('Paste a list')}</h3><span class="go" data-act="dpt-paste">${tx('Close')}</span></div><textarea class="sri-ta mono" data-field="dpt-text" rows="6" placeholder="${tx('One a line:\n7001-7040 h1\n7057 h2')}">${esc(st.text)}</textarea><div class="sri-acts">${pasteActs()}</div></div>` : '';

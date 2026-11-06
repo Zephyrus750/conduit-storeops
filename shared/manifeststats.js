@@ -24,8 +24,8 @@ const placed = (id, via) => ({ day: String(id).slice(0, 10), truck: truckOf(id),
 const daysBetween = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
 
 export function despatchDay(s) {
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim());
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s || '').trim());
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   return DAY_RE.test(String(s || '').slice(0, 10)) ? String(s).slice(0, 10) : null;
 }
 

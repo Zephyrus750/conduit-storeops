@@ -5,14 +5,14 @@
 // crew credit by D-number. A finalised truck's record comes from its
 // history row; its pallets are still on the truck in the dock projection.
 
-import { esc, fmtDate } from '../../ui.js';
-import { tx, locale } from '../../i18n.js';
+import { esc, fmtDate, fmtDay } from '../../ui.js';
+import { tx } from '../../i18n.js';
 import { printSheet, table, signoff, section, tick } from '../../print.js';
 import { historyRow, consolsOf, workedMs } from '../../../shared/reducers/backdock.js';
 import { PT_NAME, truckNo, fmtHM, fmtMins, holdName, pallets, PALLET_STATE, LINK_BASIS } from './common.js';
 
 // The date in the device's language (en-AU in English, as before).
-const day = iso => iso ? new Date(iso).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '';
+const day = iso => fmtDay(iso, { year: true });
 
 // Who prints it: a manager (or the owner) at a PC. The dock phones never
 // offer it.

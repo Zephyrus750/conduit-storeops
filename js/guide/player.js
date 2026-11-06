@@ -15,8 +15,8 @@
 
 import { SCENES, GROUPS, PEOPLE, DEVICE } from './scenes.js';
 import { gi as ic } from './icons.js';
-import { tx, txn, locale } from '../i18n.js';
-import { esc } from '../ui.js';
+import { tx, txn } from '../i18n.js';
+import { esc, fmtDate } from '../ui.js';
 import { qrSvg } from '../../shared/qr.js';
 import { guideLink, shelfLink } from '../share.js';
 import { printSheet } from '../print.js';
@@ -248,7 +248,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
   }
 
   // Paper: a chapter as the A4 page it prints as.
-  const printedOn = () => tx('Printed {when}', { when: esc(new Date().toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })) });
+  const printedOn = () => tx('Printed {when}', { when: esc(fmtDate(new Date(), { year: true })) });
   async function paperPage(s, into, tk) {
     const phoneish = s.device === 'phone', cols = phoneish ? 4 : s.device === 'pc' ? 2 : s.device === 'duo' || s.steps.length > 4 ? 3 : 2, max = phoneish ? 0.5 : 1;
     const qr = qrSvg(guideLink(storeNo, s.id), { cell: 3 });

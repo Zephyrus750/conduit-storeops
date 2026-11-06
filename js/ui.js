@@ -156,12 +156,24 @@ const fmtCache = new Map();
 const intl = opts => { const k = JSON.stringify(opts); if (!fmtCache.has(k)) fmtCache.set(k, new Intl.DateTimeFormat(locale(), opts)); return fmtCache.get(k); };
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// One way to write dates everywhere: fmtDay "Fri 6 Nov", fmtDate "6 Nov",
+// fmtTime "Fri 14:05" (a moment), fmtMonth "November 2026", timePassed
+// "2 h ago". The year shows when it isn't this year, or when asked for.
+const toDate = iso => { if (!iso) return null; const d = iso instanceof Date ? iso : new Date(typeof iso === 'string' && iso.length === 10 ? iso + 'T00:00:00' : iso); return isNaN(d) ? null : d; };
+export function fmtDay(iso, { year = false } = {}) {
+  const d = toDate(iso); if (!d) return '';
+  const y = year || d.getFullYear() !== new Date().getFullYear();
+  if (lang() !== 'en') return intl({ weekday: 'short', day: 'numeric', month: 'short', ...(y ? { year: 'numeric' } : {}) }).format(d);
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}${y ? ' ' + d.getFullYear() : ''}`;
+}
+export function fmtMonth(iso) { const d = toDate(iso); return d ? intl({ month: 'long', year: 'numeric' }).format(d) : ''; }
 // A weekday names the last six days only; anything older carries its date.
 export function fmtTime(iso) { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; if (lang() !== 'en') return Math.abs(Date.now() - d) < 6 * 86400000 ? `${intl({ weekday: 'short' }).format(d)} ${hm}` : `${intl({ day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(d)} ${hm}`; return Math.abs(Date.now() - d) < 6 * 86400000 ? `${DAYS[d.getDay()]} ${hm}` : `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''} ${hm}`; }
-export function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso); if (isNaN(d)) return ''; if (lang() !== 'en') return intl({ day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) }).format(d); return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''}`; }
+export function fmtDate(iso, { year = false } = {}) { const d = toDate(iso); if (!d) return ''; const y = year || d.getFullYear() !== new Date().getFullYear(); if (lang() !== 'en') return intl({ day: 'numeric', month: 'short', ...(y ? { year: 'numeric' } : {}) }).format(d); return `${d.getDate()} ${MONTHS[d.getMonth()]}${y ? ' ' + d.getFullYear() : ''}`; }
 // The footer's date: "Sunday 1 Nov 2026", the month in three letters.
 export function fmtLong(d = new Date()) { if (lang() !== 'en') return intl({ weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(d); return `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
-export function ago(iso) { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return tx('just now'); if (m < 60) return tx('{n} min ago', { n: m }); const h = Math.round(m / 60); if (h < 24) return tx('{n} h ago', { n: h }); return tx('{n}d ago', { n: Math.round(h / 24) }); }
+// The time passed since: "just now", "5 min ago", "2 h ago", "3d ago".
+export function timePassed(iso) { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return tx('just now'); if (m < 60) return tx('{n} min ago', { n: m }); const h = Math.round(m / 60); if (h < 24) return tx('{n} h ago', { n: h }); return tx('{n}d ago', { n: Math.round(h / 24) }); }
 export function greeting() { const h = new Date().getHours(); return h < 12 ? tx('Good morning!') : h < 17 ? tx('Good afternoon!') : tx('Good evening!'); }
 
 // Tiny toast for rejections and confirmations.
