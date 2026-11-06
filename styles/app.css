@@ -2687,6 +2687,9 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .adj-shrinks.mv { margin: 0 16px 12px; gap: 6px; }
 .adj-shrinkline.ctn { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
 .adj-shrinkline.ctn svg.i { color: var(--accent); }
+/* The third figure, both added up: the ink of the other two's sum. */
+.adj-shrinkline.all { background: var(--panel); border-color: var(--line); border-width: 1.5px; }
+.adj-shrinkline.all svg.i { color: var(--ink2); }
 .adj-ctn small, .adj-shrink small { display: block; font-size: 11px; font-weight: 500; color: var(--dim); white-space: nowrap; }
 .loss1 { color: var(--accent-ink); font-weight: 700; }
 

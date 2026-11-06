@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseReport, sohBand, isoWeek, historyOf, classify, checksFor, splitWalkers, shrinkValue, cartonShrink, cartonUnits } from '../../shared/stockintel.js';
+import { parseReport, sohBand, isoWeek, historyOf, classify, checksFor, splitWalkers, shrinkValue, cartonShrink, cartonUnits, shrinkParts } from '../../shared/stockintel.js';
 
 const REPORT = `STORE : 1241 Busselton                       Page 1
 LOCATION KEYCODE APN DESCRIPTION COLOUR STATUS PRICE SOH
@@ -102,4 +102,14 @@ test('shrink to one carton: the units to reach zero and one carton on top, at th
   assert.equal(cartonShrink(-4, null, 8), 0, 'no carton size'); assert.equal(cartonUnits(-4, 0), 0);
   assert.equal(cartonShrink(-6, 24, null), 0, 'no price'); assert.equal(cartonUnits(-6, 24), 30);
   assert.equal(cartonShrink(3, 6, 12), 0, 'above zero: not on the list');
+});
+
+test('shrink in three parts: below zero to zero, zero up to one carton, and the two combined (to zero only without a carton size)', () => {
+  assert.deepEqual(shrinkParts(-5, 12, 2), { toZero: 10, zeroToCarton: 24, combined: 34 }, 'combined is the two added up');
+  assert.deepEqual(shrinkParts(0, 12, 2), { toZero: 0, zeroToCarton: 24, combined: 24 }, 'at zero: only the carton on top');
+  assert.deepEqual(shrinkParts(-5, null, 2), { toZero: 10, zeroToCarton: 0, combined: 10 }, 'no carton size yet: back to zero only');
+  assert.deepEqual(shrinkParts(0, null, 2), { toZero: 0, zeroToCarton: 0, combined: 0 });
+  assert.deepEqual(shrinkParts(3, 12, 2), { toZero: 0, zeroToCarton: 0, combined: 0 }, 'above zero: nothing to write off');
+  assert.deepEqual(shrinkParts(-5, 12, null), { toZero: 0, zeroToCarton: 0, combined: 0 }, 'no price: nothing to count');
+  for (const [q, c, p] of [[-7, 6, 4.99], [-1, 24, 0.5], [0, 3, 19]]) { const s = shrinkParts(q, c, p); assert.equal(Math.round((s.toZero + s.zeroToCarton) * 100) / 100, s.combined); }
 });
