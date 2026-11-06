@@ -25,13 +25,13 @@ export const TASK = { ghost: 'COUNT · SOH 0', deep: 'SPOT-CHECK', stuck: 'COUNT
 const HEAD_RE = /STORE\s*:|^\s*Location\s*:|LOCATION\s+KEYCODE|ITEM\s+DESCRIPTION|BRAND\s+DESCRIPTION|Status\s+0|Page\s+\d|Start of style|End of style|^[-=_]{6,}/i;
 const OCR = { O: '0', o: '0', I: '1', l: '1', L: '1', S: '5', B: '8' };
 const fix = t => t.replace(/[OoIlLSB]/g, c => OCR[c]);
-const KC_RE = /^[0-9OIlLSB]{6,8}$/, SOH_RE = /^-?[0-9OIlLSB]{1,5}$/;
+const KC_RE = /^[0-9OIlLSB]{6,9}$/, SOH_RE = /^-?[0-9OIlLSB]{1,5}$/;
 
 // One item row, or null (no keycode, no SOH or no location).
 function rowToRecord(line, ctxLoc) {
   const t = line.trim().split(/\s+/);
   let ki = -1;
-  for (let i = 0; i < t.length; i++) { const x = t[i]; if (KC_RE.test(x) && (x.match(/\d/g) || []).length >= x.length - 2 && /^\d{6,8}$/.test(fix(x))) { ki = i; break; } }
+  for (let i = 0; i < t.length; i++) { const x = t[i]; if (KC_RE.test(x) && (x.match(/\d/g) || []).length >= x.length - 2 && /^\d{6,9}$/.test(fix(x))) { ki = i; break; } }
   if (ki < 0) return null;
   const kc = fix(t[ki]), loc = ki > 0 && /^\d{2,5}$/.test(t[ki - 1]) ? t[ki - 1] : ctxLoc;
   let soh = null, price = null; const apns = [], words = [];

@@ -104,7 +104,7 @@ export function installProductLinks(catalogue) {
     // A phone (no hover, so no card): the tap opens the product's pop-up instead.
     if (popCtx && !fineMq.matches) {
       const el = e.target.closest?.(CARD_ON), kc = el ? cardCode(el) : '';
-      if (el && !el.closest('.ppop') && /^\d{6,8}$/.test(kc)) { e.preventDefault(); e.stopPropagation(); openProduct(kc); return; }
+      if (el && !el.closest('.ppop') && /^\d{6,9}$/.test(kc)) { e.preventDefault(); e.stopPropagation(); openProduct(kc); return; }
     }
     const c = e.target.closest?.('[data-copykc]');
     if (c) { e.preventDefault(); e.stopPropagation(); copyCode(c.dataset.copykc, c); return; }
@@ -158,7 +158,7 @@ export function installProductCard(catalogue, opts = {}) {
   document.addEventListener('mouseover', e => {
     if (!fine.matches) return;
     const el = e.target.closest?.(CARD_ON), kc = el ? cardCode(el) : '';
-    if (!el || el === cur || !/^\d{6,8}$/.test(kc)) return;
+    if (!el || el === cur || !/^\d{6,9}$/.test(kc)) return;
     hide(); cur = el; if (el.title) { el.dataset.tip0 = el.title; el.removeAttribute('title'); }
     timer = setTimeout(async () => {
       // The bays are asked for alongside the catalogue; the card shows first and gains them when they land.

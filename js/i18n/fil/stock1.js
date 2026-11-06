@@ -260,7 +260,6 @@ export default {
   "One digit from {other}: check which is on the shelf": "Isang digit mula sa {other}: tingnan kung alin ang nasa shelf",
   "That is not a keycode": "Hindi iyan keycode",
   "{code} fails its check digit: scan it again": "Mali ang check digit ng {code}: i-scan ulit",
-  "{code} is {n} digits: a keycode is 7 or 8, an item barcode 13": "{n} digit ang {code}: 7 o 8 ang keycode, 13 ang item barcode",
   "{code} tagged to {bay}": "Na-tag ang {code} sa {bay}",
   "(marked incorrect)": "(naka-mark na mali)",
   "Note": "Tala",
@@ -674,4 +673,5 @@ export default {
   "Delete {bay} from today’s board?": "I-delete ang {bay} sa board ngayong araw?",
   "It was removed from today’s board.": "Inalis na ito sa board ngayong araw.",
   "Its scans are removed from the review.": "Aalisin sa review ang mga scan nito.",
+  "{code} is {n} digits: a keycode is 7 to 9, an item barcode 13": "{n} digit ang {code}: 7 hanggang 9 ang keycode, 13 ang item barcode",
 };

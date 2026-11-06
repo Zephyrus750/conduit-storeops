@@ -260,7 +260,6 @@ export default {
   "One digit from {other}: check which is on the shelf": "Eine Ziffer von {other} entfernt: prüfen, welcher im Regal liegt",
   "That is not a keycode": "Das ist kein Keycode",
   "{code} fails its check digit: scan it again": "{code} hat eine falsche Prüfziffer: erneut scannen",
-  "{code} is {n} digits: a keycode is 7 or 8, an item barcode 13": "{code} hat {n} Ziffern: ein Keycode hat 7 oder 8, ein Artikel-Barcode 13",
   "{code} tagged to {bay}": "{code} {bay} zugeordnet",
   "(marked incorrect)": "(als falsch markiert)",
   "Note": "Notiz",
@@ -674,4 +673,5 @@ export default {
   "Delete {bay} from today’s board?": "{bay} von der heutigen Tafel löschen?",
   "It was removed from today’s board.": "Er wurde von der heutigen Tafel genommen.",
   "Its scans are removed from the review.": "Seine Scans werden aus der Prüfung entfernt.",
+  "{code} is {n} digits: a keycode is 7 to 9, an item barcode 13": "{code} hat {n} Ziffern: ein Keycode hat 7 bis 9, ein Artikel-Barcode 13",
 };

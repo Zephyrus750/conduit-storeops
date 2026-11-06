@@ -15,32 +15,34 @@ export function parseKeycodes(text) {
 }
 
 // A code scanned or typed on the backfill phone, as K2B checked it: a
-// keycode is 7 or 8 digits; 13 digits is an item barcode (APN), which must
+// keycode is 7 to 9 digits (9 since late 2026); 13 digits is an item barcode (APN), which must
 // pass its EAN check digit (a misread digit is refused outright). Anything
 // else is neither. → { code } or { why }
 export function phoneCode(raw) {
   const code = String(raw ?? '').replace(/\D/g, '');
   if (!code) return { why: 'That is not a keycode' };
-  if (code.length === 7 || code.length === 8) return { code };
+  if (code.length >= 7 && code.length <= 9) return { code };
   if (code.length === 13) return ean13Ok(code) ? { code } : { why: `${code} fails its check digit: scan it again` };
-  return { why: `${code} is ${code.length} digits: a keycode is 7 or 8, an item barcode 13` };
+  return { why: `${code} is ${code.length} digits: a keycode is 7 to 9, an item barcode 13` };
 }
 const ean13Ok = c => { let sum = 0; for (let i = 0; i < 12; i++) sum += Number(c[i]) * (i % 2 ? 3 : 1); return (10 - (sum % 10)) % 10 === Number(c[12]); };
 
-// K2B's disputes: two 8-digit keycodes on one bay that differ in a single
-// digit are probably one product misread or mistyped. → { code: [partners] }
+// K2B's disputes: two keycodes of one length (8 or 9 digits) on one bay
+// that differ in a single digit are probably one product misread or
+// mistyped. → { code: [partners] }
 export function disputes(codes) {
-  const out = {}, eight = [...new Set(codes)].filter(c => /^\d{8}$/.test(c));
-  for (let i = 0; i < eight.length; i++) for (let j = i + 1; j < eight.length; j++) {
-    const a = eight[i], b = eight[j]; let d = 0;
-    for (let k = 0; k < 8 && d < 2; k++) if (a[k] !== b[k]) d++;
+  const out = {}, long = [...new Set(codes)].filter(c => /^\d{8,9}$/.test(c));
+  for (let i = 0; i < long.length; i++) for (let j = i + 1; j < long.length; j++) {
+    const a = long[i], b = long[j]; let d = 0;
+    if (a.length !== b.length) continue;
+    for (let k = 0; k < a.length && d < 2; k++) if (a[k] !== b[k]) d++;
     if (d === 1) { (out[a] ||= []).push(b); (out[b] ||= []).push(a); }
   }
   return out;
 }
 
 // Whole-report paste: split into per-location lists. Field order is
-// LOCATION · KEYCODE · APN · …: the first 6–8-digit token is the keycode
+// LOCATION · KEYCODE · APN · …: the first 6–9-digit token is the keycode
 // (12–13-digit APNs are skipped) and the location is a leading 2–5-digit
 // token or a "Location:" header line.
 // The report's SOH column (the last number on each item's line), by
@@ -74,7 +76,7 @@ export function parseReportByLocation(text) {
     if (/^(STORE\b|LOCATION\s+KEYCODE|ITEM\b|BRAND\b|PAGE\b|[-=_]{4,})/i.test(line)) continue;
     const toks = line.split(/\s+/);
     let kcIdx = -1, kc = null;
-    for (let i = 0; i < toks.length; i++) if (/^\d{6,8}$/.test(toks[i])) { kcIdx = i; kc = toks[i]; break; }
+    for (let i = 0; i < toks.length; i++) if (/^\d{6,9}$/.test(toks[i])) { kcIdx = i; kc = toks[i]; break; }
     if (kcIdx < 0) continue;
     const loc = kcIdx > 0 && /^\d{2,5}$/.test(toks[kcIdx - 1]) ? toks[kcIdx - 1] : cur;
     if (!loc) continue;

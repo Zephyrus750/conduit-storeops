@@ -27,7 +27,7 @@ const PKEY = no => `inventory_prices:${no}`, EKEY = no => `inventory_clearance:$
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 function heldCodes(ctx) {
-  const I = inv(ctx), where = new Map(), add = (kc, w) => { if (!/^\d{8}$/.test(kc)) return; if (!where.has(kc)) where.set(kc, new Set()); where.get(kc).add(w); };
+  const I = inv(ctx), where = new Map(), add = (kc, w) => { if (!/^\d{8,9}$/.test(kc)) return; if (!where.has(kc)) where.set(kc, new Set()); where.get(kc).add(w); };
   for (const r of Object.values(I.offsite)) if (!r.rec) for (const p of r.products) add(p.kc, 'pallet:' + r.pid);
   for (const l of Object.values(I.loads)) if (l.status !== 'received') for (const p of l.pallets) for (const it of p.items) add(it.k, 'load:' + l.id);
   return where;
@@ -134,8 +134,8 @@ export default {
     });
     root.addEventListener('submit', async e => {
       const form = e.target.closest('[data-form="add"]'); if (!form) return; e.preventDefault();
-      const fd = new FormData(form), desc = String(fd.get('desc') || ''), products = [...desc.matchAll(/(\d{8})\s*[x×*]\s*(\d+)/gi)].map(m => ({ kc: m[1], q: Number(m[2]) }));
-      try { await send(ctx, 'inventory.offsite.add', { pid: String(fd.get('pid')).trim() }, { sent: today(), desc, title: desc.replace(/(\d{8})\s*[x×*]\s*\d+/gi, '').trim().slice(0, 80), req: String(fd.get('req') || ''), cb: String(fd.get('cb') || ''), products }); st.adding = false; toast(tx('Pallet added to the register')); ctx.rerender(); }
+      const fd = new FormData(form), desc = String(fd.get('desc') || ''), products = [...desc.matchAll(/(\d{8,9})\s*[x×*]\s*(\d+)/gi)].map(m => ({ kc: m[1], q: Number(m[2]) }));
+      try { await send(ctx, 'inventory.offsite.add', { pid: String(fd.get('pid')).trim() }, { sent: today(), desc, title: desc.replace(/(\d{8,9})\s*[x×*]\s*\d+/gi, '').trim().slice(0, 80), req: String(fd.get('req') || ''), cb: String(fd.get('cb') || ''), products }); st.adding = false; toast(tx('Pallet added to the register')); ctx.rerender(); }
       catch (er) { toast(er.message || tx('Couldn’t add the pallet'), 'bad'); }
     });
     root.addEventListener('click', async e => {

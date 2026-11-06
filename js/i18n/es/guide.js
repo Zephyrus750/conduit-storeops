@@ -224,7 +224,6 @@ export default {
   "Settings › Feedback sends a note to the owner, with a diagnostic summary if you tick it.": "Ajustes › Comentarios envía una nota al propietario, con un resumen de diagnóstico si lo marcas.",
   "Backfill scan": "Escaneo de reposición",
   "Scan the bay label to start a bay, then scan every product on the shelf.": "Escanea la etiqueta de la ubicación para empezarla y luego escanea cada producto de la estantería.",
-  "A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.": "Un keycode tiene 7 u 8 dígitos; un código de barras de artículo de 13 dígitos debe leerse limpio. Se marcan dos códigos que difieren en un dígito: quédate con el que está en la estantería.",
   "Send it to review when the bay is done. Any code can be removed, with Undo.": "Envíala a revisión cuando termines la ubicación. Cualquier código se puede quitar, con Deshacer.",
   "Review and submit": "Revisar y confirmar",
   "Review compares each bay with the pasted SIM report: what to add, what to delete.": "La revisión compara cada ubicación con el informe SIM pegado: qué añadir y qué borrar.",
@@ -260,7 +259,6 @@ export default {
   "Team message and today’s briefing": "Mensaje del equipo y briefing de hoy",
   "Managers publish a message and the day’s briefing for every device in the store. It shows in the strip at the top until you have read it.": "Los gerentes publican un mensaje y el briefing del día para todos los dispositivos de la tienda. Aparece en la barra superior hasta que lo leas.",
   "Stricter backfill scanning": "Escaneo de reposición más estricto",
-  "Keycodes are 7 or 8 digits and item barcodes must read cleanly, as K2B checked them. Two codes one digit apart are flagged; any code can be removed, with Undo.": "Los keycodes tienen 7 u 8 dígitos y los códigos de barras de artículo deben leerse limpios, como los comprobaba K2B. Se marcan dos códigos que difieren en un dígito; cualquier código se puede quitar, con Deshacer.",
   "Bays open on another desk": "Ubicaciones abiertas en otro PC",
   "A bay being reviewed elsewhere shows a banner with Take over. A desk that walks away lets go after 20 minutes.": "Una ubicación que se está revisando en otro sitio muestra un aviso con Tomar el control. Un PC que se deja solo la libera a los 20 minutos.",
   "The decant plan on the Team Board": "El plan de desembalaje en el tablero del equipo",
@@ -320,4 +318,6 @@ export default {
   "Open Help": "Abrir Ayuda",
   "Clear from this device": "Borrar de este dispositivo",
   "Stay signed in": "Seguir con la sesión",
+  "A keycode is 7 to 9 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.": "Un keycode tiene de 7 a 9 dígitos; un código de barras de artículo de 13 dígitos debe leerse limpio. Se marcan dos códigos que difieren en un dígito: quédate con el que está en la estantería.",
+  "Keycodes are 7 to 9 digits and item barcodes must read cleanly, as K2B checked them. Two codes one digit apart are flagged; any code can be removed, with Undo.": "Los keycodes tienen de 7 a 9 dígitos y los códigos de barras de artículo deben leerse limpios, como los comprobaba K2B. Se marcan dos códigos que difieren en un dígito; cualquier código se puede quitar, con Deshacer.",
 };

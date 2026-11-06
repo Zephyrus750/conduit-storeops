@@ -224,7 +224,6 @@ export default {
   "Settings › Feedback sends a note to the owner, with a diagnostic summary if you tick it.": "Cài đặt › Góp ý gửi ghi chú cho chủ sở hữu, kèm tóm tắt chẩn đoán nếu bạn đánh dấu chọn.",
   "Backfill scan": "Quét bổ sung hàng",
   "Scan the bay label to start a bay, then scan every product on the shelf.": "Quét nhãn vị trí kho để bắt đầu, rồi quét mọi sản phẩm trên kệ.",
-  "A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.": "Keycode có 7 hoặc 8 chữ số; mã vạch sản phẩm 13 chữ số phải đọc rõ. Hai mã chỉ khác nhau một chữ số sẽ bị gắn cờ: giữ lại mã của hàng trên kệ.",
   "Send it to review when the bay is done. Any code can be removed, with Undo.": "Gửi duyệt khi xong vị trí kho. Mã nào cũng có thể xóa, có Hoàn tác.",
   "Review and submit": "Duyệt và nộp",
   "Review compares each bay with the pasted SIM report: what to add, what to delete.": "Duyệt so sánh từng vị trí kho với báo cáo SIM đã dán: cần thêm gì, cần xóa gì.",
@@ -260,7 +259,6 @@ export default {
   "Team message and today’s briefing": "Tin nhắn nhóm và thông báo hôm nay",
   "Managers publish a message and the day’s briefing for every device in the store. It shows in the strip at the top until you have read it.": "Quản lý đăng tin nhắn và thông báo trong ngày cho mọi thiết bị trong cửa hàng. Tin hiện ở thanh trên cùng cho đến khi bạn đọc.",
   "Stricter backfill scanning": "Quét bổ sung hàng chặt chẽ hơn",
-  "Keycodes are 7 or 8 digits and item barcodes must read cleanly, as K2B checked them. Two codes one digit apart are flagged; any code can be removed, with Undo.": "Keycode có 7 hoặc 8 chữ số và mã vạch sản phẩm phải đọc rõ, như K2B từng kiểm tra. Hai mã chỉ khác nhau một chữ số sẽ bị gắn cờ; mã nào cũng có thể xóa, có Hoàn tác.",
   "Bays open on another desk": "Vị trí kho đang mở trên máy tính khác",
   "A bay being reviewed elsewhere shows a banner with Take over. A desk that walks away lets go after 20 minutes.": "Vị trí kho đang được duyệt ở nơi khác sẽ hiện biểu ngữ với nút Tiếp quản. Máy tính bị bỏ đi sẽ nhả vị trí sau 20 phút.",
   "The decant plan on the Team Board": "Kế hoạch dỡ hàng trên Bảng nhóm",
@@ -320,4 +318,6 @@ export default {
   "Open Help": "Mở Trợ giúp",
   "Clear from this device": "Xóa khỏi thiết bị này",
   "Stay signed in": "Vẫn đăng nhập",
+  "A keycode is 7 to 9 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.": "Keycode có từ 7 đến 9 chữ số; mã vạch sản phẩm 13 chữ số phải đọc rõ. Hai mã chỉ khác nhau một chữ số sẽ bị gắn cờ: giữ lại mã của hàng trên kệ.",
+  "Keycodes are 7 to 9 digits and item barcodes must read cleanly, as K2B checked them. Two codes one digit apart are flagged; any code can be removed, with Undo.": "Keycode có từ 7 đến 9 chữ số và mã vạch sản phẩm phải đọc rõ, như K2B từng kiểm tra. Hai mã chỉ khác nhau một chữ số sẽ bị gắn cờ; mã nào cũng có thể xóa, có Hoàn tác.",
 };

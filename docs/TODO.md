@@ -1,4 +1,4 @@
-# What's left (kept 2026-10-08, updated 2026-10-09)
+# What's left (kept 2026-10-08, updated 2026-11-06)
 
 Done so far: every P0 and P1 list, the Back dock, Stockroom and Floor P2
 lists (the languages and the `P` suffix since 22 October), the manifest upload
@@ -15,6 +15,49 @@ brackets below).
 **19 October audit (`docs/AUDIT-2026-10-19.md`):** 54 findings (1 critical, 11 high) plus a suggested order: fix first, next, later. The fix-first group is done (its status table says what is left: T1 needs Netlify's auto publishing locked and two secrets). Next and later wait on the owner.
 
 **Map editor (`editor/`, `docs/MAP-EDITOR-AUDIT-2026-10.md`):** brought into Conduit and connected (decision 2 settled); the audit's status note lists what is fixed. Left: the scale (decision 33).
+
+## Built 2026-11-06
+
+- **One pop-up, everywhere** (PR #86): every pop-up is the shared sheet in
+  `js/sheet.js` (header with ×, a body that scrolls, actions on the right,
+  main one last); a dialog, a side sheet or a wide dialog on the PC, a bottom
+  sheet on the phone; Esc, a click outside, the Tab trap and focus return
+  handled once for all. The camera screens stay full-screen with the same ×.
+- **Confirm sheet, first pass** (PR #87): the 29 questions before a removal,
+  reset, delete, clear or sign-out ask in the app (`ask()`), with the action
+  named and in red, and focus on Keep it.
+- **Dock grid lines** (PR #87): every line drawn whatever the dock's width
+  (an 8-wide dock lost lines A7|A8, B6|B7, C5|C6, D4|D5 and the bottom row).
+- **Phone Receive tab** (PR #88): only managers attach or change a manifest
+  on a phone; no decant start and no decant part on a pallet in Receive;
+  Team & plan only in Decant, whose decant start tile now sets it.
+- **9-digit keycodes** (new products since late 2026, e.g. 110148905): one
+  rule in `shared/keycode.js` (6 to 9 digits; a scan takes 7 to 9), used by
+  the reducers (recalls, cage and live pull links, SOH ticks), the SIM and
+  SOH report parsers, backfill scanning and disputes, screen scan, the live
+  PDT reader, search, the product card and pop-up, Adjust, Recalls,
+  off-site pallets and the worker's lookups. At the back dock 9 digits is
+  still a pallet label; search finds both.
+
+## On hold or waiting on you (2026-11-06)
+
+- **Confirm sheet, second pass** (on hold): the other `confirm()` questions
+  (end a stocktake, close a recall, flip to live, apply suggestions, submit
+  bays, a location mismatch…) and the 16 `prompt()` boxes (maintenance notes
+  and the contractor visit as one sheet, cage park/retag/zone, the SOH flag,
+  decline reasons, the emergency docket and interval).
+- **The phone's New truck sheet:** keep its Decant start time box, or take
+  it off like Receive's?
+- **The Planner's week design** (boards F and F.2), **the live reader's
+  option 6** (read both ways at once, a Settings trial, off by default) and
+  **feedback on the ideas canvas** (dialogs, lists, calm screens, the More
+  sheet, the outbox, gaps, handover, roster, weekly, photos, Tasks).
+- **Still to do from the review board:** one empty state and one page
+  header everywhere; one chip and badge family, a type scale and inline
+  styles to classes; a dark-mode pass, compact density, rail counts and a
+  print header and footer; and the features (Resources all pages, live pull
+  notify, shrink trend, Ctrl K recents, device health, an alerts bell,
+  compare stores, practice mode, a Tasks area).
 
 ## Built 2026-10-09 (the defaults taken)
 

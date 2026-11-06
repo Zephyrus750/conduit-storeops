@@ -2,7 +2,7 @@
 // the parts with no camera and no screen, shared with the tests. The camera,
 // Tesseract and the overlay are js/livescan.js.
 //
-//   codesIn(words, text)   8-digit keycodes in one OCR pass, each with its box
+//   codesIn(words, text)   8- and 9-digit keycodes in one OCR pass, each with its box
 //   preprocess(px, w, h, banded)   K2B's adaptive contrast; returns the mean luma
 //   regulars(scans, { today })   the bay's regular codes from its past scans
 //   decide({ code, reads, verdict, have, expected, regular, seen })   'already' | 'add' | 'wait' | 'hold'
@@ -27,26 +27,32 @@
 import { addDays } from './time.js';
 
 // Words from Tesseract (text, bbox {x0,y0,x1,y1}, confidence) and the page
-// text; 8-digit codes found three ways, as K2B: a word that is the code, two
-// or three words on one line that split it, and a run of 8 in a line.
+// text; 8- and 9-digit codes (9 since late 2026) found three ways, as K2B:
+// a word that is the code, two or three words on one line that split it,
+// and a run of 8 or 9 in a line.
 export function codesIn(words = [], text = '') {
-  const found = new Map();
-  for (const w of words) {
-    const d = String(w.text || '').replace(/\D/g, '');
-    if (d.length === 8 && (w.confidence ?? 100) > 60 && d.length === String(w.text || '').replace(/\s/g, '').length && !found.has(d)) found.set(d, w.bbox || null);
+  const found = new Map(), dig = w => String(w?.text || '').replace(/\D/g, '');
+  // An 8-digit word with one more digit right beside it is the start of a 9-digit code, not a code.
+  const splitNine = i => dig(words[i]).length === 8 && !!words[i + 1] && adjacent(words[i], words[i + 1]) && dig(words[i + 1]).length === 1;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i], d = dig(w);
+    if (splitNine(i)) continue;
+    if ((d.length === 8 || d.length === 9) && (w.confidence ?? 100) > 60 && d.length === String(w.text || '').replace(/\s/g, '').length && !found.has(d)) found.set(d, w.bbox || null);
   }
   for (let i = 0; i < words.length; i++) {
     let joined = String(words[i].text || '').replace(/\D/g, ''), last = i;
     for (let j = i + 1; j < Math.min(i + 3, words.length); j++) {
       if (!adjacent(words[j - 1], words[j])) break;
       joined += String(words[j].text || '').replace(/\D/g, ''); last = j;
-      if (joined.length === 8) { if (!found.has(joined)) found.set(joined, span(words[i].bbox, words[last].bbox)); break; }
-      if (joined.length > 8) break;
+      // 8 digits, unless the next word on the line makes it a 9-digit code.
+      if (joined.length === 8 && j + 1 < Math.min(i + 3, words.length) && adjacent(words[j], words[j + 1]) && String(words[j + 1].text || '').replace(/\D/g, '').length === 1) continue;
+      if (joined.length === 8 || joined.length === 9) { if (!found.has(joined)) found.set(joined, span(words[i].bbox, words[last].bbox)); break; }
+      if (joined.length > 9) break;
     }
   }
   for (const line of String(text || '').split('\n')) {
     for (const run of line.match(/\d+/g) || []) {
-      if (run.length !== 8 || found.has(run)) continue;
+      if ((run.length !== 8 && run.length !== 9) || found.has(run)) continue;
       let box = null;
       for (const w of words) { const d = String(w.text || '').replace(/\D/g, ''); if (d && run.includes(d) && w.bbox) box = span(box, w.bbox); }
       found.set(run, box);

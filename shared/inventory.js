@@ -44,13 +44,13 @@ export function readOffsiteSheets(sheets) {
     for (const r of data.slice(h + 1)) {
       if (!r || !cs(r[C.pid])) continue;
       const raw = cs(r[C.pid]), desc = C.desc >= 0 ? cs(r[C.desc]).slice(0, 200) : '';
-      const products = []; for (const m of desc.matchAll(/(\d{8})\s*[x×*]\s*(\d+)/gi)) products.push({ kc: m[1], q: Number(m[2]) });
-      if (!products.length) for (const m of desc.matchAll(/\b(\d{8})\b/g)) products.push({ kc: m[1], q: 0 });
+      const products = []; for (const m of desc.matchAll(/(\d{8,9})\s*[x×*]\s*(\d+)/gi)) products.push({ kc: m[1], q: Number(m[2]) });
+      if (!products.length) for (const m of desc.matchAll(/\b(\d{8,9})\b/g)) products.push({ kc: m[1], q: 0 });
       const range = /^(\d+)\s*-\s*(\d+)$/.exec(raw), ids = range && +range[2] > +range[1] && +range[2] - +range[1] <= 20 ? Array.from({ length: +range[2] - +range[1] + 1 }, (_, k) => String(+range[1] + k)) : [raw];
       const recVal = C.rec >= 0 ? r[C.rec] : null, recDay = isoDay(recVal) || (recSheet || /^(y|yes|✓|x)$/i.test(cs(recVal)) ? 'yes' : '');   // 'yes': back, day not written
       for (const pid of ids) {
         const key = pid.slice(0, 20); if (seen.has(key)) continue; seen.add(key);
-        rows.push({ pid: key, sent: isoDay(r[C.date]), time: C.time >= 0 ? cs(r[C.time]).slice(0, 8) : '', desc, title: desc.split(/[\n;]/)[0].replace(/(\d{8})\s*[x×*]\s*\d+/gi, '').replace(/^[\s,;·-]+|[\s,;·-]+$/g, '').trim().slice(0, 80), products: products.slice(0, 20), req: C.req >= 0 ? cs(r[C.req]).slice(0, 40) : '', cb: C.cb >= 0 ? isoDay(r[C.cb]) : '', rec: recDay, note: C.note >= 0 ? cs(r[C.note]).slice(0, 200) : '' });
+        rows.push({ pid: key, sent: isoDay(r[C.date]), time: C.time >= 0 ? cs(r[C.time]).slice(0, 8) : '', desc, title: desc.split(/[\n;]/)[0].replace(/(\d{8,9})\s*[x×*]\s*\d+/gi, '').replace(/^[\s,;·-]+|[\s,;·-]+$/g, '').trim().slice(0, 80), products: products.slice(0, 20), req: C.req >= 0 ? cs(r[C.req]).slice(0, 40) : '', cb: C.cb >= 0 ? isoDay(r[C.cb]) : '', rec: recDay, note: C.note >= 0 ? cs(r[C.note]).slice(0, 200) : '' });
         if (rows.length >= OFFSITE_CAP) return { rows, diag: `kept the first ${OFFSITE_CAP} pallets` };
       }
     }

@@ -23,7 +23,7 @@ const FAILED = /render|refused|Browser Rendering|Abort|Timeout/i;
 
 export async function searchBarcode(ctx, gtin, onNames) {
   const b = await ctx.api(`/v1/catalogue/barcode?code=${encodeURIComponent(gtin)}`, { timeoutMs: SEARCH_WAIT_MS }).catch(() => null);
-  const list = (b?.candidates || []).filter(c => /^\d{6,8}$/.test(c.kc)).map(c => ({ kc: c.kc, name: c.name || '', img: '' }));
+  const list = (b?.candidates || []).filter(c => /^\d{6,9}$/.test(c.kc)).map(c => ({ kc: c.kc, name: c.name || '', img: '' }));
   if (b?.sure && list.length === 1) return { kc: list[0].kc };
   if (list.length) {
     for (const c of list) ctx.catalogue.lookup(c.kc).then(it => { if (it) { Object.assign(c, { name: it.name || c.name, img: it.img || '' }); onNames?.(); } }).catch(() => {});

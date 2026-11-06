@@ -214,7 +214,7 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
   }
   function barcode(raw) {
     const d = String(raw || '').replace(/\D/g, '');
-    if (!(d.length === 7 || d.length === 8 || (d.length === 13 && ean13(d)))) return;
+    if (!((d.length >= 7 && d.length <= 9) || (d.length === 13 && ean13(d)))) return;
     if (mode === 'pdt') flashMode(); consider(d, null, 'barcode');
   }
   // A barcode read while on the PDT's list lights the Barcode side of the switch for a moment.

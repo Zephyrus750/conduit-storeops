@@ -5,7 +5,6 @@ export default {
   "A check fails?": "Un controllo non è superato?",
   "A code one digit off another is flagged.": "Un codice che differisce da un altro di una cifra viene segnalato.",
   "A contractor came?": "È venuto un tecnico?",
-  "A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly.": "Un keycode ha 7 o 8 cifre; un codice a barre articolo di 13 cifre deve essere letto bene.",
   "A leak, a light out, a broken door: pin it on the map with a photo.": "Una perdita, una luce fulminata, una porta rotta: segnalo sulla mappa con una foto.",
   "A manager reassigns shelves from a PC.": "Un responsabile riassegna gli scaffali da un PC.",
   "A manager removes it and picks why.": "Un responsabile lo rimuove e sceglie il motivo.",
@@ -424,4 +423,5 @@ export default {
   "Switch it to Barcode to scan one item at a time.": "Passa a Codice a barre per scansionare un articolo alla volta.",
   "The location goes to Backfill review on the PC, where it is compared with the morning report.": "L’ubicazione passa alla verifica del rifornimento sul PC, dove viene confrontata con il report del mattino.",
   "Waiting to be reviewed": "In attesa di verifica",
+  "A keycode is 7 to 9 digits; a 13-digit item barcode must read cleanly.": "Un keycode ha da 7 a 9 cifre; un codice a barre articolo di 13 cifre deve essere letto bene.",
 };

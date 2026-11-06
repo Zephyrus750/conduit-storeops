@@ -66,6 +66,9 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
 - Reducer conflict rules live in the reducers test and the design doc:
   first `at` wins on refresh marks, `bay_occupied` on a second land, second
   `pallet.done` is a no-op, reopen beats a stale submit.
+- A keycode is `shared/keycode.js` (`isKeycode`: 6 to 9 digits; a scan takes
+  7 to 9; 13 is an item barcode). Never write a digit count of your own. At
+  the back dock 9 digits or more is a pallet label (its last nine).
 - Adding an event type: catalogue entry (area, roles, entity keys, payload
   shape) + reducer + unit test. Adding a route: handler + contract test +
   README table row.

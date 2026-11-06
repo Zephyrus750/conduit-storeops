@@ -19,7 +19,7 @@ test('codesIn: a word that is a keycode, a code split in two on one line, and a 
 
 test('codesIn: low confidence, wrong lengths and mixed words are not codes', () => {
   assert.deepEqual(codesIn([w('43307753', 0, 0, 80, 20, 40)], '').map(x => x.code), [], 'a doubtful word');
-  assert.deepEqual(codesIn([w('4330775', 0, 0), w('433077531', 0, 40)], '').map(x => x.code), [], '7 and 9 digits');
+  assert.deepEqual(codesIn([w('4330775', 0, 0), w('4330775310', 0, 40)], '').map(x => x.code), [], '7 and 10 digits');
   assert.deepEqual(codesIn([w('A4330775', 0, 0)], '').map(x => x.code), [], 'letters with the digits');
 });
 

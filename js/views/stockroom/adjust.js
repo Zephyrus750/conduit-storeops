@@ -172,7 +172,7 @@ async function tickOff(ctx, input) {
 // (js/barcodesearch.js) finds it; else the keycode is typed in the scan box.
 // Nothing is linked.
 const barcodeOf = raw => { const v = String(raw || '').trim(); const g = v.replace(/\D/g, '').length >= 12 || v.startsWith('(') ? gs1Parse(v) : null; return g?.gtin || null; };
-const keycodeOf = raw => parseKeycodes(raw).find(k => k.length <= 8) || '';
+const keycodeOf = raw => parseKeycodes(raw).find(k => k.length <= 9) || '';
 function takeCode(ctx, raw, repaint) {
   const g = barcodeOf(raw);
   st.bc = null;

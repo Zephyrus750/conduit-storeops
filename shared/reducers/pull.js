@@ -29,6 +29,7 @@
 
 import { reject } from './util.js';
 import { gs1Parse } from '../gs1.js';
+import { isKeycode } from '../keycode.js';
 
 export const PULL_STATES = ['todo', 'pulled', 'short', 'gone', 'cancelled'];
 export const KEEP_PULL_DAYS = 7, SESSION_CAP = 80, LINE_CAP = 600, BAYS_MAX = 12, QTY_MAX = 999, APN_CAP = 3000;
@@ -175,7 +176,7 @@ export const pullReducers = {
   'pull.pair'(s, e) {
     const g = gs1Parse(e.entity.apn), kc = String(e.payload.keycode || '');
     if (!g?.gtin) return reject('invalid_event', 'that is not a valid item barcode (UPC-A, EAN-13 or GTIN-14)');
-    if (!/^\d{6,8}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 8 digits');
+    if (!isKeycode(kc)) return reject('invalid_event', 'keycode must be 6 to 9 digits');
     const all = (s.pulls.apn ||= {});
     if (all[g.gtin]?.kc === kc) return reject('unchanged', `${g.gtin} already finds ${kc}`);
     if (!all[g.gtin] && Object.keys(all).length >= APN_CAP) { const old = Object.entries(all).sort((x, y) => String(x[1].at).localeCompare(String(y[1].at)))[0]; delete all[old[0]]; }

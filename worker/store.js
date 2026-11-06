@@ -645,7 +645,7 @@ export class StoreObject extends DurableObject {
       const a = this.state.apnPairs?.[gtin], b = this.state.pulls?.apn?.[gtin], p = a && b ? (String(b.at) > String(a.at) ? b : a) : a || b;
       if (p) { kc = p.kc; via = 'paired'; }
     }
-    else if (/^\d{6,8}$/.test(digits)) { kc = digits; via = 'keycode'; }
+    else if (/^\d{6,9}$/.test(digits)) { kc = digits; via = 'keycode'; }
     const prof = kc ? this.profiles() : null;
     return json({
       code: digits || raw, gtin, kc, via,
@@ -718,7 +718,7 @@ export class StoreObject extends DurableObject {
     const rows = [];
     for (const r of body.rows) {
       const kc = String(r?.kc || ''), loc = String(r?.loc || ''), soh = Number(r?.soh);
-      if (!/^\d{6,8}$/.test(kc) || !/^\d{1,5}$/.test(loc) || !Number.isFinite(soh)) throw new HttpError(400, 'invalid_request', `row ${rows.length + 1}: keycode, location and SOH are needed`);
+      if (!/^\d{6,9}$/.test(kc) || !/^\d{1,5}$/.test(loc) || !Number.isFinite(soh)) throw new HttpError(400, 'invalid_request', `row ${rows.length + 1}: keycode, location and SOH are needed`);
       rows.push({ kc, loc, soh: Math.round(soh), ...(Number.isFinite(Number(r.price)) && r.price !== null ? { price: Number(r.price) } : {}), ...(r.name ? { name: String(r.name).slice(0, 80) } : {}) });
     }
     // An update (merge) replaces only the bays this paste covers in the
