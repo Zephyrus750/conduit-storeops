@@ -18,6 +18,6 @@ export default {
     root.addEventListener('click', e => { if (e.target.closest('[data-act="tour"]')) openTour(); else if (e.target.closest('[data-act="whatsnew"]')) openWhatsNew(ctx.go); });
     if (ctx.arg?.tour) openTour();
     const host = root.querySelector('.vg-host');
-    return host ? [mountGuide(host, { storeNo: ctx.storeNo, storeName: ctx.storeName, arg: ctx.arg })] : [];
+    return host ? [mountGuide(host, { storeNo: ctx.storeNo, storeName: ctx.storeName, arg: ctx.arg, mobile: ctx.isMobile })] : [];
   },
 };
