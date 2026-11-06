@@ -237,7 +237,10 @@ export async function probe(env, kc, fetchImpl = fetch) {
       out.legacy = !r.ok ? { ok: false, ms, why: `answered ${r.status}` } : d?.found ? { ok: true, ms, ...fields(d) } : { ok: false, ms, why: d?.error || 'no price or picture' };
     } catch (e) { out.legacy = { ok: false, ms: Date.now() - t, why: String(e?.message || e).slice(0, 120) }; }
   } else out.legacy = { ok: false, why: 'not configured (DETAILS_URL)' };
-  const img = out.browser?.img || out.legacy?.img;
+  // With no picture from a page read, the kept one (a sitemap's, or an
+  // earlier read's) is the one tested.
+  if (!out.browser?.img && !out.legacy?.img) out.kept = (await keptPictures(env, [kc]))[kc] || null;
+  const img = out.browser?.img || out.legacy?.img || out.kept;
   if (img) {
     try { const r = await timed(fetchImpl(img, { headers: { Accept: 'image/*' } }), 15_000); out.image = { ok: r.ok && /^image\//.test(r.headers.get('content-type') || ''), url: img, status: r.status, type: r.headers.get('content-type') || '' }; }
     catch (e) { out.image = { ok: false, url: img, why: String(e?.message || e).slice(0, 120) }; }

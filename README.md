@@ -214,6 +214,13 @@ price). Beyond the tags, the reader takes any picture whose file name
 carries the keycode, from the rendered images or the page's data, and an
 `itemprop="price"` or `product:price:amount` price.
 
+Kmart's product pages now answer automated browsers with a Kasada
+bot-check page, so page reads find nothing; Conduit does not try to get
+past it. Pictures come from the product sitemaps instead when they name
+them (Google's `<image:loc>` inside a product's `<url>`): the weekly read
+keeps each product's first picture, the last build records how many, and
+the picture check tests the kept picture when the page reads fail.
+
 The same rendering answers a barcode with its keycode (`worker/apnlookup.js`):
 Kmart's site search finds a product by its barcode, so a clearance ticket or
 shelf talker, which carries the item's own barcode, needs no keycode typed.

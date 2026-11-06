@@ -59,7 +59,7 @@ before(async () => {
       if (u.hostname === 'sitemap.test') {
         const files = { '/sitemap/au/product-sitemap.xml': '<sitemapindex><sitemap><loc>https://sitemap.test/sitemap/au/product-sitemap-a.xml</loc></sitemap><sitemap><loc>https://sitemap.test/sitemap/au/product-sitemap-b.xml</loc></sitemap></sitemapindex>',
           '/sitemap/au/product-sitemap-a.xml': '<urlset><url><loc>https://www.kmart.com.au/product/12-pk-diecast-vehicles-42977636/</loc></url><url><loc>https://www.kmart.com.au/product/paper-plates-20-pk-43302210/</loc></url></urlset>',
-          '/sitemap/au/product-sitemap-b.xml': '<urlset><url><loc>https://www.kmart.com.au/product/memory-foam-bath-mat-110012345/</loc></url></urlset>' };
+          '/sitemap/au/product-sitemap-b.xml': '<urlset xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"><url><loc>https://www.kmart.com.au/product/memory-foam-bath-mat-110012345/</loc><image:image><image:loc>https://assets.kmart.test/images/110012345-1.jpg?w=800&amp;q=80</image:loc></image:image></url></urlset>' };
         sitemapReads += 1;
         return files[u.pathname] ? new Response(files[u.pathname], { headers: { 'Content-Type': 'application/xml' } }) : new Response('not found', { status: 404 });
       }
@@ -846,6 +846,8 @@ test('catalogue: the owner builds it from the sitemaps; lookups and near-misses 
   // 110012345 is unknown to the legacy lookup worker: the name proves it came from Conduit.
   const got = await api('GET', '/v1/catalogue?kc=110012345&fields=link');
   assert.equal(got.body.items['110012345'].name, 'Memory Foam Bath Mat'); assert.match(got.body.items['110012345'].url, /memory-foam-bath-mat-110012345/);
+  assert.equal(got.body.items['110012345'].img, 'https://assets.kmart.test/images/110012345-1.jpg?w=800&q=80', "the sitemap's picture, with no product page read");
+  assert.equal(st.lastbuild.pictures, 1);
   const near = await api('GET', '/v1/catalogue/nearmiss?kc=110012346');
   assert.equal(near.status, 200); assert.deepEqual(near.body.matches.map(m => [m.keycode, m.position]), [['110012345', 8]]);
   assert.equal((await api('GET', '/v1/catalogue/nearmiss?kc=12')).status, 400);

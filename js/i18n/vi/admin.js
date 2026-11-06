@@ -618,4 +618,6 @@ export default {
   "{title} is waiting again": "{title} lại đang chờ",
   "{title} marked added": "Đã đánh dấu đã thêm {title}",
   "Pictures kept": "Ảnh đã lưu",
+  "Kept picture": "Ảnh đã lưu",
+  "from the sitemap or an earlier read": "từ sitemap hoặc lần đọc trước",
 };

@@ -618,4 +618,6 @@ export default {
   "{title} is waiting again": "Naghihintay ulit ang {title}",
   "{title} marked added": "Namarkahang naidagdag ang {title}",
   "Pictures kept": "Mga larawang naitabi",
+  "Kept picture": "Naitabing larawan",
+  "from the sitemap or an earlier read": "mula sa sitemap o sa naunang pagbasa",
 };

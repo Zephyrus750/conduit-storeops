@@ -16,6 +16,21 @@ export function productsFromSitemap(xml) {
   return out;
 }
 
+// Pictures a product sitemap names (Google's image extension: an
+// <image:image><image:loc> inside a product's <url>): keycode → the first
+// picture's address. A sitemap without them gives {}.
+export function picturesFromSitemap(xml) {
+  const out = {};
+  for (const m of String(xml).matchAll(/<url>([\s\S]*?)<\/url>/gi)) {
+    const block = m[1], k = block.match(/<loc>\s*(?:<!\[CDATA\[)?\s*[^<\s]*\/product\/[^<\s]*?-(\d{6,13})\/?\s*(?:\]\]>)?\s*<\/loc>/i);
+    const img = block.match(/<image:loc>\s*(?:<!\[CDATA\[)?\s*([^<\s\]]+)\s*(?:\]\]>)?\s*<\/image:loc>/i);
+    if (!k || !img) continue;
+    const u = img[1].replace(/&amp;/g, '&');
+    if (/^https:\/\/[^\s"'<>]+$/.test(u) && u.length <= 600 && !out[k[1]]) out[k[1]] = u;
+  }
+  return out;
+}
+
 // What a sitemap index lists: product sitemap files, or the base file is a
 // product urlset itself, or neither.
 export function readSitemapIndex(xml) {
