@@ -13,6 +13,10 @@
 //   useResource(api, e, how)              how: 'open' | 'print' | 'get' (open: a tab for a PDF or a
 //                                         picture, else a download; a link opens in a tab).
 //                                         Call it from the click: the tab opens before the file arrives.
+//   thumbUrl(api, e, then, base)          the picture of its page (made in the console) as an object URL;
+//                                         null while it loads (then() runs when it lands) or when it has
+//                                         none or it failed: the page shows the kind's cover. base is the
+//                                         route ('/v1/resources', or the console's '/v1/admin/resources').
 
 import { toast } from './ui.js';
 import { tx } from './i18n.js';
@@ -67,3 +71,17 @@ export async function useResource(api, e, how = 'open') {
     else saveAs(blob, e.file.name);
   } catch (err) { w?.close(); toast(tx('{name} did not open: {error}', { name: e.title, error: err.message }), 'bad'); }
 }
+
+// Pictures of documents: each fetched once with the session's token (its
+// time is in the address, so a new picture is a new fetch and the browser
+// may keep the old one), kept as an object URL while the app is open.
+const pics = new Map();   // `${id}@${at}` → url | false (failed) | Promise
+export function thumbUrl(api, e, then, base = '/v1/resources') {
+  if (!e?.thumb) return null;
+  const k = `${e.id}@${e.thumb.at}`, got = pics.get(k);
+  if (typeof got === 'string') return got;
+  if (got === undefined) pics.set(k, api(`${base}/${encodeURIComponent(e.id)}/thumb?v=${encodeURIComponent(e.thumb.at)}`, { blob: true, timeoutMs: 60_000 })
+    .then(b => { pics.set(k, URL.createObjectURL(new Blob([b], { type: e.thumb.type }))); then?.(); }, () => { pics.set(k, false); then?.(); }));
+  return null;
+}
+export const thumbFailed = e => !!e?.thumb && pics.get(`${e.id}@${e.thumb.at}`) === false;

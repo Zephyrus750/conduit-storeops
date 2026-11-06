@@ -917,4 +917,13 @@ export default {
   "of {n}": "sa {n}",
   "{n} session": "{n} session",
   "{n} sessions": "{n} na session",
+  "Esc to close": "Esc para isara",
+  "Open full size": "Buksan sa buong laki",
+  "Pages": "Mga pahina",
+  "Preview {title}": "Silipin ang {title}",
+  "Shown": "Ipinapakita",
+  "page {n}": "pahina {n}",
+  "{n} page": "{n} pahina",
+  "{n} pages": "{n} pahina",
+  "← → for the next resource · Esc to close": "← → para sa susunod na resource · Esc para isara",
 };

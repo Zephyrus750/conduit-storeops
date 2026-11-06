@@ -664,9 +664,30 @@ test('resources: the owner adds files and links for every store or some; manager
   assert.equal(new TextDecoder().decode(await f.arrayBuffer()), '%PDF-1.4 checklist');
   assert.match((await send('GET', `/v1/resources/${all.body.id}/file?download=1`, m31)).headers.get('content-disposition'), /^attachment/);
   assert.equal((await send('GET', `/v1/resources/${one.id}/file`, m32)).status, 404, 'listed for another store');
-  // A new file replaces the old; an edit moves an entry between stores.
-  await send('POST', `/v1/admin/resources/${all.body.id}/file?name=Opening%20checklist%20v2.pdf`, ownerToken, new TextEncoder().encode('%PDF-1.4 v2'), 'application/pdf');
+  // The picture of the document the stores see: made in the console, kept beside the file.
+  const jpg = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3]), pic = (id, q, token = ownerToken, body = jpg, type = 'image/jpeg') => send('POST', `/v1/admin/resources/${id}/thumb?${q}`, token, body, type);
+  assert.equal((await pic(link.id, 'from=picture&w=800&h=600')).status, 409, 'a link has no file to show');
+  assert.equal((await pic(all.body.id, 'from=page&w=800&h=1131')).status, 400, 'a page picture names its page');
+  assert.equal((await pic(all.body.id, 'from=page&page=1&w=800&h=1131', ownerToken, new Uint8Array([60, 104]), 'text/html')).status, 415);
+  assert.equal((await pic(all.body.id, 'from=page&page=1&w=800&h=1131', m31)).status, 403, 'only the owner makes them');
+  const th = await pic(all.body.id, 'from=page&page=2&w=800&h=1131&pages=2');
+  assert.equal(th.status, 201); const thb = await th.json();
+  assert.equal(thb.thumb.from, 'page'); assert.equal(thb.thumb.page, 2); assert.equal(thb.thumb.w, 800); assert.equal(thb.file.pages, 2, 'the console tells the page count');
+  const tg = await send('GET', `/v1/resources/${all.body.id}/thumb`, m31);
+  assert.equal(tg.status, 200); assert.equal(tg.headers.get('content-type'), 'image/jpeg'); assert.match(tg.headers.get('cache-control'), /immutable/);
+  assert.deepEqual([...new Uint8Array(await tg.arrayBuffer())], [...jpg]);
+  assert.equal((await send('GET', `/v1/resources/${one.id}/thumb`, m31)).status, 404, 'no picture yet: the store shows the kind’s cover');
+  assert.equal((await send('GET', `/v1/resources/${all.body.id}/thumb`, floor)).status, 403);
+  assert.equal((await pic(one.id, 'from=file&w=640&h=480')).status, 201);
+  assert.equal((await send('GET', `/v1/resources/${one.id}/thumb`, m32)).status, 404, 'listed for another store');
+  const kept = await api('DELETE', `/v1/admin/resources/${one.id}/thumb`, undefined, ownerToken);
+  assert.equal(kept.status, 200); assert.equal(kept.body.thumb, null, 'Keep the cover');
+  assert.equal((await send('GET', `/v1/resources/${one.id}/thumb`, m31)).status, 404);
+  // A new file replaces the old, and drops the old file's picture; an edit moves an entry between stores.
+  const v2 = await send('POST', `/v1/admin/resources/${all.body.id}/file?name=Opening%20checklist%20v2.pdf&pages=3`, ownerToken, new TextEncoder().encode('%PDF-1.4 v2'), 'application/pdf');
+  const v2b = await v2.json(); assert.equal(v2b.file.pages, 3); assert.equal(v2b.thumb, null);
   assert.equal(new TextDecoder().decode(await (await send('GET', `/v1/admin/resources/${all.body.id}/file`, ownerToken)).arrayBuffer()), '%PDF-1.4 v2');
+  assert.equal((await send('GET', `/v1/admin/resources/${all.body.id}/thumb`, ownerToken)).status, 404);
   const ed = await api('PATCH', `/v1/admin/resources/${one.id}`, { stores: ['2132'], note: 'print A3' }, ownerToken);
   assert.equal(ed.status, 200); assert.deepEqual(ed.body.stores, ['2132']); assert.equal(ed.body.note, 'print A3'); assert.equal(ed.body.title, 'Evacuation plan');
   assert.ok((await api('GET', '/v1/resources', undefined, m32)).body.resources.some(r => r.id === one.id));
@@ -678,7 +699,7 @@ test('resources: the owner adds files and links for every store or some; manager
   assert.equal((await send('GET', `/v1/admin/resources/${all.body.id}/file`, ownerToken)).status, 404);
   assert.deepEqual((await api('GET', '/v1/admin/resources', undefined, ownerToken)).body.resources.map(r => r.id).sort(), [link.id, one.id].sort());
   const acts = (await api('GET', '/v1/admin/actions', undefined, ownerToken)).body.actions.map(a => a.type);
-  for (const t of ['resource.add', 'resource.file', 'resource.edit', 'resource.remove']) assert.ok(acts.includes(t), t);
+  for (const t of ['resource.add', 'resource.file', 'resource.picture', 'resource.edit', 'resource.remove']) assert.ok(acts.includes(t), t);
 });
 
 test('resource requests: managers ask for a missing document; the owner sees every store’s and answers', async () => {

@@ -917,4 +917,13 @@ export default {
   "of {n}": "de {n}",
   "{n} session": "{n} sesión",
   "{n} sessions": "{n} sesiones",
+  "Esc to close": "Esc para cerrar",
+  "Open full size": "Abrir a tamaño completo",
+  "Pages": "Páginas",
+  "Preview {title}": "Vista previa de {title}",
+  "Shown": "Se muestra",
+  "page {n}": "página {n}",
+  "{n} page": "{n} página",
+  "{n} pages": "{n} páginas",
+  "← → for the next resource · Esc to close": "← → para el siguiente recurso · Esc para cerrar",
 };

@@ -7,13 +7,17 @@
 // Missing something? Request a document: the owner sees the store's
 // requests in the console and answers each (added, or declined with a
 // word why); the answers show here.
+// Each document is a card, three across on a 1080p PC: the picture of its
+// page beside what it is and Open, Print, Download (the console makes the
+// picture when the file is added; Word, Excel and links show their kind's
+// cover). The page opens a big preview: ← → for the next one, Esc to close.
 
 import { ic, esc, vh, sub, toast, fmtDate } from '../ui.js';
 import { tx, txn } from '../i18n.js';
 import { fileKind, matches } from '../../shared/resources.js';
-import { loadResources, cachedResources, resourceError, mostUsed, useResource } from '../resourcelib.js';
+import { loadResources, cachedResources, resourceError, mostUsed, useResource, thumbUrl, thumbFailed } from '../resourcelib.js';
 
-const st = { q: '', cat: 'all', ask: null, sending: false, reqs: {}, reqErr: {} };
+const st = { q: '', cat: 'all', ask: null, sending: false, reqs: {}, reqErr: {}, view: null };   // view: the id in the big preview
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const kb = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
 const catName = c => c || tx('Other');
@@ -40,35 +44,89 @@ function asked(ctx, list) {
   }).join('') + `</div>`;
 }
 
-function row(e) {
-  const k = kindOf(e), facts = e.file ? [esc(e.file.name), kb(e.file.size)] : [esc(e.link.replace(/^https:\/\//, '').slice(0, 60))];
-  facts.push(tx('updated {date}', { date: esc(fmtDate(e.updated)) }));
-  // A PDF or a picture opens and prints here; Word, Excel and the rest download to open in their app.
-  const acts = e.file && k?.inline
-    ? `<button class="btn sm primary" data-act="rs-open" data-id="${esc(e.id)}">${ic('ext')}${tx('Open')}</button><button class="btn sm" data-act="rs-print" data-id="${esc(e.id)}">${ic('print')}${tx('Print')}</button><button class="btn sm rs-dl" data-act="rs-get" data-id="${esc(e.id)}" title="${tx('Download')}" aria-label="${tx('Download {name}', { name: esc(e.file.name) })}">${ic('arrow')}</button>`
-    : e.file ? `<button class="btn sm primary rs-dl" data-act="rs-get" data-id="${esc(e.id)}">${ic('arrow')}${tx('Download')}</button>`
-    : `<a class="btn sm primary" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer" data-act="rs-link" data-id="${esc(e.id)}">${ic('ext')}${tx('Open link')}</a>`;
-  return `<div class="rs-row">${badge(e)}<span class="rs-main"><b>${esc(e.title)}</b>${e.note ? `<span class="rs-note">${esc(e.note)}</span>` : ''}<small>${facts.join(' · ')}</small></span><span class="rs-acts">${acts}</span></div>`;
+const host = link => { try { return new URL(link).host.replace(/^www\./, ''); } catch { return String(link || '').slice(0, 40); } };
+const pagesOf = e => e.file?.pages ? txn(e.file.pages, '{n} page', '{n} pages') : '';
+// What a document is, in one line: pages, size, when it changed (a link: its site).
+const facts = e => [e.file ? pagesOf(e) : esc(host(e.link)), e.file ? kb(e.file.size) : '', tx('updated {date}', { date: esc(fmtDate(e.updated)) })].filter(Boolean).join(' · ');
+// A kind with no picture of its page (Word, Excel, a link, or a PDF the
+// console has not made one for yet): a cover with its letter and its title.
+const COVER = { PDF: 'PDF', Word: 'W', Excel: 'X', PowerPoint: 'P', CSV: 'CSV', Text: 'TXT', Picture: '' };
+function cover(e) {
+  const k = kindOf(e);
+  if (!e.file) return `<span class="rs-cover link"><i>${ic('ext')}</i><b>${esc(e.title)}</b><small>${esc(host(e.link))}</small></span>`;
+  return `<span class="rs-cover ${esc(k?.ext || '')}"><i>${esc(COVER[k?.label] ?? '')}${k?.label === 'Picture' ? ic('image') : ''}</i><b>${esc(e.title)}</b><small>${esc(KIND_LABEL[k?.label] || k?.label || '')}${e.file.pages ? ' · ' + pagesOf(e) : ''}</small></span>`;
+}
+// The page: its picture when there is one (a blank sheet while it loads), else the cover.
+function sheet(ctx, e) {
+  if (!e.thumb) return cover(e);
+  const src = thumbUrl(ctx.api, e, () => landed(ctx, e));
+  return src ? `<img src="${src}" alt="" width="${e.thumb.w}" height="${e.thumb.h}" draggable="false">` : thumbFailed(e) ? cover(e) : `<span class="rs-blank" data-pic="${esc(e.id)}" aria-hidden="true"></span>`;
+}
+// A picture landed: it takes its blank sheet's place (no redraw of the page).
+function landed(ctx, e) { for (const el of document.querySelectorAll(`.rs-blank[data-pic="${CSS.escape(e.id)}"]`)) el.outerHTML = sheet(ctx, e); }
+
+// A PDF or a picture opens and prints here; Word, Excel and the rest download to open in their app.
+function acts(e, big = false) {
+  const k = kindOf(e), id = esc(e.id), sz = big ? '' : ' sm';
+  if (e.file && k?.inline) return big
+    ? `<button class="btn primary" data-act="rs-print" data-id="${id}">${ic('print')}${tx('Print')}</button><div class="rs-pv-two"><button class="btn" data-act="rs-open" data-id="${id}">${ic('ext')}${tx('Open full size')}</button><button class="btn" data-act="rs-get" data-id="${id}">${ic('download')}${tx('Download')}</button></div>`
+    : `<button class="btn${sz} primary" data-act="rs-open" data-id="${id}">${tx('Open')}</button><button class="btn${sz}" data-act="rs-print" data-id="${id}">${tx('Print')}</button><button class="btn${sz}" data-act="rs-get" data-id="${id}" aria-label="${tx('Download {name}', { name: esc(e.file.name) })}">${tx('Download')}</button>`;
+  if (e.file) return `<button class="btn${sz} primary" data-act="rs-get" data-id="${id}">${big ? ic('download') : ''}${tx('Download')}</button>`;
+  return `<a class="btn${sz} primary" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer" data-act="rs-link" data-id="${id}">${big ? ic('ext') : ''}${tx('Open link')}</a>`;
+}
+
+function card(ctx, e) {
+  return `<article class="rs-card"><button class="rs-pg${e.thumb && e.thumb.w > e.thumb.h * 1.1 ? ' wide' : ''}" data-act="rs-view" data-id="${esc(e.id)}" aria-label="${tx('Preview {title}', { title: esc(e.title) })}">${sheet(ctx, e)}${badge(e)}</button>` +
+    `<div class="rs-cb"><small class="rs-cat">${esc(catName(e.category))}</small><b class="rs-t">${esc(e.title)}</b>${e.note ? `<span class="rs-note">${esc(e.note)}</span>` : ''}<small class="rs-facts">${facts(e)}</small><div class="rs-acts">${acts(e)}</div></div></article>`;
+}
+
+// The big preview: the page large, what it is beside it, and Print, Open full size, Download.
+function preview(ctx, e, list) {
+  const k = kindOf(e), at = list.indexOf(e), rows = e.file
+    ? [[tx('File'), esc(e.file.name)], e.file.pages ? [tx('Pages'), String(e.file.pages)] : null, [tx('Size'), kb(e.file.size)], [tx('Updated'), esc(fmtDate(e.updated))], e.thumb?.from === 'page' && e.thumb.page > 1 ? [tx('Shown'), tx('page {n}', { n: e.thumb.page })] : null]
+    : [[tx('Link'), esc(host(e.link))], [tx('Updated'), esc(fmtDate(e.updated))]];
+  return `<div class="rs-pv" data-act="rs-pv-x" role="dialog" aria-modal="true" aria-label="${esc(e.title)}"><div class="rs-pv-in">` +
+    `<div class="rs-pv-pg"><div class="rs-pv-sheet${e.thumb ? '' : ' cov'}">${sheet(ctx, e)}</div></div>` +
+    `<aside class="rs-pv-side"><div class="rs-pv-top">${badge(e)}<small>${esc(catName(e.category))}</small><button class="ibtn" data-act="rs-pv-x" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
+    `<h3>${esc(e.title)}</h3>${e.note ? `<p>${esc(e.note)}</p>` : ''}<dl>${rows.filter(Boolean).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` +
+    `<div class="rs-pv-acts">${acts(e, true)}</div>${list.length > 1 ? `<small class="rs-pv-keys">${tx('← → for the next resource · Esc to close')} · ${at + 1}/${list.length}</small>` : `<small class="rs-pv-keys">${tx('Esc to close')}</small>`}</aside></div></div>`;
+}
+
+// The cards as shown: the category and search picked, in category order (as the chips), then by title.
+function ordered(ctx) {
+  const list = cachedResources(ctx.storeNo) || [], cats = [...new Set(list.map(e => e.category || ''))].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
+  const cat = st.cat !== 'all' && !cats.includes(st.cat) ? 'all' : st.cat;
+  const order = list.filter(e => (cat === 'all' || (e.category || '') === cat) && matches(e, st.q)).sort((a, b) => cats.indexOf(a.category || '') - cats.indexOf(b.category || '') || a.title.localeCompare(b.title));
+  return { list, cats, order };
+}
+// The preview opens, moves and closes in place: the list behind it keeps its scroll.
+function showPv(ctx, root, id) {
+  root.querySelector('.rs-pv')?.remove();
+  const { order } = ordered(ctx), e = id && order.find(x => x.id === id);
+  st.view = e ? e.id : null; if (!e) return;
+  root.insertAdjacentHTML('beforeend', preview(ctx, e, order));
+  root.querySelector('.rs-pv .ibtn')?.focus();
 }
 
 function page(ctx) {
-  const got = cachedResources(ctx.storeNo), err = resourceError(ctx.storeNo), list = got || [], cats = [...new Set(list.map(e => e.category || ''))].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
+  const got = cachedResources(ctx.storeNo), err = resourceError(ctx.storeNo), list = got || [], cats = ordered(ctx).cats;
   const head = vh(tx('Resources'), sub(txn(list.length, '{n} resource', '{n} resources'), tx('from the owner, for managers')), `<button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`, 'library') + (st.ask ? askForm() : '');
   if (err && !got) return head + `<div class="card"><p class="lbl">${tx('The resources did not load: {error}', { error: esc(err) })}</p><button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('Try again')}</button></div>`;
   if (!got) return head + `<div class="card"><div class="ohint">${tx('Loading the resources…')}</div></div>`;
   if (!list.length) return head + `<div class="card rs-empty">${ic('library')}<p>${tx('No resources yet. The owner adds forms, procedures and links in the console, under Resources.')}</p>${st.ask ? '' : `<button class="btn primary" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`}</div>` + asked(ctx, list);
   if (st.cat !== 'all' && !cats.includes(st.cat)) st.cat = 'all';
-  const shown = list.filter(e => (st.cat === 'all' || (e.category || '') === st.cat) && matches(e, st.q));
+  const { order } = ordered(ctx);
   const search = `<div class="rs-bar"><div class="search rs-search">${ic('search')}<input data-field="rs-q" value="${esc(st.q)}" placeholder="${tx('Search titles, categories, notes and file names')}" aria-label="${tx('Search the resources')}">${st.q ? `<button class="ibtn" data-act="rs-clear" aria-label="${tx('Clear the search')}">${ic('x')}</button>` : ''}</div>` +
     `<div class="chips rs-cats"><button class="chip${st.cat === 'all' ? ' on' : ''}" data-act="rs-cat" data-cat="all">${tx('All')} <small>${list.length}</small></button>${cats.map(c => `<button class="chip${st.cat === c ? ' on' : ''}" data-act="rs-cat" data-cat="${esc(c)}">${esc(catName(c))} <small>${list.filter(e => (e.category || '') === c).length}</small></button>`).join('')}</div></div>`;
   // Opened most on this PC: a quick way back to the everyday ones.
   const top = !st.q && st.cat === 'all' ? mostUsed(list, 4) : [];
   const fav = top.length ? `<div class="card rs-top"><div class="ch"><h3>${tx('Used most on this PC')}</h3></div><div class="rs-tiles">${top.map(e => `<button class="rs-tile" data-act="rs-open" data-id="${esc(e.id)}">${badge(e)}<span><b>${esc(e.title)}</b><small>${esc(catName(e.category))}</small></span></button>`).join('')}</div></div>` : '';
   let body;
-  if (!shown.length) body = `<div class="card rs-none"><p class="lbl">${st.q ? tx('Nothing matches “{q}”.', { q: esc(st.q) }) : tx('Nothing in this category.')}</p>${st.q && !st.ask ? `<button class="btn" data-act="rs-ask" data-title="${esc(st.q)}">${ic('plus')}${tx('Request “{q}”', { q: esc(st.q) })}</button>` : ''}</div>`;
-  else if (st.cat === 'all' && !st.q) body = cats.map(c => { const xs = shown.filter(e => (e.category || '') === c); return xs.length ? `<div class="card rs-group"><div class="ch"><h3>${esc(catName(c))}</h3><span class="cs-dim">${xs.length}</span></div>${xs.map(row).join('')}</div>` : ''; }).join('');
-  else body = `<div class="card rs-group"><div class="ch"><h3>${st.q ? tx('Results') : esc(catName(st.cat))}</h3><span class="cs-dim">${shown.length}</span></div>${shown.map(row).join('')}</div>`;
-  return head + search + fav + body + asked(ctx, list);
+  if (!order.length) body = `<div class="card rs-none"><p class="lbl">${st.q ? tx('Nothing matches “{q}”.', { q: esc(st.q) }) : tx('Nothing in this category.')}</p>${st.q && !st.ask ? `<button class="btn" data-act="rs-ask" data-title="${esc(st.q)}">${ic('plus')}${tx('Request “{q}”', { q: esc(st.q) })}</button>` : ''}</div>`;
+  else body = (st.q || st.cat !== 'all' ? `<div class="rs-gh"><h3>${st.q ? tx('Results') : esc(catName(st.cat))}</h3><span>${order.length}</span></div>` : '') + `<div class="rs-cards">${order.map(e => card(ctx, e)).join('')}</div>`;
+  const open = st.view && order.find(e => e.id === st.view);
+  if (st.view && !open) st.view = null;
+  return head + search + fav + body + asked(ctx, list) + (open ? preview(ctx, open, order) : '');
 }
 
 export default {
@@ -77,7 +135,7 @@ export default {
   managers: true,   // a store's managers only (the shell asks a team session for the manager code)
   desktop(ctx) {
     // From the search palette: open with that search.
-    if (ctx.arg?.q != null && ctx.arg !== usedArg) { usedArg = ctx.arg; st.q = String(ctx.arg.q); st.cat = 'all'; }
+    if (ctx.arg?.q != null && ctx.arg !== usedArg) { usedArg = ctx.arg; st.q = String(ctx.arg.q); st.cat = 'all'; st.view = null; }
     return page(ctx);
   },
   mount(ctx, root) {
@@ -89,6 +147,8 @@ export default {
     root.addEventListener('click', async ev => {
       const a = ev.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act, e = a.dataset.id && find(a.dataset.id);
+      if (act === 'rs-pv-x') { if (a === ev.target || a.matches('button')) showPv(ctx, root, null); return; }
+      if (act === 'rs-view') { showPv(ctx, root, a.dataset.id); return; }
       if (act === 'rs-refresh') { load(true); loadReqs(); }
       else if (act === 'rs-ask') { st.ask = { title: a.dataset.title || '', note: '' }; ctx.rerender(); root.querySelector('[data-form="rs-ask"] [name="title"]')?.focus(); }
       else if (act === 'rs-ask-x') { st.ask = null; ctx.rerender(); }
@@ -120,6 +180,15 @@ export default {
     root.addEventListener('input', ev => { const f = ev.target.closest('[data-form="rs-ask"]'); if (f) st.ask = { title: f.elements.title.value, note: f.elements.note.value }; });
     let typing = null;
     root.addEventListener('input', ev => { if (ev.target.matches('[data-field="rs-q"]')) { st.q = ev.target.value; clearTimeout(typing); typing = setTimeout(() => ctx.rerender(), 120); } });
-    return [() => clearTimeout(typing)];
+    // The preview: Esc closes, ← → the next card as shown.
+    const keys = ev => {
+      if (!st.view || !root.querySelector('.rs-pv') || ev.target.matches?.('input, textarea')) return;
+      if (ev.key === 'Escape') { ev.preventDefault(); showPv(ctx, root, null); return; }
+      if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+      const ids = ordered(ctx).order.map(e => e.id), at = ids.indexOf(st.view); if (at < 0 || ids.length < 2) return;
+      ev.preventDefault(); showPv(ctx, root, ids[(at + (ev.key === 'ArrowRight' ? 1 : -1) + ids.length) % ids.length]);
+    };
+    document.addEventListener('keydown', keys);
+    return [() => clearTimeout(typing), () => document.removeEventListener('keydown', keys)];
   },
 };

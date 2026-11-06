@@ -127,9 +127,10 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/admin/service` | owner | live: the console's Service page: worker version, bindings and secrets as set or not (never their values), the catalogue build, each store object (events, live data size, last event, nightly run, next alarm, sockets, photos) and the last 100 errors recorded |
 | `GET /v1/admin/catalogue`, `POST /v1/admin/catalogue/rebuild` | owner | live: catalogue size, last and running build, next weekly read; start a rebuild |
 | `GET /v1/admin/catalogue/probe?kc=` | owner | live: one keycode through each step of its picture (`{ kc, link, browser, legacy, image }`, each `{ ok, why?, ms?, price, img… }`): the catalogue link, Browser Rendering, the legacy details worker, and the image itself |
-| `GET /v1/admin/resources`, `POST …`, `PATCH …/:id`, `DELETE …/:id` | owner | live: the Resources library (`shared/resources.js`): `{ title, category, note, link, stores: 'all' \| ['1241', …] }`; a link is https only, stores must be registered; each change is an owner action (`resource.add`, `.edit`, `.file`, `.remove`); a delete takes the file with it |
-| `POST /v1/admin/resources/:id/file?name=`, `GET …/file` | owner | live: the entry's file, its bytes as the body (PDF, pictures, Word, Excel, PowerPoint, CSV or text by the name's extension, under 25 MB); a new one replaces the old. Kept in the `PHOTOS` R2 bucket under `resources/<id>/` (`501` until it is bound) |
-| `GET /v1/resources`, `GET /v1/resources/:id/file?download=` | a store's manager, or the owner acting as the store | live: the entries listed for the token's store that have a file or a link (`403 tool_off` when Resources is switched off for it), and a file: PDFs and pictures inline (to open and print), the rest, or `?download=1`, as an attachment |
+| `GET /v1/admin/resources`, `POST …`, `PATCH …/:id`, `DELETE …/:id` | owner | live: the Resources library (`shared/resources.js`): `{ title, category, note, link, stores: 'all' \| ['1241', …] }`; a link is https only, stores must be registered; each change is an owner action (`resource.add`, `.edit`, `.file`, `.picture`, `.remove`); a delete takes the file and its picture with it |
+| `POST /v1/admin/resources/:id/file?name=&pages=`, `GET …/file` | owner | live: the entry's file, its bytes as the body (PDF, pictures, Word, Excel, PowerPoint, CSV or text by the name's extension, under 25 MB); `pages` is a PDF's page count (the console reads it). A new one replaces the old and drops the old file's picture. Kept in the `PHOTOS` R2 bucket under `resources/<id>/` (`501` until it is bound) |
+| `POST /v1/admin/resources/:id/thumb?from=&page=&w=&h=&pages=`, `DELETE …/thumb`, `GET …/thumb` | owner | live: the picture of the document the stores see, made in the console: the body is a JPEG, WebP or PNG under 1 MB; `from` is `page` (a PDF's page, `page` names it), `file` (the picture file, scaled) or `picture` (one the owner picked), `w`/`h` its size (`shared/resources.js` `cleanThumb`). `409 no_file` before the file is uploaded; a new one replaces the old; DELETE leaves the kind's cover. Beside the file, as `resources/<id>/thumb-<ulid>.<ext>` |
+| `GET /v1/resources`, `GET /v1/resources/:id/file?download=`, `GET /v1/resources/:id/thumb` | a store's manager, or the owner acting as the store | live: the entries listed for the token's store that have a file or a link (`403 tool_off` when Resources is switched off for it), a file (PDFs and pictures inline, to open and print; the rest, or `?download=1`, as an attachment), and its picture (`404` when it has none; cached for 30 days, the address carries `?v=` the picture's time) |
 | `GET /v1/resources/requests`, `POST …` | a store's manager, or the owner acting as the store | live: ask the owner for a document the library lacks, `{ title, note? }` (the store comes from the token; an open request of the same title is returned with `existing: true`, `200`, not doubled; at most 20 open per store, `409 too_many_open`), and list the store's requests with the owner's answers (`403 tool_off` when Resources is off) |
 | `GET /v1/admin/resources/requests`, `PATCH …/:id` | owner | live: every store's requests, newest first; answer one `{ status: 'open' \| 'added' \| 'declined', reply?, resource? }` (`resource` names the entry it became; reopening clears the answer); each answer is an owner action (`resource.request`) |
 | `GET /v1/store/:no/life/:keycode` | store token or owner, stockroom entitled | live: the keycode's bays (status, scanned, flagged), SOH adjustments and cages, newest first |
@@ -275,6 +276,20 @@ downloaded copy, so the site's CSP allows `frame-src blob:`); Word, Excel and
 the rest download. Resources is a store-wide tool: the store's Access tab
 switches it off (**Whole store**). The registry keeps the entries; the files
 share the photos bucket under their own prefix, so nothing new is set up.
+
+Each document on the store's page is a card with a picture of its page
+(three across on a 1080p PC, two on a smaller screen): its category, title,
+note, pages, size and date beside it, and Open, Print and Download. Pressing
+the page opens a big preview with the same actions (← → for the next one,
+Esc to close). The picture is made in the console when the file is added
+(`js/pagepic.js`): a PDF's page drawn by PDF.js, self-hosted in
+`vendor/pdfjs/` and loaded only by the owner's console, or a picture file
+scaled down, as an 800-pixel-wide JPEG. The owner can pick another page or
+a different picture; a Word, Excel or PowerPoint file can't be drawn in the
+browser, so it shows its kind's cover until the owner adds a picture of it
+(or uploads it as a PDF), and a link shows its site. Files added before
+pictures existed are listed in the console with **Make the pictures**, which
+fetches each PDF or picture and makes its picture in turn.
 
 Something missing? A manager presses **Request a document** (or, when a
 search finds nothing, **Request “…”**) and says what it is and where it's

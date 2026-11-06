@@ -917,4 +917,13 @@ export default {
   "of {n}": "trên {n}",
   "{n} session": "{n} phiên",
   "{n} sessions": "{n} phiên",
+  "Esc to close": "Esc để đóng",
+  "Open full size": "Mở cỡ đầy đủ",
+  "Pages": "Số trang",
+  "Preview {title}": "Xem trước {title}",
+  "Shown": "Đang hiện",
+  "page {n}": "trang {n}",
+  "{n} page": "{n} trang",
+  "{n} pages": "{n} trang",
+  "← → for the next resource · Esc to close": "← → để sang tài liệu tiếp theo · Esc để đóng",
 };
