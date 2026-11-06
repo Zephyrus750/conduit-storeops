@@ -5,7 +5,6 @@ export default {
   "A check fails?": "Kiểm tra không đạt?",
   "A code one digit off another is flagged.": "Mã chỉ lệch một chữ số so với mã khác sẽ bị gắn cờ.",
   "A contractor came?": "Nhà thầu đã đến?",
-  "A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly.": "Keycode có 7 hoặc 8 chữ số; mã vạch sản phẩm 13 chữ số phải đọc rõ.",
   "A leak, a light out, a broken door: pin it on the map with a photo.": "Rò rỉ, đèn hỏng, cửa hư: ghim lên sơ đồ kèm ảnh.",
   "A manager reassigns shelves from a PC.": "Quản lý gán lại kệ từ máy tính.",
   "A manager removes it and picks why.": "Quản lý gỡ thiết bị và chọn lý do.",
@@ -424,4 +423,5 @@ export default {
   "Switch it to Barcode to scan one item at a time.": "Chuyển sang Mã vạch để quét từng sản phẩm một.",
   "The location goes to Backfill review on the PC, where it is compared with the morning report.": "Vị trí chuyển sang mục duyệt bổ sung hàng trên máy tính, nơi nó được so với báo cáo buổi sáng.",
   "Waiting to be reviewed": "Đang chờ duyệt",
+  "A keycode is 7 to 9 digits; a 13-digit item barcode must read cleanly.": "Keycode có từ 7 đến 9 chữ số; mã vạch sản phẩm 13 chữ số phải đọc rõ.",
 };

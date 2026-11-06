@@ -36,22 +36,24 @@ export function wordsToRows(words, keepAll = false) {
   return rows.map(r => r.sort((a, b) => a.x - b.x).map(w => w.text).join(' '));
 }
 
-// A 6–8 digit run is a keycode when it opens the row or follows a
+// A 6–9 digit run is a keycode when it opens the row or follows a
 // location-length run; straight after another code it is a clipped APN.
 // Two 8-digit codes run together are split; one code broken by noise is
-// glued back, never on a lettered (header) line.
+// glued back (to 8 digits, or to 9 from short pieces only), never on a
+// lettered (header) line.
 export function parseRow(line) {
   const out = { codes: [], locs: [] }, runs = String(line).match(/\d+/g) || [];
   if (!runs.length) return out;
   const glued = runs.join(''), lettered = (String(line).match(/[A-Za-z]/g) || []).length >= 2;
-  if (!lettered && runs.length >= 2 && glued.length === 8 && !(runs[0].length >= 2 && runs[0].length <= 5 && runs.at(-1).length >= 6)) { out.codes.push(glued); return out; }
+  const gluedOk = !lettered && runs.length >= 2 && (glued.length === 8 || (glued.length === 9 && runs.every(r => r.length < 6)));
+  if (gluedOk && !(runs[0].length >= 2 && runs[0].length <= 5 && runs.at(-1).length >= 6)) { out.codes.push(glued); return out; }
   runs.forEach((r, i) => {
-    if (r.length >= 6 && r.length <= 8) {
+    if (r.length >= 6 && r.length <= 9) {
       const prev = i > 0 ? runs[i - 1] : null, prevIsLoc = !!prev && prev.length >= 2 && prev.length <= 5;
       if (i === 0 || prevIsLoc) { out.codes.push(r); if (prevIsLoc) out.locs.push(prev); }
     } else if (r.length === 16) out.codes.push(r.slice(0, 8), r.slice(8));
   });
-  if (!out.codes.length && !lettered && runs.length >= 2 && glued.length === 8) out.codes.push(glued);
+  if (!out.codes.length && gluedOk) out.codes.push(glued);
   return out;
 }
 
@@ -66,19 +68,19 @@ export function ingest(tally, lines) {
   return added;
 }
 
-// The clean list: 6–8 digits; an 8-digit code (or a 6–7 digit one seen once)
-// that shares the leading digit dominating the long (APN) reads is a
-// clipped APN and is dropped.
+// The clean list: 6–9 digits; an 8- or 9-digit code (or a 6–7 digit one
+// seen once) that shares the leading digit dominating the long (APN, 10
+// digits or more) reads is a clipped APN and is dropped.
 export function filtered(tally, all = false) {
   const codes = Object.keys(tally.codes || {});
   if (all) return codes.sort();
   const votes = {}; let total = 0;
-  for (const c of codes) if (c.length >= 9) { votes[c[0]] = (votes[c[0]] || 0) + tally.codes[c].count; total += tally.codes[c].count; }
+  for (const c of codes) if (c.length >= 10) { votes[c[0]] = (votes[c[0]] || 0) + tally.codes[c].count; total += tally.codes[c].count; }
   let apn = null, best = 0; for (const [d, n] of Object.entries(votes)) if (n > best) { best = n; apn = d; }
   const sure = apn && total > 0 && best / total >= 0.6;
   return codes.filter(c => {
-    if (c.length < 6 || c.length > 8) return false;
-    if (sure && c.length === 8 && c[0] === apn) return false;
+    if (c.length < 6 || c.length > 9) return false;
+    if (sure && c.length >= 8 && c[0] === apn) return false;
     if (sure && c.length <= 7 && c[0] === apn && tally.codes[c].count < 2) return false;
     return true;
   }).sort();
@@ -101,13 +103,13 @@ export function matchPreset(presets, w, h) {
   return best;
 }
 
-// Any report: 8-digit runs are keycodes; 6–7 digit runs only on plain lines
-// (eight digits or fewer in all), so prices, quantities and APNs stay out.
+// Any report: 8- and 9-digit runs are keycodes; 6–7 digit runs only on plain
+// lines (eight digits or fewer in all), so prices, quantities and APNs stay out.
 export function extractCodes(text) {
   const out = [];
   for (const line of String(text || '').split(/[\r\n]+/)) {
     const runs = line.match(/\d+/g) || [], digits = line.replace(/\D/g, '').length;
-    for (const r of runs) if (r.length === 8 || ((r.length === 6 || r.length === 7) && digits <= 8)) out.push(r);
+    for (const r of runs) if (r.length === 8 || r.length === 9 || ((r.length === 6 || r.length === 7) && digits <= 8)) out.push(r);
   }
   const codes = [...new Set(out)];
   return { codes, dups: out.length - codes.length };

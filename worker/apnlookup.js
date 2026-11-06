@@ -36,7 +36,7 @@ export const searchUrl = (env, gtin) => String(env?.KMART_SEARCH_URL || SEARCH_U
 // A title as a catalogue slug ("Our Perfect Storm: A Novel" → our-perfect-storm).
 export const titleSlug = t => String(t || '').split(/[:(]/)[0].normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 const candidate = (kc, slug) => ({ kc, name: slugToName(slug), url: productUrl(kc, slug) });
-const fromUrl = u => { PRODUCT_RE.lastIndex = 0; const m = PRODUCT_RE.exec(String(u || '')); return m && /^\d{6,8}$/.test(m[2]) ? candidate(m[2], m[1].toLowerCase()) : null; };
+const fromUrl = u => { PRODUCT_RE.lastIndex = 0; const m = PRODUCT_RE.exec(String(u || '')); return m && /^\d{6,9}$/.test(m[2]) ? candidate(m[2], m[1].toLowerCase()) : null; };
 
 // What a rendered Kmart page says about one barcode: { candidates, sure, why }.
 export function readSearch(html, gtin) {
@@ -52,7 +52,7 @@ export function readSearch(html, gtin) {
         if (String(d?.['@type']).toLowerCase() !== 'product') continue;
         const codes = ['gtin', 'gtin8', 'gtin12', 'gtin13', 'gtin14'].map(k => String(d[k] || '').replace(/\D/g, '').replace(/^0+/, ''));
         if (!codes.includes(String(gtin).replace(/^0+/, ''))) continue;
-        const c = fromUrl(d.url || d.offers?.url) || (/^\d{6,8}$/.test(String(d.sku || '')) ? { kc: String(d.sku), name: String(d.name || ''), url: '' } : null);
+        const c = fromUrl(d.url || d.offers?.url) || (/^\d{6,9}$/.test(String(d.sku || '')) ? { kc: String(d.sku), name: String(d.name || ''), url: '' } : null);
         if (c) return { candidates: [c], sure: true, why: 'product data' };
       }
     } catch { /* malformed block: next one */ }
@@ -63,7 +63,7 @@ export function readSearch(html, gtin) {
   if (n === 0 || (!(n > 0) && NO_RESULTS_RE.test(text))) return { candidates: [], sure: false, why: 'no results' };
   const seen = new Map();
   PRODUCT_RE.lastIndex = 0;
-  for (let m; (m = PRODUCT_RE.exec(page));) if (/^\d{6,8}$/.test(m[2]) && !seen.has(m[2])) seen.set(m[2], candidate(m[2], m[1].toLowerCase()));
+  for (let m; (m = PRODUCT_RE.exec(page));) if (/^\d{6,9}$/.test(m[2]) && !seen.has(m[2])) seen.set(m[2], candidate(m[2], m[1].toLowerCase()));
   const list = [...seen.values()].slice(0, n > 0 ? Math.min(n, MAX) : MAX);
   if (!list.length) return { candidates: [], sure: false, why: 'no product links' };
   return { candidates: list, sure: n === 1 && list.length === 1, why: n > 0 ? `${n} results` : 'results' };

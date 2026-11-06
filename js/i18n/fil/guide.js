@@ -224,7 +224,6 @@ export default {
   "Settings › Feedback sends a note to the owner, with a diagnostic summary if you tick it.": "Sa Settings › Feedback, nagpapadala ng note sa owner, may kasamang diagnostic summary kung i-tick mo ito.",
   "Backfill scan": "Backfill scan",
   "Scan the bay label to start a bay, then scan every product on the shelf.": "I-scan ang bay label para simulan ang bay, tapos i-scan ang bawat produkto sa shelf.",
-  "A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.": "Ang keycode ay 7 o 8 digit; dapat malinis ang basa sa 13-digit na item barcode. Fina-flag ang dalawang code na isang digit lang ang pagkakaiba: itira ang nasa shelf.",
   "Send it to review when the bay is done. Any code can be removed, with Undo.": "Ipadala sa review kapag tapos na ang bay. Puwedeng tanggalin ang kahit anong code, may Undo.",
   "Review and submit": "I-review at i-submit",
   "Review compares each bay with the pasted SIM report: what to add, what to delete.": "Kinukumpara ng Review ang bawat bay sa na-paste na SIM report: ano ang idadagdag, ano ang buburahin.",
@@ -260,7 +259,6 @@ export default {
   "Team message and today’s briefing": "Team message at briefing ngayong araw",
   "Managers publish a message and the day’s briefing for every device in the store. It shows in the strip at the top until you have read it.": "Naglalabas ang mga manager ng mensahe at briefing ng araw para sa lahat ng device sa tindahan. Lalabas ito sa strip sa itaas hanggang mabasa mo.",
   "Stricter backfill scanning": "Mas mahigpit na backfill scanning",
-  "Keycodes are 7 or 8 digits and item barcodes must read cleanly, as K2B checked them. Two codes one digit apart are flagged; any code can be removed, with Undo.": "7 o 8 digit ang keycode at dapat malinis ang basa sa item barcode, gaya ng pag-check ng K2B. Fina-flag ang dalawang code na isang digit lang ang pagkakaiba; puwedeng tanggalin ang kahit anong code, may Undo.",
   "Bays open on another desk": "Mga bay na bukas sa ibang PC",
   "A bay being reviewed elsewhere shows a banner with Take over. A desk that walks away lets go after 20 minutes.": "May banner na may Take over ang bay na nire-review sa ibang lugar. Bibitawan ito ng PC na iniwan pagkalipas ng 20 minuto.",
   "The decant plan on the Team Board": "Ang decant plan sa Team Board",
@@ -320,4 +318,6 @@ export default {
   "Open Help": "Buksan ang Tulong",
   "Clear from this device": "I-clear sa device na ito",
   "Stay signed in": "Manatiling naka-sign in",
+  "A keycode is 7 to 9 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.": "Ang keycode ay 7 hanggang 9 digit; dapat malinis ang basa sa 13-digit na item barcode. Fina-flag ang dalawang code na isang digit lang ang pagkakaiba: itira ang nasa shelf.",
+  "Keycodes are 7 to 9 digits and item barcodes must read cleanly, as K2B checked them. Two codes one digit apart are flagged; any code can be removed, with Undo.": "7 hanggang 9 digit ang keycode at dapat malinis ang basa sa item barcode, gaya ng pag-check ng K2B. Fina-flag ang dalawang code na isang digit lang ang pagkakaiba; puwedeng tanggalin ang kahit anong code, may Undo.",
 };

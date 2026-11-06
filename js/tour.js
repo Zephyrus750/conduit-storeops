@@ -29,7 +29,7 @@ const CARDS = [
 // walkthrough opens once. The Floor's is the whole tour above.
 const AREA_CARDS = {
   stockroom: [
-    ['barcode', '#0FA3A3', tx('Backfill scan'), [tx('Scan the bay label to start a bay, then scan every product on the shelf.'), tx('A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.'), tx('Send it to review when the bay is done. Any code can be removed, with Undo.')]],
+    ['barcode', '#0FA3A3', tx('Backfill scan'), [tx('Scan the bay label to start a bay, then scan every product on the shelf.'), tx('A keycode is 7 to 9 digits; a 13-digit item barcode must read cleanly. Two codes one digit apart are flagged: keep the one on the shelf.'), tx('Send it to review when the bay is done. Any code can be removed, with Undo.')]],
     ['listcheck', '#16A34A', tx('Review and submit'), [tx('Review compares each bay with the pasted SIM report: what to add, what to delete.'), tx('Mark it ready when the PDT matches, then Submit once it is finalised on the PDT.'), tx('My locations on the phone shows your bays and which are ready to submit.')]],
     ['m-cages', '#7C3AED', tx('Cages and adjustments'), [tx('Cages: scan a cage tag, then what goes in it; park it on the map so anyone can find it.'), tx('Adjust: stock is here but the system says none. Scan it, enter the PDT’s SOH and count the shelf.')]],
     ['packages', '#2563EB', tx('Live pull'), [tx('Join a session as a puller and pick your bays: requests in them buzz your phone, and bays nobody picked show to everyone.'), tx('Mark each line Pulled, Short or Not there. Short takes from the next bay too.'), tx('Send the cage down when it is full; the requester sees what is coming.')]],

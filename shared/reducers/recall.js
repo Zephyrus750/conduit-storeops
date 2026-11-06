@@ -23,12 +23,13 @@
 
 import { reject } from './util.js';
 import { gs1Parse } from '../gs1.js';
+import { KEYCODE } from '../keycode.js';
 
 export const RECALL_KINDS = ['recall', 'withdrawal'];
 export const RECALL_STATUSES = ['open', 'removing', 'removed', 'closed'];
 export const RECALL_CAP = 200, CODES_MAX = 200, KEEP_RECALL_DAYS = 180;
 const FOUND_CAP = 300, LOG_CAP = 120, N_MAX = 9999;
-const KC_RE = /^\d{6,8}$/;
+const KC_RE = KEYCODE;
 const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, n);
 const who = e => String(e.actor?.device || 'unknown');
 
@@ -36,11 +37,11 @@ export function recallState() {
   return { recalls: { items: {}, bay: '' } };
 }
 
-// The keycodes a person typed or pasted: 6 to 8 digits each, no repeats.
+// The keycodes a person typed or pasted: 6 to 9 digits each, no repeats.
 function keycodes(v) {
   if (!Array.isArray(v) || !v.length) return reject('invalid_event', 'kcs lists the keycodes (at least one)');
   const out = [...new Set(v.map(x => String(x).trim()))];
-  if (out.length > CODES_MAX || out.some(k => !KC_RE.test(k))) return reject('invalid_event', `kcs: up to ${CODES_MAX} keycodes of 6 to 8 digits`);
+  if (out.length > CODES_MAX || out.some(k => !KC_RE.test(k))) return reject('invalid_event', `kcs: up to ${CODES_MAX} keycodes of 6 to 9 digits`);
   return out;
 }
 // Item barcodes, as the form pairs are kept under (13 digits for EAN/UPC).

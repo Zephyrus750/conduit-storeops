@@ -26,6 +26,7 @@ import { reject, badList, earlier } from './util.js';
 import { backfillMetrics, scannedCodes } from '../backfill.js';
 import { gs1Parse } from '../gs1.js';
 import { keepDates, KEEP_DAYS, KEEP_WEEKS } from '../stockintel.js';
+import { isKeycode } from '../keycode.js';
 
 export const RINGS = ['new-lines', 'overstock', 'cant-work', 'online-picks'];
 export const SUBMISSION_STATUS = ['pending', 'corrected', 'submitted'];
@@ -144,7 +145,7 @@ export const stockroomReducers = {
   'cage.pair'(s, e) {
     const g = gs1Parse(e.entity.apn), kc = String(e.payload.keycode || '');
     if (!g?.gtin) return reject('invalid_event', 'that is not a valid item barcode (UPC-A, EAN-13 or GTIN-14)');
-    if (!/^\d{6,8}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 8 digits');
+    if (!isKeycode(kc)) return reject('invalid_event', 'keycode must be 6 to 9 digits');
     (s.apnPairs ||= {})[g.gtin] = { kc, at: e.at, by: e.actor?.device || null };
     return null;
   },
@@ -370,7 +371,7 @@ export const stockroomReducers = {
   'soh.verify'(s, e) {
     const d = String(e.entity.date), kc = String(e.entity.keycode), soh = (s.soh ||= { snaps: {}, verify: {} });
     if (!soh.snaps[d]) return reject('not_found', `no SOH snapshot for ${d}`);
-    if (!/^\d{6,8}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 8 digits');
+    if (!isKeycode(kc)) return reject('invalid_event', 'keycode must be 6 to 9 digits');
     const loc = String(e.payload.loc);
     if (!loc || loc.length > 40) return reject('invalid_event', 'loc is 1 to 40 characters');
     const key = `${kc}|${loc}`, v = (soh.verify[d] ||= {});

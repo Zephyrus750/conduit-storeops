@@ -12,8 +12,8 @@
 //     recalls:   [{ id, kind, title, ref, status, kc }],                  by keycode, item barcode, product or notice reference
 //   }
 //
-// A query of digits is a keycode (6 to 8), a consolidation (its last nine
-// digits, 9 to 22) or a pallet number; anything else matches manifest
+// A query of digits is a keycode (6 to 9), a consolidation (its last nine
+// digits, 9 to 22; 9 digits is looked up as both) or a pallet number; anything else matches manifest
 // numbers, cage tags, load names, off-site pallets by name and equipment
 // by its code or name.
 
@@ -25,7 +25,7 @@ export function findRecords(state, query) {
   const out = { recalls: [], manifests: [], consols: [], cages: [], loads: [], offsite: [], equipment: [] };
   if (Q.length < 2) return out;
   const dock = state?.dock || {}, cages = state?.cages || {}, inv = state?.inventory || {};
-  const kc = numeric && D.length >= 6 && D.length <= 8 ? D : null;
+  const kc = numeric && D.length >= 6 && D.length <= 9 ? D : null;
 
   // Manifests: by number (as typed), DC number or despatch.
   for (const m of Object.values(dock.manifests || {})) {

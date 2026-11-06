@@ -25,7 +25,7 @@ test('recalls: a recall names its keycodes and barcodes; a bad one changes nothi
   assert.equal(add(s, { kind: 'pulled' }).code, 'invalid_event');
   assert.equal(add(s, { title: '  ' }).code, 'invalid_event');
   assert.equal(add(s, { kcs: [] }).code, 'invalid_event');
-  assert.equal(add(s, { kcs: ['4364880'.padEnd(9, '1')] }).code, 'invalid_event', 'nine digits is not a keycode');
+  assert.equal(add(s, { kcs: ['4364880'.padEnd(10, '1')] }).code, 'invalid_event', 'ten digits is not a keycode');
   assert.equal(add(s, { apns: ['9341234567890'] }).code, 'invalid_event', 'a barcode must pass its check digit');
   assert.deepEqual(s.recalls.items, {}, 'nothing was half-written');
   assert.equal(add(s, { kcs: ['43648803', ' 43648803', '43648804'], apns: ['036000291452'] }), null);

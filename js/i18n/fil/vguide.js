@@ -5,7 +5,6 @@ export default {
   "A check fails?": "Bumagsak ang check?",
   "A code one digit off another is flagged.": "Fina-flag ang code na isang digit lang ang pagkakaiba sa iba.",
   "A contractor came?": "May dumating na contractor?",
-  "A keycode is 7 or 8 digits; a 13-digit item barcode must read cleanly.": "Ang keycode ay 7 o 8 digit; dapat malinis ang basa sa 13-digit na item barcode.",
   "A leak, a light out, a broken door: pin it on the map with a photo.": "Tagas, patay na ilaw, sirang pinto: i-pin ito sa mapa kasama ang litrato.",
   "A manager reassigns shelves from a PC.": "Ang manager ang nagre-reassign ng mga shelf mula sa PC.",
   "A manager removes it and picks why.": "Aalisin ito ng manager at pipiliin kung bakit.",
@@ -424,4 +423,5 @@ export default {
   "Switch it to Barcode to scan one item at a time.": "Ilipat ito sa Barcode para mag-scan ng isang item sa bawat pagkakataon.",
   "The location goes to Backfill review on the PC, where it is compared with the morning report.": "Mapupunta ang location sa Backfill review sa PC, kung saan ito ikinukumpara sa report sa umaga.",
   "Waiting to be reviewed": "Hinihintay ang review",
+  "A keycode is 7 to 9 digits; a 13-digit item barcode must read cleanly.": "Ang keycode ay 7 hanggang 9 digit; dapat malinis ang basa sa 13-digit na item barcode.",
 };

@@ -87,7 +87,7 @@ function form(d) {
     `<div class="acts"><button class="btn primary" data-act="save">${ic('check')}${d.id ? tx('Save changes') : tx('Add it: every device flags it')}</button><button class="btn" data-act="cancel">${tx('Cancel')}</button></div></div>`;
 }
 // What the pasted text holds: keycodes, and any barcode that does not read.
-const counted = d => ({ kcs: [...new Set(parseKeycodes(d.kcsText).filter(k => /^\d{6,8}$/.test(k)))], bad: d.apnsText.split(/[\s,;]+/).filter(Boolean).filter(x => !gs1Parse(x)?.gtin) });
+const counted = d => ({ kcs: [...new Set(parseKeycodes(d.kcsText).filter(k => /^\d{6,9}$/.test(k)))], bad: d.apnsText.split(/[\s,;]+/).filter(Boolean).filter(x => !gs1Parse(x)?.gtin) });
 const kcsLine = kcs => (kcs.length ? txn(kcs.length, '{n} keycode found', '{n} keycodes found') : tx('paste them from the notice: any spacing or commas'));
 const badLine = bad => (bad.length ? tx('{code} is not a valid barcode', { code: esc(bad[0]) }) : '');
 function readForm(root) {

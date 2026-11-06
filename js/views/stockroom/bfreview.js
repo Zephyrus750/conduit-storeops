@@ -854,7 +854,7 @@ function disputeHint(kc, other) {
 // device's language: the same three cases.
 function whyText(raw) {
   const c = String(raw ?? '').replace(/\D/g, '');
-  return !c ? tx('That is not a keycode') : c.length === 13 ? tx('{code} fails its check digit: scan it again', { code: c }) : tx('{code} is {n} digits: a keycode is 7 or 8, an item barcode 13', { code: c, n: c.length });
+  return !c ? tx('That is not a keycode') : c.length === 13 ? tx('{code} fails its check digit: scan it again', { code: c }) : tx('{code} is {n} digits: a keycode is 7 to 9, an item barcode 13', { code: c, n: c.length });
 }
 async function readdCode(ctx, input, repaint) {
   const raw = input.value, { code: kc } = phoneCode(raw); input.value = '';

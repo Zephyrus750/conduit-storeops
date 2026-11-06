@@ -182,8 +182,10 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
         out += grp(tx('In the stockroom')) + orow('s', 'm-srhistory', [txn(L.bays.length, 'Backfilled at {n} bay', 'Backfilled at {n} bays'), L.adjustments.length ? txn(L.adjustments.length, '{n} SOH adjustment', '{n} SOH adjustments') : '', L.cages.length ? txn(L.cages.length, 'in {n} cage', 'in {n} cages') : ''].filter(Boolean).join(' · '), tx('Last seen {date}', { date: esc(L.last || '') }), tx('History'), `data-view="srhistory" data-q="${esc(Q)}"`);
         preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || tx('Not in the catalogue'))}</div></div>`) + lifeHtml(L);
       } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}${tx('Where it’s been')}</div><div class="ohint">${tx('No backfill, adjustment or cage record for this code yet.')}</div></div>`;
-      // A consolidation label first when it is one; cages, loads and off-site pallets holding a keycode after the product.
-      const rr = recordsHtml(found(Q), Q); out = Q.length >= 9 ? rr + out : out + rr;
+      // A consolidation label first when it is one (9 digits can be either: a
+      // keycode since late 2026, or a pallet label); cages, loads and off-site
+      // pallets holding a keycode after the product.
+      const fr = found(Q), rr = recordsHtml(fr, Q); out = Q.length >= 10 || (Q.length === 9 && fr.consols?.length) ? rr + out : out + rr;
     } else if (k === 'cons') {
       const r = found(Q);
       out += recordsHtml(r, Q) || `<div class="ohint">${tx('No consolidation ending {code} on a manifest or truck this device holds. The Back dock code opens its records.', { code: esc(Q.slice(-9)) })}</div>`;

@@ -260,7 +260,6 @@ export default {
   "One digit from {other}: check which is on the shelf": "Khác {other} một chữ số: kiểm tra mã nào có trên kệ",
   "That is not a keycode": "Đó không phải keycode",
   "{code} fails its check digit: scan it again": "{code} sai số kiểm tra: quét lại",
-  "{code} is {n} digits: a keycode is 7 or 8, an item barcode 13": "{code} có {n} chữ số: keycode có 7 hoặc 8, mã vạch sản phẩm có 13",
   "{code} tagged to {bay}": "Đã gắn {code} vào {bay}",
   "(marked incorrect)": "(đánh dấu sai)",
   "Note": "Ghi chú",
@@ -674,4 +673,5 @@ export default {
   "Delete {bay} from today’s board?": "Xóa {bay} khỏi bảng hôm nay?",
   "It was removed from today’s board.": "Nó đã bị gỡ khỏi bảng hôm nay.",
   "Its scans are removed from the review.": "Các lần quét của nó sẽ bị xóa khỏi lượt duyệt.",
+  "{code} is {n} digits: a keycode is 7 to 9, an item barcode 13": "{code} có {n} chữ số: keycode có từ 7 đến 9, mã vạch sản phẩm có 13",
 };
