@@ -41,7 +41,7 @@
 
 import { HttpError } from './http.js';
 import { upstream } from './upstream.js';
-import { detailsConfigured, renderDetails, renderPage, extractDetails, isAccessDenied } from './details.js';
+import { detailsConfigured, renderDetails, renderPage, extractDetails, isAccessDenied, describePage, pageSummary } from './details.js';
 
 export const MAX_CODES = 50;
 const LINK_TTL_S = 7 * 86400;       // name and URL do not change
@@ -227,7 +227,7 @@ export async function probe(env, kc, fetchImpl = fetch) {
     const t = Date.now(), r = await renderPage(it.u, env, fetchImpl), ms = Date.now() - t;
     if (!r.html) out.browser = { ok: false, ms, why: r.err };
     else if (isAccessDenied(r.html)) out.browser = { ok: false, ms, why: 'refused by kmart.com.au (Access Denied)' };
-    else { const d = extractDetails(r.html), ok = d.price !== null || d.img !== null; out.browser = { ok, ms, bytes: r.html.length, ...fields(d), ...(ok ? {} : { why: 'no price or picture on the page' }) }; }
+    else { const d = extractDetails(r.html, kc), ok = d.price !== null || d.img !== null, page = describePage(r.html, kc); out.browser = { ok, ms, bytes: r.html.length, page, ...fields(d), ...(ok ? {} : { why: pageSummary(page) }) }; }
   } else out.browser = { ok: false, why: 'not configured (CF_ACCOUNT_ID and BROWSER_TOKEN)' };
   if (env.DETAILS_URL) {
     const t = Date.now();

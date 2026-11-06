@@ -36,9 +36,51 @@ export async function renderPage(url, env, fetchImpl = fetch) {
 
 const num = x => { const n = parseFloat(String(x).replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 ? n : null; };
 export const isAccessDenied = html => /Access Denied|don't have permission|edgesuite\.net|Reference&#32;&#35;/i.test(html || '');
+// Bot-check and challenge pages a site can answer a headless browser with
+// instead of the product page: named, so the owner's picture check says
+// "blocked" rather than "no price or picture".
+const BLOCKS = [
+  ['Access Denied', /Access Denied|don't have permission|edgesuite\.net/i],
+  ['Pardon Our Interruption', /Pardon Our Interruption/i],
+  ['Akamai challenge', /\/_sec\/cp_challenge|sec-if-cpt-container|bm-verify/i],
+  ['Incapsula', /Incapsula|_Incapsula_Resource|Request unsuccessful/i],
+  ['PerimeterX', /px-captcha|_pxCaptcha|perimeterx/i],
+  ['Kasada', /kpsdk|ips\.js\?/i],
+  ['Cloudflare challenge', /cf-chl|challenge-platform|Just a moment\.\.\./i],
+  ['a captcha', /captcha|verify you are (a )?human|are you a robot/i],
+];
+// A challenge page is small; a full product page that merely loads a
+// captcha script for its sign-in form is not one (only the two named
+// refusal pages count at any size).
+export const blockedBy = html => { const h = html || '', hit = BLOCKS.find(([name, re]) => (h.length < 200_000 || name === 'Access Denied' || name === 'Pardon Our Interruption') && re.test(h)); return hit ? hit[0] : null; };
+// What a page read actually got, for the picture check: its title and size,
+// a block page if it was one, and which of the things the reader looks for
+// were on it.
+export function describePage(html, kc = '') {
+  const h = html || '', title = (h.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const ld = /<script[^>]*type="application\/ld\+json"/i.test(h), ldProduct = /"@type"\s*:\s*"Product"/i.test(h);
+  const kcPics = kc ? keycodePictures(h, kc).length : 0;
+  return { bytes: h.length, title, blocked: blockedBy(h), jsonLd: ld ? (ldProduct ? 'Product' : 'other') : 'none', ogImage: /property="og:image"/i.test(h), nextData: /id="__NEXT_DATA__"/i.test(h), keycodePictures: kcPics, priceText: /\$\s?\d+(?:\.\d{2})?/.test(h.replace(/<[^>]+>/g, ' ')) };
+}
+export function pageSummary(p) {
+  if (p.blocked) return `blocked by kmart.com.au: a ${p.blocked} page (${Math.round(p.bytes / 1024)} KB, title “${p.title}”)`;
+  return `no price or picture on the page (title “${p.title || 'none'}”, ${Math.round(p.bytes / 1024)} KB; JSON-LD: ${p.jsonLd}; og:image: ${p.ogImage ? 'yes' : 'none'}; Next.js data: ${p.nextData ? 'yes' : 'none'}; pictures named with the keycode: ${p.keycodePictures}; a $ price in the text: ${p.priceText ? 'yes' : 'none'})`;
+}
+// Image addresses on the page whose file name carries the keycode (the
+// rendered <img> tags and any JSON the page carries, slashes unescaped).
+const IMG_EXT = /\.(?:jpe?g|png|webp|avif)(?:[?#][^"'\s<>()\\]*)?$/i;
+export function keycodePictures(html, kc) {
+  if (!kc) return [];
+  const text = String(html || '').replace(/\\u002F/gi, '/').replace(/\\\//g, '/'), out = [];
+  for (const m of text.matchAll(/(?:https?:)?\/\/[^"'\s<>()\\,]+/g)) {
+    const u = m[0].startsWith('//') ? 'https:' + m[0] : m[0];
+    if (u.includes(String(kc)) && (IMG_EXT.test(u) || /\/(?:images?|media|assets|transform)\//i.test(u)) && !/\/product\/[^/]*\/?$/i.test(u) && !out.includes(u)) out.push(u);
+  }
+  return out;
+}
 
 // Several independent strategies, first hit wins per field (as v1.6).
-export function extractDetails(html) {
+export function extractDetails(html, kc = '') {
   const out = { price: null, was: null, img: null, clr: false };
   if (!html) return out;
   for (const block of html.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi) || []) {
@@ -61,10 +103,17 @@ export function extractDetails(html) {
   if (out.price === null) { const m = html.match(/"(?:sellPrice|currentPrice|salePrice|price|amount)"\s*:\s*\{?\s*"?(?:amount|value)?"?\s*:?\s*"?(\d+\.?\d{0,2})"?/i); if (m) out.price = num(m[1]); }
   if (out.was === null) { const m = html.match(/"(?:wasPrice|originalPrice|listPrice|rrp|comparisonPrice)"\s*:\s*"?(\d+\.?\d{0,2})"?/i); if (m) out.was = num(m[1]); }
   if (out.img === null) { const m = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i) || html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/i); if (m) out.img = m[1]; }
+  if (out.img === null) { const m = html.match(/<meta[^>]+name="twitter:image"[^>]+content="([^"]+)"/i) || html.match(/<link[^>]+rel="image_src"[^>]+href="([^"]+)"/i); if (m) out.img = m[1]; }
+  // A page drawn by its scripts carries no tags for the picture: the
+  // rendered <img> tags and the page's data still name the file, and
+  // Kmart's picture files carry the keycode.
+  if (out.img === null && kc) out.img = keycodePictures(html, kc)[0] || null;
+  if (out.price === null) { const m = html.match(/<meta[^>]+(?:property="(?:product|og):price:amount"|itemprop="price")[^>]+content="(\d+\.?\d{0,2})"/i) || html.match(/itemprop="price"[^>]*>\s*\$?\s*(\d+\.?\d{0,2})/i); if (m) out.price = num(m[1]); }
   if (/"(?:isClearance|is_clearance|isOnClearance|onClearance)"\s*:\s*(?:true|1|"true")/i.test(html)) out.clr = true;
   if (out.was && out.price && out.price < out.was) out.clr = true;
   if (out.was && out.price && out.price >= out.was) out.was = null;
   if (out.img && out.img.startsWith('//')) out.img = 'https:' + out.img;
+  if (out.img && out.img.startsWith('/')) out.img = 'https://www.kmart.com.au' + out.img;
   if (out.img && !/^https:\/\//.test(out.img)) out.img = null;
   return out;
 }
@@ -82,8 +131,8 @@ export async function renderDetails(env, items, fetchImpl = fetch, { onItem, sto
       const it = list[next++];
       const r = await renderPage(it.u, env, fetchImpl);
       if (!r.html || isAccessDenied(r.html)) { out[it.kc] = { found: false, why: r.html ? 'refused by kmart.com.au (Access Denied)' : r.err }; if (stopOnRefusal) refused = true; continue; }
-      const d = extractDetails(r.html), found = d.price !== null || d.img !== null;
-      out[it.kc] = { found, ...d, ...(found ? {} : { why: 'no price or picture on the page' }) };
+      const d = extractDetails(r.html, it.kc), found = d.price !== null || d.img !== null;
+      out[it.kc] = { found, ...d, ...(found ? {} : { why: blockedBy(r.html) ? 'blocked by kmart.com.au' : 'no price or picture on the page' }) };
       if (found) onItem?.(it.kc, out[it.kc]);
     }
   };
