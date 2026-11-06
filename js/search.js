@@ -65,7 +65,7 @@ function recordsHtml(r, Q) {
 // A resource: a PDF or a picture opens in a tab, the rest download, a link opens.
 function resRow(e, Q) {
   const k = e.file && fileKind(e.file.name), what = e.file ? `${k?.label === 'Picture' ? tx('Picture') : k?.label === 'Text' ? tx('Text') : esc(k?.label || '')} · ${esc(e.file.name)}` : tx('Link');
-  return orow('', 'stack', hi(e.title, Q), [e.category ? esc(e.category) : '', what].filter(Boolean).join(' · '), !e.file ? tx('Open link') : k?.inline ? tx('Open') : tx('Download'), `data-res="${esc(e.id)}"`);
+  return orow('', 'library', hi(e.title, Q), [e.category ? esc(e.category) : '', what].filter(Boolean).join(' · '), !e.file ? tx('Open link') : k?.inline ? tx('Open') : tx('Download'), `data-res="${esc(e.id)}"`);
 }
 const ARG_KEYS = ['select', 'dept', 'micro', 'q', 'man', 'cage', 'load', 'pid', 'truck', 'bay', 'equip', 'recall'];
 const RC_STATUS = { open: tx('issue status::Open'), removing: tx('Removing'), removed: tx('All removed'), closed: tx('Closed') };
@@ -199,7 +199,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const rs = (resources() || []).filter(e => matches(e, Q));
       if (depts.length) out += grp(tx('Departments'), depts.length) + depts.map(([d, n]) => orow('s', 'map', `${hi(n, Q)} ${dep(d)}`, tx('Show the department on the map'), tx('Show'), `data-view="map" data-dept="${d}"`)).join('');
       if (ts.length) out += grp(tx('Tools'), ts.length) + ts.map(t => orow('', t.icon, hi(t.title, Q), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
-      if (rs.length) out += grp(tx('Resources'), rs.length) + rs.slice(0, 6).map(e => resRow(e, Q)).join('') + (rs.length > 6 ? orow('', 'stack', tx('All {n} resources matching “{q}”', { n: rs.length, q: esc(Q) }), tx('Open Resources with this search'), tx('Open'), `data-view="resources" data-q="${esc(Q)}"`) : '');
+      if (rs.length) out += grp(tx('Resources'), rs.length) + rs.slice(0, 6).map(e => resRow(e, Q)).join('') + (rs.length > 6 ? orow('', 'library', tx('All {n} resources matching “{q}”', { n: rs.length, q: esc(Q) }), tx('Open Resources with this search'), tx('Open'), `data-view="resources" data-q="${esc(Q)}"`) : '');
       const recs = recordsHtml(found(Q), Q); out += recs;
       if (!depts.length && !ts.length && !rs.length && !recs) out += `<div class="ohint">${tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) })}</div>`;
     }

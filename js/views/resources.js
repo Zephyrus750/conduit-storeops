@@ -53,10 +53,10 @@ function row(e) {
 
 function page(ctx) {
   const got = cachedResources(ctx.storeNo), err = resourceError(ctx.storeNo), list = got || [], cats = [...new Set(list.map(e => e.category || ''))].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
-  const head = vh(tx('Resources'), sub(txn(list.length, '{n} resource', '{n} resources'), tx('from the owner, for managers')), `<button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`, 'stack') + (st.ask ? askForm() : '');
+  const head = vh(tx('Resources'), sub(txn(list.length, '{n} resource', '{n} resources'), tx('from the owner, for managers')), `<button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`, 'library') + (st.ask ? askForm() : '');
   if (err && !got) return head + `<div class="card"><p class="lbl">${tx('The resources did not load: {error}', { error: esc(err) })}</p><button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('Try again')}</button></div>`;
   if (!got) return head + `<div class="card"><div class="ohint">${tx('Loading the resources…')}</div></div>`;
-  if (!list.length) return head + `<div class="card rs-empty">${ic('stack')}<p>${tx('No resources yet. The owner adds forms, procedures and links in the console, under Resources.')}</p>${st.ask ? '' : `<button class="btn primary" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`}</div>` + asked(ctx, list);
+  if (!list.length) return head + `<div class="card rs-empty">${ic('library')}<p>${tx('No resources yet. The owner adds forms, procedures and links in the console, under Resources.')}</p>${st.ask ? '' : `<button class="btn primary" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`}</div>` + asked(ctx, list);
   if (st.cat !== 'all' && !cats.includes(st.cat)) st.cat = 'all';
   const shown = list.filter(e => (st.cat === 'all' || (e.category || '') === st.cat) && matches(e, st.q));
   const search = `<div class="rs-bar"><div class="search rs-search">${ic('search')}<input data-field="rs-q" value="${esc(st.q)}" placeholder="${tx('Search titles, categories, notes and file names')}" aria-label="${tx('Search the resources')}">${st.q ? `<button class="ibtn" data-act="rs-clear" aria-label="${tx('Clear the search')}">${ic('x')}</button>` : ''}</div>` +
@@ -72,7 +72,7 @@ function page(ctx) {
 }
 
 export default {
-  id: 'resources', title: tx('Resources'), icon: 'stack',
+  id: 'resources', title: tx('Resources'), icon: 'library',
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   managers: true,   // a store's managers only (the shell asks a team session for the manager code)
   desktop(ctx) {

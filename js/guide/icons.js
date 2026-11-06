@@ -9,7 +9,7 @@ const APP = {
   dots: 'dots', box: 'box', check: 'check', truck: 'truck', map: 'map', list: 'listcheck', ladder: 'm-equipment', share: 'qr',
   clip: 'clip', barcode: 'barcode', cal: 'cal', chart: 'chart', updown: 'm-adjust', cage: 'cage', expand: 'expand', gear: 'settings',
   clipboard: 'clip', pkg: 'packages', lock: 'lock', wrench: 'tool', camera: 'camera', shield: 'shield', arrow: 'arrow', pause: 'pause',
-  print: 'print', x: 'x', plus: 'plus', star: 'star', help: 'help', file: 'file', stack: 'stack', bars: 'bars', users: 'users', pin: 'pin',
+  print: 'print', x: 'x', plus: 'plus', star: 'star', help: 'help', file: 'file', stack: 'stack', library: 'library', plan: 'plan', bars: 'bars', users: 'users', pin: 'pin',
   // The app's area and screen icons, as its rail and tab strip draw them.
   'm-dashboard': 'm-dashboard', 'm-map': 'm-map', 'm-picklist': 'm-picklist', 'm-emergency': 'm-emergency', 'm-bfreview': 'm-bfreview',
   'm-adjust': 'm-adjust', 'm-cages': 'm-cages', 'm-receiving': 'm-receiving', 'm-planner': 'm-planner', 'm-settings': 'm-settings',

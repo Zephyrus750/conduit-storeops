@@ -21,13 +21,13 @@ const preview = () => `<div class="lyt-map" aria-hidden="true"><div class="lyt-r
   `<div class="lyt-key"><span><i class="lyt-sh cur"></i>${tx('Current planogram')}</span><span><i class="lyt-sh old"></i>${tx('Replaced: print the new one')}</span><span><i class="lyt-sh none"></i>${tx('No planogram yet')}</span></div>`;
 
 function page() {
-  return `<div class="lyt"><div class="lyt-hero"><span class="lyt-ic">${ic('layers')}</span><span class="lyt-soon">${tx('Coming soon')}</span><h2>${tx('Layouts')}</h2><p>${tx('In development: planograms on the store map, shelf by shelf.')}</p></div>` +
+  return `<div class="lyt"><div class="lyt-hero"><span class="lyt-ic">${ic('plan')}</span><span class="lyt-soon">${tx('Coming soon')}</span><h2>${tx('Layouts')}</h2><p>${tx('In development: planograms on the store map, shelf by shelf.')}</p></div>` +
     `<div class="lyt-show">${preview()}</div>` +
     `<div class="lyt-feats">${FEATURES().map(([icon, title, text]) => `<div class="lyt-f"><span class="lyt-fi">${ic(icon)}</span><b>${title}</b><small>${text}</small></div>`).join('')}</div></div>`;
 }
 
 export default {
-  id: 'layouts', title: tx('Layouts'), icon: 'layers', area: 'floor', soon: true,
+  id: 'layouts', title: tx('Layouts'), icon: 'plan', area: 'floor', soon: true,
   desktop: page,
   mobile: page,
 };
