@@ -219,7 +219,6 @@ export default {
   "{pid} is back": "Bumalik na si {pid}",
   "Enter a D-number, like D4. Names are not kept.": "Maglagay ng D-number, gaya ng D4. Hindi itinatago ang mga pangalan.",
   "{pid} is already on the truck": "Nasa truck na si {pid}",
-  "{pid} is on {ref}. Take them off the truck? Their time on it is kept.": "Nasa {ref} si {pid}. Alisin siya sa truck? Itatabi ang oras niya rito.",
   "{ref} is not in this session: include it first": "Wala sa session na ito ang {ref}: isama muna",
   "{pid} joined {ref}": "Sumali si {pid} sa {ref}",
   "Undo": "I-undo",
@@ -760,4 +759,7 @@ export default {
   "{n} mixed": "{n} may halo",
   "{n} more consolidations": "{n} pang consolidation",
   "{n} more micro-departments": "{n} pang micro-department",
+  "Remove pallet": "Alisin ang pallet",
+  "Take off the truck": "Alisin sa truck",
+  "{pid} is on {ref}. Their time on it is kept.": "Nasa {ref} si {pid}. Itatabi ang oras niya rito.",
 };

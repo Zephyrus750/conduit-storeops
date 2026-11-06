@@ -7,6 +7,7 @@
 
 import { ic, esc, toast } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
+import { ask } from '../../sheet.js';
 import { schedule, balance, finishCheck, personalRates, TAKE5, atTime } from '../../../shared/dockplan.js';
 import { fmtHM, truckNo, pallets, planOpts } from './common.js';
 import { truckPhase } from '../../../shared/dockphase.js';
@@ -65,7 +66,7 @@ export function guard(t, pid, ref, rates, startNow) {
 export async function onPlanAct(ctx, t, a, rates) {
   const act = a.dataset.act;
   if (act === 'pl-basis') { await send(ctx, t, clean(t), a.dataset.v); return true; }
-  if (act === 'pl-clear') { if (confirm(tx('Clear the plan for Truck {n}?', { n: truckNo(t.id) }))) await send(ctx, t, {}); return true; }
+  if (act === 'pl-clear') { if (await ask({ title: tx('Clear the plan for Truck {n}?', { n: truckNo(t.id) }), ok: tx('Clear plan') })) await send(ctx, t, {}); return true; }
   if (act === 'pl-balance') {
     const b = balance(t, Date.now(), a.dataset.v, planOpts(t, rates));
     if (b.error) { toast(tx(b.error), 'bad'); return true; }   // shared/dockplan.js's message (test/unit/i18n-keys/dock1.json)

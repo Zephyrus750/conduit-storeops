@@ -466,4 +466,5 @@ export default {
   "Set the planogram’s modules against the shelf’s, spill onto an end, and mark spare modules.": "Confronta i moduli del planogramma con quelli dello scaffale, sposta l’eccesso su una testata e segna i moduli liberi.",
   "Shelves coloured by planogram. Tap one for its planogram, item list, print and history.": "Scaffali colorati per planogramma. Toccane uno per planogramma, elenco articoli, stampa e cronologia.",
   "Upload planograms": "Carica planogrammi",
+  "Clear the pick list": "Svuota la lista di prelievo",
 };

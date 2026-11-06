@@ -113,7 +113,6 @@ export default {
   "Changes on this device": "Mga pagbabago sa device na ito",
   "Close": "Isara",
   "Sending now": "Ipinapadala na",
-  "Discard this change? It never reached the store, so it is lost from this device for good.": "Itapon ang pagbabagong ito? Hindi ito umabot sa tindahan, kaya mawawala na ito nang tuluyan sa device na ito.",
   "Discarded": "Itinapon",
   "This store is not set up for the {area}": "Hindi naka-set up ang tindahang ito para sa {area}",
   "{name} is switched off for this store": "Naka-off ang {name} para sa tindahang ito",
@@ -378,4 +377,10 @@ export default {
   "Sign in to open the guide.": "Mag-sign in para buksan ang guide.",
   "Layouts": "Mga layout",
   "Soon": "Malapit na",
+  "Clear briefing": "I-clear ang briefing",
+  "Clear message": "I-clear ang message",
+  "Discard change": "Itapon ang pagbabago",
+  "Discard this change?": "Itapon ang pagbabagong ito?",
+  "It never reached the store, so it is lost from this device for good.": "Hindi ito umabot sa tindahan, kaya mawawala na ito nang tuluyan sa device na ito.",
+  "Keep it": "Panatilihin",
 };

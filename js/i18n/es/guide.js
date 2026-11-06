@@ -318,4 +318,6 @@ export default {
   "At the top of the rail for managers: the forms, procedures, posters and links the owner shares with every store. Search them, open or print a PDF in one click, and the ones you use most sit on top.": "Arriba en la barra, para los gerentes: los formularios, procedimientos, carteles y enlaces que el propietario comparte con cada tienda. Búscalos, abre o imprime un PDF con un clic; los que más usas quedan arriba.",
   "Help has the Visual Guide: every task played on the device it’s done on, to watch, try, read or print.": "Ayuda tiene la Guía visual: cada tarea mostrada en el dispositivo en que se hace, para ver, probar, leer o imprimir.",
   "Open Help": "Abrir Ayuda",
+  "Clear from this device": "Borrar de este dispositivo",
+  "Stay signed in": "Seguir con la sesión",
 };

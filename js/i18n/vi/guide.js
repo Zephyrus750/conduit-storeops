@@ -318,4 +318,6 @@ export default {
   "At the top of the rail for managers: the forms, procedures, posters and links the owner shares with every store. Search them, open or print a PDF in one click, and the ones you use most sit on top.": "Ở đầu thanh bên dành cho quản lý: biểu mẫu, quy trình, áp phích và liên kết mà chủ sở hữu chia sẻ với mọi cửa hàng. Tìm kiếm, mở hoặc in PDF chỉ với một cú nhấp; những mục dùng nhiều nhất nằm ở trên cùng.",
   "Help has the Visual Guide: every task played on the device it’s done on, to watch, try, read or print.": "Trợ giúp có Hướng dẫn trực quan: mỗi việc được trình diễn ngay trên thiết bị dùng để làm việc đó, để xem, thử, đọc hoặc in.",
   "Open Help": "Mở Trợ giúp",
+  "Clear from this device": "Xóa khỏi thiết bị này",
+  "Stay signed in": "Vẫn đăng nhập",
 };

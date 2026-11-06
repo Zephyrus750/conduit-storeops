@@ -9,6 +9,7 @@ import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/r
 import { SCALES, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
 import { tx, txn, langPicker, setLang } from '../i18n.js';
+import { ask } from '../sheet.js';
 import { updates } from '../updates.js';
 import { retailPeriod } from '../../shared/time.js';
 import { bundle, storagePots, releaseCache, fmtBytes } from '../diag.js';
@@ -50,7 +51,7 @@ export default {
       else if (act === 'scale') setPref('scale', a.getAttribute('data-v')), ctx.rerender();
       else if (act === 'railmin') setPref('railmin', !prefs().railmin), ctx.rerender();
       else if (act === 'hdr') setPref('hdr', prefs().hdr === 'title' ? 'classic' : 'title'), ctx.rerender();
-      else if (act === 'signout') { if (confirm(ctx.store ? tx('Sign out of this store on this device?') : tx('Sign out of the owner console on this device?'))) await ctx.signOut(); }
+      else if (act === 'signout') { if (await ask({ title: ctx.store ? tx('Sign out of this store on this device?') : tx('Sign out of the owner console on this device?'), ok: tx('Sign out'), cancel: tx('Stay signed in') })) await ctx.signOut(); }
       else if (act === 'reload') location.reload();
       else if (act === 'force-reload') { if (confirm(tx('Reload Conduit from the worker? You stay signed in; queued changes are kept.'))) await updates.forceReload(); }
       else if (act === 'install') { if (!(await updates.install())) toast(tx('Use the browser menu › Install app, or Share › Add to Home Screen on an iPhone')); ctx.rerender(); }
@@ -170,7 +171,7 @@ async function paintStorage(ctx, root) {
 async function clearPot(ctx, prefix) {
   if (!ctx.storage || prefix === 'outbox:' || prefix === 'suite_') return;
   const rows = await ctx.storage.list(prefix), keep = prefix === 'snap:' ? `snap:${ctx.storeNo}` : null;
-  if (!confirm(txn(rows.length, 'Clear {n} item from this device?', 'Clear {n} items from this device?'))) return;
+  if (!await ask({ title: txn(rows.length, 'Clear {n} item from this device?', 'Clear {n} items from this device?'), ok: tx('Clear from this device') })) return;
   for (const r of rows) if (r.key !== keep) await ctx.storage.del(r.key);
   toast(tx('Cleared')); if (prefix === 'map:') location.reload(); else ctx.rerender();
 }

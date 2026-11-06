@@ -113,7 +113,6 @@ export default {
   "Changes on this device": "Changements sur cet appareil",
   "Close": "Fermer",
   "Sending now": "Envoi en cours",
-  "Discard this change? It never reached the store, so it is lost from this device for good.": "Abandonner ce changement ? Il n’a jamais atteint le magasin, il sera donc perdu définitivement sur cet appareil.",
   "Discarded": "Abandonné",
   "This store is not set up for the {area}": "Ce magasin n’est pas configuré pour {area}",
   "{name} is switched off for this store": "Désactivé pour ce magasin : {name}",
@@ -378,4 +377,10 @@ export default {
   "Sign in to open the guide.": "Connectez-vous pour ouvrir le guide.",
   "Layouts": "Implantations",
   "Soon": "Bientôt",
+  "Clear briefing": "Effacer le briefing",
+  "Clear message": "Effacer le message",
+  "Discard change": "Abandonner le changement",
+  "Discard this change?": "Abandonner ce changement ?",
+  "It never reached the store, so it is lost from this device for good.": "Il n’a jamais atteint le magasin, il sera donc perdu définitivement sur cet appareil.",
+  "Keep it": "Conserver",
 };

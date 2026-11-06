@@ -219,7 +219,6 @@ export default {
   "{pid} is back": "{pid} đã quay lại",
   "Enter a D-number, like D4. Names are not kept.": "Nhập số D, như D4. Không lưu tên.",
   "{pid} is already on the truck": "{pid} đã có trên xe tải",
-  "{pid} is on {ref}. Take them off the truck? Their time on it is kept.": "{pid} đang ở {ref}. Gỡ họ khỏi xe tải? Thời gian đã làm vẫn được giữ.",
   "{ref} is not in this session: include it first": "{ref} không thuộc phiên này: hãy đưa vào trước",
   "{pid} joined {ref}": "{pid} đã tham gia {ref}",
   "Undo": "Hoàn tác",
@@ -760,4 +759,7 @@ export default {
   "{n} mixed": "{n} lô trộn",
   "{n} more consolidations": "thêm {n} lô hàng gộp",
   "{n} more micro-departments": "thêm {n} nhóm hàng",
+  "Remove pallet": "Xóa pallet",
+  "Take off the truck": "Đưa ra khỏi xe",
+  "{pid} is on {ref}. Their time on it is kept.": "{pid} đang ở {ref}. Thời gian đã làm vẫn được giữ.",
 };

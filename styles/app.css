@@ -3594,6 +3594,11 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .bdk-vf { position: absolute; right: 3px; top: 3px; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; font-size: 9.5px; font-weight: 900; line-height: 1; color: #fff; box-shadow: 0 0 0 1.5px rgba(255,255,255,.9); }
 .bdk-vf.ok { background: #16A34A; } .bdk-vf.no { background: #EA580C; }
 /* Receive's grid sits in a card under its PALLET ENTRY header, like LAST LANDED. */
+/* The dock grid's lines, for a dock of any width: the grid's own colour
+   shows through a 1 px gap. shell.css draws them as borders that end every
+   7th square, so an 8-wide dock lost lines (A7|A8, B6|B7 … and the bottom row). */
+.bdk-grid { gap: 1px; }
+.bdk-sq { border-right: 0; border-bottom: 0; }
 .dk-pe .bdk-grid { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
 /* Last landed rows carry the same mark, beside the square. */
 .dk-li .bdk-vf { position: static; flex: none; width: 17px; height: 17px; font-size: 10.5px; box-shadow: none; margin-left: -4px; }
@@ -4162,6 +4167,11 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .sht-back.bottom.enter .sht { animation: sht-up .24s cubic-bezier(.2, .8, .2, 1); }
 @container shell (max-width: 600px) { .sht-back.enter:not(.cam) .sht { animation: sht-up .24s cubic-bezier(.2, .8, .2, 1); } }
 @media (prefers-reduced-motion: reduce) { .sht-back.enter, .sht-back.enter .sht { animation: none; } .sht { transition: none !important; } }
+/* ask(): the question before a removal, reset or sign-out. */
+.sht-back.sht-ask { z-index: 85; }
+.sht-b:empty { display: none; }
+.sht-b:empty + .sht-f { border-top: 0; }
+.sht-ask .sht-b p { color: var(--ink2); font-size: 14.5px; line-height: 1.5; }
 /* Each pop-up's own width on the PC. */
 .sht-back.pbox { --sht-w: 560px; }
 .sht-back.rcbox { --sht-w: 460px; }

@@ -17,6 +17,7 @@
 
 import { ic, esc, vh, sub, toast, fmtDate } from '../ui.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 import { fileKind, matches, sameTitle, FILE_EXTS, FILE_MAX } from '../../shared/resources.js';
 import { invalidate } from './admin.js';
 import { canPicture, readPdf, pictureOf } from '../pagepic.js';
@@ -198,7 +199,7 @@ export default {
         if (document.querySelector('.rsa-nopic')) ctx.rerender();   // still on this page
       }
       else if (act === 'rsa-del' && e) {
-        if (!confirm(tx('Remove {title} from every store? Its file is deleted too.', { title: e.title }))) return;
+        if (!await ask({ title: tx('Remove {title} from every store?', { title: e.title }), text: tx('Its file is deleted too.'), ok: tx('Remove resource') })) return;
         try { await ctx.admin.api(`/v1/admin/resources/${encodeURIComponent(e.id)}`, { method: 'DELETE' }); st.list = st.list.filter(x => x.id !== e.id); invalidate(); toast(tx('{title} removed', { title: e.title })); ctx.rerender(); } catch (err) { fail(err); }
       }
       else if (act === 'rsa-open' && e) {

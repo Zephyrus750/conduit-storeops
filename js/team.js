@@ -14,7 +14,7 @@
 import { ic, esc, toast, fmtTime } from './ui.js';
 import { MESSAGE_MAX, BRIEFING_MAX } from '../shared/reducers/store.js';
 import { tx } from './i18n.js';
-import { openSheet } from './sheet.js';
+import { openSheet, ask } from './sheet.js';
 
 const SEEN = 'team_seen';
 const seen = no => { try { return JSON.parse(localStorage.getItem(SEEN) || '{}')[no] || ''; } catch { return ''; } };
@@ -119,7 +119,7 @@ export function openTeam({ store, session, today, onClose }) {
       const a = b.dataset.tm, kind = b.dataset.kind;
       if (a === 'edit') { editing = kind; paint(); }
       else if (a === 'cancel') { editing = null; paint(); }
-      else if (a === 'clear') { if (confirm(kind === 'message' ? tx('Clear the team message on every device?') : tx('Clear the briefing on every device?'))) send(kind, '', null); }
+      else if (a === 'clear') { ask({ title: kind === 'message' ? tx('Clear the team message on every device?') : tx('Clear the briefing on every device?'), ok: kind === 'message' ? tx('Clear message') : tx('Clear briefing') }).then(yes => { if (yes) send(kind, '', null); }); }
       else if (a === 'save') { const text = sheet.el.querySelector('[data-tm-field="text"]')?.value || '', until = sheet.el.querySelector('[data-tm-field="until"]')?.value || ''; if (!text.trim()) return toast(tx('Write something first, or Clear'), 'bad'); send(kind, text, until); }
     },
   });

@@ -7,7 +7,7 @@ import { retailPeriod } from '../../shared/time.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
 import { openScanner } from '../scan.js';
 import { tx, txn, locale } from '../i18n.js';
-import { sheetHtml } from '../sheet.js';
+import { sheetHtml, ask } from '../sheet.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
 const PLAN_NAME = { '#a855f7': tx('Purple'), '#3b82f6': tx('Blue'), '#f59e0b': tx('Amber'), '#ec4899': tx('Pink'), '#14b8a6': tx('Teal'), '#ef4444': tx('Red') };
@@ -186,12 +186,12 @@ export default {
         else if (act === 'locate') { if (!flashSeg(map, a.dataset.seg)) toast(tx('{code} is not on this map', { code: a.dataset.seg }), 'bad'); }
         else if (act === 'reset-dept') {
           const d = a.dataset.dept, segs = (refreshedByDept(map, m).find(g => g[0] === d) || [, []])[1];
-          if (!segs.length || !confirm(tx('Reset all refreshed shelves in {dept} for this week?\n\nThis clears them for everyone on the team and cannot be undone.', { dept: d.toUpperCase() }))) return;
+          if (!segs.length || !await ask({ title: tx('Reset all refreshed shelves in {dept} for this week?', { dept: d.toUpperCase() }), text: tx('This clears them for everyone on the team and cannot be undone.'), ok: tx('Reset {dept}', { dept: d.toUpperCase() }) })) return;
           await ctx.store.dispatch({ type: 'refresh.clearDept', entity: { week: m.week }, payload: { dept: d, segments: segs } }); toast(tx('{dept} refreshes reset', { dept: d.toUpperCase() }));
         }
         else if (act === 'colour') { planColour = a.getAttribute('data-colour'); mode = 'plan'; paint(); }
-        else if (act === 'reset-week') { if (confirm(tx('Reset all refreshed shelves for this week?\n\nThis clears every shelf marked as refreshed — for everyone on the team — and cannot be undone.'))) await ctx.store.dispatch({ type: 'refresh.clearWeek', entity: { week: m.week } }); }
-        else if (act === 'reset-plan') { const n = Object.keys(m.plan).length; if (!n) return toast(tx('Nothing is planned')); if (confirm(txn(n, 'Reset planning?\n\nThis clears the colour on {n} planned shelf, for everyone on the team.', 'Reset planning?\n\nThis clears the colours on all {n} planned shelves, for everyone on the team.'))) { await ctx.store.dispatch({ type: 'refresh.plan.clear', entity: {} }); toast(tx('Planning reset')); } }
+        else if (act === 'reset-week') { if (await ask({ title: tx('Reset all refreshed shelves for this week?'), text: tx('This clears every shelf marked as refreshed, for everyone on the team, and cannot be undone.'), ok: tx('Reset the week') })) await ctx.store.dispatch({ type: 'refresh.clearWeek', entity: { week: m.week } }); }
+        else if (act === 'reset-plan') { const n = Object.keys(m.plan).length; if (!n) return toast(tx('Nothing is planned')); if (await ask({ title: tx('Reset planning?'), text: txn(n, 'This clears the colour on {n} planned shelf, for everyone on the team.', 'This clears the colours on all {n} planned shelves, for everyone on the team.'), ok: tx('Reset planning') })) { await ctx.store.dispatch({ type: 'refresh.plan.clear', entity: {} }); toast(tx('Planning reset')); } }
         else if (act === 'focus') { const d = a.getAttribute('data-dept'); const next = m.focus.includes(d) ? m.focus.filter(x => x !== d) : [...m.focus, d]; await ctx.store.dispatch({ type: 'refresh.focus.set', entity: { week: m.week }, payload: { departments: next } }); }
         else if (act === 'zoom-dept') { map.filterDept(a.getAttribute('data-dept')); }
       } catch (err) { toast(err.message, 'bad'); }

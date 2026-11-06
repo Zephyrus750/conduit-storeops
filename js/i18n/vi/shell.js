@@ -113,7 +113,6 @@ export default {
   "Changes on this device": "Thay đổi trên thiết bị này",
   "Close": "Đóng",
   "Sending now": "Đang gửi",
-  "Discard this change? It never reached the store, so it is lost from this device for good.": "Bỏ thay đổi này? Nó chưa từng đến cửa hàng nên sẽ mất vĩnh viễn trên thiết bị này.",
   "Discarded": "Đã bỏ",
   "This store is not set up for the {area}": "Cửa hàng này chưa được thiết lập cho {area}",
   "{name} is switched off for this store": "{name} đã bị tắt cho cửa hàng này",
@@ -378,4 +377,10 @@ export default {
   "Sign in to open the guide.": "Đăng nhập để mở hướng dẫn.",
   "Layouts": "Bố cục",
   "Soon": "Sắp có",
+  "Clear briefing": "Xóa thông báo",
+  "Clear message": "Xóa tin nhắn",
+  "Discard change": "Bỏ thay đổi",
+  "Discard this change?": "Bỏ thay đổi này?",
+  "It never reached the store, so it is lost from this device for good.": "Nó chưa từng đến cửa hàng nên sẽ mất vĩnh viễn trên thiết bị này.",
+  "Keep it": "Giữ lại",
 };

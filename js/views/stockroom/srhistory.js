@@ -14,6 +14,7 @@ import { $, ic, esc, vh, sub, fmtTime, toast, mhead, mrows, DEPT_NAME, accChip }
 import { ensureNames, nameHtml, todayKey, send, copyText, loadArchive, archivedRecs, archiveState } from './common.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { tx, txn, lang, locale } from '../../i18n.js';
+import { ask } from '../../sheet.js';
 
 const SORTS = [['time', tx('Newest first')], ['loc', tx('By location')], ['latest', tx('Latest per bay')], ['dept', tx('By department')]];
 const bayNum = b => { const m = /\d+/.exec(b); return m ? Number(m[0]) : Infinity; };
@@ -93,7 +94,7 @@ export default {
         const E = { bay: o.bay, date: o.date };
         if (a.dataset.act === 'unfinalise') { if (await send(ctx, 'submission.ready', E)) toast(tx('{bay} · {date} moved back to Ready', { bay: o.bay, date: o.date })); }
         else if (a.dataset.act === 'reopen') { if (!confirm(o.date < todayKey() ? tx('Reopen {bay} ({date}) for review? An earlier day’s bay is submitted again automatically at the next end of day.', { bay: o.bay, date: o.date }) : tx('Reopen {bay} ({date}) for review?', { bay: o.bay, date: o.date }))) return; if (await send(ctx, 'submission.reopen', E)) toast(tx('{bay} is back in review', { bay: o.bay })); }
-        else { if (!confirm(tx('Delete this history entry? {bay} on {date} leaves the board and History. The event log keeps a record of the delete.', { bay: o.bay, date: o.date }))) return; if (await send(ctx, 'submission.delete', E)) { st.open = null; toast(tx('History entry deleted')); } }
+        else { if (!await ask({ title: tx('Delete this history entry?'), text: `${tx('{bay} on {date} leaves the board and History.', { bay: o.bay, date: o.date })} ${tx('The event log keeps a record of the delete.')}`, ok: tx('Delete entry') })) return; if (await send(ctx, 'submission.delete', E)) { st.open = null; toast(tx('History entry deleted')); } }
       }
     });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="q"]')) { st.q = e.target.value; const v = e.target.value; ctx.rerender(); setTimeout(() => { const i = root.querySelector('[data-field="q"]'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 0); } });

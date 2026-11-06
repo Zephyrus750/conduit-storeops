@@ -7,6 +7,7 @@
 
 import { ic, esc, vh, sub, toast } from '../ui.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 import { invalidate } from './admin.js';
 
 const st = { list: null, error: null, edit: null, busy: false };
@@ -72,7 +73,7 @@ export default {
       if (act === 'zn-reload') { st.list = null; st.error = null; loadZones(ctx); ctx.rerender(); }
       else if (act === 'zn-edit') { st.edit = z; ctx.rerender(); root.querySelector('[data-form="zone-rename"] input')?.select(); }
       else if (act === 'zn-cancel') { st.edit = null; ctx.rerender(); }
-      else if (act === 'zn-del') { if (confirm(tx('Remove the zone {zone}?', { zone: z }))) await save(ctx, () => ctx.admin.api(`/v1/admin/zones/${encodeURIComponent(z)}`, { method: 'DELETE' }), tx('{zone} removed', { zone: z })); }
+      else if (act === 'zn-del') { if (await ask({ title: tx('Remove the zone {zone}?', { zone: z }), ok: tx('Remove zone') })) await save(ctx, () => ctx.admin.api(`/v1/admin/zones/${encodeURIComponent(z)}`, { method: 'DELETE' }), tx('{zone} removed', { zone: z })); }
     });
     root.addEventListener('submit', async ev => {
       const f = ev.target.closest('form[data-form^="zone-"]'); if (!f) return;

@@ -219,7 +219,6 @@ export default {
   "{pid} is back": "{pid} è rientrato",
   "Enter a D-number, like D4. Names are not kept.": "Inserisci un numero D, come D4. I nomi non vengono conservati.",
   "{pid} is already on the truck": "{pid} è già sul camion",
-  "{pid} is on {ref}. Take them off the truck? Their time on it is kept.": "{pid} è su {ref}. Toglierlo dal camion? Il tempo già fatto resta.",
   "{ref} is not in this session: include it first": "{ref} è fuori da questa sessione: includilo prima",
   "{pid} joined {ref}": "{pid} si è unito a {ref}",
   "Undo": "Annulla",
@@ -760,4 +759,7 @@ export default {
   "{n} mixed": "{n} misti",
   "{n} more consolidations": "altri {n} consolidamenti",
   "{n} more micro-departments": "altri {n} microreparti",
+  "Remove pallet": "Rimuovi il pallet",
+  "Take off the truck": "Togli dal camion",
+  "{pid} is on {ref}. Their time on it is kept.": "{pid} è su {ref}. Il tempo già fatto resta.",
 };

@@ -466,4 +466,5 @@ export default {
   "Set the planogram’s modules against the shelf’s, spill onto an end, and mark spare modules.": "Đối chiếu mô-đun của sơ đồ với mô-đun của kệ, tràn sang đầu kệ và đánh dấu mô-đun trống.",
   "Shelves coloured by planogram. Tap one for its planogram, item list, print and history.": "Kệ được tô màu theo sơ đồ trưng bày. Chạm vào một kệ để xem sơ đồ, danh sách hàng, in và lịch sử.",
   "Upload planograms": "Tải lên sơ đồ trưng bày",
+  "Clear the pick list": "Xóa danh sách lấy hàng",
 };
