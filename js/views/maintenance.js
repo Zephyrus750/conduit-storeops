@@ -10,6 +10,7 @@ import { issueLink } from '../share.js';
 import { qrSvg } from '../../shared/qr.js';
 import { mapFloors } from '../map.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 
 const SEV = [[tx('Low'), '#6B7280'], [tx('Medium'), '#D97706'], [tx('High'), '#DC2626'], [tx('Urgent'), '#7F1D1D']];
 // An issue's status word ("Open" alone is the verb on every link and button).
@@ -176,7 +177,7 @@ export default {
         }
         else if (act === 'remove') {
           const i = ctx.store.get('issues')[selected]; if (!i) return;
-          if (!confirm(tx('Remove "{title}"?\n\nIt leaves every list on every device. Its log stays in the store\'s record.', { title: i.title || CAT_NAME[i.cat] }))) return;
+          if (!await ask({ title: tx('Remove "{title}"?', { title: i.title || CAT_NAME[i.cat] }), text: `${tx('It leaves every list on every device.')} ${tx('Its log stays in the store’s record.')}`, ok: tx('Remove issue') })) return;
           const ev = await ctx.store.dispatch({ type: 'issue.remove', entity: { issue: selected }, payload: {} }); selected = null; toast(tx('Issue removed'));
           for (const p of i.photos || []) dropPhotoWhenSent(ctx, ev, p.id);
         }
@@ -189,7 +190,7 @@ export default {
         }
         else if (act === 'photo-open') { openPhoto(thumbs.get(a.dataset.photo)); }
         else if (act === 'photo-remove') {
-          if (!confirm(tx('Remove this photo? It is deleted from the store’s records.'))) return;
+          if (!await ask({ title: tx('Remove this photo?'), text: tx('It is deleted from the store’s records.'), ok: tx('Remove photo') })) return;
           const ev = await ctx.store.dispatch({ type: 'issue.photo', entity: { issue: selected }, payload: { photo: a.dataset.photo, remove: true } });
           dropPhotoWhenSent(ctx, ev, a.dataset.photo);
         }

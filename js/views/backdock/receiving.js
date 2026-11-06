@@ -6,7 +6,7 @@
 
 import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
-import { sheetHtml } from '../../sheet.js';
+import { sheetHtml, ask } from '../../sheet.js';
 import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
 import { haptic } from '../../device.js';
 import { previewManifest } from './mpreview.js';
@@ -638,7 +638,7 @@ async function onAct(ctx, a, root) {
     if (act === 'l-drop') { keepLand(); st.land.codes.splice(+a.dataset.i, 1); st.land.minsManual = false; st.land.mins = ''; return ctx.rerender(); }
     if (act === 'move-cancel') { st.moving = null; return ctx.rerender(); }
     if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const pid = dnumId(v); if (!pid) return toast(tx('Enter a D-number, like D4. Names are not kept.'), 'bad'); if ((t.team || []).some(x => x.pid === pid)) return toast(tx('{pid} is already on the truck', { pid })); await dispatch(ctx, 'truck.team.set', { truck: id }, { team: [...(t.team || []), { pid }] }); return; }
-    if (act === 'team-drop') { if (a.closest('.pp') && !m.run[a.dataset.pid] && !confirm(tx('Take {pid} off the truck?', { pid: a.dataset.pid }))) return; if (m.run[a.dataset.pid] && !confirm(tx('{pid} is on {ref}. Take them off the truck? Their time on it is kept.', { pid: a.dataset.pid, ref: m.run[a.dataset.pid] }))) return; if (a.closest('.pp')) st.person = null; await dispatch(ctx, 'truck.team.set', { truck: id }, { team: (t.team || []).filter(x => x.pid !== a.dataset.pid) }); return; }
+    if (act === 'team-drop') { const onP = m.run[a.dataset.pid]; if ((onP || a.closest('.pp')) && !await ask({ title: tx('Take {pid} off the truck?', { pid: a.dataset.pid }), text: onP ? tx('{pid} is on {ref}. Their time on it is kept.', { pid: a.dataset.pid, ref: onP }) : '', ok: tx('Take off the truck') })) return; if (a.closest('.pp')) st.person = null; await dispatch(ctx, 'truck.team.set', { truck: id }, { team: (t.team || []).filter(x => x.pid !== a.dataset.pid) }); return; }
     if (act === 'cell') {
       const ref = a.dataset.ref, p = t.pallets[ref];
       // Move: the pallet goes to the empty square tapped.
@@ -700,7 +700,7 @@ async function onAct(ctx, a, root) {
       toast(out ? tx('{ref} skipped: not counted this session', { ref }) : tx('{ref} back in the session', { ref })); return;
     }
     if (act === 'unscan') { const ref = st.sel; await dispatch(ctx, 'pallet.unscan', { truck: id, bay: ref }, { id: a.dataset.id }); toast(tx('{id} taken off {ref}', { id: a.dataset.id, ref })); return; }
-    if (act === 'pal-remove') { if (!confirm(tx('Remove pallet {ref}?', { ref: st.sel }))) return; await dispatch(ctx, 'pallet.remove', { truck: id, bay: st.sel }, {}); st.sel = null; toast(tx('Pallet removed')); return; }
+    if (act === 'pal-remove') { if (!await ask({ title: tx('Remove pallet {ref}?', { ref: st.sel }), ok: tx('Remove pallet') })) return; await dispatch(ctx, 'pallet.remove', { truck: id, bay: st.sel }, {}); st.sel = null; toast(tx('Pallet removed')); return; }
     if (act === 'dec') {
       const kind = a.dataset.dec, p = t.pallets[st.sel];
       // Undo, one step deep as DV's: each action offers its opposite.

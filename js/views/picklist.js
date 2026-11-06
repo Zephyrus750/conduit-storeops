@@ -7,6 +7,7 @@ import { voiceSupported, dictate } from '../voice.js';
 import { spokenCodes, spokenStops, typedStops, ofRun, STOP_WORDS } from '../../shared/voice.js';
 import { haptic } from '../device.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 
 // Voice add on the phone (ShelfSearcher's): say shelf codes, "done" to stop.
 let dictation = null;
@@ -49,7 +50,7 @@ export default {
       const act = a.getAttribute('data-act'), m = model(ctx), code = a.getAttribute('data-code');
       if (act === 'toggle') await save(ctx, m.items.map(i => i.code === code ? { ...i, completed: !i.completed } : i));
       else if (act === 'remove') await save(ctx, m.items.filter(i => i.code !== code));
-      else if (act === 'clear') { const n = m.items.length; if (n && confirm(txn(n, 'Clear all {n} stop from the pick list?', 'Clear all {n} stops from the pick list?'))) await save(ctx, []); }
+      else if (act === 'clear') { const n = m.items.length; if (n && await ask({ title: txn(n, 'Clear all {n} stop from the pick list?', 'Clear all {n} stops from the pick list?'), ok: tx('Clear the pick list') })) await save(ctx, []); }
       else if (act === 'pick-next') { const n = walked(map, m).find(i => !i.completed); if (n) await save(ctx, m.items.map(i => i === n ? { ...i, completed: true } : i)); }
       else if (act === 'add') { const inp = $('[data-field="add"]', root); const { codes, bad } = typedStops(inp.value, lookup); if (bad.length) toast(tx('Not in this store: {codes}', { codes: bad.join(', ') }), 'bad'); const ok = codes.filter(c => !m.items.some(i => i.code === c)); if (ok.length) await save(ctx, [...m.items, ...ok.map(code => ({ code, completed: false }))]); inp.value = ''; }
       else if (act === 'plan') { const order = map.planOrder(m.items.map(i => i.code)); const by = Object.fromEntries(m.items.map(i => [i.code, i])); await save(ctx, order.map(c => by[c])); setRouteView(false); toast(tx('List reordered by the shortest walk')); }

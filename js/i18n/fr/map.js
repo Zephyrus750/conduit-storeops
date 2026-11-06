@@ -466,4 +466,5 @@ export default {
   "Set the planogram’s modules against the shelf’s, spill onto an end, and mark spare modules.": "Mettez les modules du planogramme face à ceux du rayon, débordez sur une tête de gondole et marquez les modules libres.",
   "Shelves coloured by planogram. Tap one for its planogram, item list, print and history.": "Rayons colorés selon leur planogramme. Touchez-en un pour son planogramme, sa liste d’articles, l’impression et l’historique.",
   "Upload planograms": "Importer des planogrammes",
+  "Clear the pick list": "Vider la liste de prélèvement",
 };

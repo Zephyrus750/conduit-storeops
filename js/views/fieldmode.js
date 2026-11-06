@@ -18,6 +18,7 @@ import { $, ic, esc, vh, sub, mhead, toast, today, fmtTime, mgr } from '../ui.js
 import { mountMap, mvMap, bindMapChrome, segmentId, canonCode, hasMap, setStrip, sx } from '../map.js';
 import { haptic } from '../device.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 
 const KEY = no => `fieldcapture:${no}`;
 // { caps: key → capture, sent: [{ id, kind, shelf, to, note, at }] }; an
@@ -122,7 +123,7 @@ export default {
       else if (act === 'fm-send') await send();
       else if (act === 'fm-drop') { const d = read(ctx.storeNo); delete d.caps[a.dataset.key]; write(ctx.storeNo, d); paint(); }
       else if (act === 'fm-clear' && sel) { const d = read(ctx.storeNo); delete d.caps[sel.key]; write(ctx.storeNo, d); paint(true); }
-      else if (act === 'fm-wipe') { if (confirm(tx('Clear every check on this device? Anything not sent yet is lost; what was sent stays in the owner’s queue.'))) { write(ctx.storeNo, { caps: {}, sent: [] }); sel = null; paint(); } }
+      else if (act === 'fm-wipe') { if (await ask({ title: tx('Clear every check on this device?'), text: tx('Anything not sent yet is lost; what was sent stays in the owner’s queue.'), ok: tx('Clear checks') })) { write(ctx.storeNo, { caps: {}, sent: [] }); sel = null; paint(); } }
       else if (act === 'fm-export') {
         const d = read(ctx.storeNo), caps = {};
         for (const c of Object.values(d.caps)) if (c.kind !== 'name') caps[c.shelf] = { shelf: c.shelf.split(' ')[0], sub: c.shelf.split(' ').slice(1).join(' '), floor: c.floor, code: c.to || c.shelf, comment: c.note || '', at: c.at, ...(c.kind === 'rename' ? { differs: true } : {}) };

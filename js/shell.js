@@ -14,7 +14,7 @@ import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEP
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
-import { watchSheets } from './sheet.js';
+import { watchSheets, ask } from './sheet.js';
 import { loadMap, setMap, setPlanSource, mapInfo, parkMap, liveIn, mapStats, shelfForLocation, splitCanon } from './map.js';
 import { initSearch } from './search.js';
 import { voiceSupported, listenOnce } from './voice.js';
@@ -605,7 +605,7 @@ document.addEventListener('click', async e => {
   const act = b.dataset.sync;
   if (act === 'close') { $('#syncDlg').hidden = true; return; }
   if (act === 'retry') { const n = store.retry(); toast(n ? txn(n, 'Trying {n} waiting change again', 'Trying {n} waiting changes again') : tx('Sending now')); }
-  if (act === 'discard') { const h = store.held.find(x => x.event.id === b.dataset.id); if (h && confirm(tx('Discard this change? It never reached the store, so it is lost from this device for good.'))) { await store.discard(h.event.id); toast(tx('Discarded')); } }
+  if (act === 'discard') { const h = store.held.find(x => x.event.id === b.dataset.id); if (h && await ask({ title: tx('Discard this change?'), text: tx('It never reached the store, so it is lost from this device for good.'), ok: tx('Discard change') })) { await store.discard(h.event.id); toast(tx('Discarded')); } }
   paintSync();
 });
 // A view's deskOnly is true, or a test of the session: Maintenance is on a

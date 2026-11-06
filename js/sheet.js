@@ -18,9 +18,10 @@
 //     kind: 'dialog' (default), 'side' or 'bottom'; size: '' or 'wide'.
 //   openSheet({ ...the same, onClose, onClick, root }) → { el, body, set(parts), busy(on), close() }
 //     a pop-up of its own, on the frame.
+//   ask({ title, text, ok, cancel, danger }) → Promise<boolean>, in place of confirm().
 //   camScreen(el) / camClose(attrs) the camera screens' marker and close button.
 
-import { ic } from './ui.js';
+import { ic, esc } from './ui.js';
 import { tx } from './i18n.js';
 
 let seq = 0;
@@ -57,6 +58,27 @@ export function openSheet({ onClose, onClick, root, ...o } = {}) {
       if (p.foot != null) { let f = $('.sht-f'); if (!f && p.foot) { f = document.createElement('div'); f.className = 'sht-f'; $('.sht').appendChild(f); } if (f) { if (p.foot) f.innerHTML = p.foot; else f.remove(); } }
     },
   };
+}
+
+// A question before something that cannot be taken back: the question, a
+// sentence or two on what happens, and buttons named by what they do. A red
+// action starts with focus on the safe button, so Enter never removes
+// anything; Esc and a click outside are the safe answer too. Plain text:
+// it is escaped here.
+//   ask({ title, text, ok, cancel, danger }) → Promise<boolean>
+//   text: a sentence, or a list of them (one paragraph each).
+export function ask({ title, text = '', ok, cancel = tx('Keep it'), danger = true } = {}) {
+  return new Promise(resolve => {
+    let yes = false;
+    const sheet = openSheet({
+      cls: 'sht-ask', title: esc(title), label: title,
+      body: [].concat(text || []).map(t => `<p>${esc(t)}</p>`).join(''),
+      foot: `<button type="button" class="btn" data-ask="no">${esc(cancel)}</button><button type="button" class="btn ${danger ? 'danger' : 'primary'}" data-ask="yes">${esc(ok)}</button>`,
+      onClose: () => resolve(yes),
+      onClick: e => { const b = e.target.closest('[data-ask]'); if (!b) return; yes = b.dataset.ask === 'yes'; sheet.close(); },
+    });
+    try { sheet.el.querySelector(`[data-ask="${danger ? 'no' : 'yes'}"]`).focus({ preventScroll: true }); } catch {}
+  });
 }
 
 // The camera screens: full-screen, the same × at the top right and the same Esc.
@@ -108,19 +130,26 @@ export function watchSheets() {
     }
     const t = top();
     if (t && !stack.some(x => x.el === t)) {
-      const opener = lastOut && !lastOut.closest('.is-sheet') ? lastOut : (document.activeElement !== document.body ? document.activeElement : null);
+      // What opened it: the last thing pressed or focused (for a sheet over
+      // another sheet, the button inside the one below). Kept even when a
+      // repaint replaced it: its twin takes the focus back.
+      const a = document.activeElement, opener = lastOut && !t.contains(lastOut) ? lastOut : (a && a !== document.body && !t.contains(a) ? a : null);
       stack.push({ el: t, opener, back: sig(opener) });
       t.classList.add('enter'); t.addEventListener('animationend', () => t.classList.remove('enter'), { once: true });
       first(t);
     }
   };
   new MutationObserver(check).observe(document.body, { childList: true, subtree: true });
-  // What a sheet would give focus back to: the last thing pressed or focused outside one.
-  document.addEventListener('focusin', e => { const s = e.target.closest?.('.is-sheet'); if (s) lastIn = sig(e.target); else lastOut = e.target; }, true);
+  // What a sheet would give focus back to: the last thing pressed or focused.
+  // Focus a sheet sets on itself as it opens is not what opened it.
+  document.addEventListener('focusin', e => {
+    const s = e.target.closest?.('.is-sheet'); if (s) lastIn = sig(e.target);
+    if (!s || stack.some(x => x.el === s)) lastOut = e.target;
+  }, true);
   let downOn = null;
   document.addEventListener('pointerdown', e => {
     downOn = e.target;
-    if (!e.target.closest?.('.is-sheet')) { const b = e.target.closest?.(FOCUSABLE); if (b) lastOut = b; }
+    const b = e.target.closest?.(FOCUSABLE); if (b) lastOut = b;
   }, true);
   // A click on the dimmed page: the press and the release both outside the sheet.
   document.addEventListener('click', e => {

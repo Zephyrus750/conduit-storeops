@@ -7,6 +7,7 @@
 import { $, ic, esc, vh, sub, toast, mhead, fmtDate, today as storeToday } from '../../ui.js';
 import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, fmtHM, slotRef, attachManifest } from './common.js';
 import { tx, txn } from '../../i18n.js';
+import { ask } from '../../sheet.js';
 import { truckPhase, phaseCounts } from '../../../shared/dockphase.js';
 import { phaseChip } from './phase.js';
 
@@ -130,7 +131,7 @@ export default {
         else if (act === 'sel') { st.sel = a.dataset.slot; ctx.rerender(); }
         else if (act === 'add') { st.sel = a.dataset.slot; const { date, n } = cur(); await set(date, n, { eta: null, note: '' }); }
         else if (act === 'save') { const { date, n } = cur(); const eta = field('eta').trim(); if (eta && !/^\d{2}:\d{2}$/.test(eta)) return toast(tx('Enter a time like 06:30'), 'bad'); const hu = field('huddle'), br = field('break'); await set(date, n, { eta: eta || null, note: field('note'), huddleMins: hu === '' ? null : Number(hu), breakMins: br === '' ? null : Number(br) }); toast(tx('Saved')); }
-        else if (act === 'remove') { const { date, n } = cur(); if (!confirm(tx('Remove Truck {no} from {date}?', { no: n, date: fmtDate(date) }))) return; await ctx.store.dispatch({ type: 'plan.remove', entity: { date, slot: n } }); st.sel = null; }
+        else if (act === 'remove') { const { date, n } = cur(); if (!await ask({ title: tx('Remove Truck {no} from {date}?', { no: n, date: fmtDate(date) }), text: tx('It comes off the plan for that day.'), ok: tx('Remove truck') })) return; await ctx.store.dispatch({ type: 'plan.remove', entity: { date, slot: n } }); st.sel = null; }
         else if (act === 'team-add') { const v = field('team').trim(); if (!v) return; const { date, n, slot } = cur(); const pid = dnumId(v); if (!pid) return toast(tx('Enter a D-number, like D4. Names are not kept.'), 'bad'); if ((slot.team || []).some(x => x.pid === pid)) return; await set(date, n, { team: [...(slot.team || []), { pid }] }); }
         else if (act === 'team-drop') { const { date, n, slot } = cur(); await set(date, n, { team: (slot.team || []).filter(x => x.pid !== a.dataset.pid) }); }
         else if (act === 'stage-to') {

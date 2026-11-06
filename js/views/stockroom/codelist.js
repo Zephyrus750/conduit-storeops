@@ -16,6 +16,7 @@ import { extractCodes } from '../../../shared/screenscan.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { openScreenScan } from '../../screenscan.js';
 import { tx, txn } from '../../i18n.js';
+import { ask } from '../../sheet.js';
 
 // Per store (a device signed in to two stores keeps two lists); a list kept
 // under the old shared key moves to the first store that opens it.
@@ -77,7 +78,7 @@ export default {
       else if (act === 'cl-screen') openScreenScan(ctx, { mode: 'list', onUse: ({ codes }) => { const n = add(codes); toast(txn(n, '{n} code added from the screen', '{n} codes added from the screen')); repaint(); } });
       else if (act === 'cl-add') addTyped();
       else if (act === 'cl-copy') { const list = load(); copyText(list.map(x => x.c).join('\n'), txn(list.length, '{n} code', '{n} codes')); }
-      else if (act === 'cl-clear') { if (confirm(tx('Clear the whole list on this device?'))) { save([]); st.at = 0; repaint(); } }
+      else if (act === 'cl-clear') { ask({ title: tx('Clear the whole list on this device?'), ok: tx('Clear list') }).then(yes => { if (yes) { save([]); st.at = 0; repaint(); } }); }
       else if (act === 'cl-rm') { e.stopPropagation(); remove(Number(a.dataset.i)); }
       else if (act === 'cl-open') { st.at = Number(a.dataset.i); st.view = 'one'; repaint(); setTimeout(() => document.querySelector('#content [data-focus]')?.focus(), 0); }
       else if (act === 'cl-prev') step(-1);

@@ -466,4 +466,5 @@ export default {
   "Set the planogram’s modules against the shelf’s, spill onto an end, and mark spare modules.": "Itapat ang mga module ng planogram sa mga module ng shelf, ilipat ang sobra sa isang end, at markahan ang mga bakanteng module.",
   "Shelves coloured by planogram. Tap one for its planogram, item list, print and history.": "May kulay ang mga shelf ayon sa planogram. I-tap ang isa para sa planogram, listahan ng item, print at history nito.",
   "Upload planograms": "Mag-upload ng mga planogram",
+  "Clear the pick list": "I-clear ang pick list",
 };

@@ -19,7 +19,7 @@ import { otsu, wordsToRows, ingest, filtered, locVerdict, matchPreset } from '..
 import { parseReport, byLoc } from '../shared/stockintel.js';
 import { csvLines } from '../shared/records.js';
 import { tx, txn } from './i18n.js';
-import { openSheet } from './sheet.js';
+import { openSheet, ask } from './sheet.js';
 
 const BASE = () => new URL('vendor/tesseract/', location.href).href;
 let tessLoading = null, tess = null, tessMode = null;
@@ -192,7 +192,7 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
     else if (a === 'preset') { const size = `${video.videoWidth}x${video.videoHeight}`; try { await ctx.store.dispatch({ type: 'scan.preset', entity: { size }, payload: { kind, ...region } }); status(tx('✓ Saved as the store preset for {size}: it applies for every desk sharing a screen this size.', { size })); } catch (err) { status(err.message); } }
     else if (a === 'all') { showAll = !showAll; render(); }
     else if (a === 'rm') { delete tally.codes[b.dataset.code]; render(); }
-    else if (a === 'reset') { if (!confirm(tx('Clear everything read so far?'))) return; for (const k of Object.keys(tally.codes)) delete tally.codes[k]; for (const k of Object.keys(tally.locs)) delete tally.locs[k]; for (const k of Object.keys(items)) delete items[k]; render(); }
+    else if (a === 'reset') { if (!await ask({ title: tx('Clear everything read so far?'), ok: tx('Clear what was read') })) return; for (const k of Object.keys(tally.codes)) delete tally.codes[k]; for (const k of Object.keys(tally.locs)) delete tally.locs[k]; for (const k of Object.keys(items)) delete items[k]; render(); }
     else if (a === 'csv' || a === 'xls') exportAs(a);
     else if (a === 'use') {
       const lv = locVerdict(tally.locs, expected);

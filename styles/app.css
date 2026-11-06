@@ -4167,6 +4167,11 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .sht-back.bottom.enter .sht { animation: sht-up .24s cubic-bezier(.2, .8, .2, 1); }
 @container shell (max-width: 600px) { .sht-back.enter:not(.cam) .sht { animation: sht-up .24s cubic-bezier(.2, .8, .2, 1); } }
 @media (prefers-reduced-motion: reduce) { .sht-back.enter, .sht-back.enter .sht { animation: none; } .sht { transition: none !important; } }
+/* ask(): the question before a removal, reset or sign-out. */
+.sht-back.sht-ask { z-index: 85; }
+.sht-b:empty { display: none; }
+.sht-b:empty + .sht-f { border-top: 0; }
+.sht-ask .sht-b p { color: var(--ink2); font-size: 14.5px; line-height: 1.5; }
 /* Each pop-up's own width on the PC. */
 .sht-back.pbox { --sht-w: 560px; }
 .sht-back.rcbox { --sht-w: 460px; }

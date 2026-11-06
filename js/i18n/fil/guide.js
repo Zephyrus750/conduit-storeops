@@ -318,4 +318,6 @@ export default {
   "At the top of the rail for managers: the forms, procedures, posters and links the owner shares with every store. Search them, open or print a PDF in one click, and the ones you use most sit on top.": "Sa itaas ng rail para sa mga manager: ang mga form, proseso, poster at link na ibinabahagi ng owner sa bawat tindahan. Hanapin ang mga ito, buksan o i-print ang PDF sa isang click, at nasa itaas ang pinakamadalas mong gamitin.",
   "Help has the Visual Guide: every task played on the device it’s done on, to watch, try, read or print.": "Nasa Tulong ang Visual Guide: bawat gawain, ipinapakita sa device kung saan ito ginagawa, para panoorin, subukan, basahin o i-print.",
   "Open Help": "Buksan ang Tulong",
+  "Clear from this device": "I-clear sa device na ito",
+  "Stay signed in": "Manatiling naka-sign in",
 };

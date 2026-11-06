@@ -28,6 +28,7 @@ import { publishMany, dateMany } from './mbatch.js';
 import { statsPane, loadStats, statsHeat } from './mstats.js';
 import { toolOff } from '../../../shared/tools.js';
 import { tx, txn, locale } from '../../i18n.js';
+import { ask } from '../../sheet.js';
 
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {}, load: null, paint: null, stage: null,
@@ -294,13 +295,13 @@ export default {
         else if (act === 'heat') { const l = st.load && inv(ctx).loads[st.load], doc = st.docFor === st.open ? st.doc : null; st.paint = st.paint?.mode === 'heat' ? null : st.view === 'stats' ? statsHeat(st.ms) : l ? loadHeat(l) : doc ? manifestHeat(doc) : null; showPaint(ctx, root, map, st.paint); }
         else if (act === 'unpaint') { st.paint = null; showPaint(ctx, root, map, null); }
         else if (act === 'load-status') { await send(ctx, 'inventory.load.status', { load: st.load }, { status: a.dataset.s, ...(a.dataset.s === 'received' ? { recvDate: today() } : {}) }); }
-        else if (act === 'load-remove') { const l = inv(ctx).loads[st.load]; if (!l || !confirm(tx('Remove {load}? The event log keeps a record.', { load: l.label }))) return; await send(ctx, 'inventory.load.remove', { load: l.id }); st.load = null; st.paint = null; toast(tx('Load removed')); ctx.rerender(); }
+        else if (act === 'load-remove') { const l = inv(ctx).loads[st.load]; if (!l || !await ask({ title: tx('Remove {load}?', { load: l.label }), text: tx('The event log keeps a record.'), ok: tx('Remove load') })) return; await send(ctx, 'inventory.load.remove', { load: l.id }); st.load = null; st.paint = null; toast(tx('Load removed')); ctx.rerender(); }
         else if (act === 'stage-cancel') { st.stage = null; ctx.rerender(); }
         else if (act === 'stage-save') { const s = st.stage; if (!s) return; a.disabled = true; const r = await saveStage(ctx, s); st.stage = null; if (r.kind === 'offsite') return ctx.go('offsite'); st.load = r.id; st.open = null; st.paint = null; ctx.rerender(); }
         else if (act === 'sort') { if (st.sort === a.dataset.k) st.dir = -st.dir; else { st.sort = a.dataset.k; st.dir = -1; } ctx.rerender(); }
         else if (act === 'group') { st.group = st.group === a.dataset.g ? null : a.dataset.g; ctx.rerender(); }
         else if (act === 'attach') { const truck = root.querySelector('[data-field="truck"]')?.value; if (!truck) return; a.disabled = true; await attachManifest(ctx, truck, st.open); toast(tx('{man} attached to Truck {no}', { man: st.open, no: truckNo(truck) })); }
-        else if (act === 'remove') { if (!confirm(tx('Remove manifest {man} from the library? Trucks it is attached to keep their copy.', { man: st.open }))) return; await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(st.open)}`, { method: 'DELETE' }); st.open = null; st.docFor = null; st.allKey = null; toast(tx('Manifest removed')); ctx.rerender(); }
+        else if (act === 'remove') { if (!await ask({ title: tx('Remove manifest {man} from the library?', { man: st.open }), text: tx('Trucks it is attached to keep their copy.'), ok: tx('Remove manifest') })) return; await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(st.open)}`, { method: 'DELETE' }); st.open = null; st.docFor = null; st.allKey = null; toast(tx('Manifest removed')); ctx.rerender(); }
       } catch (err) { toast(err.message, 'bad'); ctx.rerender(); }
     });
     const publish = async f => {

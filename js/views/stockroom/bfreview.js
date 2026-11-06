@@ -28,6 +28,7 @@ import { STATUS, todayKey, ensureNames, nameHtml, nameOf, catalogueVerdict, send
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { openPasteBox } from '../pastebox.js';
 import { tx, txn } from '../../i18n.js';
+import { ask } from '../../sheet.js';
 
 // Desk state. report: the pasted SIM report { at, byLoc, range, delta, bayAt }
 // (delta: what changed per bay since the previous paste; bayAt: when one
@@ -477,7 +478,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'req-paste') { st.reqPaste = !st.reqPaste; ctx.rerender(); }
   else if (act === 'req-close') { st.reqPaste = false; ctx.rerender(); }
   else if (act === 'req-save' || act === 'req-clear') {
-    if (act === 'req-clear' && !confirm(tx('Clear today’s requested list?'))) return;
+    if (act === 'req-clear' && !await ask({ title: tx('Clear today’s requested list?'), ok: tx('Clear list') })) return;
     const want = act === 'req-clear' ? [] : parseRequested(root.querySelector('[data-field="reqpaste"]')?.value || ''), have = m.reqAll;
     for (const b of want) if (!have.includes(b)) await send(ctx, 'submission.request', { bay: b, date });
     for (const b of have) if (!want.includes(b)) await send(ctx, 'submission.request', { bay: b, date }, { remove: true });
@@ -505,7 +506,7 @@ async function onClick(e, ctx, root, repaint) {
     let n = 0; for (const s of m.ready) if (await send(ctx, 'submission.submit', { bay: s.bay, date })) n++;
     toast(txn(n, '{n} bay submitted', '{n} bays submitted'));
   }
-  else if (act === 'delete') { const s = cur(); if (s && confirm(tx('Delete {bay} from today’s board? Its scans are removed from the review.', { bay: s.bay }))) { await send(ctx, 'submission.delete', { bay: s.bay, date }); st.sel = null; } }
+  else if (act === 'delete') { const s = cur(); if (s && await ask({ title: tx('Delete {bay} from today’s board?', { bay: s.bay }), text: tx('Its scans are removed from the review.'), ok: tx('Delete bay') })) { await send(ctx, 'submission.delete', { bay: s.bay, date }); st.sel = null; } }
   else if (act === 'rename') { const s = cur(); if (!s) return; const to = prompt(tx('Correct the bay number for {bay}', { bay: s.bay }), s.bay); if (to && to.trim().toUpperCase() !== s.bay) { const r = await send(ctx, 'submission.rename', { bay: s.bay, date }, { newBay: to.trim() }); if (r) st.sel = `${to.trim().toUpperCase()}:${date}`; } }
   else if (act === 'incorrect') { const s = cur(); if (!s) return; const set = new Set(s.incorrect); set.has(a.dataset.code) ? set.delete(a.dataset.code) : set.add(a.dataset.code); await send(ctx, 'submission.update', { bay: s.bay, date }, { incorrect: [...set] }); }
   else if (act === 'remove') { const s = cur(); if (s) await send(ctx, 'submission.update', { bay: s.bay, date }, { remove: [a.dataset.code] }); }
@@ -542,7 +543,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-home') { st.mView = null; st.mStep = 1; repaint(); }
   else if (act === 'm-check') { st.mView = 'check'; repaint(); }
   else if (act === 'm-remind-close') { st.mRemind = false; repaint(); }
-  else if (act === 'm-dismiss') { if (!confirm(tx('Clear {bay} from your list? It was removed from today’s board.', { bay: a.dataset.bay }))) return; mineSave(mineLocal().filter(x => !(x.bay === a.dataset.bay && x.date === a.dataset.date))); repaint(); }
+  else if (act === 'm-dismiss') { if (!await ask({ title: tx('Clear {bay} from your list?', { bay: a.dataset.bay }), text: tx('It was removed from today’s board.'), ok: tx('Clear {bay}', { bay: a.dataset.bay }) })) return; mineSave(mineLocal().filter(x => !(x.bay === a.dataset.bay && x.date === a.dataset.date))); repaint(); }
   else if (act === 'm-done') {
     const bay = a.dataset.bay, d = a.dataset.date; if (!confirm(tx('Mark "{bay}" as submitted on the PDT?', { bay }))) return;
     const r = await send(ctx, 'submission.submit', { bay, date: d }); if (!r) return;

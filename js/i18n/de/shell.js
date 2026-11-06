@@ -113,7 +113,6 @@ export default {
   "Changes on this device": "Änderungen auf diesem Gerät",
   "Close": "Schließen",
   "Sending now": "Wird jetzt gesendet",
-  "Discard this change? It never reached the store, so it is lost from this device for good.": "Diese Änderung verwerfen? Sie hat die Filiale nie erreicht und geht auf diesem Gerät endgültig verloren.",
   "Discarded": "Verworfen",
   "This store is not set up for the {area}": "Diese Filiale ist nicht für {area} eingerichtet",
   "{name} is switched off for this store": "{name} ist für diese Filiale ausgeschaltet",
@@ -378,4 +377,10 @@ export default {
   "Sign in to open the guide.": "Melden Sie sich an, um die Anleitung zu öffnen.",
   "Layouts": "Layouts",
   "Soon": "Bald",
+  "Clear briefing": "Tagesbriefing löschen",
+  "Clear message": "Teamnachricht löschen",
+  "Discard change": "Änderung verwerfen",
+  "Discard this change?": "Diese Änderung verwerfen?",
+  "It never reached the store, so it is lost from this device for good.": "Sie hat die Filiale nie erreicht und geht auf diesem Gerät endgültig verloren.",
+  "Keep it": "Behalten",
 };

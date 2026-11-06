@@ -17,6 +17,7 @@ import { csvLines } from '../../shared/records.js';
 import wallboard from './backdock/wallboard.js';
 import { teamboard } from './backdock/screens.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 import { loadZones, zoneSelect, zoneHint, zonesChanged } from './adminzones.js';
 
 const AREAS = ['floor', 'stockroom', 'backdock'];
@@ -443,7 +444,7 @@ async function onStoreClick(e, ctx) {
   else if (act === 'actas') { a.disabled = true; try { await ctx.actAs(no); } catch (err) { a.disabled = false; fail(err); } }
   else if (act === 'tool') { const id = a.dataset.tool, off = (c.rec?.toolsOff || []).includes(id), t = TOOLS.find(x => x.id === id); if (!off && !confirm(tx('Switch {tool} off for {no}? It disappears from every device now and the worker refuses its changes. Its records stay.', { tool: tx(t.name), no }))) return; await patchStore(ctx, { tools: { [id]: off } }); toast(off ? tx('{tool} on for {no}', { tool: tx(t.name), no }) : tx('{tool} off for {no}', { tool: tx(t.name), no })); }
   else if (act === 'entitle') { const area = a.dataset.area, on = !c.rec?.entitlements?.[area]; if (!on && !confirm(tx('Turn {area} off for {no}? Devices lose the area the next time their token refreshes.', { area: AREA_NAME[area], no }))) return; await patchStore(ctx, { entitlements: { [area]: on } }); }
-  else if (act === 'revoke') { if (confirm(tx('Sign out every device at store {no}? Each one needs the store PIN again.', { no: st.no })) && await patchStore(ctx, { revoke: true })) toast(tx('Every device is signed out')); }
+  else if (act === 'revoke') { if (await ask({ title: tx('Sign out every device at store {no}?', { no: st.no }), text: tx('Each one needs the store PIN again.'), ok: tx('Sign out every device'), cancel: tx('Cancel') }) && await patchStore(ctx, { revoke: true })) toast(tx('Every device is signed out')); }
   else if (act === 'rot') { st.rot = a.dataset.name; st.rotValue = gen[a.dataset.name](); st.rotDone = null; st.reveal = null; ctx.rerender(); }
   else if (act === 'reveal') {
     a.disabled = true;

@@ -7,6 +7,7 @@
 import { ic, esc, vh, sub, status, toast, fmtTime, mhead, fmtDay } from '../ui.js';
 import { mapInfo, mapStats, mapSymbols, symbolsHtml } from '../map.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 
 const gmaps = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 const dirGoogle = si => si.directionsGoogle || (si.lat != null && si.lng != null ? `https://www.google.com/maps/dir/?api=1&destination=${si.lat},${si.lng}` : '');
@@ -94,7 +95,7 @@ export default {
           if (n && !confirm((area ? txn(n, '{n} change for {store} is still waiting to send. It sends when you switch back (Stockroom and Back dock changes once their code is entered again).', '{n} changes for {store} are still waiting to send. They send when you switch back (Stockroom and Back dock changes once their code is entered again).', { store: ctx.storeNo }) : txn(n, '{n} change for {store} is still waiting to send. It sends when you switch back.', '{n} changes for {store} are still waiting to send. They send when you switch back.', { store: ctx.storeNo })) + '\n\n' + tx('Switch to {store}?', { store: a.dataset.store }))) return;
           await ctx.session.switchTo(a.dataset.store); location.reload();
         }
-        else if (act === 'forget') { if (confirm(tx('Sign this device out of store {store}?', { store: a.dataset.store }))) { await ctx.session.forget(a.dataset.store); parked = await ctx.session.parked(); repaint(); } }
+        else if (act === 'forget') { if (await ask({ title: tx('Sign this device out of store {store}?', { store: a.dataset.store }), ok: tx('Sign out'), cancel: tx('Stay signed in') })) { await ctx.session.forget(a.dataset.store); parked = await ctx.session.parked(); repaint(); } }
       } catch (err) { toast(err.message, 'bad'); }
     });
     root.addEventListener('submit', async e => {

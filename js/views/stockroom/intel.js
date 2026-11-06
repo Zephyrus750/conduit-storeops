@@ -10,6 +10,7 @@ import { todayKey, kcCopy, ensureNames, nameOf, nameHtml, loadProfiles, allProfi
 import { openScreenScan } from '../../screenscan.js';
 import { parseReport, rowKey, sohBand, flagOf, flagsOf, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
 import { tx, txn } from '../../i18n.js';
+import { ask } from '../../sheet.js';
 
 // The snapshot history, fetched when the index changes.
 const cache = { key: null, snaps: null, loading: null, error: null, built: null };
@@ -171,7 +172,7 @@ export default {
         st.busy = false; ctx.rerender();
         toast(`${tx("{n} sent to today's Adjustments", { n: r.n })}${r.failed ? ` · ${tx('{n} could not be added', { n: r.failed })}` : ''}`, r.failed ? 'bad' : '', { label: tx('Open'), run: () => ctx.go('adjust') });
       }
-      else if (act === 'sri-remove') { if (!confirm(tx('Remove the snapshot for {date}? The classes are worked out again without it.', { date: a.dataset.date }))) return; try { await ctx.api(`/v1/store/${ctx.storeNo}/soh/${a.dataset.date}`, { method: 'DELETE' }); toast(tx('Snapshot removed')); } catch (err) { toast(err.message, 'bad'); } }
+      else if (act === 'sri-remove') { if (!await ask({ title: tx('Remove the snapshot for {date}?', { date: a.dataset.date }), text: tx('The classes are worked out again without it.'), ok: tx('Remove snapshot') })) return; try { await ctx.api(`/v1/store/${ctx.storeNo}/soh/${a.dataset.date}`, { method: 'DELETE' }); toast(tx('Snapshot removed')); } catch (err) { toast(err.message, 'bad'); } }
     });
     root.addEventListener('change', e => { if (e.target.matches('[data-field="keep"]')) { st.keep = e.target.checked; ctx.rerender(); } });
     let typing = null;

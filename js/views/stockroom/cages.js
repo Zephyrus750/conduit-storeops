@@ -16,6 +16,7 @@ import { hasMap, mountMap, bindMapChrome, mvMap, segmentId } from '../../map.js'
 import { printSheet } from '../../print.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { tx, txn } from '../../i18n.js';
+import { ask } from '../../sheet.js';
 
 let usedArg = null;
 const st = { sel: null, find: '', filter: 'all', sort: 'age', mode: 'scan', target: null, qty: 1, last: null, newRing: 'new-lines', placing: null, feed: 'all', tags: false, zone: '', bc: null };
@@ -103,7 +104,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'park') { const c = m.open.find(x => x.id === st.sel); const loc = root.querySelector('[data-field="park"]')?.value.trim(); if (c && loc) await send(ctx, 'cage.park', { cage: c.id }, { location: loc }); }
   else if (act === 'addline') { const c = m.open.find(x => x.id === st.sel); const kc = parseKeycodes(root.querySelector('[data-field="addkc"]')?.value)[0], qty = Number(root.querySelector('[data-field="addqty"]')?.value) || 1; if (!c || !kc) return toast(tx('Keycode needed'), 'bad'); await send(ctx, 'cage.scan', { cage: c.id }, { keycode: kc, qty }); }
   else if (act === 'sweep') { const c = m.open.find(x => x.id === st.sel); if (c) await send(ctx, 'cage.sweep', { cage: c.id }); }
-  else if (act === 'close') { const c = m.open.find(x => x.id === st.sel); if (c && confirm(tx('Close {cage}? It is emptied and leaves the list.', { cage: c.id }))) { await send(ctx, 'cage.close', { cage: c.id }); st.sel = null; } }
+  else if (act === 'close') { const c = m.open.find(x => x.id === st.sel); if (c && await ask({ title: tx('Close {cage}?', { cage: c.id }), text: tx('It is emptied and leaves the list.'), ok: tx('Close cage') })) { await send(ctx, 'cage.close', { cage: c.id }); st.sel = null; } }
   else if (act === 'place') { st.placing = st.placing === st.sel ? null : st.sel; ctx.rerender(); }
   else if (act === 'retag') { const to = (prompt(tx('New tag for {cage} (scan or type it)', { cage: st.sel })) || '').trim().toUpperCase(); if (!to) return; const sscc = gs1Parse(to)?.sscc; if (await send(ctx, 'cage.retag', { cage: st.sel }, { to: sscc || to })) { toast(tx('{cage} is now {tag}', { cage: st.sel, tag: sscc || to })); st.sel = sscc || to; ctx.rerender(); } }
   else if (act === 'tag1') printTags([st.sel], ctx.storeName);
