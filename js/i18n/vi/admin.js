@@ -617,4 +617,5 @@ export default {
   "{title} declined": "Đã từ chối {title}",
   "{title} is waiting again": "{title} lại đang chờ",
   "{title} marked added": "Đã đánh dấu đã thêm {title}",
+  "Pictures kept": "Ảnh đã lưu",
 };

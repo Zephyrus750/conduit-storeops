@@ -617,4 +617,5 @@ export default {
   "{title} declined": "{title} rifiutato",
   "{title} is waiting again": "{title} è di nuovo in attesa",
   "{title} marked added": "{title} segnato come aggiunto",
+  "Pictures kept": "Immagini conservate",
 };

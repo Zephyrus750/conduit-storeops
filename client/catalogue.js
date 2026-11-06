@@ -19,8 +19,16 @@ const TTL_MS = 7 * 86_400_000;
 // in the background and keeps each one). Asking again costs the worker an
 // edge-cache read: it does not re-read a page it is reading or that failed.
 export const THIN_MS = 90_000;
-const thin = item => !!item && !item.img && !Number.isFinite(item.price);
-const fresh = (item, at) => Date.now() - at < (thin(item) ? THIN_MS : TTL_MS);
+// An answer whose page was read but came without a picture (or without a
+// price) is asked again after 30 minutes, not kept for the week: the worker
+// keeps trying the page, and fills in any picture it has kept, so the
+// picture arrives without waiting a week. A picture this device already
+// has is never dropped for an answer without one.
+export const PART_MS = 30 * 60_000;
+const hasPrice = item => Number.isFinite(item.price);
+const thin = item => !!item && !item.at && !(item.img && hasPrice(item));
+const part = item => !!item && (!item.img || !hasPrice(item));
+const fresh = (item, at) => Date.now() - at < (thin(item) ? THIN_MS : part(item) ? PART_MS : TTL_MS);
 // The device's own calendar day: a kept miss counts until local midnight.
 export const deviceDay = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const BATCH_MS = 40;
@@ -67,7 +75,8 @@ export function createCatalogue({ transport, storage, timers = globalThis, token
       catch { const now = Date.now(); for (const kc of chunk) failed.set(kc, now); }
       for (const kc of chunk) {
         // Left out of the answer: the worker could not tell (its catalogue was down).
-        const item = items && kc in items ? items[kc] ?? null : undefined;
+        let item = items && kc in items ? items[kc] ?? null : undefined;
+        if (item && !item.img) { const prev = mem.get(kc)?.item || (await storage.get(`kc:${kc}`))?.item; if (prev?.img) item = { ...item, img: prev.img }; }
         if (item) { mem.set(kc, { item, at: Date.now() }); failed.delete(kc); await storage.set(`kc:${kc}`, { at: Date.now(), item }); }
         else if (item === null) { mem.set(kc, { item: null, at: Date.now() }); await storage.set(`kc:${kc}`, { at: Date.now(), item: null, day: deviceDay() }); }
         else if (items) failed.set(kc, Date.now());   // left out: not asked again until the back-off has passed
