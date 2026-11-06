@@ -24,7 +24,7 @@
 //   POST /rebuild { trigger }  → starts a build unless one is running or ran in the last 20 h (force: true overrides)
 
 import { DurableObject } from 'cloudflare:workers';
-import { productsFromSitemap, readSitemapIndex, shardNameForUrl, slugToName, productUrl, oneDigitVariants, sweepPlan } from './sitemap.js';
+import { productsFromSitemap, picturesFromSitemap, readSitemapIndex, shardNameForUrl, slugToName, productUrl, oneDigitVariants, sweepPlan } from './sitemap.js';
 import { json, fail, HttpError } from './http.js';
 import { storeParts, DEFAULT_TZ } from '../shared/time.js';
 
@@ -197,13 +197,17 @@ export class CatalogueObject extends DurableObject {
     if (r.status !== 200) { b.skipped += 1; if (r.status === 404) b.probedGone.push(t.name); return; }
     const found = productsFromSitemap(r.text), n = Object.keys(found).length;
     if (!n) { b.errors += 1; b.firstError = b.firstError || `no products in sitemap ${t.name}`; return; }
+    // A sitemap that names its products' pictures gives them all, with no
+    // product page read (Kmart's pages turn automated browsers away).
+    const pics = Object.entries(picturesFromSitemap(r.text)), now = Date.now();
     this.ctx.storage.transactionSync(() => {
       this.sql.exec('DELETE FROM products WHERE shard = ?', t.name);
       for (const [kc, slug] of Object.entries(found)) this.sql.exec('INSERT OR REPLACE INTO products (kc, slug, shard) VALUES (?, ?, ?)', kc, slug, t.name);
-      this.sql.exec('INSERT OR REPLACE INTO shards (name, count, at) VALUES (?, ?, ?)', t.name, n, Date.now());
+      for (const [kc, img] of pics) this.sql.exec('INSERT OR REPLACE INTO pictures (kc, img, at) VALUES (?, ?, ?)', kc, img, now);
+      this.sql.exec('INSERT OR REPLACE INTO shards (name, count, at) VALUES (?, ?, ?)', t.name, n, now);
     });
     this.put('collected', Date.now());
-    b.filesOk += 1; b.ingested += n;
+    b.filesOk += 1; b.ingested += n; b.pictures = (b.pictures || 0) + pics.length;
   }
 
   async finish(b) {
@@ -222,7 +226,7 @@ export class CatalogueObject extends DurableObject {
     }
     const total = this.total();
     const status = total > 0 && b.errors === 0 ? 'ok' : total > 0 ? 'partial' : 'failed';
-    this.put('lastbuild', { at: now, status, total, filesOk: b.filesOk, filesSkipped: b.skipped, errors: b.errors, ingested: b.ingested, ms: now - b.started, trigger: b.trigger, discovery: b.discovery, ...(staleCleaned ? { staleCleaned } : {}), ...(sweepHeld ? { sweepHeld } : {}), ...(b.firstError ? { reason: b.firstError } : {}) });
+    this.put('lastbuild', { at: now, status, total, filesOk: b.filesOk, filesSkipped: b.skipped, errors: b.errors, ingested: b.ingested, pictures: b.pictures || 0, ms: now - b.started, trigger: b.trigger, discovery: b.discovery, ...(staleCleaned ? { staleCleaned } : {}), ...(sweepHeld ? { sweepHeld } : {}), ...(b.firstError ? { reason: b.firstError } : {}) });
     this.put('build', null);
   }
 }

@@ -298,3 +298,14 @@ test('details: the picture check names a block page, and says what an ordinary p
   assert.deepEqual([p.title, p.jsonLd, p.ogImage, p.nextData, p.keycodePictures, p.priceText, p.blocked], ['Kettle | Kmart', 'none', false, true, 0, true, null]);
   assert.match(pageSummary(p), /no price or picture on the page \(title “Kettle \| Kmart”.*JSON-LD: none; og:image: none; Next\.js data: yes; pictures named with the keycode: 0; a \$ price in the text: yes\)/);
 });
+
+test('sitemap: a product sitemap that names its pictures gives keycode → picture (first one, https only)', async () => {
+  const { picturesFromSitemap } = await import('../../worker/sitemap.js');
+  const xml = '<urlset xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' +
+    '<url><loc>https://www.kmart.com.au/product/1.7l-cordless-kettle-41989326/</loc><image:image><image:loc>https://assets.kmart.example/images/41989326-1.jpg?w=800&amp;q=80</image:loc></image:image><image:image><image:loc>https://assets.kmart.example/images/41989326-2.jpg</image:loc></image:image></url>' +
+    '<url><loc><![CDATA[https://www.kmart.com.au/product/mug-43307685/]]></loc><image:image><image:loc><![CDATA[https://assets.kmart.example/images/43307685.webp]]></image:loc></image:image></url>' +
+    '<url><loc>https://www.kmart.com.au/product/no-picture-43302210/</loc></url>' +
+    '<url><loc>https://www.kmart.com.au/product/plain-http-43166022/</loc><image:image><image:loc>http://insecure.example/43166022.jpg</image:loc></image:image></url></urlset>';
+  assert.deepEqual(picturesFromSitemap(xml), { 41989326: 'https://assets.kmart.example/images/41989326-1.jpg?w=800&q=80', 43307685: 'https://assets.kmart.example/images/43307685.webp' });
+  assert.deepEqual(picturesFromSitemap('<urlset><url><loc>https://www.kmart.com.au/product/x-42977636/</loc></url></urlset>'), {});
+});

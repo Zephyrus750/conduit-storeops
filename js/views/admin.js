@@ -95,7 +95,7 @@ function probeBox() {
   const got = r => [r.img ? tx('picture') : '', r.price != null ? tx('price {price}', { price: `$${r.price}` }) : ''].filter(Boolean).join(' · ');
   const body = !p ? '' : p.loading ? `<div class="cat-pr-r"><span class="nm-look" role="status"><i aria-hidden="true"></i><span>${tx('Checking {code}…', { code: esc(p.kc) })}</span></span></div>`
     : p.error ? `<div class="cat-pr-r c-red">${esc(p.error)}</div>`
-    : `<div class="cat-pr-r"><div class="ad-kv">${step(tx('In the catalogue'), p.link, r => esc(r.name || p.kc))}${step(tx('Browser Rendering'), p.browser, got)}${step(tx('Legacy details worker'), p.legacy, got)}${step(tx('The picture loads'), p.image, r => esc(r.type || ''))}</div>` +
+    : `<div class="cat-pr-r"><div class="ad-kv">${step(tx('In the catalogue'), p.link, r => esc(r.name || p.kc))}${step(tx('Browser Rendering'), p.browser, got)}${step(tx('Legacy details worker'), p.legacy, got)}${p.kept ? `<span>${tx('Kept picture')}</span><b class="c-green">✓ ${tx('from the sitemap or an earlier read')}</b>` : ''}${step(tx('The picture loads'), p.image, r => esc(r.type || ''))}</div>` +
       (p.image?.url ? `<div class="cat-pr-img">${productImg(p.image.url, p.link?.name || '')}<small class="mono">${esc(p.image.url)}</small></div>` : '') + `</div>`;
   return `<div class="cat-pr"><b>${tx('Check a product’s picture')}</b><div class="cat-pr-f"><input class="inp" data-field="cat-kc" inputmode="numeric" placeholder="${tx('Keycode')}" value="${esc(p?.kc || '')}" aria-label="${tx('Keycode')}"><button class="btn sm" data-act="cat-probe"${p?.loading ? ' disabled' : ''}>${ic('search')}${tx('Check')}</button></div>${body}</div>`;
 }

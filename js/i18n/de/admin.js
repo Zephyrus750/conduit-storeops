@@ -618,4 +618,6 @@ export default {
   "{title} is waiting again": "{title} wartet wieder",
   "{title} marked added": "{title} als hinzugefügt markiert",
   "Pictures kept": "Gespeicherte Bilder",
+  "Kept picture": "Gespeichertes Bild",
+  "from the sitemap or an earlier read": "aus der Sitemap oder einem früheren Abruf",
 };
