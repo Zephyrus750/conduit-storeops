@@ -3283,10 +3283,14 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .rs-cats .chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font-size: 12.5px; font-weight: 600; color: var(--ink2); }
 .rs-cats .chip:hover { background: var(--hover); }
 .rs-cats .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-.rs-kind { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; height: 26px; padding: 0 6px; border-radius: 7px; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #fff; background: #64748B; }
+.rs-kind { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; height: 26px; padding: 0 6px; border-radius: 7px; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #334155; background: #E2E8F0; }
 .rs-kind svg.i { width: 15px; height: 15px; }
-.rs-kind.pdf { background: #DC2626; } .rs-kind.doc, .rs-kind.docx { background: #2563EB; } .rs-kind.xls, .rs-kind.xlsx, .rs-kind.csv { background: #15803D; }
-.rs-kind.ppt, .rs-kind.pptx { background: #EA580C; } .rs-kind.png, .rs-kind.jpg, .rs-kind.jpeg, .rs-kind.gif, .rs-kind.webp { background: #7C3AED; } .rs-kind.link { background: #0F766E; }
+/* A file's kind is a state, so pale with dark ink (one rule for status colour: solid only for what is live). */
+.rs-kind.pdf { background: #FEE2E2; color: #991B1B; } .rs-kind.doc, .rs-kind.docx { background: #DBEAFE; color: #1D4ED8; } .rs-kind.xls, .rs-kind.xlsx, .rs-kind.csv { background: #DCFCE7; color: #166534; }
+.rs-kind.ppt, .rs-kind.pptx { background: #FFEDD5; color: #C2410C; } .rs-kind.png, .rs-kind.jpg, .rs-kind.jpeg, .rs-kind.gif, .rs-kind.webp { background: #EDE9FE; color: #5B21B6; } .rs-kind.link { background: #CCFBF1; color: #0F766E; }
+.frame.dark .rs-kind { background: #334155; color: #E2E8F0; } .frame.dark .rs-kind.pdf { background: #4C1D1D; color: #FCA5A5; } .frame.dark .rs-kind.doc, .frame.dark .rs-kind.docx { background: #1E3A5F; color: #93C5FD; }
+.frame.dark .rs-kind.xls, .frame.dark .rs-kind.xlsx, .frame.dark .rs-kind.csv { background: #14532D; color: #86EFAC; } .frame.dark .rs-kind.ppt, .frame.dark .rs-kind.pptx { background: #4A2511; color: #FDBA74; }
+.frame.dark .rs-kind.png, .frame.dark .rs-kind.jpg, .frame.dark .rs-kind.jpeg, .frame.dark .rs-kind.gif, .frame.dark .rs-kind.webp { background: #3B2A63; color: #C4B5FD; } .frame.dark .rs-kind.link { background: #134E4A; color: #5EEAD4; }
 .rs-top .rs-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .rs-tile { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); text-align: left; min-width: 0; }
 .rs-tile:hover { background: var(--hover); }

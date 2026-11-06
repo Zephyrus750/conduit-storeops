@@ -190,7 +190,7 @@ function deptsBody(ctx) {
 function feedbackBody(ctx) {
   return `<div class="stg-card"><div class="stg-h">${tx('Feedback and report')}</div><p class="stg-p">${tx('Goes to the developer with the store number, the version and a diagnostics summary from this device. No names; write the D-number if it matters.')}</p>` +
     `<div class="stg-fb"><select class="stg-in" data-field="fbkind" aria-label="${tx('Kind of feedback')}"><option value="wrong">${tx('Something is wrong')}</option><option value="idea">${tx('An idea')}</option><option value="question">${tx('A question')}</option><option value="other">${tx('Other')}</option></select><textarea class="stg-in" data-field="fbtext" rows="4" maxlength="2000" placeholder="${tx('What happened, and what did you expect?')}" aria-label="${tx('What happened')}"></textarea><label class="stg-chk"><input type="checkbox" data-field="fbdiag" checked> ${tx('Attach diagnostics')}</label><span class="btn sm primary" data-act="send-feedback">${ic('arrow')}${tx('Send')}</span></div>` +
-    row(tx('Diagnostic bundle'), tx('Device, version, sync, storage and the last 50 log lines, for pasting into a message.'), `<span class="btn sm" data-act="copy-diag">${ic('file')}${tx('Copy')}</span>`) + `</div>`;
+    row(tx('Diagnostic bundle'), tx('Device, version, sync, storage and the last 50 log lines, for pasting into a message.'), `<span class="btn sm" data-act="copy-diag">${ic('clip')}${tx('Copy')}</span>`) + `</div>`;
 }
 async function sendFeedback(ctx, root) {
   const v = f => root.querySelector(`[data-field="${f}"]`), text = v('fbtext')?.value.trim();
