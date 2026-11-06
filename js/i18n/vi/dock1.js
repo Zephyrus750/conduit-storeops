@@ -762,4 +762,7 @@ export default {
   "Remove pallet": "Xóa pallet",
   "Take off the truck": "Đưa ra khỏi xe",
   "{pid} is on {ref}. Their time on it is kept.": "{pid} đang ở {ref}. Thời gian đã làm vẫn được giữ.",
+  "A manager attaches it": "Quản lý sẽ gắn bảng kê",
+  "A manager attaches the manifest.": "Quản lý là người gắn bảng kê.",
+  "No manifest yet: a manager attaches it.": "Chưa có bảng kê: quản lý sẽ gắn bảng kê.",
 };

@@ -762,4 +762,7 @@ export default {
   "Remove pallet": "Alisin ang pallet",
   "Take off the truck": "Alisin sa truck",
   "{pid} is on {ref}. Their time on it is kept.": "Nasa {ref} si {pid}. Itatabi ang oras niya rito.",
+  "A manager attaches it": "Isang manager ang mag-a-attach nito",
+  "A manager attaches the manifest.": "Isang manager ang mag-a-attach ng manifest.",
+  "No manifest yet: a manager attaches it.": "Wala pang manifest: isang manager ang mag-a-attach nito.",
 };
