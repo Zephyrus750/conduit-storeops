@@ -195,6 +195,15 @@ and those are set, the legacy suite and details workers (`LOOKUP_URL`,
 `DETAILS_URL`) answer instead; after that they can be removed from
 `wrangler.toml`. `npm run dev` serves stand-in sitemaps on :8791.
 
+Pictures are kept once found. Every picture a page read finds goes into the
+catalogue object's `pictures` table, and a kept picture fills any answer
+that has none, so a product's picture survives the edge cache emptying and
+a spell when product pages cannot be read (the owner console's catalogue
+status counts them). A read that finds no picture is read again after 30
+minutes, doubling to a day, rather than kept for the day; devices ask again
+after 30 minutes for an answer without a picture, and never drop a picture
+they already have.
+
 The same rendering answers a barcode with its keycode (`worker/apnlookup.js`):
 Kmart's site search finds a product by its barcode, so a clearance ticket or
 shelf talker, which carries the item's own barcode, needs no keycode typed.

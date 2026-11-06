@@ -30,6 +30,13 @@
 // again two minutes later. A page that could not be read waits an hour.
 // When Browser Rendering cannot read the pages (Kmart refusing it, or the
 // account over its browser limit), the legacy details worker reads them.
+//
+// Pictures: a page read that finds no picture is not taken as final. It is
+// read again after 30 minutes, then an hour, two, and so on up to a day
+// (np counts the reads in a row without one). Every picture found is kept
+// by the catalogue object, and a kept picture fills any answer that has
+// none, so a product's picture survives the edge cache emptying and a
+// spell when product pages cannot be read.
 // GET /v1/admin/catalogue/probe?kc= (probe below) shows the owner each step.
 
 import { HttpError } from './http.js';
@@ -42,6 +49,9 @@ const DETAIL_TTL_S = 86400;         // price and clearance refresh daily
 const MISS_TTL_S = 3600;
 const RETRY_TTL_S = 3600;           // a product page that could not be read waits this long before another try
 const PENDING_TTL_S = 120;          // a page being read now is not started again by another ask for this long
+const NOPIC_BASE_S = 1800;          // a read that found no picture is read again after 30 min, doubling to a day
+const NOPIC_MAX_S = 86400;
+export const nopicTtl = np => Math.min(NOPIC_MAX_S, NOPIC_BASE_S * 2 ** Math.max(0, (np || 1) - 1));
 const UPSTREAM_TIMEOUT_MS = 8000;
 export const DETAIL_BUDGET_MS = 3500;
 
@@ -62,7 +72,7 @@ export async function lookup(env, ctx, codes, { details = true, upstream: fetchU
     const hit = cache ? await cacheGet(cache, kc) : null;
     if (hit === undefined) { needLink.push(kc); continue; }
     items[kc] = hit;
-    if (hit && details && !fresh(hit.at, DETAIL_TTL_S, now()) && !fresh(hit.tried, RETRY_TTL_S, now()) && !fresh(hit.pending, PENDING_TTL_S, now())) needDetail.push(kc);
+    if (hit && details && !fresh(hit.at, hit.img ? DETAIL_TTL_S : nopicTtl(hit.np), now()) && !fresh(hit.tried, RETRY_TTL_S, now()) && !fresh(hit.pending, PENDING_TTL_S, now())) needDetail.push(kc);
   }
   // 2. links for the unknown codes; a code the catalogue could not answer
   // for stays out of items and out of the cache.
@@ -74,6 +84,14 @@ export async function lookup(env, ctx, codes, { details = true, upstream: fetchU
       items[kc] = f ? { kc, name: f.name || '', url: f.url, price: null, was: null, img: null, clr: false, at: 0 } : null;
       if (f) needDetail.push(kc); else puts.push(kc);
     }
+  }
+  // 2b. a picture kept from an earlier read fills an answer that has none
+  // (an edge hit without one is written back with it, so the next ask
+  // does not need the catalogue object).
+  const bare = Object.keys(items).filter(kc => items[kc] && !items[kc].img);
+  if (bare.length) {
+    const kept = await keptPictures(env, bare);
+    for (const kc of bare) if (kept[kc]) { items[kc] = { ...items[kc], img: kept[kc] }; if (!needLink.includes(kc) && !needDetail.includes(kc)) puts.push(kc); }
   }
   // 3. price, was, image, clearance for the ones that have a product page:
   // marked as being read and cached first, so another ask does not start the
@@ -87,11 +105,19 @@ export async function lookup(env, ctx, codes, { details = true, upstream: fetchU
     const base = Object.fromEntries(needDetail.map(kc => [kc, plain(kc)]));
     for (const kc of needDetail) items[kc] = { ...base[kc], pending: t0 };
     if (cache) await Promise.all(needDetail.map(kc => cachePut(cache, kc, items[kc], t0)));
-    const onItem = (kc, d) => { got[kc] = { ...base[kc], price: d.price ?? null, was: d.was ?? null, img: d.img || null, clr: !!d.clr, at: now() }; save(kc, got[kc]); };
+    // A read without a picture keeps the one already known, and counts
+    // towards the back-off; a new picture is kept by the catalogue object.
+    const found = {};
+    const onItem = (kc, d) => {
+      const { np, ...prev } = base[kc];
+      got[kc] = { ...prev, price: d.price ?? null, was: d.was ?? null, img: d.img || prev.img || null, clr: !!d.clr, at: now(), ...(d.img ? {} : { np: (np || 0) + 1 }) };
+      if (d.img && d.img !== prev.img) found[kc] = d.img;
+      save(kc, got[kc]);
+    };
     const job = fetchDetails(env, needDetail.map(kc => ({ kc, u: base[kc].url })), fetchImpl, onItem)
       .then(() => { const t = now(); for (const kc of needDetail) if (!got[kc]) save(kc, { ...base[kc], tried: t }); })
       .catch(() => {})
-      .then(() => Promise.all(saves));
+      .then(() => Promise.all([...saves, keepPictures(env, found)]));
     if (ctx?.waitUntil) ctx.waitUntil(job);
     let timer; await Promise.race([job, new Promise(r => { timer = setTimeout(r, budgetMs); })]); clearTimeout(timer);
     for (const kc of needDetail) if (got[kc]) items[kc] = got[kc];
@@ -115,6 +141,17 @@ async function cachePut(cache, kc, item, now) {
   try { await cache.put(cacheKey(kc), new Response(JSON.stringify(item), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ttl}`, 'X-Cached-At': String(now) } })); } catch {}
 }
 
+// The pictures the catalogue object keeps: { kc: img } for the codes it has one for.
+async function keptPictures(env, codes) {
+  const stub = catalogueStub(env); if (!stub) return {};
+  try { const r = await stub.fetch(`https://catalogue/pictures?kc=${codes.join(',')}`); return r.ok ? ((await r.json()).items || {}) : {}; }
+  catch { return {}; }
+}
+async function keepPictures(env, pics) {
+  const stub = catalogueStub(env); if (!stub || !Object.keys(pics).length) return;
+  try { await stub.fetch('https://catalogue/pictures', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: pics }) }); }
+  catch { /* kept next time a page is read */ }
+}
 export const catalogueStub = env => env.CATALOGUE ? env.CATALOGUE.get(env.CATALOGUE.idFromName('catalogue')) : null;
 // Conduit's own catalogue: { built, found, down }. built is false until its
 // first build has landed products, which is what keeps the legacy fallback

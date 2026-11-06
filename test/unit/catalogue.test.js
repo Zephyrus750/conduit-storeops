@@ -209,3 +209,67 @@ test('device: a code not in the catalogue is kept for the rest of the day, acros
   finally { Date.now = real; }
   assert.equal(n, 2, 'asked again the next day');
 });
+
+test('device: an answer without a picture is asked again after 30 minutes, and a picture it already had is kept', async () => {
+  const { createCatalogue, PART_MS } = await import('../../client/catalogue.js');
+  const { memoryStorage } = await import('../../client/storage.js');
+  const storage = memoryStorage(), asked = [], t = Date.now();
+  await storage.set('kc:41000011', { at: t - PART_MS - 60_000, item: { kc: '41000011', name: 'Priced, no picture', url: 'u', img: null, price: 9, at: t - PART_MS } });
+  await storage.set('kc:41000012', { at: t - 60_000, item: { kc: '41000012', name: 'Priced, no picture, just asked', url: 'u', img: null, price: 9, at: t } });
+  const transport = { request: async path => { const kcs = new URL('https://x' + path).searchParams.get('kc').split(','); asked.push(...kcs); return { items: Object.fromEntries(kcs.map(kc => [kc, { kc, name: 'Now with a picture', url: 'u', img: 'https://img.test/' + kc + '.jpg', price: 9, at: Date.now() }])) }; } };
+  const [a, b] = await createCatalogue({ transport, storage }).lookupMany(['41000011', '41000012']);
+  assert.deepEqual(asked, ['41000011'], 'not kept for a week: asked again once the 30 minutes have passed');
+  assert.equal(a.img, 'https://img.test/41000011.jpg'); assert.equal(b.img, null);
+  // A week-old full answer is asked again; the worker answers without a picture: the one the device had stays.
+  await storage.set('kc:41000013', { at: t - 8 * 86_400_000, item: { kc: '41000013', name: 'Mug', url: 'u', img: 'https://img.test/mug.jpg', price: 4, at: t - 8 * 86_400_000 } });
+  const bare = { request: async () => ({ items: { 41000013: { kc: '41000013', name: 'Mug', url: 'u', img: null, price: 5, at: Date.now() } } }) };
+  const c = await createCatalogue({ transport: bare, storage }).lookup('41000013');
+  assert.equal(c.img, 'https://img.test/mug.jpg'); assert.equal(c.price, 5, 'the new price is taken');
+  assert.equal((await storage.get('kc:41000013')).item.img, 'https://img.test/mug.jpg');
+});
+
+test('worker: a read that finds no picture is read again after 30 minutes, then an hour, until one is found', async () => {
+  const { lookup, nopicTtl } = await import('../../worker/catalogue.js');
+  assert.deepEqual([1, 2, 3, 7].map(nopicTtl), [1800, 3600, 7200, 86400], '30 min, doubling, at most a day');
+  let reads = 0, pic = false; const cache = edge();
+  const fetchImpl = async url => {
+    if (String(url).startsWith('https://lookup.test')) return Response.json({ 43350130: { found: true, url: 'https://www.kmart.com.au/product/vase-43350130/', name: 'Vase' } });
+    reads += 1; return Response.json({ 43350130: { found: true, price: 8, img: pic ? 'https://img.test/vase.jpg' : null } });
+  };
+  const env = { LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test' }, t0 = Date.now();
+  const ask = async mins => { const c = bg(); const items = await lookup(env, c, ['43350130'], { fetchImpl, cache, budgetMs: 500, now: () => t0 + mins * 60_000 }); await c.settle(); return items['43350130']; };
+  assert.equal((await ask(0)).img, null); assert.equal(reads, 1);
+  await ask(20); assert.equal(reads, 1, 'not read again within 30 minutes');
+  await ask(31); assert.equal(reads, 2, 'read again after 30 minutes');
+  await ask(31 + 50); assert.equal(reads, 2, 'the second try waits an hour');
+  pic = true;
+  assert.equal((await ask(31 + 61)).img, 'https://img.test/vase.jpg'); assert.equal(reads, 3);
+  await ask(31 + 61 + 120); assert.equal(reads, 3, 'with a picture, the daily refresh again');
+});
+
+test('worker: a picture once found is kept, and fills answers when the cache is gone and pages cannot be read', async () => {
+  const { lookup } = await import('../../worker/catalogue.js');
+  const pics = new Map(), posts = [];
+  const CATALOGUE = { idFromName: () => 'catalogue', get: () => ({ fetch: async (url, init) => {
+    const u = new URL(url);
+    if (u.pathname === '/pictures' && init?.method === 'POST') { const b = JSON.parse(init.body); posts.push(b.items); for (const [k, v] of Object.entries(b.items)) pics.set(k, v); return Response.json({ kept: Object.keys(b.items).length }); }
+    if (u.pathname === '/pictures') return Response.json({ items: Object.fromEntries(u.searchParams.get('kc').split(',').filter(k => pics.has(k)).map(k => [k, pics.get(k)])) });
+    return Response.json({ total: 0, items: {} });   // not built yet: links come from the legacy lookup
+  } }) };
+  let pages = true;
+  const fetchImpl = async url => {
+    if (String(url).startsWith('https://lookup.test')) return Response.json({ 43350140: { found: true, url: 'https://www.kmart.com.au/product/rug-43350140/', name: 'Rug' } });
+    return pages ? Response.json({ 43350140: { found: true, price: 25, img: 'https://img.test/rug.jpg' } }) : new Response('refused', { status: 500 });
+  };
+  const env = { LOOKUP_URL: 'https://lookup.test', DETAILS_URL: 'https://details.test', CATALOGUE };
+  const c = bg(); assert.equal((await lookup(env, c, ['43350140'], { fetchImpl, cache: edge(), budgetMs: 500 }))['43350140'].img, 'https://img.test/rug.jpg'); await c.settle();
+  assert.deepEqual(posts, [{ 43350140: 'https://img.test/rug.jpg' }], 'the picture went to the catalogue object');
+  // A new colo (empty edge cache) while product pages are refused: the kept picture still shows.
+  pages = false;
+  const d = bg(), cold = edge(), r = (await lookup(env, d, ['43350140'], { fetchImpl, cache: cold, budgetMs: 500 }))['43350140']; await d.settle();
+  assert.equal(r.img, 'https://img.test/rug.jpg'); assert.equal(r.name, 'Rug');
+  assert.equal(JSON.parse([...cold.m.values()][0]).img, 'https://img.test/rug.jpg', 'and the cached answer carries it');
+  // An anonymous caller (no page reads) gets it too.
+  assert.equal((await lookup(env, bg(), ['43350140'], { fetchImpl, cache: edge(), upstream: false }))['43350140'].img, 'https://img.test/rug.jpg');
+  assert.equal(posts.length, 1, 'nothing new to keep');
+});

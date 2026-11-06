@@ -18,7 +18,9 @@
 //   GET  /lookup?kc=a,b        → { total, items: { kc: { name, slug, url } | null } }
 //   GET  /nearmiss?kc=         → { query, matches: [{ keycode, name, url, position }] }
 //   GET  /search?slug=         → { items: [{ kc, slug, name }] } whose name holds the slug (a book's title)
-//   GET  /status               → { total, files, lastbuild, build, collected, next }
+//   GET  /pictures?kc=a,b      → { items: { kc: img } } for the codes with a kept picture
+//   POST /pictures { items }   → keeps { kc: img } (pictures found on product pages)
+//   GET  /status               → { total, pictures, files, lastbuild, build, collected, next }
 //   POST /rebuild { trigger }  → starts a build unless one is running or ran in the last 20 h (force: true overrides)
 
 import { DurableObject } from 'cloudflare:workers';
@@ -42,6 +44,7 @@ export class CatalogueObject extends DurableObject {
       CREATE INDEX IF NOT EXISTS products_shard ON products(shard);
       CREATE TABLE IF NOT EXISTS shards (name TEXT PRIMARY KEY, count INTEGER NOT NULL, at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS pictures (kc TEXT PRIMARY KEY, img TEXT NOT NULL, at INTEGER NOT NULL);
     `);
     // The weekly read is an alarm; a new object (or one woken after a
     // deploy) schedules it. It never starts a build by itself on creation:
@@ -71,6 +74,8 @@ export class CatalogueObject extends DurableObject {
         case 'GET /lookup': return json(this.lookup(url.searchParams.get('kc')));
         case 'GET /nearmiss': return json(this.nearMiss(url.searchParams.get('kc')));
         case 'GET /search': return json(this.search(url.searchParams.get('slug')));
+        case 'GET /pictures': return json(this.pictures(url.searchParams.get('kc')));
+        case 'POST /pictures': { const b = await request.json().catch(() => ({})); return json(this.keepPictures(b.items)); }
         case 'GET /status': return json(await this.status());
         case 'POST /rebuild': { const b = await request.json().catch(() => ({})); return json(await this.startBuild(String(b.trigger || 'owner').slice(0, 20), !!b.force)); }
         default: return fail(404, 'not_found', `catalogue has no ${request.method} ${url.pathname}`);
@@ -90,6 +95,26 @@ export class CatalogueObject extends DurableObject {
       for (const r of this.sql.exec(`SELECT kc, slug FROM products WHERE kc IN (${chunk.map(() => '?').join(',')})`, ...chunk).toArray()) items[r.kc] = { name: slugToName(r.slug), slug: r.slug, url: productUrl(r.kc, r.slug) };
     }
     return { total: this.total(), items };
+  }
+  // Every product picture a page read has found, kept here so it outlives
+  // the edge cache (per colo, evictable) and a spell when product pages
+  // cannot be read: once found, a product's picture shows from then on.
+  // The weekly sitemap read never touches this table.
+  pictures(raw) {
+    const codes = [...new Set(String(raw || '').split(',').map(c => c.replace(/\D/g, '')).filter(c => /^\d{6,13}$/.test(c)))].slice(0, 100), items = {};
+    for (let i = 0; i < codes.length; i += 50) {
+      const chunk = codes.slice(i, i + 50);
+      for (const r of this.sql.exec(`SELECT kc, img FROM pictures WHERE kc IN (${chunk.map(() => '?').join(',')})`, ...chunk).toArray()) items[r.kc] = r.img;
+    }
+    return { items };
+  }
+  keepPictures(items) {
+    const now = Date.now(); let kept = 0;
+    for (const [kc, img] of Object.entries(items && typeof items === 'object' ? items : {}).slice(0, 100)) {
+      if (!/^\d{6,13}$/.test(kc) || typeof img !== 'string' || img.length > 600 || !/^https:\/\/[^\s"'<>]+$/.test(img)) continue;
+      this.sql.exec('INSERT OR REPLACE INTO pictures (kc, img, at) VALUES (?, ?, ?)', kc, img, now); kept += 1;
+    }
+    return { kept };
   }
   nearMiss(raw) {
     const code = String(raw || '').replace(/\D/g, '');
@@ -114,7 +139,7 @@ export class CatalogueObject extends DurableObject {
     const files = this.sql.exec('SELECT name, count, at FROM shards ORDER BY name').toArray();
     const build = this.get('build');
     return {
-      total: this.total(), files: files.length, fileCounts: Object.fromEntries(files.map(f => [f.name, f.count])),
+      total: this.total(), pictures: this.sql.exec('SELECT COUNT(*) AS n FROM pictures').toArray()[0].n, files: files.length, fileCounts: Object.fromEntries(files.map(f => [f.name, f.count])),
       lastbuild: this.get('lastbuild'), collected: this.get('collected'), next: await this.ctx.storage.getAlarm(),
       build: build ? { trigger: build.trigger, started: build.started, phase: build.phase, done: build.i || 0, of: (build.targets || []).length, ingested: build.ingested || 0 } : null,
     };

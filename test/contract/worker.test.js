@@ -841,6 +841,7 @@ test('catalogue: the owner builds it from the sitemaps; lookups and near-misses 
   let st; for (let i = 0; i < 100; i++) { st = (await api('GET', '/v1/admin/catalogue', undefined, ownerToken)).body; if (st.lastbuild) break; await new Promise(r => setTimeout(r, 100)); }
   assert.equal(st.lastbuild?.status, 'ok', JSON.stringify(st.lastbuild)); assert.equal(st.total, 3); assert.equal(st.files, 2); assert.equal(st.lastbuild.discovery, 'index:2 files'); assert.equal(st.build, null);
   assert.ok(sitemapReads >= 3); assert.ok(st.next > Date.now(), 'the weekly read is scheduled');
+  assert.ok(st.pictures >= 1, 'the picture an earlier device lookup found is kept by the catalogue object');
 
   // 110012345 is unknown to the legacy lookup worker: the name proves it came from Conduit.
   const got = await api('GET', '/v1/catalogue?kc=110012345&fields=link');

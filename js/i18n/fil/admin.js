@@ -617,4 +617,5 @@ export default {
   "{title} declined": "Tinanggihan ang {title}",
   "{title} is waiting again": "Naghihintay ulit ang {title}",
   "{title} marked added": "Namarkahang naidagdag ang {title}",
+  "Pictures kept": "Mga larawang naitabi",
 };
