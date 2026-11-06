@@ -10,7 +10,7 @@
 //   loadStats(ctx, s, done) fetches the period when it, or what the dock holds, changed
 //   statsHeat(s)            the period's cartons by department, as heat on the map
 
-import { ic, esc, today, fmtDate } from '../../ui.js';
+import { ic, esc, today, fmtDate, fmtDay, fmtMonth } from '../../ui.js';
 import { tx, txn, locale } from '../../i18n.js';
 import { hasMap } from '../../map.js';
 import { microDept, microChip, microName, STD_MINS_PER_CARTON } from './common.js';
@@ -26,8 +26,8 @@ const groupOf = code => { const d = microDept(code); return !d ? '?' : d === 'fl
 const DOW = [tx('Mon'), tx('Tue'), tx('Wed'), tx('Thu'), tx('Fri'), tx('Sat'), tx('Sun')];
 const dow = d => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7;
 const monday = d => addDays(d, -dow(d));
-const short = d => new Date(d + 'T00:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
-const dayText = d => new Date(d + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+const short = d => fmtDate(d);
+const dayText = d => fmtDay(d);
 const n0 = x => Math.round(x || 0).toLocaleString();
 
 export function rangeOf(s) {
@@ -40,7 +40,7 @@ export function rangeOf(s) {
 function periodName(s, r) {
   if (s.per === 'all') return s.data?.from ? tx('All time · since {date}', { date: fmtDate(s.data.from) }) : tx('All time');
   const range = `${short(r.from)} – ${short(r.to)}`;
-  if (s.per === 'month') return new Date(r.from + 'T00:00:00').toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+  if (s.per === 'month') return fmtMonth(r.from);
   if (s.per === 'week') return s.off === 0 ? tx('This week · {range}', { range }) : s.off === -1 ? tx('Last week · {range}', { range }) : range;
   return s.off === 0 ? tx('These two weeks · {range}', { range }) : range;
 }

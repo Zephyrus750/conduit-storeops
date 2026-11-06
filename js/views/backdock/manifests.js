@@ -14,7 +14,8 @@
 // loads) list below the manifests. A manifest's departments, or a load's,
 // paint on the store map: one department, or the whole of it as heat.
 
-import { $, ic, esc, vh, sub, toast, dep, mhead, ago, fmtDate, today } from '../../ui.js';
+import { despatchDay as isoDespatch } from '../../../shared/manifeststats.js';
+import { $, ic, esc, vh, sub, toast, dep, mhead, fmtDate, today, fmtDay } from '../../ui.js';
 import { mountMap, bindMapChrome, hasMap } from '../../map.js';
 import { ensureNames, nameOf, kcCopy, itemName } from '../stockroom/common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
@@ -74,7 +75,7 @@ function entries(ctx) {
 // yet first (newest first), then each week, newest first, its reports by
 // day and truck.
 const monday = d => addDays(d, -((new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7));
-const short = d => new Date(d + 'T00:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+const short = d => fmtDate(d);
 function grouped(list) {
   const out = [], free = list.filter(x => !x.day).sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')), wk = new Map();
   if (free.length) out.push({ key: 'free', title: tx('No day yet'), xs: free });
@@ -88,7 +89,7 @@ function weekName(w) {
 }
 // "Today · Sat 24 Oct", "Tomorrow · …", "Yesterday · …", else the day.
 function dayName(d) {
-  const t = today(), w = new Date(d + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+  const t = today(), w = fmtDay(d);
   return d === t ? tx('Today · {date}', { date: w }) : d === addDays(t, 1) ? tx('Tomorrow · {date}', { date: w }) : d === addDays(t, -1) ? tx('Yesterday · {date}', { date: w }) : w;
 }
 // The row's day tile: weekday and date (today's in the accent), or a
@@ -96,18 +97,13 @@ function dayName(d) {
 const dayTile = d => { const day = /^\d{4}-\d{2}-\d{2}/.test(d || '') ? d.slice(0, 10) : ''; return day ? `<span class="mfl-dd${day === today() ? ' now' : ''}" title="${esc(dayName(day))}"><small>${esc(new Date(day + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short' }))}</small><b>${Number(day.slice(8))}</b></span>` : `<span class="mfl-dd none" title="${tx('No day yet')}">${ic('cal')}</span>`; };
 // A despatch date as the report writes it (30/10/2026, or 2026-10-30) read
 // as "Fri 30 Oct"; anything else as written.
-function despatchDay(raw) {
-  const v = String(raw || '').trim(), m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/) || v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return v;
-  const [y, mo, d] = m[1].length === 4 ? [m[1], m[2], m[3]] : [m[3], m[2], m[1]], dt = new Date(Number(y), Number(mo) - 1, Number(d));
-  return Number.isNaN(dt.getTime()) ? v : dt.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
-}
+const despatchText = raw => { const d = isoDespatch(raw); return d ? fmtDay(d) : String(raw || '').trim(); };
 // Each row in two lines: the number, its truck and where it stands; then
 // its cartons and consols, labelled, and when it was despatched.
 function listRow(x) {
   const [label, cls] = STATUS[x.status];
   const status = x.status === 'planned' && x.eta ? tx('Planned · {time}', { time: esc(x.eta) }) : label;
-  const meta = x.despatch ? tx('despatched {date}', { date: esc(despatchDay(x.despatch)) }) : !x.day && x.publishedAt ? tx('published {date}', { date: esc(fmtDate(x.publishedAt.slice(0, 10))) }) : '';
+  const meta = x.despatch ? tx('despatched {date}', { date: esc(despatchText(x.despatch)) }) : !x.day && x.publishedAt ? tx('published {date}', { date: esc(fmtDate(x.publishedAt.slice(0, 10))) }) : '';
   return `<div class="mfl-row tk${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}">${dayTile(x.day)}` +
     `<span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b>${x.n ? `<span class="mfl-tn">${ic('truck')}${tx('Truck {no}', { no: x.n })}</span>` : ''}<span class="status ${cls}">${status}</span></span>` +
     `<span class="mfl-fig"><span>${tx('<b>{n}</b> ctn', { n: x.totalCartons ?? '–' })}</span><span>${tx('<b>{n}</b> consols', { n: x.consols ?? '–' })}</span><span class="mfl-meta">${meta}</span></span></span>${ic('chev')}</div>`;

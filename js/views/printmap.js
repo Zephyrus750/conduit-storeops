@@ -10,11 +10,11 @@
 // its own page, the booklet by sub-department, and colours that print
 // without "Background graphics" (print-color-adjust).
 
-import { $, ic, esc, vh, sub, toast, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId } from '../ui.js';
+import { $, ic, esc, vh, sub, toast, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtDate } from '../ui.js';
 import { mountMap, mapFloors, mapInfo, hasMap, segmentId } from '../map.js';
 import { printSheet } from '../print.js';
 import { issuePin } from './maintenance.js';
-import { tx, txn, locale } from '../i18n.js';
+import { tx, txn } from '../i18n.js';
 
 const KEY = 'print_composer';
 const DEF = { floor: 'current', dept: '', hide: false, labels: true, badges: true, colours: 'full', pc: true, tory: true, lm: true, emerg: false, maint: false, route: false, rfdone: false, rfplan: false, st: false, legend: true, paper: 'A4', orient: 'landscape', book: 'dept' };
@@ -54,7 +54,7 @@ function panel() {
   return floors + areaCard + layers + modes + out;
 }
 function titleStrip(ctx, scope) {
-  return `<div class="pm-title"><b>${esc(ctx.storeName || tx('Store'))} <span>${esc(ctx.storeNo || '')}</span></b><span>${esc(scope)}</span><span>${esc(new Date().toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>`;
+  return `<div class="pm-title"><b>${esc(ctx.storeName || tx('Store'))} <span>${esc(ctx.storeNo || '')}</span></b><span>${esc(scope)}</span><span>${esc(fmtDate(new Date(), { year: true }))}</span></div>`;
 }
 function legend(map) {
   if (!o.legend) return '';

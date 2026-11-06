@@ -12,8 +12,8 @@
 //
 //   previewManifest(ctx, file, { attachTo, dating }) → { manNo, consols, totalCartons, attached } | null (cancelled)
 
-import { ic, esc, toast, today, dep } from '../../ui.js';
-import { tx, txn, locale } from '../../i18n.js';
+import { ic, esc, toast, today, dep, fmtDay } from '../../ui.js';
+import { tx, txn } from '../../i18n.js';
 import { readManifestFile, publishParsed, attachManifest, manifestIndex, microDept, microName, truckNo, STD_MINS_PER_CARTON, todayKey } from './common.js';
 import { SUBS } from '../../data/micros.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
@@ -53,7 +53,7 @@ const consolUnits = c => (c.items || []).reduce((n, i) => n + (Number(i.q) || 0)
 const hm = m => tx('{h}h {m}m', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') });
 const dur = m => m >= 60 ? hm(m) : tx('{m}m', { m });
 
-const dayText = d => new Date(d + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+const dayText = d => fmtDay(d);
 
 export async function previewManifest(ctx, file, { attachTo = null, dating = false } = {}) {
   let parsed;

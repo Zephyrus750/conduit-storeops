@@ -5,7 +5,7 @@
 // the separate map editor and publishes a new version. A manager can
 // decline one here. Reads store.get('mapedits').
 
-import { $, ic, esc, vh, sub, status, ago, toast, mhead, mbig, mghost, mfoot, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, status, timePassed, toast, mhead, mbig, mghost, mfoot, mgr } from '../ui.js';
 import { mountMap, mapbar, crumbx, bindMapChrome, tipLine, canonCode } from '../map.js';
 import { tx, txn } from '../i18n.js';
 
@@ -92,7 +92,7 @@ function form(mobile) {
 }
 function item(x, m) {
   const [cls, label] = STATE[x.status] || STATE.open;
-  return `<div class="li me-li"><span class="me-k">${ic(KIND[x.kind]?.[1] || 'edit')}</span><span class="nm" style="white-space:normal"><b class="mono">${esc(x.shelf)}</b><span class="me-line">${line(x)}</span><small class="cs-dim">${ago(x.at)}${x.by ? ' · ' + esc(x.by) : ''}${x.reply ? ' · “' + esc(x.reply) + '”' : ''}</small></span>${status(cls, label)}${x.status === 'open' && m.manager ? `<button class="btn sm" data-act="decline" data-id="${esc(x.id)}">${tx('Decline')}${m.phone ? mgr() : ''}</button>` : ''}</div>`;
+  return `<div class="li me-li"><span class="me-k">${ic(KIND[x.kind]?.[1] || 'edit')}</span><span class="nm" style="white-space:normal"><b class="mono">${esc(x.shelf)}</b><span class="me-line">${line(x)}</span><small class="cs-dim">${timePassed(x.at)}${x.by ? ' · ' + esc(x.by) : ''}${x.reply ? ' · “' + esc(x.reply) + '”' : ''}</small></span>${status(cls, label)}${x.status === 'open' && m.manager ? `<button class="btn sm" data-act="decline" data-id="${esc(x.id)}">${tx('Decline')}${m.phone ? mgr() : ''}</button>` : ''}</div>`;
 }
 function sidebar(m) {
   const pills = [['open', tx('Waiting {n}', { n: m.open.length })], ['done', tx('Resolved {n}', { n: m.all.length - m.open.length })]];

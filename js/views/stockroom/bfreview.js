@@ -14,7 +14,7 @@
 
 import { haptic } from '../../device.js';
 import { recallFor, recallFlag } from '../../recallflag.js';
-import { $, $$, ic, esc, vh, sub, status, fmtTime, ago, toast, mhead, mscan, mrows, productImg, mbig, mghost, mfoot, camButton, depInk, accChip, accBand } from '../../ui.js';
+import { $, $$, ic, esc, vh, sub, status, fmtTime, toast, mhead, mscan, mrows, productImg, mbig, mghost, mfoot, camButton, depInk, accChip, accBand } from '../../ui.js';
 import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';

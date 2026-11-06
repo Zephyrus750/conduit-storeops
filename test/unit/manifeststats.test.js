@@ -116,3 +116,10 @@ test('manifestStats: a period against the one before, departments, top and new k
   assert.equal(all.all, true); assert.equal(all.from, '2026-10-06'); assert.equal(all.to, '2026-10-16');
   assert.equal(all.totals.manifests, 4); assert.equal(all.prev, null); assert.equal(all.newKeycodes, null, 'all time has nothing before it');
 });
+
+test('despatchDay: a day or month written with one digit reads the same', () => {
+  assert.equal(despatchDay('5/9/2026'), '2026-09-05');
+  assert.equal(despatchDay('05/09/2026'), '2026-09-05');
+  assert.equal(despatchDay('2026-09-05T08:00'), '2026-09-05');
+  assert.equal(despatchDay('Sept 5'), null);
+});

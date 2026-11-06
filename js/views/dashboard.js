@@ -8,7 +8,7 @@
 
 import { focusDone } from '../../shared/reducers/floor.js';
 import { addDays, retailPeriod } from '../../shared/time.js';
-import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, ago, dep, DEPT_COLOUR, accChip } from '../ui.js';
+import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip } from '../ui.js';
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
@@ -300,7 +300,7 @@ function maintCard(ctx, r) {
   const hs = period === 'today' ? tx('open · {logged} logged today · {waiting} done, waiting for sign-off', { logged, waiting }) : period === 'week' ? tx('open · {logged} logged this week · {waiting} done, waiting for sign-off', { logged, waiting }) : tx('open · {logged} logged in {month} · {waiting} done, waiting for sign-off', { logged, waiting, month: esc(r.label) });
   const cls = open.length ? 'todo' : 'done';
   return `<div class="card kpi mt ${cls}"><div class="kh">${ic('tool')}<h3>${tx('Maintenance')}</h3>${doneTag(cls, tx('All clear'))}<a class="open" data-go="maintenance">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${open.length}</span><span class="hs">${hs}</span></div>` +
-    `<div class="rows">${list.map(i => `<div class="row"><span class="l"><span class="pt" style="background:${i.status === 'open' ? '#DC2626' : '#D97706'}"></span><span><b>${esc(i.title)}</b><span class="where">${esc(i.loc || '')}${i.dept ? ' ' + dep(i.dept) : ''} · ${ago(i.created)}</span></span></span><span class="r"><span class="pri p${Math.min(3, (i.sev ?? 1) + 1)}" title="${tx('{sev} severity', { sev: SEV[i.sev ?? 1][0] })}"><i></i><i></i><i></i></span>${chip(i.status === 'open' ? OPEN : tx('Done, to check'), i.status === 'open' ? 'warn' : 'info')}</span></div>`).join('') || `<div class="row">${tx('Nothing open')}<b>✓</b></div>`}</div></div>`;
+    `<div class="rows">${list.map(i => `<div class="row"><span class="l"><span class="pt" style="background:${i.status === 'open' ? '#DC2626' : '#D97706'}"></span><span><b>${esc(i.title)}</b><span class="where">${esc(i.loc || '')}${i.dept ? ' ' + dep(i.dept) : ''} · ${timePassed(i.created)}</span></span></span><span class="r"><span class="pri p${Math.min(3, (i.sev ?? 1) + 1)}" title="${tx('{sev} severity', { sev: SEV[i.sev ?? 1][0] })}"><i></i><i></i><i></i></span>${chip(i.status === 'open' ? OPEN : tx('Done, to check'), i.status === 'open' ? 'warn' : 'info')}</span></div>`).join('') || `<div class="row">${tx('Nothing open')}<b>✓</b></div>`}</div></div>`;
 }
 
 // ── the operations register ────────────────────────────────────────────
