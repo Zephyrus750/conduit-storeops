@@ -11,7 +11,7 @@
 // and the phone's search bar (a compact list under the bar; see bar()).
 
 import { recallTag } from './recallflag.js';
-import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast } from './ui.js';
+import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
 import { VIEWS } from './registry.js';
 import { findRecords } from '../shared/finder.js';
@@ -214,7 +214,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     const day = d => d ? new Date(d.length > 10 ? d : d + 'T00:00:00').toLocaleDateString(lang() === 'en' ? [] : locale(), { day: 'numeric', month: 'short' }) : '';
     const st = v => v.status === 'submitted' ? tx('Submitted') : v.status === 'corrected' ? tx('Ready') : tx('Needs review');
     const rows = [
-      ...L.visits.slice(0, 8).map(v => `<div class="li"><span class="loc">${esc(v.bay)}</span><span class="nm">${st(v)}${v.expected != null ? ' · ' + txn(v.expected, '{n} code', '{n} codes') : ''}${v.accuracy != null ? ` · ${v.accuracy}%` : ''}${v.incorrect ? ` · <b class="bad">${tx('not on the report')}</b>` : v.scanned ? '' : ` · <b class="warn">${tx('not scanned')}</b>`}</span><span class="rt">${day(v.date)}</span></div>`),
+      ...L.visits.slice(0, 8).map(v => `<div class="li"><span class="loc">${esc(v.bay)}</span><span class="nm">${st(v)}${v.expected != null ? ' · ' + txn(v.expected, '{n} code', '{n} codes') : ''}${v.accuracy != null ? ` · ${accChip(v.accuracy)}` : ''}${v.incorrect ? ` · <b class="bad">${tx('not on the report')}</b>` : v.scanned ? '' : ` · <b class="warn">${tx('not scanned')}</b>`}</span><span class="rt">${day(v.date)}</span></div>`),
       ...L.adjustments.slice(0, 4).map(a => `<div class="li"><span class="loc">SOH</span><span class="nm">${a.qty} · ${a.confirmed ? tx('confirmed') : tx('unconfirmed')}${a.location ? ` · ${esc(a.location)}` : ''}</span><span class="rt">${day(a.date)}</span></div>`),
       ...L.cages.slice(0, 4).map(c => `<div class="li"><span class="loc">${esc(c.cage)}</span><span class="nm">${[esc(ringName(c.ring)), txn(c.qty, '{n} unit', '{n} units'), c.location ? tx('at {place}', { place: esc(c.location) }) : '', c.status === 'closed' ? tx('closed') : ''].filter(Boolean).join(' · ')}</span><span class="rt">${day(c.seen)}</span></div>`),
     ];

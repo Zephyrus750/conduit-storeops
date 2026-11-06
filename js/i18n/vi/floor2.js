@@ -33,7 +33,6 @@ export default {
   "4-week target · {month}": "Mục tiêu 4 tuần · {month}",
   "Best week": "Tuần tốt nhất",
   "Label integrity": "Kiểm tra nhãn",
-  "This cycle is complete ✓": "Chu kỳ này đã hoàn tất ✓",
   "Labels wrong this cycle": "Nhãn sai trong chu kỳ này",
   "Cycle": "Chu kỳ",
   "Next cycle opens in": "Chu kỳ tới bắt đầu sau",
@@ -911,4 +910,7 @@ export default {
   "asked {date}": "yêu cầu ngày {date}",
   "{n} waiting on the owner": "{n} đang chờ chủ sở hữu",
   "{title} is already waiting on the owner": "{title} đã đang chờ chủ sở hữu",
+  "All clear": "Đã xử lý hết",
+  "Every location on today’s board submitted": "Mọi vị trí trên bảng hôm nay đã được gửi",
+  "This cycle is complete": "Chu kỳ này đã hoàn tất",
 };

@@ -3994,3 +3994,54 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .rq-card tr.rq-open td:first-child b { color: var(--ink); }
 .rq-card tr:not(.rq-open) td { color: var(--ink2); }
 .rq-reply { font-size: 12.5px; color: var(--ink2); margin-top: 2px; }
+
+/* Accuracy in four bands (accChip in js/ui.js): 95+ solid green, 85–94
+   green tint, 70–84 amber, under 70 red. The number only. */
+.acc { display: inline-block; border-radius: 7px; padding: 1px 7px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.35; white-space: nowrap; }
+.acc-vg { background: #15803D; color: #fff; }
+.acc-g { background: #DCFCE7; color: #166534; }
+.acc-av { background: #FEF3C7; color: #92400E; }
+.acc-bad { background: #FEE2E2; color: #991B1B; }
+.frame.dark .acc-g { background: #15562C; color: #92E7B2; }
+.frame.dark .acc-av { background: #564915; color: #F3AF86; }
+.frame.dark .acc-bad { background: #5A1D1D; color: #FCA5A5; }
+/* The desk header's accuracy cell takes its band's colour. */
+.hstats > span.acc-cell { border-radius: 8px; border-left-color: transparent; margin: -2px 2px; padding-top: 3px; padding-bottom: 3px; }
+.hstats > span.acc-cell + span { border-left-color: transparent; }
+.hstats > span.acc-cell b, .hstats > span.acc-cell small { color: inherit; }
+.slc .sr .pc .acc { font-size: inherit; }
+.kpi .row b .acc { font-size: 15px; padding: 1px 8px; }
+/* Dashboard (canvas variation E): a finished card steps back in soft green
+   with a Done chip; while any card is done, the ones still to do take the
+   accent ring, so what is left stands out. */
+.dash .kpi .donetag { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 9px; }
+.dash .card.kpi.done { border: 1px solid #CDE7D5; background: #F5FAF6; box-shadow: none; }
+.dash .card.kpi.done .kh svg.i { color: #6FA884; }
+.dash .card.kpi.done .kh .donetag svg.i { width: 13px; height: 13px; stroke-width: 2.8; color: currentColor; }
+.dash .card.kpi.done .kh h3 { color: #4B5563; }
+.dash .card.kpi.done .open { background: var(--panel); color: #3F7A55; border: 1px solid #CDE7D5; }
+.dash .card.kpi.done .open:hover { background: #EAF5EE; }
+.dash .card.kpi.done .open svg.i { color: currentColor; }
+.dash .card.kpi.done .hero .n { color: #5B8F6E; }
+.dash .card.kpi.done .row b:not([class]) { color: #4B5563; }
+.dash .card.kpi.done .rows { border-top-color: #DDEDE2; }
+.dash .card.kpi.done .row { border-bottom-color: #DDEDE2; }
+.dash .card.kpi.done .track i { background: #8CCBA2; }
+.dash .card.kpi.done .prog b { color: #5B8F6E; }
+.dash .card.kpi.done .dkg, .dash .card.kpi.done .dk-steps6 { opacity: .7; }
+.dash:has(.kpi.done) .card.kpi.todo { border: 2px solid var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), 0 1px 2px rgba(17,24,39,.03); }
+.frame.dark .dash .card.kpi.hot, .frame.dark .dash:has(.kpi.done) .card.kpi.todo { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent); }
+.frame.dark .dash .card.kpi.done { background: #13241B; border-color: #24452F; }
+.frame.dark .dash .card.kpi.done .kh h3, .frame.dark .dash .card.kpi.done .row b:not([class]) { color: var(--ink2); }
+.frame.dark .dash .card.kpi.done .open { background: transparent; color: #8CCBA2; border-color: #24452F; }
+.frame.dark .dash .card.kpi.done .open:hover { background: #1A3324; }
+.frame.dark .dash .card.kpi.done .hero .n, .frame.dark .dash .card.kpi.done .prog b { color: #7FB592; }
+.frame.dark .dash .card.kpi.done .rows { border-top-color: #1F3A29; }
+.frame.dark .dash .card.kpi.done .row { border-bottom-color: #1F3A29; }
+.frame.dark .dash .card.kpi.done .track i { background: #4E8A63; }
+/* Below the wide layout the three top cards are narrow: their chip keeps
+   only its tick (the word stays for screen readers and the tooltip). */
+@container shell (min-width: 1101px) and (max-width: 1599px) {
+  .dash .kpis .kpi .donetag { font-size: 0; gap: 0; padding: 4px; }
+  .dash .kpis .kpi .donetag svg.i { width: 14px; height: 14px; }
+}

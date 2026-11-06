@@ -33,7 +33,6 @@ export default {
   "4-week target · {month}": "Objectif sur 4 semaines · {month}",
   "Best week": "Meilleure semaine",
   "Label integrity": "Contrôle des étiquettes",
-  "This cycle is complete ✓": "Ce cycle est terminé ✓",
   "Labels wrong this cycle": "Étiquettes fausses ce cycle",
   "Cycle": "Cycle",
   "Next cycle opens in": "Prochain cycle dans",
@@ -911,4 +910,7 @@ export default {
   "asked {date}": "demandé le {date}",
   "{n} waiting on the owner": "{n} en attente du propriétaire",
   "{title} is already waiting on the owner": "{title} attend déjà le propriétaire",
+  "All clear": "Tout est réglé",
+  "Every location on today’s board submitted": "Chaque emplacement du tableau du jour est envoyé",
+  "This cycle is complete": "Ce cycle est terminé",
 };

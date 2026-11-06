@@ -33,7 +33,6 @@ export default {
   "4-week target · {month}": "4-linggong target · {month}",
   "Best week": "Pinakamagandang linggo",
   "Label integrity": "Label integrity",
-  "This cycle is complete ✓": "Kumpleto na ang cycle na ito ✓",
   "Labels wrong this cycle": "Maling label sa cycle na ito",
   "Cycle": "Cycle",
   "Next cycle opens in": "Magbubukas ang susunod na cycle sa",
@@ -911,4 +910,7 @@ export default {
   "asked {date}": "hiniling noong {date}",
   "{n} waiting on the owner": "{n} ang naghihintay sa may-ari",
   "{title} is already waiting on the owner": "Naghihintay na sa may-ari ang {title}",
+  "All clear": "Ayos na lahat",
+  "Every location on today’s board submitted": "Naipasa na ang bawat location sa board ngayong araw",
+  "This cycle is complete": "Kumpleto na ang cycle na ito",
 };
