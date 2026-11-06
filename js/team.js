@@ -14,6 +14,7 @@
 import { ic, esc, toast, fmtTime } from './ui.js';
 import { MESSAGE_MAX, BRIEFING_MAX } from '../shared/reducers/store.js';
 import { tx } from './i18n.js';
+import { openSheet } from './sheet.js';
 
 const SEEN = 'team_seen';
 const seen = no => { try { return JSON.parse(localStorage.getItem(SEEN) || '{}')[no] || ''; } catch { return ''; } };
@@ -85,39 +86,44 @@ export function mountTeam({ store, session, host, today, storeNo, isHome = () =>
 
 export function openTeam({ store, session, today, onClose }) {
   document.getElementById('teamsheet')?.remove();
-  const el = document.createElement('div'); el.id = 'teamsheet'; el.className = 'tm-back'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', tx('Team message and briefing'));
   let editing = null;
-  const paint = () => {
-    const c = store.get('comms') || {}, day = today(), msg = live(c.message, day) ? c.message : null, brief = c.briefings?.[day] || null, w = canWrite(session);
-    const block = (title, it, kind) => `<section class="tm-sec"><div class="tm-h"><h3>${title}</h3>${w && editing !== kind ? `<button class="btn sm" data-tm="edit" data-kind="${kind}">${ic('edit')}${it ? tx('Edit') : tx('Write')}</button>` : ''}</div>` +
-      (editing === kind ? editor(kind, it) : it ? `<div class="tm-body">${richText(it.text)}</div><p class="tm-meta">${it.owner ? tx('From the owner') : tx('From a manager')} · ${fmtTime(it.at)}${kind === 'message' && it.until ? ` · ${tx('until {date}', { date: esc(it.until) })}` : ''}</p>` : `<p class="tm-empty">${kind === 'message' ? tx('No team message.') : tx('No briefing for today.')}</p>`) + '</section>';
-    el.innerHTML = `<div class="tm-sheet"><button class="tour-x" data-tm="close" aria-label="${tx('Close')}">${ic('x')}</button>${block(tx('Team message'), msg, 'message')}${block(tx('Today’s briefing'), brief, 'briefing')}${w ? '' : `<p class="tm-meta">${tx('Managers write these.')}</p>`}</div>`;
-    el.querySelector('textarea')?.focus();
-  };
+  const block = (title, it, kind, w) => `<section class="tm-sec"><div class="tm-h"><h3>${title}</h3>${w && !editing ? `<button class="btn sm" data-tm="edit" data-kind="${kind}">${ic('edit')}${it ? tx('Edit') : tx('Write')}</button>` : ''}</div>` +
+    (editing === kind ? editor(kind, it) : it ? `<div class="tm-body">${richText(it.text)}</div><p class="tm-meta">${it.owner ? tx('From the owner') : tx('From a manager')} · ${fmtTime(it.at)}${kind === 'message' && it.until ? ` · ${tx('until {date}', { date: esc(it.until) })}` : ''}</p>` : `<p class="tm-empty">${kind === 'message' ? tx('No team message.') : tx('No briefing for today.')}</p>`) + '</section>';
   const editor = (kind, it) => `<textarea class="tm-in" data-tm-field="text" maxlength="${kind === 'message' ? MESSAGE_MAX : BRIEFING_MAX}" rows="${kind === 'message' ? 4 : 7}" placeholder="${kind === 'message' ? tx('A message every device in the store sees until it is cleared') : tx('Today: deliveries, focus, who is where…')}">${esc(it?.text || '')}</textarea>` +
     `<p class="tm-hint">${tx('Plain text. **bold**, and lines starting with “- ” become a list.')}</p>` +
-    (kind === 'message' ? `<label class="tm-until">${tx('Show until')} <input type="date" data-tm-field="until" value="${esc(it?.until || '')}"> <small>${tx('(blank: until cleared)')}</small></label>` : '') +
-    `<div class="tm-acts"><button class="btn primary" data-tm="save" data-kind="${kind}">${tx('Publish')}</button>${it ? `<button class="btn" data-tm="clear" data-kind="${kind}">${tx('Clear')}</button>` : ''}<button class="btn" data-tm="cancel">${tx('Cancel')}</button></div>`;
+    (kind === 'message' ? `<label class="tm-until">${tx('Show until')} <input type="date" data-tm-field="until" value="${esc(it?.until || '')}"> <small>${tx('(blank: until cleared)')}</small></label>` : '');
+  const cur = () => { const c = store.get('comms') || {}, day = today(); return { msg: live(c.message, day) ? c.message : null, brief: c.briefings?.[day] || null }; };
+  // While one is being written, its actions are the sheet's: Cancel, Clear, Publish.
+  const foot = () => {
+    if (!editing) return canWrite(session) ? '' : `<span class="sht-note">${tx('Managers write these.')}</span>`;
+    const it = editing === 'message' ? cur().msg : cur().brief;
+    return `<button class="btn" data-tm="cancel">${tx('Cancel')}</button>${it ? `<button class="btn" data-tm="clear" data-kind="${editing}">${tx('Clear')}</button>` : ''}<button class="btn primary" data-tm="save" data-kind="${editing}">${tx('Publish')}</button>`;
+  };
+  const paint = () => {
+    const { msg, brief } = cur(), w = canWrite(session);
+    sheet.set({ body: block(tx('Team message'), msg, 'message', w) + block(tx('Today’s briefing'), brief, 'briefing', w), foot: foot() });
+    sheet.el.querySelector('textarea')?.focus();
+  };
   const send = async (kind, text, until) => {
+    sheet.busy(true);
     try {
       if (kind === 'message') await store.dispatch({ type: 'team.message.set', entity: {}, payload: { text, ...(until ? { until } : {}) } });
       else await store.dispatch({ type: 'team.briefing.set', entity: { date: today() }, payload: { text } });
       editing = null; toast(text ? tx('Published to every device in the store') : tx('Cleared')); paint();
-    } catch (e) { toast(e.message, 'bad'); }
+    } catch (e) { toast(e.message, 'bad'); } finally { sheet.busy(false); }
   };
-  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); onClose?.(); };
-  const onKey = e => { if (e.key === 'Escape') close(); };
-  el.addEventListener('click', e => {
-    if (e.target === el) return close();
-    const b = e.target.closest('[data-tm]'); if (!b) return;
-    const a = b.dataset.tm, kind = b.dataset.kind;
-    if (a === 'close') close();
-    else if (a === 'edit') { editing = kind; paint(); }
-    else if (a === 'cancel') { editing = null; paint(); }
-    else if (a === 'clear') { if (confirm(kind === 'message' ? tx('Clear the team message on every device?') : tx('Clear the briefing on every device?'))) send(kind, '', null); }
-    else if (a === 'save') { const text = el.querySelector('[data-tm-field="text"]')?.value || '', until = el.querySelector('[data-tm-field="until"]')?.value || ''; if (!text.trim()) return toast(tx('Write something first, or Clear'), 'bad'); send(kind, text, until); }
+  const sheet = openSheet({
+    kind: 'side', cls: 'tm-side', title: tx('Team message and briefing'), onClose,
+    onClick: e => {
+      const b = e.target.closest('[data-tm]'); if (!b) return;
+      const a = b.dataset.tm, kind = b.dataset.kind;
+      if (a === 'edit') { editing = kind; paint(); }
+      else if (a === 'cancel') { editing = null; paint(); }
+      else if (a === 'clear') { if (confirm(kind === 'message' ? tx('Clear the team message on every device?') : tx('Clear the briefing on every device?'))) send(kind, '', null); }
+      else if (a === 'save') { const text = sheet.el.querySelector('[data-tm-field="text"]')?.value || '', until = sheet.el.querySelector('[data-tm-field="until"]')?.value || ''; if (!text.trim()) return toast(tx('Write something first, or Clear'), 'bad'); send(kind, text, until); }
+    },
   });
-  document.addEventListener('keydown', onKey);
-  document.body.appendChild(el); paint();
-  return close;
+  sheet.el.id = 'teamsheet';
+  paint();
+  return sheet.close;
 }

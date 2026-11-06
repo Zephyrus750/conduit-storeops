@@ -15,6 +15,7 @@
 
 import { ic, esc, toast, today, fmtDay } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
+import { openSheet } from '../../sheet.js';
 import { readManifestFile, publishParsed, STD_MINS_PER_CARTON } from './common.js';
 import { manifestCheck } from '../../../shared/manifest.js';
 import { placeIndex, usualGap, suggestPlace, despatchDay } from '../../../shared/manifeststats.js';
@@ -62,17 +63,16 @@ function table(rows, { files }) {
 function dialog(ctx, { title, sub, rows, files, button, run, gap }) {
   return new Promise(resolve => {
     document.getElementById('mbatch')?.remove();
-    const el = document.createElement('div'); el.id = 'mbatch'; el.className = 'sscan mprev mbatch'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', title);
-    document.body.appendChild(el);
-    let busy = false, finished = false, result = null;
-    const done = v => { document.removeEventListener('keydown', onKey); el.remove(); resolve(v); };
-    const onKey = e => { if (e.key === 'Escape' && !busy) done(result); };
-    document.addEventListener('keydown', onKey);
+    let busy = false, finished = false, result = null, settled = false;
+    const done = v => { if (settled) return; settled = true; sheet.close(); resolve(v); };
+    const sheet = openSheet({ size: 'wide', cls: 'mprev mbatch', title: `${ic('file')}${esc(title)}`, label: title, sub: esc(sub), onClose: () => done(result) });
+    const el = sheet.el; el.id = 'mbatch';
     const paint = () => {
       const n = rows.filter(r => r.on && !r.done).length, dated = rows.filter(r => r.on && r.day && !r.fixed).length;
-      el.innerHTML = `<div class="ss-card mp-card mb-card"><div class="ss-top"><b>${ic('file')}${esc(title)}</b><span class="ss-exp">${esc(sub)}</span><button class="ibtn" data-mb="close" aria-label="${tx('Close')}"${busy ? ' disabled' : ''}>${ic('x')}</button></div>` +
+      sheet.busy(busy);
+      sheet.set({ body:
         `<div class="mb-body">${table(rows.map(r => ({ ...r, gap })), { files })}<p class="lbl">${txn(gap, 'A suggested day is a truck the Planner or Receiving has with no manifest near the despatch date; otherwise the despatch date plus {n} day, as this store’s trucks usually take. Change any of them, or clear one to leave it without a day.', 'A suggested day is a truck the Planner or Receiving has with no manifest near the despatch date; otherwise the despatch date plus {n} days, as this store’s trucks usually take. Change any of them, or clear one to leave it without a day.')}</p></div>` +
-        `<div class="mb-foot"><span class="cs-dim">${finished ? tx('Finished. Close when you have checked the list.') : txn(dated, '{n} with a day', '{n} with a day')}</span>${finished ? `<button class="btn primary" data-mb="close">${tx('Close')}</button>` : `<button class="btn primary" data-mb="go"${!n || busy ? ' disabled' : ''}>${busy ? tx('Working…') : button(n)}</button><button class="btn" data-mb="close"${busy ? ' disabled' : ''}>${tx('Cancel')}</button>`}</div></div>`;
+        '', foot: `<span class="sht-note">${finished ? tx('Finished. Close when you have checked the list.') : txn(dated, '{n} with a day', '{n} with a day')}</span>${finished ? `<button class="btn primary" data-mb="close">${tx('Close')}</button>` : `<button class="btn" data-mb="close"${busy ? ' disabled' : ''}>${tx('Cancel')}</button><button class="btn primary" data-mb="go"${!n || busy ? ' disabled' : ''}>${busy ? tx('Working…') : button(n)}</button>`}` });
     };
     el.addEventListener('change', e => {
       const r = rows[Number(e.target.dataset.row)], f = e.target.dataset.f; if (!r || !f) return;

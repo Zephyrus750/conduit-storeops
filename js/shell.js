@@ -14,6 +14,7 @@ import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEP
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
+import { watchSheets } from './sheet.js';
 import { loadMap, setMap, setPlanSource, mapInfo, parkMap, liveIn, mapStats, shelfForLocation, splitCanon } from './map.js';
 import { initSearch } from './search.js';
 import { voiceSupported, listenOnce } from './voice.js';
@@ -72,6 +73,7 @@ document.addEventListener('change', e => { if (e.target.matches?.('#siLang, [dat
 installKeyboard();
 applyOrientation();
 installCameraButtons(document);
+watchSheets();
 installProductImages(document);
 installProductLinks(client.catalogue);
 // The PC's product card also shows the item's stockroom bays, for a store with the Stockroom.

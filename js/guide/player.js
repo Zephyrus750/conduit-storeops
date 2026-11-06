@@ -336,7 +336,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
     if (dead || st.mode !== 'watch' || !host.isConnected || e.altKey || e.ctrlKey || e.metaKey) return;
     const at = e.composedPath()[0];
     if (at instanceof Element && at.closest('input, select, textarea, [contenteditable="true"]')) return;
-    if (document.querySelector('#msheet.open, .sharesheet, #pbox')) return;
+    if (document.querySelector('#msheet.open, .is-sheet, .sharesheet, #pbox')) return;
     const n = scene().steps.length;
     if (e.key === 'ArrowRight') { e.preventDefault(); stop(); showStep(Math.min(n - 1, st.stepIx + 1), 'watch'); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); stop(); showStep(Math.max(0, st.stepIx - 1), null); }

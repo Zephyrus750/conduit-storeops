@@ -7,6 +7,7 @@ import { retailPeriod } from '../../shared/time.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
 import { openScanner } from '../scan.js';
 import { tx, txn, locale } from '../i18n.js';
+import { sheetHtml } from '../sheet.js';
 
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
 const PLAN_NAME = { '#a855f7': tx('Purple'), '#3b82f6': tx('Blue'), '#f59e0b': tx('Amber'), '#ec4899': tx('Pink'), '#14b8a6': tx('Teal'), '#ef4444': tx('Red') };
@@ -170,7 +171,7 @@ export default {
       try {
         if (act === 'mode') { mode = a.getAttribute('data-mode'); paint(); }
         else if (act === 'scan-open') { scanOpen = true; lastScan = null; paint(); setTimeout(() => root.querySelector('[data-field="shelfscan"]')?.focus(), 50); }
-        else if (act === 'scan-close') { if (e.target.closest('.rf-sheet') && !e.target.closest('.sheet-x')) return; scanOpen = false; paint(); }
+        else if (act === 'scan-close') { scanOpen = false; paint(); }
         else if (act === 'scan-go') { root.querySelector('[data-field="shelfscan"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); }
         // Walk the aisle scanning shelf labels: each read marks that shelf
         // refreshed (one already done says so). "A013S02" and "A13 S2" name
@@ -214,10 +215,12 @@ function sidebar(map, m) {
 // desk, so the phone only shows them.
 let scanOpen = false, lastScan = null;
 function scanSheet() {
-  return `<div class="rf-sheetback" data-act="scan-close"><div class="sheet rf-sheet" role="dialog" aria-label="${tx('Mark a shelf refreshed')}"><div class="sheet-h"><h3>${tx('Mark a shelf refreshed')}</h3><button class="sheet-x" data-act="scan-close" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
-    `<button class="mv-big" data-camera="shelfscan" data-camera-continuous title="${tx('Scan shelf labels')}">${ic('camera')}${tx('Scan with the camera')}</button>` +
-    `<div class="rf-type"><span class="lbl">${tx('Or type the shelf')}</span><div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="${tx('e.g. A16 S1')}" aria-label="${tx('Shelf label')}"><button class="btn primary sm" data-act="scan-go">${tx('Mark')}</button></div></div>` +
-    (lastScan ? `<div class="rf-last ${lastScan.ok ? 'ok' : 'bad'}">${ic(lastScan.ok ? 'check' : 'alert')}<span>${esc(lastScan.text)}</span></div>` : `<div class="rf-last">${tx('Each label marks its shelf refreshed for the whole team.')}</div>`) + '</div></div>';
+  return sheetHtml({
+    kind: 'bottom', cls: 'rf-sheet', title: tx('Mark a shelf refreshed'), close: 'scan-close',
+    body: `<button class="mv-big" data-camera="shelfscan" data-camera-continuous title="${tx('Scan shelf labels')}">${ic('camera')}${tx('Scan with the camera')}</button>` +
+      `<div class="rf-type"><span class="lbl">${tx('Or type the shelf')}</span><div class="shelfscan">${ic('barcode')}<input data-field="shelfscan" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="${tx('e.g. A16 S1')}" aria-label="${tx('Shelf label')}"><button class="btn primary sm" data-act="scan-go">${tx('Mark')}</button></div></div>` +
+      (lastScan ? `<div class="rf-last ${lastScan.ok ? 'ok' : 'bad'}">${ic(lastScan.ok ? 'check' : 'alert')}<span>${esc(lastScan.text)}</span></div>` : `<div class="rf-last">${tx('Each label marks its shelf refreshed for the whole team.')}</div>`),
+  });
 }
 // The phone's Refresh sheet (opened from the strip): the week's progress,
 // scan and the Refresh/Plan toggle, each focus department with its own bar,

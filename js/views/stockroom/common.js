@@ -3,6 +3,7 @@
 import { recallTagFor, recallFor, recallWord } from '../../recallflag.js';
 import { esc, ic, today, fmtDate, DEPTS_DEFAULT, DEPT_COLOUR, depInk, productImg } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
+import { openSheet } from '../../sheet.js';
 
 export const RING = { 'new-lines': [tx('New lines'), '#7C3AED'], overstock: [tx('Overstock'), '#2563EB'], 'cant-work': [tx('Can’t work'), '#DC2626'], 'online-picks': [tx('Online picks'), '#16A34A'] };
 export const ring = (r, on) => `<i class="ring${on ? ' on' : ''}" style="--rc:${RING[r]?.[1] || '#6B7280'}" title="${RING[r]?.[0] || r}"></i>`;
@@ -197,41 +198,44 @@ const fineMq = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and
 let popCtx = null, popActions = null, pop = null;
 export function setProductActions(fn) { popActions = fn; return () => { if (popActions === fn) popActions = null; }; }
 export function closeProduct() { pop?.close(); }
-function popHtml(kc, it, w, nm, ext) {
+function popParts(kc, it, w, nm, ext) {
   const rc = recallFor(null, kc), url = it?.url || searchUrl(kc);
   const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : '';
-  const img = `<div class="ppop-img${it?.img || it === undefined ? '' : ' none'}">${it?.img ? productImg(it.img) : `${ic('box')}${it === undefined ? '' : `<small>${tx('No photo')}</small>`}`}<button type="button" class="ppop-x" data-pp="close" aria-label="${tx('Close')}">${ic('x')}</button></div>`;
+  const img = `<div class="ppop-img${it?.img || it === undefined ? '' : ' none'}">${it?.img ? productImg(it.img) : `${ic('box')}${it === undefined ? '' : `<small>${tx('No photo')}</small>`}`}</div>`;
   const near = it === null && nm.length ? `<div class="ppop-near"><small>${tx('Did you mean')}</small>${nm.slice(0, 2).map(x => `<div class="ppop-nr"><span><b class="mono">${esc(x.keycode)}</b> ${esc(x.name || '')}</span>${ext.use ? `<button type="button" class="btn sm primary" data-pp="use" data-code="${esc(x.keycode)}">${tx('Use it')}</button>` : `<button type="button" class="btn sm" data-pp="copy" data-code="${esc(x.keycode)}">${tx('Copy')}</button>`}</div>`).join('')}</div>` : '';
-  const body = `<div class="ppop-b"><div class="ppop-r1"><button type="button" class="ppop-kc" data-pp="copy" aria-label="${tx('Copy {code}', { code: esc(kc) })}">${esc(kc)}${ic('clip')}</button>${price}</div>` +
-    (it === undefined ? `<b class="ppop-nm">${searching()}</b>` : it ? `<b class="ppop-nm">${esc(it.name || tx('Verified product'))}</b>` : it === false ? `<span class="ppop-miss">${tx('Not checked yet')}</span><p class="ppop-why">${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}</p>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
+  const body = `<div class="ppop-b">` +
+    (it === undefined || it ? '' : it === false ? `<span class="ppop-miss">${tx('Not checked yet')}</span><p class="ppop-why">${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}</p>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
     (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') + baysLine(w) + near + `</div>`;
-  const acts = `<div class="ppop-acts"><a class="btn primary ppop-go" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${it === null || it === false ? tx('Search kmart.com.au for {code}', { code: esc(kc) }) : tx('Open on kmart.com.au')}${ic('ext')}</a>` +
-    `<div class="ppop-row"><button type="button" class="btn" data-pp="copy">${tx('Copy keycode')}</button>${(ext.actions || []).map((a, i) => `<button type="button" class="btn${a.danger ? ' bad' : ''}" data-pp="act" data-i="${i}">${a.label}</button>`).join('')}</div></div>`;
-  return `<button type="button" class="ppop-scrim" data-pp="close" aria-label="${tx('Close')}" tabindex="-1"></button><div class="ppop-dlg">${img}${body}${acts}</div>`;
+  const title = it === undefined ? searching() : it ? esc(it.name || tx('Verified product')) : `<span class="mono">${esc(kc)}</span>`;
+  // Not found: the keycode is the title, so it is not said twice.
+  const sub = it === null || it === false ? '' : `<button type="button" class="ppop-kc" data-pp="copy" aria-label="${tx('Copy {code}', { code: esc(kc) })}">${esc(kc)}${ic('clip')}</button>${price}`;
+  const foot = `<button type="button" class="btn" data-pp="copy">${tx('Copy keycode')}</button>${(ext.actions || []).map((a, i) => `<button type="button" class="btn${a.danger ? ' bad' : ''}" data-pp="act" data-i="${i}">${a.label}</button>`).join('')}` +
+    `<a class="btn primary ppop-go" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${it === null || it === false ? tx('Search kmart.com.au for {code}', { code: esc(kc) }) : tx('Open on kmart.com.au')}${ic('ext')}</a>`;
+  return { title, sub, body: img + body, foot };
 }
+// A product tapped on a phone (or a touch screen): the shared sheet, from
+// the bottom on a phone and from the side on a wider screen.
 async function openProduct(kc) {
   pop?.close();
-  const back = document.activeElement, host = document.createElement('div'), ext = popActions?.(kc) || {};
-  host.className = 'ppop'; host.setAttribute('role', 'dialog'); host.setAttribute('aria-modal', 'true'); host.setAttribute('aria-label', kc);
+  const back = document.activeElement, ext = popActions?.(kc) || {};
   let it, w = null, nm = [], closed = false;
-  const paint = () => { if (!closed) host.innerHTML = popHtml(kc, it, w, nm, ext); };
-  const onKey = e => { if (e.key === 'Escape') close(); };
-  function close() {
-    if (closed) return; closed = true; host.remove(); document.removeEventListener('keydown', onKey, true);
-    if (pop?.close === close) pop = null;
-    if (back?.isConnected && back.matches?.('input')) back.focus();
-  }
-  host.addEventListener('click', async e => {
-    const b = e.target.closest('[data-pp]'); if (!b) return;
-    const a = b.dataset.pp;
-    if (a === 'close') close();
-    else if (a === 'copy') copyCode(b.dataset.code || kc, b);
-    else if (a === 'use') { close(); await ext.use?.(b.dataset.code); }
-    else if (a === 'act') { close(); await ext.actions?.[Number(b.dataset.i)]?.run(); }
+  const paint = () => { if (!closed) sheet.set(popParts(kc, it, w, nm, ext)); };
+  const sheet = openSheet({
+    kind: 'side', cls: 'ppop', label: kc, ...popParts(kc, it, w, nm, ext),
+    onClose: () => {
+      closed = true; if (pop?.sheet === sheet) pop = null;
+      // A scan field takes the next scan.
+      if (back?.isConnected && back.matches?.('input')) back.focus();
+    },
+    onClick: async e => {
+      const b = e.target.closest('[data-pp]'); if (!b) return;
+      const a = b.dataset.pp;
+      if (a === 'copy') copyCode(b.dataset.code || kc, b);
+      else if (a === 'use') { sheet.close(); await ext.use?.(b.dataset.code); }
+      else if (a === 'act') { sheet.close(); await ext.actions?.[Number(b.dataset.i)]?.run(); }
+    },
   });
-  document.addEventListener('keydown', onKey, true);
-  (document.querySelector('.frame') || document.body).appendChild(host);
-  pop = { close }; paint(); host.querySelector('.ppop-x')?.focus();
+  pop = { sheet, close: sheet.close };
   it = await popCtx.catalogue.lookup(kc).catch(() => undefined); if (it === undefined) it = false; paint();
   if (it === null) { nm = near.get(kc) || await popCtx.catalogue.nearMiss(kc).catch(() => []) || []; near.set(kc, nm); paint(); }
   w = await popCtx.bays(kc); paint();

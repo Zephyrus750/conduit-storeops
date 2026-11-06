@@ -258,7 +258,6 @@ export default {
   "Shelf {shelf} · store {store}": "Kệ {shelf} · cửa hàng {store}",
   "Shelf {shelf} at store {store}": "Kệ {shelf} tại cửa hàng {store}",
   "Torch": "Đèn pin",
-  "Close the scanner": "Đóng trình quét",
   "Point the camera at the barcode": "Hướng máy ảnh vào mã vạch",
   "Or type the code": "Hoặc nhập mã",
   "Type the code": "Nhập mã",

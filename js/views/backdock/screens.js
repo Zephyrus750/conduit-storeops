@@ -22,6 +22,7 @@ import { timeline, timelineAct } from './wallboard.js';
 import { phaseChip } from './phase.js';
 import { begun } from '../../../shared/dockphase.js';
 import { tx, txn } from '../../i18n.js';
+import { sheetHtml } from '../../sheet.js';
 
 // A person's role as a word in a line (lower case in English).
 const ROLE_WORD = { cutter: tx('cutter'), runner: tx('runner'), cleaner: tx('cleaner') };
@@ -70,7 +71,7 @@ function palletSheet(t) {
   if (!sheet) return '';
   const p = t.pallets[sheet.ref]; if (!p || p.excluded) { sheet = null; return ''; }
   const s = p.status, on = openSegs(p).map(x => x.pid), w = workedMin(t, p);
-  const head = `<div class="scr-sh-h"><div><b>${tx('Pallet {ref}', { ref: esc(p.ref) })}</b><span>${esc(PT_NAME[p.ptype] || p.ptype)} · ${tx('{n} ctn', { n: p.cartons ?? '–' })} · ${esc(s === 'active' ? tx('decanting') : s === 'done' ? tx('done') : s === 'paused' ? tx('paused') : tx('waiting'))}${p.segments.length ? ` · ${tx('{time} worked', { time: fmtMins(w) })}` : ''}${p.expectedMins ? ` · ${tx('est {n}m', { n: p.expectedMins })}` : ''}</span></div><button class="ibtn" data-act="scr-close" aria-label="${tx('Close')}">${ic('x')}</button></div>`;
+  const sub = `${esc(PT_NAME[p.ptype] || p.ptype)} · ${tx('{n} ctn', { n: p.cartons ?? '–' })} · ${esc(s === 'active' ? tx('decanting') : s === 'done' ? tx('done') : s === 'paused' ? tx('paused') : tx('waiting'))}${p.segments.length ? ` · ${tx('{time} worked', { time: fmtMins(w) })}` : ''}${p.expectedMins ? ` · ${tx('est {n}m', { n: p.expectedMins })}` : ''}`;
   let body;
   if (t.status !== 'live') body = `<p class="lbl">${tx('The truck isn’t live yet. Receiving starts it.')}</p>`;
   else if (sheet.pick) {
@@ -86,14 +87,14 @@ function palletSheet(t) {
   else if (s === 'paused') body = `<div class="scr-sh-acts"><button class="btn primary big" data-act="scr-pickfor" data-kind="resume">▶ ${tx('Resume')}</button><button class="btn big" data-act="scr-do" data-do="done">${ic('check')}${tx('Done')}</button></div>`;
   else if (s === 'done') { const pc = pace(t, p); body = `<p class="scr-sh-on">${tx('Clear at {time}', { time: fmtHM(p.doneAt) })}${p.expectedMins ? ` · ${tx('{n} min vs expected', { n: `${Math.round(w - p.expectedMins) >= 0 ? '+' : ''}${Math.round(w - p.expectedMins)}` })}` : ''}${pc === 'over' ? ` · ${tx('over its estimate')}` : ''}</p><p class="lbl">${tx('Done by mistake? Receiving can reopen it.')}</p>`; }
   else body = `<div class="scr-sh-acts"><button class="btn primary big" data-act="scr-pickfor" data-kind="start">▶ ${tx('Start decanting')}</button></div>`;
-  return `<div class="scr-sheet" data-act="scr-close-bg"><div class="scr-sh" role="dialog" aria-label="${tx('Pallet {ref}', { ref: esc(p.ref) })}">${head}${body}<button class="btn scr-sh-close" data-act="scr-close">${tx('Close')}</button></div></div>`;
+  return sheetHtml({ title: tx('Pallet {ref}', { ref: esc(p.ref) }), sub, body, close: 'scr-close', cls: 'scr-sheet' });
 }
 async function onScreenAct(ctx, a) {
   const act = a.dataset.act, { t } = current(ctx); if (!t) return;
   const at = sheet?.ref, dispatch = (type, payload = {}) => ctx.store.dispatch({ type, entity: { truck: t.id, bay: at }, payload });
   try {
     if (act === 'scr-pal') { sheet = { ref: a.dataset.ref, pick: null }; return ctx.rerender(); }
-    if (act === 'scr-close' || act === 'scr-close-bg') { sheet = null; return ctx.rerender(); }
+    if (act === 'scr-close') { sheet = null; return ctx.rerender(); }
     if (!sheet) return;
     if (act === 'scr-back') { sheet.pick = null; return ctx.rerender(); }
     // The decant starts with Take 5 at Receiving: until then nothing starts here either.
@@ -174,13 +175,12 @@ function mountScreen(ctx, root) {
   root.addEventListener('click', e => {
     const z = e.target.closest('[data-act="wb-zoom"], [data-act="wb-pan"]'); if (z) { if (timelineAct(z)) ctx.rerender(); return; }
     const s = e.target.closest('[data-act^="scr-"]:not([data-act="scr-full"])');
-    if (s && !(s.dataset.act === 'scr-close-bg' && e.target !== s)) { onScreenAct(ctx, s); return; }
+    if (s) { onScreenAct(ctx, s); return; }
     const a = e.target.closest('[data-act="scr-full"]'); if (!a) return;
     const el = root.querySelector('.scr') || document.documentElement;
     if (document.fullscreenElement) document.exitFullscreen?.(); else el.requestFullscreen?.().catch(() => {});
   });
   root.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && sheet) { sheet = null; ctx.rerender(); return; }
     const sq = e.target.closest?.('[data-act="scr-pal"]'); if (sq && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onScreenAct(ctx, sq); }
   });
   return [ctx.store.on('dock', () => ctx.rerender()), () => clearInterval(timer), () => clearInterval(slow), () => { document.removeEventListener('visibilitychange', onVis); lock?.release?.().catch(() => {}); lock = null; }];

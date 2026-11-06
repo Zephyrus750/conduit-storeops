@@ -9,6 +9,7 @@
 import { ic, esc } from './ui.js';
 import { VERSION } from './version.js';
 import { tx } from './i18n.js';
+import { openSheet } from './sheet.js';
 
 export const RELEASES = [
   { v: 'v0.3.0', date: '2026-10-09', items: [
@@ -53,18 +54,11 @@ const forDevice = list => { const phone = (document.querySelector('.frame')?.cli
 function open(list, go) {
   list = forDevice(list);
   document.getElementById('whatsnew')?.remove();
-  const el = document.createElement('div'); el.id = 'whatsnew'; el.className = 'tm-back'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', tx('What’s new'));
-  el.innerHTML = `<div class="tm-sheet wn"><button class="tour-x" data-wn="close" aria-label="${tx('Close')}">${ic('x')}</button><h3 class="wn-h">${ic('star')}${tx('What’s new')}</h3>` +
-    list.map(r => `<section class="wn-rel"><div class="wn-v">${esc(r.v)} · ${esc(r.date)}</div>${r.items.map(([icon, title, text, view]) => `<div class="wn-it"><span class="wn-ic">${ic(icon)}</span><div><b>${esc(title)}</b><p>${esc(text)}</p>${view ? `<button class="btn sm" data-wn="go" data-view="${esc(view)}">${tx('Show me')}</button>` : ''}</div></div>`).join('')}</section>`).join('') +
-    `<div class="tm-acts"><button class="btn primary" data-wn="close">${tx('Got it')}</button></div></div>`;
-  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = e => { if (e.key === 'Escape') close(); };
-  el.addEventListener('click', e => {
-    if (e.target === el) return close();
-    const b = e.target.closest('[data-wn]'); if (!b) return;
-    if (b.dataset.wn === 'go') { close(); go?.(b.dataset.view); } else close();
+  const sheet = openSheet({
+    kind: 'side', cls: 'wn-side', title: `${ic('star')}${tx('What’s new')}`, label: tx('What’s new'),
+    body: list.map(r => `<section class="wn-rel"><div class="wn-v">${esc(r.v)} · ${esc(r.date)}</div>${r.items.map(([icon, title, text, view]) => `<div class="wn-it"><span class="wn-ic">${ic(icon)}</span><div><b>${esc(title)}</b><p>${esc(text)}</p>${view ? `<button class="btn sm" data-wn="go" data-view="${esc(view)}">${tx('Show me')}</button>` : ''}</div></div>`).join('')}</section>`).join(''),
+    foot: `<button class="btn primary" data-wn="close">${tx('Got it')}</button>`,
+    onClick: e => { const b = e.target.closest('[data-wn]'); if (!b) return; sheet.close(); if (b.dataset.wn === 'go') go?.(b.dataset.view); },
   });
-  document.addEventListener('keydown', onKey);
-  document.body.appendChild(el);
-  el.querySelector('.tm-acts .primary')?.focus({ preventScroll: true });
+  sheet.el.id = 'whatsnew';
 }

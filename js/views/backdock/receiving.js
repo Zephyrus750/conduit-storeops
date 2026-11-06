@@ -6,6 +6,7 @@
 
 import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
+import { sheetHtml } from '../../sheet.js';
 import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
 import { haptic } from '../../device.js';
 import { previewManifest } from './mpreview.js';
@@ -288,6 +289,8 @@ function trucksSheet(m, t) {
     m.open.map(x => `<button class="dk-trow${x.id === t.id ? ' on' : ''}" data-act="pick" data-id="${esc(x.id)}" aria-pressed="${x.id === t.id}"><span><b>${tx('Truck {n}', { n: esc(truckNo(x.id)) })}</b>${phaseChip(x)}</span><small>${x.status === 'live' ? landedLine(x) : tx('planned · Start receiving to land pallets')}${x.manifest ? ' · ' + tx('Manifest {no}', { no: esc(x.manifest.manNo) }) : ''}</small></button>`).join('') +
     `</div><button class="btn primary big" style="width:100%;justify-content:center;margin-top:10px" data-act="newtruck">${ic('plus')}${tx('New truck')}</button>`;
 }
+// A panel's header row and its × (the sheet brings its own).
+const PANEL_HEAD = /<div class="bdk-pal-h">([\s\S]*?)<button class="ibtn" data-act="[\w-]+" title="[^"]*">[\s\S]*?<\/button><\/div>/;
 // The one sheet over the grid, most pressing first; closing it shows the
 // panel again if it was open (a step back).
 function phoneSheet(ctx, m, t, plan, run) {
@@ -303,8 +306,12 @@ function phoneSheet(ctx, m, t, plan, run) {
   if (ss.info) return wrap(infoSheet(t));
   if (st.more) return wrap(moreSheet(m, t));
   if (st.trucks) return wrap(trucksSheet(m, t));
-  // A pallet, landed or about to be, opens as a popup in the middle of the screen.
-  const modal = (label, html, close = 'closepal') => `<div class="dk-modal" role="dialog" aria-modal="true" aria-label="${label}"><button class="dk-scrim" data-act="${close}" aria-label="${tx('Close')}"></button><div class="dk-dlg">${html}</div></div>`;
+  // A pallet (landed or about to be), a person or the crew's roles: the
+  // shared bottom sheet, the panel's own header row as the sheet's header.
+  const modal = (label, html, close = 'closepal') => {
+    const h = PANEL_HEAD.exec(html);
+    return sheetHtml({ label, cls: 'dk-pop', close, head: h ? `<div class="sht-t dk-poph">${h[1]}</div>` : '', title: h ? '' : label, body: h ? html.replace(h[0], '') : html });
+  };
   if (st.person && (t.team || []).some(x => x.pid === st.person)) return modal(esc(st.person), personPanel(t, m, st.person), 'person-close');
   if (st.roles && (t.team || []).length) return modal(tx('Crew roles'), rolesPanel(t, m), 'roles-close');
   if (st.sel && !(run && !begun(t))) return t.pallets[st.sel] ? modal(tx('Pallet {ref}', { ref: esc(st.sel) }), palletPanel(t, t.pallets[st.sel], false)) : modal(landTitle(t, st.sel), landPanel(t, st.sel));

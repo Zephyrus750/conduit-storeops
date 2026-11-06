@@ -14,6 +14,7 @@
 
 import { ic, esc, toast, today, dep, fmtDay } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
+import { openSheet } from '../../sheet.js';
 import { readManifestFile, publishParsed, attachManifest, manifestIndex, microDept, microName, truckNo, STD_MINS_PER_CARTON, todayKey } from './common.js';
 import { SUBS } from '../../data/micros.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
@@ -63,8 +64,9 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
   const mpc = (attachTo && dock.trucks?.[attachTo]?.minsPerCarton) || settingsOf(ctx.store.get('settings')).minsPerCarton || STD_MINS_PER_CARTON;
   return new Promise(resolve => {
     document.getElementById('mprev')?.remove();
-    const el = document.createElement('div'); el.id = 'mprev'; el.className = 'sscan mprev'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', tx('Preview {file}', { file: file.name }));
-    document.body.appendChild(el);
+    const sheet = openSheet({ size: 'wide', cls: 'mprev', title: `${ic('file')}${tx('Check the report before publishing')}`, label: tx('Preview {file}', { file: file.name }),
+      sub: `${esc(file.name)}${parsed.sheet ? ' · ' + tx('sheet “{name}”', { name: esc(parsed.sheet) }) : ''}`, onClose: () => done(null) });
+    const el = sheet.el; el.id = 'mprev';
     let manNo = String(parsed.manNo || '').trim(), busy = false, came = null;
     // Where it came: a truck or slot the dock already has it on, a day on
     // file, or a suggestion for a day already gone (today's goes on its truck).
@@ -82,9 +84,8 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
       return `<div class="pt3">${tx('Came on')}</div><div class="mb-came"><input type="date" class="ad-in" data-mp-field="day" value="${esc(came.day || '')}" max="${esc(today())}" aria-label="${tx('Day it came')}"><select class="ad-in" data-mp-field="truck" aria-label="${tx('Truck')}"><option value="">${tx('Truck —')}</option>${[1, 2, 3, 4].map(n => `<option value="${n}"${came.truck === n ? ' selected' : ''}>${tx('Truck {no}', { no: n })}</option>`).join('')}</select></div><small class="cs-dim">${esc(why)}</small>`;
     };
     place();
-    const done = v => { document.removeEventListener('keydown', onKey); el.remove(); resolve(v); };
-    const onKey = e => { if (e.key === 'Escape' && !busy) done(null); };
-    document.addEventListener('keydown', onKey);
+    let settled = false;
+    const done = v => { if (settled) return; settled = true; sheet.close(); resolve(v); };
     const paint = () => {
       const chk = manifestCheck({ ...parsed, manNo }, { storeNo: ctx.storeNo, index, today: todayKey(), mpc }), s = chk.stats;
       const noNum = !/^[\w-]{1,20}$/.test(manNo), micros = microRows(parsed), dmax = Math.max(1, ...micros.map(r => r.cartons)), tot = s.cartons || 1;
@@ -92,7 +93,8 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
       const mixed = parsed.consols.filter(c => (c.mix || []).filter(m => m[1] > 0).length > 1).length, share = dur(Math.round(s.workMins / 4)), prods = topProducts(parsed);
       const stat = (k, v, note) => `<div><span>${k}</span><b>${v}</b>${note ? `<small>${note}</small>` : ''}</div>`;
       const fact = (k, v) => `<div><span>${k}</span><b>${v || '—'}</b></div>`;
-      el.innerHTML = `<div class="ss-card mp-card"><div class="ss-top"><b>${ic('file')}${tx('Check the report before publishing')}</b><span class="ss-exp">${esc(file.name)}${parsed.sheet ? ' · ' + tx('sheet “{name}”', { name: esc(parsed.sheet) }) : ''}</span><button class="ibtn" data-mp="cancel" aria-label="${tx('Cancel')}">${ic('x')}</button></div>` +
+      sheet.busy(busy);
+      sheet.set({ body: 
         `<div class="mp-body"><div class="mp-main">` +
         `<div class="mp-facts">${fact(tx('Manifest'), noNum ? '' : esc(manNo))}${fact(tx('Store'), esc(parsed.storeNo || ''))}${fact(tx('DC'), esc(parsed.dcNo || ''))}${fact(tx('Despatch'), esc(parsed.despatch || ''))}</div>` +
         (noNum || parsed.kind === 'generic' || !parsed.manNo ? `<label class="mp-num">${tx('Manifest number')} <input class="ad-in mono" data-mp-field="manNo" value="${esc(manNo)}" maxlength="20" placeholder="${tx('e.g. {n}', { n: '7031482' })}" autocomplete="off"></label>` : '') +
@@ -112,7 +114,7 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
                 // The checks' text is shared/manifest.js's: the fixed ones are translated (test/unit/i18n-keys/dock1.json); those carrying counts stay English.
         `<div class="mp-side">${cameHtml()}<div class="pt3">${tx('Checks')}</div><ul class="mp-checks">${chk.checks.map(c => `<li class="${c.level}">${c.level === 'ok' ? '✓' : c.level === 'bad' ? '⛔' : '⚠'} ${esc(tx(c.text))}</li>`).join('')}</ul>` +
         `<div class="mp-acts"><button class="btn primary" data-mp="publish"${chk.blocking || noNum || busy ? ' disabled' : ''}>${busy ? tx('Publishing…') : attachTo ? `${ic('truck')}${tx('Publish & attach to Truck {n}', { n: esc(truckNo(attachTo)) })}` : `${ic('check')}${tx('Publish to the library')}`}</button><button class="btn" data-mp="cancel"${busy ? ' disabled' : ''}>${tx('Cancel')}</button></div>` +
-        `<p class="lbl">${chk.blocking ? tx('Fix what is marked ⛔ first: the worker would refuse this report.') : tx('Publishing lists it on every device; a truck attaches it when it lands.')}</p></div></div></div>`;
+        `<p class="lbl">${chk.blocking ? tx('Fix what is marked ⛔ first: the worker would refuse this report.') : tx('Publishing lists it on every device; a truck attaches it when it lands.')}</p></div></div>` });
     };
     el.addEventListener('change', e => {
       const f = e.target.dataset.mpField; if (!came || (f !== 'day' && f !== 'truck')) return;

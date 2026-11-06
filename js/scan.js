@@ -18,6 +18,7 @@
 import { ic, esc, toast } from './ui.js';
 import { prefs } from './prefs.js';
 import { tx } from './i18n.js';
+import { camScreen, camClose } from './sheet.js';
 
 const FORMATS = ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39', 'itf', 'qr_code', 'data_matrix'];
 const REPEAT_MS = 2500, TICK_MS = 180;
@@ -25,9 +26,9 @@ let current = null;
 
 export function openScanner({ title = tx('Scan'), hint = '', continuous = false, onCode } = {}) {
   current?.close();
-  const el = document.createElement('div'); el.id = 'scanner'; el.className = 'scanner';
+  const el = camScreen(document.createElement('div')); el.id = 'scanner'; el.classList.add('scanner');
   el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', title);
-  el.innerHTML = `<div class="sc-top"><b>${esc(title)}</b><button type="button" class="sc-btn" data-sc="torch" hidden aria-label="${tx('Torch')}">${ic('bolt')}</button><button type="button" class="sc-btn" data-sc="close" aria-label="${tx('Close the scanner')}">${ic('x')}</button></div>` +
+  el.innerHTML = `<div class="sc-top"><b>${esc(title)}</b><button type="button" class="sc-btn" data-sc="torch" hidden aria-label="${tx('Torch')}">${ic('bolt')}</button>${camClose('data-sc="close"')}</div>` +
     `<div class="sc-view"><video playsinline muted></video><div class="sc-frame"></div><div class="sc-msg" role="status">${esc(hint || tx('Point the camera at the barcode'))}</div></div>` +
     `<form class="sc-type"><input inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="${tx('Or type the code')}" aria-label="${tx('Type the code')}"><button type="submit" class="sc-btn">${ic('arrow')}</button></form>` +
     (continuous ? `<div class="sc-tally" aria-live="polite"></div>` : '');
@@ -90,7 +91,6 @@ export function openScanner({ title = tx('Scan'), hint = '', continuous = false,
     if (b.dataset.sc === 'torch') { const t = stream?.getVideoTracks()[0]; torch = !torch; try { await t.applyConstraints({ advanced: [{ torch }] }); b.classList.toggle('on', torch); } catch { torch = false; } }
   });
   el.querySelector('.sc-type').addEventListener('submit', e => { e.preventDefault(); const i = e.target.querySelector('input'); found(i.value); i.value = ''; });
-  el.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   start();
   current = { close };
   return close;

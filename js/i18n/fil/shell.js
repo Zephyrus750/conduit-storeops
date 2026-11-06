@@ -258,7 +258,6 @@ export default {
   "Shelf {shelf} · store {store}": "Shelf {shelf} · tindahan {store}",
   "Shelf {shelf} at store {store}": "Shelf {shelf} sa tindahan {store}",
   "Torch": "Flashlight",
-  "Close the scanner": "Isara ang scanner",
   "Point the camera at the barcode": "Itutok ang camera sa barcode",
   "Or type the code": "O i-type ang code",
   "Type the code": "I-type ang code",
