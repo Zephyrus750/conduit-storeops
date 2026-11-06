@@ -58,7 +58,7 @@ function form(ctx, e, pre = null) {
 function page(ctx) {
   const all = ctx.admin.stores || [], list = st.list || [], shown = list.filter(e => matches(e, st.q));
   const waiting = (st.reqs || []).filter(q => q.status === 'open').length;
-  const head = vh(tx('Resources'), sub(tx('files and links for every store’s managers'), txn(list.length, '{n} resource', '{n} resources'), waiting ? txn(waiting, '{n} request waiting', '{n} requests waiting') : ''), `<button class="btn" data-act="rsa-reload">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button>`, 'stack');
+  const head = vh(tx('Resources'), sub(tx('files and links for every store’s managers'), txn(list.length, '{n} resource', '{n} resources'), waiting ? txn(waiting, '{n} request waiting', '{n} requests waiting') : ''), `<button class="btn" data-act="rsa-reload">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button>`, 'library');
   const editing = st.edit === 'new' ? form(ctx, null, st.from && (st.reqs || []).find(q => q.id === st.from)) : st.edit ? form(ctx, list.find(e => e.id === st.edit)) : '';
   if (st.error && !st.list) return head + `<div class="card"><p class="lbl">${esc(st.error)}</p></div>`;
   if (!st.list) return head + `<div class="card"><div class="ohint">${tx('Loading…')}</div></div>`;
@@ -69,7 +69,7 @@ function page(ctx) {
       `<td class="rsa-acts">${e.file ? `<button class="btn sm" data-act="rsa-open" data-id="${esc(e.id)}" title="${k?.inline ? tx('Open') : tx('Download')}">${ic(k?.inline ? 'ext' : 'arrow')}</button>` : ''}<label class="btn sm" title="${e.file ? tx('Replace the file') : tx('Upload a file')}">${ic('file')}<input type="file" accept="${ACCEPT}" data-upload="${esc(e.id)}" hidden></label><button class="btn sm" data-act="rsa-edit" data-id="${esc(e.id)}">${ic('edit')}${tx('Edit')}</button><button class="btn sm" data-act="rsa-del" data-id="${esc(e.id)}" title="${tx('Remove')}" aria-label="${tx('Remove {title}', { title: esc(e.title) })}">${ic('trash')}</button></td></tr>`;
   }).join('');
   const table = list.length ? `<div class="card"><div class="rs-bar"><div class="search rs-search">${ic('search')}<input data-field="rsa-q" value="${esc(st.q)}" placeholder="${tx('Search the library')}" aria-label="${tx('Search the library')}"></div></div><table class="wb-t rsa-t"><thead><tr><th>${tx('Title')}</th><th>${tx('Category')}</th><th>${tx('File or link')}</th><th>${tx('Stores')}</th><th>${tx('Updated')}</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="cs-dim">${tx('Nothing matches.')}</td></tr>`}</tbody></table></div>`
-    : st.edit ? '' : `<div class="card rs-empty">${ic('stack')}<p>${tx('Nothing in the library yet. Add the forms, procedures and links managers reach for most: every store’s PC lists them under Resources.')}</p><button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button></div>`;
+    : st.edit ? '' : `<div class="card rs-empty">${ic('library')}<p>${tx('Nothing in the library yet. Add the forms, procedures and links managers reach for most: every store’s PC lists them under Resources.')}</p><button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button></div>`;
   return head + editing + requests(ctx) + table + `<p class="lbl">${tx('Managers see these on a store PC under Resources, searchable and by category. Switch Resources off for a store on its Access tab.')}</p>`;
 }
 
@@ -81,7 +81,7 @@ async function upload(ctx, id, file) {
 }
 
 export default {
-  id: 'adminresources', title: tx('Resources'), icon: 'stack',
+  id: 'adminresources', title: tx('Resources'), icon: 'library',
   desktop(ctx) { return page(ctx); },
   mount(ctx, root) {
     const load = () => ctx.admin.api('/v1/admin/resources').then(r => { st.list = r.resources || []; st.error = null; ctx.rerender(); }).catch(e => { st.error = e.message; fail(e); ctx.rerender(); });

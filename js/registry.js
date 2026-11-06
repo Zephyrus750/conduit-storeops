@@ -63,9 +63,9 @@ const G = (label, icon, tabs, also = [], soon = false) => ({ label, icon, tabs: 
 export const GROUPS = {
   today: G(tx('Dashboard'), 'm-dashboard', ['dashboard']),
   inputs: G(tx('Reports & files'), 'file', ['inputs']),
-  resources: G(tx('Resources'), 'stack', ['resources']),
+  resources: G(tx('Resources'), 'library', ['resources']),
   map: G(tx('Store map'), 'm-map', ['map'], ['printmap', 'mapedits', 'fieldmode']),
-  layouts: G(tx('Layouts'), 'layers', ['layouts'], [], true),
+  layouts: G(tx('Layouts'), 'plan', ['layouts'], [], true),
   floorchecks: G(tx('Floor checks'), 'listcheck', ['refresh', 'labelint', 'stocktake']),
   picklist: G(tx('Pick list'), 'm-picklist', ['picklist']),
   safety: G(tx('Safety & upkeep'), 'm-emergency', ['emergency', 'maintenance', ['equipment', tx('Equipment')], 'recalls']),
@@ -108,7 +108,7 @@ export const STRIP = {
 export const HOME = { floor: 'map', stockroom: 'srhome', backdock: 'bdhome', admin: 'admin' };
 export const WORKSPACES = [['floor', tx('Floor'), 'm-map', tx('Map, refresh, labels, routes, stocktake')], ['stockroom', tx('Stockroom'), 'box', tx('Backfill scan, cages, adjustments, day list')], ['backdock', tx('Back dock'), 'truck', tx('Land and decant pallets, run the truck')]];
 // The owner console's rail: stores are added at runtime, these are the system rows.
-export const ADMIN_RAIL = [['admin', 'grid', tx('Overview')], ['adminmaps', 'm-map', tx('Maps')], ['adminservice', 'm-settings', tx('Service')], ['adminresources', 'stack', tx('Resources')], ['adminzones', 'pin', tx('Zones')], ['adminreg', 'plus', tx('Register a store')], ['adminactions', 'history', tx('Owner actions')]];
+export const ADMIN_RAIL = [['admin', 'grid', tx('Overview')], ['adminmaps', 'm-map', tx('Maps')], ['adminservice', 'm-settings', tx('Service')], ['adminresources', 'library', tx('Resources')], ['adminzones', 'pin', tx('Zones')], ['adminreg', 'plus', tx('Register a store')], ['adminactions', 'history', tx('Owner actions')]];
 // The phone's More sheet: each area's tools (with a line on what each is
 // for), then the store and the app; Switch area and Sign out sit at the foot.
 // A desk-only view drops out (Maintenance shows on a manager's phone only).
