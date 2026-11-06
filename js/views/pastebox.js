@@ -20,6 +20,7 @@ import { parseReportByLocation } from '../../shared/backfill.js';
 import { parseReport as parseSoh } from '../../shared/stockintel.js';
 import { pasteReport } from './stockroom/bfreview.js';
 import { tx, txn } from '../i18n.js';
+import { openSheet } from '../sheet.js';
 
 const stockroom = ctx => (ctx.session.current?.caps || []).includes('stockroom') && hasArea(ctx.session, 'stockroom');
 const toolOn = (ctx, view) => !toolOff(ctx.store.get('tools')?.off, toolForView(view));
@@ -45,14 +46,11 @@ function read(text) {
 
 export function openPasteBox(ctx, { want = 'any', text, after } = {}) {
   document.getElementById('pbox')?.remove();
-  const el = document.createElement('div'); el.id = 'pbox'; el.className = 'sscan pbox';
-  el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', TITLE[want]);
-  (document.querySelector('.frame') || document.body).appendChild(el);   // in the frame: its accent and zoom
+  const sheet = openSheet({ cls: 'pbox', title: `${ic('file')}${TITLE[want]}`, label: TITLE[want], onClose: () => close() });
+  const el = sheet.el; el.id = 'pbox';
   // phase: reading · found · empty · blocked · wrong · saving
   const s = { phase: 'reading', text: '', found: null };
-  const close = () => { document.removeEventListener('keydown', onKey, true); document.removeEventListener('paste', onPaste, true); el.remove(); };
-  const onKey = e => { if (e.key === 'Escape' && s.phase !== 'saving') { e.preventDefault(); e.stopPropagation(); close(); } };
-  document.addEventListener('keydown', onKey, true);
+  const close = () => { document.removeEventListener('paste', onPaste, true); sheet.close(); };
 
   const take = text => {
     s.text = String(text || '');
@@ -79,13 +77,13 @@ export function openPasteBox(ctx, { want = 'any', text, after } = {}) {
       : s.phase === 'wrong' ? `<div class="pb-state bad">${ic('alert')}<div><b>${tx('Incorrect format')}</b><span>${WRONG[want]}</span></div></div>`
       : s.phase === 'empty' ? `<div class="pb-state">${ic('clip')}<div><b>${tx('Your clipboard is empty')}</b><span>${tx('In SIM, select the whole report (Ctrl A) and copy it (Ctrl C), then come back here.')}</span></div></div>`
       : `<div class="pb-state">${ic('lock')}<div><b>${tx('This browser kept the clipboard to itself')}</b><span>${tx('Press Ctrl V now, or paste into the box below.')}</span></div></div>`;
-    el.innerHTML = `<div class="ss-card pb-card"><div class="ss-top"><b>${ic('file')}${TITLE[want]}</b><button class="ibtn" data-pb="close" aria-label="${tx('Close')}">${ic('x')}</button></div><div class="pb-body">${body}` +
+    sheet.busy(s.phase === 'saving');
+    sheet.set({ body: '<div class="pb-body">' + body +
       (s.phase === 'found' || s.phase === 'saving' || s.phase === 'reading' ? '' : `<div class="pb-acts"><button class="btn primary" data-pb="clip">${ic('clip')}${tx('Paste from clipboard')}</button></div>`) +
       (s.phase === 'blocked' || s.phase === 'wrong' || s.phase === 'empty' ? `<details class="pb-manual"${s.phase === 'blocked' ? ' open' : ''}><summary>${tx('Or paste it in a box')}</summary><textarea class="ad-in inp-paste" data-pb="box" rows="5" placeholder="${tx('Paste the report here (Ctrl V)')}"></textarea><button class="btn sm" data-pb="read">${ic('check')}${tx('Read it')}</button></details>` : '') +
-      `</div></div>`;
+      '</div>' });
   };
   el.addEventListener('click', async e => {
-    if (e.target === el && s.phase !== 'saving') return close();   // a click outside the card
     const b = e.target.closest('[data-pb]'); if (!b || b.tagName === 'TEXTAREA') return;
     const act = b.dataset.pb;
     if (act === 'close') return close();

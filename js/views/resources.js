@@ -14,6 +14,7 @@
 
 import { ic, esc, vh, sub, toast, fmtDate } from '../ui.js';
 import { tx, txn } from '../i18n.js';
+import { sheetHtml } from '../sheet.js';
 import { fileKind, matches } from '../../shared/resources.js';
 import { loadResources, cachedResources, resourceError, mostUsed, useResource, thumbUrl, thumbFailed } from '../resourcelib.js';
 
@@ -69,7 +70,7 @@ function landed(ctx, e) { for (const el of document.querySelectorAll(`.rs-blank[
 function acts(e, big = false) {
   const k = kindOf(e), id = esc(e.id), sz = big ? '' : ' sm';
   if (e.file && k?.inline) return big
-    ? `<button class="btn primary" data-act="rs-print" data-id="${id}">${ic('print')}${tx('Print')}</button><div class="rs-pv-two"><button class="btn" data-act="rs-open" data-id="${id}">${ic('ext')}${tx('Open full size')}</button><button class="btn" data-act="rs-get" data-id="${id}">${ic('download')}${tx('Download')}</button></div>`
+    ? `<button class="btn" data-act="rs-open" data-id="${id}">${ic('ext')}${tx('Open full size')}</button><button class="btn" data-act="rs-get" data-id="${id}">${ic('download')}${tx('Download')}</button><button class="btn primary" data-act="rs-print" data-id="${id}">${ic('print')}${tx('Print')}</button>`
     : `<button class="btn${sz} primary" data-act="rs-open" data-id="${id}">${tx('Open')}</button><button class="btn${sz}" data-act="rs-print" data-id="${id}">${tx('Print')}</button><button class="btn${sz}" data-act="rs-get" data-id="${id}" aria-label="${tx('Download {name}', { name: esc(e.file.name) })}">${tx('Download')}</button>`;
   if (e.file) return `<button class="btn${sz} primary" data-act="rs-get" data-id="${id}">${big ? ic('download') : ''}${tx('Download')}</button>`;
   return `<a class="btn${sz} primary" href="${esc(e.link)}" target="_blank" rel="noopener noreferrer" data-act="rs-link" data-id="${id}">${big ? ic('ext') : ''}${tx('Open link')}</a>`;
@@ -85,11 +86,12 @@ function preview(ctx, e, list) {
   const k = kindOf(e), at = list.indexOf(e), rows = e.file
     ? [[tx('File'), esc(e.file.name)], e.file.pages ? [tx('Pages'), String(e.file.pages)] : null, [tx('Size'), kb(e.file.size)], [tx('Updated'), esc(fmtDate(e.updated))], e.thumb?.from === 'page' && e.thumb.page > 1 ? [tx('Shown'), tx('page {n}', { n: e.thumb.page })] : null]
     : [[tx('Link'), esc(host(e.link))], [tx('Updated'), esc(fmtDate(e.updated))]];
-  return `<div class="rs-pv" data-act="rs-pv-x" role="dialog" aria-modal="true" aria-label="${esc(e.title)}"><div class="rs-pv-in">` +
-    `<div class="rs-pv-pg"><div class="rs-pv-sheet${e.thumb ? '' : ' cov'}">${sheet(ctx, e)}</div></div>` +
-    `<aside class="rs-pv-side"><div class="rs-pv-top">${badge(e)}<small>${esc(catName(e.category))}</small><button class="ibtn" data-act="rs-pv-x" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
-    `<h3>${esc(e.title)}</h3>${e.note ? `<p>${esc(e.note)}</p>` : ''}<dl>${rows.filter(Boolean).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` +
-    `<div class="rs-pv-acts">${acts(e, true)}</div>${list.length > 1 ? `<small class="rs-pv-keys">${tx('← → for the next resource · Esc to close')} · ${at + 1}/${list.length}</small>` : `<small class="rs-pv-keys">${tx('Esc to close')}</small>`}</aside></div></div>`;
+  return sheetHtml({
+    size: 'wide', cls: 'rs-pv', title: esc(e.title), sub: `${badge(e)}<span>${esc(catName(e.category))}</span>`, close: 'rs-pv-x',
+    body: `<div class="rs-pv-in"><div class="rs-pv-pg"><div class="rs-pv-sheet${e.thumb ? '' : ' cov'}">${sheet(ctx, e)}</div></div>` +
+      `<aside class="rs-pv-side">${e.note ? `<p>${esc(e.note)}</p>` : ''}<dl>${rows.filter(Boolean).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></aside></div>`,
+    foot: `<small class="sht-note">${list.length > 1 ? `${tx('← → for the next resource · Esc to close')} · ${at + 1}/${list.length}` : tx('Esc to close')}</small>${acts(e, true)}`,
+  });
 }
 
 // The cards as shown: the category and search picked, in category order (as the chips), then by title.
@@ -105,7 +107,6 @@ function showPv(ctx, root, id) {
   const { order } = ordered(ctx), e = id && order.find(x => x.id === id);
   st.view = e ? e.id : null; if (!e) return;
   root.insertAdjacentHTML('beforeend', preview(ctx, e, order));
-  root.querySelector('.rs-pv .ibtn')?.focus();
 }
 
 function page(ctx) {
@@ -147,7 +148,7 @@ export default {
     root.addEventListener('click', async ev => {
       const a = ev.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act, e = a.dataset.id && find(a.dataset.id);
-      if (act === 'rs-pv-x') { if (a === ev.target || a.matches('button')) showPv(ctx, root, null); return; }
+      if (act === 'rs-pv-x') { showPv(ctx, root, null); return; }
       if (act === 'rs-view') { showPv(ctx, root, a.dataset.id); return; }
       if (act === 'rs-refresh') { load(true); loadReqs(); }
       else if (act === 'rs-ask') { st.ask = { title: a.dataset.title || '', note: '' }; ctx.rerender(); root.querySelector('[data-form="rs-ask"] [name="title"]')?.focus(); }
@@ -183,7 +184,6 @@ export default {
     // The preview: Esc closes, ← → the next card as shown.
     const keys = ev => {
       if (!st.view || !root.querySelector('.rs-pv') || ev.target.matches?.('input, textarea')) return;
-      if (ev.key === 'Escape') { ev.preventDefault(); showPv(ctx, root, null); return; }
       if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
       const ids = ordered(ctx).order.map(e => e.id), at = ids.indexOf(st.view); if (at < 0 || ids.length < 2) return;
       ev.preventDefault(); showPv(ctx, root, ids[(at + (ev.key === 'ArrowRight' ? 1 : -1) + ids.length) % ids.length]);

@@ -37,6 +37,7 @@ import { ic, esc, toast } from './ui.js';
 import { feedback, barcodeReader } from './scan.js';
 import { codesIn, preprocess, decide, misreadFix, readsNeeded } from '../shared/livescan.js';
 import { tx, txn } from './i18n.js';
+import { camScreen, camClose } from './sheet.js';
 
 const TICK_MS = 180, OCR_MS = 900, PENDING_MS = 12000, BOX_MS = 2500;
 const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'];
@@ -80,8 +81,8 @@ export function resolveHeld(held, code, how) {
 let current = null;
 export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = 'pdt', expected = [], lists = null, have = () => new Set(), verify = async () => 'error', add = async () => true, label = () => '', held = new Map(), onHeldChange = () => {}, onClose = () => {} } = {}) {
   current?.close();
-  const el = document.createElement('div'); el.className = 'ls'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', title);
-  el.innerHTML = `<div class="ls-top"><button type="button" class="ls-ib" data-ls="close" aria-label="${tx('Close')}">${ic('x')}</button><div class="ls-tt"><b>${esc(title)}</b><span class="ls-st"><i></i><span>${tx('Starting the camera…')}</span></span></div><button type="button" class="ls-ib" data-ls="torch" hidden aria-label="${tx('Torch')}">${ic('bolt')}</button></div>` +
+  const el = camScreen(document.createElement('div')); el.classList.add('ls'); el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', title);
+  el.innerHTML = `<div class="ls-top"><div class="ls-tt"><b>${esc(title)}</b><span class="ls-st"><i></i><span>${tx('Starting the camera…')}</span></span></div><button type="button" class="ls-ib" data-ls="torch" hidden aria-label="${tx('Torch')}">${ic('bolt')}</button>${camClose('data-ls="close"')}</div>` +
     `<div class="ls-view"><video playsinline muted></video><canvas class="ls-hl" aria-hidden="true"></canvas><div class="ls-win" aria-hidden="true"><i class="ls-line"></i></div><div class="ls-seg" role="group" aria-label="${tx('What the camera reads')}"><button type="button" data-ls="mode" data-mode="pdt">${ic('file')}${tx('PDT list')}</button><button type="button" data-ls="mode" data-mode="barcode">${ic('barcode')}${tx('Barcode')}</button></div><span class="ls-lists" hidden></span><span class="ls-hint" hidden></span><i class="ls-focus" hidden></i></div>` +
     `<div class="ls-zoom" hidden><span>1×</span><input type="range" aria-label="${tx('Zoom')}"><span class="ls-zmax"></span></div>` +
     `<div class="ls-chips" aria-live="polite"></div><div class="ls-panel" hidden></div>` +
@@ -325,7 +326,6 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
     else if (act === 'check') togglePanel(true);
     else if (act === 'torch' && track) { torch = !torch; try { await track.applyConstraints({ advanced: [{ torch }] }); b.classList.toggle('on', torch); if (torch) lowLight(255); } catch { torch = false; toast(tx('The torch is not available on this camera'), 'bad'); } }
   });
-  el.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   refreshLists(); setMode(firstMode); start(); engine().catch(e => { if (mode === 'pdt') say(e.message); });
   current = { close };
   return close;

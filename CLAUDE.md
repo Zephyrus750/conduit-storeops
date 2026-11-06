@@ -40,6 +40,15 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
   its six translations in `js/i18n/<lang>/<area>.js`; the key is the English,
   one sentence per key, values in `{placeholders}`. Data, codes and the
   editor stay English. Conventions and the glossary: `docs/I18N.md`.
+- Every pop-up is the shared sheet (`js/sheet.js`): `sheetHtml()` for one a
+  view paints (its × sends the view's close `data-act`), `openSheet()` for
+  one of its own. Header with ×, body that scrolls, footer with the actions
+  on the right and the main one last. `kind`: dialog (440 px, short forms),
+  side (520 px, details) or `size: 'wide'` (a working surface); a phone
+  always gets a bottom sheet. Esc, a click on the dimmed page, the Tab trap
+  and focus return are `watchSheets()`'s, once for all: never a pop-up's own
+  backdrop, Esc handler or close button. `busy` blocks closing while saving.
+  The camera screens stay full-screen with `camScreen()` and `camClose()`.
 - The map is `js/map.js`: mount, pan/zoom, select, marks, pins, routes.
 - Phone map modes end in the strip (`mountStrip` in `js/shell.js`): a view
   paints it with `setStrip(root, html)` and builds its sheet (the `.mv-sel`

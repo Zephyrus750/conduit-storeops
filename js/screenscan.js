@@ -19,6 +19,7 @@ import { otsu, wordsToRows, ingest, filtered, locVerdict, matchPreset } from '..
 import { parseReport, byLoc } from '../shared/stockintel.js';
 import { csvLines } from '../shared/records.js';
 import { tx, txn } from './i18n.js';
+import { openSheet } from './sheet.js';
 
 const BASE = () => new URL('vendor/tesseract/', location.href).href;
 let tessLoading = null, tess = null, tessMode = null;
@@ -42,13 +43,16 @@ const TITLES = { compare: tx('Screen scan · compare a bay'), soh: tx('Screen sc
 export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse } = {}) {
   if (!navigator.mediaDevices?.getDisplayMedia) { toast(tx('Screen sharing is not available in this browser: paste the report instead'), 'bad'); return; }
   document.getElementById('sscan')?.remove();
-  const kind = KIND(mode), el = document.createElement('div'); el.id = 'sscan'; el.className = 'sscan'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', title || TITLES[mode]);
-  el.innerHTML = `<div class="ss-card"><div class="ss-top"><b>${esc(title || TITLES[mode])}</b>${expected ? `<span class="ss-exp">${tx('Reviewing {bay}', { bay: `<b class="mono">${esc(expected)}</b>` })}</span>` : ''}<span class="ss-locb" hidden></span><button class="ibtn" data-ss="close" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
-    `<div class="ss-body"><div class="ss-left"><div class="ss-stage"><video muted playsinline></video><div class="ss-box" hidden><i class="h tl"></i><i class="h br"></i></div><div class="ss-empty">${ic('expand')}<b>${tx('Share the window with the report')}</b><span>${kind === 'rows' ? tx('Then draw a box over the whole report rows (location to SOH).') : tx('Then draw a box over the LOCATION and KEYCODE columns.')}</span><button class="btn primary" data-ss="share">${tx('Share a screen')}</button></div></div>` +
-    `<div class="ss-ctl"><button class="btn sm" data-ss="test" disabled>${tx('Test read')}</button><button class="btn sm primary" data-ss="go" disabled>${tx('Start reading')}</button><button class="btn sm" data-ss="preset" disabled title="${tx('Every desk sharing a screen this size starts with this box')}">${tx('Save as store preset')}</button><button class="btn sm" data-ss="reshare" hidden>${tx('Share another window')}</button><span class="ss-peek" hidden><canvas></canvas><small>${tx('what the OCR sees')}</small></span></div>` +
-    `<div class="ss-status" role="status">${tx('Drag across the shared screen to draw the box. Zoom the report up for bigger digits.')}</div></div>` +
-    `<div class="ss-right"><div class="ss-count"><b>0</b><span>${kind === 'rows' ? tx('rows') : tx('codes')}</span></div><div class="ss-flags"></div><div class="ss-list"></div><div class="ss-acts"></div></div></div></div>`;
-  document.body.appendChild(el);
+  const kind = KIND(mode);
+  const sheet = openSheet({
+    size: 'wide', cls: 'sscan-sheet', title: esc(title || TITLES[mode]), onClose: () => close(),
+    sub: `${expected ? `<span class="ss-exp">${tx('Reviewing {bay}', { bay: `<b class="mono">${esc(expected)}</b>` })}</span>` : ''}<span class="ss-locb" hidden></span>`,
+    body: `<div class="ss-body"><div class="ss-left"><div class="ss-stage"><video muted playsinline></video><div class="ss-box" hidden><i class="h tl"></i><i class="h br"></i></div><div class="ss-empty">${ic('expand')}<b>${tx('Share the window with the report')}</b><span>${kind === 'rows' ? tx('Then draw a box over the whole report rows (location to SOH).') : tx('Then draw a box over the LOCATION and KEYCODE columns.')}</span><button class="btn primary" data-ss="share">${tx('Share a screen')}</button></div></div>` +
+      `<div class="ss-ctl"><button class="btn sm" data-ss="test" disabled>${tx('Test read')}</button><button class="btn sm primary" data-ss="go" disabled>${tx('Start reading')}</button><button class="btn sm" data-ss="preset" disabled title="${tx('Every desk sharing a screen this size starts with this box')}">${tx('Save as store preset')}</button><button class="btn sm" data-ss="reshare" hidden>${tx('Share another window')}</button><span class="ss-peek" hidden><canvas></canvas><small>${tx('what the OCR sees')}</small></span></div>` +
+      `<div class="ss-status" role="status">${tx('Drag across the shared screen to draw the box. Zoom the report up for bigger digits.')}</div></div>` +
+      `<div class="ss-right"><div class="ss-count"><b>0</b><span>${kind === 'rows' ? tx('rows') : tx('codes')}</span></div><div class="ss-flags"></div><div class="ss-list"></div><div class="ss-acts"></div></div></div>`,
+  });
+  const el = sheet.el; el.id = 'sscan';
   const $ = s => el.querySelector(s), video = $('video'), stage = $('.ss-stage'), box = $('.ss-box'), status = t => { $('.ss-status').textContent = t; };
   let stream = null, region = null, capturing = false, busy = false, timer = null, prevSig = null, settled = false, lastRead = 0, showAll = false, closed = false;
   const tally = { codes: {}, locs: {} }, items = {};
@@ -96,7 +100,6 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
   });
   stage.addEventListener('pointerup', () => { if (!drag) return; drag = null; if (region && region.w > 0.01 && region.h > 0.01) { setRegion(region, tx('Box set. Test read to check it, then start and scroll slowly.')); prevSig = null; } else setRegion(null); });
   const onKey = e => {
-    if (e.key === 'Escape') { close(); return; }
     if (!region || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) || e.target.closest('input,textarea')) return;
     e.preventDefault(); const st = e.shiftKey ? 0.01 : 0.002, r = { ...region };
     if (e.altKey) { if (e.key === 'ArrowRight') r.w += st; if (e.key === 'ArrowLeft') r.w = Math.max(0.01, r.w - st); if (e.key === 'ArrowDown') r.h += st; if (e.key === 'ArrowUp') r.h = Math.max(0.01, r.h - st); }
@@ -178,13 +181,12 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${name}.${fmt}`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     toast(kind === 'rows' ? tx('Exported {n} rows', { n: rows.length }) : tx('Exported {n} codes', { n: rows.length }));
   }
-  function close() { closed = true; stopCapture(); stream?.getTracks().forEach(t => t.stop()); document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); el.remove(); }
+  function close() { if (closed) return; closed = true; stopCapture(); stream?.getTracks().forEach(t => t.stop()); document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); sheet.close(); }
 
   el.addEventListener('click', async e => {
     const b = e.target.closest('[data-ss]'); if (!b) return;
     const a = b.dataset.ss;
-    if (a === 'close') close();
-    else if (a === 'share' || a === 'reshare') { stopCapture(); stream?.getTracks().forEach(t => t.stop()); await share(); }
+    if (a === 'share' || a === 'reshare') { stopCapture(); stream?.getTracks().forEach(t => t.stop()); await share(); }
     else if (a === 'test') { if (busy) return; busy = true; status(tx('Test read…')); try { const lines = await readFrame(), t = { codes: {}, locs: {} }; if (kind === 'rows') { const r = parseReport(lines.join('\n')); status(r.rows ? tx('Test read: {n} rows, e.g. {sample}', { n: r.rows, sample: Object.values(r.items).slice(0, 2).map(x => `${x.loc} ${x.kc} SOH ${x.soh}`).join(' · ') }) : tx('Test read found no full rows: widen the box to take in the SOH column. Saw: {seen}', { seen: lines.slice(0, 2).join(' | ').slice(0, 90) })); } else { ingest(t, lines); const c = filtered(t); status(c.length ? tx('Test read: {n} codes, e.g. {sample}', { n: c.length, sample: c.slice(0, 4).join(', ') }) : tx('Test read found no clean codes: zoom the report bigger, or redraw the box over the two columns. Saw: {seen}', { seen: lines.slice(0, 2).join(' | ').slice(0, 90) })); } } catch (err) { status(err.message); } busy = false; }
     else if (a === 'go') capturing ? stopCapture() : startCapture();
     else if (a === 'preset') { const size = `${video.videoWidth}x${video.videoHeight}`; try { await ctx.store.dispatch({ type: 'scan.preset', entity: { size }, payload: { kind, ...region } }); status(tx('✓ Saved as the store preset for {size}: it applies for every desk sharing a screen this size.', { size })); } catch (err) { status(err.message); } }

@@ -3,7 +3,8 @@
 // (ShelfSearcher's shareShelfLink, with the QR made offline in shared/qr.js).
 //   ?store=1241&shelf=A16S1 → the shell opens the map with that shelf.
 
-import { ic, esc, toast, dep, DEPT_NAME } from './ui.js';
+import { ic, esc, toast, DEPT_NAME } from './ui.js';
+import { openSheet } from './sheet.js';
 import { qrSvg } from '../shared/qr.js';
 import { tx } from './i18n.js';
 
@@ -18,24 +19,18 @@ export const guideLink = (storeNo, chapter) => `${location.origin}${location.pat
 export function openShare({ storeNo, storeName, shelf, dept }) {
   document.getElementById('sharesheet')?.remove();
   const url = shelfLink(storeNo, shelf), qr = qrSvg(url, { cell: 5 });
-  const el = document.createElement('div');
-  el.id = 'sharesheet'; el.className = 'sharesheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', tx('Share shelf {shelf}', { shelf }));
-  el.innerHTML = `<div class="sh-card"><div class="sh-h"><b>${tx('Share {shelf}', { shelf: esc(shelf) })}</b><button class="ibtn" data-sh="close" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
-    `<div class="sh-where">${dept ? dep(dept) + `<span>${esc(DEPT_NAME[dept] || dept)}</span>` : ''}<span class="cs-dim">${esc(storeName || '')} #${esc(storeNo)}</span></div>` +
-    `<div class="sh-qr">${qr || `<p class="lbl">${tx('This link is too long for a QR code.')}</p>`}</div><p class="lbl">${tx('Scan with another phone to open the map on this shelf. Signed-in devices of this store open it straight away.')}</p>` +
-    `<div class="sh-url mono">${esc(url)}</div><div class="sh-acts"><button class="btn primary sm" data-sh="copy">${ic('clip')}${tx('Copy link')}</button>${navigator.share ? `<button class="btn sm" data-sh="share">${ic('arrow')}${tx('Share…')}</button>` : ''}</div></div>`;
-  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = e => { if (e.key === 'Escape') close(); };
-  el.addEventListener('click', async e => {
-    if (e.target === el) return close();
-    const a = e.target.closest('[data-sh]'); if (!a) return;
-    if (a.dataset.sh === 'close') close();
-    else if (a.dataset.sh === 'copy') { try { await navigator.clipboard.writeText(url); toast(tx('Link copied')); } catch { const t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); toast(tx('Link copied')); } catch { toast(tx('Copy failed: select the link and copy it'), 'bad'); } t.remove(); } }
-    else if (a.dataset.sh === 'share') { try { await navigator.share({ title: tx('Shelf {shelf} · store {store}', { shelf, store: storeNo }), text: tx('Shelf {shelf} at store {store}', { shelf, store: storeNo }), url }); } catch {} }
+  const sheet = openSheet({
+    title: tx('Share {shelf}', { shelf: esc(shelf) }), label: tx('Share shelf {shelf}', { shelf }), cls: 'sh-sheet',
+    sub: `${dept ? `${esc(DEPT_NAME[dept] || dept)} · ` : ''}${esc(storeName || '')} #${esc(storeNo)}`,
+    body: `<div class="sh-qr">${qr || `<p class="lbl">${tx('This link is too long for a QR code.')}</p>`}</div><p class="lbl">${tx('Scan with another phone to open the map on this shelf. Signed-in devices of this store open it straight away.')}</p><div class="sh-url mono">${esc(url)}</div>`,
+    foot: `${navigator.share ? `<button class="btn" data-sh="share">${ic('arrow')}${tx('Share…')}</button>` : ''}<button class="btn primary" data-sh="copy">${ic('clip')}${tx('Copy link')}</button>`,
+    onClick: async e => {
+      const a = e.target.closest('[data-sh]'); if (!a) return;
+      if (a.dataset.sh === 'copy') { try { await navigator.clipboard.writeText(url); toast(tx('Link copied')); } catch { const t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); toast(tx('Link copied')); } catch { toast(tx('Copy failed: select the link and copy it'), 'bad'); } t.remove(); } }
+      else if (a.dataset.sh === 'share') { try { await navigator.share({ title: tx('Shelf {shelf} · store {store}', { shelf, store: storeNo }), text: tx('Shelf {shelf} at store {store}', { shelf, store: storeNo }), url }); } catch {} }
+    },
   });
-  document.addEventListener('keydown', onKey);
-  document.body.appendChild(el);
-  el.querySelector('[data-sh="copy"]')?.focus();
+  sheet.el.id = 'sharesheet';
 }
 
 // The link a device was opened with: { store, shelf }, { store, issue }, { store, equip }

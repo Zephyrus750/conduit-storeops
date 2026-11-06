@@ -258,7 +258,6 @@ export default {
   "Shelf {shelf} · store {store}": "Étagère {shelf} · magasin {store}",
   "Shelf {shelf} at store {store}": "Étagère {shelf} au magasin {store}",
   "Torch": "Lampe",
-  "Close the scanner": "Fermer le scanner",
   "Point the camera at the barcode": "Pointez l’appareil photo vers le code-barres",
   "Or type the code": "Ou saisissez le code",
   "Type the code": "Saisir le code",

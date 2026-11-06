@@ -14,6 +14,7 @@
 import { ic, esc, toast } from './ui.js';
 import { recallOf } from '../shared/reducers/recall.js';
 import { tx } from './i18n.js';
+import { openSheet } from './sheet.js';
 
 // The open store, for code that names a product without a ctx at hand
 // (nameHtml in the stockroom lists). The shell sets it when a store opens.
@@ -38,34 +39,30 @@ export function recallFlag(store, r, kc = '') {
 export function openFound(store, id, kc) {
   const r = store?.get?.('recalls')?.items?.[id]; if (!r) return;
   document.getElementById('rcbox')?.remove();
-  const el = document.createElement('div'); el.id = 'rcbox'; el.className = 'sscan rcbox';
-  el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', tx('Moved to the recall bay'));
-  (document.querySelector('.frame') || document.body).appendChild(el);
   const bay = store.get('recalls')?.bay || '', codes = r.kcs.includes(kc) ? [kc, ...r.kcs.filter(k => k !== kc)] : r.kcs;
   let n = 1, busy = false;
-  const close = () => { document.removeEventListener('keydown', onKey, true); el.remove(); };
-  const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
-  document.addEventListener('keydown', onKey, true);
-  el.innerHTML = `<div class="ss-card rc-card"><div class="ss-top"><b>${ic('alert')}${tx('Moved to the recall bay')}</b><button class="ibtn" data-rc="close" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
-    `<div class="pb-body"><div class="pb-state bad">${ic('alert')}<div><b>${recallWord(r)} · ${esc(r.title)}</b><span>${bay ? tx('Recall bay: {bay}', { bay: esc(bay) }) : tx('Ask a manager where the recall bay is.')}</span></div></div>` +
+  const sheet = openSheet({ cls: 'rcbox', title: `${ic('alert')}${tx('Moved to the recall bay')}`, label: tx('Moved to the recall bay'),
+    body: `<div class="pb-body"><div class="pb-state bad">${ic('alert')}<div><b>${recallWord(r)} · ${esc(r.title)}</b><span>${bay ? tx('Recall bay: {bay}', { bay: esc(bay) }) : tx('Ask a manager where the recall bay is.')}</span></div></div>` +
     (codes.length > 1 ? `<label class="lbl" for="rcKc">${tx('Keycode')}</label><select class="ad-in mono" id="rcKc">${codes.map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select>` : `<input type="hidden" id="rcKc" value="${esc(codes[0])}">`) +
     `<label class="lbl" for="rcN">${tx('How many did you move?')}</label><div class="rc-n"><button class="btn" data-rc="minus" aria-label="${tx('One fewer')}">−</button><input class="ad-in mono" id="rcN" inputmode="numeric" value="1" aria-label="${tx('How many')}"><button class="btn" data-rc="plus" aria-label="${tx('One more')}">+</button></div>` +
     `<label class="lbl" for="rcWhere">${tx('Where were they?')}</label><input class="ad-in" id="rcWhere" maxlength="40" placeholder="${tx('Bay or shelf, like 7036 or A16 S2')}">` +
-    `<div class="pb-acts"><button class="btn primary" data-rc="save">${ic('check')}${tx('Save')}</button><button class="btn" data-rc="close">${tx('Cancel')}</button></div><p class="lbl">${tx('Then tell a manager, so they know it has been moved.')}</p></div></div>`;
+    `<p class="lbl">${tx('Then tell a manager, so they know it has been moved.')}</p></div>`,
+    foot: `<button class="btn" data-rc="close">${tx('Cancel')}</button><button class="btn primary" data-rc="save">${ic('check')}${tx('Save')}</button>`,
+  });
+  const el = sheet.el, close = sheet.close; el.id = 'rcbox';
   const num = el.querySelector('#rcN');
   el.addEventListener('click', async e => {
-    if (e.target === el) return close();
     const b = e.target.closest('[data-rc]'); if (!b) return;
     const act = b.dataset.rc;
     if (act === 'close') return close();
     if (act === 'minus' || act === 'plus') { n = Math.max(1, Math.min(9999, (Number(num.value) || 1) + (act === 'plus' ? 1 : -1))); num.value = String(n); return; }
     if (act === 'save' && !busy) {
       n = Math.round(Number(num.value)); if (!(n >= 1 && n <= 9999)) { toast(tx('Type how many, 1 or more'), 'bad'); return num.focus(); }
-      busy = true;
+      busy = true; sheet.busy(true);
       try {
         await store.dispatch({ type: 'recall.found', entity: { recall: r.id }, payload: { kc: el.querySelector('#rcKc').value, n, ...(el.querySelector('#rcWhere').value.trim() ? { where: el.querySelector('#rcWhere').value.trim() } : {}) } });
         close(); toast(tx('Saved. Now tell a manager.'));
-      } catch (err) { busy = false; toast(err.message, 'bad'); }
+      } catch (err) { busy = false; sheet.busy(false); toast(err.message, 'bad'); }
     }
   });
   setTimeout(() => num.select(), 30);

@@ -258,7 +258,6 @@ export default {
   "Shelf {shelf} · store {store}": "Scaffale {shelf} · negozio {store}",
   "Shelf {shelf} at store {store}": "Scaffale {shelf} nel negozio {store}",
   "Torch": "Torcia",
-  "Close the scanner": "Chiudi lo scanner",
   "Point the camera at the barcode": "Inquadra il codice a barre",
   "Or type the code": "Oppure digita il codice",
   "Type the code": "Digita il codice",
