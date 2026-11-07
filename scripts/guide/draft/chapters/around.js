@@ -275,11 +275,15 @@ export const around = {
 
 // ── What if a screen isn't on the rail? ──────────────────────────────
 // Print map opens from the Store map row; the boards from Screens.
-const printmap = () => vh('print', tx('Print map'), sub(tx('A4 landscape'), 'Busselton'), btn('print', tx('Print · Save as PDF'), 'pri')) +
-  `<div class="pc2-pm"><div class="paper"><div class="sht"><div class="shh"><b>Busselton 1241</b><span>FOH · Ground</span><span>${fmtDate(DAY, { year: true })}</span></div>${plan()}</div></div>` +
-  `<div class="side"><div class="pc2-card"><h4>${tx('Floors')}</h4><span class="pc2-tabs sm"><b class="on">${tx('Current')}</b><b>${tx('Ground')}</b></span><small>${tx('Prints the floor shown.')}</small></div>` +
-  `<div class="pc2-card"><h4>${tx('Area')}</h4><span class="pc2-tabs sm"><b class="on">${tx('All')}</b><b>Home</b><b>Clothing</b><b>Kids</b></span></div>` +
-  `<div class="pc2-card"><h4>${tx('Layers')}</h4>${[tx('Shelf names'), tx('Shelf badges')].map(l => `<span class="cb on"><i></i>${l}</span>`).join('')}</div></div></div>`;
+const printmap = () => {
+  const cb = (l, on = true) => `<span class="cb${on ? ' on' : ''}"><i></i>${l}</span>`;
+  return vh('print', tx('Print map'), sub(tx('{paper} landscape', { paper: 'A4' })), btn('print', tx('Print · Save as PDF'), 'pri')) +
+    `<div class="pc2-pm"><div class="paper"><div class="sht"><div class="shh"><b>Busselton 1241</b><span>FOH · Ground</span><span>${fmtDate(DAY, { year: true })}</span></div>${plan()}</div></div>` +
+    `<div class="side"><div class="pc2-card"><h4>${tx('Floors')}</h4><span class="pc2-tabs sm"><b class="on">${tx('Current')}</b><b>Ground</b></span><small>${tx('Prints the floor shown.')}</small></div>` +
+    `<div class="pc2-card"><h4>${tx('Area')}</h4><span class="pc2-tabs sm"><b class="on">${tx('All')}</b><b>${ai('home')}Home</b><b>${ai('shirt')}Clothing</b><b>${ai('star')}Kids</b></span></div>` +
+    `<div class="pc2-card"><h4>${tx('Layers')}</h4>${cb(tx('Shelf names'))}${cb(tx('Shelf badges'))}<span class="dc">${tx('Department colours')}<span class="pc2-tabs sm"><b class="on">${tx('Full')}</b><b>${tx('Outline')}</b></span></span>${cb(tx('Price checks'))}${cb(tx('Tory lines'))}${cb(tx('Landmarks'))}</div>` +
+    `<div class="pc2-card"><h4>${tx('Mode details')}</h4>${[tx('Pick route (this device’s pick list)'), tx('Refresh — completed shelves'), tx('Refresh — plan colours'), tx('Stocktake states'), tx('Emergency markers'), tx('Maintenance issues')].map(l => cb(l, false)).join('')}</div></div></div>`;
+};
 const team = () => gtabs([['receiving', 'm-receiving', tx('Truck')], ['teamboard', 'users', tx('Team Board')]], 'teamboard') +
   `<div class="pc2-tb"><div class="th"><h2>${tx('Team Board')} <span class="phb">${tx('truck phase::Receiving')}</span></h2><small>${tx('Truck {no} · landed {time}', { no: 1, time: '05:40' })}</small></div><span class="clk">08:20:14</span>${btn('expand', tx('Fullscreen'), 'sm')}${btn('grid', tx('Dock screen'), 'sm')}</div>` +
   `<div class="pc2-tbk">${[[tx('Goal'), '—', ''], [tx('Forecast finish'), '08:10', tx('{time} of work left · {n} on', { time: '1h 50m', n: 3 })], [tx('Cartons'), '0 <i>/ 72</i>', ''], [tx('Pallets'), '0 <i>/ 8</i>', '']].map(([l, v, s]) => `<div class="pc2-card"><small>${l}</small><b>${v}</b>${s ? `<span>${s}</span>` : ''}</div>`).join('')}</div>` +

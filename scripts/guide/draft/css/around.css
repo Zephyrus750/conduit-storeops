@@ -375,29 +375,34 @@
 .pc2-pm .sht .pc2-plan { flex: 1; min-height: 0; padding: 30px 60px; }
 .pc2-pm .side { display: flex; flex-direction: column; gap: 12px; }
 .pc2-pm .side h4 { margin: 0 0 10px; font-size: 18px; font-weight: 600; } .pc2-pm .side small { display: block; margin-top: 8px; font-size: 13.5px; color: #6B7280; }
-.pc2-pm .cb { display: flex; align-items: center; gap: 10px; font-size: 14px; padding: 4px 0; } .pc2-pm .cb i { width: 15px; height: 15px; border-radius: 3px; background: #0E7CA8; }
+.pc2-pm .cb { display: flex; align-items: center; gap: 10px; font-size: 14px; padding: 4px 0; } .pc2-pm .cb i { width: 15px; height: 15px; border-radius: 3px; border: 1.5px solid #9CA3AF; } .pc2-pm .cb.on i { background: #0E7CA8; border-color: #0E7CA8; }
+.pc2-pm .dc { display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; color: #6B7280; margin: 8px 0; }
+.pc2-pm .pc2-tabs b svg.i { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
+.pc2-pm .side .pc2-card { padding: 14px 16px; } .pc2-pm .side h4 { margin-bottom: 8px; }
 .pc2-tb { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 16px; }
 .pc2-tb .th { flex: 1; } .pc2-tb h2 { margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -.02em; } .pc2-tb h2 .phb { font-size: 12px; margin-left: 8px; } .pc2-tb small { font-size: 14px; color: #6B7280; }
 .pc2-tb .clk { font: 600 14px ui-monospace, Menlo, monospace; border: 1px solid #E5E7EB; border-radius: 8px; padding: 6px 10px; background: #fff; }
 .pc2-tbk { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.pc2-tbk .pc2-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; min-height: 100px; }
+.pc2-tbk .pc2-card { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; min-height: 92px; }
 .pc2-tbk small { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; }
-.pc2-tbk b { font: 800 34px ui-monospace, Menlo, monospace; } .pc2-tbk b i { font-style: normal; font-size: 18px; color: #6B7280; } .pc2-tbk span { font-size: 13px; color: #6B7280; }
+.pc2-tbk b { font: 800 32px ui-monospace, Menlo, monospace; } .pc2-tbk b i { font-style: normal; font-size: 18px; color: #6B7280; } .pc2-tbk span { font-size: 13px; color: #6B7280; }
 .pc2-tbp { height: 16px; border-radius: 8px; background: #E5E7EB; margin: 16px 0 8px; }
 .pc2-tbl { display: flex; justify-content: space-between; font-size: 15px; color: #6B7280; margin-bottom: 12px; } .pc2-tbl b { font-size: 20px; color: #111827; }
 .pc2-tbc { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.pc2-tbc .h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; } .pc2-tbc .h b { font-size: 19px; } .pc2-tbc .h small { font-size: 12.5px; color: #6B7280; }
-.pc2-tbc p { margin: 60px 0 0; font-size: 14.5px; color: #374151; }
-.pc2-tbc .nx { display: grid; grid-template-columns: 70px 70px 1fr; align-items: center; padding: 12px 0; border-top: 1px solid #EEF0F3; font-size: 15px; }
-.pc2-tbc .nx b { font-size: 20px; font-weight: 700; } .pc2-tbc .nx .bay { color: #0B6183; font-family: ui-monospace, Menlo, monospace; }
+.pc2-tbc .pc2-card { display: flex; flex-direction: column; }
+.pc2-tbc .h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; } .pc2-tbc .h b { font-size: 17px; } .pc2-tbc .h small { font-size: 12.5px; color: #6B7280; }
+.pc2-tbc p { margin: auto 0 0; font-size: 14px; color: #374151; }
+.pc2-tbc .nx { display: grid; grid-template-columns: 70px 62px 1fr; align-items: center; padding: 9px 0; border-top: 1px solid #EEF0F3; font-size: 15px; }
+.pc2-tbc .nx b { font-size: 18px; font-weight: 700; } .pc2-tbc .nx .bay { color: #0B6183; font-family: ui-monospace, Menlo, monospace; }
 
 /* ── half the screen (960 px): the shell's narrower layout ─────────── */
 .pc2.half .pc2-rail { padding: 0 10px 10px; }
-.pc2.half .pc2-brand { height: 60px; padding: 0 6px; gap: 10px; }
+.pc2.half .pc2-brand { height: 52px; padding: 0 6px; gap: 10px; }
+.pc2.half .pc2-chip { padding: 6px 8px 8px; }
 .pc2.half .pc2-mark { width: 30px; height: 30px; } .pc2.half .pc2-brand b { font-size: 20px; }
 .pc2.half .pc2-chip b { font-size: 14.5px; } .pc2.half .pc2-chip small { font-size: 12px; }
 .pc2.half .pc2-rsec { font-size: 10.5px; padding: 12px 10px 5px; }
-.pc2.half .pc2-row { font-size: 14.5px; padding: 8px 10px; gap: 11px; white-space: normal; }
+.pc2.half .pc2-row { font-size: 14px; padding: 8px 10px; gap: 11px; white-space: normal; }
 .pc2.half .pc2-row svg.i { width: 20px; height: 20px; }
 .pc2.half .pc2-row .bdg { font-size: 11.5px; padding: 2px 8px; }
 .pc2.half .pc2-main { grid-template-rows: 60px minmax(0, 1fr) 44px; }
@@ -406,17 +411,33 @@
 .pc2.half .pc2-btn { font-size: 14px; padding: 8px 14px; }
 .pc2.half .pc2-content { padding: 16px; }
 .pc2.half .pc2-foot { font-size: 13px; padding: 0 20px; }
-.pc2.half .pc2-vh h2 { font-size: 30px; }
+.pc2.half .pc2-vh h2 { font-size: 32px; }
+.pc2.half .pc2-tabs b { font-size: 13.5px; padding: 7px 16px; }
+.pc2.half .pc2-tm { font-size: 13.5px; padding: 8px 12px; }
+.pc2.half .pc2-kpi { padding: 16px 18px; }
+.pc2.half .pc2-kpi .kh svg.i { width: 24px; height: 24px; }
+.pc2.half .pc2-kpi .kh h3 { font-size: 16px; }
+.pc2.half .pc2-kpi .open { font-size: 13px; padding: 6px 9px; }
+.pc2.half .pc2-kpi .open svg.i { width: 14px; height: 14px; }
+.pc2.half .pc2-kpi .hl { font-size: 13px; margin-top: 3px; }
+.pc2.half .pc2-kpi .row { font-size: 13.5px; padding: 5px 0; }
+.pc2.half .pc2-kpi .pg { padding-top: 8px; } .pc2.half .pc2-kpi .pg b { font-size: 12.5px; } .pc2.half .pc2-kpi .pg .track { height: 8px; }
+.pc2.half .pc2-sr3 .ch b { font-size: 16px; }
+.pc2.half .pc2-sr3 .ch .sel { max-width: 76px; white-space: nowrap; overflow: hidden; }
+.pc2.half .pc2-slc { padding: 10px 12px; } .pc2.half .pc2-slc .sl > b { font-size: 15px; } .pc2.half .pc2-slc small { font-size: 11.5px; }
+.pc2.half .pc2-sr3 .lf .in { white-space: nowrap; overflow: hidden; min-width: 0; }
+.pc2.half .pc2-sr3 .bh .bay { font-size: 30px; }
+.pc2.half .pc2-sr3 .li { padding: 9px 12px; } .pc2.half .pc2-sr3 .li > b { font-size: 14.5px; }
 .pc2.half .pc2-acts { flex-basis: 100%; }
 .pc2.half .pc2-dash { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: none; align-content: start; gap: 16px; }
 .pc2.half .pc2-kpi.dk { grid-column: 1 / -1; }
-.pc2.half .pc2-kpi .hero .n { font-size: 42px; }
+.pc2.half .pc2-kpi .hero .n { font-size: 40px; }
 .pc2.half .pc2-steps li:not(.on) span { visibility: hidden; }
 .pc2.half .pc2-gtab { font-size: 13.5px; min-height: 38px; padding: 0 14px; }
-.pc2.half .pc2-sr3 { grid-template-columns: 188px minmax(0, 1fr); }
-.pc2.half .pc2-sr3 .col.r { display: none; }
+.pc2.half .pc2-sr3 { grid-template-columns: 188px minmax(0, 1fr) 196px; }
+.pc2.half .pc2-sr3 .col.r { visibility: hidden; }
 .pc2.half .pc2-sr3 .lists { grid-template-columns: 1fr; }
-.pc2.half .pc2-sr3 .ctn, .pc2.half .pc2-sr3 .ex { display: none; }
+.pc2.half:not(.min) .pc2-sr3 .ctn, .pc2.half:not(.min) .pc2-sr3 .ex { display: none; }
 /* The rail folded to icons (Menu): counts become dots. */
 .pc2.min .pc2-z { grid-template-columns: 72px minmax(0, 1fr); }
 .pc2.half.min .pc2-z { grid-template-columns: 64px minmax(0, 1fr); }
