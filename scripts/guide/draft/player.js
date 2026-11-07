@@ -54,7 +54,7 @@ const TO = { floor: 'Every device in the store', stockroom: 'Stockroom devices a
 const j = o => typeof o === 'string' ? o : JSON.stringify(o).replace(/"([a-zA-Z_]\w*)":/g, '$1: ').replace(/,(?=[a-zA-Z"{[])/g, ', ');
 function evCard(e, fresh) {
   if (e.route) return `<div class="evc route${fresh ? ' fresh' : ''}"><div class="t"><b>${esc(e.route)}</b><span class="x">to the worker</span></div>${e.body ? `<code>${esc(j(e.body))}</code>` : ''}<div class="to">${esc(e.note)}</div></div>`;
-  return `<div class="evc${e.wait ? ' wait' : ''}${fresh ? ' fresh' : ''}"><div class="t"><b>${esc(e.type)}</b><span class="ar">${esc(e.area)}</span>${e.n ? `<span class="x">×${e.n}</span>` : ''}</div><code>entity ${esc(j(e.entity))}${Object.keys(e.payload || {}).length ? `\npayload ${esc(j(e.payload))}` : ''}</code><div class="to">${e.wait ? `Waiting on this phone${e.why ? ` · ${esc(e.why)}` : ''}` : `→ ${TO[e.area]}`}</div></div>`;
+  return `<div class="evc${e.wait ? ' wait' : ''}${fresh ? ' fresh' : ''}"><div class="t"><b>${esc(e.type)}</b><span class="ar">${esc(e.area)}</span>${e.n ? `<span class="x">×${e.n}</span>` : ''}</div><code>entity ${esc(j(e.entity))}${Object.keys(e.payload || {}).length ? `\npayload ${esc(j(e.payload))}` : ''}</code><div class="to">${e.wait ? `Waiting on this device${e.why ? ` · ${esc(e.why)}` : ''}` : `→ ${TO[e.area]}`}</div></div>`;
 }
 
 // Scales a device to the width it has, keeping its height in the flow.
