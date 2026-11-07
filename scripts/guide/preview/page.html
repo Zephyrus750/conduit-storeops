@@ -1,0 +1,76 @@
+<title>Visual Guide Preview</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="styles/fonts.css">
+<style>
+/* One column: a short header naming what is new, then Help's own guide, full width.
+   The guide's chrome takes the app's appearance tokens (styles/tokens.css and the
+   shell's dark frame), set here on :root so they reach its shadow root. */
+:root {
+  --ground: #F3F4F6; --panel: #FFFFFF; --line: #E5E7EB; --line-soft: #EEF0F3; --ink: #111827; --ink2: #374151; --dim: #6B7280; --faint: #9CA3AF;
+  --accent: #D24E0E; --accent-ink: #B84309; --accent-soft: #FDEEE5; --accent-line: #F4C9B3;
+  --amber: #F59E0B; --blue: #2563EB; --green: #16A34A; --red: #DC2626; --violet: #7C3AED; --amber-ink: #B45309; --green-ink: #15803D; --blue-ink: #1D4ED8;
+  --chip: #F3F4F6; --chip-ink: #4B5563; --track: #E9EBEF; --hover: #F7F8FA;
+  --shadow: 0 1px 2px rgba(17,24,39,.04), 0 8px 24px -16px rgba(17,24,39,.18);
+  --body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  --r-card: 14px; --r-ctl: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  color-scheme: dark; --ground: #0B1220; --panel: #111827; --line: #263145; --line-soft: #1C2536; --ink: #F3F4F6; --ink2: #D1D5DB; --dim: #9CA3AF; --faint: #6B7280;
+  --accent-ink: #F59E6B; --accent-soft: #2A1A12; --accent-line: #5A2E17;
+  --chip: #1F2937; --chip-ink: #D1D5DB; --track: #374151; --hover: #1A2333; --amber-ink: #FBBF24; --green-ink: #4ADE80; --blue-ink: #93C5FD;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px -16px rgba(0,0,0,.6);
+} }
+:root[data-theme="dark"] {
+  color-scheme: dark; --ground: #0B1220; --panel: #111827; --line: #263145; --line-soft: #1C2536; --ink: #F3F4F6; --ink2: #D1D5DB; --dim: #9CA3AF; --faint: #6B7280;
+  --accent-ink: #F59E6B; --accent-soft: #2A1A12; --accent-line: #5A2E17;
+  --chip: #1F2937; --chip-ink: #D1D5DB; --track: #374151; --hover: #1A2333; --amber-ink: #FBBF24; --green-ink: #4ADE80; --blue-ink: #93C5FD;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px -16px rgba(0,0,0,.6);
+}
+body { background: var(--ground); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1680px; margin: 0 auto; padding-block: 22px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 20px; }
+.intro { display: flex; flex-direction: column; gap: 10px; }
+.eyebrow { font: 700 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); }
+h1 { margin: 0; font: 800 clamp(24px, 3vw, 34px)/1.1 var(--body); letter-spacing: -.015em; text-wrap: balance; }
+.intro p { margin: 0; color: var(--ink2); max-width: 70ch; }
+.new { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; }
+.new button { text-align: left; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: var(--r-card); padding: 12px 14px; font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.new button:hover { border-color: var(--accent-line); }
+.new button[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.new button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.new small { font: 700 11px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); }
+.new b { font-size: 15px; line-height: 1.3; }
+.new span { font-size: 13px; color: var(--dim); }
+#guide { min-width: 0; container-type: inline-size; }
+.err { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px; color: var(--ink2); }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="eyebrow">Conduit · Visual Guide · preview</span>
+    <h1>The redrawn chapters</h1>
+    <p>These chapters are redrawn to match the app as it is today, with What ifs you can play. Watch them, try them yourself or read them as a handbook. Help keeps its current chapters until these are approved.</p>
+    <div class="new" id="new" role="group" aria-label="Redrawn chapters"></div>
+  </header>
+  <div id="guide"></div>
+</div>
+
+<script type="module">
+const host = document.getElementById('guide'), list = document.getElementById('new');
+let stop = null;
+try {
+  const [{ mountGuide }, { NEW }, { GROUPS }] = await Promise.all([import('./js/guide/player.js'), import('./js/guide/chapters/index.js'), import('./js/guide/scenes.js')]);
+  const area = id => (GROUPS.find(g => g[0] === id) || [, ''])[1];
+  const phone = () => matchMedia('(max-width: 700px)').matches;
+  const open = id => {
+    stop?.(); stop = mountGuide(host, { storeNo: '1241', storeName: 'Busselton', arg: { chapter: id }, mobile: phone() });
+    list.querySelectorAll('button').forEach(b => b.setAttribute('aria-current', String(b.dataset.id === id)));
+  };
+  list.innerHTML = NEW.map(s => `<button type="button" data-id="${s.id}"><small>${area(s.grp)} · ${s.device === 'pc' ? 'PC' : 'Phone'}</small><b>${s.title}</b><span>${s.steps.length} steps${s.stories?.length ? ` · ${s.stories.length} What ifs` : ''}</span></button>`).join('');
+  list.addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) { open(b.dataset.id); host.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
+  const first = location.hash.slice(1);
+  open(NEW.some(s => s.id === first) ? first : NEW[0]?.id);
+} catch (e) {
+  host.innerHTML = `<p class="err">The guide did not load: ${String(e && e.message || e).replace(/</g, '&lt;')}</p>`;
+}
+</script>

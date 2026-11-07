@@ -2,9 +2,13 @@
 # Runs a command with the local dev stack up (scripts/dev.js: the worker on
 # :8787 with store 1241, the shell on :8080), then stops the stack, so every
 # run starts from a fresh store. It stops a dev stack already running here.
+# GUIDE_OUT names the output folder (default scripts/guide/out).
 #   bash scripts/guide/run.sh "node scripts/guide/capture.mjs"
 cd "$(dirname "$0")/../.." || exit 1
 OUT=${GUIDE_OUT:-scripts/guide/out}; mkdir -p "$OUT"; LOG="$OUT/dev.log"
+# One dev stack at a time on this machine (it takes ports 8787 and 8080): a
+# second run waits here for the first to finish.
+exec 9>"${TMPDIR:-/tmp}/conduit-guide-devstack.lock"; flock 9
 stop() { pkill -f "^node scripts/dev.js" 2>/dev/null; pkill -f "^$PWD/node_modules/@cloudflare/workerd" 2>/dev/null; }
 stop; sleep 1
 setsid node scripts/dev.js > "$LOG" 2>&1 &

@@ -17,6 +17,47 @@ tools support that work:
 - **The review page:** the audit and the sample in one page, published as a
   private artifact.
 
+## The redrawn chapters (drafts)
+
+The chapters being redrawn, and the player changes they need, live in
+`draft/` until they're approved. Help keeps its current chapters until then.
+
+- **`draft/player.js`:** Help's player (`js/guide/player.js`) with four
+  changes:
+  - What ifs that play (a chapter's `stories`);
+  - a phone chapter's caption and controls beside the phone on a wide screen;
+  - a device never taller than the window leaves room for;
+  - on a narrow screen, the stage before the chapter list.
+- **`draft/frames.js`, `draft/guide.css`:** the phone at the app's real size
+  (390×844) and what goes on it: top bar, tabs, bottom sheet, toast, and a
+  camera showing real Code 128 labels.
+- **`draft/chapters/`:** one file per redrawn chapter. `index.js` lists them.
+  A chapter that keeps Help's id takes that chapter's place.
+- **`draft/css/`:** each chapter's own styles.
+- **`draft/scenes.js`:** Help's chapters with the redrawn ones in place.
+
+To see them, build the preview and serve it. It runs the real player and
+chapter code on a page of its own:
+
+| Command | Does |
+|---|---|
+| `node scripts/guide/preview/build.mjs` | Builds `out/preview/`. `GUIDE_ONLY=refresh` builds it with one chapter |
+| `node scripts/guide/preview/check.mjs <id> [play]` | Opens it at 1920×1080, 1440×900, 960×1040 and 420×860: errors, side scroll, a screenshot each, and with `play` plays the chapter to the end |
+| `node scripts/guide/preview/try.mjs <id> [n]` | Try it, tapping each ring, for the chapter or What if n |
+| `node scripts/guide/preview/book.mjs <id>` | The chapter and each What if as Handbook frames, one image each |
+
+The preview is published as a private artifact, using `out/preview/files.json`
+for its files.
+
+When the chapters are approved, one PR moves them into Help:
+
+- `draft/player.js` replaces `js/guide/player.js`;
+- the chapters go into `js/guide/scenes.js`, with their translations;
+- the CSS goes into `styles/guide.css`.
+
+The chapters already use the app's own text keys wherever the screen shows
+the same words.
+
 ## Needs
 
 - Node 22.
