@@ -1,0 +1,103 @@
+/* Location refresh on the phone (DRAFT, scripts/guide/draft/chapters/refresh.js):
+   the map card, its badge and tools, the strip, the week's dark panel, the
+   scan sheet, the toast over the strip and the camera on a shelf edge, in
+   the colours of styles/shell.css and styles/app.css (.map.real.rf, .mv-strip,
+   .mv-sel sheet, .rf-* and .sx-*). */
+
+/* The map card (.mv-map) with the week's badge and the map tools. */
+.rf-mv { position: relative; flex: 1; min-height: 0; border: 1px solid #E5E7EB; border-radius: 18px; overflow: hidden; background: #fff; }
+.rf-map, .rf-map > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.rf-svg .rf-lr, .rf-svg .rf-ls { font-family: Inter, system-ui, sans-serif; fill: #fff; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.rf-svg .rf-lr { font-size: 10.5px; font-weight: 700; }
+.rf-svg .rf-ls { font-size: 7.5px; font-weight: 600; opacity: .92; }
+.rf-svg .rf-lab.pl { opacity: .85; }
+.rf-badge { position: absolute; left: 10px; top: 10px; background: #fff; border: 1px solid #E5E7EB; border-radius: 999px; padding: 5px 11px; font-size: 12px; color: #5B6472; box-shadow: 0 4px 12px -6px rgba(0, 0, 0, .3); white-space: nowrap; }
+.rf-badge b { color: #111827; }
+.rf-tools { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .35); }
+.rf-tools span { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #374151; }
+.rf-tools span.scan { background: #0E7CA8; color: #fff; }
+.rf-tools svg.i { width: 19px; height: 19px; }
+
+/* The strip above the tabs (.mv-strip) and the shell's arrow. */
+#rf .p2-strip { height: 54px; padding: 0 8px 0 16px; gap: 8px; border-top: 1px solid rgba(255, 255, 255, .08); border-bottom: 0; }
+.rf-st { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; }
+.rf-st > svg.i { width: 18px; height: 18px; color: #5CC4EA; }
+.rf-st > b { font-size: 16.5px; font-weight: 800; white-space: nowrap; }
+.rf-st .n { flex: none; background: #0E7CA8; color: #fff; border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 800; }
+.rf-st .s { flex: 1; min-width: 0; color: #9CA3AF; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rf-act { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; background: #1F2937; border: 1px solid #263145; color: #F3F4F6; border-radius: 10px; padding: 0 10px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.rf-act svg.i { width: 16px; height: 16px; color: #5CC4EA; }
+.rf-act.go { background: #0E7CA8; border-color: #0E7CA8; }
+.rf-act.go svg.i { color: #fff; }
+.rf-tog { flex: none; width: 40px; height: 40px; border-radius: 12px; background: #1F2937; color: #E5E7EB; display: grid; place-items: center; }
+
+/* The week's panel: the dark sheet over the bottom of the map. */
+.rf-panel { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; max-height: 550px; overflow: hidden; background: #111827; color: #F3F4F6; border-radius: 20px 20px 0 0; padding: 22px 16px 16px; box-shadow: 0 -16px 40px -12px rgba(17, 24, 39, .45); }
+.rf-panel::before { content: ""; position: absolute; top: 8px; left: 50%; width: 38px; height: 4px; margin-left: -19px; border-radius: 4px; background: #374151; }
+.rf-sxh { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 800; }
+.rf-sxh > svg.i { width: 19px; height: 19px; color: #5CC4EA; }
+.rf-sxh .n { margin-left: auto; background: #0E7CA8; color: #fff; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 800; }
+.rf-sxsub { color: #9CA3AF; font-size: 12.5px; margin-top: 5px; line-height: 1.4; }
+.rf-bar { display: block; height: 6px; border-radius: 6px; background: #263145; overflow: hidden; margin-top: 8px; }
+.rf-bar i { display: block; height: 100%; border-radius: 6px; }
+.rf-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.rf-scanbtn { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 14px; border: 1px solid #263145; border-radius: 12px; background: #1A2333; font-size: 14.5px; font-weight: 700; }
+.rf-scanbtn svg.i { width: 20px; height: 20px; color: #0E7CA8; }
+.rf-scanbtn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rf-tg { flex: none; display: inline-flex; border: 1px solid #263145; border-radius: 999px; padding: 3px; background: #1A2333; }
+.rf-tg span { min-height: 36px; padding: 0 13px; display: inline-flex; align-items: center; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #9CA3AF; }
+.rf-tg span.on { background: #0E7CA8; color: #fff; }
+.rf-pal { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0 10px; border: 1px solid #263145; border-radius: 12px; background: #111827; }
+.rf-pal i { width: 24px; height: 24px; flex: none; border-radius: 50%; display: grid; place-items: center; border: 2px solid transparent; }
+.rf-pal i.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #F3F4F6; }
+.rf-pal i.er { border-color: #263145; color: #9CA3AF; }
+.rf-pal i.er svg.i { width: 11px; height: 11px; }
+.rf-sec { margin-top: 14px; }
+.rf-sl { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; margin-bottom: 7px; }
+.rf-sl span { color: #9CA3AF; letter-spacing: .02em; text-transform: none; font-weight: 700; text-align: right; }
+.rf-rows { background: #1A2333; border-radius: 12px; overflow: hidden; }
+.rf-r { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-top: 1px solid #222C3D; font-size: 13px; }
+.rf-r:first-child { border-top: 0; }
+.rf-r .k { flex: 1; min-width: 0; } .rf-r .k b { font-size: 13px; }
+.rf-r .rf-bar { width: 64px; flex: none; margin: 0; }
+.rf-r .rf-v { font-size: 12px; font-weight: 800; white-space: nowrap; color: #D1D5DB; }
+.rf-dep { display: inline-block; flex: none; font-size: 11px; font-weight: 700; border-radius: 5px; padding: 2px 7px; }
+.rf-mdone { background: #1A2333; border-radius: 12px; padding: 4px 11px; }
+.rf-mgrp { padding: 9px 0; border-top: 1px solid #222C3D; }
+.rf-mgrp:first-child { border-top: 0; }
+.rf-mgh { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.rf-mgh .rf-dep { font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 4px; }
+.rf-mgh .n { margin-left: auto; color: #4ADE80; font-weight: 800; font-size: 12px; }
+.rf-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.rf-chip { font: 600 11.5px/1 var(--vg-mono); color: #4ADE80; background: rgba(74, 222, 128, .12); border-radius: 7px; padding: 5px 7px; white-space: nowrap; }
+.rf-chip.more { color: #9CA3AF; background: #263145; }
+
+/* The scan sheet (white, over the strip and tabs). */
+.rf-big { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 54px; border-radius: 16px; font-size: 17px; font-weight: 800; background: #0E7CA8; color: #fff; box-shadow: 0 8px 20px -12px rgba(0, 0, 0, .4); }
+.rf-big svg.i { width: 22px; height: 22px; }
+.rf-lbl { display: block; margin-bottom: 6px; font-size: 13px; color: #5B6472; }
+.rf-field { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; border: 1px solid #E5E7EB; border-radius: 12px; background: #fff; }
+.rf-field > svg.i { color: #5B6472; }
+.rf-in { flex: 1; min-width: 0; font: 600 16px/1.2 var(--vg-mono); text-transform: uppercase; padding: 8px 0; color: #111827; white-space: nowrap; overflow: hidden; }
+.rf-in.rf-ph { color: #9CA3AF; }
+.rf-mark { flex: none; display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 8px; background: #0E7CA8; color: #fff; font-size: 13px; font-weight: 700; }
+.rf-last { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5B6472; min-height: 22px; line-height: 1.35; }
+.rf-last.ok { color: #15803D; font-weight: 700; }
+.rf-last.bad { color: #DC2626; font-weight: 700; }
+.rf-last svg.i { width: 18px; height: 18px; flex: none; }
+
+/* The toast, over the strip as the app shows it in a map mode (#toasts, bottom 146px). */
+#rf .p2 > .dv-toast { top: auto; bottom: 146px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 195px; white-space: normal; text-align: left; background: #111827; color: #fff; font-size: 13.5px; font-weight: 400; line-height: 1.35; padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; gap: 12px; z-index: 40; box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .45); }
+#rf .p2 > .dv-toast[hidden] { display: none; }
+#rf .p2 > .dv-toast u { flex: none; font-weight: 700; color: #fff; }
+#rf .p2 > .dv-toast.bad { background: #DC2626; }
+
+/* The camera on a shelf edge: two shelf labels, one per hold. */
+.rf-camsc { position: absolute; top: 0; bottom: 0; left: 0; width: 900px; display: flex; align-items: center; gap: 192px; padding: 0 0 0 65px;
+  background: linear-gradient(transparent 0 36%, #C7CCD3 36% 37%, #E4E7EB 37% 63%, #B9BFC8 63% 64%, transparent 64%), linear-gradient(rgba(20, 24, 32, .38), rgba(20, 24, 32, .38)),
+    repeating-linear-gradient(90deg, #9C7F66 0 46px, #6E8091 46px 92px, #B39B80 92px 132px, #7F8E79 132px 180px, #8C6F7A 180px 224px);
+  transition: transform 1.2s cubic-bezier(.5, 0, .3, 1); }
+.rf-cam.rf-pan .rf-camsc { transform: translateX(-452px); }
+.rf-tag { position: relative; z-index: 1; width: 260px; flex: none; background: #FBFBF7; border-radius: 4px; padding: 10px 12px 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); display: flex; flex-direction: column; gap: 4px; }
+.rf-tag svg { display: block; width: 100%; height: 64px; }
+.rf-tag b { text-align: center; font: 700 13px/1.2 var(--vg-mono); letter-spacing: .1em; color: #111; }
