@@ -15,6 +15,8 @@ const C = [['601930100', 2, '022', 'TOYS'], ['601930107', 7, '038', 'PARTY'], ['
   ['601930142', 2, '090', 'GIFT WRAP'], ['601930149', 7, '006', 'BEDDING'], ['601930156', 9, '022', 'TOYS'], ['601930163', 2, '038', 'PARTY'], ['601930170', 7, '047', 'BATH'], ['601930177', 9, '024', 'KIDSWEAR']];
 const cons = i => '093008012' + C[i][0];
 const TYPES = () => ({ c: tx('Chep tubs'), l: tx('Load pallet'), b: tx('Bulk') });
+// The short names a Last landed row uses (js/views/backdock/common.js PT_TINY).
+const TINY = () => ({ c: tx('pallet type::Tub'), l: tx('pallet type::Pallet'), b: tx('Bulk') });
 
 // ── the screens ──────────────────────────────────────────────────────
 const PH = () => [tx('Planned'), tx('Receiving'), tx('Received'), tx('Decanting'), tx('Cleared'), tx('Closed')];
@@ -30,8 +32,10 @@ const grid = bays => `<div class="dk2">${[...'ABCD'].flatMap(r => [1, 2, 3, 4, 5
 })).join('')}</div>`;
 const entry = bays => { const n = Object.keys(bays).length; return `<div class="card2 pe"><div class="card2-h">${tx('Pallet entry')}<span>${tx('{a} of {b} verified', { a: Object.values(bays).filter(p => p.ok || p.done).length, b: n })}</span></div>${grid(bays)}</div>`; };
 const legend = () => `<div class="lg2"><span><i style="background:#2953D6"></i>${tx('Tubs')}</span><span><i style="background:#B3261E"></i>${tx('Load')}</span><span><i style="background:#69787F"></i>${tx('Bulk')}</span><span class="r">${tx('Tap an empty square to land')}</span></div>`;
-const llRow = ([ref, t, n, labels, at]) => `<div><span class="tg t-${t}">${ref}</span><span class="ck">${ai('check')}</span><span><em class="t-${t}">${TYPES()[t]}</em> · ${tx('{n} ctn', { n })} · ${txn(labels, '{n} label', '{n} labels')}</span><small>${at}</small></div>`;
-const last = (rows, ctn) => `<div class="card2 ll"><div class="card2-h">${tx('Last landed')}<span>${tx('landed {a} · first pallet {b} · {n} ctn', { a: '05:40', b: '05:45', n: ctn })}</span></div><div class="ll2">${rows.map(llRow).join('')}</div></div>`;
+// A Last landed row (receiving.js firstLabel): type and cartons, the first consol
+// scanned with its last four digits bold, +n for the pallet's other labels.
+const llRow = ([ref, t, n, first, more, at]) => `<div><span class="tg t-${t}">${ref}</span><span class="ck">${ai('check')}</span><span class="tx"><span><em class="t-${t}">${TINY()[t]}</em> · ${tx('{n} ctn', { n })}</span><span class="cons">${first.slice(0, -4)}<b>${first.slice(-4)}</b></span>${more ? `<span class="more">+${more}</span>` : ''}</span><small>${at}</small></div>`;
+const last = (rows, ctn) => `<div class="card2 ll"><div class="card2-h">${tx('Last landed')}<span>${tx('landed {a} · first pallet {b} · {n} ctn', { a: '05:40', b: '05:45', n: ctn })}</span></div><div class="ll2">${rows.slice(0, 4).map(llRow).join('')}</div></div>`;
 const strip = (got, toLand, off) => `<div class="ds2"><b>${got}/12 <span>${tx('consols matched')}</span></b><div class="bar"><i style="width:${Math.round(got / 12 * 100)}%"></i></div><small>${tx('<em>{a}</em> to land · <em class="z">{b}</em> off-manifest', { a: toLand, b: off })}</small></div><span class="b2 pri fin">${tx('Finish receiving')}</span><span class="up2">${ai('chev', 'up')}</span>`;
 const stripReceived = () => `<div class="ds2"><b>${tx('Received')}</b><small>${tx('Take 5, then Start decant')}</small></div><span class="up2">${ai('chev', 'up')}</span>`;
 
@@ -40,9 +44,9 @@ const B0 = { A1: { t: 'c', n: 2, ok: true }, A2: { t: 'l', n: 16, ok: true } };
 const B1 = { ...B0, A3: { t: 'c', n: 18, ok: true } };
 const B2 = { ...B1, A4: { t: 'c', n: 2, ok: true }, A5: { t: 'c', n: 16, ok: true }, A6: { t: 'l', n: 2, ok: true, off: true }, A7: { t: 'b', n: 7, ok: true }, B1: { t: 'c', n: 9, ok: true } };
 const fresh = (b, refs) => Object.fromEntries(Object.entries(b).map(([k, v]) => [k, refs.includes(k) ? { ...v, fresh: true } : v]));
-const L0 = [['A2', 'l', 16, 2, '05:48'], ['A1', 'c', 2, 1, '05:45']];
-const L1 = [['A3', 'c', 18, 3, '06:02'], ...L0];
-const L2 = [['B1', 'c', 9, 1, '06:09'], ['A7', 'b', 7, 1, '06:08'], ['A6', 'l', 2, 2, '06:07'], ...L1];
+const L0 = [['A2', 'l', 16, C[1][0], 1, '05:48'], ['A1', 'c', 2, C[0][0], 0, '05:45']];
+const L1 = [['A3', 'c', 18, C[3][0], 2, '06:02'], ...L0];
+const L2 = [['B1', 'c', 9, C[11][0], 0, '06:09'], ['A7', 'b', 7, C[10][0], 0, '06:08'], ['A6', 'l', 2, C[9][0], 1, '06:07'], ...L1];
 
 const home = () => `<div class="v hm2" id="r-home" style="display:flex;flex-direction:column;gap:12px"><div><h3>${tx('Back dock')}</h3><p>${tx('Truck {n} · landed {time}', { n: 1, time: '05:40' })}</p></div>` +
   `<div class="row2" style="gap:10px;font-size:13px;color:var(--d)"><b style="font-size:20px;color:var(--i)">0</b><span style="flex:1;height:5px;border-radius:5px;background:#E5E7EB"></span>${tx('{n} cartons · {p}%', { n: 18, p: 0 })}</div>` +
@@ -125,10 +129,10 @@ export const receive = {
     { cap: tx('Land it: the bay fills and the count moves on.'), read: S(tx('The pallet is on the dock for everyone: every phone and the dock screens show A3 straight away.'), tx('The strip counts the consols matched.')),
       dev: 'One event lands the pallet with its type, cartons and consols.',
       ev: [E('pallet.land', 'backdock', { truck: TR, bay: 'A3' }, { ptype: 'chep', cartons: 18, consolIds: [C[3][0], C[4][0], C[5][0]] })],
-      run: async c => { await c.tap('.p2-sheet .go'); unsheet(c); c.html('.pe-w', entry(fresh(B1, ['A3']))); c.html('.ll-w', last(L1, 18)); c.html('.p2-strip', strip(6, 6, 0)); toast2(c, `<span>${tx('Pallet landed at {ref}', { ref: 'A3' })} · ${txn(3, '{n} label', '{n} labels')}</span><u>${tx('Open')}</u>`); } },
+      run: async c => { await c.tap('.p2-sheet .go'); unsheet(c); c.html('.pe-w', entry(fresh(B1, ['A3']))); c.html('.ll-w', last(L1, 36)); c.html('.p2-strip', strip(6, 6, 0)); toast2(c, `<span>${tx('Pallet landed at {ref}', { ref: 'A3' })} · ${txn(3, '{n} label', '{n} labels')}</span><u>${tx('Open')}</u>`); } },
     { cap: tx('The other dock phones land theirs: it all updates live.'), read: S(tx('Nobody refreshes anything.'), tx('Each phone landing a pallet sends one event, and every device on the dock shows it within a second or two.')),
       dev: 'Back dock events go to every back dock device and to managers.', ev: [E('pallet.land', 'backdock', { truck: TR, bay: 'A4' }, { ptype: 'chep', cartons: 2, consolIds: [C[6][0]] }, { n: 5 })],
-      run: async c => { await c.wait(700); c.html('.pe-w', entry(fresh(B2, ['A4', 'A5', 'A6', 'A7', 'B1']))); c.html('.ll-w', last(L2, 18)); c.html('.p2-strip', strip(12, 0, 1)); } },
+      run: async c => { await c.wait(700); c.html('.pe-w', entry(fresh(B2, ['A4', 'A5', 'A6', 'A7', 'B1']))); c.html('.ll-w', last(L2, 72)); c.html('.p2-strip', strip(12, 0, 1)); } },
     { cap: tx('Every pallet down: Finish receiving.'), read: S(tx('The strip has the next step.'), tx('Finish receiving counts what landed, what is still to land and any label that is not on the manifest, before the layout is confirmed.')),
       dev: 'The counts come from the truck as the reducer holds it; nothing is sent to open the sheet.', ev: [],
       run: async c => { await c.tap('.p2-strip .fin'); sheet(c, finish(1)); } },
@@ -161,7 +165,7 @@ receive.stories.push({
     { cap: tx('Land it: the bay is marked so everyone sees it.'), read: S(tx('The square shows OFF until someone decides.'), tx('Every phone and the dock screens show the same mark.')),
       dev: 'The held label lands with the pallet.', ev: [E('pallet.land', 'backdock', { truck: TR, bay: 'A3' }, { ptype: 'chep', cartons: 2, consolIds: [C[3][0]], held: ['601999917'] })],
       run: async c => { await c.tap('.pt2 [data-pt="c"]'); c.html('.p2-sheet', land({ labels: [HELD(), L(3)], type: 'c', typing: true })); await c.tap('.p2-sheet .go'); unsheet(c);
-        c.html('.pe-w', entry(fresh({ ...B0, A3: { t: 'c', n: 2, ok: true, off: true } }, ['A3']))); c.html('.ll-w', last([['A3', 'c', 2, 1, '06:02'], ...L0], 20)); c.html('.p2-strip', strip(4, 8, 1));
+        c.html('.pe-w', entry(fresh({ ...B0, A3: { t: 'c', n: 2, ok: true, off: true } }, ['A3']))); c.html('.ll-w', last([['A3', 'c', 2, C[3][0], 0, '06:02'], ...L0], 20)); c.html('.p2-strip', strip(4, 8, 1));
         toast2(c, `<span>${tx('1 label is not on the manifest: open {ref} to flag or ignore it.', { ref: 'A3' })}</span><u>${tx('Open')}</u>`, 'bad'); } },
     { cap: tx('Open the pallet to decide: Add &amp; flag, or Ignore.'), read: S(tx('The pallet’s card lists the held label with its two choices.'), tx('Check the tub first: is it an old label?')),
       dev: 'Nothing changes until one of the two is pressed.', ev: [],

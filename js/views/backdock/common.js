@@ -13,6 +13,8 @@ export const PT_COLOUR = Object.fromEntries(PTYPES.map(p => [p[0], p[2]]));
 export const PT_ONE = { chep: tx('Chep tubs'), loscam: tx('Load pallet'), bulk: tx('Bulk') };
 // The short names for the phone's legend under the grid.
 export const PT_SHORT = { chep: tx('Tubs'), loscam: tx('pallet type::Load'), bulk: tx('Bulk') };
+// One pallet's type where a row is tight (Last landed on a phone).
+export const PT_TINY = { chep: tx('pallet type::Tub'), loscam: tx('pallet type::Pallet'), bulk: tx('Bulk') };
 export const HALT_NAME = { hcage: tx('Cages out'), nostock: tx('No stock'), equip: tx('Equipment'), safety: tx('Safety'), waiting: tx('Waiting'), other: tx('Other') };
 // Hold-up kinds (DV): a halt is downtime; a huddle, a transition and a team
 // break are planned pauses. All of them stop the decant clock.

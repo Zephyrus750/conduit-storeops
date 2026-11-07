@@ -136,6 +136,11 @@
 .ll2 .ck svg.i { width: 11px; height: 11px; color: #fff; stroke-width: 3.5; }
 .ll2 em { font-style: normal; font-weight: 700; } .ll2 em.t-c { color: #2953D6; } .ll2 em.t-l { color: #B3261E; } .ll2 em.t-b { color: #4B5563; }
 .ll2 small { margin-left: auto; color: var(--d); font-size: 12.5px; }
+.ll2 .tx { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+.ll2 .tx > span:first-child { flex: none; white-space: nowrap; }
+.ll2 .cons { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; direction: rtl; font: 12.5px var(--vg-mono); color: var(--d); }
+.ll2 .cons b { font-weight: 800; color: var(--i); }
+.ll2 .more { flex: none; font-size: 11px; font-weight: 800; line-height: 1; padding: 3px 6px; border-radius: 999px; background: var(--g); color: var(--i2); }
 .ds2 { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .ds2 b { font-size: 17px; } .ds2 b span { font-size: 13px; font-weight: 500; color: #D1D5DB; }
 .ds2 .bar { height: 4px; border-radius: 4px; background: #374151; overflow: hidden; } .ds2 .bar i { display: block; height: 100%; background: #22C55E; }

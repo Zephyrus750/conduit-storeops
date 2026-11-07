@@ -7,7 +7,7 @@
 import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton, mgr } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { sheetHtml, ask } from '../../sheet.js';
-import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
+import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_TINY, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
 import { haptic } from '../../device.js';
 import { previewManifest } from './mpreview.js';
 import { printAudit, canAudit } from './audit.js';
@@ -340,7 +340,16 @@ function lastLanded(t) {
   const ps = pallets(t).filter(p => !p.carryover && p.landedAt).sort((a, b) => b.landedAt.localeCompare(a.landedAt)), c = phaseCounts(t);
   if (!ps.length) return t.status === 'live' ? `<p class="dk-empty">${tx('Nothing landed yet. Tap an empty square, or Scan a label.')}</p>` : '';
   return `<div class="card dk-list"><div class="dk-lh">${tx('Last landed')}<span>${landedLine(t)} · ${tx('{n} ctn', { n: c.cartons })}</span></div>` +
-    ps.slice(0, 4).map(p => { const n = p.consolIds.length + p.scanIds.length; return `<button class="dk-li" data-act="cell" data-ref="${esc(p.ref)}"><b class="dk-ref t-${PT_LETTER[p.ptype] || 'c'}">${esc(p.ref)}</b>${vfMark(p)}<span><em class="ty t-${PT_LETTER[p.ptype] || 'c'}">${esc(PT_ONE[p.ptype] || p.ptype)}</em> · ${tx('{n} ctn', { n: p.cartons ?? '–' })}${n ? ' · ' + txn(n, '{n} label', '{n} labels') : ''}</span><small>${fmtHM(p.landedAt)}</small></button>`; }).join('') + `</div>`;
+    ps.slice(0, 4).map(p => `<button class="dk-li" data-act="cell" data-ref="${esc(p.ref)}"><b class="dk-ref t-${PT_LETTER[p.ptype] || 'c'}">${esc(p.ref)}</b>${vfMark(p)}<span class="dk-tx"><span class="dk-ty"><em class="ty t-${PT_LETTER[p.ptype] || 'c'}">${esc(PT_TINY[p.ptype] || p.ptype)}</em> · ${tx('{n} ctn', { n: p.cartons ?? '–' })}</span>${firstLabel(p)}</span><small>${fmtHM(p.landedAt)}</small></button>`).join('') + `</div>`;
+}
+// A landed pallet's labels in its row: the first consol scanned, its last four
+// digits bold (what the receiver checks on the label), cut from the left when
+// the row is narrow (…30107), and +n for the others on the pallet.
+function firstLabel(p) {
+  const ids = [...p.consolIds, ...p.scanIds], id = String(ids[0] || ''); if (!id) return '';
+  const more = ids.length - 1;
+  return `<span class="dk-cons" title="${esc(id)}"><span>${esc(id.slice(0, -4))}</span><b>${esc(id.slice(-4))}</b></span>` +
+    (more ? `<span class="dk-more" title="${txn(more, '{n} more label', '{n} more labels')}">+${more}</span>` : '');
 }
 // Under the crew in Decant: where each busy cutter goes next, from the plan
 // (a free one has NEXT on their chip).

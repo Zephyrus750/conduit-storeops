@@ -3559,6 +3559,13 @@ button.dk-tile { background: var(--panel); border-color: var(--line); cursor: po
 .dk-li b.dk-ref { color: #fff; border-radius: 6px; padding: 2px 0; text-align: center; min-width: 34px; }
 .dk-ref.t-c { background: #2953D6; } .dk-ref.t-l { background: #B3261E; } .dk-ref.t-b { background: #69787F; }
 .dk-li em.ty { font-style: normal; font-weight: 700; }
+/* Last landed: type and cartons, then the first consol scanned, cut from the
+   left when the row is narrow (…30107) with its last four bold, then +n. */
+.dk-li .dk-tx { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.dk-li .dk-ty { flex: none; white-space: nowrap; }
+.dk-li .dk-cons { flex: 0 1 auto; min-width: 3.2em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; direction: rtl; text-align: left; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--dim); }
+.dk-li .dk-cons b { min-width: 0; font: inherit; font-weight: 800; color: var(--ink); }
+.dk-li .dk-more { flex: none; font-size: 11px; font-weight: 800; line-height: 1; padding: 3px 6px; border-radius: 999px; background: var(--chip); color: var(--chip-ink); }
 .ty.t-c { color: #2953D6; } .ty.t-l { color: #B3261E; } .ty.t-b { color: #56646B; }
 .frame.dark .ty.t-c { color: #93B4FF; } .frame.dark .ty.t-l { color: #FCA5A5; } .frame.dark .ty.t-b { color: #B6C2C8; }
 /* The panel (the strip opened) is dark, as the Floor's sheets are. */
