@@ -18,8 +18,11 @@ const files = {};
 // chapters ride along as js/guide/scenes-old.js.
 put('js/guide/scenes-old.js', path.join(ROOT, 'js/guide/scenes.js'));
 for (const f of fs.readdirSync(DRAFT, { recursive: true })) if (f.endsWith('.js')) put(`js/guide/${f}`, path.join(DRAFT, f));
-// GUIDE_ONLY=refresh builds the preview with that one redrawn chapter (draft/chapters/refresh.js).
-if (process.env.GUIDE_ONLY) fs.writeFileSync(OUT + 'js/guide/chapters/index.js', `import * as m from './${process.env.GUIDE_ONLY}.js';\nexport const NEW = Object.values(m);\n`);
+// GUIDE_ONLY=refresh (or receive,refresh) builds the preview with only those redrawn chapters.
+if (process.env.GUIDE_ONLY) {
+  const names = process.env.GUIDE_ONLY.split(',').map(n => n.trim()).filter(Boolean);
+  fs.writeFileSync(OUT + 'js/guide/chapters/index.js', names.map((n, i) => `import * as m${i} from './${n}.js';`).join('\n') + `\nexport const NEW = [${names.map((_, i) => `...Object.values(m${i})`).join(', ')}];\n`);
+}
 // Everything else the player imports, from the app as it is.
 const seen = new Set(Object.keys(files)), queue = [...seen];
 while (queue.length) {
