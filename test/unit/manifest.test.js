@@ -85,3 +85,36 @@ test('a plain sheet attaches: consolidation numbers lose spaces and dashes, anyt
   assert.equal(apply(s, ev('truck.create', { truck: '2026-09-07-T1' }, {})), null);
   assert.equal(apply(s, ev('manifest.attach', { truck: '2026-09-07-T1' }, { manNo: 'G-1', consols: attachConsols(manifestDoc(r, { manNo: 'G-1' })) })), null);
 });
+
+test('every check the upload preview can show is said in the device’s language (checkText in js/views/backdock/mbatch.js)', async () => {
+  // A German device: shared/manifest.js writes each check in English with its
+  // counts; the screens read it back to a key with {placeholders}.
+  globalThis.localStorage = { getItem: () => JSON.stringify({ lang: 'de' }), setItem() {} };
+  const { checkText } = await import('../../js/views/backdock/mbatch.js');
+  const de = (await import('../../js/i18n/de.js')).default;
+  const con = (i, extra = {}) => ({ id: String(601804300 + i), cartons: 2, items: [{ k: '43307685', q: 6, dept: '024' }], ...extra });
+  const ok = { manNo: '7031482', storeNo: '1241', despatch: '06/09/2026', consols: [con(1)] };
+  const texts = new Set();
+  const run = (parsed, opts = {}) => { for (const c of manifestCheck(parsed, { storeNo: '1241', today: '2026-09-07', ...opts }).checks) texts.add(c.text); };
+  run({ ...ok, rowsRead: 5 }); run(ok); run({ ...ok, storeNo: '2033' }); run({ ...ok, consols: Array.from({ length: 501 }, (_, i) => con(i)) }); run({ ...ok, consols: [] });
+  for (const n of [1, 2]) {
+    run({ ...ok, skipped: { numericCons: n, badKeycode: n, other: n } });
+    run({ ...ok, consols: [con(1, { itemsCut: 3 }), con(2, { itemsCut: n - 1 })] });
+    run({ ...ok, consols: Array.from({ length: n + 3 }, (_, i) => con(i, { cartons: i < n ? 0 : 2 })) });
+    run({ ...ok, consols: [con(1), con(1), con(2), con(n)] });
+    run({ ...ok, consols: [con(1, { items: Array.from({ length: n }, () => ({ k: '43307685', q: 1 })) })] });
+    run({ ...ok, kind: 'generic', skipped: n });
+  }
+  run({ ...ok, consols: Array.from({ length: 4 }, (_, i) => con(i, { cartons: 0 })) });
+  run({ ...ok, manNo: '' }); run(ok, { index: { 7031482: { publishedAt: '2026-09-07T01:00:00Z' } } }); run(ok, { index: { 7031482: { publishedAt: '2026-09-07T01:00:00Z', truck: '2026-09-07-T2' } } });
+  run(ok, { today: '2026-10-05' }); run(ok, { today: '2026-08-30' });
+  assert.equal(texts.size, 28, [...texts].join('\n'));
+  // Each English text is one key filled in exactly, and the German is that key's translation filled the same way.
+  // (the key with the most words of its own, so '{a}, {b}.' never stands in for a sentence)
+  const keys = Object.keys(de).map(k => { const names = [...k.matchAll(/\{(\w+)\}/g)].map(m => m[1]); return { k, names, own: k.replace(/\{\w+\}/g, '').length, re: new RegExp('^' + k.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\?\{(\w+)\\?\}/g, '(.+?)') + '$') }; }).sort((a, b) => b.own - a.own);
+  for (const t of texts) {
+    const hit = keys.find(x => x.re.test(t)); assert.ok(hit, `no key reads: ${t}`);
+    const vals = hit.re.exec(t).slice(1), want = de[hit.k].replace(/\{(\w+)\}/g, (m, k) => vals[hit.names.indexOf(k)]);
+    assert.equal(checkText(t), want, t);
+  }
+});

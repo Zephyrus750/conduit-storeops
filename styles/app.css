@@ -1728,6 +1728,7 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .inv-prow b { margin-left: auto; color: #B45309; }
 .inv-mapcard .mapbox { position: relative; height: 460px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line-soft); }
 .inv-mapcard .mapstage { position: absolute; inset: 0; }
+.inv-mapcard .btn[hidden] { display: none; }   /* Clear, with nothing painted: .btn's display beat the attribute */
 .inv-heatkey { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--dim); flex-wrap: wrap; }
 .inv-heatkey > i { width: 26px; height: 10px; border-radius: 3px; }
 .inv-heatkey span { display: inline-flex; align-items: center; gap: 5px; }

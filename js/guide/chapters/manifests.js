@@ -35,7 +35,7 @@ const BASE = [['7040258', '2026-10-01', 1, 'arrived', 84, 12], ['7040262', '2026
   ['7040280', '2026-10-12', 1, 'done', 80, 11], ['7040282', '2026-10-13', 1, 'done', 61, 9], ['7040284', '2026-10-14', 1, 'done', 87, 13], ['7040285', '2026-10-14', 2, 'done', 42, 6],
   ['7040287', '2026-10-15', 1, 'done', 84, 12], ['7040289', '2026-10-16', 1, 'done', 72, 10], ['7040291', '2026-10-17', 1, 'done', 53, 8],
   ['7040293', '2026-10-19', 1, 'done', 75, 10], ['7040295', '2026-10-20', 1, 'done', 84, 12], ['7040296', '2026-10-21', 1, 'done', 61, 9], ['7040297', '2026-10-21', 2, 'done', 40, 6],
-  ['7040298', '2026-10-22', 1, 'done', 100, 14], ['7040301', DAY, 1, 'live', 72, 12]];
+  ['7040298', '2026-10-22', 1, 'done', 100, 14], ['7040301', DAY, 1, 'receiving', 72, 12]];
 // Truck 2's report for today (no day until its truck takes it), and Friday's and Saturday's, published late.
 const M304 = ['7040304', null, null, 'library', 66, 10, '2026-10-24'], M300 = ['7040300', '2026-10-23', 1, 'arrived', 79, 11], M303 = ['7040303', '2026-10-24', 1, 'arrived', 63, 9];
 const mk = ([no, day, truck, st, ctn, n, desp]) => ({ no, day, truck, st, ctn, n, desp: desp || addDays(day, -1) });
@@ -72,7 +72,8 @@ const NAMES = { 42977636: '12pk Diecast Vehicles', 43302210: 'Paper Plates 20pk'
 const KDEPT = { ...Object.fromEntries(KC301), 43310045: '038', 42981102: '047', 43305518: '028', 43170264: '072', 43604471: '024', 43201187: '025', 43447720: '074', 43561290: '006', 43118843: '091', 43226605: '004', 43339981: '067', 42977641: '028', 43610017: '015', 43610025: '040', 43610033: '087', 43610041: '065' };
 
 // ── the list by week, day and truck (manifests.js grouped(), listRow()) ──
-const STATUS = () => ({ done: [tx('Done'), 'good'], live: [tx('Decanting'), 'warn'], staged: [tx('Receiving'), ''], planned: [tx('Planned'), ''], arrived: [tx('Came in'), ''], library: [tx('Published'), ''] });
+// On a truck here, the truck's phase: 7040301's Truck 1 is still receiving.
+const STATUS = () => ({ done: [tx('Done'), 'good'], decanting: [tx('Decanting'), 'warn'], receiving: [tx('Receiving'), ''], planned: [tx('Planned'), ''], arrived: [tx('Came in'), ''], library: [tx('Published'), ''] });
 const monday = d => addDays(d, -((new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7));
 const dayName = d => d === DAY ? tx('Today · {date}', { date: fmtDay(d) }) : d === addDays(DAY, -1) ? tx('Yesterday · {date}', { date: fmtDay(d) }) : fmtDay(d);
 function weekName(w) {
@@ -115,7 +116,7 @@ function came(m) {
 const roll = ([h, c, k]) => { const t = h + c + k; return `<div class="mf2-roll">${GROUPS.map((g, i) => [g, [h, c, k][i]]).filter(([, v]) => v > 0).map(([g, v]) => `<span style="flex:${v};background:${g[2]}">${v / t > 0.08 ? `${g[1]} ${Math.round(v / t * 100)}%` : ''}</span>`).join('')}</div>`; };
 // opts: tab (consols | depts), open (a consol's id), q (the search), hit (the keycode found).
 function explorer(m, { tab = 'consols', open = '', q = '', hit = '' } = {}) {
-  const x = X[m.no], [label, cls] = STATUS()[m.st], onTruck = m.st === 'done' || m.st === 'live';
+  const x = X[m.no], [label, cls] = STATUS()[m.st], onTruck = m.st === 'done' || m.st === 'receiving';
   const state = id => m.st === 'done' ? 'done' : m.no === '7040301' && LANDED301.includes(id) ? 'landed' : '';
   const nLanded = m.st === 'done' ? x.rows.length : m.no === '7040301' ? LANDED301.length : 0;
   const facts = [tx('despatch <b>{date}</b>', { date: ddmmyy(m.desp) }), tx('DC <b>{no}</b>', { no: '4101533' })];
@@ -137,8 +138,8 @@ function explorer(m, { tab = 'consols', open = '', q = '', hit = '' } = {}) {
     `<div class="mf2-lg">${SQ().map(([s, l]) => `${sq(s)}<span>${l}</span>`).join('')}</div>` +
     `<table class="mf2-t"><thead><tr>${head.map(([h, c]) => `<th${c ? ` class="${c}"` : ''}>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
-// The map below the departments (loads.js mapCard()), nothing painted yet.
-const mapCard = () => `<div class="pc2-card mf2-mapc"><div class="ch"><h3>${tx('On the map')}</h3><span class="dim">${tx('pick a department or Whole load')}</span>${btn('', tx('Clear'), 'sm')}</div><div class="box">${mapSvg()}</div></div>`;
+// The map below the departments (loads.js mapCard()), nothing painted yet, so no Clear.
+const mapCard = () => `<div class="pc2-card mf2-mapc"><div class="ch"><h3>${tx('On the map')}</h3><span class="dim">${tx('pick a department or Whole load')}</span></div><div class="box">${mapSvg()}</div></div>`;
 
 // The page: the Plan row's tabs, the header, the list and the open one.
 const TABS = () => [['planner', 'm-planner', tx('Planner')], ['manifests', 'm-manifests', tx('Manifests')], ['profiles', 'm-profiles', tx('Carton profiles')], ['offsite', 'm-inventory', tx('Off-site pallets')]];
@@ -292,7 +293,7 @@ manifests.stories.push({
     { cap: tx('Pick Truck 2, then Save.'), read: S(tx('It moves to Truck 2 at once, in the list and in the stats.'), tx('Every device sees the change.')),
       dev: 'Save sends <b>manifest.day</b> with the day and the truck; a report on a truck here is refused (<b>on_truck</b>).', ev: [E('manifest.day', 'backdock', { manNo: '7040303' }, { day: '2026-10-24', truck: 2 })],
       run: async c => { await c.tap('#v-list .mf2-came .sel'); c.html('#v-list .mf2-came .sel .val', tx('Truck {no}', { no: 2 })); await c.tap('#v-list .mf2-came .mf2-save'); c.html('#v-list', page(LIST3, '7040303'));
-        toast(c, tx('{man}: came on {day}', { man: '7040303', day: `${dayName('2026-10-24')} · ${tx('Truck {no}', { no: 2 })}` })); } },
+        toast(c, tx('{man}: came on {day}', { man: '7040303', day: `${fmtDay('2026-10-24')} · ${tx('Truck {no}', { no: 2 })}` })); } },
     { cap: tx('One that came on a truck here has no Came on: its truck says when.'), read: S(tx('7040298 was on Thursday’s Truck 1, so its header says so.'), tx('Its squares are its pallets on that truck, all decanted.')),
       dev: '<b>manifest.day</b> for a report on a truck is refused: its truck says when it came.', ev: [],
       run: async c => { await c.tap('#v-list .mf2-row[data-man="7040298"]'); c.html('#v-list', page(LIST3, '7040298')); glow(c, '#v-list .mf2-dh'); } },

@@ -1,8 +1,9 @@
 // Manifests: the explorer (Decant Visualiser's manifest explorer over the
 // worker's manifest store). Every manifest the dock knows, from the library,
 // the planner's slots, the trucks on the board and the history, by week,
-// each on the day and truck it came on, with where it stands (Planned,
-// Receiving, Decanting, Done, Arrived). A report no truck here carried gets
+// each on the day and truck it came on, with where it stands (on a truck,
+// its phase: Planned, Receiving, Received, Decanting, Done; else Planned,
+// Came in or Published). A report no truck here carried gets
 // its day by hand or from the Planner (manifest.day); several publish at
 // once with their days (mbatch.js). Stats: what came in over a week, a
 // fortnight, a month or all time (mstats.js). Open one
@@ -19,6 +20,7 @@ import { $, ic, esc, vh, sub, toast, dep, mhead, fmtDate, today, fmtDay } from '
 import { mountMap, bindMapChrome, hasMap } from '../../map.js';
 import { ensureNames, nameOf, kcCopy, itemName } from '../stockroom/common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
+import { truckPhase } from '../../../shared/dockphase.js';
 import { previewManifest } from './mpreview.js';
 import { inv, loadsOf, send, statusPill, loadUnits, loadDetail, loadHeat, mapCard, paintMap, showPaint, paintNotes, stageFile, stagePanel, saveStage, stageChange } from './loads.js';
 import { manifestIndex, microDept, microChip, microName, attachManifest, openTrucks, truckNo, STD_MINS_PER_CARTON } from './common.js';
@@ -37,7 +39,10 @@ const chip = microChip;
 // Home, Clothing, Kids and Flex are department names: they stay as the store writes them.
 const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'Kids', '#F59E0B'], ['flex', 'Flex', '#64748B']];
 const groupOf = code => { const d = microDept(code); return !d ? '?' : d === 'flex' ? 'flex' : d[0]; };
-const STATUS = { done: [tx('Done'), 'good'], live: [tx('Decanting'), 'warn'], staged: [tx('Receiving'), ''], planned: [tx('Planned'), ''], arrived: [tx('Came in'), ''], library: [tx('Published'), ''] };
+const STATUS = { done: [tx('Done'), 'good'], decanting: [tx('Decanting'), 'warn'], received: [tx('Received'), ''], receiving: [tx('Receiving'), ''], planned: [tx('Planned'), ''], arrived: [tx('Came in'), ''], library: [tx('Published'), ''] };
+// A manifest on a truck here stands where its truck does (shared/dockphase.js):
+// a truck not started yet is Planned; a cleared one is still decanting until it is closed.
+const BY_PHASE = { planned: 'planned', receiving: 'receiving', received: 'received', decanting: 'decanting', cleared: 'decanting', closed: 'done' };
 const TRUCK_ST = { staged: tx('staged'), live: tx('live'), closed: tx('closed') };
 const units = c => (c.items || []).reduce((n, i) => n + (Number(i.q) || 0), 0);
 // An item's cartons: logged on the line, else its share of the consol's cartons by units.
@@ -64,7 +69,7 @@ function entries(ctx) {
     if (!p) { x.status = 'library'; continue; }
     Object.assign(x, { day: p.day, n: p.truck, via: p.via });
     const id = p.truck ? `${p.day}-T${p.truck}` : null;
-    if (p.via === 'truck') { const t = dock.trucks[id]; x.truck = id; x.status = t?.status === 'closed' ? 'done' : t?.status === 'live' ? 'live' : 'staged'; }
+    if (p.via === 'truck') { x.truck = id; x.status = BY_PHASE[truckPhase(dock.trucks[id])]; }
     else if (p.via === 'history' || p.via === 'index') { x.truck = id; x.status = 'done'; }
     else if (p.via === 'plan') { x.slot = p.truck; x.status = 'planned'; }
     else x.status = p.day <= d0 ? 'arrived' : 'planned';
@@ -171,6 +176,13 @@ function explorer(ctx, e, doc) {
   const landed = landedMap(ctx, e), early = earlyMap(ctx, e), allUnits = doc.consols.reduce((n, c) => n + units(c), 0), cartons = doc.totalCartons ?? doc.consols.reduce((n, c) => n + c.cartons, 0);
   const keycodes = new Set(doc.consols.flatMap(c => (c.items || []).map(i => i.k))).size, mpc = ctx.store.get('dock').trucks?.[e?.truck]?.minsPerCarton || settingsOf(ctx.store.get('settings')).minsPerCarton || STD_MINS_PER_CARTON, work = Math.round(cartons * mpc);
   const trucks = openTrucks(ctx.store.get('dock')), attachedTo = e?.truck, nLanded = doc.consols.filter(c => landed[c.id]).length;
+  // How many consols landed: the truck's own pallets while it is on the dock. One
+  // with only a history row (imported from the old app, or past the 60 days) says
+  // what its audit kept, or nothing when it kept none.
+  const dock = ctx.store.get('dock'), tno = attachedTo ? esc(truckNo(attachedTo)) : '';
+  const gone = attachedTo && !dock.trucks?.[attachedTo], kept = gone ? (dock.history || []).find(r => r.id === attachedTo)?.audit : null;
+  const truckFact = !gone ? tx('Truck <b>{no}</b> · {n}/{total} landed', { no: tno, n: nLanded, total: doc.consols.length })
+    : kept ? tx('Truck <b>{no}</b> · {n}/{total} landed', { no: tno, n: kept.matched, total: kept.total }) : tx('Truck <b>{no}</b>', { no: tno });
   // The department-group rollup: cartons by Home / Clothing / Kids / Flex.
   const gc = {}; for (const c of doc.consols) for (const it of c.items || []) { const g = groupOf(it.dept); gc[g] = (gc[g] || 0) + itemCartons(c, it); }
   const gs = [...GROUPS, ['?', tx('Unknown'), '#94A3B8']].filter(g => gc[g[0]] > 0), gt = Object.values(gc).reduce((a, b) => a + b, 0) || 1;
@@ -191,7 +203,7 @@ function explorer(ctx, e, doc) {
   const tip = e?.truck
     ? tx('{cartons} cartons × {mpc} min a carton = {work} minutes of decanting for one person (Minutes per carton in Settings › Store settings, as this truck took it). Split it across the team: four people ≈ {share}.', { cartons: cartons.toLocaleString(), mpc, work: work.toLocaleString(), share })
     : tx('{cartons} cartons × {mpc} min a carton = {work} minutes of decanting for one person (Minutes per carton in Settings › Store settings). Split it across the team: four people ≈ {share}.', { cartons: cartons.toLocaleString(), mpc, work: work.toLocaleString(), share });
-  return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>${tx('despatch <b>{date}</b>', { date: esc(doc.despatch || '—') })}</span><span>${tx('DC <b>{no}</b>', { no: esc(doc.dcNo || '—') })}</span>${attachedTo ? `<span>${esc(dayName(e.day))}</span><span>${tx('Truck <b>{no}</b> · {n}/{total} landed', { no: esc(truckNo(attachedTo)), n: nLanded, total: doc.consols.length })}</span>` : e?.slot ? `<span>${tx('Planned for Truck <b>{no}</b> · {day}', { no: esc(String(e.slot)), day: esc(dayName(e.day)) })}${e.eta ? ' · ' + tx('due {time}', { time: esc(e.eta) }) : ''}</span>` : e?.via === 'label' ? `<span>${e.n ? tx('Came on Truck <b>{no}</b> · {day}', { no: e.n, day: esc(dayName(e.day)) }) : tx('Came on {day}', { day: esc(dayName(e.day)) })}</span>` : ''}</span></div>` + (attachedTo ? '' : cameOn(ctx, e)) +
+  return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>${tx('despatch <b>{date}</b>', { date: esc(doc.despatch || '—') })}</span><span>${tx('DC <b>{no}</b>', { no: esc(doc.dcNo || '—') })}</span>${attachedTo ? `<span>${esc(dayName(e.day))}</span><span>${truckFact}</span>` : e?.slot ? `<span>${tx('Planned for Truck <b>{no}</b> · {day}', { no: esc(String(e.slot)), day: esc(dayName(e.day)) })}${e.eta ? ' · ' + tx('due {time}', { time: esc(e.eta) }) : ''}</span>` : e?.via === 'label' ? `<span>${e.n ? tx('Came on Truck <b>{no}</b> · {day}', { no: e.n, day: esc(dayName(e.day)) }) : tx('Came on {day}', { day: esc(fmtDay(e.day)) })}</span>` : ''}</span></div>` + (attachedTo ? '' : cameOn(ctx, e)) +
     `<div class="ps-facts mfx-stats">${stat(tx('Consols'), doc.consols.length)}${stat(tx('Cartons'), cartons.toLocaleString())}${stat(tx('Keycodes'), keycodes.toLocaleString())}${stat(tx('Units'), allUnits.toLocaleString())}${stat(tx('Est. work'), tx('{h}h {m}m', { h: Math.floor(work / 60), m: String(work % 60).padStart(2, '0') }), tip, tx('{mpc} min/ctn · one person', { mpc }))}</div>` + roll +
     `<div class="mfd-acts">${attachedTo ? `<span class="status good">${tx('On Truck {no}', { no: esc(truckNo(attachedTo)) })}</span>` : trucks.length ? `<select class="ad-in" data-field="truck">${trucks.map(t => `<option value="${esc(t.id)}">${tx('Truck {no} · {status}', { no: esc(truckNo(t.id)), status: esc(TRUCK_ST[t.status] || t.status) })}</option>`).join('')}</select><button class="btn primary sm" data-act="attach">${ic('truck')}${tx('Attach to truck')}</button>` : `<span class="cs-dim">${tx('No truck on the board to attach to')}</span>`}<button class="btn sm" data-act="remove" style="margin-left:auto">${ic('trash')}${tx('Remove')}</button></div>` +
     `<div class="mfx-bar"><div class="seg">${[['consols', tx('Consols')], ['products', tx('Products')], ['depts', tx('Departments')]].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="${tx('find consol, keycode, product, dept…')}" aria-label="${tx('Search this manifest')}"></div>${st.tab === 'depts' ? `<button class="btn sm${st.paint?.mode === 'heat' ? ' on' : ''}" data-act="heat">${ic('layers')}${tx('Whole load heat')}</button>` : ''}<span class="mfd-hit">${st.tab === 'depts' ? txn(list.length, '{n} department', '{n} departments') : st.tab === 'products' ? txn(list.length, '{n} product', '{n} products') : txn(list.length, '{n} consol', '{n} consols')}</span></div>` +
@@ -286,7 +298,8 @@ export default {
           if (act === 'came-save' && !day) return toast(tx('Pick the day it came first'), 'bad');
           a.disabled = true;
           await ctx.store.dispatch({ type: 'manifest.day', entity: { manNo: st.open }, payload: { day, truck: day && tn ? Number(tn) : null } });
-          toast(day ? tx('{man}: came on {day}', { man: st.open, day: dayName(day) + (tn ? ' · ' + tx('Truck {no}', { no: tn }) : '') }) : tx('{man}: day cleared', { man: st.open }));
+          // The date alone: "Yesterday · …" heads a line and does not sit inside a sentence.
+          toast(day ? tx('{man}: came on {day}', { man: st.open, day: fmtDay(day) + (tn ? ' · ' + tx('Truck {no}', { no: tn }) : '') }) : tx('{man}: day cleared', { man: st.open }));
         }
         else if (act === 'open-load') { st.load = a.dataset.id; st.paint = null; ctx.rerender(); }
         else if (act === 'toggle') { st.expanded[a.dataset.id] = !st.expanded[a.dataset.id]; ctx.rerender(); }

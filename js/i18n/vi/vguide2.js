@@ -551,7 +551,6 @@ export default {
   "Save it: every location compares at once.": "Lưu lại: mọi vị trí được so sánh cùng lúc.",
   "Every location gets its accuracy, and its codes to add and to delete.": "Mỗi vị trí có độ chính xác, cùng các mã cần thêm và cần xóa.",
   "Review sorts them again, the best match first.": "Duyệt sắp xếp lại, khớp nhất trước.",
-  "Every row read ({n} lines).": "Đã đọc hết mọi dòng ({n} dòng).",
   "Open one to see what is on it and what has landed, or publish the report from the DC’s email.": "Mở một bảng kê để xem có gì và những gì đã đến, hoặc đăng báo cáo từ email của DC.",
   "Plan › Manifests lists every manifest by week, day and truck.": "Kế hoạch › Bảng kê hàng liệt kê mọi bảng kê theo tuần, ngày và xe tải.",
   "This week comes first, then each week before it, with its manifests and cartons.": "Tuần này đứng đầu, rồi đến từng tuần trước đó, kèm bảng kê và số thùng.",

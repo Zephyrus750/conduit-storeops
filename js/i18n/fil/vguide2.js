@@ -551,7 +551,6 @@ export default {
   "Save it: every location compares at once.": "I-save ito: sabay-sabay na makukumpara ang bawat location.",
   "Every location gets its accuracy, and its codes to add and to delete.": "Magkakaroon ang bawat location ng accuracy nito, at ng mga code na idadagdag at buburahin.",
   "Review sorts them again, the best match first.": "Inaayos ulit ng Review ang mga ito, pinakatugma muna.",
-  "Every row read ({n} lines).": "Nabasa ang bawat row ({n} line).",
   "Open one to see what is on it and what has landed, or publish the report from the DC’s email.": "Buksan ang isa para makita ang laman nito at kung ano na ang dumating, o i-publish ang report mula sa email ng DC.",
   "Plan › Manifests lists every manifest by week, day and truck.": "Inililista ng Plano › Manifests ang bawat manifest ayon sa linggo, araw at truck.",
   "This week comes first, then each week before it, with its manifests and cartons.": "Nauuna ang linggong ito, kasunod ang bawat naunang linggo, kasama ang mga manifest at carton nito.",

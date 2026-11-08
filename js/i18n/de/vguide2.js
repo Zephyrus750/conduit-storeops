@@ -551,7 +551,6 @@ export default {
   "Save it: every location compares at once.": "Speichern: Jeder Lagerplatz wird auf einmal verglichen.",
   "Every location gets its accuracy, and its codes to add and to delete.": "Jeder Lagerplatz bekommt seine Genauigkeit und seine Codes zum Hinzufügen und zum Löschen.",
   "Review sorts them again, the best match first.": "Prüfung sortiert sie neu, der beste Treffer zuerst.",
-  "Every row read ({n} lines).": "Jede Zeile gelesen ({n} Positionen).",
   "Open one to see what is on it and what has landed, or publish the report from the DC’s email.": "Öffnen Sie einen, um zu sehen, was darauf ist und was angekommen ist, oder veröffentlichen Sie den Bericht aus der E-Mail des DC.",
   "Plan › Manifests lists every manifest by week, day and truck.": "Planung › Lieferscheine listet jeden Lieferschein nach Woche, Tag und LKW.",
   "This week comes first, then each week before it, with its manifests and cartons.": "Diese Woche steht oben, dann jede Woche davor, mit ihren Lieferscheinen und Kartons.",
