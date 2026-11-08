@@ -311,10 +311,22 @@ test('sitemap: a product sitemap that names its pictures gives keycode → pictu
   assert.deepEqual(picturesFromSitemap('<urlset><url><loc>https://www.kmart.com.au/product/x-42977636/</loc></url></urlset>'), {});
 });
 
-test('product page: the barcodes its data names, check digits verified', () => {
-  const page = `<script type="application/ld+json">${JSON.stringify({ '@type': 'Product', gtin13: '9341234567893', sku: '43300411' })}</script><script>{"ean":"9341234567890","barcode":"12345"}</script>`;
-  assert.deepEqual(pageGtins(page), ['9341234567893'], 'a bad check digit or a short number is not a barcode');
-  assert.deepEqual(pageGtins('<p>nothing</p>'), []);
+test('product page: its barcode is kept only when the page names exactly one, check digits verified', () => {
+  const ld = o => `<script type="application/ld+json">${JSON.stringify(o)}</script>`;
+  // The item's own structured data.
+  const page = ld({ '@type': 'Product', gtin13: '9341234567893', sku: '43300411' }) + '<script>{"ean":"9341234567890","barcode":"12345"}</script>';
+  assert.deepEqual(pageGtins(page, '43300411'), ['9341234567893'], 'a bad check digit or a short number is not a barcode');
+  assert.deepEqual(pageGtins(ld({ '@type': 'Product', sku: '43300411', offers: [{ gtin13: '9341234567893' }] }), '43300411'), ['9341234567893'], 'an offer’s barcode is the product’s');
+  // A related product's block, or a second barcode, keeps none.
+  assert.deepEqual(pageGtins(ld({ '@type': 'Product', gtin13: '9341234567893', sku: '43577460' }), '43300411'), [], 'another item’s block is not this item’s');
+  assert.deepEqual(pageGtins(ld({ '@graph': [{ '@type': 'Product', sku: '43300411', gtin13: '9341234567893' }, { '@type': 'Product', sku: '43577460', gtin13: '9341111236423' }] }), '43300411'), ['9341234567893'], 'a related product in the same graph is skipped by its sku');
+  assert.deepEqual(pageGtins(ld({ '@type': 'Product', sku: '43300411', offers: [{ gtin13: '9341234567893' }, { gtin13: '9341111236423' }] }), '43300411'), [], 'two barcodes (colours): none kept');
+  // With no structured barcode, the page's own data near the keycode.
+  const data = '<script>{"product":{"keycode":"43300411","barcode":"9341234567893"},"name":"' + 'x'.repeat(700) + '","related":[{"keycode":"43577460","ean":"9341111236423"}]}</script>';
+  assert.deepEqual(pageGtins(data, '43300411'), ['9341234567893'], 'a related item far from the keycode is not counted');
+  assert.deepEqual(pageGtins('<script>{"related":[{"keycode":"43577460","ean":"9341111236423"}]}</script>', '43300411'), [], 'only another item’s barcode: none');
+  assert.deepEqual(pageGtins('<script>{"keycode":"43300411","barcode":"9341234567893","alt":{"barcode":"9341111236423"}}</script>', '43300411'), [], 'two near the keycode: none');
+  assert.deepEqual(pageGtins('<p>nothing</p>', '43300411'), []);
 });
 
 test('product names for a scan’s answer come from the catalogue’s table, and never hold the answer up', async () => {

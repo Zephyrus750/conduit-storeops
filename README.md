@@ -237,7 +237,10 @@ quick.
 Live pull never waits on a search (8 Nov 2026): `pull/find` matches a barcode
 from the store's barcode book (every inventory report's APN column, kept after
 the report itself goes: the `apnbook` table), a person's link (`cage.pair`,
-`pull.pair`) and the catalogue's kept barcodes, all at once; a barcode none of
+`pull.pair`) and the catalogue's kept barcodes (a product page's barcode,
+kept only when the page names exactly one for that item: its own structured
+data first, else its data near the keycode; a page naming two or more, such as
+colour variants or a related-products row, keeps none), all at once; a barcode none of
 them knows is searched in the background, in a tray under the scan box, while
 the requester scans on, and lands there found, as a choice, or to type. A
 match a person confirms there (a search's answer tapped, or the keycode typed
