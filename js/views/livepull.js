@@ -180,8 +180,9 @@ function requester(ctx, ses, repaint) {
 // person made earlier (Cages, Adjust), or Kmart's site search.
 const FROM = { apn: () => tx('found from the barcode'), paired: () => tx('found from the barcode'), kmart: () => tx('found from the barcode'), web: () => tx('found on kmart.com.au from the barcode') };
 function productRow(f, bays) {
-  const price = Number.isFinite(f.price) ? ` · $${Number(f.price).toFixed(2)}` : '';
-  return `<div class="card lp-prod"><span class="lp-pic">${productImg(f.img) || ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${FROM[f.via] ? `<small class="lp-from">${FROM[f.via]()}${f.via !== 'apn' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-wrong" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}</span>` +
+  // The keycode is the title until the name lands, and then the line under it.
+  const id = esc(f.kc || f.code), line = [f.name ? `<span class="mono">${id}</span>` : '', Number.isFinite(f.price) ? `$${Number(f.price).toFixed(2)}` : '', f.carton ? tx('carton of {n}', { n: f.carton }) : ''].filter(Boolean).join(' · ');
+  return `<div class="card lp-prod"><span class="lp-pic">${productImg(f.img) || ic('box')}</span><span class="lp-pn">${f.name ? `<b>${esc(f.name)}</b>` : `<b class="mono">${id}</b>`}${line ? `<small>${line}</small>` : ''}${FROM[f.via] ? `<small class="lp-from">${FROM[f.via]()}${f.via !== 'apn' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-wrong" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}</span>` +
     (bays && f.bays?.length ? `<span class="lp-bay"><small>${f.bays.length > 1 ? tx('BAYS') : tx('BAY')}</small><b class="mono">${esc(f.bays[0])}</b>${f.bays.length > 1 ? `<small class="mono">+ ${esc(f.bays.slice(1).join(', '))}</small>` : ''}</span>` : '') + `</div>`;
 }
 // What the requester is told before the pad: already asked for in this
@@ -336,6 +337,7 @@ async function find(ctx, raw, viaCam = false) {
     // (the tray under the scan box), and the next item can be scanned now.
     if (r.report && r.gtin && !r.kc) { searchBehind(ctx, r); st.find = null; haptic('warning'); ctx.rerender(); if (viaCam) setTimeout(() => openCam(ctx), 350); return; }
     st.find = { ...r, state: r.bays?.length ? 'found' : r.seen?.length ? 'seen' : r.report ? 'none' : 'noreport', code };
+    if (r.gtin && r.kc) behind.delete(r.gtin);   // known now: its row leaves the tray
     haptic(recallFor(ctx.store, r.kc) ? 'error' : st.find.state === 'found' ? 'success' : 'warning');
     if (linkFor && r.kc) pair(ctx, linkFor, r.kc);
     // The answer shows now; the product's name and picture follow when they land.
