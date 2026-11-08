@@ -496,6 +496,7 @@ export default {
   "shelf scan on": "scansione scaffali attiva",
   "shelf scan off": "scansione scaffali spenta",
   "Cage {n}": "Gabbia {n}",
+  "On its way: {n} line": "In arrivo: {n} riga",
   "On its way: {n} lines": "In arrivo: {n} righe",
   "sent down {time}": "mandata giù alle {time}",
   "Coming": "In arrivo",

@@ -496,6 +496,7 @@ export default {
   "shelf scan on": "Regalscan an",
   "shelf scan off": "Regalscan aus",
   "Cage {n}": "Gitterbox {n}",
+  "On its way: {n} line": "Unterwegs: {n} Zeile",
   "On its way: {n} lines": "Unterwegs: {n} Zeilen",
   "sent down {time}": "um {time} nach unten geschickt",
   "Coming": "Kommt",

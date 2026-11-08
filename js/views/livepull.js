@@ -172,7 +172,7 @@ function requester(ctx, ses, repaint) {
   const lines = liveLines(ses).sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const lastCage = ses.cages?.[ses.cage - 1];
   const sheet = sheetHtml(`<div class="sx-h">${ic('listcheck')}${esc(ses.name)}${c.todo ? `<span class="n">${tx('{n} waiting', { n: c.todo })}</span>` : ''}</div><p class="sx-sub">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers'), tx('since {time}', { time: hm(ses.at) }), ses.shelves ? tx('shelf scan on') : tx('shelf scan off')].join(' · ')}</p>` +
-    (lastCage ? sx.sec(tx('Cage {n}', { n: ses.cage - 1 }), sx.rows([sx.row('cage', tx('On its way: {n} lines', { n: lastCage.lines }), tx('sent down {time}', { time: hm(lastCage.at) }), tx('Coming'), 'acc')])) : '') +
+    (lastCage ? sx.sec(tx('Cage {n}', { n: ses.cage - 1 }), sx.rows([sx.row('cage', txn(lastCage.lines, 'On its way: {n} line', 'On its way: {n} lines'), tx('sent down {time}', { time: hm(lastCage.at) }), tx('Coming'), 'acc')])) : '') +
     sx.sec(tx('Requests'), lines.length ? sx.rows(lines.slice(0, 60).map(l => { const [t, tone] = stateText(l); return sx.row('box', `${esc(nameOf(ctx, l, repaint))} · ${esc(qtyText(l))}`, `<span class="mono">${esc(l.kc)}</span> · ${esc(baysText(l))} · ${hm(l.at)}`, t, tone); })) : `<p class="sx-sub">${tx('Nothing asked for yet.')}</p>`, tx('newest first')) +
     sx.acts([sx.btn('x', tx('Leave session'), 'data-act="lp-leave"'), sx.btn('check', tx('End session'), 'data-act="lp-end"')]));
   return `<div class="lp-body">${head}${scan}${behindTray()}${card}${showPad ? pad : ''}</div>${sheet}${strip('listcheck', esc(ses.name), countsLine(c), c.todo || '')}`;

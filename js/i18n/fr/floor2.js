@@ -496,6 +496,7 @@ export default {
   "shelf scan on": "scan d’étagère activé",
   "shelf scan off": "scan d’étagère désactivé",
   "Cage {n}": "Cage {n}",
+  "On its way: {n} line": "En route : {n} ligne",
   "On its way: {n} lines": "En route : {n} lignes",
   "sent down {time}": "descendue à {time}",
   "Coming": "Arrive",

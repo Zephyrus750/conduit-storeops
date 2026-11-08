@@ -496,6 +496,7 @@ export default {
   "shelf scan on": "escaneo de estanterías activado",
   "shelf scan off": "escaneo de estanterías desactivado",
   "Cage {n}": "Jaula {n}",
+  "On its way: {n} line": "En camino: {n} línea",
   "On its way: {n} lines": "En camino: {n} líneas",
   "sent down {time}": "bajada a las {time}",
   "Coming": "Viene",

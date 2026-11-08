@@ -496,6 +496,7 @@ export default {
   "shelf scan on": "naka-on ang shelf scan",
   "shelf scan off": "naka-off ang shelf scan",
   "Cage {n}": "Cage {n}",
+  "On its way: {n} line": "Papunta na: {n} linya",
   "On its way: {n} lines": "Papunta na: {n} linya",
   "sent down {time}": "ibinaba nang {time}",
   "Coming": "Darating",

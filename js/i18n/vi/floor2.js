@@ -496,6 +496,7 @@ export default {
   "shelf scan on": "quét kệ: bật",
   "shelf scan off": "quét kệ: tắt",
   "Cage {n}": "Lồng hàng {n}",
+  "On its way: {n} line": "Đang chuyển: {n} dòng",
   "On its way: {n} lines": "Đang chuyển: {n} dòng",
   "sent down {time}": "chuyển xuống lúc {time}",
   "Coming": "Đang đến",
