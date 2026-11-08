@@ -1885,12 +1885,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 .dc2-clk.on { background: #DCFCE7; color: #166534; } .dc2-clk.near { background: #FEF3C7; color: #92400E; }
 .dc2-sel { margin-left: 4px; flex: 1; max-width: 132px; min-height: 31px; border: 1px solid var(--l); border-radius: 8px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
 .dc2-sel svg.i { width: 14px; height: 14px; }
-/* One row of buttons, as the app's: with five they run past the edge. */
-.dc2-verbs { display: flex; gap: 6px; overflow: hidden; margin-right: -11px; }
-.dc2-verbs .dc2-btn { flex: 1 0 auto; padding: 0 11px; }
-.dc2-verbs .dc2-wide { flex: 1; }
+/* The buttons wrap, as the app's: a free cutter or two on the pallet make five or more. */
+.dc2-verbs { display: flex; flex-wrap: wrap; gap: 6px; }
+.dc2-verbs .dc2-btn { flex: 1; padding: 0 8px; }   /* breaks where the app's do at 390 */
 .dc2-dnd { flex: none; min-height: 37px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 8px; background: #DCFCE7; color: #15803D; font-size: 13.5px; font-weight: 500; white-space: nowrap; }
-.dc2-verbs.dc2-vd { margin-right: 0; }
 .dc2-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .dc2-acts .dc2-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
@@ -1905,8 +1903,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 .dc2-ch { background: var(--g); border-radius: 9px; padding: 7px 11px; font-size: 14px; font-weight: 500; color: var(--i2); }
 .dc2-ch.on { background: var(--as); color: var(--ai); box-shadow: inset 0 0 0 1px var(--al); }
 .dc2-in { flex: 1; min-width: 150px; border: 1px solid var(--l); border-radius: 10px; padding: 7px 10px; font-size: 14px; color: var(--d); }
-.dc2-fin { display: flex; gap: 8px; align-items: flex-start; } .dc2-fin .dc2-btn { min-height: 50px; padding: 4px 14px; }
-.dc2-fin .pri { flex-direction: column; gap: 2px; font-size: 15px; }
+.dc2-fin { display: flex; gap: 8px; }
 /* The panel (runPanel()), dark as the strip. */
 .dc2-pt6 { margin-top: 4px; } .dc2-pt6 span { color: #6B7280; } .dc2-pt6 span::before { background: #39435A; }
 .dc2-pt6 span.d { color: #4ADE80; } .dc2-pt6 span.d::before { background: #22C55E; } .dc2-pt6 span.c { color: #5CC4EA; } .dc2-pt6 span.c::before { background: #0E7CA8; }
@@ -1938,7 +1935,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 /* No truck: the card and today's decants (decantBoard()). */
 .dc2-nt { background: #fff; border: 1px solid var(--l); border-radius: 14px; padding: 15px 12px; display: flex; align-items: center; gap: 8px; }
 .dc2-nt b { font-size: 17.5px; }
-.dc2-chip { font: 800 10.5px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; padding: 4px 8px; border-radius: 999px; background: var(--g); color: #4B5563; }
 .dc2-today { background: #fff; border: 1px solid var(--l); border-radius: 14px; padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 10px; }
 .dc2-th { display: flex; align-items: baseline; gap: 10px; } .dc2-th b { font-size: 17px; } .dc2-th small { color: var(--d); font-size: 12px; }
 .dc2-tc { border: 1px solid var(--l); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }

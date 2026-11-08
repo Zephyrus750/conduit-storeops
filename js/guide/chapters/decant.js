@@ -92,7 +92,7 @@ function card(ref, d) {
       (d.pick ? `<span class="dc2-btn">＋ ${tx('Join')}</span><span class="dc2-btn">⇄ ${tx('Hand over')}</span>` : '') +
       (who.length > 1 ? who.map(p => `<span class="dc2-btn">${tx('{pid} steps off', { pid: p })}</span>`).join('') : '') + `<span class="dc2-btn">↶ ${tx('Undo start')}</span>`
     : d.st === 'p' ? `<span class="dc2-btn pri dc2-rs">${PLAY} ${tx('Resume')}</span><span class="dc2-btn">${ai('check')}${tx('Done')}</span><span class="dc2-btn">↶ ${tx('Undo start')}</span>`
-    : `<span class="dc2-dnd">${tx('Decanted {time}', { time: d.done })}</span><span class="dc2-btn dc2-wide">↩ ${tx('Reopen')}</span>`;
+    : `<span class="dc2-dnd">${tx('Decanted {time}', { time: d.done })}</span><span class="dc2-btn">↩ ${tx('Reopen')}</span>`;
   const acts = [`${ai('check')}${tx('Update')}`, `${ai('clock')}${tx('Fix times')}`, ...(d.st !== 'd' ? [`⇲ ${tx('Move')}`] : []), ...(d.st === 'p' ? [`🚫 ${tx('Not in this session')}`] : []), `${ai('trash')}${tx('Remove')}`];
   return `<div class="sh-h dc2-chd"><b>${tx('Pallet {ref}', { ref })}<span class="dc2-tst ${pc}">${pill}</span></b><span class="sh-x">${ai('x')}</span></div><div class="sh-b dc2-cb">` +
     `<div class="pt2 dc2-pt">${types}</div><div class="two2 dc2-f"><div><span class="dc2-lab">${tx('Cartons')}</span><span class="f2">${ctn}</span></div><div><span class="dc2-lab">${tx('Est. mins')}</span><span class="f2 dc2-auto">${est}</span></div></div>` +
@@ -100,7 +100,7 @@ function card(ref, d) {
     `<div class="dc2-scan"><span class="dc2-btn pri">${ai('camera')}${tx('Scan a label')}</span><span class="dc2-btn">${ai('keyboard')}${tx('Type it')}</span></div>${rows}` +
     `<div class="dc2-cont"><i>${PLAY}</i>${tx('Contents')} · ${txn(cs.length, '{n} consol', '{n} consols')}</div>` +
     `<div class="dc2-decant"><div class="dc2-lab">${tx('Decant')} · ${who.join(' + ')}</div><div class="dc2-dk"><span class="dc2-clk ${d.pace || 'on'}">${tx('{time} worked', { time: d.clock })} · ${tx('est {n} min', { n: est })}</span>` +
-    (d.st === 'd' ? '' : d.pick ? `<span class="dc2-sel">${d.pick}${ai('chev')}</span>` : `<small>${tx('Everyone is busy or on a break.')}</small>`) + `</div><div class="dc2-verbs${d.st === 'd' ? ' dc2-vd' : ''}">${verbs}</div></div>` +
+    (d.st === 'd' ? '' : d.pick ? `<span class="dc2-sel">${d.pick}${ai('chev')}</span>` : `<small>${tx('Everyone is busy or on a break.')}</small>`) + `</div><div class="dc2-verbs">${verbs}</div></div>` +
     `<div class="dc2-acts">${acts.map(a => `<span class="dc2-btn">${a}</span>`).join('')}</div></div>`;
 }
 
@@ -133,7 +133,7 @@ function person(pid, { ref = '', mins = 0, brk = '' } = {}) {
 }
 
 // After Close the truck: no truck, and today's decants (plan.js decantBoard()).
-const noneView = () => `<div class="dc2-nt"><b>${tx('No truck on the dock')}</b><span class="dc2-chip">${tx('truck phase::Planned')}</span></div>` +
+const noneView = () => `<div class="dc2-nt"><b>${tx('No truck on the dock')}</b></div>` +
   `<div class="dc2-today"><div class="dc2-th"><b>${tx('Today’s decants')}</b><small>1</small></div><div class="dc2-tc"><b>${tx('Truck {n}', { n: 1 })}</b><span>${tx('Done')}</span><small>${tx('{n} ctn cleared in {time}', { n: 72, time: tx('{h}h {m}m', { h: 0, m: '17' }) })}</small></div></div>`;
 
 // The phone on the Decant tab: Take 5, the run or no truck.

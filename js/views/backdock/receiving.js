@@ -224,7 +224,7 @@ function mobile(ctx, mode) {
   st.keepSel = false; lastMode = mode;
   st.view = mode; const run = mode === 'run'; attachOk = canAttach(ctx);
   const m = model(ctx), t = m.t, plan = ctx.store.get('plan'), sheet = phoneSheet(ctx, m, t, plan, run);
-  if (!t) return `<div class="dk-top"><div class="dk-tr"><b class="dk-tn">${tx('No truck on the dock')}</b>${phaseChip(null)}</div></div>` +
+  if (!t) return `<div class="dk-top"><div class="dk-tr"><b class="dk-tn">${tx('No truck on the dock')}</b></div></div>` +
     `<div class="dk-body">${clockNote(ctx)}${decantBoard(m.dock, plan, todayKey(), { act: true })}${heldCard(m.dock)}</div>` + sheet +
     strip(`<div class="dk-st"><div class="dk-l1"><span>${tx('Tap New truck when it lands.')}</span></div></div><button class="dk-go" data-act="newtruck">${ic('plus')}${tx('New truck')}</button>`, '', false);
   const body = run ? (!begun(t) ? readyBlock(t) : movingBar() + `<div class="bdk">${dockGrid(t, false)}</div>` + runHint() + crewStrip(t, m) + noCartonNote(t) + upNext(t, m))
@@ -717,7 +717,7 @@ async function onAct(ctx, a, root) {
       toast(out ? tx('{ref} skipped: not counted this session', { ref }) : tx('{ref} back in the session', { ref })); return;
     }
     if (act === 'unscan') { const ref = st.sel; await dispatch(ctx, 'pallet.unscan', { truck: id, bay: ref }, { id: a.dataset.id }); toast(tx('{id} taken off {ref}', { id: a.dataset.id, ref })); return; }
-    if (act === 'pal-remove') { if (!await ask({ title: tx('Remove pallet {ref}?', { ref: st.sel }), ok: tx('Remove pallet') })) return; await dispatch(ctx, 'pallet.remove', { truck: id, bay: st.sel }, {}); st.sel = null; toast(tx('Pallet removed')); return; }
+    if (act === 'pal-remove') { if (!await ask({ title: tx('Remove pallet {ref}?', { ref: st.sel }), ok: tx('Remove pallet') })) return; await dispatch(ctx, 'pallet.remove', { truck: id, bay: st.sel }, {}); st.sel = null; ctx.rerender(); toast(tx('Pallet removed')); return; }   // the store redrew it, still selected, before dispatch returned
     if (act === 'dec') {
       const kind = a.dataset.dec, p = t.pallets[st.sel];
       // Undo, one step deep as DV's: each action offers its opposite.
@@ -731,7 +731,8 @@ async function onAct(ctx, a, root) {
       if (kind === 'unstart') { await dispatch(ctx, 'pallet.unstart', B, {}); toast(tx('Last start undone')); return; }
       if (kind === 'pause') { await dispatch(ctx, 'pallet.pause', B, {}); toast(tx('{ref} paused', { ref }), '', onNow.length ? undo('pallet.resume', { pid: onNow[0] }) : null); return; }
       if (kind === 'done') {
-        await dispatch(ctx, 'pallet.done', B, {}); if (ctx.isMobile) st.sel = null;
+        // The phone's card closes at once: the store redrew it, still open, before dispatch returned.
+        await dispatch(ctx, 'pallet.done', B, {}); if (ctx.isMobile) { st.sel = null; ctx.rerender(); }
         const nt = model(ctx).t, q = nt?.pallets[ref];
         // The last one: the truck is cleared, so the next step is to close it.
         if (nt && truckPhase(nt) === 'cleared') { toast(tx('{ref} decanted · every pallet is done: close the truck', { ref }), '', { label: tx('Close the truck'), run: () => { st.finalising = true; ctx.rerender(); show('.bdr-fin'); } }); return; }
