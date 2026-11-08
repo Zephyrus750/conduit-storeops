@@ -27,6 +27,9 @@ export const SECS = () => [
 export const FOOT = () => [['screens', 'expand', tx('Screens')], ['settings', 'm-settings', tx('Settings')], ['help', 'help', tx('Help')]];
 // The rail's counts this morning: the morning report not pasted, LAD-02 overdue, three bays to review.
 export const BADGES = { inputs: 1, safety: 1, backfill: 3 };
+// The rows whose count is red, as paintBadges() in js/shell.js paints the
+// cages', the equipment's and the recalls' counts.
+const RED = ['safety', 'cages'];
 // What a row holds, shown beside it on hover (RDESC in js/shell.js).
 export const TIP = () => ({ backfill: [tx('Backfill'), tx('Today’s board against the morning report, the walk order, and how it went.')] });
 export const MARK = '<svg class="pc2-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#111827" stroke="rgba(255,255,255,.16)" stroke-width=".8"/><path d="M21.94 21.94A8.4 8.4 0 0 1 10.94 22.71" fill="none" stroke="#7DD3FC" stroke-width="5.4"/><path d="M9.66 21.51A8.4 8.4 0 0 1 9.66 10.49" fill="none" stroke="#22A6D6" stroke-width="5.4"/><path d="M10.94 9.29A8.4 8.4 0 0 1 21.94 10.06" fill="none" stroke="#0E7CA8" stroke-width="5.4"/></svg>';
@@ -34,7 +37,7 @@ export const MARK = '<svg class="pc2-mark" viewBox="0 0 32 32" aria-hidden="true
 export function rail(on, badges) {
   const tip = TIP();
   const row = ([g, icon, label, soon]) => `<span class="pc2-row${g === on ? ' on' : ''}${soon ? ' soon' : ''}" data-g="${g}">${ai(icon)}<span class="rl">${label}</span>` +
-    (badges[g] ? `<span class="bdg">${badges[g]}</span>` : '') + (soon ? `<span class="soon">${tx('Soon')}</span>` : '') +
+    (badges[g] ? `<span class="bdg${RED.includes(g) ? ' red' : ''}">${badges[g]}</span>` : '') + (soon ? `<span class="soon">${tx('Soon')}</span>` : '') +
     (tip[g] ? `<span class="pc2-tip" hidden><b>${tip[g][0]}</b><span>${tip[g][1]}</span></span>` : '') + '</span>';
   return `<aside class="pc2-rail"><div class="pc2-brand">${MARK}<b>Conduit</b></div>` +
     `<div class="pc2-chip">${ai('m-store', 'sc')}<span><b>Busselton</b><small>${tx('Store {no}', { no: '1241' })}</small></span>${ai('chev', 'dn')}</div>` +

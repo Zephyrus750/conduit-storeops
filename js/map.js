@@ -8,6 +8,7 @@ import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute
 import { markerGlyph, locationRange, markerSymbol, MARKER_NAMES, LANDMARK_NAMES, markerType } from '../shared/maprender.js';
 import { prefs, setPref } from './prefs.js';
 import { haptic } from './device.js';
+import { openScanner } from './scan.js';
 import { tx, txn } from './i18n.js';
 
 let floors = [], mapMeta = null;
@@ -158,14 +159,21 @@ export function oneShelf(root, code) {
   if (ids.length > 1) return { error: tx("{code} is a run of {n} shelves: scan the shelf's own label ({list})", { code: String(code).toUpperCase(), n: ids.length, list: ids.slice(0, 3).join(', ') + (ids.length > 3 ? '…' : '') }) };
   return { g: gs[0] };
 }
+// The view's own answer to a shelf label, by mounted map: the map tools'
+// Scan (bindMapChrome) hands its code there too.
+const shelfScans = new WeakMap();
 export function bindShelfScan(root, map, onShelf, onError) {
+  const take = code => {
+    const { g, error } = oneShelf(map.svg, code);
+    if (!g) { toast(error, 'bad'); onError?.(error); return; }
+    onShelf(map.shelfInfo(g));
+  };
+  shelfScans.set(map, take);
   root.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || !e.target.matches?.('[data-field="shelfscan"]')) return;
     e.preventDefault();
     const code = e.target.value.trim(); e.target.value = ''; if (!code) return;
-    const { g, error } = oneShelf(map.svg, code);
-    if (!g) { toast(error, 'bad'); onError?.(error); return; }
-    onShelf(map.shelfInfo(g));
+    take(code);
   });
 }
 // Repaint a panel that holds the scan field without dropping its focus, so
@@ -1033,7 +1041,15 @@ export const sx = {
 };
 export function mvMap(o = {}) {
   const fls = mapFloors();
-  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="${tx('Scan')}">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="${tx('Next level')}">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Tory lines')}">${ic('route')}</span>` : ''}${planButton()}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}" aria-label="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="${tx('Zoom in')}" aria-label="${tx('Zoom in')}">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="${tx('Zoom out')}" aria-label="${tx('Zoom out')}">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}" aria-label="${tx('Fit the map')}">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-mapscan title="${tx('Scan a shelf label')}" aria-label="${tx('Scan a shelf label')}">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="${tx('Next level')}">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Tory lines')}">${ic('route')}</span>` : ''}${planButton()}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}" aria-label="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="${tx('Zoom in')}" aria-label="${tx('Zoom in')}">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="${tx('Zoom out')}" aria-label="${tx('Zoom out')}">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}" aria-label="${tx('Fit the map')}">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+}
+
+// A scanned shelf (or run) label found on a mounted map: selected, lit,
+// framed and pinged (locate()), and announced to the view as a find.
+function findShelf(map, code) {
+  if (!map.groups(code).length) return toast(tx('{code} is not a shelf on this map', { code }), 'bad');
+  const id = canonCode(code); map.locate(id);
+  map.stage.dispatchEvent(new CustomEvent('mapselect', { detail: { code: id, ...(map.code(id) || {}) } }));
 }
 
 // Wire zoom buttons and group chips on a mounted view.
@@ -1041,6 +1057,12 @@ export function bindMapChrome(root, map) {
   root.addEventListener('click', e => {
     const z = e.target.closest('[data-zoom]');
     if (z) { const k = z.getAttribute('data-zoom'); if (k === 'in') map.zoomBy(1 / 1.3, null, null, 300); else if (k === 'out') map.zoomBy(1.3, null, null, 300); else map.fit(400); return; }
+    // The map tools' Scan: a shelf label read with the camera. A view that
+    // scans shelves (bindShelfScan: Refresh marks one, Stocktake counts it)
+    // takes the code as its own scan; elsewhere the shelf is found on the
+    // map, as the phone Home's Scan label finds it, and the view hears of
+    // it as of a find ('mapselect').
+    if (e.target.closest('[data-mapscan]')) { openScanner({ title: tx('Scan a shelf label'), hint: tx('Point the camera at the shelf label'), onCode: code => (shelfScans.get(map) || (c => findShelf(map, c)))(code) }); return; }
     const pcb = e.target.closest('[data-pcmode]'); if (pcb) { const next = { small: 'large', large: 'off', off: 'small' }[prefs().priceChecks || 'small']; setPref('priceChecks', next); map.priceChecks(next); haptic('select'); for (const b of $$('[data-pcmode]', root)) b.setAttribute('data-pcmode', next); toast({ small: tx('Price checks: normal'), large: tx('Price checks: large'), off: tx('Price checks: hidden') }[next]); return; }
     const plb = e.target.closest('[data-planmode]');
     if (plb) {

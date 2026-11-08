@@ -75,9 +75,12 @@ function mvCrumb(map, id, scope) {
   const sep = '<i class="sep">›</i>';
   return (area ? `<button type="button" class="ma" data-crumb="${area[2].join()}">${ic(area[1])}${area[0]}</button>` : ic(OTHER_ICON[d] || 'tag')) +
     (d ? `${area ? sep : ''}<button type="button" class="md" data-crumb="${esc(d)}">${dep(d)}<span>${esc(DEPT_NAME[d] || d)}</span></button>` : '') +
-    (g ? `${sep}<b class="ms">${esc(id)}</b>` : '');
+    (g ? `${sep}<b class="ms">${esc(shelfText(map, id))}</b>` : '');
 }
 const OTHER_ICON = { checkouts: 'bag', flex: 'flame', stockroom: 'box' };
+// A shelf or run written as the strip writes it, "A16 S2" or "A16": the
+// path, the share sheet and the messages say it the same way.
+function shelfText(map, id) { const cd = map.code(id); return cd ? cd.shelf + (cd.sub ? ' ' + cd.sub : '') : id; }
 
 function homeStrip(map, id, p) {
   if (p) { const title = p.variant === 'order' ? tx('Order screen') : tx('Price check'); return `${ic('barcode')}<b>${title}</b><span class="s">${esc(p.location || p.label || '')}</span>${p.location ? `<button class="act" type="button" data-act="pc-goto">${ic('pin')}${tx('Show')}</button>` : ''}`; }
@@ -123,28 +126,32 @@ export default {
   mobile(ctx) { return mvMap({ badge: `<span id="mvcrumb" class="mcrumb">${mvCrumb(null, null, [])}</span>` }) + `<div class="mv-sel home" id="mvsel"></div>`; },
   mount(ctx, root) {
     if (ctx.arg?.select) selected = ctx.arg.select;
+    // A department or micro-department picked (the Departments picker, a
+    // search row) lets the shelf go, as the crumb's area and department do.
+    if (ctx.arg?.dept || ctx.arg?.micro) selected = null;
     pcSel = null;
     const map = mountMap($('#mapstage', root), { select: selected, onSelect: info => { if (info.kind === 'shelf') { map.highlight(null); selected = info.code; pcSel = null; paint(); } else if (info.kind === 'pricecheck') { pcSel = info; map.select(''); paint(); } } });
     bindMapChrome(root, map);
     // From a search (the bar, voice, the palette, a link): found, as ShelfSearcher showed it.
     if (ctx.arg?.select) map.locate(selected);
     // From the phone's search: a micro-department's shelves ring on the map
-    // and the first is selected; with none assigned, its department shows.
+    // and the first is selected; with none assigned, its department shows
+    // (and the path over the map names it).
+    let scope = [];
     if (ctx.arg?.micro) {
       const id = String(ctx.arg.micro), shelvesOf = ctx.store.get('labels')?.assign?.[id] || [], gs = shelvesOf.flatMap(s => map.groups(s));
       const [sd, code] = id.split('-'), e = (MICRO[sd] || []).find(x => microCode(x) === code), name = `${code} ${e ? microName(e) : ''}`.trim();
       if (gs.length) { selected = shelvesOf[0]; map.select(selected); map.highlight(gs); map.zoomTo(selected); toast(txn(shelvesOf.length, '{name}: {n} shelf', '{name}: {n} shelves', { name })); }
-      else { map.zoomDept([sd]); toast(tx('{name} has no shelves assigned yet, so its department shows', { name })); }
+      else { scope = [sd]; map.zoomDept(scope); toast(tx('{name} has no shelves assigned yet, so its department shows', { name })); }
     }
     // From the phone's Departments picker: one department, an area's ("h1,h2,h3,h4"), or 'all' to clear.
-    let scope = [];
     if (ctx.arg?.dept && ctx.isMobile) { const d = String(ctx.arg.dept).toLowerCase(); scope = d === 'all' ? [] : d.split(',').filter(Boolean); map.zoomDept(scope); }
     if (ctx.isMobile) document.querySelector('.mdepts')?.classList.toggle('on', scope.length > 0);
     else if (ctx.arg?.dept) { const d = String(ctx.arg.dept).toLowerCase(), grp = DEPT_GROUPS.find(x => x[2].includes(d) && x[0] !== 'Other'); root.querySelector(`[data-mapgroup="${grp ? grp[0].toLowerCase() : d}"]`)?.click(); if (grp) root.querySelector(`[data-mapdept="${d}"]`)?.click(); }
     const paint = () => {
       const host = $('#selhost', root); if (host) host.innerHTML = pcSel ? pcCard(pcSel) : selCard(ctx, map, selected);
       const mv = $('#mvsel', root); if (mv) { mv.innerHTML = pcSel ? pcCard(pcSel, true) : mvSel(ctx, map, selected); mv.classList.toggle('shelf', !pcSel && !!mv.querySelector('.mvs-d')); mv.classList.toggle('nosel', !!mv.querySelector('.mvs-empty')); }
-      const c = $('#mapcrumb', root); if (c) c.textContent = selected || '—';
+      const c = $('#mapcrumb', root); if (c) c.textContent = selected ? shelfText(map, selected) : '—';
       setStrip(root, homeStrip(map, selected, pcSel));
       const mc = $('#mvcrumb', root); if (mc) mc.innerHTML = mvCrumb(map, pcSel ? null : selected, scope);
     };
@@ -160,20 +167,22 @@ export default {
       if (e.target.closest('[data-act="depts"]')) document.querySelector('.mdepts')?.click();
       // The crumb's area and department step out of the shelf to that department.
       const cr = e.target.closest('[data-crumb]'); if (cr) { const v = cr.dataset.crumb; scope = v ? v.split(',') : []; selected = null; pcSel = null; map.select(''); map.highlight(null); map.zoomDept(scope); document.querySelector('.mdepts')?.classList.toggle('on', scope.length > 0); paint(); }
-      const pa = e.target.closest('[data-act="pick-add"]'); if (pa) addToPickList(ctx, pa.dataset.shelf);
-      const sh = e.target.closest('[data-act="share"]'); if (sh) { const id = sh.dataset.shelf, g = map.groups(id)[0]; openShare({ storeNo: ctx.storeNo, storeName: ctx.storeName, shelf: id, dept: g ? map.shelfInfo(g).dept : '' }); }
+      const pa = e.target.closest('[data-act="pick-add"]'); if (pa) addToPickList(ctx, pa.dataset.shelf, shelfText(map, pa.dataset.shelf));
+      const sh = e.target.closest('[data-act="share"]'); if (sh) { const id = sh.dataset.shelf, g = map.groups(id)[0]; openShare({ storeNo: ctx.storeNo, storeName: ctx.storeName, shelf: id, name: shelfText(map, id), dept: g ? map.shelfInfo(g).dept : '' }); }
     });
-    map.stage.addEventListener('mapselect', e => { selected = e.detail.code; paint(); });
+    // A find on the map itself (the desk's find bar, the map tools' Scan).
+    map.stage.addEventListener('mapselect', e => { selected = e.detail.code; pcSel = null; paint(); });
     return [ctx.store.on('refresh', paint), ctx.store.on('labels', paint), ctx.store.on('stocktake', paint)];
   },
 };
 
 // The shelf card's "Add to pick list": onto this device's list, as the
-// legacy shelf sheet did (pickListBulkAdd), with its messages.
-async function addToPickList(ctx, code) {
+// legacy shelf sheet did (pickListBulkAdd), with its messages (the shelf
+// named as the strip names it).
+async function addToPickList(ctx, code, name = code) {
   const cur = ctx.store.get('picklists')[ctx.session.device]?.items || [];
-  if (cur.some(i => i.code === code)) return toast(tx('{code} is already on the list', { code }));
+  if (cur.some(i => i.code === code)) return toast(tx('{code} is already on the list', { code: name }));
   if (cur.length >= 200) return toast(tx('Pick list is full'), 'bad');
-  try { await ctx.store.dispatch({ type: 'picklist.set', entity: { device: ctx.session.device }, payload: { items: [...cur, { code, completed: false }] } }); toast(tx('{code} added to pick list', { code }), '', { label: tx('Open'), run: () => ctx.go('picklist') }); }
+  try { await ctx.store.dispatch({ type: 'picklist.set', entity: { device: ctx.session.device }, payload: { items: [...cur, { code, completed: false }] } }); toast(tx('{code} added to pick list', { code: name }), '', { label: tx('Open'), run: () => ctx.go('picklist') }); }
   catch { toast(tx('Couldn’t add to the pick list.'), 'bad'); }
 }

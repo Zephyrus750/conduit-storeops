@@ -816,10 +816,12 @@ document.addEventListener('click', e => {
     else if (act === 'recall-found') { if (store) openFound(store, sa.dataset.recall, sa.dataset.kc); }
     return;
   }
-  // The search palette routes its own rows (they carry select, dept or q);
-  // elsewhere a data-view element opens the view, with a store number for
-  // the console's store rows.
-  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no, ...(v.dataset.tab ? { tab: v.dataset.tab } : {}) } : undefined); return; }
+  // The search palette and the phone's search list route their own rows
+  // (they carry select, dept, micro or q; a list row has already left the
+  // list when the click gets here, so it is known by its class); elsewhere
+  // a data-view element opens the view, with a store number for the
+  // console's store rows.
+  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni, .sdd-r')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no, ...(v.dataset.tab ? { tab: v.dataset.tab } : {}) } : undefined); return; }
   const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
   if (e.target.closest('.mdepts')) { if (store) (ws === 'floor' ? openDepts : openLauncher)(); return; }
   const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }

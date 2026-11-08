@@ -81,7 +81,7 @@ const clearBar = c => { c.hide('.fd-dd'); c.cls('.p2-search', 'fd-on', false); c
 const note = (c, text, open = false, tone = '') => toast2(c, `<span>${text}</span>${open ? `<u>${tx('Open')}</u>` : ''}`, tone);
 
 // The share sheet (js/share.js openShare, in the shared sheet).
-const shareSheet = () => `<div class="fd-shh"><div><b>${tx('Share {shelf}', { shelf: 'A16S2' })}</b><small>${DEPT.h1[1]} · Busselton #1241</small></div><span class="fd-x">${ai('x')}</span></div>` +
+const shareSheet = () => `<div class="fd-shh"><div><b>${tx('Share {shelf}', { shelf: 'A16 S2' })}</b><small>${DEPT.h1[1]} · Busselton #1241</small></div><span class="fd-x">${ai('x')}</span></div>` +
   `<div class="fd-shb"><div class="fd-qr"></div><p>${tx('Scan with another phone to open the map on this shelf. Signed-in devices of this store open it straight away.')}</p><div class="fd-url">…/?store=1241&amp;shelf=A16S2</div></div>` +
   `<div class="fd-shf"><span class="fd-pri">${ai('clip')}${tx('Copy link')}</span></div>`;
 // The Departments picker (js/shell.js openDepts): the whole floor, each
@@ -105,12 +105,12 @@ const phone = (s = at()) => phone2('fd', `<div class="fd-mv"><div class="fd-map"
 const html0 = s => () => phone(s).replace('<span>' + tx('Search') + '</span>', `<span class="fd-q fd-ph">${tx('Search')}</span>`);
 
 // The chapter's states.
-const A16S2 = { area: 'Home', d: 'h1', shelf: 'A16S2' };
+const A16S2 = { area: 'Home', d: 'h1', shelf: 'A16 S2' };
 const FOUND = at({ vb: V.found, hl: ['A16 S2'], sel: 'A16 S2', crumb: A16S2, shelf: 'A16 S2' });
 const PANEL = { ...FOUND, panel: 'shelf' };
 const OUT2 = { ...FOUND, vb: V.out2 }, FITS = { ...FOUND, vb: FIT };
 const HOME = at({ vb: V.home, scope: ['h1', 'h2', 'h3', 'h4'], crumb: { area: 'Home' } });
-const SCANNED = at({ vb: V.panel, hl: ['A16 S1'], sel: 'A16 S1', crumb: { area: 'Home', d: 'h1', shelf: 'A16S1' }, shelf: 'A16 S1', panel: 'shelf' });
+const SCANNED = at({ vb: V.panel, hl: ['A16 S1'], sel: 'A16 S1', crumb: { area: 'Home', d: 'h1', shelf: 'A16 S1' }, shelf: 'A16 S1', panel: 'shelf' });
 
 // ── the chapter ──────────────────────────────────────────────────────
 export const find = {
@@ -133,7 +133,7 @@ export const find = {
     { cap: tx('Add to route puts the shelf on this phone’s pick list.'), read: S(tx('The Route tab walks you to every shelf on the list.'), tx('Open, in the message, goes straight there.')),
       dev: '<b>addToPickList()</b> in js/views/map.js sends <b>picklist.set</b> with this device’s whole list (up to 200 shelves); a shelf already on it says so instead.',
       ev: [E('picklist.set', 'floor', { device: 'd_7k2m9xq4ab1c' }, { items: [{ code: 'A16S2', completed: false }] })],
-      run: async c => { await c.tap('.fd-panel [data-b="route"]'); note(c, tx('{code} added to pick list', { code: 'A16S2' }), true); } },
+      run: async c => { await c.tap('.fd-panel [data-b="route"]'); note(c, tx('{code} added to pick list', { code: 'A16 S2' }), true); } },
     { cap: tx('Share shows a QR code and a link to this shelf.'), read: S(tx('A colleague scans it with their phone and the map opens on this shelf.'), tx('Signed-in devices of this store open it straight away.')),
       dev: '<b>openShare()</b> in js/share.js, in the shared sheet (<b>openSheet()</b> in js/sheet.js): the link is <b>shelfLink()</b>, the code <b>qrSvg()</b> in shared/qr.js.', ev: [],
       run: async c => { c.html('.fd-panel', panel({ ...PANEL, acts: true })); await c.wait(500); await c.tap('.fd-panel [data-b="share"]'); sheet(c, shareSheet()); c.qr('.p2-sheet .fd-qr', 'shelf', 'A16S2'); } },
@@ -150,7 +150,7 @@ export const find = {
       dev: '<b>mvEmpty()</b> in js/views/map.js; Say it shows where the browser can listen (<b>voiceSupported()</b> in js/voice.js).', ev: [],
       run: async c => { await c.tap('.p2-strip .fd-tog'); paint(c, { ...HOME, panel: 'empty' }); } },
     { cap: tx('Scan label: point the camera at the shelf edge label.'), read: S(tx('The label on the shelf edge names its shelf.'), tx('Printed labels have zeros in front: {a} is {b}.', { a: 'A016S01', b: 'A16 S1' })),
-      dev: 'Scan label opens <b>openScanner()</b> in js/scan.js for one code; <b>groupsFor()</b> in js/map.js reads it with <b>canonCode()</b>, so A016S01 is A16 S1.', ev: [],
+      dev: 'Scan label opens <b>openScanner()</b> in js/scan.js for one code (so does the blue barcode in the map’s tools, <b>bindMapChrome()</b>); <b>groupsFor()</b> in js/map.js reads it with <b>canonCode()</b>, so A016S01 is A16 S1.', ev: [],
       run: async c => { await c.tap('.fd-panel [data-b="scan"]'); c.show('.fd-cam'); await c.wait(900); c.cls('.fd-cam', 'hit', true); } },
     { cap: tx('It reads: the map goes to that shelf and the panel shows it.'), read: S(tx('Every way of finding a shelf ends the same: the shelf lit on the map and named in the strip.'), tx('Looking sends nothing.')),
       dev: 'A scanned shelf is found as a typed one is (<b>locate()</b>, framed above the open panel by <b>zoomTo()</b>).', ev: [],
@@ -184,7 +184,7 @@ find.stories.push({
       run: async c => { for (const n of [1, 2, 3]) { await c.tap('.fd-tools [data-z="in"]'); paint(c, K2z(n)); } } },
     { cap: tx('Tap a shelf: the strip names it.'), read: S(tx('{shelf} is one shelf of the run {run}.', { shelf: 'K18 S1', run: 'K18' }), tx('The arrow opens what the map knows about it.')),
       dev: 'A tap selects that shelf only (<b>select()</b> in js/map.js), never its run.', ev: [],
-      run: async c => { await c.tap('.fd-svg [data-s="K18 S1"]'); paint(c, { ...K2z(3), sel: 'K18 S1', crumb: { area: 'Kids', d: 'k2', shelf: 'K18S1' }, shelf: 'K18 S1' }); } },
+      run: async c => { await c.tap('.fd-svg [data-s="K18 S1"]'); paint(c, { ...K2z(3), sel: 'K18 S1', crumb: { area: 'Kids', d: 'k2', shelf: 'K18 S1' }, shelf: 'K18 S1' }); } },
   ],
 });
 const RUN = at({ vb: V.run, hl: ['A16 S1', 'A16 S2', 'A16 E1', 'A16 E2'], sel: 'A16 S1', crumb: { area: 'Home', d: 'h1', shelf: 'A16' }, shelf: 'A16' });

@@ -60,7 +60,6 @@ export default {
   "Price checks: normal, large or hidden": "Verificaprezzi: normali, grandi o nascosti",
   "Show the tory lines": "Mostra le linee Tory",
   "FOH · Ground": "FOH · Piano terra",
-  "Scan": "Scansiona",
   "Next level": "Piano successivo",
   "Tory lines": "Linee Tory",
   "Zoom in": "Ingrandisci",

@@ -7,8 +7,8 @@
 .eqv-spot { fill: rgba(14, 124, 168, .001); cursor: pointer; }
 .pc2-eq.eqv .leg .f { margin-left: 2px; }
 .pc2-eq.eqv .side { gap: 16px; min-height: 0; overflow: hidden; }
-/* The rail's count for Safety & upkeep is red (paintBadges()), and the Equipment tab's when it is not open. */
-.pc2-row .bdg.eqv-red, .pc2-row.on .bdg.eqv-red, .pc2-gtab:not(.on) .bdg.eqv-red { background: #DC2626; color: #fff; }
+/* The Equipment tab's count is red when it is not open (paintBadges()); the rail's is the PC frame's (styles/guide.css). */
+.pc2-gtab:not(.on) .bdg.eqv-red { background: #DC2626; color: #fff; }
 /* A status chip (.status in the app). */
 .eqv-st { display: inline-block; flex: none; border-radius: 8px; padding: 4px 10px; font-size: 14.5px; font-weight: 500; white-space: nowrap; background: #F3F4F6; color: #4B5563; }
 .eqv-st.bad { background: #FEE2E2; color: #B91C1C; } .eqv-st.warn { background: #FEF3C7; color: #92400E; }

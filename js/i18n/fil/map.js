@@ -60,7 +60,6 @@ export default {
   "Price checks: normal, large or hidden": "Price checks: normal, malaki o nakatago",
   "Show the tory lines": "Ipakita ang tory lines",
   "FOH · Ground": "FOH · Ground floor",
-  "Scan": "I-scan",
   "Next level": "Susunod na palapag",
   "Tory lines": "Tory lines",
   "Zoom in": "I-zoom in",

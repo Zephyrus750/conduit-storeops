@@ -711,6 +711,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 .pc2-row.on svg.i { color: #fff; }
 .pc2-row .bdg { flex: none; font-size: 13px; font-weight: 700; color: #fff; background: rgba(255, 255, 255, .16); border-radius: 999px; padding: 3px 10px; min-width: 24px; text-align: center; }
 .pc2-row.on .bdg { background: #fff; color: #0B6183; }
+.pc2-row .bdg.red, .pc2-row.on .bdg.red { background: #DC2626; color: #fff; }
 .pc2-row.soon > :not(.pc2-tip) { opacity: .55; }
 .pc2-row .soon { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9CA3AF; border: 1px solid #E5E7EB; border-radius: 6px; padding: 1px 5px; }
 .pc2-rfoot { border-top: 1px solid rgba(255, 255, 255, .14); padding-top: 6px; margin-top: 4px; }
@@ -750,9 +751,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 .pc2-sync { display: inline-flex; align-items: center; border-radius: 8px; padding: 2px 6px; cursor: pointer; }
 .pc2-sync .dot { width: 8px; height: 8px; border-radius: 50%; background: #16A34A; margin-right: 7px; }
 .pc2-sync .dot.off { background: #9CA3AF; }
-/* The toast, at the foot of the content as the app shows it on a PC. */
-.pc2 > .dv-toast { bottom: 80px; left: calc(50% + 138px); font-size: 14.5px; font-weight: 500; padding: 10px 14px; border-radius: 8px; background: #111827; }
-.pc2.half > .dv-toast { left: calc(50% + 90px); }
+/* The toast, at the foot of the window and centred on it, as the app shows it on a PC (#toasts). */
+.pc2 > .dv-toast { bottom: 80px; left: 50%; font-size: 14.5px; font-weight: 500; padding: 10px 14px; border-radius: 8px; background: #111827; }
 
 /* A view's header, tabs and buttons. */
 .pc2-vh { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; flex: none; }

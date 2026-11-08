@@ -16,18 +16,20 @@ export const equipLink = (storeNo, equip) => `${location.origin}${location.pathn
 // A chapter of the Visual Guide (its printed page's QR code): ?store=1241&guide=cages opens Help on it.
 export const guideLink = (storeNo, chapter) => `${location.origin}${location.pathname}?store=${encodeURIComponent(storeNo)}&guide=${encodeURIComponent(chapter)}`;
 
-export function openShare({ storeNo, storeName, shelf, dept }) {
+// shelf is the code the link carries ("A16S2"); name is the shelf as the
+// map writes it ("A16 S2") for the words around it.
+export function openShare({ storeNo, storeName, shelf, name = shelf, dept }) {
   document.getElementById('sharesheet')?.remove();
   const url = shelfLink(storeNo, shelf), qr = qrSvg(url, { cell: 5 });
   const sheet = openSheet({
-    title: tx('Share {shelf}', { shelf: esc(shelf) }), label: tx('Share shelf {shelf}', { shelf }), cls: 'sh-sheet',
+    title: tx('Share {shelf}', { shelf: esc(name) }), label: tx('Share shelf {shelf}', { shelf: name }), cls: 'sh-sheet',
     sub: `${dept ? `${esc(DEPT_NAME[dept] || dept)} · ` : ''}${esc(storeName || '')} #${esc(storeNo)}`,
     body: `<div class="sh-qr">${qr || `<p class="lbl">${tx('This link is too long for a QR code.')}</p>`}</div><p class="lbl">${tx('Scan with another phone to open the map on this shelf. Signed-in devices of this store open it straight away.')}</p><div class="sh-url mono">${esc(url)}</div>`,
     foot: `${navigator.share ? `<button class="btn" data-sh="share">${ic('arrow')}${tx('Share…')}</button>` : ''}<button class="btn primary" data-sh="copy">${ic('clip')}${tx('Copy link')}</button>`,
     onClick: async e => {
       const a = e.target.closest('[data-sh]'); if (!a) return;
       if (a.dataset.sh === 'copy') { try { await navigator.clipboard.writeText(url); toast(tx('Link copied')); } catch { const t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); toast(tx('Link copied')); } catch { toast(tx('Copy failed: select the link and copy it'), 'bad'); } t.remove(); } }
-      else if (a.dataset.sh === 'share') { try { await navigator.share({ title: tx('Shelf {shelf} · store {store}', { shelf, store: storeNo }), text: tx('Shelf {shelf} at store {store}', { shelf, store: storeNo }), url }); } catch {} }
+      else if (a.dataset.sh === 'share') { try { await navigator.share({ title: tx('Shelf {shelf} · store {store}', { shelf: name, store: storeNo }), text: tx('Shelf {shelf} at store {store}', { shelf: name, store: storeNo }), url }); } catch {} }
     },
   });
   sheet.el.id = 'sharesheet';

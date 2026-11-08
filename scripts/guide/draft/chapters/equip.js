@@ -187,9 +187,8 @@ const TABS = n => [['emergency', 'm-emergency', tx('Emergency')], ['maintenance'
 const tabs = (n, on) => gtabs(TABS(n), on).replace(/(data-t="equipment">(?:(?!data-t=)[\s\S])*?<span class=")bdg(")/, '$1bdg eqv-red$2');
 const screen = s => tabs(need(s) || 0, 'equipment') + vh('m-equipment', tx('Equipment checks'), headSub(s), `${btn('qr', tx('Print QR labels'), 'eqv-lbl')}${btn('print', tx('Print check sheet'))}${btn('plus', tx('Add equipment'), 'pri eqv-add')}`) +
   `<div class="pc2-eq eqv">${mapCard(s)}<div class="side eqv-side">${side(s)}</div></div>`;
-// The rail's count for Safety & upkeep is red, as paintBadges() paints the equipment's.
-const redBadge = h => h.replace(/(data-g="safety">(?:(?!data-g=)[\s\S])*?<span class=")bdg(")/, '$1bdg eqv-red$2');
-const frame = (s, more = '') => redBadge(pc(view('v-eq', screen(s), true) + more, { on: 'safety', badges: { inputs: 1, safety: need(s), backfill: 3 } }));
+// The rail's count for Safety & upkeep is red: the PC frame paints it as paintBadges() does (js/guide/pc.js).
+const frame = (s, more = '') => pc(view('v-eq', screen(s), true) + more, { on: 'safety', badges: { inputs: 1, safety: need(s), backfill: 3 } });
 // The toast, at the foot of the window as the app shows it (#toasts): an action is underlined.
 const toast = (c, t, tone = '', act = '') => { c.html('.pc2 > .dv-toast', t + (act ? ` <u>${act}</u>` : '')); c.cls('.pc2 > .dv-toast', 'eqv-t', true); c.cls('.pc2 > .dv-toast', 'warn', tone === 'warn'); c.show('.pc2 > .dv-toast'); };
 // Selectors on the side column, scoped so a ring never lands on a hidden copy.
@@ -249,7 +248,7 @@ export const equip = {
       dev: 'A click on the map while the form is open sets the draft’s x and y in map units and its floor; an empty Where it lives becomes the nearest shelf.', ev: [],
       run: async c => { paint(c, S7); await c.tap('#v-eq .eqv-spot'); paint(c, S8); } },
     { cap: tx('Add {code}: it is on the map and the list, due in three months.', { code: 'LAD-01' }), read: S(tx('Its card opens with its first line: Added.'), tx('Its next check is worked out from Last checked, today.')),
-      dev: '<b>saveDraft()</b> sends <b>equip.add</b> with the place on the map; the reducer works out the next due date from the last check.',
+      dev: '<b>saveDraft()</b> sends <b>equip.add</b> with the place on the map, then the view paints the new item’s card; the reducer works out the next due date from the last check.',
       ev: [E('equip.add', 'floor', { equip: LAD01.id }, { code: 'LAD-01', kind: 'ladder', name: LAD01.name, every: 3, last: DAY, x: LAD01.x, y: LAD01.y, floor: 'ground', loc: LAD01.loc })],
       run: async c => { paint(c, S8); await c.tap('#v-eq .eqv-form .eqv-save'); paint(c, S9); toast(c, tx('{code} added', { code: 'LAD-01' })); } },
     { cap: tx('Print QR labels: one for each piece, to stick on it.'), read: S(tx('Scanning a label on a store PC or a manager’s phone opens that piece’s card, ready for a check.'), tx('Print check sheet prints the list to walk with a pen.')),

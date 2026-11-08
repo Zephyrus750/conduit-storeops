@@ -165,13 +165,15 @@ export default {
           paint(); if (act === 'move') { sheet(false); toast(tx('Tap the map where it lives now')); } else openSheet();
         }
         else if (act === 'draft-cancel') { draft = null; paint(); }
-        else if (act === 'draft-save') await saveDraft(ctx, root);
+        // Saved: the item's card, or the list (the store's own update paints
+        // while the form is still open, before the save lets it go).
+        else if (act === 'draft-save') { if (await saveDraft(ctx, root)) paint(); }
         else if (act === 'check') { const it = item(a.dataset.id || selected); if (!it) return; selected = it.id; checking = { id: it.id, day: today(), pts: {}, note: '', issue: true, due: '' }; draft = removing = null; paint(); openSheet(); }
         else if (act === 'pt') { readForms(root); checking.pts[a.dataset.key] = a.dataset.v; paint(); }
         else if (act === 'all-ok') { readForms(root); const it = item(checking.id); for (const [k] of pointsOf(it)) checking.pts[k] = 'ok'; paint(); }
         else if (act === 'issue-toggle') { readForms(root); checking.issue = !checking.issue; paint(); }
         else if (act === 'check-cancel') { checking = null; paint(); }
-        else if (act === 'check-save') await saveCheck(ctx, root, map);
+        else if (act === 'check-save') { if (await saveCheck(ctx, root, map)) paint(); }
         else if (act === 'remove') { if (!manager) return toast(tx('Only a manager can remove equipment'), 'bad'); removing = { id: selected, why: '', note: '' }; checking = draft = null; paint(); openSheet(); }
         else if (act === 'why') { readForms(root); removing.why = a.dataset.why; paint(); }
         else if (act === 'remove-cancel') { removing = null; paint(); }
@@ -222,6 +224,7 @@ async function saveDraft(ctx, root) {
     await ctx.store.dispatch({ type: 'equip.add', entity: { equip: id }, payload: { code: draft.code, kind: draft.kind, name: draft.name, every: draft.every, last: draft.last || null, ...(draft.due ? { due: draft.due } : {}), ...pos } });
     selected = id; toast(tx('{code} added', { code: draft.code })); draft = null;
   }
+  return true;
 }
 async function saveCheck(ctx, root, map) {
   readForms(root);
@@ -239,6 +242,7 @@ async function saveCheck(ctx, root, map) {
   await ctx.store.dispatch({ type: 'equip.check', entity: { equip: c.id }, payload });
   checking = null;
   toast(failed.length ? tx('{code} is out of service', { code: it.code }) + (issue ? ' · ' + tx('issue logged') : '') : tx('{code} checked OK', { code: it.code }), failed.length ? 'warn' : '');
+  return true;
 }
 
 // ── the desk's side column ───────────────────────────────────────────────

@@ -60,7 +60,6 @@ export default {
   "Price checks: normal, large or hidden": "Máy kiểm tra giá: thường, lớn hoặc ẩn",
   "Show the tory lines": "Hiện vạch Tory",
   "FOH · Ground": "FOH · Tầng trệt",
-  "Scan": "Quét",
   "Next level": "Tầng tiếp theo",
   "Tory lines": "Vạch Tory",
   "Zoom in": "Phóng to",
