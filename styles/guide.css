@@ -1134,7 +1134,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 /* ── the phone's body, strip and toast as this screen has them ── */
 #bf2 .p2-body { padding: 12px 14px 10px; gap: 8px; }
 #bf2 .p2-strip { height: 64px; padding: 0 8px 0 16px; gap: 8px; border-bottom: 0; }
-#bf2 .p2 > .dv-toast { top: 76px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 196px; font-size: 13.5px; padding: 10px 14px; border-radius: 10px; background: #111827; color: #fff; gap: 12px; }
+#bf2 .p2 > .dv-toast { top: 76px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 351px; font-size: 13.5px; padding: 10px 14px; border-radius: 10px; background: #111827; color: #fff; gap: 12px; }
 #bf2 .p2 > .dv-toast.bf2-warn { background: #F59E0B; color: #1A1300; }
 #bf2 .p2 > .dv-toast.bf2-bad { background: #DC2626; color: #fff; }
 #bf2 .p2 > .dv-toast u { flex: none; }
@@ -1448,7 +1448,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 .rf-last svg.i { width: 18px; height: 18px; flex: none; }
 
 /* The toast, over the strip as the app shows it in a map mode (#toasts, bottom 146px). */
-#rf .p2 > .dv-toast { top: auto; bottom: 146px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 195px; white-space: normal; text-align: left; background: #111827; color: #fff; font-size: 13.5px; font-weight: 400; line-height: 1.35; padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; gap: 12px; z-index: 40; box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .45); }
+#rf .p2 > .dv-toast { top: auto; bottom: 146px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 351px; white-space: normal; text-align: left; background: #111827; color: #fff; font-size: 13.5px; font-weight: 400; line-height: 1.35; padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; gap: 12px; z-index: 40; box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .45); }
 #rf .p2 > .dv-toast[hidden] { display: none; }
 #rf .p2 > .dv-toast u { flex: none; font-weight: 700; color: #fff; }
 #rf .p2 > .dv-toast.bad { background: #DC2626; }
@@ -1540,7 +1540,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 .lb2-in.on { border-color: #F3F4F6; box-shadow: 0 0 0 1px #F3F4F6; }
 
 /* The toast, over the strip as the app shows it in a map mode (#toasts, bottom 146px). */
-#lb .p2 > .dv-toast { top: auto; bottom: 146px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 195px; white-space: normal; text-align: left; background: #111827; color: #fff; font-size: 13.5px; font-weight: 400; line-height: 1.35; padding: 10px 14px; border-radius: 10px; display: block; z-index: 40; box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .45); }
+#lb .p2 > .dv-toast { top: auto; bottom: 146px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 351px; white-space: normal; text-align: left; background: #111827; color: #fff; font-size: 13.5px; font-weight: 400; line-height: 1.35; padding: 10px 14px; border-radius: 10px; display: block; z-index: 40; box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .45); }
 #lb .p2 > .dv-toast[hidden] { display: none; }
 #lb .p2 > .dv-toast.bad { background: #DC2626; }
 

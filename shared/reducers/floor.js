@@ -16,6 +16,7 @@
 //             (Back dock events and projection since 23 Oct 2026; the reducers stay here)
 
 import { reject, badList, earlier } from './util.js';
+import { isKeycode } from '../keycode.js';
 // A department code (h1, k4, flex, checkouts) and a micro-department id
 // ("<sub>-<code>", h4-024): label and focus keys reach other screens as ids.
 const DEPT_RE = /^[a-z0-9]{1,12}$/, MICRO_RE = /^[a-z0-9]{1,12}-[0-9a-z]{1,6}$/i;
@@ -130,7 +131,7 @@ export const floorReducers = {
   },
   'label.variance'(s, e) {
     if (!MICRO_RE.test(e.entity.micro)) return reject('invalid_event', 'micro must be a micro-department id like h4-024');
-    if (!/^\d{6,13}$/.test(e.payload.keycode)) return reject('invalid_event', 'keycode must be 6 to 13 digits');
+    if (!isKeycode(e.payload.keycode)) return reject('invalid_event', 'keycode must be 6 to 9 digits');
     const list = s.labels.variances[e.entity.cycle] || [];
     if (list.length >= VARIANCES_MAX) return reject('invalid_event', `a cycle holds at most ${VARIANCES_MAX} variances`);
     s.labels.variances[e.entity.cycle] = list;

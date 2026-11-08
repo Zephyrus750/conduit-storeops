@@ -416,7 +416,6 @@ export default {
   "The strip says Wrong label while the form is open.": "Maling label ang nakasulat sa strip habang bukas ang form.",
   "Type the keycode and what was wrong.": "I-type ang keycode at kung ano ang mali.",
   "The keycode is on the ticket.": "Nasa ticket ang keycode.",
-  "The box takes 6 to 13 digits, so the item’s barcode works too.": "Tumatanggap ang kahon ng 6 hanggang 13 digit, kaya puwede rin ang barcode ng item.",
   "Log variance: it goes on the cycle’s list.": "I-log ang variance: mapupunta ito sa listahan ng cycle.",
   "Every device has it at once.": "Agad itong nasa bawat device.",
   "The sheet goes back to the micro-department.": "Bumabalik ang sheet sa micro-department.",
@@ -759,4 +758,5 @@ export default {
   "Finalised on the PDT? Open it in Ready and Submit: it’s done for today.": "Na-finalise na sa PDT? Buksan ito sa Handa na at isumite: tapos na ito para sa araw na ito.",
   "The swap is a correction, not a new scan, so the location doesn’t go back to SCANNING; a submitted location can’t change.": "Pagwawasto ang pagpapalit, hindi bagong scan, kaya hindi bumabalik sa NAG-SCAN ang location; hindi na mababago ang naisumiteng location.",
   "Nothing is left to review, so the desk opens the first location in Ready.": "Wala nang ire-review, kaya binubuksan ng desk ang unang location sa Handa na.",
+  "The box takes a keycode of 6 to 9 digits, not the item’s barcode.": "Tumatanggap ang kahon ng keycode na 6 hanggang 9 na digit, hindi ang barcode ng item.",
 };

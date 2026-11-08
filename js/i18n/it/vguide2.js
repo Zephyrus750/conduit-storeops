@@ -416,7 +416,6 @@ export default {
   "The strip says Wrong label while the form is open.": "La barra in basso dice Etichetta errata mentre il modulo è aperto.",
   "Type the keycode and what was wrong.": "Digita il keycode e cosa non andava.",
   "The keycode is on the ticket.": "Il keycode è sul cartellino.",
-  "The box takes 6 to 13 digits, so the item’s barcode works too.": "Il campo accetta da 6 a 13 cifre, quindi va bene anche il codice a barre dell’articolo.",
   "Log variance: it goes on the cycle’s list.": "Registra differenza: va nell’elenco del ciclo.",
   "Every device has it at once.": "Ogni dispositivo la riceve subito.",
   "The sheet goes back to the micro-department.": "La finestra torna al microreparto.",
@@ -759,4 +758,5 @@ export default {
   "Finalised on the PDT? Open it in Ready and Submit: it’s done for today.": "Finalizzata sul PDT? Aprila in Pronto e inviala: per oggi è fatta.",
   "The swap is a correction, not a new scan, so the location doesn’t go back to SCANNING; a submitted location can’t change.": "La sostituzione è una correzione, non una nuova scansione, quindi l’ubicazione non torna IN SCANSIONE; un’ubicazione inviata non può cambiare.",
   "Nothing is left to review, so the desk opens the first location in Ready.": "Non resta nulla da verificare, quindi la postazione apre la prima ubicazione in Pronto.",
+  "The box takes a keycode of 6 to 9 digits, not the item’s barcode.": "Il campo accetta un keycode da 6 a 9 cifre, non il codice a barre dell’articolo.",
 };

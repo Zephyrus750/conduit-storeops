@@ -416,7 +416,6 @@ export default {
   "The strip says Wrong label while the form is open.": "Dải thông tin ghi Nhãn sai khi biểu mẫu đang mở.",
   "Type the keycode and what was wrong.": "Nhập keycode và chỗ sai.",
   "The keycode is on the ticket.": "Keycode có trên nhãn giá.",
-  "The box takes 6 to 13 digits, so the item’s barcode works too.": "Ô nhập nhận 6 đến 13 chữ số, nên mã vạch của mặt hàng cũng được.",
   "Log variance: it goes on the cycle’s list.": "Ghi sai lệch: nó vào danh sách của chu kỳ.",
   "Every device has it at once.": "Mọi thiết bị đều có ngay.",
   "The sheet goes back to the micro-department.": "Bảng quay về nhóm hàng nhỏ.",
@@ -759,4 +758,5 @@ export default {
   "Finalised on the PDT? Open it in Ready and Submit: it’s done for today.": "Đã hoàn tất trên PDT? Mở nó trong Sẵn sàng rồi Gửi: xong cho hôm nay.",
   "The swap is a correction, not a new scan, so the location doesn’t go back to SCANNING; a submitted location can’t change.": "Việc đổi là một chỉnh sửa, không phải lần quét mới, nên vị trí không quay lại ĐANG QUÉT; vị trí đã gửi thì không đổi được.",
   "Nothing is left to review, so the desk opens the first location in Ready.": "Không còn gì cần duyệt, nên bàn duyệt mở vị trí đầu tiên trong Sẵn sàng.",
+  "The box takes a keycode of 6 to 9 digits, not the item’s barcode.": "Ô nhập nhận keycode có 6 đến 9 chữ số, không nhận mã vạch của mặt hàng.",
 };

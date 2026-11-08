@@ -34,6 +34,10 @@ body { font-family: var(--body); color: var(--ink); }
 .toast.warn { background: var(--amber); color: #1a1300; }
 .toast.has-act { pointer-events: auto; display: flex; align-items: center; gap: 12px; }
 .toast-act { background: none; border: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; padding: 6px 2px; min-height: 36px; cursor: pointer; }
+/* From left:50% alone the stack would shrink to half the screen and wrap a
+   phone's toast at about 195 px: on a phone it takes its text's width, up to
+   the toast's own 90vw, still centred by the transform. */
+@media (max-width: 600px) { #toasts { width: max-content; max-width: 90vw; } }
 .foot .dot.off { background: var(--faint); }
 .m-more .sheet .mv-tiles { margin: 10px 0; }
 .mv-hint a { color: var(--accent-ink); font-weight: 600; cursor: pointer; }
