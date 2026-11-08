@@ -127,7 +127,7 @@ function dock(s) {
     return `<span class="rc2-sq t-${p.t}${s.fresh.includes(ref) ? ' fresh' : ''}" data-ref="${ref}"><span class="ref">${ref}</span><span class="ct">${p.n ?? '–'}</span>${fl ? `<span class="fl ${fl[0]}">${fl[1]}</span>` : ''}</span>`;
   };
   return `<div class="rc2-card rc2-dock"><div class="rc2-kh">${ai('box')}<h3>${tx('The dock')}</h3>${lg}</div>${form}<div class="rc2-grid">${REFS.map(sq).join('')}</div>` +
-    `<div class="rc2-hr">${ai('clock')}<span>${tx('Decant running')}</span>${btn('alert', tx('Hold-up'), 'sm')}${btn('users', tx('Book huddle'), 'sm')}</div></div>`;
+    `<div class="rc2-hr">${ai('clock')}<span>${s.begun ? tx('Decant running') : tx('Take 5, then Start decant')}</span>${btn('alert', tx('Hold-up'), 'sm')}${btn('users', tx('Book huddle'), 'sm')}</div></div>`;
 }
 // The team on the truck (teamCard()) and the decant plan (planCard() in plan.js).
 const team = () => `<div class="rc2-card"><div class="rc2-ch"><h3>${tx('Decanting now')}</h3><span class="dim">${tx('{n} on the dock', { n: 3 })}</span></div>` +
@@ -196,7 +196,7 @@ const S2 = mut(S0, s => { s.y = Y.dock; });
 const S3 = mut(S2, s => { Object.assign(s.bays, bays('A3', 'A4', 'A5', 'A6', 'A7')); s.fresh = ['A3', 'A4', 'A5', 'A6', 'A7']; s.fc = '06:20'; });
 const S4 = mut(S3, s => { s.fresh = []; s.form = 'B1'; });
 const S4b = mut(S4, s => { s.pt = 'c'; });
-const S5 = mut(S4b, s => { s.bays.B1 = mk('B1', { cons: [], n: null }); s.fresh = ['B1']; s.fc = '07:09'; });
+const S5 = mut(S4b, s => { s.bays.B1 = mk('B1', { cons: [], n: null }); s.fresh = ['B1']; s.fc = '07:09'; s.form = ''; s.pt = ''; });   // the land row starts empty again
 const S6 = mut(S5, s => { s.fresh = []; s.form = ''; s.pt = ''; s.sel = 'B1'; s.y = Y.foot; });
 const S7 = mut(S6, s => { s.bays.B1 = mk('B1'); s.fc = '06:23'; s.y = Y.foot2; });
 const S8 = mut(S7, s => { s.sel = ''; s.y = Y.top; s.card = 'fin'; s.fc = '06:25'; });
