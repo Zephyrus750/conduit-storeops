@@ -317,7 +317,12 @@ function buildBadges(floorEl) {
     const t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'sb'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('data-shelf', b.name); t.setAttribute('data-dept', b.dept); t.textContent = b.label;
     layer.appendChild(bg); layer.appendChild(t);
   }
-  floorEl.appendChild(layer);
+  // The zoom fade is the opacity of a group of its own: changing it restyles
+  // that one element, where a property the whole map inherits restyled all
+  // six thousand of them on every zoom step (about 100 ms a step on a store
+  // phone). View rules on .shelf-badges (dimmed, hidden) still apply inside.
+  const fade = document.createElementNS(NS, 'g'); fade.setAttribute('class', 'badge-fade'); fade.appendChild(layer);
+  floorEl.appendChild(fade);
 }
 
 // The map's DOM is built once per published document (parsing 800 KB of
@@ -329,10 +334,12 @@ let tpl = null, live = null, pv = null;
 // The shell calls this before it replaces a view's content: the live map
 // steps out first, so the next view re-inserts the same element instead of
 // the browser destroying five thousand nodes and building them again.
-// The label/badge fade lives in custom properties on the map: changing one
-// restyles every element of the map (about 130 ms on a store phone), so a
-// value is written only when it changes.
-const FADE_VARS = ['--badge-opacity', '--label-opacity', '--label-display'];
+// Whether shelf names show lives in a custom property on the map: changing
+// it restyles every element of the map (about 130 ms on a store phone), so it
+// is written only when it changes, once as the badges hand over. The badges'
+// fade is the opacity of their own group (.badge-fade), never a property of
+// the whole map, and names well off screen leave the tree (cullLabels).
+const FADE_VARS = ['--label-display'];
 const setVar = (el, k, v) => { if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v); };
 // The live map's width on screen, kept by a ResizeObserver: the marker scale
 // needs it, and measuring it while a view mounts would lay the whole map out
@@ -442,10 +449,30 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const k = Math.min(Math.max(w, b[2] / 40), b[2] * 1.6) / w, cx = Math.min(Math.max(x + w / 2, b[0]), b[0] + b[2]), cy = Math.min(Math.max(y + h / 2, b[1]), b[1] + b[3]);
     w *= k; h *= k; return [cx - w / 2, cy - h / 2, w, h];
   };
+  // Shelf names well off screen leave the tree: every name is laid out again
+  // on each zoom step (the text is drawn at the new scale), and with all
+  // 1,847 of Busselton's showing a step cost 175 ms on a store phone against
+  // 50 ms without them. A name outside the view and one view's margin on
+  // every side is hidden (data-far); checked when names come in, and 120 ms
+  // after a move stops, so a pan or a zoom out within the margin never shows
+  // a gap. Each floor's names and their x/y are read once.
+  let named = null, cullT = 0;
+  const cullLabels = () => {
+    clearTimeout(cullT); cullT = 0;
+    const host = floorEl(cur?.id); if (!host || !svg.isConnected) return;
+    if (named?.host !== host) named = { host, list: $$('.shelf-label', host).map(t => ({ t, x: Number(t.getAttribute('x')), y: Number(t.getAttribute('y')), far: t.hasAttribute('data-far') })) };
+    const [x, y, w, h] = api.vb(), x0 = x - w, x1 = x + 2 * w, y0 = y - h, y1 = y + 2 * h;
+    for (const l of named.list) {
+      const far = Number.isFinite(l.x) && Number.isFinite(l.y) && (l.x < x0 || l.x > x1 || l.y < y0 || l.y > y1);
+      if (far !== l.far) { l.far = far; l.t.toggleAttribute('data-far', far); }
+    }
+  };
+  let fadeNow = null, firstFade = true;
   const setLabelFade = () => {
     const z = (Number(vb0.split(' ')[2]) || 1) / (Number(svg.getAttribute('viewBox').split(' ')[2]) || 1);
     const badge = z <= BADGE_START ? 1 : z >= BADGE_END ? 0 : 1 - (z - BADGE_START) / (BADGE_END - BADGE_START);
-    setVar(svg, '--badge-opacity', badge.toFixed(2)); setVar(svg, '--label-opacity', (1 - badge).toFixed(2));
+    const op = badge >= 1 ? '' : badge.toFixed(2);
+    if (op !== fadeNow) { fadeNow = op; for (const f of $$('.badge-fade', svg)) f.style.opacity = op; }
     // Two thousand shelf labels that are invisible when zoomed out still
     // cost a layout and a paint each; take them out of the tree until the
     // badges start handing over (views without badges keep them).
@@ -453,7 +480,12 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // zoomed out, where they are two to four pixels tall: there they come
     // back from 2.5 times the whole-store zoom, about five pixels.
     const tiny = z < LABEL_MIN_Z && ((svg === live && liveW) || innerWidth) < 600;
-    setVar(svg, '--label-display', svg.classList.contains('nobadges') ? (tiny ? 'none' : 'inline') : badge >= 1 ? 'none' : 'inline');
+    const was = svg.style.getPropertyValue('--label-display'), show = svg.classList.contains('nobadges') ? (tiny ? 'none' : 'inline') : badge >= 1 ? 'none' : 'inline';
+    // Names coming in are culled before they are laid out; while they show,
+    // the check waits for the move to stop.
+    if (show === 'inline') { if (was !== 'inline' || firstFade) cullLabels(); else { clearTimeout(cullT); cullT = setTimeout(cullLabels, 120); } }
+    firstFade = false;
+    setVar(svg, '--label-display', show);
   };
   // Emergency markers are authored at translate(x,y) only; scale them so a
   // sign is about 32px on screen whatever the zoom (the legacy viewer did
