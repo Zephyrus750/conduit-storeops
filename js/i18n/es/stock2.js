@@ -325,7 +325,6 @@ export default {
   "{n} could not be added.": "{n} no se pudieron añadir.",
   "Classes": "Clases",
   "Loading the snapshots…": "Cargando las instantáneas…",
-  "No snapshot yet. Paste this week's SOH report and save it; the classes need three snapshots to tell flat from moving.": "Aún no hay instantánea. Pega el informe de SOH de esta semana y guárdalo; las clases necesitan tres instantáneas para distinguir lo estancado de lo que se mueve.",
   "Keycode, location or name": "Keycode, ubicación o nombre",
   "Class": "Clase",
   "Loc": "Ubic.",
@@ -574,4 +573,6 @@ export default {
   "The classes are worked out again without it.": "Las clases se recalculan sin ella.",
   "The event log keeps a record of the delete.": "El registro de eventos guarda constancia de la eliminación.",
   "{bay} on {date} leaves the board and History.": "{bay} del {date} sale del tablero y del Historial.",
+  "No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.": "Aún no hay instantánea. Guarda el informe SIM de hoy o pega aquí el informe de SOH; las clases necesitan tres instantáneas para distinguir lo estancado de lo que se mueve.",
+  "Nothing flagged on the latest snapshot.": "Nada marcado en la última instantánea.",
 };

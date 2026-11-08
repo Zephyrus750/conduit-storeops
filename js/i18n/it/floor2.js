@@ -930,4 +930,7 @@ export default {
   "Remove \"{title}\"?": "Rimuovere «{title}»?",
   "Remove issue": "Rimuovi la segnalazione",
   "Remove this photo?": "Rimuovere questa foto?",
+  "The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.": "Il report giacenze va alla verifica rifornimento, alla lista del giorno, alle rettifiche e all’analisi giacenze.",
+  "Stock intelligence was not updated: {error}": "L’analisi giacenze non è stata aggiornata: {error}",
+  "Stock intelligence updated": "Analisi giacenze aggiornata",
 };

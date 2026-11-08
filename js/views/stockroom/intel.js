@@ -3,12 +3,16 @@
 // that classes every keycode. STUCK (flat since stock arrived), GHOST (zero
 // though stock arrived), FROZEN (flat, nothing arrived), DEEP (flat and two
 // cartons or more: a spot-check), NEW (under three snapshots), MOVING. The
-// day list turns the flagged ones into the walk's counts.
+// day list turns the flagged ones into the walk's counts. Saving today's SIM
+// report (the paste pop-up) updates today's snapshot by itself, as it fills
+// Adjustments: reportToIntel(). The list filters on the latest snapshot's
+// flags too: under two cartons (to pull) and 0 or less (to adjust).
 
 import { ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
 import { todayKey, kcCopy, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf, ctnOf, depthChip } from './common.js';
 import { openScreenScan } from '../../screenscan.js';
 import { parseReport, rowKey, sohBand, flagOf, flagsOf, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
+import { toolOff, toolForView } from '../../../shared/tools.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
 
@@ -57,9 +61,30 @@ export const spark = (w, cls) => { if (w.length < 2) return ''; const max = Math
 export const clsBadge = (cls, flat) => `<span class="sri-cls ${cls}">${cls === 'frozen' ? tx('FROZEN · {n}w', { n: flat }) : tx(BADGE[cls])}</span>`;
 export const bandSoh = (soh, ctn) => `<span class="sri-soh ${sohBand(soh, ctn)}">SOH ${soh}</span>`;
 
+// Today's snapshot from a report's rows: a new day, or (merge) only the bays
+// these rows cover replaced in it.
+function saveSnapshot(ctx, items, merge) {
+  return ctx.api(`/v1/store/${ctx.storeNo}/soh`, { method: 'POST', body: { date: todayKey(), ...(merge ? { merge: true } : {}), rows: items.map(x => ({ kc: x.kc, loc: x.loc, soh: x.soh, price: x.price, ...(nameOf(x.kc) ? { name: nameOf(x.kc) } : {}) })) }, timeoutMs: 60000 });
+}
+// Today's SIM report, saved from the paste pop-up (Backfill review's
+// pasteReport), updates Stock intelligence as it updates Adjustments: its
+// rows with an SOH go into today's snapshot, replacing the bays it lists and
+// keeping the rest, so a midday report updates the morning's. Null when the
+// store has Stock intelligence off or the report has no SOH column.
+export async function reportToIntel(ctx, text) {
+  if (toolOff(ctx.store.get('tools')?.off, toolForView('srintel'))) return null;
+  const items = Object.values(parseReport(text, {}).items); if (!items.length) return null;
+  await loadProfiles(ctx, () => {});   // the carton sizes the pull flag needs
+  const fl = flagsOf(items, ctnOf), pull = new Set(fl.pull.map(r => r.kc)).size;
+  try { const r = await saveSnapshot(ctx, items, true); return { rows: r.rows, locs: r.locs, pull }; }
+  catch (err) { return { error: err.message }; }
+}
+
 const st = { text: '', parsed: null, keep: false, filter: 'all', q: '', busy: false, open: false, loc: '', saved: null };
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const FILTERS = ['all', 'stuck', 'ghost', 'frozen', 'deep', 'new', 'moving'];
+// The latest snapshot's flags, filtered like the classes and listed in walking order.
+const FLAGS = ['pull', 'adjust'];
 
 function pastePanel(ctx, data) {
   const p = st.parsed, items = p ? Object.values(p.items).sort((a, b) => byLoc(a.loc, b.loc) || a.kc.localeCompare(b.kc)) : [], kcs = new Set(items.map(r => r.kc));
@@ -111,18 +136,25 @@ function sendCard() {
     `<div class="sri-acts"><a class="btn" data-go="adjust">${ic('m-adjust')}${tx('Open Adjustments')}</a></div></div>`;
 }
 
+// Every keycode in the history with its class, and the flag the latest
+// snapshot gives it (only keycodes on that snapshot are flagged).
+function flaggedRows(data) {
+  const last = data.latest?.date;
+  return Object.values(data.history).map(h => { const c = classify(h, profileOf(h.kc)), ctn = c.ctn || ctnOf(h.kc); return { ...h, ...c, ctn, flag: h.dates.at(-1) === last ? flagOf(c.latest, ctn) : null }; });
+}
 function classesCard(ctx, data) {
   if (!data) return `<div class="card"><div class="ch"><h3>${tx('Classes')}</h3></div><div class="ohint">${sohError() ? esc(sohError()) : tx('Loading the snapshots…')}</div></div>`;
-  if (!data.snaps.length) return `<div class="card"><div class="ch"><h3>${tx('Classes')}</h3></div><p class="lbl">${tx("No snapshot yet. Paste this week's SOH report and save it; the classes need three snapshots to tell flat from moving.")}</p></div>`;
-  const rows = Object.values(data.history).map(h => ({ ...h, ...classify(h, profileOf(h.kc)) }));
-  const counts = Object.fromEntries(FILTERS.map(f => [f, f === 'all' ? rows.length : rows.filter(r => r.cls === f).length]));
-  const q = st.q.trim().toLowerCase();
-  const list = rows.filter(r => (st.filter === 'all' || r.cls === st.filter) && (!q || r.kc.includes(q) || (r.locs || [r.loc]).some(l => String(l).includes(q)) || (nameOf(r.kc) || r.name || '').toLowerCase().includes(q)))
-    .sort((a, b) => PRIORITY[a.cls] - PRIORITY[b.cls] || b.flat - a.flat || byLoc(a.loc, b.loc));
+  if (!data.snaps.length) return `<div class="card"><div class="ch"><h3>${tx('Classes')}</h3></div><p class="lbl">${tx("No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.")}</p></div>`;
+  const rows = flaggedRows(data);
+  const counts = Object.fromEntries([...FILTERS.map(f => [f, f === 'all' ? rows.length : rows.filter(r => r.cls === f).length]), ...FLAGS.map(f => [f, rows.filter(r => r.flag === f).length])]);
+  const q = st.q.trim().toLowerCase(), byFlag = FLAGS.includes(st.filter);
+  const list = rows.filter(r => (st.filter === 'all' || (byFlag ? r.flag : r.cls) === st.filter) && (!q || r.kc.includes(q) || (r.locs || [r.loc]).some(l => String(l).includes(q)) || (nameOf(r.kc) || r.name || '').toLowerCase().includes(q)))
+    .sort(byFlag ? (a, b) => byLoc(a.loc, b.loc) || a.kc.localeCompare(b.kc) : (a, b) => PRIORITY[a.cls] - PRIORITY[b.cls] || b.flat - a.flat || byLoc(a.loc, b.loc));
   const verify = ctx.store.get('soh')?.verify?.[data.latest.date] || {};
   return `<div class="card"><div class="ch"><h3>${tx('Classes')}</h3><span class="cs-dim">${txn(data.snaps.length, '{n} snapshot · {from} to {to}', '{n} snapshots · {from} to {to}', { from: esc(data.snaps[0].date), to: esc(data.latest.date) })}</span></div>` +
-    `<div class="sri-filters">${FILTERS.map(f => `<button class="chip${st.filter === f ? ' on' : ''}" data-act="sri-filter" data-f="${f}">${f === 'all' ? tx('All') : f[0].toUpperCase() + f.slice(1)} <b>${counts[f]}</b></button>`).join('')}<div class="search">${ic('search')}<input data-field="sri-q" value="${esc(st.q)}" placeholder="${tx('Keycode, location or name')}"></div></div>` +
-    `<div class="mfx-scroll"><table class="wb-t sri-t"><thead><tr><th>${tx('Class')}</th><th>${tx('Keycode')}</th><th>${tx('Product')}</th><th>${tx('Loc')}</th><th>${tx('Last {n}', { n: Math.min(12, data.snaps.length) })}</th><th class="n">SOH</th><th class="n">${tx('/ctn')}</th><th>${tx('Last landed')}</th></tr></thead><tbody>${list.slice(0, 300).map(r => `<tr><td>${clsBadge(r.cls, r.flat)}${r.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${verify[`${r.kc}|${r.loc}`] ? ` <span class="status good">✓ ${tx('verified')}</span>` : ''}</td><td class="mono">${kcCopy(r.kc)}</td><td>${nameHtml(r.kc)}</td><td class="mono">${esc((r.locs || [r.loc]).join(' '))}</td><td>${spark(r.w, r.cls)}</td><td class="n">${bandSoh(r.latest, r.ctn)}</td><td class="n">${r.ctn || '—'}</td><td>${r.lastArrival?.date ? esc(fmtDate(r.lastArrival.date)) : '—'}</td></tr>`).join('') || `<tr><td colspan="8" class="cs-dim">${tx('Nothing in this class.')}</td></tr>`}</tbody></table></div>${list.length > 300 ? `<p class="lbl">${tx('{n} more: search or pick a class to narrow.', { n: list.length - 300 })}</p>` : ''}</div>`;
+    `<div class="sri-filters">${FILTERS.map(f => `<button class="chip${st.filter === f ? ' on' : ''}" data-act="sri-filter" data-f="${f}">${f === 'all' ? tx('All') : f[0].toUpperCase() + f.slice(1)} <b>${counts[f]}</b></button>`).join('')}` +
+    `<span class="sri-fsep" aria-hidden="true"></span>${FLAGS.map(f => `<button class="chip flag ${f}${st.filter === f ? ' on' : ''}" data-act="sri-filter" data-f="${f}" title="${f === 'pull' ? tx('Under two cartons in the whole store: the floor has most likely run out and the rest is out the back') : tx('In a stockroom bay but the system says 0 or less: adjust it')}">${f === 'pull' ? tx('{n} to pull · under two cartons', { n: `<b>${counts.pull}</b>` }) : tx('{n} to adjust · 0 or less', { n: `<b>${counts.adjust}</b>` })}</button>`).join('')}<div class="search">${ic('search')}<input data-field="sri-q" value="${esc(st.q)}" placeholder="${tx('Keycode, location or name')}"></div></div>` +
+    `<div class="mfx-scroll"><table class="wb-t sri-t"><thead><tr><th>${tx('Class')}</th><th>${tx('Keycode')}</th><th>${tx('Product')}</th><th>${tx('Loc')}</th><th>${tx('Last {n}', { n: Math.min(12, data.snaps.length) })}</th><th class="n">SOH</th><th class="n">${tx('/ctn')}</th><th>${tx('Last landed')}</th></tr></thead><tbody>${list.slice(0, 300).map(r => `<tr><td>${clsBadge(r.cls, r.flat)}${r.flag ? ' ' + flagBadge(r.flag) : ''}${r.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${verify[`${r.kc}|${r.loc}`] ? ` <span class="status good">✓ ${tx('verified')}</span>` : ''}</td><td class="mono">${kcCopy(r.kc)}</td><td>${nameHtml(r.kc)}</td><td class="mono">${esc((r.locs || [r.loc]).join(' '))}</td><td>${spark(r.w, r.cls)}</td><td class="n">${bandSoh(r.latest, r.ctn)}</td><td class="n">${r.ctn || '—'}</td><td>${r.lastArrival?.date ? esc(fmtDate(r.lastArrival.date)) : '—'}</td></tr>`).join('') || `<tr><td colspan="8" class="cs-dim">${byFlag ? tx('Nothing flagged on the latest snapshot.') : tx('Nothing in this class.')}</td></tr>`}</tbody></table></div>${list.length > 300 ? `<p class="lbl">${tx('{n} more: search or pick a class to narrow.', { n: list.length - 300 })}</p>` : ''}</div>`;
 }
 
 function snapsCard(data) {
@@ -137,12 +169,13 @@ export default {
   desktop(ctx) {
     const data = sohData(ctx, () => ctx.rerender()), idx = ctx.store.get('soh')?.snaps || {}, n = Object.keys(idx).length;
     if (st.parsed) ensureNames(ctx, [...new Set(Object.values(st.parsed.items).map(r => r.kc))], () => ctx.rerender());
-    if (data?.history && st.filter !== 'all') ensureNames(ctx, Object.values(data.history).filter(h => classify(h, profileOf(h.kc)).cls === st.filter).slice(0, 300).map(h => h.kc), () => ctx.rerender());
+    if (data?.history && st.filter !== 'all') ensureNames(ctx, flaggedRows(data).filter(r => (FLAGS.includes(st.filter) ? r.flag : r.cls) === st.filter).slice(0, 300).map(r => r.kc), () => ctx.rerender());
     const head = vh(tx('Stock intelligence'), sub(txn(n, '{n} snapshot', '{n} snapshots'), n ? tx('latest {date}', { date: esc(Object.keys(idx).sort().at(-1)) }) : tx('none yet'), 'STUCK · GHOST · FROZEN · DEEP'), `<button class="btn" data-view="daylist">${ic('m-daylist')}${tx('Day list')}</button>`, 'chart');
     return head + `<div class="sri-grid"><div>${sendCard()}${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${lookupCard(ctx, data)}${snapsCard(data)}<div class="card"><div class="ch"><h3>${tx('How the classes work')}</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} ${tx('SOH has not moved for three snapshots although stock arrived: count it.')}</li><li>${clsBadge('ghost')} ${tx('The system says zero but stock arrived: count it.')}</li><li>${clsBadge('frozen', 3)} ${tx('Flat for three or more snapshots with nothing arriving: count it.')}</li><li>${clsBadge('deep')} ${tx('Flat, but two cartons or more on hand: a spot-check.')}</li><li>${clsBadge('new')} ${tx('Under three snapshots: not enough history yet.')}</li><li><span class="sri-badge recount">RECOUNT</span> ${tx('Re-cartoned within the last four trucks: count, do not spot-check.')}</li></ul></div></div></div>`;
   },
   mount(ctx, root) {
     // From Reports & files: an SOH report pasted there, read here for its review.
+    if (ctx.arg?.filter && ctx.arg !== usedArg) { usedArg = ctx.arg; if ([...FILTERS, ...FLAGS].includes(ctx.arg.filter)) st.filter = ctx.arg.filter; setTimeout(() => ctx.rerender(), 0); }
     if (ctx.arg?.paste && ctx.arg !== usedArg) { usedArg = ctx.arg; const r = parseReport(ctx.arg.paste, {}); st.parsed = { items: r.items, skipped: r.skipped }; st.text = ''; setTimeout(() => ctx.rerender(), 0); }
     root.addEventListener('click', async e => {
       const a = e.target.closest('[data-act]'); if (!a) return;
@@ -155,7 +188,7 @@ export default {
         const items = Object.values(st.parsed?.items || {}); if (!items.length) return;
         st.busy = true; ctx.rerender();
         try {
-          const merge = a.dataset.merge === '1', r = await ctx.api(`/v1/store/${ctx.storeNo}/soh`, { method: 'POST', body: { date: todayKey(), ...(merge ? { merge: true } : {}), rows: items.map(x => ({ kc: x.kc, loc: x.loc, soh: x.soh, price: x.price, ...(nameOf(x.kc) ? { name: nameOf(x.kc) } : {}) })) }, timeoutMs: 60000 });
+          const r = await saveSnapshot(ctx, items, a.dataset.merge === '1');
           // Saving the report is the manager's say-so: its items at 0 or less go to today's Adjustments.
           const all = new Set(flagsOf(items, ctnOf).adjust.map(x => x.kc)).size, sent = await sendAdjust(ctx, adjustRows(ctx, items));
           toast(`${r.updatedLocs ? tx('{n} locations updated · today holds {rows} rows', { n: r.updatedLocs, rows: r.rows }) : tx('Snapshot saved · {week} · {rows} rows', { week: r.week, rows: r.rows })}${sent.n ? ` · ${tx('{n} sent to Adjustments', { n: sent.n })}` : ''}`);

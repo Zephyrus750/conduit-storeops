@@ -930,4 +930,7 @@ export default {
   "Remove \"{title}\"?": "„{title}“ entfernen?",
   "Remove issue": "Meldung entfernen",
   "Remove this photo?": "Dieses Foto entfernen?",
+  "The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.": "Der Bestandsbericht geht an die Auffüll-Prüfung, die Tagesliste, die Korrekturen und die Bestandsanalyse.",
+  "Stock intelligence was not updated: {error}": "Die Bestandsanalyse wurde nicht aktualisiert: {error}",
+  "Stock intelligence updated": "Bestandsanalyse aktualisiert",
 };

@@ -311,9 +311,11 @@ export async function copyText(text, what) {
 // means stock is likely out the back. RECOUNT when the supplier re-cartoned
 // within the last few trucks: count it, do not spot-check.
 let profiles = null, lastArrival = {}, profilesAt = 0, profilesLoading = null;
+// Returns a promise that settles once they are in (at once when they are).
 export function loadProfiles(ctx, repaint) {
-  if (profilesLoading || Date.now() - profilesAt < 12 * 3600000) return;
-  profilesLoading = ctx.api(`/v1/store/${ctx.storeNo}/profiles`).then(doc => { profiles = doc?.profiles || {}; lastArrival = doc?.last || {}; profilesAt = Date.now(); paintSoon(repaint); }).catch(() => { profiles = profiles || {}; profilesAt = Date.now(); }).finally(() => { profilesLoading = null; });
+  if (profilesLoading) return profilesLoading;
+  if (Date.now() - profilesAt < 12 * 3600000) return Promise.resolve();
+  return profilesLoading = ctx.api(`/v1/store/${ctx.storeNo}/profiles`).then(doc => { profiles = doc?.profiles || {}; lastArrival = doc?.last || {}; profilesAt = Date.now(); paintSoon(repaint); }).catch(() => { profiles = profiles || {}; profilesAt = Date.now(); }).finally(() => { profilesLoading = null; });
 }
 export const profileOf = kc => profiles?.[String(kc)] || null;
 // Units a carton for the pull and depth checks: the profile when three or

@@ -930,4 +930,7 @@ export default {
   "Remove \"{title}\"?": "Alisin ang “{title}”?",
   "Remove issue": "Alisin ang isyu",
   "Remove this photo?": "Alisin ang litratong ito?",
+  "The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.": "Napupunta ang inventory report sa Backfill review, sa Day list, sa Adjustments at sa Stock intelligence.",
+  "Stock intelligence was not updated: {error}": "Hindi na-update ang Stock intelligence: {error}",
+  "Stock intelligence updated": "Na-update ang Stock intelligence",
 };

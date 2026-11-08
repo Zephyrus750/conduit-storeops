@@ -606,8 +606,10 @@ in arrives: one box takes the clipboard or a file and says what it found
 before anything is saved, and a list says what is due today (the morning SIM
 report is required, the midday one optional), what each feeds and where it
 comes from. Each kind is saved by the screen it feeds, through that screen's
-code: the SIM report through Backfill review's `pasteReport`, the SOH report
-in Stock intelligence (opened with the paste read), a DC manifest through the
+code: the SIM report through Backfill review's `pasteReport` (its lines at 0
+or less go to Adjustments and its SOH lines into today's Stock intelligence
+snapshot, `reportToIntel`, replacing the bays it lists), the SOH report in
+Stock intelligence (opened with the paste read), a DC manifest through the
 publish preview, the off-site list and other loads through `loads.js`. Its
 rail row shows 1 while today's morning report is missing. Today's morning
 setup marks the morning report Required and the midday one Optional (it never

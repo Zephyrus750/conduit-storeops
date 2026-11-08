@@ -10,7 +10,8 @@
 //            'soh'     the SOH report, opened in Stock intelligence with its rows read
 //            'any'     whichever it is (Reports & files' own Paste button)
 //     text   what was already pasted (Ctrl V on the screen); else the clipboard is read
-//     after  called once a report is saved
+//     after  called once a report is saved (its rows with an SOH update
+//            today's Stock intelligence snapshot too, like Adjustments)
 //   reportToday(ctx)  today's report as the store holds it: { rep, morning, midday }
 
 import { ic, toast, today } from '../ui.js';
@@ -67,12 +68,14 @@ export function openPasteBox(ctx, { want = 'any', text, after } = {}) {
   const paint = () => {
     const f = s.found, sr = stockroom(ctx);
     const summary = f ? [f.bays ? txn(f.bays, '{n} bay', '{n} bays') : '', f.codes ? txn(f.codes, '{n} keycode', '{n} keycodes') : '', f.soh ? txn(f.soh, '{n} line with an SOH', '{n} lines with an SOH') : ''].filter(Boolean).join(' · ') : '';
-    const asReport = f && f.bays && want !== 'soh' && toolOn(ctx, 'bfreview'), asSoh = f && f.soh && want !== 'report' && toolOn(ctx, 'srintel');
+    // Saving the inventory report updates Stock intelligence by itself, so it
+    // is offered on its own only for a paste that is not saved as the report.
+    const asReport = f && f.bays && want !== 'soh' && toolOn(ctx, 'bfreview'), intelOn = toolOn(ctx, 'srintel'), asSoh = f && f.soh && want !== 'report' && intelOn && !asReport;
     const body = s.phase === 'reading' ? `<div class="pb-state">${ic('clip')}<b>${tx('Reading your clipboard…')}</b></div>`
       : s.phase === 'saving' ? `<div class="pb-state">${ic('clock')}<b>${tx('Saving…')}</b></div>`
       : s.phase === 'found' ? `<div class="pb-state ok">${ic('check')}<div><b>${tx('Found in your clipboard: a SIM report')}</b><span>${summary}</span></div></div>` +
         (sr ? `<div class="pb-acts">${asReport ? `<button class="btn primary" data-pb="save">${ic('check')}${saveLabel()}</button>` : ''}${asSoh ? `<button class="btn${asReport ? '' : ' primary'}" data-pb="soh">${ic('arrow')}${tx('Open it in Stock intelligence')}</button>` : ''}</div>` +
-          `<p class="lbl">${asReport ? tx('The inventory report goes to Backfill review, the Day list and Adjustments.') : asSoh ? tx('Stock intelligence shows the rows to check before they are saved.') : tx('This store does not use Backfill review or Stock intelligence.')}</p>`
+          `<p class="lbl">${asReport ? (intelOn && f.soh ? tx('The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.') : tx('The inventory report goes to Backfill review, the Day list and Adjustments.')) : asSoh ? tx('Stock intelligence shows the rows to check before they are saved.') : tx('This store does not use Backfill review or Stock intelligence.')}</p>`
           : `<p class="lbl">${tx('Reports go to the Stockroom: enter its code on this device first.')}</p>`)
       : s.phase === 'wrong' ? `<div class="pb-state bad">${ic('alert')}<div><b>${tx('Incorrect format')}</b><span>${WRONG[want]}</span></div></div>`
       : s.phase === 'empty' ? `<div class="pb-state">${ic('clip')}<div><b>${tx('Your clipboard is empty')}</b><span>${tx('In SIM, select the whole report (Ctrl A) and copy it (Ctrl C), then come back here.')}</span></div></div>`
@@ -97,6 +100,9 @@ export function openPasteBox(ctx, { want = 'any', text, after } = {}) {
         if (!r) { s.phase = 'wrong'; return paint(); }
         close();
         toast(txn(r.bays, 'Report pasted: {n} bay, {codes} codes', 'Report pasted: {n} bays, {codes} codes', { codes: r.codes }) + (r.sent ? ' · ' + tx('{n} at 0 or less sent to Adjustments', { n: r.sent }) : ''), '', r.sent ? { label: tx('Open'), run: () => ctx.go('adjust') } : null);
+        // Stock intelligence's snapshot, saved with it: what it flags to pull.
+        if (r.intel?.error) toast(tx('Stock intelligence was not updated: {error}', { error: r.intel.error }), 'warn');
+        else if (r.intel) toast(tx('Stock intelligence updated') + (r.intel.pull ? ' · ' + tx('{n} to pull · under two cartons', { n: r.intel.pull }) : ''), '', { label: tx('Open'), run: () => ctx.go('srintel', { filter: r.intel.pull ? 'pull' : 'all' }) });
         after?.(r);
       } catch (err) { s.phase = 'found'; paint(); toast(err.message, 'bad'); }
     }

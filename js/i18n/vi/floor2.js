@@ -930,4 +930,7 @@ export default {
   "Remove \"{title}\"?": "Xóa “{title}”?",
   "Remove issue": "Xóa sự cố",
   "Remove this photo?": "Xóa ảnh này?",
+  "The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.": "Báo cáo tồn kho đi tới duyệt bổ sung hàng, danh sách trong ngày, điều chỉnh và phân tích tồn kho.",
+  "Stock intelligence was not updated: {error}": "Chưa cập nhật được phân tích tồn kho: {error}",
+  "Stock intelligence updated": "Đã cập nhật phân tích tồn kho",
 };

@@ -1377,6 +1377,12 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .sri-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .sri-filters .search { flex: 1; min-width: 180px; }
 .sri-filters .chip b { margin-left: 4px; font-variant-numeric: tabular-nums; }
+/* The latest snapshot's flags, after the classes: under two cartons (pull) and 0 or less (adjust). */
+.sri-fsep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 4px; }
+.sri-filters .chip.flag b { margin: 0 4px 0 0; }
+.sri-filters .chip.flag.pull b { color: var(--accent-ink); } .sri-filters .chip.flag.adjust b { color: var(--red); }
+.sri-filters .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sri-filters .chip.flag.on b { color: inherit; }
 .sri-cls { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
 .sri-cls.stuck { background: #DC2626; color: #fff; } .sri-cls.ghost { background: rgba(239,125,0,.16); color: #EF7D00; }
 .sri-cls.frozen { background: rgba(217,119,6,.16); color: #B45309; } .sri-cls.deep { background: rgba(22,163,74,.14); color: #15803D; }

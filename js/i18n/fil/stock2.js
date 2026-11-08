@@ -325,7 +325,6 @@ export default {
   "{n} could not be added.": "{n} ang hindi naidagdag.",
   "Classes": "Mga class",
   "Loading the snapshots…": "Nilo-load ang mga snapshot…",
-  "No snapshot yet. Paste this week's SOH report and save it; the classes need three snapshots to tell flat from moving.": "Wala pang snapshot. I-paste ang SOH report ngayong linggo at i-save; kailangan ng tatlong snapshot para malaman kung flat o gumagalaw.",
   "Keycode, location or name": "Keycode, location o pangalan",
   "Class": "Class",
   "Loc": "Loc",
@@ -574,4 +573,6 @@ export default {
   "The classes are worked out again without it.": "Kakalkulahin ulit ang mga class nang wala ito.",
   "The event log keeps a record of the delete.": "May record ng pagbura sa event log.",
   "{bay} on {date} leaves the board and History.": "Mawawala ang {bay} noong {date} sa board at sa History.",
+  "No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.": "Wala pang snapshot. I-save ang SIM report ngayong araw o i-paste dito ang SOH report; kailangan ng tatlong snapshot para malaman kung flat o gumagalaw.",
+  "Nothing flagged on the latest snapshot.": "Walang naka-flag sa pinakabagong snapshot.",
 };

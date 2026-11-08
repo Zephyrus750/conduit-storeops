@@ -27,6 +27,7 @@ import { CLAIM_TTL_MS } from '../../../shared/reducers/stockroom.js';
 import { STATUS, todayKey, ensureNames, nameHtml, nameOf, catalogueVerdict, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge, setProductActions, closeProduct, imgOf } from './common.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { openPasteBox } from '../pastebox.js';
+import { reportToIntel } from './intel.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
 
@@ -237,15 +238,16 @@ async function pushReport(ctx, r) {
 }
 // The whole SIM report, from the paste pop-up (js/views/pastebox.js): added
 // to today's (a later paste updates the bays it lists), sent to the store,
-// and its items at 0 or less go to Adjustments. Null when no location line
+// its items at 0 or less go to Adjustments and its SOH lines to today's
+// Stock intelligence snapshot (reportToIntel). Null when no location line
 // is found.
 export async function pasteReport(ctx, text) {
   const byLoc = parseReportByLocation(text), n = Object.keys(byLoc).length; if (!n) return null;
   await loadReport(ctx);
   const prev = st.report?.byLoc || {}, lines = parseReportLines(text), soh = Object.fromEntries(Object.entries(lines).map(([kc, r]) => [kc, r.soh]));
   await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh }, apn: { ...(st.report?.apn || {}), ...reportApns(text) } });
-  const sent = await reportToAdjust(ctx, byLoc, lines);
-  return { bays: n, codes: Object.values(byLoc).reduce((x, l) => x + l.length, 0), sent };
+  const sent = await reportToAdjust(ctx, byLoc, lines), intel = await reportToIntel(ctx, text);
+  return { bays: n, codes: Object.values(byLoc).reduce((x, l) => x + l.length, 0), sent, intel };
 }
 // One bay's inventory list from SIM (K2B's paste): lines or a glued blob,
 // detected live with names, duplicates removed, leftovers called out, and a
