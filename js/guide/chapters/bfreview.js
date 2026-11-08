@@ -166,8 +166,10 @@ const S5 = mut(S3, s => { s.menu = true; });
 const S6 = mut(S3, s => { s.view = 'focus'; s.f = { side: 'add', i: { add: 0, delete: 0 }, done: [] }; });
 const S7 = mut(S6, s => { s.f.done.push('42977636'); s.f.i.add = 1; });
 const S8 = mut(S7, s => { s.f.side = 'delete'; s.f.done.push('43350142'); });
-const S9 = mut(S8, s => { Object.assign(s.locs[7036], { st: 'corrected', rdy: '08:49', t: '08:49' }); });
-const S10 = mut(S9, s => { Object.assign(s.locs[7036], { st: 'submitted', done: '08:52' }); });
+// Ready opens the next location in Review (7031); 7036 opens again from Ready to Submit.
+const S9 = mut(S8, s => { Object.assign(s.locs[7036], { st: 'corrected', rdy: '08:49', t: '08:49' }); s.sel = '7031'; s.f = { side: 'delete', i: { add: 0, delete: 0 }, done: [] }; });
+const S9b = mut(S8, s => { Object.assign(s.locs[7036], { st: 'corrected', rdy: '08:49', t: '08:49' }); s.f.i = { add: 0, delete: 0 }; });
+const S10 = mut(S9b, s => { Object.assign(s.locs[7036], { st: 'submitted', done: '08:52' }); });
 const S11 = mut(S10, s => { s.sel = 'req:7037'; s.view = 'list'; });
 const S12 = mut(S11, s => { s.req.push('7039'); });
 const glow = (c, sel, on) => c.cls(sel, 'glow', on);
@@ -203,12 +205,12 @@ export const bfreview = {
       dev: '<b>focusTarget()</b> picks the side the keys work on.', ev: [],
       run: async c => { await c.tap('#v-br .br2-fc[data-side="delete"]'); c.html('#v-br', screen(S8)); } },
     { cap: tx('The PDT matches? Ready: {bay} moves to Ready at {acc}%.', { bay: '7036', acc: 71 }), read: S(tx('Ready records the accuracy in History and frees the location.'), tx('The phone that sent it sees it reviewed straight away.')),
-      dev: '<b>readyPayload()</b> writes the code only the report has as scanned: false, then <b>submission.ready</b> carries the report’s list.',
-      ev: [E('submission.update', 'stockroom', W('7036'), { codes: { 43350142: false }, incorrect: [] }), E('submission.ready', 'stockroom', W('7036'), { system: REP[7036] }), E('submission.claim', 'stockroom', W('7036'), { release: true })],
+      dev: '<b>readyPayload()</b> writes the code only the report has as scanned: false, then <b>submission.ready</b> carries the report’s list; <b>select()</b> opens and claims the next location in Review.',
+      ev: [E('submission.update', 'stockroom', W('7036'), { codes: { 43350142: false }, incorrect: [] }), E('submission.ready', 'stockroom', W('7036'), { system: REP[7036] }), E('submission.claim', 'stockroom', W('7036'), { release: true }), E('submission.claim', 'stockroom', W('7031'), {})],
       run: async c => { await c.tap('#v-br .br2-ready'); paint(c, S9); toast(c, tx('{bay} marked ready: history recorded', { bay: '7036' })); } },
-    { cap: tx('Finalised on the PDT? Submit: it’s done for today.'), read: S(tx('{bay} moves to Submitted today and reads only.', { bay: '7036' }), tx('Finalise all submits every Ready location at once, after asking; Unfinalise puts one back.')),
+    { cap: tx('Finalised on the PDT? Open it in Ready and Submit: it’s done for today.'), read: S(tx('{bay} moves to Submitted today and reads only.', { bay: '7036' }), tx('Finalise all submits every Ready location at once, after asking; Unfinalise puts one back.')),
       dev: '<b>submission.submit</b> is refused while a location is still in review; Finalise all sends one per Ready location.', ev: [E('submission.submit', 'stockroom', W('7036'), {})],
-      run: async c => { await c.tap('#v-br .br2-submit'); paint(c, S10); } },
+      run: async c => { await c.tap('#v-br .br2-rail.r .br2-slc[data-bay="7036"]'); c.html('#v-br', screen(S9b)); await c.wait(600); await c.tap('#v-br .br2-submit'); paint(c, S10); } },
     { cap: tx('A requested location waits for the floor, the report’s list beside it.'), read: S(tx('{bay} is on today’s requested list, so the phones offer it next.', { bay: '7037' }), tx('The first scan turns it into a review; Cancel request takes it off the list.')),
       dev: 'The requested list is <b>submission.request</b> on the day; <b>middle()</b> draws a requested location with the report’s codes.', ev: [],
       run: async c => { await c.tap('#v-br .br2-slc[data-bay="req:7037"]'); c.html('#v-br', screen(S11)); } },
@@ -229,7 +231,7 @@ const N3 = mut(N1, s => { Object.assign(s.locs[7037], { codes: ['43702215', '438
 bfreview.stories.push({
   id: 'near', title: tx('What if a code is one digit off the report?'), blurb: tx('The desk says the catalogue doesn’t know it and offers the code it probably is: one click swaps it.'),
   know: [tx('A code the catalogue doesn’t know says so in amber, on a red row.'), tx('When the catalogue knows a code one digit away, Did you mean offers it.'),
-    tx('A click uses it instead, after asking: in the scans when the phone scanned it, in the report’s list when the report has it.'), tx('The swap is two changes to the location, sent like any other; a submitted location can’t change.'),
+    tx('A click uses it instead, after asking: in the scans when the phone scanned it, in the report’s list when the report has it.'), tx('The swap is a correction, not a new scan, so the location doesn’t go back to SCANNING; a submitted location can’t change.'),
     tx('On the phone the camera holds a code like this as a possible misread, so most never reach the desk.')],
   html: () => desk(N0),
   steps: [
@@ -240,8 +242,8 @@ bfreview.stories.push({
       dev: '<b>useNear()</b> asks with the browser’s confirm before it changes anything.', ev: [],
       run: async c => { await c.tap('#v-br .br2-use'); over(c, ask(tx('Use {other} instead of {code} in the scans for {bay}?', { other: '43702208', code: '43702209', bay: '7037' }))); } },
     { cap: tx('OK: the scans swap, and {bay} matches the report.', { bay: '7037' }), read: S(tx('{code} goes in and {other} comes out.', { code: '43702208', other: '43702209' }), tx('Nothing to add, nothing to delete: {acc}%.', { acc: 100 })),
-      dev: 'Two <b>submission.update</b>s: the code in, then the misread out. The removal leaves a tombstone, so a late copy from the phone can’t bring it back.',
-      ev: [E('submission.update', 'stockroom', W('7037'), { codes: { 43702208: true } }), E('submission.update', 'stockroom', W('7037'), { remove: ['43702209'] })],
+      dev: 'One <b>submission.update</b> marked <b>swap</b>: the code in, the misread out. A swap is a correction, not a scan, so the phone’s Submit for review stands and a Ready location stays Ready. The removal leaves a tombstone, so a late copy from the phone can’t bring it back.',
+      ev: [E('submission.update', 'stockroom', W('7037'), { codes: { 43702208: true }, remove: ['43702209'], swap: true })],
       run: async c => { await c.tap('.pc2-omni .br2-ok'); unover(c); off(c); paint(c, N3); toast(c, tx('{code} swapped for {other}', { code: '43702209', other: '43702208' })); } },
   ],
 });
@@ -250,7 +252,8 @@ bfreview.stories.push({
 // 7031 has three scans and no Submit from the phone (bfscan's In progress).
 const C0 = mut(S12, s => { s.view = 'list'; });
 const C1 = mut(C0, s => { s.sel = '7031'; });
-const C3 = mut(C1, s => { Object.assign(s.locs[7031], { st: 'corrected', rdy: '08:53', t: '08:53' }); });
+// Nothing is left in Review, so Ready opens the first location in Ready.
+const C3 = mut(C1, s => { Object.assign(s.locs[7031], { st: 'corrected', rdy: '08:53', t: '08:53' }); s.sel = '7024'; });
 const C4 = mut(C3, s => { Object.assign(s.locs[7031], { st: 'pending', codes: [...s.locs[7031].codes, '43095529'], t: '08:55', late: 1 }); });
 bfreview.stories.push({
   id: 'scanning', title: tx('What if the crew is still scanning a location?'), blurb: tx('SCANNING says so, Ready asks first, and a scan that lands after Ready brings it back marked LATE.'),
@@ -265,7 +268,7 @@ bfreview.stories.push({
     { cap: tx('Ready asks first: the crew may still be scanning.'), read: S(tx('Cancel to wait for the phone.'), tx('OK marks it ready anyway, with what it has.')),
       dev: '<b>readyBay()</b> asks with the browser’s confirm when the location has scans but no Submit from the phone.', ev: [],
       run: async c => { await c.tap('#v-br .br2-ready'); over(c, ask(S(tx('{bay} has not been submitted for review from the phone yet, so it may still be scanning.', { bay: '7031' }), tx('Mark it ready anyway?')))); } },
-    { cap: tx('OK anyway: {bay} is Ready at {acc}%.', { bay: '7031', acc: 60 }), read: S(tx('The two codes it is missing go in as system only.'), tx('It moves to Ready like any other.')),
+    { cap: tx('OK anyway: {bay} is Ready at {acc}%.', { bay: '7031', acc: 60 }), read: S(tx('The two codes it is missing go in as system only.'), tx('Nothing is left to review, so the desk opens the first location in Ready.')),
       dev: '<b>readyPayload()</b> writes the two codes only the report has as scanned: false, then <b>submission.ready</b>.',
       ev: [E('submission.update', 'stockroom', W('7031'), { codes: { 42988105: false, 43095529: false }, incorrect: [] }), E('submission.ready', 'stockroom', W('7031'), { system: REP[7031] }), E('submission.claim', 'stockroom', W('7031'), { release: true })],
       run: async c => { await c.tap('.pc2-omni .br2-ok'); unover(c); off(c); paint(c, C3); toast(c, tx('{bay} marked ready: history recorded', { bay: '7031' })); } },

@@ -165,6 +165,9 @@ export const stockroomReducers = {
   // before the removal (a phone's queued scan landing late) cannot bring it
   // back; a scan made after it can. An update that only carries such stale
   // codes is refused so the phone hears the reviewer removed them.
+  // swap: true, the desk's "Did you mean": the codes it carries take the
+  // place of the ones it removes. That is a correction, not a scan: the
+  // phone's Send stands and a Ready bay stays Ready, as with any desk edit.
   'submission.update'(s, e) {
     const cur = s.backfill.subs[subKey(e)];
     const p = e.payload;
@@ -174,6 +177,7 @@ export const stockroomReducers = {
     if (incoming.length > SUB_CODES_MAX) return reject('invalid_event', `one update carries at most ${SUB_CODES_MAX} codes`);
     if (incoming.some(([code]) => !code || code.length > CODE_LEN)) return reject('invalid_event', `a code is 1 to ${CODE_LEN} characters`);
     for (const k of ['remove', 'incorrect']) if (p[k] !== undefined) { const no = badList(p[k], k, SUB_CODES_MAX, CODE_LEN); if (no) return reject('invalid_event', no); }
+    if (p.swap !== undefined && (p.swap !== true || !incoming.length || !p.remove?.length)) return reject('invalid_event', 'a swap puts codes in place of the ones it removes');
     if (cur && Object.keys(cur.codes).length + incoming.filter(([code]) => !cur.codes[code]).length > SUB_CODES_MAX) return reject('invalid_event', `a bay holds at most ${SUB_CODES_MAX} codes`);
     // A tie (event times are to the second) goes to the removal, unless the
     // device that removed the code is putting it back (the phone's Undo).
@@ -182,11 +186,11 @@ export const stockroomReducers = {
     if (stale.length && stale.length === incoming.length && !(Array.isArray(p.remove) && p.remove.length) && !Array.isArray(p.incorrect)) {
       return reject('removed_by_reviewer', `${stale.join(', ')} ${stale.length === 1 ? 'was' : 'were'} removed by the reviewer`);
     }
-    if (!cur && !incoming.length) return reject('not_found', 'submission is not open');   // "sent" or a desk edit never brings back a deleted bay
+    if (!cur && (!incoming.length || p.swap)) return reject('not_found', 'submission is not open');   // "sent" or a desk edit never brings back a deleted bay
     if (cur?.trimmed) return reject('record_trimmed', `${cur.bay} on ${cur.date} is older than two weeks and can't change`);
     const sub = cur || (s.backfill.subs[subKey(e)] = newSub(bay(e), e.entity.date));
     const dev = e.actor?.device;
-    const fresh = incoming.filter(([code, v]) => v && !stale.includes(code) && !sub.codes[code]?.scanned);
+    const fresh = p.swap ? [] : incoming.filter(([code, v]) => v && !stale.includes(code) && !sub.codes[code]?.scanned);
     if (fresh.length && sub.status !== 'pending') { backToReview(sub, e.at); sub.prevMetrics = null; sub.lateScans = (sub.lateScans || 0) + fresh.length; }
     if (fresh.length) sub.sentAt = null;
     if (e.payload.sent === true) sub.sentAt = e.at;

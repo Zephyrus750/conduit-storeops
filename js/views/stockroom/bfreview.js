@@ -401,9 +401,8 @@ async function useNear(ctx, m, code, other) {
   if (!bay || !other || s?.status === 'submitted') return;
   if (s?.codes[code]?.scanned) {
     if (!confirm(tx('Use {other} instead of {code} in the scans for {bay}?', { other, code, bay }))) return;
-    const where = { bay: s.bay, date: s.date };
-    if (!s.codes[other]?.scanned && !await send(ctx, 'submission.update', where, { codes: { [other]: true } })) return;
-    if (!await send(ctx, 'submission.update', where, { remove: [code] })) return;
+    // One update, marked a swap: a correction, not a scan, so the crew's Send stands.
+    if (!await send(ctx, 'submission.update', { bay: s.bay, date: s.date }, { codes: { [other]: true }, remove: [code], swap: true })) return;
   } else if ((st.report?.byLoc?.[bay] || []).includes(code)) {
     if (!confirm(tx('Use {other} instead of {code} in the report list for {bay}?', { other, code, bay }))) return;
     await saveReport(ctx, { ...st.report, byLoc: { ...st.report.byLoc, [bay]: [...new Set(st.report.byLoc[bay].map(c => c === code ? other : c))] }, unsent: undefined });
@@ -497,7 +496,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'request') { const inp = root.querySelector('[data-field="addloc"]'); await addLocation(ctx, inp.value, true); inp.value = ''; }
   else if (act === 'cancel-req') { await send(ctx, 'submission.request', { bay: a.dataset.bay, date }, { remove: true }); st.sel = null; }
   else if (act === 'print-sheet') { const s = cur(); if (s) printWorksheet(s, m.sys?.[s.bay] || null); }
-  else if (act === 'ready') { const s = cur(); if (s) await readyBay(ctx, s, m, false); }
+  else if (act === 'ready') { const s = cur(); if (s) { await readyBay(ctx, s, m, true); ctx.rerender(); } }
   else if (act === 'takeover') { const s = cur(); if (!s) return; try { await ctx.store.dispatch({ type: 'submission.claim', entity: { bay: s.bay, date }, payload: { takeover: true } }); st.claimed = key(s); toast(tx('{bay} is yours now', { bay: s.bay })); } catch (e) { toast(e.message, 'bad'); } }
   else if (act === 'submit') { const s = cur(); if (s) await send(ctx, 'submission.submit', { bay: s.bay, date }); }
   else if (act === 'reopen') { const s = cur(); if (s) await send(ctx, 'submission.reopen', { bay: s.bay, date }); }

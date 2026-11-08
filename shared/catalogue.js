@@ -86,7 +86,7 @@ export const CATALOGUE = {
   'cage.sweepEnd':       T('stockroom', S, ['sweep']),
   'cage.pair':           T('stockroom', S, ['apn'], { keycode: 'string' }),
   'submission.open':     T('stockroom', S, ['bay', 'date']),
-  'submission.update':   T('stockroom', S, ['bay', 'date']),                    // codes {code: scanned}, remove [], incorrect [], sent
+  'submission.update':   T('stockroom', S, ['bay', 'date']),                    // codes {code: scanned}, remove [], incorrect [], sent; swap (the desk's Did you mean)
   'submission.ready':    T('stockroom', S, ['bay', 'date']),                    // status → corrected
   'submission.submit':   T('stockroom', S, ['bay', 'date']),                    // status → submitted; payload.auto
   'submission.reopen':   T('stockroom', S, ['bay', 'date']),

@@ -90,6 +90,31 @@ test('the phone marks a bay sent; a new scan clears it', () => {
   assert.equal(s.backfill.subs[key].sentAt, null, 'still scanning');
 });
 
+test('the desk’s swap is a correction, not a scan: the Send stands and a Ready bay stays Ready', () => {
+  const s = initialState(), key = `7023:${DAY}`;
+  apply(s, ev('submission.update', A, { codes: { 43000001: true, 43000009: true } }));
+  apply(s, ev('submission.update', A, { sent: true }));
+  const sent = s.backfill.subs[key].sentAt;
+  assert.equal(apply(s, ev('submission.update', A, { codes: { 43000002: true }, remove: ['43000009'], swap: true }, 'DESK')), null);
+  let sub = s.backfill.subs[key];
+  assert.deepEqual(Object.keys(sub.codes).sort(), ['43000001', '43000002']);
+  assert.equal(sub.sentAt, sent, 'still sent for review');
+  assert.ok(sub.removed['43000009'], 'the misread leaves a tombstone');
+  apply(s, ev('submission.ready', A, { system: ['43000001', '43000003'] }));
+  apply(s, ev('submission.update', A, { codes: { 43000003: true }, remove: ['43000002'], swap: true }, 'DESK'));
+  sub = s.backfill.subs[key];
+  assert.deepEqual([sub.status, sub.lateScans ?? 0, sub.sentAt], ['corrected', 0, sent], 'not back in review, not LATE');
+  // A swap must remove what it replaces, and never opens a bay.
+  const before = JSON.stringify(s);
+  assert.equal(apply(s, ev('submission.update', A, { codes: { 43000004: true }, swap: true })).code, 'invalid_event');
+  assert.equal(apply(s, ev('submission.update', A, { codes: { 43000004: true }, remove: ['43000003'], swap: 'yes' })).code, 'invalid_event');
+  assert.equal(apply(s, ev('submission.update', B, { codes: { 43000004: true }, remove: ['43000005'], swap: true })).code, 'not_found');
+  assert.equal(JSON.stringify(s), before);
+  // A phone's own new scan still clears the Send.
+  apply(s, ev('submission.update', A, { codes: { 43000006: true } }, 'P1'));
+  assert.equal(s.backfill.subs[key].sentAt, null);
+});
+
 test('a trimmed bay takes no more scans', () => {
   const s = initialState(), old = { bay: '7023', date: '2026-09-01' };
   apply(s, ev('submission.update', old, { codes: { 43000001: true } }));
