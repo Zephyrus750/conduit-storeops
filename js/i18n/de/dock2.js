@@ -375,7 +375,6 @@ export default {
   "{n} manifest": "{n} Lieferschein",
   "{n} manifests": "{n} Lieferscheine",
   "Publish a manifest": "Lieferschein veröffentlichen",
-  "<b>{cartons}</b> ctn · <b>{consols}</b> consols": "<b>{cartons}</b> Ktn · <b>{consols}</b> Sammelsendungen",
   "Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.": "Noch nichts veröffentlicht. Den heutigen DC Manifest Report (die .xls aus der E-Mail) veröffentlichen, dann kann die Warenannahme Paletten damit abgleichen.",
   "This report has left the library; only its history row remains.": "Dieser Bericht ist nicht mehr in der Bibliothek; nur sein Verlaufseintrag bleibt.",
   "{man} attached to Truck {no}": "{man} LKW {no} zugeordnet",

@@ -1,4 +1,4 @@
-// The map for the redrawn Location refresh chapter (DRAFT): a real part of
+// The map for the Location refresh chapter: a real part of
 // Busselton 1241's published map (maps/1241.svg), the Kitchen runs A8 to A23
 // with the Women's Clothing runs behind them, drawn as the phone's Refresh
 // view draws them (styles/app.css .map.real.rf, js/views/refresh.js marksFor

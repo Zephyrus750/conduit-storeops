@@ -48,8 +48,8 @@ h1 { margin: 0; font: 800 clamp(24px, 3vw, 34px)/1.1 var(--body); letter-spacing
 <div class="wrap">
   <header class="intro">
     <span class="eyebrow">Conduit · Visual Guide · preview</span>
-    <h1>The redrawn chapters</h1>
-    <p>These chapters are redrawn to match the app as it is today, with What ifs you can play. Watch them, try them yourself or read them as a handbook. Help keeps its current chapters until these are approved.</p>
+    <h1>Chapters being drawn</h1>
+    <p>These chapters are being drawn to match the app as it is today, with What ifs you can play. Watch them, try them yourself or read them as a handbook. Help keeps its current chapters until these are approved.</p>
     <div class="new" id="new" role="group" aria-label="Redrawn chapters"></div>
   </header>
   <div id="guide"></div>
@@ -69,7 +69,7 @@ try {
   list.innerHTML = NEW.map(s => `<button type="button" data-id="${s.id}"><small>${area(s.grp)} · ${s.device === 'pc' ? 'PC' : 'Phone'}</small><b>${s.title}</b><span>${s.steps.length} steps${s.stories?.length ? ` · ${s.stories.length} What ifs` : ''}</span></button>`).join('');
   list.addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) { open(b.dataset.id); host.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
   const first = location.hash.slice(1);
-  open(NEW.some(s => s.id === first) ? first : NEW[0]?.id);
+  open(first || NEW[0]?.id || null);
 } catch (e) {
   host.innerHTML = `<p class="err">The guide did not load: ${String(e && e.message || e).replace(/</g, '&lt;')}</p>`;
 }

@@ -1,8 +1,8 @@
-// The store PC the redrawn PC chapters are drawn on (DRAFT), at the real
+// The store PC the PC chapters are drawn on, at the real
 // 1920×1080 (laid out at the shell's 95% display size, so the sizes are the
 // app's own CSS sizes): the rail as js/registry.js lays it out, the top bar,
 // the footer, a view's header and tabs, buttons and chips. Its styles are the
-// pc2- rules in draft/css/around.css. The day is the guide's: Sunday 25
+// pc2- rules in styles/guide.css. The day is the guide's: Sunday 25
 // October 2026 at Busselton 1241.
 import { tx, txn, locale } from '../i18n.js';
 import { fmtLong, fmtDate, DEPT_COLOUR } from '../ui.js';

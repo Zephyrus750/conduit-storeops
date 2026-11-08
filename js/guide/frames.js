@@ -1,4 +1,4 @@
-// Drawing pieces the redrawn chapters share (DRAFT): a phone at the app's own
+// Drawing pieces the chapters share: a phone at the app's own
 // size (390 × 844, the shell's phone layout), its top bar and an area's tabs,
 // the bottom sheet, the toast and the camera with real Code 128 labels.
 // Words go through tx(), using the app's own keys wherever the screen shows

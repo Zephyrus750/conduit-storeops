@@ -1,4 +1,4 @@
-// Redrawn chapter (DRAFT): Getting around on a PC, the managers' desk as the
+// Chapter: Getting around on a PC, the managers' desk as the
 // shell draws it today on a store PC at 1920×1080 (js/shell.js, js/registry.js,
 // js/views/dashboard.js, js/search.js, js/views/backdock/screenlist.js,
 // js/views/help.js): the Dashboard's cards, the rail with its tips and counts,
@@ -15,7 +15,7 @@ import { fmtLong, fmtDate, DEPT_COLOUR } from '../../ui.js';
 import { VERSION } from '../../version.js';
 import { ai } from '../frames.js';
 import { gi } from '../icons.js';
-// The PC frame and its pieces: draft/pc.js, shared by the PC chapters.
+// The PC frame and its pieces: js/guide/pc.js, shared by the PC chapters.
 import { DAY, dt, dShort, footDate, at, TOP, SECS, FOOT, BADGES, TIP, MARK, rail, sync, pc, view, vh, sub, gtabs, btn, chip, dep } from '../pc.js';
 
 const S = (...p) => p.join(' ');
@@ -248,9 +248,9 @@ around.stories.push({
     tx('A tool the owner switched off for the store is not on the rail and not in search.'), tx('Layouts shows SOON: it opens a page about what is coming.')],
   html: () => pc(VIEWS() + view('v-pm', printmap(), false) + view('v-team', team(), false)),
   steps: [
-    { cap: tx('Ctrl K, then type the screen’s name: print.'), read: S(tx('Print map has no row: it opens from the Store map.'), tx('Search finds it by name anyway, under Tools.')),
+    { cap: tx('Ctrl K, then type the screen’s name.'), read: S(tx('Print map has no row: it opens from the Store map.'), tx('Search finds it by name anyway, under Tools.')),
       dev: 'Tools come from the registry: each row’s tabs and the screens it stands for (<b>also</b> in GROUPS).', ev: [],
-      run: async c => { await c.tap('.pc2-top .pc2-search'); omni(c, palette({ q: ' ', kind: tx('Name') })); c.text('.pc2-omni .oq', ''); await c.type('.pc2-omni .oq', 'print'); omni(c, palTool('print', 'print', tx('Print map').slice(0, 5), tx('Print map').slice(5), 'printmap')); } },
+      run: async c => { await c.tap('.pc2-top .pc2-search'); omni(c, palette({ q: ' ', kind: tx('Name') })); c.text('.pc2-omni .oq', ''); const name = tx('Print map'), q = name.split(' ')[0]; await c.type('.pc2-omni .oq', q.toLowerCase()); omni(c, palTool(q.toLowerCase(), 'print', name.slice(0, q.length), name.slice(q.length), 'printmap')); } },
     { cap: tx('Open it: the Store map row lights up, since Print map belongs to it.'), read: S(tx('Print map composes a printable map: floors, an area, layers and a legend.'), tx('The rail shows which row it belongs to.')),
       dev: 'GROUP_OF in js/registry.js names each screen’s row; <b>markRail()</b> lights it.', ev: [],
       run: async c => { await c.tap('.pc2-omni [data-o="printmap"]'); go(c, 'map', 'v-pm'); } },

@@ -94,7 +94,7 @@ export const GROUP_OF = Object.fromEntries(Object.entries(GROUPS).flatMap(([g, x
 // A screen with none opens the guide at the first chapter for the reader.
 export const GUIDE_OF = {
   dashboard: 'around', help: 'around', settings: 'settings', map: 'find', refresh: 'refresh', labelint: 'labels', maintenance: 'fault', equipment: 'equip',
-  bfreview: ['bfscan', 'bfreview'], livepull: 'pull', cages: 'cages', manifests: 'manifests', receiving: 'receive', decant: 'receive',
+  bfreview: ['bfscan', 'bfreview'], livepull: 'pull', cages: 'cages', manifests: 'manifests', receiving: ['receivephone', 'receive'], decant: ['decantphone', 'receive'],
 };
 export const guideFor = (view, mobile) => { const g = GUIDE_OF[view]; return Array.isArray(g) ? g[mobile ? 0 : 1] : g || null; };
 export const STRIP = {

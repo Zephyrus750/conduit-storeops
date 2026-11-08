@@ -3,8 +3,8 @@
 Tools for reviewing and improving the Visual Guide (Help). Nothing in the app
 loads this folder, and Help is unchanged by anything here.
 
-The guide keeps drawing its screens by hand in `js/guide/scenes.js`. These
-tools support that work:
+The guide keeps drawing its screens by hand (`js/guide/`). These tools
+support that work:
 
 - **The audit:** every guide chapter next to the real screen for the same
   task, so a drawing can be checked against the app.
@@ -17,46 +17,43 @@ tools support that work:
 - **The review page:** the audit and the sample in one page, published as a
   private artifact.
 
-## The redrawn chapters (drafts)
+## Drawing a chapter (drafts)
 
-The chapters being redrawn, and the player changes they need, live in
-`draft/` until they're approved. Help keeps its current chapters until then.
+Help's chapters live in `js/guide/`: `scenes.js` lists them, and the ones
+drawn at the app's real sizes are in `js/guide/chapters/`, using the phone
+in `js/guide/frames.js` and the store PC in `js/guide/pc.js`. A chapter
+being drawn lives in `draft/` until it's approved, and Help keeps its
+current chapter until then.
 
-- **`draft/player.js`:** Help's player (`js/guide/player.js`) with four
-  changes:
-  - What ifs that play (a chapter's `stories`);
-  - a phone chapter's caption and controls beside the phone on a wide screen;
-  - a device never taller than the window leaves room for;
-  - on a narrow screen, the stage before the chapter list.
-- **`draft/frames.js`, `draft/guide.css`:** the phone at the app's real size
-  (390×844) and what goes on it: top bar, tabs, bottom sheet, toast, and a
-  camera showing real Code 128 labels.
-- **`draft/chapters/`:** one file per redrawn chapter. `index.js` lists them.
-  A chapter that keeps Help's id takes that chapter's place.
+- **`draft/chapters/`:** one file per chapter being drawn. `index.js` lists
+  them. A chapter that keeps Help's id takes that chapter's place; one with a
+  new id is added.
 - **`draft/css/`:** each chapter's own styles.
-- **`draft/scenes.js`:** Help's chapters with the redrawn ones in place.
+- **`draft/scenes.js`:** Help's chapters with the drafts in place.
 
-To see them, build the preview and serve it. It runs the real player and
-chapter code on a page of its own:
+To see them, build the preview and serve it. It runs Help's player with the
+drafts laid over Help's chapters, on a page of its own:
 
 | Command | Does |
 |---|---|
-| `node scripts/guide/preview/build.mjs` | Builds `out/preview/`. `GUIDE_ONLY=refresh` builds it with one chapter |
+| `node scripts/guide/preview/build.mjs` | Builds `out/preview/`. `GUIDE_ONLY=labels` builds it with one draft; `GUIDE_LANG=1` adds the six languages, for a check in each (a device's language is `lang` in `localStorage.suite_prefs`) |
 | `node scripts/guide/preview/check.mjs <id> [play]` | Opens it at 1920×1080, 1440×900, 960×1040 and 420×860: errors, side scroll, a screenshot each, and with `play` plays the chapter to the end |
-| `node scripts/guide/preview/try.mjs <id> [n]` | Try it, tapping each ring, for the chapter or What if n |
+| `node scripts/guide/preview/try.mjs <id> [n]` | Try it, tapping each ring, for the chapter or What if n (`PC=1` for a PC chapter) |
 | `node scripts/guide/preview/book.mjs <id>` | The chapter and each What if as Handbook frames, one image each |
 
 The preview is published as a private artifact, using `out/preview/files.json`
 for its files.
 
-When the chapters are approved, one PR moves them into Help:
+When a draft is approved, it moves into Help in one PR:
 
-- `draft/player.js` replaces `js/guide/player.js`;
-- the chapters go into `js/guide/scenes.js`, with their translations;
-- the CSS goes into `styles/guide.css`.
+- the chapter file goes into `js/guide/chapters/` and `js/guide/scenes.js`
+  imports it in the old chapter's place;
+- its CSS goes into `styles/guide.css`;
+- its new text gets its six translations in `js/i18n/<lang>/vguide2.js`, and
+  the old chapter's text that nothing uses any more comes out.
 
-The chapters already use the app's own text keys wherever the screen shows
-the same words.
+A chapter uses the app's own text keys wherever the screen shows the same
+words, so those translations carry over.
 
 ## Needs
 

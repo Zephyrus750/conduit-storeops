@@ -1,4 +1,4 @@
-// Redrawn chapter (DRAFT): Backfill review at the desk, on a store PC at
+// Chapter: Backfill review at the desk, on a store PC at
 // 1920×1080, as js/views/stockroom/bfreview.js draws it today (desktop():
 // the Review and Ready panels, the location's header with its barcode, the
 // counts strip, Re-check and Ready, the views and the filter, Focus with Add
@@ -10,7 +10,7 @@
 // (7036 is the location the crew scanned in that chapter, 08:41), 7031 is
 // still being scanned, 7037 and 7038 are requested, 7024 is reviewed and 7020
 // finalised. Today's report was pasted at 08:42.
-// Every class here starts br2- (css/bfreview.css); the frame is draft/pc.js.
+// Every class here starts br2- (styles/guide.css); the frame is js/guide/pc.js.
 import { tx, txn } from '../../i18n.js';
 import { DEPT_COLOUR, depInk } from '../../ui.js';
 import { ai } from '../frames.js';

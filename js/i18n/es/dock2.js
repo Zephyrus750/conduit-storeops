@@ -375,7 +375,6 @@ export default {
   "{n} manifest": "{n} manifiesto",
   "{n} manifests": "{n} manifiestos",
   "Publish a manifest": "Publicar un manifiesto",
-  "<b>{cartons}</b> ctn · <b>{consols}</b> consols": "<b>{cartons}</b> cj · <b>{consols}</b> consolidados",
   "Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.": "Aún no hay nada publicado. Publica el DC Manifest Report de hoy (el .xls del correo) y el muelle podrá verificar los palés con él.",
   "This report has left the library; only its history row remains.": "Este informe ya no está en la biblioteca; solo queda su fila del historial.",
   "{man} attached to Truck {no}": "{man} adjuntado al camión {no}",

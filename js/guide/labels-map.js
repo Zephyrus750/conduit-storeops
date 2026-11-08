@@ -1,5 +1,5 @@
-// The map for the redrawn Price checks chapter (DRAFT): the same real part of
-// Busselton 1241's map as Location refresh (scripts/guide/draft/refresh-map.js,
+// The map for the Price checks chapter: the same real part of
+// Busselton 1241's map as Location refresh (js/guide/refresh-map.js,
 // the Kitchen runs A8 to A23), drawn as the phone's Labels view draws it
 // (styles/app.css .map.real.li, js/views/labelint.js marksFor): every shelf
 // grey, the shelves of a micro-department checked this cycle green, of one

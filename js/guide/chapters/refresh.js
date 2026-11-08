@@ -1,9 +1,9 @@
-// Redrawn chapter (DRAFT): Location refresh on the phone, the Floor › Refresh
+// Chapter: Location refresh on the phone, the Floor › Refresh
 // tab as the app has it today (js/views/refresh.js mobile(), the strip from
 // js/shell.js mountStrip, the scan sheet and the week's panel): tap a shelf,
 // take a mark off, scan shelf labels with the camera, type one, read the week.
 // Three What ifs play on the same phone.
-// The map is a real part of Busselton 1241's (scripts/guide/draft/refresh-map.js):
+// The map is a real part of Busselton 1241's (js/guide/refresh-map.js):
 // the Kitchen runs A8 to A23. The week: Sunday 25 October 2026, week 2026-W43
 // (P5W1), focus H1 Kitchen and K2 Toys; nine Kitchen shelves and fourteen
 // Toys shelves are done already, 23 of 100.

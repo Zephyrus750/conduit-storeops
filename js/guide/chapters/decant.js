@@ -1,4 +1,4 @@
-// Redrawn chapter (DRAFT): Run the decant on the phone, the Back dock's Decant
+// Chapter: Run the decant on the phone, the Back dock's Decant
 // tab as the app has it today (js/views/backdock/receiving.js mobile(ctx,
 // 'run'): the truck bar, Take 5 from js/views/backdock/plan.js, the dock grid,
 // the crew strip, a pallet's card, the strip with HALT and its panel, the
@@ -8,7 +8,7 @@
 // Busselton 1241, Truck 1 with manifest 7040301, the crew D4, D7 and D9, and
 // the eight pallets Receive landed (72 cartons, A6 with a label off the
 // manifest), the layout confirmed. Times are the store's: Take 5 at 06:15.
-// Every class here starts dc2- (css/decant.css).
+// Every class here starts dc2- (styles/guide.css).
 import { tx, txn } from '../../i18n.js';
 import { ai, phone2, tab, sheet, unsheet, toast2 } from '../frames.js';
 

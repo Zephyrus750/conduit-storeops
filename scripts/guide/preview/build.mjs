@@ -1,7 +1,6 @@
-// The private preview of the redrawn chapters: the guide's real player and
-// chapter code, with the drafts in scripts/guide/draft/ in place of
-// js/guide/player.js and js/guide/scenes.js, on a page of its own. Help is
-// not touched. The page is published as a private artifact (files.json lists
+// The private preview of chapters being drawn: Help's player and chapters
+// (js/guide/), with the drafts in scripts/guide/draft/ laid over them, on a
+// page of its own. Help is not touched. The page is published as a private artifact (files.json lists
 // what it needs) and can be served locally:
 //   node scripts/guide/preview/build.mjs   → out/preview/
 //   python3 -m http.server 8618 --directory scripts/guide/out/preview
@@ -13,11 +12,12 @@ const OUT = dir('preview', { fresh: true }), DRAFT = path.join(ROOT, 'scripts/gu
 const put = (to, from) => { fs.mkdirSync(path.dirname(OUT + to), { recursive: true }); fs.copyFileSync(from, OUT + to); files[to] = OUT + to; };
 const files = {};
 
-// The drafts, at the paths the player's imports expect: draft/player.js is
-// js/guide/player.js, draft/chapters/x.js is js/guide/chapters/x.js. Help's own
-// chapters ride along as js/guide/scenes-old.js.
+// The drafts, at the paths the player's imports expect: draft/chapters/x.js is
+// js/guide/chapters/x.js, draft/scenes.js is js/guide/scenes.js. Help's own
+// chapters ride along as js/guide/scenes-old.js, and Help's player plays them.
 put('js/guide/scenes-old.js', path.join(ROOT, 'js/guide/scenes.js'));
 for (const f of fs.readdirSync(DRAFT, { recursive: true })) if (f.endsWith('.js')) put(`js/guide/${f}`, path.join(DRAFT, f));
+if (!files['js/guide/player.js']) put('js/guide/player.js', path.join(ROOT, 'js/guide/player.js'));
 // GUIDE_ONLY=refresh (or receive,refresh) builds the preview with only those redrawn chapters.
 if (process.env.GUIDE_ONLY) {
   const names = process.env.GUIDE_ONLY.split(',').map(n => n.trim()).filter(Boolean);
@@ -33,13 +33,19 @@ while (queue.length) {
     if (!(to in files)) put(to, path.join(ROOT, to));
   }
 }
-// The stylesheet: Help's, then the drafts' additions. The app's Inter, and its icons.
-// draft/guide.css, then each chapter's own (draft/css/*.css).
+// GUIDE_LANG=1 adds the six languages' dictionaries (js/i18n.js loads the
+// device's own when it starts), to check the drawn screens in each language.
+if (process.env.GUIDE_LANG) for (const l of ['de', 'fr', 'fil', 'vi', 'es', 'it']) {
+  put(`js/i18n/${l}.js`, path.join(ROOT, `js/i18n/${l}.js`));
+  for (const f of fs.readdirSync(path.join(ROOT, 'js/i18n', l))) put(`js/i18n/${l}/${f}`, path.join(ROOT, 'js/i18n', l, f));
+}
+// The stylesheet: Help's, then the drafts' additions (draft/guide.css, if
+// there is one, then each chapter's own draft/css/*.css). The app's Inter, and its icons.
 const cssDir = path.join(DRAFT, 'css');
 const extra = [path.join(DRAFT, 'guide.css'), ...(fs.existsSync(cssDir) ? fs.readdirSync(cssDir).filter(f => f.endsWith('.css')).sort().map(f => path.join(cssDir, f)) : [])]
   .filter(f => fs.existsSync(f)).map(f => `/* ${path.relative(DRAFT, f)} */\n` + fs.readFileSync(f, 'utf8')).join('\n');
 fs.mkdirSync(OUT + 'styles', { recursive: true });
-fs.writeFileSync(OUT + 'styles/guide.css', fs.readFileSync(path.join(ROOT, 'styles/guide.css'), 'utf8') + '\n/* ── the redrawn chapters (scripts/guide/draft/guide.css) ── */\n' + extra);
+fs.writeFileSync(OUT + 'styles/guide.css', fs.readFileSync(path.join(ROOT, 'styles/guide.css'), 'utf8') + '\n/* ── the drafts (scripts/guide/draft/) ── */\n' + extra);
 files['styles/guide.css'] = OUT + 'styles/guide.css';
 const faces = fs.readFileSync(path.join(ROOT, 'styles/app.css'), 'utf8').match(/@font-face\s*{[^}]*}/g).filter(r => r.includes('inter-var'));
 fs.writeFileSync(OUT + 'styles/fonts.css', faces.join('\n') + '\n'); files['styles/fonts.css'] = OUT + 'styles/fonts.css';

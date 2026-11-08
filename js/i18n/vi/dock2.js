@@ -375,7 +375,6 @@ export default {
   "{n} manifest": "{n} bảng kê",
   "{n} manifests": "{n} bảng kê",
   "Publish a manifest": "Đăng bảng kê hàng",
-  "<b>{cartons}</b> ctn · <b>{consols}</b> consols": "<b>{cartons}</b> thùng · <b>{consols}</b> lô hàng gộp",
   "Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.": "Chưa có gì được đăng. Hãy đăng DC Manifest Report hôm nay (tệp .xls trong email) để khu nhận hàng đối chiếu pallet.",
   "This report has left the library; only its history row remains.": "Báo cáo này không còn trong thư viện; chỉ còn dòng lịch sử.",
   "{man} attached to Truck {no}": "Đã gắn {man} vào xe tải {no}",

@@ -1,4 +1,4 @@
-// Redrawn chapter (DRAFT): Manifests by day and truck, on the store PC at
+// Chapter: Manifests by day and truck, on the store PC at
 // 1920×1080, Back dock › Plan › Manifests as the app draws it today
 // (js/views/backdock/manifests.js: the list by week, day and truck and the
 // explorer; mpreview.js: the upload preview; mbatch.js: several reports at

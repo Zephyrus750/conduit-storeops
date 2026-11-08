@@ -1,11 +1,11 @@
-// Redrawn chapter (DRAFT): Price checks on the phone, the Floor › Labels tab
+// Chapter: Price checks on the phone, the Floor › Labels tab
 // as the app has it today (js/views/labelint.js mobile(), mobileBar(),
 // mobileInner() and liStrip(), the strip from js/shell.js mountStrip): the
 // cycle on the map, the departments and the wrong labels under the arrow, a
 // shelf opening its micro-department, a wrong price logged, Checked, and
 // another phone's check arriving. Three What ifs play on the same phone.
 // The map is the real part of Busselton 1241's used by Location refresh
-// (scripts/guide/draft/labels-map.js): the Kitchen runs A8 to A23, each shelf
+// (js/guide/labels-map.js): the Kitchen runs A8 to A23, each shelf
 // on its own micro-department. The cycle: October 2026 (monthly, the store's
 // setting), Sunday 25 October with 6 days left, 46 of the 77 numbered
 // micro-departments checked, one wrong label found so far (K2 047).

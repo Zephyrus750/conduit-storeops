@@ -1,4 +1,4 @@
-// The store map in the Manifests chapter's "On the map" card (DRAFT):
+// The store map in the Manifests chapter's "On the map" card:
 // Busselton 1241's published map (maps/1241.svg) as the card draws it with
 // nothing painted, the ground floor's shelves in their departments' colours
 // with its landmarks, and the stockroom shelves above it. Shelves are data:

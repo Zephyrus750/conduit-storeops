@@ -1,6 +1,6 @@
-// Redrawn chapter (DRAFT): Receive a truck on the phone, the Back dock tabs as
-// the app has them today (js/views/backdock/receiving.js, bdhome.js,
-// decant.js): land a pallet with the camera, the other phones land theirs
+// Chapter: Receive a truck on the phone, the Back dock tabs as
+// the app has them today (js/views/backdock/receiving.js, bdhome.js):
+// land a pallet with the camera, the other phones land theirs
 // live, Finish receiving, Take 5. Three What ifs play on the same phone.
 // The day: Busselton 1241, Truck 1 with manifest 7040301 and its 12 consols
 // (the demo day scripts/guide/seed.mjs records), team D4, D7, D9.

@@ -1,11 +1,11 @@
-// Redrawn chapter (DRAFT): Backfill, scan a location, on the phone, as the
+// Chapter: Backfill, scan a location, on the phone, as the
 // app has it today (js/views/stockroom/bfreview.js mobile: the board, the
 // location bar with its three steps, the list, the strip, its panel and the
 // Submit sheet; js/livescan.js: the live PDT reader with its PDT list /
 // Barcode switch). Three What ifs play on the same phone.
 // The day: Busselton 1241, location 7036 in K2 Toys with today's report
 // pasted at the desk; 7037 and 7038 are requested next.
-// Every class here starts bf2- (css/bfscan.css): the guide's stylesheet
+// Every class here starts bf2- (styles/guide.css): the guide's stylesheet
 // already uses short names such as .ph, .prog, .seg and .rp.
 import { tx, txn } from '../../i18n.js';
 import { fmtTime } from '../../ui.js';
@@ -230,7 +230,7 @@ bfscan.stories.push({
       dev: '<b>finaliseReminder()</b> in bfreview.js: once a session, from <b>myLocations()</b>.', ev: [], run: async c => { await c.wait(900); } },
     { cap: tx('Finalise it on the PDT, then tap Submit.'), read: S(tx('The phone asks to be sure: it records that the PDT is done.'), tx('Cancel if the PDT isn’t finalised yet.')),
       dev: 'A plain confirm before <b>submission.submit</b>.', ev: [],
-      run: async c => { await c.tap('#bf2-b .bf2-rem .bf2-fin'); c.html('.p2-sheet', `<div class="bf2-cf"><p>${tx('Mark "{bay}" as submitted on the PDT?', { bay: '7036' })}</p><div><span>${tx('Cancel')}</span><span class="bf2-okc">${tx('OK')}</span></div></div>`); c.cls('.p2-sheet', 'bf2-cfs', true); c.show('.p2-dim'); c.show('.p2-sheet'); } },
+      run: async c => { await c.tap('#bf2-b .bf2-rem .bf2-fin'); c.html('.p2-sheet', `<div class="bf2-cf"><p>${tx('Mark "{bay}" as submitted on the PDT?', { bay: '7036' })}</p><div><span>${tx('Cancel')}</span><span class="bf2-okc">${tx('dialog button::OK')}</span></div></div>`); c.cls('.p2-sheet', 'bf2-cfs', true); c.show('.p2-dim'); c.show('.p2-sheet'); } },
     { cap: tx('OK: it’s finalised, and the board counts it.'), read: S(tx('7036 moves to Finalised today.'), tx('Mine has nothing left to finalise.')),
       dev: '<b>submission.submit</b> moves the location to submitted; the desk’s Submitted today counts it too.', ev: [E('submission.submit', 'stockroom', W('7036'), {})],
       run: async c => { await c.tap('.p2-sheet .bf2-okc'); off(c); c.hide('.p2-dim'); c.hide('.p2-sheet'); c.html('#bf2-b', board({ ...BOARD_C, fin: [['7024', 75]], done: 2 }, 0)); say(c, tx('{bay} completed', { bay: '7036' })); } },

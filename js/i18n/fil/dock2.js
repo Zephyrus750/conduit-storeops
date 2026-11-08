@@ -375,7 +375,6 @@ export default {
   "{n} manifest": "{n} manifest",
   "{n} manifests": "{n} manifest",
   "Publish a manifest": "Mag-publish ng manifest",
-  "<b>{cartons}</b> ctn · <b>{consols}</b> consols": "<b>{cartons}</b> ctn · <b>{consols}</b> consol",
   "Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.": "Wala pang na-publish. I-publish ang DC Manifest Report ngayong araw (ang .xls mula sa email) para ma-check ng dock ang mga pallet laban dito.",
   "This report has left the library; only its history row remains.": "Wala na sa library ang report na ito; ang history row na lang ang natira.",
   "{man} attached to Truck {no}": "Na-attach ang {man} sa Truck {no}",
