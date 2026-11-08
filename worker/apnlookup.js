@@ -4,6 +4,9 @@
 // it asks a person to type the keycode printed on the ticket. Two sources,
 // first hit wins:
 //
+//   0. The barcodes Kmart's product pages named (the catalogue object keeps
+//      each one as the pages are read for pictures and prices): an instant,
+//      sure match, no search needed.
 //   1. Kmart's own site search, which finds a product by its barcode. The
 //      site refuses a plain server fetch, so the search page is rendered by
 //      Browser Rendering (worker/details.js) and the keycodes are read from
@@ -23,7 +26,7 @@
 
 import { renderPage, detailsConfigured, isAccessDenied } from './details.js';
 import { slugToName, productUrl } from './sitemap.js';
-import { catalogueStub } from './catalogue.js';
+import { catalogueStub, keptBarcodes } from './catalogue.js';
 
 // {code}: the barcode. A setting, so a change to Kmart's search address needs no release.
 export const SEARCH_URL = 'https://www.kmart.com.au/search/?searchTerm={code}';
@@ -91,7 +94,16 @@ async function byTitle(env, book) {
 }
 
 const cacheKey = gtin => new Request(`https://catalogue.internal/barcode/${gtin}`);
+// A barcode a product page named: { kc, name, url } from the catalogue, or null.
+export async function keptMatch(env, gtin) {
+  const kc = (await keptBarcodes(env, [gtin]))[gtin]; if (!kc) return null;
+  const stub = catalogueStub(env);
+  try { const it = stub ? (await (await stub.fetch(`https://catalogue/lookup?kc=${kc}`)).json()).items?.[kc] : null; return { kc, name: it?.name || '', url: it?.url || '' }; }
+  catch { return { kc, name: '', url: '' }; }
+}
 export async function findByBarcode(env, gtin, { fetchImpl = fetch, cache = globalThis.caches?.default } = {}) {
+  const kept = await keptMatch(env, gtin).catch(() => null);
+  if (kept) return { gtin, source: 'kmart', sure: true, candidates: [kept], why: 'kept from the product page' };
   if (cache) { try { const r = await cache.match(cacheKey(gtin)); if (r) return { ...(await r.json()), cached: true }; } catch { /* a cache miss */ } }
   let out = { gtin, source: null, sure: false, candidates: [], why: '' }, definite = true;
   if (detailsConfigured(env)) {

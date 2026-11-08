@@ -60,6 +60,19 @@ test('live pull: a request names stockroom bays and how many: a number, cartons 
   assert.deepEqual(sessionCounts(s.pulls.sessions[S]), { asked: 1, todo: 1, pulled: 0, short: 0, gone: 0 }, 'a request taken back is not counted');
 });
 
+test('live pull: an item the morning report has no bay for is asked for where it was seen lately, as a suggestion', () => {
+  const s = initialState(); start(s);
+  const seen = [{ bay: '7036', date: '2026-10-21', via: 'backfill' }, { bay: '7041', date: '2026-10-19', via: 'soh' }];
+  assert.equal(ask(s, 'L1', { seen: [] }).code, 'invalid_event', 'an empty list says nothing');
+  assert.equal(ask(s, 'L1', { seen: [{ bay: '7099', date: '2026-10-21', via: 'backfill' }] }).code, 'invalid_event', 'a sighting names a bay it is asked for in');
+  assert.equal(ask(s, 'L1', { seen: [{ bay: '7036', date: '21 Oct', via: 'backfill' }] }).code, 'invalid_event', 'a day');
+  assert.equal(ask(s, 'L1', { seen: [{ bay: '7036', date: '2026-10-21', via: 'guess' }] }).code, 'invalid_event', 'backfill, report or soh');
+  assert.equal(ask(s, 'L1', { seen }), null);
+  assert.deepEqual(s.pulls.sessions[S].lines.L1.seen, seen);
+  assert.equal(ask(s, 'L2', { kc: '43652214' }), null);
+  assert.equal('seen' in s.pulls.sessions[S].lines.L2, false, 'a request from the report carries none');
+});
+
 test('live pull: the first mark wins; short takes from more than one bay; undo until the cage goes', () => {
   const s = initialState(); start(s);
   ask(s, 'L1'); ask(s, 'L2', { kc: '43615502', bays: ['7022', '7028'], qty: 6 }); ask(s, 'L3', { kc: '43620019', bays: ['7014'], qty: 2 });

@@ -1,0 +1,541 @@
+<title>Visual Guide Audit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one reading column (about 1040px) with wider bands for the sample player and the before/after pairs.
+   Colours and faces are Conduit's own: its teal-blue accent, Inter for text, and the guide's Archivo headings. */
+:root {
+  --bg: #F3F5F7; --panel: #FFFFFF; --ink: #111827; --ink2: #374151; --mute: #5B6472; --line: #DFE4E9; --soft: #E9EEF2;
+  --accent: #0E7CA8; --accent-ink: #0B6183; --accent-soft: #E3F0F5;
+  --good: #15803D; --good-soft: #E7F6EC; --warn: #9A4A06; --warn-soft: #FFF4DE; --bad: #B91C1C; --bad-soft: #FDECEC;
+  --ring: #F59E0B; --stage: #DCE3E9; --bezel: #0B0F14;
+  --display: 'Archivo', 'Arial Narrow', system-ui, sans-serif;
+  --body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F151B; --panel: #161F27; --ink: #E6EBF0; --ink2: #C9D2DB; --mute: #9AA7B3; --line: #26323D; --soft: #1C2731;
+    --accent: #3AA7D2; --accent-ink: #7CC6E4; --accent-soft: #15303D;
+    --good: #5BD68A; --good-soft: #15301F; --warn: #F5C27A; --warn-soft: #33270F; --bad: #F48A8A; --bad-soft: #3A1717;
+    --ring: #FBBF24; --stage: #0B1116; --bezel: #000000; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F151B; --panel: #161F27; --ink: #E6EBF0; --ink2: #C9D2DB; --mute: #9AA7B3; --line: #26323D; --soft: #1C2731;
+  --accent: #3AA7D2; --accent-ink: #7CC6E4; --accent-soft: #15303D;
+  --good: #5BD68A; --good-soft: #15301F; --warn: #F5C27A; --warn-soft: #33270F; --bad: #F48A8A; --bad-soft: #3A1717;
+  --ring: #FBBF24; --stage: #0B1116; --bezel: #000000; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -.01em; }
+h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.05; font-weight: 800; }
+h2 { font-size: clamp(24px, 3.2vw, 32px); line-height: 1.15; font-weight: 800; }
+h3 { font-size: 19px; line-height: 1.25; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font: 700 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); }
+.lede { font-size: 18.5px; color: var(--ink2); max-width: 68ch; }
+.sec { display: flex; flex-direction: column; gap: 18px; }
+.sec > p, .prose { max-width: 70ch; color: var(--ink2); }
+.mono { font-family: var(--mono); }
+.num { font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Top */
+.top { display: flex; flex-direction: column; gap: 14px; }
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 12px; margin-top: 6px; }
+.verdict div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.verdict b { font: 800 26px/1.1 var(--display); }
+.verdict span { font-size: 14px; color: var(--mute); }
+
+/* Sample player */
+.band { background: var(--stage); border-radius: 22px; padding: 22px; display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+.dev { flex: 0 0 auto; width: min(100%, 318px); margin: 0 auto; }
+.bezel { background: var(--bezel); border-radius: 44px; padding: 11px; box-shadow: 0 24px 50px -24px rgba(0,0,0,.55); }
+.scr { position: relative; width: 100%; aspect-ratio: 390 / 844; border-radius: 34px; overflow: hidden; background: #111827; touch-action: manipulation; }
+.scr img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transition: opacity .32s ease; }
+.scr img.off { opacity: 0; }
+.finger { position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(14,124,168,.24); border: 3px solid rgba(14,124,168,.95); box-shadow: 0 2px 10px rgba(0,0,0,.25); pointer-events: none; opacity: 0; transition: left .62s cubic-bezier(.3,.7,.3,1), top .62s cubic-bezier(.3,.7,.3,1), opacity .25s, transform .15s; z-index: 3; }
+.finger.on { opacity: 1; }
+.finger.press { transform: scale(.82); }
+.rip { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid rgba(14,124,168,.9); pointer-events: none; z-index: 2; animation: rip .6s ease-out forwards; }
+@keyframes rip { from { transform: scale(.4); opacity: 1; } to { transform: scale(2.1); opacity: 0; } }
+.target { position: absolute; border-radius: 12px; border: 3px solid var(--ring); box-shadow: 0 0 0 6px rgba(245,158,11,.22); pointer-events: none; z-index: 3; animation: pulse 1.1s ease-in-out infinite; }
+.target::after { content: attr(data-say); position: absolute; left: 50%; top: -30px; transform: translateX(-50%); white-space: nowrap; background: var(--ring); color: #111827; font: 800 12px/1 var(--body); padding: 6px 9px; border-radius: 7px; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 12px rgba(245,158,11,.12); } }
+.live { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: #111827; color: #fff; font: 700 12px/1 var(--body); padding: 7px 11px; border-radius: 999px; z-index: 3; display: inline-flex; gap: 6px; align-items: center; box-shadow: 0 6px 18px rgba(0,0,0,.3); }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; display: inline-block; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.side { flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.chap-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.chap-h .where { font: 600 13px/1.3 var(--mono); color: var(--accent-ink); }
+.cap { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-height: 196px; }
+.cap-n { font: 800 13px/1 var(--mono); color: var(--accent-ink); background: var(--accent-soft); border-radius: 8px; padding: 7px 9px; align-self: flex-start; }
+.cap-t { font: 700 21px/1.28 var(--display); text-wrap: balance; }
+.cap-r { font-size: 15px; color: var(--mute); }
+.yt { display: inline-block; font: 800 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #fff; background: var(--accent); border-radius: 6px; padding: 4px 6px; margin-right: 8px; vertical-align: 3px; }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ctl button { border: 1px solid var(--line); background: var(--panel); border-radius: 11px; min-height: 44px; min-width: 44px; padding: 0 14px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.ctl button.pri { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 120px; }
+.ctl svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.modes { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px; gap: 4px; }
+.modes button { border: 0; background: none; border-radius: 9px; min-height: 36px; padding: 0 14px; font-weight: 700; color: var(--mute); cursor: pointer; }
+.modes button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.dots { display: flex; gap: 5px; }
+.dots button { flex: 1; height: 9px; border: 0; padding: 0; border-radius: 6px; background: var(--line); cursor: pointer; min-width: 14px; }
+.dots button.done { background: var(--accent-soft); }
+.dots button.on { background: var(--accent); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13.5px; color: var(--mute); }
+.facts b { color: var(--ink); }
+.strip { display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+.strip figure { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.strip img { width: 132px; height: auto; border-radius: 12px; border: 1px solid var(--line); display: block; background: #111827; cursor: pointer; }
+.strip figcaption { font-size: 12.5px; line-height: 1.35; color: var(--ink2); }
+.strip figcaption i { font: 800 11px var(--mono); font-style: normal; color: var(--accent-ink); margin-right: 4px; }
+.was { display: flex; flex-direction: column; gap: 10px; }
+.was-g { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.was-g figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.was-g img { width: 100%; display: block; }
+.was-g figcaption { padding: 8px 10px; font-size: 13px; color: var(--ink2); }
+
+.wi-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; background: var(--accent-soft); border-radius: 12px; padding: 9px 12px; }
+.wi-bar b { font: 700 15.5px/1.3 var(--display); flex: 1 1 200px; min-width: 0; }
+.wi-bar button { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; min-height: 40px; padding: 0 12px; font-weight: 700; cursor: pointer; }
+.know { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.know b { font: 700 13px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); }
+.know ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; color: var(--ink2); }
+.wis { display: flex; flex-direction: column; gap: 10px; }
+.wi-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px; }
+.wi-card { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; min-height: 44px; }
+.wi-card:hover { border-color: var(--accent); }
+.wi-card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.wi-card b { font: 700 16px/1.3 var(--display); }
+.wi-card span { font-size: 14px; color: var(--mute); }
+.wi-card small { font: 700 12px/1 var(--mono); color: var(--accent-ink); }
+/* Cards and lists */
+.cardg { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card p, .card li { font-size: 15px; color: var(--ink2); }
+.card ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.tag { display: inline-flex; align-items: center; gap: 5px; font: 700 11.5px/1 var(--mono); letter-spacing: .04em; border-radius: 6px; padding: 5px 7px; align-self: flex-start; }
+.tag.good { background: var(--good-soft); color: var(--good); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.tag.acc { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* Coverage */
+.cov { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+.cov .card h3 { font-size: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 13px; border-radius: 8px; padding: 4px 9px; border: 1px solid var(--line); background: var(--soft); color: var(--mute); }
+.chip.y { background: var(--good-soft); border-color: transparent; color: var(--good); font-weight: 600; }
+.chip.y::before { content: "✓ "; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13.5px; color: var(--mute); }
+
+/* Before / after */
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 14px; align-items: start; }
+.pair figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+.pair .shot { background: var(--stage); padding: 14px; display: flex; justify-content: center; align-items: center; min-height: 160px; }
+.pair .shot img { max-width: 100%; max-height: 440px; border-radius: 8px; display: block; box-shadow: 0 10px 26px -14px rgba(0,0,0,.45); }
+.pair figcaption { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; color: var(--ink2); }
+.pairs { display: flex; flex-direction: column; gap: 26px; }
+.pairs h3 { margin-bottom: -4px; }
+
+/* Issues */
+.issues { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.issues figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+.issues .shot { background: var(--stage); padding: 12px; display: flex; justify-content: center; }
+.issues .shot img { max-height: 300px; max-width: 100%; border-radius: 8px; display: block; }
+.issues figcaption { padding: 12px 14px 14px; font-size: 14.5px; color: var(--ink2); display: flex; flex-direction: column; gap: 4px; }
+.issues figcaption b { color: var(--ink); }
+
+/* Pipeline */
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
+.flow .st { flex: 1 1 170px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.flow .st b { font: 700 15px/1.25 var(--display); }
+.flow .st span { font-size: 13.5px; color: var(--mute); }
+.flow .ar { align-self: center; color: var(--mute); font: 700 20px var(--mono); }
+.flow .st.hl { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.loop { font-size: 14px; color: var(--ink2); background: var(--accent-soft); border-radius: 12px; padding: 10px 14px; }
+
+/* Tables */
+.tbl { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 640px; }
+th, td { text-align: left; padding: 9px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+thead th { border-top: 0; font: 700 11.5px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); background: var(--soft); }
+td.n { text-align: right; font-variant-numeric: tabular-nums; }
+tr.grp td { background: var(--soft); font: 700 12px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); }
+.st-new { color: var(--accent-ink); font-weight: 700; }
+.st-re { color: var(--warn); font-weight: 700; }
+.st-done { color: var(--good); font-weight: 700; }
+
+/* Phases and decisions */
+.phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.phases .card h3 { display: flex; gap: 10px; align-items: baseline; }
+.phases .card h3 span { font: 800 13px var(--mono); color: var(--accent-ink); }
+.dec { margin: 0; padding: 0; list-style: none; counter-reset: d; display: flex; flex-direction: column; gap: 10px; }
+.dec li { counter-increment: d; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 14px 56px; position: relative; font-size: 15px; color: var(--ink2); }
+.dec li::before { content: counter(d); position: absolute; left: 16px; top: 13px; width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: #fff; font: 800 14px/28px var(--mono); text-align: center; }
+.dec li b { color: var(--ink); display: block; margin-bottom: 2px; }
+.foot { font-size: 13.5px; color: var(--mute); border-top: 1px solid var(--line); padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) {
+  .scr img, .finger { transition: none !important; }
+  .rip, .target, .live i { animation: none !important; }
+}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <span class="eyebrow">Conduit · Help · Visual Guide</span>
+  <h1>The Visual Guide, audited</h1>
+  <p class="lede">The guide's four ways of reading it (Watch, Try it, Handbook, Paper) are good and worth keeping. What lets it down is what it shows. Every screen is redrawn by hand, so the drawings have fallen behind the app. It covers about a third of what Conduit does now. And someone outside a store can't open it. The fix I recommend is to record each chapter from the real app, so it stays accurate and sharp, and to build a public showcase edition from the same recordings.</p>
+  <div class="verdict num">
+    <div><b>15 · 64</b><span>chapters and steps in the guide today, 4 steps in most chapters</span></div>
+    <div><b>12 of 32</b><span>screens on the desk rail with a chapter. None of the phone's Back dock tabs (Receive, Decant, Board) has one</span></div>
+    <div><b>0</b><span>ways to open it without signing in to a store</span></div>
+    <div><b>1.7 MB</b><span>for the sample below: a 12-step chapter with camera scanning, and three What ifs, all real frames at 2×</span></div>
+  </div>
+</header>
+
+<section class="sec" aria-labelledby="s-sample">
+  <span class="eyebrow">The proposal, working</span>
+  <h2 id="s-sample">One chapter rebuilt from the real app</h2>
+  <p>This chapter is new: the guide has nothing for receiving on a phone. A script ran the real app on a seeded demo dock, did each step the way a dock phone does, and saved every screen at twice the phone's resolution with the spot it tapped. Nothing here is drawn. The camera steps are real too: the phone's own scanner read both labels' barcodes from a video of the pallet, played in as its camera. Watch plays it, Try it waits for your tap on the amber ring, and the strip underneath is the Handbook.</p>
+  <div class="band" id="player">
+    <div class="dev">
+      <div class="bezel"><div class="scr" id="scr" aria-label="The phone's screen">
+        <img id="ia" alt="">
+        <img id="ib" class="off" alt="" aria-hidden="true">
+        <i class="finger" id="finger"></i>
+        <div class="target" id="target" hidden data-say="Tap here"></div>
+        <span class="live" id="live" hidden><i></i>Live from the other phones</span>
+      </div></div>
+    </div>
+    <div class="side">
+      <div class="chap-h"><h3>Receive a truck on the phone</h3><span class="where">Phone · Back dock › Receive</span></div>
+      <div class="modes" role="group" aria-label="View"><button type="button" data-mode="watch" aria-pressed="true">Watch</button><button type="button" data-mode="try" aria-pressed="false">Try it</button></div>
+      <div class="wi-bar" id="wibar" hidden><span class="tag acc">What if</span><b id="wititle"></b><button type="button" id="wiback">Back to the chapter</button></div>
+      <div class="cap" aria-live="polite">
+        <span class="cap-n num" id="capn">1 / 12</span>
+        <p class="cap-t" id="capt"></p>
+        <p class="cap-r" id="capr"></p>
+      </div>
+      <div class="ctl">
+        <button type="button" id="prev" aria-label="Previous step"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <button type="button" class="pri" id="play"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>Play</button>
+        <button type="button" id="next" aria-label="Next step"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+        <button type="button" id="again" aria-label="Start again"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 102.3-5.6M4 4v5h5"/></svg></button>
+      </div>
+      <div class="dots" id="dots"></div>
+      <div class="know" id="know" hidden><b>What to know</b><ul id="knowlist"></ul></div>
+      <div class="facts num"><span>Captured <b>390 × 844</b> at <b>2×</b></span><span>Demo store, real screens</span><span>Re-shot with <b>one command</b> when the app changes</span></div>
+    </div>
+  </div>
+  <section class="wis" aria-labelledby="wi-h"><h3 id="wi-h">What if…</h3><p class="prose">The other things that can happen when a truck comes in, recorded from the app the same way. Each one plays on the phone above, with what to know about it.</p><div class="wi-cards" id="wicards"></div></section>
+  <div class="strip" id="book" aria-label="Every step as a still"></div>
+  <div class="was">
+    <h3>The guide's Receiving chapter today, for comparison</h3>
+    <p class="prose">Four steps on a drawn PC, from before the phase track, Finish receiving, Take 5 and the coloured dock grid existed.</p>
+    <div class="was-g">
+      <figure><img src="@@img:old-recv-1@@" alt="The guide's drawn Receiving screen: an empty grid of squares"><figcaption>1 · Start the truck; its manifest comes with it.</figcaption></figure>
+      <figure><img src="@@img:old-recv-2@@" alt="The drawn grid with one square landed"><figcaption>2 · Land each pallet on its square.</figcaption></figure>
+      <figure><img src="@@img:old-recv-3@@" alt="The drawn grid with a pallet started"><figcaption>3 · Start it with the person decanting it.</figcaption></figure>
+      <figure><img src="@@img:old-recv-4@@" alt="The drawn grid with a pallet finished"><figcaption>4 · Finish it: the board updates everywhere.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s-cov">
+  <span class="eyebrow">Audit · 1</span>
+  <h2 id="s-cov">What it covers</h2>
+  <p>Every screen on the desk rail and the phone's tabs, ticked where a chapter shows it. Much of what is unticked came after the chapters were written; some of it, like the phone's Back dock, never had one.</p>
+  <div class="legend"><span class="chip y">has a chapter</span><span class="chip">no chapter yet</span></div>
+  <div class="cov">
+    <div class="card"><h3>Start here and the top of the rail</h3><div class="chips"><span class="chip y">Signing in</span><span class="chip y">The rail, tabs and search</span><span class="chip y">When the wifi drops</span><span class="chip y">Settings</span><span class="chip y">Help</span><span class="chip">Dashboard</span><span class="chip">Reports &amp; files</span><span class="chip">Resources</span><span class="chip">Getting around on a phone</span></div></div>
+    <div class="card"><h3>Floor</h3><div class="chips"><span class="chip y">Store map (phone)</span><span class="chip y">Location refresh</span><span class="chip y">Price checks</span><span class="chip y">Maintenance (phone)</span><span class="chip y">Equipment</span><span class="chip">Store map (PC), print, edits</span><span class="chip">Stocktake</span><span class="chip">Pick list · Route tab</span><span class="chip">Emergency tab</span><span class="chip">Maintenance (PC)</span><span class="chip">Recalls</span></div></div>
+    <div class="card"><h3>Stockroom</h3><div class="chips"><span class="chip y">Backfill scan (phone)</span><span class="chip y">Backfill review</span><span class="chip y">Live pull</span><span class="chip y">Cages (phone)</span><span class="chip">Day list</span><span class="chip">History</span><span class="chip">Trends</span><span class="chip">Stock accuracy · Adjust tab</span><span class="chip">Stock intel</span><span class="chip">Quick Scan</span><span class="chip">Cages (PC)</span></div></div>
+    <div class="card"><h3>Back dock</h3><div class="chips"><span class="chip y">Manifests</span><span class="chip y">Receiving (PC, an old version)</span><span class="chip">Receive tab (phone)</span><span class="chip">Decant tab (phone)</span><span class="chip">Board tab</span><span class="chip">Team Board</span><span class="chip">Planner</span><span class="chip">Carton profiles</span><span class="chip">Off-site pallets</span><span class="chip">Results · History · Analytics</span><span class="chip">Dock screens</span></div></div>
+    <div class="card"><h3>Managers and the owner</h3><div class="chips"><span class="chip">Store info</span><span class="chip">Departments</span><span class="chip">Owner console: stores, codes, zones</span><span class="chip">Map editor and publishing a map</span><span class="chip">Printing sheets</span></div></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s-acc">
+  <span class="eyebrow">Audit · 2</span>
+  <h2 id="s-acc">Where the drawings have fallen behind</h2>
+  <p>Each chapter's screens are hand-written HTML in <span class="mono">js/guide/scenes.js</span>. A test keeps the event names, routes and function names in its developer notes true to the code, but nothing checks the pictures. So each time a screen changes, its drawing goes stale. These are the guide's frames beside the same screens today.</p>
+  <div class="pairs">
+    <div class="sec" style="gap:12px"><h3>Receiving, on the PC</h3>
+      <div class="pair">
+        <figure><div class="shot"><img src="@@img:old-recv-4@@" alt="The guide's drawn Receiving screen"></div><figcaption><span class="tag warn">In the guide</span>An empty grid of 28 grey squares, one marked Done, and a progress line.</figcaption></figure>
+        <figure><div class="shot"><img src="@@img:real-recv@@" alt="Conduit's Receiving screen today"></div><figcaption><span class="tag good">The app today</span>The truck card (manifest, pallets, decant team), the six-phase track with Finish receiving, the Take 5 checklist, the truck's times and forecast, and the dock grid coloured by pallet type, with the land form.</figcaption></figure>
+      </div></div>
+    <div class="sec" style="gap:12px"><h3>Finding a shelf, on a phone</h3>
+      <div class="pair">
+        <figure><div class="shot"><img src="@@img:old-map@@" alt="The guide's drawn store map"></div><figcaption><span class="tag warn">In the guide</span>A made-up plan of six runs (A14 to A19) and a shelf card whose share text breaks in the middle of words.</figcaption></figure>
+        <figure><div class="shot"><img src="@@img:real-map@@" alt="Conduit's store map on a phone"></div><figcaption><span class="tag good">The app today</span>The real 1,157-shelf Busselton map in department colours, the map controls and the Find a shelf strip.</figcaption></figure>
+      </div></div>
+    <div class="sec" style="gap:12px"><h3>The Dashboard</h3>
+      <div class="pair">
+        <figure><div class="shot"><img src="@@img:old-around@@" alt="The guide's drawn Dashboard"></div><figcaption><span class="tag warn">In the guide</span>Three numbers and a short list, as Getting around opens.</figcaption></figure>
+        <figure><div class="shot"><img src="@@img:real-dash@@" alt="Conduit's Dashboard today"></div><figcaption><span class="tag good">The app today</span>A card for each area (Backfill review, Location refresh, Label integrity, Back dock with its dock grid, Maintenance), the Operations register's morning checklist, and links into each module.</figcaption></figure>
+      </div></div>
+    <div class="sec" style="gap:12px"><h3>Signing in and Manifests</h3>
+      <div class="pair">
+        <figure><div class="shot"><img src="@@img:old-signin@@" alt="The guide's drawn sign-in" style="max-height:300px"><img src="@@img:real-signin@@" alt="Conduit's sign-in" style="max-height:300px;margin-left:12px"></div><figcaption><span class="tag warn">Guide, then app</span>The real sign-in has the Conduit mark, a card on its patterned ground, the server it signs in to, the language and the version.</figcaption></figure>
+        <figure><div class="shot" style="flex-direction:column;gap:10px"><img src="@@img:old-man@@" alt="The guide's drawn Manifests screen"><img src="@@img:real-man@@" alt="Conduit's Manifests screen"></div><figcaption><span class="tag warn">Guide, then app</span>Manifests has since gained the wider list, the Came on box, stats, the department bar and the consol table.</figcaption></figure>
+      </div></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s-q">
+  <span class="eyebrow">Audit · 3</span>
+  <h2 id="s-q">How it looks and plays</h2>
+  <div class="issues">
+    <figure><div class="shot"><img src="@@img:q-fold@@" alt="Help's Watch view on a 1920 by 1080 screen"></div><figcaption><b>On a store PC, Play is below the fold.</b>At 1920 × 1080 the device fills the screen, so the caption and the controls start at the bottom edge and you scroll to press Play.</figcaption></figure>
+    <figure><div class="shot"><img src="@@img:q-phone@@" alt="Help on a phone"></div><figcaption><b>On a phone, the player sits under the whole chapter list.</b>Nine chapter rows and their headings come before the first frame.</figcaption></figure>
+    <figure><div class="shot"><img src="@@img:q-toast@@" alt="A toast over the phone's strip in the Refresh chapter"><img src="@@img:q-toast2@@" alt="A toast over the strip in the Price checks chapter" style="margin-left:10px"></div><figcaption><b>Toasts land on the strip.</b>In Refresh, Price checks and Report a fault, the toast covers the strip's text, so both read as broken.</figcaption></figure>
+    <figure><div class="shot" style="flex-direction:column;align-items:flex-start;gap:8px;padding:16px 18px"><span class="tag bad">Small</span><span style="font-size:14.5px;color:var(--ink2)">PC screens are drawn at 1920 × 1080 and shrunk to fit: two-thirds size in Watch, about a third in Handbook (text 4 to 6 px high), smaller still on Paper. The phone is drawn 282 × 600, smaller than a real one (390 × 844).</span><span class="tag bad">Still</span><span style="font-size:14.5px;color:var(--ink2)">Screens swap in one jump. A pointer glides and taps, but sheets don't rise and grids don't fill.</span></div><figcaption><b>Detail and motion.</b>The drawings are tidy but simplified, and they look it next to the app.</figcaption></figure>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s-send">
+  <span class="eyebrow">Audit · 4</span>
+  <h2 id="s-send">Sending it to someone</h2>
+  <div class="cardg">
+    <div class="card"><span class="tag bad">Can't open it</span><p>The guide lives in Help, so it opens only after signing in to a store. Its printed pages' QR codes open the store's own app too.</p></div>
+    <div class="card"><span class="tag warn">Two copies</span><p>The standalone Conduit Visual Guide page from 25 October is a separate copy of the code, and they have already drifted: its Backfill chapter is the older "scan a bay" one.</p></div>
+    <div class="card"><span class="tag warn">Written for staff</span><p>It teaches tasks to people who already work there. Someone deciding whether Conduit is worth it gets no "what is this", no view of the whole pipeline and nothing on what it saves.</p></div>
+    <div class="card"><span class="tag good">Worth keeping</span><ul><li>Watch, Try it, Handbook and Paper</li><li>The ? on every screen that opens its chapter</li><li>The For picker and the seven languages</li><li>Developer notes with the event log, and the test that keeps them true</li></ul></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s-rec">
+  <span class="eyebrow">What I recommend</span>
+  <h2 id="s-rec">Record every chapter from the real app</h2>
+  <p class="loop"><b>Not taken (7 November):</b> the guide keeps drawing its screens. This section stays as the record of what was considered; the sample above was made this way.</p>
+  <p>Stop drawing the screens. A demo store holds a believable day: trucks with manifests, a morning report, bays to backfill, shelves to refresh, cages, a recall. A capture script drives the real app through each chapter on a phone (390 × 844) and a store PC (1920 × 1080), and keeps each screen at 2× with the spot it tapped. The guide plays those frames. When a screen changes, one command re-shoots every chapter. If a button a step relies on has gone, its capture fails and names the step, so a stale chapter can't slip through.</p>
+  <div class="flow">
+    <div class="st"><b>Demo store</b><span>One seed script: a whole day of trucks, reports, bays and shelves, with no real staff.</span></div><span class="ar" aria-hidden="true">→</span>
+    <div class="st hl"><b>Capture</b><span>Playwright plays each chapter in the real app, saving 2× frames, the tap spots and the captions.</span></div><span class="ar" aria-hidden="true">→</span>
+    <div class="st"><b>In Help</b><span>The same player: Watch, Try it on the real tap spots, Handbook, Paper.</span></div><span class="ar" aria-hidden="true">→</span>
+    <div class="st"><b>Showcase edition</b><span>A public page built from the same frames, for anyone, no sign-in.</span></div>
+  </div>
+  <p class="loop">On the store PC's 1080p screen, a PC chapter can zoom in on the part that matters (the dock grid, a pallet card). Text stays readable on a laptop or a phone, which a drawn 880 px screen never managed.</p>
+  <div class="cardg">
+    <div class="card"><h3>What it fixes</h3><ul><li>Accurate by construction: it shows the real screens</li><li>Sharp at 2×, with the real map and real data</li><li>Stays current with one command</li><li>Chapters become a list of steps, quicker to write than drawings</li><li>Small: about 40 KB a phone frame, 60 to 150 KB a PC frame</li></ul></div>
+    <div class="card"><h3>What it costs</h3><ul><li>Screens are in English; captions and explanations stay in all seven languages</li><li>Help fetches a chapter's frames the first time it opens (cached after, like the translations)</li><li>A capture script needs updating when a screen's buttons change (it fails loudly when they do)</li></ul></div>
+    <div class="card"><h3>What I ruled out</h3><ul><li><b>Draw better:</b> it would drift again with the next change.</li><li><b>Freeze the real HTML:</b> crisp, but every frame would carry the 800 KB map, slow to open.</li><li><b>A live demo store people click around:</b> the best version, but a project of its own. The same demo store makes it a later step (a Practice mode).</li></ul></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s-show">
+  <span class="eyebrow">For people outside the store</span>
+  <h2 id="s-show">The showcase edition</h2>
+  <p>A page anyone can open from a link, with no sign-in, and no store's real data. It tells the story first, then lets the reader go as deep as they like.</p>
+  <div class="cardg">
+    <div class="card"><span class="tag acc">1 · What Conduit is</span><p>One program for the floor, the stockroom and the back dock, replacing three. It runs on the phones, the store PCs and the dock screens the store already has, works without wifi, and speaks seven languages.</p></div>
+    <div class="card"><span class="tag acc">2 · A day at the store</span><p>The pipeline as a timeline, from the DC's manifest to a shelf: publish manifests → plan the week → the truck lands → receive → Take 5 → decant → close → the morning report → backfill scan → desk review → the floor's refresh and price checks. Each stage plays its chapter.</p></div>
+    <div class="card"><span class="tag acc">3 · The chapters</span><p>The same chapters as Help, by area and by person (floor, stockroom, dock, managers), with Watch, Try it and Handbook.</p></div>
+    <div class="card"><span class="tag acc">4 · What it changes</span><p>Facts only: one sign-in instead of three apps, every change on record, phones and PCs in step within seconds, paper that still works. Numbers such as clear times or decant rates only if you give me Busselton's.</p></div>
+  </div>
+  <p>It comes in two forms: a link (the page, which can also play short clips) and a single file for email or a USB stick, stills only, about 15 to 20 MB for every chapter.</p>
+</section>
+
+<section class="sec" aria-labelledby="s-plan">
+  <span class="eyebrow">The chapters</span>
+  <h2 id="s-plan">From 15 chapters to 33</h2>
+  <p>About 180 steps in all, 4 to 10 a chapter, each as long as the task needs, and each chapter with its own What ifs, recorded like the three in the sample. A chapter keeps its old drawn version until its recording replaces it, so nothing goes missing on the way.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Chapter</th><th>Device</th><th>For</th><th class="n">Steps</th><th>Now</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td colspan="5">Start here</td></tr>
+      <tr><td>Signing in and picking your area</td><td>Phone</td><td>Everyone</td><td class="n">5</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Getting around on a phone: tabs, the strip, More, search, ?</td><td>Phone</td><td>Everyone</td><td class="n">6</td><td class="st-new">New</td></tr>
+      <tr><td>Getting around on a PC: rail, tabs, Ctrl K, Show map, ?</td><td>PC</td><td>Managers</td><td class="n">6</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>When the wifi drops</td><td>Phone</td><td>Everyone</td><td class="n">4</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Settings, language and updates</td><td>PC</td><td>Managers</td><td class="n">5</td><td class="st-re">Rebuild</td></tr>
+      <tr class="grp"><td colspan="5">The morning, at the desk</td></tr>
+      <tr><td>The Dashboard and the morning checklist</td><td>PC</td><td>Managers</td><td class="n">6</td><td class="st-new">New</td></tr>
+      <tr><td>Reports &amp; files: paste the morning report</td><td>PC</td><td>Managers</td><td class="n">5</td><td class="st-new">New</td></tr>
+      <tr class="grp"><td colspan="5">Back dock</td></tr>
+      <tr><td>Publish manifests, several at once</td><td>PC</td><td>Dock, managers</td><td class="n">6</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Plan the week</td><td>PC</td><td>Managers</td><td class="n">6</td><td class="st-new">New</td></tr>
+      <tr><td>Receive a truck on the phone</td><td>Phone</td><td>Dock</td><td class="n">12</td><td class="st-done">Sample above</td></tr>
+      <tr><td>The dock board on the PC</td><td>PC</td><td>Dock, managers</td><td class="n">6</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Take 5 and run the decant: roles, next pallet, hold-ups</td><td>Phone</td><td>Dock</td><td class="n">8</td><td class="st-new">New</td></tr>
+      <tr><td>Close the truck and read the results</td><td>Phone, PC</td><td>Dock, managers</td><td class="n">5</td><td class="st-new">New</td></tr>
+      <tr><td>Off-site pallets</td><td>PC, phone</td><td>Managers</td><td class="n">5</td><td class="st-new">New</td></tr>
+      <tr><td>Dock screens and the Team Board</td><td>TV, PC</td><td>Dock</td><td class="n">4</td><td class="st-new">New</td></tr>
+      <tr class="grp"><td colspan="5">Stockroom</td></tr>
+      <tr><td>Backfill: scan a location (the live PDT reader)</td><td>Phone</td><td>Stockroom</td><td class="n">6</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Backfill review at the desk</td><td>PC</td><td>Stockroom, managers</td><td class="n">6</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Live pull between floor and stockroom</td><td>2 phones</td><td>Floor, stockroom</td><td class="n">6</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Cages: scan, park and sweep</td><td>Phone</td><td>Stockroom</td><td class="n">6</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Stock accuracy: below-zero SOH and adjustments</td><td>Phone, PC</td><td>Stockroom, managers</td><td class="n">6</td><td class="st-new">New</td></tr>
+      <tr><td>Quick Scan</td><td>Phone</td><td>Stockroom</td><td class="n">4</td><td class="st-new">New</td></tr>
+      <tr class="grp"><td colspan="5">Floor</td></tr>
+      <tr><td>Find a shelf, on the real map</td><td>Phone</td><td>Floor</td><td class="n">5</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Location refresh</td><td>Phone</td><td>Floor</td><td class="n">5</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Price checks</td><td>Phone</td><td>Floor</td><td class="n">5</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Routes and pick lists</td><td>Phone</td><td>Floor</td><td class="n">5</td><td class="st-new">New</td></tr>
+      <tr><td>Stocktake</td><td>Phone, PC</td><td>Floor, managers</td><td class="n">5</td><td class="st-new">New</td></tr>
+      <tr><td>Emergency and safety</td><td>Phone</td><td>Everyone</td><td class="n">4</td><td class="st-new">New</td></tr>
+      <tr><td>Report a fault and track it</td><td>Phone, PC</td><td>Managers</td><td class="n">5</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Equipment checks and QR labels</td><td>PC, phone</td><td>Managers</td><td class="n">5</td><td class="st-re">Rebuild</td></tr>
+      <tr><td>Recalls</td><td>PC, phone</td><td>Managers</td><td class="n">5</td><td class="st-new">New</td></tr>
+      <tr class="grp"><td colspan="5">Managers and the owner</td></tr>
+      <tr><td>Resources: the store's documents</td><td>PC</td><td>Managers</td><td class="n">4</td><td class="st-new">New</td></tr>
+      <tr><td>Setting up a store: codes, zones, the map</td><td>PC</td><td>Owner</td><td class="n">6</td><td class="st-new">New</td></tr>
+      <tr><td>Printing: maps, sheets and this guide</td><td>PC</td><td>Managers</td><td class="n">4</td><td class="st-new">New</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="sec" aria-labelledby="s-ph">
+  <span class="eyebrow">How it would roll out</span>
+  <h2 id="s-ph">Three PRs</h2>
+  <div class="phases">
+    <div class="card"><h3><span>1</span>The engine and the dock</h3><p>The demo store, the capture tool and the new player in Help. Start here, the morning and every Back dock chapter (15 chapters). The showcase page with What Conduit is and A day at the store. Captures checked at all four screen sizes.</p></div>
+    <div class="card"><h3><span>2</span>Stockroom and floor</h3><p>The 15 stockroom and floor chapters. Each old drawn chapter and its code goes once its recording replaces it.</p></div>
+    <div class="card"><h3><span>3</span>Managers, paper and the file</h3><p>The managers' and owner's chapters, Paper on real frames (sharp in print), the single-file edition, and short clips where motion helps (a sheet rising, a grid filling).</p></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s-dec">
+  <span class="eyebrow">Decided 7 November</span>
+  <h2 id="s-dec">Your decisions</h2>
+  <ol class="dec">
+    <li><b>Keep drawing the screens.</b>The guide stays drawn by hand, as it is now, and is not recorded from the app. The drawings are brought up to date with the real screens, and they get the sample's features: What ifs with what to know, and camera scanning. The recording tools stay in the repo (<code>scripts/guide/</code>) to check each drawing against the real screen.</li>
+    <li><b>Busselton 1241.</b>The guide and the showcase show Busselton with its real map. The day itself (trucks, manifests, pallets, D-numbers) is made up.</li>
+    <li><b>Sending: still open.</b>A public link (you share the page from its Share menu), a single file, or both.</li>
+    <li><b>"What it changes": figures like a real store's.</b>Clear times, cartons an hour and shelves refreshed, from the demo day. The page says they come from a demo day, so nobody takes them for Busselton's own results.</li>
+    <li><b>Language: no longer a question.</b>Drawn screens follow each person's language, as they do now.</li>
+    <li><b>Help stays as it is until the new guide is approved.</b>It is worked out on this private page first, and one final PR moves it into Help.</li>
+  </ol>
+</section>
+
+<p class="foot">Audited on 7 November 2026 against the guide in Help (15 chapters, js/guide/) and the app on the claude/conduit-feature-audit-vp7scz branch. The sample chapter was captured on the local dev stack with a seeded demo truck. Frames are WebP at 2×.</p>
+</div>
+
+<script>
+(() => {
+'use strict';
+const DATA = @@DATA@@;
+const W = DATA.w, H = DATA.h, IMG = DATA.img, SETS = DATA.sets;
+let SET = SETS[0], STEPS = SET.steps;
+const $ = id => document.getElementById(id);
+const scr = $('scr'), ia = $('ia'), ib = $('ib'), finger = $('finger'), target = $('target'), live = $('live');
+const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+let front = ia, back = ib, mode = 'watch', ix = 0, ended = false, playing = false, tok = 0;
+const sleep = ms => new Promise(r => setTimeout(r, reduce() ? Math.min(ms, 60) : ms));
+const alive = t => { if (t !== tok) throw 'stop'; };
+// Shows a frame: instantly, or by cross-fading the back image over the front one.
+async function frame(name, instant) {
+  const src = IMG[name];
+  if (instant || reduce()) { front.src = src; front.classList.remove('off'); back.classList.add('off'); return; }
+  back.src = src; await (back.decode ? back.decode().catch(() => {}) : Promise.resolve());
+  back.classList.remove('off'); front.classList.add('off'); [front, back] = [back, front];
+  await sleep(330);
+}
+const at = p => ({ left: (p.x / W * 100) + '%', top: (p.y / H * 100) + '%' });
+function place(el, p) { const a = at(p); el.style.left = a.left; el.style.top = a.top; }
+async function tap(p, t) {
+  if (!p) return;
+  place(finger, p); finger.classList.add('on'); await sleep(680); alive(t);
+  const r = document.createElement('i'); r.className = 'rip'; place(r, p); scr.appendChild(r); setTimeout(() => r.remove(), 650);
+  finger.classList.add('press'); await sleep(170); finger.classList.remove('press'); await sleep(120); alive(t);
+}
+// Try it: an amber ring on the spot; resolves when the reader taps inside it.
+function waitTap(p, t) {
+  return new Promise((res, rej) => {
+    target.hidden = false; const pad = 6;
+    target.style.left = ((p.x - p.w / 2 - pad) / W * 100) + '%'; target.style.top = ((p.y - p.h / 2 - pad) / H * 100) + '%';
+    target.style.width = ((p.w + pad * 2) / W * 100) + '%'; target.style.height = ((p.h + pad * 2) / H * 100) + '%';
+    const on = e => {
+      const b = scr.getBoundingClientRect(), x = (e.clientX - b.left) / b.width * W, y = (e.clientY - b.top) / b.height * H;
+      if (Math.abs(x - p.x) <= p.w / 2 + 14 && Math.abs(y - p.y) <= p.h / 2 + 14) { done(); res(); }
+    };
+    const stop = setInterval(() => { if (t !== tok) { done(); rej('stop'); } }, 120);
+    const done = () => { scr.removeEventListener('click', on); clearInterval(stop); target.hidden = true; };
+    scr.addEventListener('click', on);
+  });
+}
+function caption() {
+  const s = STEPS[ix];
+  $('capn').textContent = `${ix + 1} / ${STEPS.length}`;
+  $('capt').innerHTML = (mode === 'try' ? '<span class="yt">Your turn</span>' : '') + s.cap;
+  $('capr').textContent = s.read;
+  document.querySelectorAll('#dots button').forEach((b, i) => { b.classList.toggle('on', i === ix); b.classList.toggle('done', i < ix); b.setAttribute('aria-current', i === ix ? 'step' : 'false'); });
+  document.querySelectorAll('#book img').forEach((m, i) => m.style.outline = i === ix ? '3px solid var(--accent)' : 'none');
+  setPlay();
+}
+function setPlay() {
+  const b = $('play'); if (mode === 'try') { b.hidden = true; return; } b.hidden = false;
+  b.innerHTML = playing ? '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>Pause' : ix === STEPS.length - 1 ? '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 102.3-5.6M4 4v5h5"/></svg>Replay' : '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>Play';
+}
+// Plays step i from its first frame. how: 'watch' | 'try' | 'still' (jump to its end).
+async function run(i, how) {
+  const t = ++tok, s = STEPS[i]; ix = i; ended = false; caption();
+  finger.classList.remove('on'); target.hidden = true; live.hidden = true;
+  if (how === 'still') { await frame(s.to, true); ended = true; return; }
+  await frame(s.from, true); await sleep(how === 'try' ? 150 : 450); alive(t);
+  if (s.at) { if (how === 'try') { await waitTap(s.at, t); alive(t); const r = document.createElement('i'); r.className = 'rip'; place(r, s.at); scr.appendChild(r); setTimeout(() => r.remove(), 650); } else await tap(s.at, t); }
+  for (const m of s.mid) { await frame(m); await sleep(380); alive(t); }
+  if (s.at2) { if (how === 'try') { await waitTap(s.at2, t); alive(t); } else await tap(s.at2, t); }
+  if (s.live) { live.hidden = false; await sleep(900); alive(t); }
+  finger.classList.remove('on');
+  await frame(s.to); alive(t); ended = true;
+}
+async function play() {
+  playing = true; setPlay();
+  try {
+    // Play from the step on show if it has not played yet, else from the next; after the last, from the start.
+    let i = ended ? ix + 1 : ix; if (i >= STEPS.length) i = 0;
+    for (; playing && i < STEPS.length; i++) { await run(i, 'watch'); const t = tok; await sleep(1900); if (t !== tok) break; }
+  } catch (e) { if (e !== 'stop') throw e; }
+  playing = false; setPlay();
+}
+async function tryFrom(i) {
+  try { for (let k = i; k < STEPS.length; k++) { await run(k, 'try'); const t = tok; await sleep(700); if (t !== tok) return; } } catch (e) { if (e !== 'stop') throw e; }
+}
+const stop = () => { playing = false; tok++; finger.classList.remove('on'); target.hidden = true; setPlay(); };
+const go = i => { stop(); i = Math.max(0, Math.min(STEPS.length - 1, i)); if (mode === 'try') tryFrom(i); else run(i, 'watch').catch(e => { if (e !== 'stop') throw e; }); };
+// The chapter or a What if: its step dots, its handbook strip, its title and what to know.
+function paintSet() {
+  $('dots').innerHTML = STEPS.map((s, i) => `<button type="button" aria-label="Step ${i + 1}"></button>`).join('');
+  $('book').innerHTML = STEPS.map((s, i) => `<figure><img src="${IMG[s.to]}" alt="Step ${i + 1}: ${s.cap.replace(/"/g, '&quot;')}" loading="lazy" data-i="${i}"><figcaption><i>${i + 1}</i>${s.cap}</figcaption></figure>`).join('');
+  const wi = SET !== SETS[0];
+  $('wibar').hidden = !wi; $('know').hidden = !wi; $('wititle').textContent = wi ? SET.title : '';
+  $('knowlist').innerHTML = wi ? SET.specifics.map(x => `<li>${x}</li>`).join('') : '';
+  document.querySelectorAll('#wicards .wi-card').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.set === SET.id)));
+}
+function load(id) {
+  stop(); SET = SETS.find(s => s.id === id) || SETS[0]; STEPS = SET.steps; ix = 0; ended = false;
+  paintSet(); front.src = IMG[STEPS[0].from]; front.classList.remove('off'); back.classList.add('off'); live.hidden = true; caption();
+  const r = scr.getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight) $('player').scrollIntoView({ behavior: reduce() ? 'auto' : 'smooth', block: 'start' });
+  if (mode === 'try') tryFrom(0);
+}
+$('wicards').innerHTML = SETS.slice(1).map(s => `<button type="button" class="wi-card" data-set="${s.id}" aria-pressed="false"><b>${s.title}</b><span>${s.blurb}</span><small>${s.steps.length} steps · play on the phone</small></button>`).join('');
+$('wicards').addEventListener('click', e => { const c = e.target.closest('.wi-card'); if (c) load(c.dataset.set); });
+$('wiback').addEventListener('click', () => load(SETS[0].id));
+$('dots').addEventListener('click', e => { const b = e.target.closest('button'); if (b) go([...$('dots').children].indexOf(b)); });
+$('book').addEventListener('click', e => { const m = e.target.closest('img[data-i]'); if (!m) return; stop(); run(Number(m.dataset.i), 'still'); document.getElementById('player').scrollIntoView({ behavior: reduce() ? 'auto' : 'smooth', block: 'nearest' }); });
+$('play').addEventListener('click', () => { if (playing) stop(); else play(); });
+$('next').addEventListener('click', () => go(ix + 1));
+$('prev').addEventListener('click', () => { stop(); run(Math.max(0, ix - 1), 'still'); });
+$('again').addEventListener('click', () => go(0));
+document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.mode === mode) return; mode = b.dataset.mode;
+  document.querySelectorAll('.modes button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  stop(); if (mode === 'try') { const r = scr.getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight) scr.scrollIntoView({ block: 'center', behavior: reduce() ? 'auto' : 'smooth' }); tryFrom(0); } else run(0, 'still');
+}));
+// The first frame and caption are there before anything plays.
+paintSet(); front.src = IMG[STEPS[0].from]; caption();
+})();
+</script>

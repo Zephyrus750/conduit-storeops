@@ -3,8 +3,9 @@
 // the morning report has no barcode for. Kmart's site search, or a book's
 // title, finds it (GET /v1/catalogue/barcode, worker/apnlookup.js). Live
 // pull, Cages and Adjust search first and fall back to the keycode typed in
-// their own scan box. Nothing is linked: the worker caches each answer by
-// barcode, so the next scan of it is quick.
+// their own scan box. The worker caches each answer by barcode, so the next
+// scan of it is quick; Live pull also keeps a match a person confirms
+// (pull.pair) and searches in the background while the requester scans on.
 //
 //   searchBarcode(ctx, gtin, onNames)  → { kc } one sure match | { list, source } a choice
 //                                        | { why: 'none' | 'failed' }; onNames runs as the

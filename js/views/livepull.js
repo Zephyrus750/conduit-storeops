@@ -1,13 +1,19 @@
 // Live pull (24 Oct 2026): the floor asks the stockroom for stock, item by
 // item, and the stockroom pulls it straight away. A session is one
 // department's run. The requester scans an item, its ticket or a keycode on
-// the floor (the worker's /pull/find answers from the latest inventory
-// report: the item's stockroom bays, carton size, today's truck) and sends
+// the floor (the worker's /pull/find answers at once from the latest inventory
+// report: the item's stockroom bays, carton size, today's truck; an item's
+// barcode is matched from the store's barcode book, a kept match or the
+// catalogue, and one nothing knows is searched in the background, in a tray,
+// while the requester scans on) and sends
 // how many; each puller sees the requests for the bays their phone picked,
 // marks them off (pulled, short from one bay and the rest from the next, or
 // not there) and sends the cage down. Only items with a stockroom location
-// can be asked for. What was pulled shows to anyone who scans the item again
-// that day. Sessions stay listed for a week (shared/reducers/pull.js).
+// can be asked for: the report's bays, or (8 Nov 2026) for an item the report
+// has no bay for, the bays it was seen in over the last two weeks (backfilled
+// there, or on an earlier report or SOH snapshot: the worker's seenBays),
+// asked for as a suggestion the puller sees marked. What was pulled shows to
+// anyone who scans the item again that day. Sessions stay listed for a week (shared/reducers/pull.js).
 //
 // Screens on the phone: home (sessions), new, the requester's scan and pad,
 // the puller's bays, the puller's list, the cage. Both lists end in a strip
@@ -26,13 +32,14 @@ import { haptic } from '../device.js';
 import { prefs, setPref } from '../prefs.js';
 import { fmtHM } from './backdock/common.js';
 import { ulid } from '../../shared/ulid.js';
+import { isKeycode } from '../../shared/keycode.js';
 import { settingsOf } from '../../shared/reducers/store.js';
 import { sessionCounts, sessionPeople, inZone, lineInZone, uncovered, pulledToday, gotOf } from '../../shared/reducers/pull.js';
 import { tx, txn } from '../i18n.js';
 
 // screen: null (the session this phone is in, or home) | new | zones | cage | past
-// find: the last scan's answer { state: busy | found | none | noreport | error, code, kc, bays, soh, carton, truck, name, img }
-const st = { screen: null, past: null, desk: null, find: null, qty: '', ack: false, change: null, sent: null, viaCam: false, shelf: '', tab: 'todo', order: 'time', sheet: false, short: null, got: {}, form: null, zone: null, tag: '' };
+// find: the last scan's answer { state: busy | found | seen | none | noreport | error, code, kc, bays, seen, soh, carton, truck, name, img }
+const st = { screen: null, past: null, desk: null, find: null, qty: '', ack: false, seenOk: false, change: null, sent: null, viaCam: false, shelf: '', tab: 'todo', order: 'time', sheet: false, short: null, got: {}, form: null, zone: null, tag: '' };
 const names = new Map(), asking = new Set();
 const hm = iso => (iso ? fmtHM(iso) : '');
 
@@ -65,6 +72,11 @@ function nameOf(ctx, l, repaint) {
   return l.kc;
 }
 const qtyText = l => (l.qty === 'all' ? tx('all there is') : l.carton && l.qty % l.carton === 0 ? `${l.qty} · ${txn(l.qty / l.carton, '{n} carton', '{n} cartons')}` : String(l.qty));
+// Where an item the report had no bay for was seen lately (pull/find's seen, a line's seen).
+const SEEN_VIA = { backfill: d => tx('backfilled {date}', { date: d }), report: d => tx('inventory report {date}', { date: d }), soh: d => tx('SOH report {date}', { date: d }) };
+const seenText = x => SEEN_VIA[x.via]?.(esc(fmtDay(x.date))) || '';
+// A line asked for where it was seen lately: what the puller is told about the bay in hand.
+const seenTag = (l, bay) => { const x = l.seen?.find(y => y.bay === bay) || l.seen?.[0]; return x ? `<span class="lp-sug" title="${tx('Not on today’s report: asked for where it was seen lately, so it may not be there')}">${tx('SUGGESTED')}</span> <small class="lp-sugw">${seenText(x)}</small>` : ''; };
 const baysText = l => (l.got && Object.keys(l.got).length > 1 ? Object.entries(l.got).map(([b, n]) => tx('{n} from {bay}', { n, bay: b })).join(', ') : l.bays.length > 1 ? tx('bays {list}', { list: l.bays.join(' + ') }) : tx('bay {bay}', { bay: l.bays[0] }));
 function stateText(l) {
   if (l.st === 'todo') return [tx('Waiting'), ''];
@@ -139,18 +151,19 @@ function requester(ctx, ses, repaint) {
   const head = `<div class="lp-top">${ses.dept ? dep(ses.dept) : ''}<div><b>${esc(ses.name)}</b><span><i class="lp-live"></i>${p.pull ? txn(p.pull, '{n} puller in the stockroom', '{n} pullers in the stockroom') : tx('No puller has joined yet')}</span></div></div>`;
   const scan = `<form class="lp-scan" data-form="lp-find"><input class="ad-in mono" data-field="lp-code" inputmode="numeric" autocomplete="off" enterkeyhint="search" placeholder="${tx('Scan or type a keycode')}" aria-label="${tx('Keycode or barcode')}"><button type="button" class="lp-cam" data-act="lp-cam" aria-label="${tx('Scan with the camera')}">${ic('camera')}</button></form>` +
     (ses.shelves ? `<button class="lp-shelf" data-act="lp-cam-shelf">${ic('pin')}${st.shelf ? tx('For shelf {shelf}', { shelf: `<b>${esc(st.shelf)}</b>` }) : tx('Scan the shelf you are filling')}</button>` : '');
-  const dup = f?.state === 'found' ? liveLines(ses).find(l => l.kc === f.kc && l.st === 'todo') : null;
+  const dup = f?.state === 'found' || f?.state === 'seen' ? liveLines(ses).find(l => l.kc === f.kc && l.st === 'todo') : null;
   // A recalled or withdrawn product is never asked for: the flag says where it goes instead.
-  const rec = f && (f.state === 'found' || f.state === 'none' || f.state === 'recalled') ? recallFor(ctx.store, f.kc) || recallFor(ctx.store, f.gtin) || recallFor(ctx.store, f.code) : null;
+  const rec = f && (f.state === 'found' || f.state === 'seen' || f.state === 'none' || f.state === 'recalled') ? recallFor(ctx.store, f.kc) || recallFor(ctx.store, f.gtin) || recallFor(ctx.store, f.code) : null;
   const card = rec ? productRow(f) + recallFlag(ctx.store, rec, f.kc || '') : !f ? (st.sent ? `<div class="lp-sent" role="status">${ic('check')}<span><b>${st.sent.change ? tx('Changed: {name} × {qty}', { name: esc(st.sent.name), qty: esc(st.sent.qty) }) : tx('Sent: {name} × {qty}', { name: esc(st.sent.name), qty: esc(st.sent.qty) })}</b><small>${tx('On the pullers’ phones now. Scan the next item.')}</small></span></div>` : `<div class="card lp-card lp-hint">${ic('barcode')}<p>${tx('Scan an item, its ticket, or type the keycode. Only items with a stockroom location can be asked for.')}</p></div>`)
     : f.state === 'busy' ? `<div class="card lp-card lp-hint">${ic('clock')}<p>${tx('Looking it up…')}</p></div>`
     : f.state === 'error' ? `<div class="lp-ans bad">${ic('alert')}<span><b>${tx('Couldn’t look it up')}</b>${esc(f.message || '')}</span></div>`
-    : f.state === 'searching' || f.state === 'choose' || f.state === 'manual' ? barcodeCard(f)
+    : f.state === 'choose' || f.state === 'manual' ? barcodeCard(f)
     : f.state === 'recalled' ? productRow(f)   // closed since the scan: nothing more to say
     : f.state === 'noreport' ? `<div class="lp-ans warn">${ic('alert')}<span><b>${tx('No inventory report yet')}</b>${tx('Live pull reads the stockroom bays from the morning inventory report. Paste it in Reports & files first.')}</span></div>`
+    : f.state === 'seen' ? productRow(f) + seenCard(f) + (st.seenOk ? flags(ctx, ses, f, dup, day) : '')
     : f.state === 'none' ? productRow(f) + `<div class="lp-ans warn">${ic('x')}<span><b>${tx('No stockroom location')}</b>${f.report?.date && f.report.date !== day ? tx('The latest report ({date}) has no stockroom bay for it, so it isn’t added to the list.', { date: esc(f.report.date) }) : tx('This morning’s report has no stockroom bay for it, so it isn’t added to the list.')}</span></div>`
     : productRow(f, true) + flags(ctx, ses, f, dup, day);
-  const showPad = f?.state === 'found' && !rec && (st.ack || (!dup && !f.truck));
+  const showPad = (f?.state === 'found' || (f?.state === 'seen' && st.seenOk)) && !rec && (st.ack || (!dup && !f.truck));
   const c2 = f?.carton;
   const pad = `<div class="lp-qty"><span class="lbl">${st.change ? tx('Change to') : tx('How many?')}</span><b class="lp-n${st.qty ? '' : ' blank'}${st.qty === 'ALL' ? ' all' : ''}" aria-live="polite">${st.qty === 'ALL' ? tx('All there is') : st.qty || '–'}</b></div>` +
     `<div class="lp-padx">${c2 ? `<button data-act="lp-carton">${ic('box')}${tx('+ Carton ({n})', { n: c2 })}</button>` : ''}<button class="${st.qty === 'ALL' ? 'on' : ''}" data-act="lp-allthere">${tx('All there is')}</button></div>` +
@@ -161,11 +174,11 @@ function requester(ctx, ses, repaint) {
     (lastCage ? sx.sec(tx('Cage {n}', { n: ses.cage - 1 }), sx.rows([sx.row('cage', tx('On its way: {n} lines', { n: lastCage.lines }), tx('sent down {time}', { time: hm(lastCage.at) }), tx('Coming'), 'acc')])) : '') +
     sx.sec(tx('Requests'), lines.length ? sx.rows(lines.slice(0, 60).map(l => { const [t, tone] = stateText(l); return sx.row('box', `${esc(nameOf(ctx, l, repaint))} · ${esc(qtyText(l))}`, `<span class="mono">${esc(l.kc)}</span> · ${esc(baysText(l))} · ${hm(l.at)}`, t, tone); })) : `<p class="sx-sub">${tx('Nothing asked for yet.')}</p>`, tx('newest first')) +
     sx.acts([sx.btn('x', tx('Leave session'), 'data-act="lp-leave"'), sx.btn('check', tx('End session'), 'data-act="lp-end"')]));
-  return `<div class="lp-body">${head}${scan}${card}${showPad ? pad : ''}</div>${sheet}${strip('listcheck', esc(ses.name), countsLine(c), c.todo || '')}`;
+  return `<div class="lp-body">${head}${scan}${behindTray()}${card}${showPad ? pad : ''}</div>${sheet}${strip('listcheck', esc(ses.name), countsLine(c), c.todo || '')}`;
 }
 // How a scanned barcode found its keycode: the report's own APN, a pair a
 // person made earlier (Cages, Adjust), or Kmart's site search.
-const FROM = { apn: () => tx('found from the barcode'), paired: () => tx('found from the barcode'), web: () => tx('found on kmart.com.au from the barcode') };
+const FROM = { apn: () => tx('found from the barcode'), paired: () => tx('found from the barcode'), kmart: () => tx('found from the barcode'), web: () => tx('found on kmart.com.au from the barcode') };
 function productRow(f, bays) {
   const price = Number.isFinite(f.price) ? ` · $${Number(f.price).toFixed(2)}` : '';
   return `<div class="card lp-prod"><span class="lp-pic">${productImg(f.img) || ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${FROM[f.via] ? `<small class="lp-from">${FROM[f.via]()}${f.via !== 'apn' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-wrong" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}</span>` +
@@ -173,6 +186,14 @@ function productRow(f, bays) {
 }
 // What the requester is told before the pad: already asked for in this
 // session, on today's truck, pulled earlier today (any session).
+// Not on the report's bays, but seen in the stockroom over the last two weeks:
+// it may not have been scanned in, so it can be asked for there. The request
+// carries where it was seen, and the puller sees it as a suggestion.
+function seenCard(f) {
+  return `<div class="lp-ans warn">${ic('alert')}<span><b>${tx('Not on today’s report, but seen lately')}</b>${tx('It may not have been scanned in. Ask for it where it was seen and the stockroom checks there.')}</span></div>` +
+    `<ul class="lp-seen">${f.seen.map(x => `<li><span class="lp-bay sm"><small>${tx('BAY')}</small><b class="mono">${esc(x.bay)}</b></span><span>${seenText(x)}</span></li>`).join('')}</ul>` +
+    (st.seenOk ? '' : `<div class="lp-acts"><button class="btn" data-act="lp-clear">${tx('Skip it')}</button><button class="btn primary" data-act="lp-seen-ok">${f.seen.length > 1 ? tx('Ask for it in these bays') : tx('Ask for it there')}</button></div>`);
+}
 function flags(ctx, ses, f, dup, day) {
   const earlier = pulledToday({ pulls: pulls(ctx) }, f.kc, day);
   const before = earlier.length ? `<div class="lp-ans info">${ic('clock')}<span><b>${tx('Pulled earlier today')}</b>${earlier.map(x => x.n != null ? tx('{n} came out of bay {bay} at {time}', { n: x.n, bay: esc(x.bay), time: hm(x.at) }) : tx('Pulled from bay {bay} at {time}', { bay: esc(x.bay), time: hm(x.at) })).join('. ')}. ${tx('The bay may still have more.')}</span></div>` : '';
@@ -197,6 +218,7 @@ function puller(ctx, ses, repaint) {
     const bay = firstBay(l), also = l.bays.filter(b => b !== bay), todoL = l.st === 'todo', [t, tone] = stateText(l);
     const big = l.qty === 'all' ? tx('ALL') : String(l.qty), small = l.qty === 'all' ? tx('there is') : l.carton && l.qty % l.carton === 0 ? txn(l.qty / l.carton, '{n} carton', '{n} cartons') : '';
     return `<div class="lp-ln${todoL ? '' : ' done'}${todoL && Date.parse(l.at) > recent ? ' fresh' : ''}"><div class="lp-lt"><span class="lp-bay sm"><small>${tx('BAY')}</small><b class="mono">${esc(bay)}</b></span><span class="lp-pn"><b>${recallTagFor(l.kc)}${esc(nameOf(ctx, l, repaint))}</b><small>${hm(l.at)} · <span class="mono">${esc(l.kc)}</span>${l.shelf ? ' · ' + tx('for {shelf}', { shelf: esc(l.shelf) }) : ''}</small></span><span class="lp-q"><b>${esc(big)}</b>${small ? `<small>${esc(small)}</small>` : ''}</span></div>` +
+      (l.seen ? `<div class="lp-also lp-sugl">${seenTag(l, bay)}</div>` : '') +
       (todoL && also.length ? `<div class="lp-also">${tx('Also in {bays} if {bay} runs short', { bays: also.map(b => `<span class="chip mono">${esc(b)}</span>`).join(' '), bay: `<span class="mono">${esc(bay)}</span>` })}</div>` : '') +
       (todoL ? `<div class="lp-acts"><button class="btn primary sm lp-ok" data-act="lp-pulled" data-line="${esc(l.id)}" data-bay="${esc(bay)}">${ic('check')}${l.qty === 'all' ? tx('Pulled all') : tx('Pulled {n}', { n: l.qty })}</button>${l.qty !== 'all' ? `<button class="btn sm" data-act="lp-short" data-line="${esc(l.id)}">${tx('Short')}</button>` : ''}<button class="btn sm lp-no" data-act="lp-gone" data-line="${esc(l.id)}">${tx('Not there')}</button></div>`
         : `<div class="lp-acts"><span class="lp-pill ${tone}">${t}${l.doneBy && l.doneBy !== ctx.session.device ? ' · ' + esc(who(l.doneBy) || tx('another puller')) : ''}</span>${l.cage == null ? `<button class="btn sm" data-act="lp-undo" data-line="${esc(l.id)}">${tx('Undo')}</button>` : `<span class="lp-dim">${tx('cage {n}', { n: l.cage })}</span>`}</div>`) + `</div>`;
@@ -283,7 +305,7 @@ function desk(ctx) {
     `<p class="lbl">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers') + (zones.length ? ` (${esc(zones.join('; '))})` : ''), tx('since {time}', { time: hm(ses.at) }), ses.shelves ? tx('shelf scan on') : tx('shelf scan off')].join(' · ')}</p>` +
     `<div class="lp-kpis"><div><b>${c.asked}</b><span>${tx('Asked')}</span></div><div><b class="ok">${c.pulled}</b><span>${tx('Pulled')}</span></div><div><b>${c.todo}</b><span>${tx('Waiting')}</span></div><div><b class="warn">${c.short}</b><span>${tx('Short')}</span></div><div><b class="bad">${c.gone}</b><span>${tx('Not there')}</span></div></div>` +
     (lines.length ? `<div class="mfx-scroll"><table class="wb-t lp-t"><thead><tr><th>${tx('Asked')}</th><th>${tx('Item')}</th><th>${tx('Keycode')}</th><th>${tx('Bays')}</th><th class="num">${tx('Asked')}</th><th class="num">${tx('Pulled')}</th><th>${tx('Puller')}</th><th>${tx('State')}</th></tr></thead><tbody>` +
-      groups.map(([label, ls]) => `<tr class="lp-cg"><td colspan="8">${label}</td></tr>` + ls.sort((a, b) => String(a.at).localeCompare(String(b.at))).map(l => { const [t, tone] = stateText(l); return `<tr><td>${hm(l.at)}</td><td>${esc(nameOf(ctx, l, repaint))}${l.shelf ? ` <small class="lbl">${tx('for {shelf}', { shelf: esc(l.shelf) })}</small>` : ''}</td><td class="mono"><span data-kccard="${esc(l.kc)}">${esc(l.kc)}</span></td><td class="mono">${esc(l.got && Object.keys(l.got).length > 1 ? Object.entries(l.got).map(([b, n]) => `${b} (${n})`).join(' + ') : l.bays.join(', '))}</td><td class="num">${esc(qtyText(l))}</td><td class="num">${l.st === 'todo' ? '–' : l.st === 'gone' ? 0 : l.qty === 'all' && !l.got ? tx('all') : gotOf(l)}</td><td>${esc(l.doneBy ? who(l.doneBy) || tx('another puller') : '')}</td><td><span class="lp-pill ${tone}">${t}</span></td></tr>`; }).join('')).join('') + `</tbody></table></div>` : `<p class="lbl">${tx('Nothing asked for yet.')}</p>`) + `</div></div>`;
+      groups.map(([label, ls]) => `<tr class="lp-cg"><td colspan="8">${label}</td></tr>` + ls.sort((a, b) => String(a.at).localeCompare(String(b.at))).map(l => { const [t, tone] = stateText(l); return `<tr><td>${hm(l.at)}</td><td>${esc(nameOf(ctx, l, repaint))}${l.shelf ? ` <small class="lbl">${tx('for {shelf}', { shelf: esc(l.shelf) })}</small>` : ''}</td><td class="mono"><span data-kccard="${esc(l.kc)}">${esc(l.kc)}</span></td><td class="mono">${esc(l.got && Object.keys(l.got).length > 1 ? Object.entries(l.got).map(([b, n]) => `${b} (${n})`).join(' + ') : l.bays.join(', '))}${l.seen ? ' ' + seenTag(l, l.bays[0]) : ''}</td><td class="num">${esc(qtyText(l))}</td><td class="num">${l.st === 'todo' ? '–' : l.st === 'gone' ? 0 : l.qty === 'all' && !l.got ? tx('all') : gotOf(l)}</td><td>${esc(l.doneBy ? who(l.doneBy) || tx('another puller') : '')}</td><td><span class="lp-pill ${tone}">${t}</span></td></tr>`; }).join('')).join('') + `</tbody></table></div>` : `<p class="lbl">${tx('Nothing asked for yet.')}</p>`) + `</div></div>`;
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────
@@ -295,7 +317,9 @@ async function find(ctx, raw, viaCam = false) {
   const code = String(raw || '').trim(); if (!code) return;
   const j = joined(ctx);
   if (j?.ses.shelves && /[A-Za-z]/.test(code)) { const s = SHELF(code); if (s) { st.shelf = s; haptic('tap'); ctx.rerender(); if (viaCam) setTimeout(() => openCam(ctx), 300); return; } }
-  st.sent = null; st.ack = false; st.change = null; st.qty = ''; st.viaCam = viaCam;
+  // A keycode typed for a barcode nothing knew is kept as its match (pull.pair), so its next scan is instant.
+  const linkFor = st.find?.state === 'manual' && isKeycode(code) ? st.find.gtin : null;
+  st.sent = null; st.ack = false; st.seenOk = false; st.change = null; st.qty = ''; st.viaCam = viaCam;
   // A recalled or withdrawn product stops here, from the list every device
   // holds: no report, link or network needed.
   const pre = recallFor(ctx.store, code);
@@ -308,33 +332,54 @@ async function find(ctx, raw, viaCam = false) {
   st.find = { state: 'busy', code }; ctx.rerender();
   try {
     const r = await ctx.api(`/v1/store/${ctx.storeNo}/pull/find?code=${encodeURIComponent(code)}`);
-    if (r.report && r.gtin && !r.kc) return lookUp(ctx, r);
-    st.find = { ...r, state: r.bays?.length ? 'found' : r.report ? 'none' : 'noreport', code };
-    if (r.kc) { const it = await ctx.catalogue.lookup(r.kc).catch(() => null); if (it) Object.assign(st.find, { name: it.name || '', img: it.img || '', price: it.price }); }
+    // A barcode nothing in the store knows: searched in the background
+    // (the tray under the scan box), and the next item can be scanned now.
+    if (r.report && r.gtin && !r.kc) { searchBehind(ctx, r); st.find = null; haptic('warning'); ctx.rerender(); if (viaCam) setTimeout(() => openCam(ctx), 350); return; }
+    st.find = { ...r, state: r.bays?.length ? 'found' : r.seen?.length ? 'seen' : r.report ? 'none' : 'noreport', code };
     haptic(recallFor(ctx.store, r.kc) ? 'error' : st.find.state === 'found' ? 'success' : 'warning');
+    if (linkFor && r.kc) pair(ctx, linkFor, r.kc);
+    // The answer shows now; the product's name and picture follow when they land.
+    if (r.kc) ctx.catalogue.lookup(r.kc).then(it => { if (it && st.find?.code === code) { Object.assign(st.find, { name: it.name || '', img: it.img || '', price: it.price }); ctx.rerender(); } }).catch(() => {});
   } catch (e) { st.find = { state: 'error', code, message: e.message }; haptic('error'); }
   ctx.rerender();
 }
-// A barcode the report doesn't list (a clearance ticket, a shelf talker
-// carries the item's own barcode): the search (js/barcodesearch.js) finds
-// its keycode. One sure match is found at once; candidates are a one-tap
-// choice; nothing found, and the person types the keycode in the scan box.
-// Nothing is linked.
-async function lookUp(ctx, f) {
-  const gtin = f.gtin, seq = (st.seq = (st.seq || 0) + 1), viaCam = st.viaCam;
-  st.find = { state: 'searching', code: gtin, gtin, report: f.report }; ctx.rerender();
-  let res = null;
-  res = await searchBarcode(ctx, gtin, () => { if (st.find?.list && st.find.list === res?.list) ctx.rerender(); });
-  if (st.seq !== seq || st.find?.gtin !== gtin || st.find.state !== 'searching') return;   // another scan came first
-  st.viaCam = viaCam;
-  if (res.kc) return pick(ctx, res.kc, gtin);
-  if (res.list) { st.find = { state: 'choose', code: gtin, gtin, report: f.report, source: res.source, list: res.list }; haptic('warning'); return ctx.rerender(); }
-  typeIt(ctx, gtin, f.report, res.why);
+// A barcode matched to its keycode by a person (a search's answer tapped, or
+// the keycode typed): kept for the store (pull.pair), so the next scan of it
+// finds the item at once. A newer match replaces it ("Wrong item?").
+function pair(ctx, gtin, kc) { send(ctx, 'pull.pair', { apn: gtin }, { keycode: kc }).catch?.(() => {}); }
+// Barcodes being searched on kmart.com.au while the requester scans on:
+// gtin → { gtin, state: searching | found | choose | none | failed, kc, name, img, list, source, report }.
+const behind = new Map();
+function searchBehind(ctx, f) {
+  const g = f.gtin, was = behind.get(g); if (was && was.state !== 'failed') return;
+  const b = { gtin: g, state: 'searching', report: f.report }; behind.set(g, b);
+  searchBarcode(ctx, g, () => ctx.rerender()).then(res => {
+    if (behind.get(g) !== b) return;
+    if (res.kc) Object.assign(b, { state: 'found', kc: res.kc });
+    else if (res.list) Object.assign(b, { state: 'choose', list: res.list, source: res.source });
+    else Object.assign(b, { state: res.why === 'failed' ? 'failed' : 'none' });
+    if (b.kc) ctx.catalogue.lookup(b.kc).then(it => { if (it) { Object.assign(b, { name: it.name || '', img: it.img || '' }); ctx.rerender(); } }).catch(() => {});
+    haptic(b.state === 'found' ? 'success' : 'warning'); ctx.rerender();
+  });
+}
+// The tray: each background search, newest first, with what to do next.
+function behindTray() {
+  const list = [...behind.values()].reverse().slice(0, 6); if (!list.length) return '';
+  const row = b => {
+    const what = b.state === 'searching' ? `<span class="lp-bgs">${tx('Searching kmart.com.au…')}</span>`
+      : b.state === 'found' ? `<b>${esc(b.name || b.kc)}</b><small class="mono">${esc(b.kc)}</small>`
+      : b.state === 'choose' ? `<b>${tx('Is this it?')}</b><small>${txn(b.list.length, '{n} possible item', '{n} possible items')}</small>`
+      : `<b>${b.state === 'failed' ? tx('Couldn’t search kmart.com.au') : tx('Not found on kmart.com.au')}</b><small>${tx('Type its keycode in the box above, from the ticket, shelf label or carton.')}</small>`;
+    const act = b.state === 'found' ? `<button class="btn primary sm" data-act="lp-bg-ask" data-g="${esc(b.gtin)}">${tx('Ask for it')}</button>`
+      : b.state === 'searching' ? '' : `<button class="btn sm" data-act="lp-bg-open" data-g="${esc(b.gtin)}">${b.state === 'choose' ? tx('Pick') : tx('Type it')}</button>`;
+    return `<div class="lp-bgr ${b.state}"><span class="lp-pic sm">${b.state === 'searching' ? ic('search') : productImg(b.img) || ic('barcode')}</span><span class="lp-pn">${what}<small class="mono">${tx('Barcode {code}', { code: esc(b.gtin) })}</small></span>${act}<button class="ibtn" data-act="lp-bg-x" data-g="${esc(b.gtin)}" aria-label="${tx('Dismiss')}">${ic('x')}</button></div>`;
+  };
+  return `<div class="card lp-bg"><div class="lp-bgh">${ic('search')}<b>${tx('Barcodes being looked up')}</b><small>${tx('Keep scanning: each one lands here when kmart.com.au answers.')}</small></div>${list.map(row).join('')}</div>`;
 }
 // The keycode the search found, or the one tapped: found as if it were typed.
 async function pick(ctx, kc, gtin) {
   await find(ctx, kc, st.viaCam);
-  if (st.find?.code === kc && st.find.state !== 'error') { Object.assign(st.find, { gtin, via: 'web' }); ctx.rerender(); }
+  if (st.find?.code === kc && st.find.state !== 'error') { Object.assign(st.find, { gtin, via: 'web' }); ctx.rerender(); pair(ctx, gtin, kc); }
 }
 // Nothing found (or the wrong item): the keycode printed on the ticket goes in the scan box.
 function typeIt(ctx, gtin, report, why) {
@@ -343,14 +388,15 @@ function typeIt(ctx, gtin, report, why) {
   setTimeout(() => { const i = document.querySelector('[data-field="lp-code"]'); if (i) { i.value = ''; i.focus(); } }, 40);
 }
 async function sendRequest(ctx, ses) {
-  const f = st.find; if (f?.state !== 'found' || !st.qty) return;
+  const f = st.find; if ((f?.state !== 'found' && f?.state !== 'seen') || !st.qty) return;
+  const seen = f.state === 'seen' ? f.seen : null;
   if (recallFor(ctx.store, f.kc)) return toast(tx('This product is recalled: it can’t be asked for'), 'bad');
   const all = st.qty === 'ALL', qty = all ? undefined : Number(st.qty), q = all ? { all: true } : { qty };
   const ok = st.change ? await send(ctx, 'pull.update', { session: ses.id, line: st.change }, q)
-    : await send(ctx, 'pull.request', { session: ses.id, line: ulid() }, { kc: f.kc, bays: f.bays, ...q, ...(f.carton ? { carton: f.carton } : {}), ...(f.name ? { name: String(f.name).slice(0, 80) } : {}), ...(ses.shelves && st.shelf ? { shelf: st.shelf } : {}) });
+    : await send(ctx, 'pull.request', { session: ses.id, line: ulid() }, { kc: f.kc, bays: seen ? seen.map(x => x.bay) : f.bays, ...(seen ? { seen } : {}), ...q, ...(f.carton ? { carton: f.carton } : {}), ...(f.name ? { name: String(f.name).slice(0, 80) } : {}), ...(ses.shelves && st.shelf ? { shelf: st.shelf } : {}) });
   if (!ok) return;
   st.sent = { name: f.name || f.kc, qty: all ? tx('all there is') : qty, change: !!st.change };
-  Object.assign(st, { find: null, qty: '', change: null, ack: false });
+  Object.assign(st, { find: null, qty: '', change: null, ack: false, seenOk: false });
   haptic('success'); ctx.rerender();
   if (st.viaCam) setTimeout(() => openCam(ctx), 350);
 }
@@ -426,8 +472,12 @@ export default {
       if (act === 'bc-pick') { const f = st.find; if (f?.gtin) return pick(ctx, a.dataset.kc, f.gtin); return; }
       if (act === 'bc-type') { const f = st.find; if (f?.gtin) typeIt(ctx, f.gtin, f.report, 'pick'); return; }
       if (act === 'lp-wrong') { typeIt(ctx, a.dataset.gtin, st.find?.report, 'wrong'); return; }
-      if (act === 'bc-again') { const f = st.find; if (f?.gtin) lookUp(ctx, f); return; }
+      if (act === 'bc-again') { const f = st.find; if (f?.gtin) { searchBehind(ctx, f); st.find = null; ctx.rerender(); } return; }
+      if (act === 'lp-bg-ask') { const b = behind.get(a.dataset.g); if (b?.kc) { behind.delete(b.gtin); return pick(ctx, b.kc, b.gtin); } return; }
+      if (act === 'lp-bg-open') { const b = behind.get(a.dataset.g); if (!b) return; behind.delete(b.gtin); st.find = b.state === 'choose' ? { state: 'choose', code: b.gtin, gtin: b.gtin, report: b.report, list: b.list, source: b.source } : { state: 'manual', code: b.gtin, gtin: b.gtin, report: b.report, why: b.state === 'failed' ? 'failed' : 'none' }; st.qty = ''; ctx.rerender(); if (st.find.state === 'manual') setTimeout(() => document.querySelector('[data-field="lp-code"]')?.focus(), 40); return; }
+      if (act === 'lp-bg-x') { behind.delete(a.dataset.g); return ctx.rerender(); }
       if (act === 'lp-ack') { st.ack = true; return ctx.rerender(); }
+      if (act === 'lp-seen-ok') { st.seenOk = true; return ctx.rerender(); }
       if (act === 'lp-dup-add') { const l = ses?.lines[a.dataset.line]; if (!l || l.qty === 'all') return; if (await send(ctx, 'pull.update', { session: ses.id, line: l.id }, { qty: Math.min(999, l.qty + (l.carton || l.qty)) })) { st.sent = { name: l.name || l.kc, qty: Math.min(999, l.qty + (l.carton || l.qty)), change: true }; st.find = null; haptic('success'); ctx.rerender(); } return; }
       if (act === 'lp-dup-change') { st.change = a.dataset.line; st.ack = true; st.qty = ''; return ctx.rerender(); }
       // The puller

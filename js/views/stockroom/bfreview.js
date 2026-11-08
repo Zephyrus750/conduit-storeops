@@ -27,6 +27,7 @@ import { CLAIM_TTL_MS } from '../../../shared/reducers/stockroom.js';
 import { STATUS, todayKey, ensureNames, nameHtml, nameOf, catalogueVerdict, send, copyText, loadProfiles, depthChip, SR_DEPTS, SR_GROUPS, deptLabel, deptColour, deptBadge, setProductActions, closeProduct, imgOf } from './common.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { openPasteBox } from '../pastebox.js';
+import { reportToIntel } from './intel.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
 
@@ -237,15 +238,16 @@ async function pushReport(ctx, r) {
 }
 // The whole SIM report, from the paste pop-up (js/views/pastebox.js): added
 // to today's (a later paste updates the bays it lists), sent to the store,
-// and its items at 0 or less go to Adjustments. Null when no location line
+// its items at 0 or less go to Adjustments and its SOH lines to today's
+// Stock intelligence snapshot (reportToIntel). Null when no location line
 // is found.
 export async function pasteReport(ctx, text) {
   const byLoc = parseReportByLocation(text), n = Object.keys(byLoc).length; if (!n) return null;
   await loadReport(ctx);
   const prev = st.report?.byLoc || {}, lines = parseReportLines(text), soh = Object.fromEntries(Object.entries(lines).map(([kc, r]) => [kc, r.soh]));
   await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh }, apn: { ...(st.report?.apn || {}), ...reportApns(text) } });
-  const sent = await reportToAdjust(ctx, byLoc, lines);
-  return { bays: n, codes: Object.values(byLoc).reduce((x, l) => x + l.length, 0), sent };
+  const sent = await reportToAdjust(ctx, byLoc, lines), intel = await reportToIntel(ctx, text);
+  return { bays: n, codes: Object.values(byLoc).reduce((x, l) => x + l.length, 0), sent, intel };
 }
 // One bay's inventory list from SIM (K2B's paste): lines or a glued blob,
 // detected live with names, duplicates removed, leftovers called out, and a
@@ -399,9 +401,8 @@ async function useNear(ctx, m, code, other) {
   if (!bay || !other || s?.status === 'submitted') return;
   if (s?.codes[code]?.scanned) {
     if (!confirm(tx('Use {other} instead of {code} in the scans for {bay}?', { other, code, bay }))) return;
-    const where = { bay: s.bay, date: s.date };
-    if (!s.codes[other]?.scanned && !await send(ctx, 'submission.update', where, { codes: { [other]: true } })) return;
-    if (!await send(ctx, 'submission.update', where, { remove: [code] })) return;
+    // One update, marked a swap: a correction, not a scan, so the crew's Send stands.
+    if (!await send(ctx, 'submission.update', { bay: s.bay, date: s.date }, { codes: { [other]: true }, remove: [code], swap: true })) return;
   } else if ((st.report?.byLoc?.[bay] || []).includes(code)) {
     if (!confirm(tx('Use {other} instead of {code} in the report list for {bay}?', { other, code, bay }))) return;
     await saveReport(ctx, { ...st.report, byLoc: { ...st.report.byLoc, [bay]: [...new Set(st.report.byLoc[bay].map(c => c === code ? other : c))] }, unsent: undefined });
@@ -495,7 +496,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'request') { const inp = root.querySelector('[data-field="addloc"]'); await addLocation(ctx, inp.value, true); inp.value = ''; }
   else if (act === 'cancel-req') { await send(ctx, 'submission.request', { bay: a.dataset.bay, date }, { remove: true }); st.sel = null; }
   else if (act === 'print-sheet') { const s = cur(); if (s) printWorksheet(s, m.sys?.[s.bay] || null); }
-  else if (act === 'ready') { const s = cur(); if (s) await readyBay(ctx, s, m, false); }
+  else if (act === 'ready') { const s = cur(); if (s) { await readyBay(ctx, s, m, true); ctx.rerender(); } }
   else if (act === 'takeover') { const s = cur(); if (!s) return; try { await ctx.store.dispatch({ type: 'submission.claim', entity: { bay: s.bay, date }, payload: { takeover: true } }); st.claimed = key(s); toast(tx('{bay} is yours now', { bay: s.bay })); } catch (e) { toast(e.message, 'bad'); } }
   else if (act === 'submit') { const s = cur(); if (s) await send(ctx, 'submission.submit', { bay: s.bay, date }); }
   else if (act === 'reopen') { const s = cur(); if (s) await send(ctx, 'submission.reopen', { bay: s.bay, date }); }
@@ -731,6 +732,8 @@ function scanView(ctx, m) {
   // Every code scanned here, newest first, each removable (K2B could
   // delete any code, with undo); a pair one digit apart is flagged.
   const all = codes.slice().reverse(), dsp = disputes(codes), nDsp = Object.keys(dsp).length, recallNow = st.mRecall ? ctx.store.get('recalls')?.items?.[st.mRecall.id] : null;
+  // last: the code just scanned (it gets the row's highlight); the strip falls
+  // back to the newest code still here once that one is removed.
   const held = heldFor(bay), d = deptForBay(rangesOf(ctx), bay), last = st.mLast && codes.includes(st.mLast) ? st.mLast : null;
   warmReader();   // the reading engine loads while the location is open, so Scan starts quickly
   const row = (c, i) => `<div class="bf-code${i === 0 && c === last ? ' new' : ''}${dsp[c] ? ' warn' : nameOf(c) === null || recallFor(ctx.store, c) ? ' bad' : ''}"><b class="mono" data-kccard="${esc(c)}">${esc(c)}</b><span class="nm">${dsp[c] ? `<span class="mv-dsp">${ic('alert')}${esc(disputeHint(c, dsp[c][0]))}</span>` : nameHtml(c)}</span>${i === 0 && c === last ? `<em>${tx('just now')}</em>` : ''}` +
@@ -742,7 +745,7 @@ function scanView(ctx, m) {
     (nDsp ? `<div class="mv-note warn">${ic('alert')}${nDsp / 2 === 1 ? tx('Two codes are one digit apart: check which is on the shelf and remove the other.') : tx('{n} codes are one digit apart: check which is on the shelf and remove the other.', { n: nDsp })}</div>` : '');
   const list = `<div class="card bf-list"><div class="bf-lh">${tx('Scanned here')}<span>${tx('newest first')}</span></div>${all.length ? all.map(row).join('') : `<p class="bf-empty">${tx('Tap Scan to read the PDT’s list, or scan each product.')}</p>`}</div>`;
   const strip = bfStrip(`<div class="dk-st"><div class="dk-l1"><b>${codes.length}</b><span>${txn(codes.length, 'code in {bay}', 'codes in {bay}', { bay: esc(bay) })}</span></div>` +
-    `<div class="dk-l2">${held.size ? `<b class="w">${txn(held.size, '{n} held', '{n} held')}</b> · ` : ''}${last ? `${tx('Last')} <b>${esc(last)}</b> ${esc(nameOf(last) || '')}` : tx('Nothing scanned yet')}</div></div>` +
+    `<div class="dk-l2">${held.size ? `<b class="w">${txn(held.size, '{n} held', '{n} held')}</b> · ` : ''}${(last || all[0]) ? `${tx('Last')} <b>${esc(last || all[0])}</b> ${esc(nameOf(last || all[0]) || '')}` : tx('Nothing scanned yet')}</div></div>` +
     `<button class="dk-go ok" data-act="m-send">${ic('check')}${tx('Submit for review')}</button>`);
   return topBar(title, d ? deptBadge(d) : '', 2) + `<div class="dk-body">${entry}${notes}${list}</div>` + (st.mPanel ? scanPanel(bay) : '') + strip;
 }

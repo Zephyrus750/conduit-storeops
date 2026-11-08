@@ -73,6 +73,15 @@ differs from the default.
 | 32 | Label integrity on the phone |  **Decided 2026-10-09 (default), built:** a tap on the phone opens the micro-department the shelf is on and never assigns. On a desk, assigning is its own mode (Assign shelves, or Settings › Departments); a selected micro-department is otherwise checked  | Phone checks only; assigning stays on the desk | `js/views/labelint.js` |
 | 33 | The map's scale in metres (`metresPerUnit`) | No store has one, so shelf sizes, route metres and evacuation distances never show in metres. Each map is drawn over the store's official layout imported at 100%, shelves auto-detected then finished by hand; shelving comes in about three module sizes, so a module count is not a ruler (map editor audit 1.7) | Use the official layout as the ruler: on one store, measure a known distance on the layout at 100% (a dimensioned wall or the plan's scale bar) once; every layout imported the same way shares that scale | `shared/maprender.js`, the editor's Set Scale |
 
+## The Visual Guide (added 2026-11-07)
+
+| # | Decision | What Conduit does today | Where |
+|---|---|---|---|
+| 34 | How the guide shows screens | **Decided 2026-11-07:** drawn by hand in HTML, as now, not recorded from the real app. The drawings are brought up to date with the real screens and gain features (What ifs, camera scanning) as they are added. `scripts/guide/` captures the real screens to check a drawing against | `js/guide/scenes.js`, `scripts/guide/` |
+| 35 | The store the guide and its showcase show | **Decided 2026-11-07:** Busselton 1241 with its real map; the day itself (trucks, manifests, pallets, D-numbers) is made up | `js/guide/scenes.js` |
+| 36 | Numbers in the showcase's "What it changes" | **Decided 2026-11-07:** figures like a real store's (clear times, cartons an hour, shelves refreshed), from the demo day and labelled as a demo day, so nobody reads them as Busselton's own results | — |
+| 37 | When the new guide reaches Help | **Decided 2026-11-07:** it is worked out on a private review page first; Help changes only in a final PR once it is approved. **2026-11-08:** the first eight chapters approved and moved into Help with their translations; the rest are drawn the same way, one draft at a time | `js/guide/chapters/`, `scripts/guide/draft/` |
+
 ## The test pass on a real PC (1920×1080 first)
 
 Use store 1241 Busselton with the real map. Things only a real desk, real

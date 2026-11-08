@@ -325,7 +325,6 @@ export default {
   "{n} could not be added.": "Không thể thêm {n}.",
   "Classes": "Nhóm",
   "Loading the snapshots…": "Đang tải các bản chụp…",
-  "No snapshot yet. Paste this week's SOH report and save it; the classes need three snapshots to tell flat from moving.": "Chưa có bản chụp. Dán báo cáo SOH tuần này và lưu lại; cần ba bản chụp để phân biệt đứng yên với đang biến động.",
   "Keycode, location or name": "Keycode, vị trí hoặc tên",
   "Class": "Nhóm",
   "Loc": "Vị trí",
@@ -574,4 +573,6 @@ export default {
   "The classes are worked out again without it.": "Các nhóm sẽ được tính lại mà không có nó.",
   "The event log keeps a record of the delete.": "Nhật ký sự kiện vẫn ghi lại việc xóa.",
   "{bay} on {date} leaves the board and History.": "{bay} ngày {date} sẽ rời khỏi bảng và Lịch sử.",
+  "No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.": "Chưa có bản chụp. Lưu báo cáo SIM hôm nay hoặc dán báo cáo SOH vào đây; cần ba bản chụp để phân biệt đứng yên với đang biến động.",
+  "Nothing flagged on the latest snapshot.": "Không có gì được đánh dấu trong bản chụp mới nhất.",
 };

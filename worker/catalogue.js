@@ -107,8 +107,9 @@ export async function lookup(env, ctx, codes, { details = true, upstream: fetchU
     if (cache) await Promise.all(needDetail.map(kc => cachePut(cache, kc, items[kc], t0)));
     // A read without a picture keeps the one already known, and counts
     // towards the back-off; a new picture is kept by the catalogue object.
-    const found = {};
+    const found = {}, codes = {};
     const onItem = (kc, d) => {
+      for (const g of d.gtins || []) codes[g] = kc;
       const { np, ...prev } = base[kc];
       got[kc] = { ...prev, price: d.price ?? null, was: d.was ?? null, img: d.img || prev.img || null, clr: !!d.clr, at: now(), ...(d.img ? {} : { np: (np || 0) + 1 }) };
       if (d.img && d.img !== prev.img) found[kc] = d.img;
@@ -117,7 +118,7 @@ export async function lookup(env, ctx, codes, { details = true, upstream: fetchU
     const job = fetchDetails(env, needDetail.map(kc => ({ kc, u: base[kc].url })), fetchImpl, onItem)
       .then(() => { const t = now(); for (const kc of needDetail) if (!got[kc]) save(kc, { ...base[kc], tried: t }); })
       .catch(() => {})
-      .then(() => Promise.all([...saves, keepPictures(env, found)]));
+      .then(() => Promise.all([...saves, keepPictures(env, found), keepBarcodes(env, codes)]));
     if (ctx?.waitUntil) ctx.waitUntil(job);
     let timer; await Promise.race([job, new Promise(r => { timer = setTimeout(r, budgetMs); })]); clearTimeout(timer);
     for (const kc of needDetail) if (got[kc]) items[kc] = got[kc];
@@ -151,6 +152,17 @@ async function keepPictures(env, pics) {
   const stub = catalogueStub(env); if (!stub || !Object.keys(pics).length) return;
   try { await stub.fetch('https://catalogue/pictures', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: pics }) }); }
   catch { /* kept next time a page is read */ }
+}
+// The barcodes product pages named, kept by the catalogue object: { gtin: kc }.
+async function keepBarcodes(env, codes) {
+  const stub = catalogueStub(env); if (!stub || !Object.keys(codes).length) return;
+  try { await stub.fetch('https://catalogue/barcodes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: codes }) }); }
+  catch { /* kept next time the page is read */ }
+}
+export async function keptBarcodes(env, gtins) {
+  const stub = catalogueStub(env); if (!stub || !gtins.length) return {};
+  try { const r = await stub.fetch(`https://catalogue/barcodes?gtin=${gtins.join(',')}`); return r.ok ? ((await r.json()).items || {}) : {}; }
+  catch { return {}; }
 }
 export const catalogueStub = env => env.CATALOGUE ? env.CATALOGUE.get(env.CATALOGUE.idFromName('catalogue')) : null;
 // Conduit's own catalogue: { built, found, down }. built is false until its

@@ -36,6 +36,11 @@ test('labels: check and uncheck per cycle, variance list, cycle length guard', (
   assert.equal(s.labels.checks['2026-09M']['h4-023'], undefined);
   assert.equal(apply(s, ev('label.variance', { cycle: '2026-09M', micro: 'h4-023' }, { keycode: '42977636', note: 'ticket says 12.00' })), null);
   assert.equal(s.labels.variances['2026-09M'].length, 1);
+  // The keycode is shared/keycode.js's: 6 to 9 digits. A 13-digit item barcode is not one.
+  assert.equal(apply(s, ev('label.variance', { cycle: '2026-09M', micro: 'h4-023' }, { keycode: '9300601234561' })).code, 'invalid_event', 'an item barcode is not a keycode');
+  assert.equal(apply(s, ev('label.variance', { cycle: '2026-09M', micro: 'h4-023' }, { keycode: '43125' })).code, 'invalid_event', 'nor is a code a digit short');
+  assert.equal(apply(s, ev('label.variance', { cycle: '2026-09M', micro: 'h4-023' }, { keycode: '110148905' })), null, 'a 9-digit keycode is');
+  assert.equal(s.labels.variances['2026-09M'].length, 2, 'a refused variance leaves the list untouched');
   assert.equal(apply(s, ev('label.cycle.set', {}, { cycleLen: 'daily' })).code, 'invalid_event');
   assert.equal(apply(s, ev('label.cycle.set', {}, { cycleLen: 'fortnightly' })), null);
   assert.equal(apply(s, ev('label.assign', { micro: 'h4-023' }, { shelves: ['H4S1', 'H4S2'] })), null);

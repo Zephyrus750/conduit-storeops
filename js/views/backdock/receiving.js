@@ -7,7 +7,7 @@
 import { $, $$, ic, esc, vh, sub, toast, mhead, mbig, fmtDate, camButton, mgr } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { sheetHtml, ask } from '../../sheet.js';
-import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
+import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_TINY, PT_COLOUR, HALT_NAME, KIND_NAME, TRANS_NAME, ROLE_NAME, holdName, PALLET_STATE, TRUCK_STATE, LINK_BASIS, STD_MINS_PER_CARTON, todayKey, truckNo, fmtHM, openTrucks, nextTruckId, pallets, progress, openHalt, running, onBreak, openSegs, startOf, workedMin, pace, fmtMins, fmtClock, forecast, goalPace, who, dnumId, unfinished, grid, startable, manifestIndex, attachManifest } from './common.js';
 import { haptic } from '../../device.js';
 import { previewManifest } from './mpreview.js';
 import { printAudit, canAudit } from './audit.js';
@@ -224,7 +224,7 @@ function mobile(ctx, mode) {
   st.keepSel = false; lastMode = mode;
   st.view = mode; const run = mode === 'run'; attachOk = canAttach(ctx);
   const m = model(ctx), t = m.t, plan = ctx.store.get('plan'), sheet = phoneSheet(ctx, m, t, plan, run);
-  if (!t) return `<div class="dk-top"><div class="dk-tr"><b class="dk-tn">${tx('No truck on the dock')}</b>${phaseChip(null)}</div></div>` +
+  if (!t) return `<div class="dk-top"><div class="dk-tr"><b class="dk-tn">${tx('No truck on the dock')}</b></div></div>` +
     `<div class="dk-body">${clockNote(ctx)}${decantBoard(m.dock, plan, todayKey(), { act: true })}${heldCard(m.dock)}</div>` + sheet +
     strip(`<div class="dk-st"><div class="dk-l1"><span>${tx('Tap New truck when it lands.')}</span></div></div><button class="dk-go" data-act="newtruck">${ic('plus')}${tx('New truck')}</button>`, '', false);
   const body = run ? (!begun(t) ? readyBlock(t) : movingBar() + `<div class="bdk">${dockGrid(t, false)}</div>` + runHint() + crewStrip(t, m) + noCartonNote(t) + upNext(t, m))
@@ -340,7 +340,16 @@ function lastLanded(t) {
   const ps = pallets(t).filter(p => !p.carryover && p.landedAt).sort((a, b) => b.landedAt.localeCompare(a.landedAt)), c = phaseCounts(t);
   if (!ps.length) return t.status === 'live' ? `<p class="dk-empty">${tx('Nothing landed yet. Tap an empty square, or Scan a label.')}</p>` : '';
   return `<div class="card dk-list"><div class="dk-lh">${tx('Last landed')}<span>${landedLine(t)} · ${tx('{n} ctn', { n: c.cartons })}</span></div>` +
-    ps.slice(0, 4).map(p => { const n = p.consolIds.length + p.scanIds.length; return `<button class="dk-li" data-act="cell" data-ref="${esc(p.ref)}"><b class="dk-ref t-${PT_LETTER[p.ptype] || 'c'}">${esc(p.ref)}</b>${vfMark(p)}<span><em class="ty t-${PT_LETTER[p.ptype] || 'c'}">${esc(PT_ONE[p.ptype] || p.ptype)}</em> · ${tx('{n} ctn', { n: p.cartons ?? '–' })}${n ? ' · ' + txn(n, '{n} label', '{n} labels') : ''}</span><small>${fmtHM(p.landedAt)}</small></button>`; }).join('') + `</div>`;
+    ps.slice(0, 4).map(p => `<button class="dk-li" data-act="cell" data-ref="${esc(p.ref)}"><b class="dk-ref t-${PT_LETTER[p.ptype] || 'c'}">${esc(p.ref)}</b>${vfMark(p)}<span class="dk-tx"><span class="dk-ty"><em class="ty t-${PT_LETTER[p.ptype] || 'c'}">${esc(PT_TINY[p.ptype] || p.ptype)}</em> · ${tx('{n} ctn', { n: p.cartons ?? '–' })}</span>${firstLabel(p)}</span><small>${fmtHM(p.landedAt)}</small></button>`).join('') + `</div>`;
+}
+// A landed pallet's labels in its row: the first consol scanned, its last four
+// digits bold (what the receiver checks on the label), cut from the left when
+// the row is narrow (…30107), and +n for the others on the pallet.
+function firstLabel(p) {
+  const ids = [...p.consolIds, ...p.scanIds], id = String(ids[0] || ''); if (!id) return '';
+  const more = ids.length - 1;
+  return `<span class="dk-cons" title="${esc(id)}"><span>${esc(id.slice(0, -4))}</span><b>${esc(id.slice(-4))}</b></span>` +
+    (more ? `<span class="dk-more" title="${txn(more, '{n} more label', '{n} more labels')}">+${more}</span>` : '');
 }
 // Under the crew in Decant: where each busy cutter goes next, from the plan
 // (a free one has NEXT on their chip).
@@ -708,7 +717,7 @@ async function onAct(ctx, a, root) {
       toast(out ? tx('{ref} skipped: not counted this session', { ref }) : tx('{ref} back in the session', { ref })); return;
     }
     if (act === 'unscan') { const ref = st.sel; await dispatch(ctx, 'pallet.unscan', { truck: id, bay: ref }, { id: a.dataset.id }); toast(tx('{id} taken off {ref}', { id: a.dataset.id, ref })); return; }
-    if (act === 'pal-remove') { if (!await ask({ title: tx('Remove pallet {ref}?', { ref: st.sel }), ok: tx('Remove pallet') })) return; await dispatch(ctx, 'pallet.remove', { truck: id, bay: st.sel }, {}); st.sel = null; toast(tx('Pallet removed')); return; }
+    if (act === 'pal-remove') { if (!await ask({ title: tx('Remove pallet {ref}?', { ref: st.sel }), ok: tx('Remove pallet') })) return; await dispatch(ctx, 'pallet.remove', { truck: id, bay: st.sel }, {}); st.sel = null; ctx.rerender(); toast(tx('Pallet removed')); return; }   // the store redrew it, still selected, before dispatch returned
     if (act === 'dec') {
       const kind = a.dataset.dec, p = t.pallets[st.sel];
       // Undo, one step deep as DV's: each action offers its opposite.
@@ -722,7 +731,8 @@ async function onAct(ctx, a, root) {
       if (kind === 'unstart') { await dispatch(ctx, 'pallet.unstart', B, {}); toast(tx('Last start undone')); return; }
       if (kind === 'pause') { await dispatch(ctx, 'pallet.pause', B, {}); toast(tx('{ref} paused', { ref }), '', onNow.length ? undo('pallet.resume', { pid: onNow[0] }) : null); return; }
       if (kind === 'done') {
-        await dispatch(ctx, 'pallet.done', B, {}); if (ctx.isMobile) st.sel = null;
+        // The phone's card closes at once: the store redrew it, still open, before dispatch returned.
+        await dispatch(ctx, 'pallet.done', B, {}); if (ctx.isMobile) { st.sel = null; ctx.rerender(); }
         const nt = model(ctx).t, q = nt?.pallets[ref];
         // The last one: the truck is cleared, so the next step is to close it.
         if (nt && truckPhase(nt) === 'cleared') { toast(tx('{ref} decanted · every pallet is done: close the truck', { ref }), '', { label: tx('Close the truck'), run: () => { st.finalising = true; ctx.rerender(); show('.bdr-fin'); } }); return; }

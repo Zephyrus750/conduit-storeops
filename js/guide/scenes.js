@@ -17,11 +17,19 @@
 
 import { tx, txn, locale, LANGS, lang } from '../i18n.js';
 import { gi as ic } from './icons.js';
+// The chapters drawn at the app's real sizes (js/guide/chapters/), each in its place below.
+import { around } from './chapters/around.js';
+import { refresh } from './chapters/refresh.js';
+import { labels } from './chapters/labels.js';
+import { bfscan } from './chapters/bfscan.js';
+import { bfreview } from './chapters/bfreview.js';
+import { manifests } from './chapters/manifests.js';
+import { receive as receivePhone } from './chapters/receive.js';
+import { decant } from './chapters/decant.js';
 
 const S = (...parts) => parts.join(' ');
 // A day of the guide's week (it plays on Sunday 25 October 2026), as the app shows dates.
 const day = (iso, o = { weekday: 'short', day: 'numeric', month: 'short' }) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { ...o, timeZone: 'UTC' });
-const num = n => Number(n).toLocaleString(locale());
 
 // ── device frames ─────────────────────────────────────────────────────
 // The phone's tab strip and the PC's rail, as js/registry.js has them
@@ -110,31 +118,7 @@ export const SCENES = [
   ],
   whatif: [[tx('Wrong PIN?'), S(tx('It says Wrong PIN and you can try again.'), tx('Ask a manager if the PIN has changed.'))], [tx('A shared phone at the end of a shift?'), tx('Sign out in Settings so the next person enters their own codes.')], [tx('No wifi at sign-in?'), S(tx('A phone that has signed in before opens without wifi.'), tx('A new phone needs wifi the first time.'))]],
 },
-{
-  id: 'around', grp: 'start', icon: 'grid', title: tx('Getting around on a PC'), device: 'pc', where: tx('PC · the rail, tabs, search and ?'), for: ['manager', 'dock'],
-  intro: S(tx('Everything on the PC hangs off the rail on the left.'), tx('Search finds anything in the store from any screen, and ? opens the guide for the screen you’re on.')),
-  html: () => pc('p1', `
-    <div class="v" id="v-today"><div class="pc-h"><h3>${tx('Good morning!')}</h3><p>${tx('How we’re tracking')}</p></div>
-      <div class="dsh"><div class="kp3"><div class="kp"><b>0 / 14</b><span>${tx('Bays to review')}</span></div><div class="kp"><b>37 / 100</b><span>${tx('Shelves refreshed this week')}</span></div><div class="kp"><b>2</b><span>${tx('Checks need attention')}</span></div></div>
-      <div class="rows"><div class="rw">${ic('clip')}<span class="g"><b>${tx('Morning inventory report')}</b><small>${tx('Paste it to start the day’s backfill')}</small></span><span class="pill warn">${tx('Required')}</span></div><div class="rw">${ic('truck')}<span class="g"><b>${tx('Truck {n} due {time}', { n: 2, time: '13:30' })}</b><small>${tx('Manifest {no} published', { no: '7032044' })}</small></span><span class="pill acc">${tx('Planned')}</span></div><div class="rw">${ic('ladder')}<span class="g"><b>${tx('{code} is overdue for its check', { code: 'LAD-02' })}</b><small>Floor, aisle 8</small></span><span class="pill bad">${tx('Overdue')}</span></div></div></div></div>
-    <div class="v" id="v-bf" hidden>${tabsx([['review', tx('Review')], ['daylist', tx('Day list')], ['history', tx('History')], ['trends', tx('Trends')], ['pull', tx('Live pull')]], 'review')}<div class="pc-h"><h3>${tx('Backfill review')}</h3><p>${tx('Today’s board')}</p></div>
-      <div class="sr3m"><div class="rows"><div class="grp-h">${tx('Review')}</div><div class="rw"><b class="mono">7036</b><span class="g">${txn(22, '{n} code', '{n} codes')}<small>${tx('sent {time}', { time: '08:41' })}</small></span><span class="pill acc">${tx('Needs review')}</span></div><div class="rw"><b class="mono">7041</b><span class="g">${txn(18, '{n} code', '{n} codes')}<small>${tx('sent {time}', { time: '08:47' })}</small></span><span class="pill acc">${tx('Needs review')}</span></div></div><div class="card" style="align-self:stretch;justify-content:center;align-items:center;color:#5B6472">${tx('Pick a bay to compare it with the report.')}</div><div class="rows"><div class="grp-h">${tx('Ready')}</div><div class="rw"><b class="mono">7012</b><span class="g">${txn(31, '{n} code', '{n} codes')}<small>${tx('ready {time}', { time: '08:30' })}</small></span><span class="pill ok">${tx('Ready')}</span></div></div></div></div>
-    <div class="v" id="v-eq" hidden>${tabsx([['emergency', tx('Emergency')], ['maintenance', tx('Maintenance')], ['equipment', tx('Equipment')], ['recalls', tx('Recalls')]], 'equipment')}<div class="pc-h"><h3>LAD-02 · Step ladder, 3 step</h3><p>Floor, aisle 8 · ${tx('Every 3 months')}</p></div>
-      <div class="rows" style="max-width:560px"><div class="rw">${ic('alert')}<span class="g"><b>${txn(10, 'Overdue {n} day', 'Overdue {n} days')}</b><small>${tx('Was due {date}', { date: day('2026-10-15') })}</small></span><span class="btnx pri">${tx('Record a check')}</span></div><div class="rw">${ic('check')}<span class="g">${tx('Checked OK')}<small>${day('2026-07-15')}</small></span></div></div></div>
-    <div class="v" id="v-help" hidden style="display:flex;flex-direction:column;gap:10px"><div class="gh-top"><div class="pc-h" style="flex:1"><h3>${tx('Help')}</h3><p>${tx('How the app works')}</p></div><span class="gh-acts"><span class="btnx">${ic('star')}${tx('What’s new')}</span><span class="btnx pri">${ic('star')}${tx('Take the tour')}</span></span></div>
-      <div class="cols2" style="grid-template-columns:320px 1fr"><div class="rows" style="align-self:start"><div class="grp-h">${tx('Floor')}</div><div class="rw">${ic('map')}${tx('Find a shelf on a phone')}</div><div class="rw">${ic('wrench')}${tx('Report a fault')}</div><div class="rw on">${ic('ladder')}<b>${tx('Equipment checks')}</b></div><div class="grp-h">${tx('Stockroom')}</div><div class="rw">${ic('barcode')}${tx('Backfill: scan a bay')}</div></div>
-      <div class="card ghelp"><b style="font-size:15px">${tx('Equipment checks')}</b><small style="color:#5B6472">${tx('PC · Floor › Safety & upkeep › Equipment')}</small><ol><li class="on">${tx('Red pins are overdue; black is out of service.')}</li><li>${tx('Record a check: OK or Fail on each point.')}</li><li>${tx('Save: the next due date moves on.')}</li><li>${tx('Print QR labels: a scan opens its card.')}</li></ol><div class="sh-acts"><span class="btnx pri">${ic('play')}${tx('Watch')}</span><span class="btnx">${ic('hand')}${tx('Try it')}</span><span class="btnx">${ic('book')}${tx('Handbook')}</span><span class="btnx">${ic('print')}${tx('Paper')}</span></div></div></div></div>
-    <div class="pal" hidden><div class="pal-in">${ic('search')}<span class="pal-q"></span><span class="caret"></span></div><div class="pal-res" hidden><span class="pal-grp">${tx('Equipment')}</span><div class="pal-hit">${ic('ladder')}<b class="mono">LAD-02</b>Step ladder, 3 step<small>Floor, aisle 8</small></div><span class="pal-grp">${tx('Tools')}</span><div class="pal-row">${ic('ladder')}${tx('Equipment checks')}</div></div></div>`, { badge: { safety: 2 } }),
-  steps: [
-    { cap: tx('The rail has a few rows for each area.'), read: S(tx('Floor, Stockroom and Back dock each have a few rows.'), tx('Today, Reports & files and Resources sit on top; Screens, Settings and Help are at the foot.'), tx('A red count means something needs a person.')), dev: 'Rail rows and their tabs: <b>GROUPS</b> and <b>RAIL</b> in js/registry.js. Counts: <b>paintBadges()</b> in js/shell.js.', run: async c => { c.cls('.pc-rail', 'glow', true); await c.wait(1400); c.cls('.pc-rail', 'glow', false); } },
-    { cap: tx('Click a row: its screens are tabs along the top.'), read: S(tx('Backfill holds Review, Day list, History, Trends and Live pull.'), tx('The row opens the tab used last on this PC; the tabs switch between the rest.')), dev: 'A group row opens <b>rowTarget()</b>: the tab used last on this device, else its first.', run: async c => { await c.tap('[data-r="backfill"]'); c.rail('backfill'); c.view('v-bf'); } },
-    { cap: tx('Ctrl K searches everything from anywhere.'), read: S(tx('Type a shelf (A16 S2), a bay, a keycode, a manifest, a consolidation, a cage, an equipment code or a tool.'), tx('Results come grouped by kind.')), dev: 'Search runs on the device (<b>findRecords()</b> in shared/finder.js): nothing is sent, so it works offline.', run: async c => { await c.tap('.pc-search'); c.show('.pal'); await c.type('.pal-q', 'LAD-02'); c.show('.pal-res'); } },
-    { cap: tx('Pick a result to go straight to it.'), read: tx('Choosing LAD-02 opens Safety & upkeep › Equipment with that ladder’s card, its checks and what is due.'), dev: 'A result row carries <b>data-view</b> and its argument; the shell’s <b>show(view, arg)</b> opens it.', run: async c => { await c.tap('.pal-hit'); c.hide('.pal'); c.rail('safety'); c.view('v-eq'); } },
-    { cap: S(tx('Stuck?'), tx('Press ? and Help opens at this screen’s chapter.')), read: S(tx('Every screen has a ?.'), tx('It opens the guide at the chapter for that screen, ready to watch or try.')), dev: 'The ? in the top bar opens Help with <b>show(\'help\', { chapter })</b>; each screen’s chapter is <b>guideFor()</b> in js/registry.js.', run: async c => { await c.tap('.pc-help'); c.rail('help'); c.view('v-help'); } },
-    { cap: tx('Help has the whole guide, the tour and what’s new.'), read: S(tx('Help sits at the foot of the rail on every PC.'), tx('On a phone it is in More.')), dev: 'js/views/help.js mounts the guide (js/guide/player.js). The guide replaces the long written How to use.', run: async c => { c.cls('.gh-acts', 'glow', true); c.cls('[data-r="help"]', 'glow', true); await c.wait(1300); c.cls('.gh-acts', 'glow', false); c.cls('[data-r="help"]', 'glow', false); } },
-  ],
-  whatif: [[tx('Can’t find a screen?'), tx('Type its name in search: tools are results too.')], [tx('A row is missing?'), tx('The owner may have switched that tool off for the store.')], [tx('Rail too wide on a small screen?'), tx('Settings › Display › Rail starts it collapsed to icons on this PC.')]],
-},
+around,
 {
   id: 'offline', grp: 'start', fresh: true, icon: 'nowifi', title: tx('When the wifi drops'), device: 'phone', where: tx('Phone · any screen'), for: ['floor', 'stockroom', 'dock', 'manager'],
   intro: S(tx('Nothing stops when the wifi does.'), tx('Work saves on the phone and sends itself when it can.')),
@@ -188,42 +172,8 @@ export const SCENES = [
   ],
   whatif: [[tx('Typed A16 only?'), S(tx('That is the whole run.'), tx('Pick S1 or S2 from the list.'))], [tx('Not found?'), S(tx('Check the label for typos.'), tx('If the map itself is wrong, suggest a map edit from More.'))], [tx('Noisy floor?'), tx('Type instead of speaking: both find the same shelf.')]],
 },
-{
-  id: 'refresh', grp: 'floor', icon: 'refresh', title: tx('Location refresh'), device: 'phone', where: tx('Phone · Floor › Refresh'), for: ['floor', 'manager'],
-  intro: S(tx('As you refresh shelves, mark them on the map.'), tx('The week counts toward 100 in the focus departments.')),
-  html: () => phone('r1', `<div class="ph-map">${plan()}</div>`, { strip: `${ic('pin')}<b>${tx('Find a shelf')}</b><span class="s"></span><span class="act">${ic('search')}${tx('Search')}</span>` }),
-  steps: [
-    { cap: tx('Open Refresh from the tab bar.'), read: tx('The map switches to refresh mode: shelves refreshed this week are green, and the strip counts the week.'), dev: 'js/views/refresh.js. The map element stays; only the strip and the marks change (<b>keepMap()</b> in js/shell.js).', run: async c => { await c.tap('[data-tab="refresh"]'); c.tab('refresh'); c.html('.ph-strip', rfStrip(37)); for (const s of ['A14-S1', 'A14-S2', 'A19-S1']) c.cls(`#sh-${s}`, 'done', true); } },
-    { cap: tx('Tap a shelf as you finish it.'), read: S(tx('One tap marks it refreshed.'), tx('Tap it again to take the mark back.')), dev: 'A second tap sends <b>refresh.unmark</b>, with Undo on its message.',
-      ev: [E('refresh.mark', 'floor', { segment: 'A15 S1', week: '2026-W43' }, { dept: 'k2' })],
-      run: async c => { await c.tap('#sh-A15-S1'); c.cls('#sh-A15-S1', 'done', true); c.text('.cnt', '38 / 100'); c.toast(`${tx('{code} refreshed', { code: 'A15 S1' })} · ${tx('Undo')}`); } },
-    { cap: tx('Or scan the shelf label.'), read: S(tx('Scan or type on the strip opens the scanner.'), tx('A shelf label marks its shelf, and the map shows where it is.')), dev: 'The scanned code resolves with <b>groupsFor()</b>, so A17S1 and A17-S1 work too.',
-      ev: [E('refresh.mark', 'floor', { segment: 'A17 S1', week: '2026-W43' }, { dept: 'k2' })],
-      run: async c => { await c.tap('.ph-strip .act'); await c.scan('A17 S1'); c.cls('#sh-A17-S1', 'done', true); c.text('.cnt', '39 / 100'); } },
-    { cap: tx('Every device sees the count go up.'), read: S(tx('Marks reach every phone and PC straight away.'), tx('Two people never refresh the same shelf.')), dev: 'Floor events go to every device in the store (the Floor projection).',
-      ev: [E('refresh.mark', 'floor', { segment: 'A15 S2', week: '2026-W43' }, { dept: 'k2' })],
-      run: async c => { await c.tap('#sh-A15-S2'); c.cls('#sh-A15-S2', 'done', true); c.text('.cnt', '40 / 100'); c.toast(`${tx('{code} refreshed', { code: 'A15 S2' })} · ${tx('Undo')}`); } },
-  ],
-  whatif: [[tx('Marked the wrong shelf?'), tx('Tap it again to take the mark back, or press Undo on the message.')], [tx('Not in this week’s focus?'), S(tx('It is still marked.'), tx('Only the focus departments count toward the 100.'))], [tx('No wifi in that aisle?'), S(tx('Keep marking.'), tx('It sends when the phone is back in range.'))]],
-},
-{
-  id: 'labels', grp: 'floor', fresh: true, icon: 'tag', title: tx('Price checks'), device: 'phone', where: tx('Phone · Floor › Labels'), for: ['floor', 'manager'],
-  intro: S(tx('Each micro-department gets one label check per cycle.'), tx('Tap a shelf, fix or record the wrong labels, mark it checked.')),
-  html: () => phone('l1', `<div class="ph-map">${plan()}</div>
-    <div class="sheet lsh" hidden><div class="grab"></div><div class="sh-h"><span class="dep" style="background:#FF4500">K2</span><b>067 Dolls &amp; Construction</b></div><p class="sh-sub">A16 S1, A16 S2 · ${tx('Not checked yet')}</p><div class="card var" hidden style="background:#FFF7E6;border-color:#F8D9A0;padding:8px"><b style="color:#92400E;font-size:12px">${tx('Wrong labels')}</b><span class="mono" style="font-size:12px">43648803 · Lego set</span></div><div class="sh-acts"><span class="btnx wrong">${ic('alert')}${tx('Wrong label')}</span></div></div>`, { on: 'labels', strip: `${ic('m-labelint')}<b>${tx('Labels')}</b><span class="n">46 / 120</span><span class="s">${tx('{n}d left · tap a shelf', { n: 9 })}</span>` }),
-  steps: [
-    { cap: tx('Labels shows the cycle on the strip.'), read: S(tx('The count is micro-departments checked this cycle, and how many days are left.'), tx('Shelves still to check are highlighted.')), dev: 'One check per micro-department per cycle; the cycle (here monthly) is a store setting.', run: async c => { await c.tap('[data-tab="labels"]'); for (const s of ['A16-S1', 'A16-S2', 'A18-S1']) c.cls(`#sh-${s}`, 'lbl', true); await c.wait(900); } },
-    { cap: tx('Tap a shelf: its micro-department opens.'), read: S(tx('A shelf belongs to a micro-department, like 067 Dolls & Construction.'), tx('Its card lists every shelf it covers.')), dev: 'On a phone a tap opens the micro-department; only a desk assigns shelves to one.',
-      run: async c => { await c.tap('#sh-A16-S1'); c.show('.lsh'); c.html('.ph-strip', `${ic('m-labelint')}<b>067</b><span class="s">Dolls &amp; Construction</span><span class="act chk">${ic('check')}${tx('Mark checked')}</span>`); } },
-    { cap: S(tx('Wrong price?'), tx('Scan the item and it is noted.')), read: tx('Fix the label, then scan the item so the wrong label is recorded for the cycle’s report.'), dev: 'Each wrong label is a <b>label.variance</b> with the keycode.',
-      ev: [E('label.variance', 'floor', { micro: 'k2-067', cycle: '2026-10M' }, { keycode: '43648803' })],
-      run: async c => { await c.tap('.wrong'); await c.scan('43648803'); c.show('.var'); c.toast(tx('Variance logged')); } },
-    { cap: tx('Mark it checked: the count goes up.'), read: S(tx('Mark checked when every shelf of the micro-department is done.'), tx('Its shelves stop being highlighted.')), dev: '<b>label.check</b>; Checked again sends <b>label.uncheck</b>.',
-      ev: [E('label.check', 'floor', { micro: 'k2-067', cycle: '2026-10M' }, {})],
-      run: async c => { await c.tap('.chk'); c.hide('.lsh'); c.cls('#sh-A16-S1', 'lbl', false); c.cls('#sh-A16-S2', 'lbl', false); c.html('.ph-strip', `${ic('m-labelint')}<b>${tx('Labels')}</b><span class="n">47 / 120</span><span class="s">${tx('{n}d left · tap a shelf', { n: 9 })}</span>`); } },
-  ],
-  whatif: [[tx('Checked the wrong micro-department?'), tx('Tap Checked again to take it back.')], [tx('A shelf in the wrong micro-department?'), tx('A manager reassigns shelves from a PC.')], [tx('Cycle ends with some unchecked?'), S(tx('They show on the report.'), tx('The next cycle starts fresh.'))]],
-},
+refresh,
+labels,
 {
   id: 'fault', grp: 'floor', fresh: true, icon: 'wrench', title: tx('Report a fault'), device: 'phone', where: tx('Phone · More › Maintenance (managers)'), for: ['manager'],
   intro: S(tx('A leak, a light out, a broken door: pin it on the map with a photo.'), tx('Every device can see it until it’s fixed.')),
@@ -260,62 +210,8 @@ export const SCENES = [
   whatif: [[tx('A check fails?'), S(tx('It goes out of service (a black pin) until a check passes.'), tx('The Fail can log a fault in Maintenance too.'))], [tx('Moved a ladder?'), tx('Move it and tap its new spot on the map.')], [tx('Retired one?'), S(tx('A manager removes it and picks why.'), tx('Its history is kept.'))]],
 },
 // ═══ Stockroom ═══
-{
-  id: 'bfscan', grp: 'stockroom', icon: 'barcode', title: tx('Backfill: scan a location'), device: 'phone', where: tx('Phone · Stockroom › Backfill'), for: ['stockroom'],
-  intro: tx('In the stockroom, scan the location label, then every product in it, then submit the location for review at the desk.'),
-  html: () => {
-    const steps = n => `<div class="bf-steps">${[tx('Location'), tx('Scan'), tx('Submit')].map((l, i) => `<span class="${i + 1 < n ? 'done' : i + 1 === n ? 'cur' : ''}"><i>${i + 1 < n ? ic('check') : i + 1}</i>${l}</span>`).join('')}</div>`;
-    const tl = (cls, t, small) => `<div class="tl-r ${cls}"><i></i><b>${t}</b><small>${small}</small></div>`;
-    return phone('b1', `
-    <div class="bf-start" style="display:flex;flex-direction:column;gap:8px">${steps(1)}<div class="card" style="align-items:center;text-align:center;padding:22px 12px">${ic('barcode')}<b>${tx('Scan the location label to start.')}</b><span style="color:#5B6472;font-size:12px">${tx('Scan or type a location')}</span></div></div>
-    <div class="bf-bay" hidden style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0"><div class="ph-h"><span class="baybox"><small>${tx('Location')}</small><b>7036</b></span><span><b>K2 Toys</b><small class="bf-n">${txn(0, '{n} code', '{n} codes')}</small></span><span class="pill acc bf-st" style="margin-left:auto">${tx('scanning')}</span></div>${steps(2)}
-      <span class="btnx pri bf-read">${ic('camera')}${tx('Scan')}</span>
-      <div class="card bf-list" style="gap:0;padding:4px 10px"></div>
-      <div class="card bf-flag" hidden style="background:#FFF7E6;border-color:#F8D9A0"><b style="color:#92400E">${tx('{code} is one digit from {other}: check which is on the shelf', { code: '43648808', other: '43648803' })}</b><span style="font-size:12px;color:#92400E">${tx('Two codes are one digit apart: check which is on the shelf and remove the other.')}</span><div class="sh-acts"><span class="btnx bad bf-rm">${ic('x')}${tx('Remove {code}', { code: '43648808' })}</span></div></div>
-      <span class="btnx ok big bf-send" style="margin-top:auto">${ic('check')}${tx('Submit for review')}</span></div>
-    <div class="bf-done" hidden style="display:flex;flex-direction:column;gap:8px"><div class="ph-h"><span><b>${tx('Submitted for review')}</b><small>7036 · ${txn(3, '{n} code', '{n} codes')} · 08:41</small></span></div>${steps(3)}
-      <div class="card" style="align-items:center;text-align:center"><span style="color:#15803D">${ic('check')}</span><b>${tx('{bay} is with review', { bay: '7036' })}</b></div>
-      <div class="card bf-tl">${tl('dn', tx('Submitted for review'), `08:41 · ${txn(3, '{n} code', '{n} codes')}`)}${tl('now', tx('Reviewed at the desk'), tx('Waiting to be reviewed'))}${tl('', tx('Finalise on the PDT'), tx('After the review'))}</div></div>`, { tabs: 'stock', on: 'scan' });
-  },
-  steps: [
-    { cap: tx('Scan the location label to start.'), read: tx('Point the camera at the location’s label, or type its number.'), dev: 'The bay and the store day are the entity, so each bay has one submission a day.',
-      ev: [E('submission.open', 'stockroom', { bay: '7036', date: '2026-10-25' }, {})],
-      run: async c => { await c.scan('7036'); c.hide('.bf-start'); c.show('.bf-bay'); } },
-    { cap: tx('Scan every product on the shelf.'), read: S(tx('Each scan adds the code with a short buzz.'), tx('A keycode is 7 to 9 digits; a 13-digit item barcode must read cleanly.'), tx('Scan opens the camera on the PDT’s list and takes the codes straight off its screen.'), tx('Switch it to Barcode to scan one item at a time.')), dev: 'One <b>submission.update</b> per scan, so a wifi drop loses nothing. The PDT reader is js/livescan.js.',
-      ev: [E('submission.update', 'stockroom', { bay: '7036', date: '2026-10-25' }, { codes: { 43648803: true } }, { n: 4 })],
-      run: async c => { for (const [k, n] of [['43648803', 'Lego set'], ['42977636', 'Puzzle 500pc'], ['43615502', 'Plush bear'], ['43648808', '']]) { await c.scan(k, true); c.add('.bf-list', `<div class="rw" style="padding:7px 0"><span class="mono">${k}</span><span class="g" style="text-align:right;color:#5B6472">${n}</span></div>`); } c.text('.bf-n', txn(4, '{n} code', '{n} codes')); } },
-    { cap: tx('A code one digit off another is flagged.'), read: S(tx('Two codes one digit apart are probably one misread.'), tx('Keep the one on the shelf; Remove has an Undo.')), dev: 'The near-miss check (<b>disputes()</b> in shared/backfill.js) runs on the phone before anything is sent.',
-      ev: [E('submission.update', 'stockroom', { bay: '7036', date: '2026-10-25' }, { remove: ['43648808'] })],
-      run: async c => { c.show('.bf-flag'); await c.wait(700); await c.tap('.bf-rm'); c.hide('.bf-flag'); c.remove('.bf-list .rw:last-child'); c.text('.bf-n', txn(3, '{n} code', '{n} codes')); c.toast(`${tx('{code} removed', { code: '43648808' })} · ${tx('Undo')}`); } },
-    { cap: tx('Submit it for review when the location is done.'), read: S(tx('The location goes to Backfill review on the PC, where it is compared with the morning report.'), tx('The phone follows it: reviewed at the desk, then finalise on the PDT.')), dev: 'Stockroom events go to Stockroom devices and managers; the desk sees the bay at once.',
-      ev: [E('submission.update', 'stockroom', { bay: '7036', date: '2026-10-25' }, { sent: true })],
-      run: async c => { await c.tap('.bf-send'); c.hide('.bf-bay'); c.show('.bf-done'); } },
-  ],
-  whatif: [[tx('Lost wifi part-way through?'), S(tx('Every scan is kept on the phone and sends when it can.'), tx('Carry on scanning.'))], [tx('Both codes are real?'), tx('Leave both: the flag is a question, not an error.')], [tx('Submitted it too early?'), tx('Ask the desk to reopen the location and scan the rest.')]],
-},
-{
-  id: 'bfreview', grp: 'stockroom', icon: 'list', title: tx('Backfill review at the desk'), device: 'pc', where: tx('PC · Stockroom › Backfill › Review'), for: ['stockroom', 'manager'],
-  intro: S(tx('Paste the morning report once, then work through each bay.'), tx('What to add, what to delete, ready, submit.')),
-  html: () => pc('d1', `${tabsx([['review', tx('Review')], ['daylist', tx('Day list')], ['history', tx('History')], ['trends', tx('Trends')], ['pull', tx('Live pull')]], 'review')}
-    <div style="display:flex;align-items:flex-end;gap:10px"><div class="pc-h" style="flex:1"><h3>${tx('Backfill review')}</h3><p class="rep">${tx('Not pasted yet · the board compares against nothing until it is')}</p></div><span class="btnx pri paste">${ic('clipboard')}${tx('Paste whole report')}</span></div>
-    <div class="sr3m"><div class="rows"><div class="grp-h">${tx('Review')}</div><div class="rw b36"><b class="mono">7036</b><span class="g">${txn(3, '{n} code', '{n} codes')}<small>${tx('sent {time}', { time: '08:41' })}</small></span><span class="pill acc s36">${tx('Needs review')}</span></div><div class="rw"><b class="mono">7041</b><span class="g">${txn(18, '{n} code', '{n} codes')}<small>${tx('sent {time}', { time: '08:47' })}</small></span><span class="pill acc">${tx('Needs review')}</span></div></div>
-      <div class="card det" style="justify-content:flex-start;align-self:start"><span style="color:#5B6472">${tx('Pick a bay to compare it with the report.')}</span></div><div class="rows"><div class="grp-h">${tx('Ready')}</div><div class="rw"><b class="mono">7012</b><span class="g">${txn(31, '{n} code', '{n} codes')}<small>${tx('ready {time}', { time: '08:30' })}</small></span><span class="pill ok">${tx('Ready')}</span></div></div></div>
-    <div class="modal" hidden><div class="box"><h4>${tx('Paste today’s inventory report')}</h4><span style="font-size:12px;color:#15803D;font-weight:700">${tx('Found in your clipboard: a SIM report')}</span><div class="facts"><div><b>412</b><span>${tx('Bays')}</span></div><div><b>${num(3980)}</b><span>${tx('Keycodes')}</span></div><div><b>${tx('Today')}</b><span>${tx('Morning inventory report')}</span></div></div><span class="btnx pri big save">${ic('check')}${tx('Save as the morning report')}</span><span style="font-size:11.5px;color:#5B6472">${tx('The inventory report goes to Backfill review, the Day list and Adjustments.')}</span></div></div>`, { on: 'backfill' }),
-  steps: [
-    { cap: tx('Copy the SIM report, then press Paste.'), read: S(tx('In SIM, copy the whole report by location.'), tx('Paste reads the clipboard and says what it found before anything is saved.')), dev: 'The pop-up is js/views/pastebox.js; it parses on the PC with <b>parseReportByLocation()</b> in shared/backfill.js.', run: async c => { await c.tap('.paste'); c.show('.modal'); } },
-    { cap: tx('One more click saves it for every device.'), read: tx('The report is saved for the store, so every desk and phone compares against the same one.'), dev: 'The worker stores the report and logs the event itself.',
-      ev: [R('POST', '/v1/store/1241/backfill/report', { date: '2026-10-25', report: { byLoc: '{ 412 bays, 3,980 codes }' } }, 'Saved for the store.'), E('backfill.report.publish', 'stockroom', { date: '2026-10-25' }, { bays: 412, codes: 3980 })],
-      run: async c => { await c.tap('.save'); c.hide('.modal'); c.text('.rep', `${tx('Morning inventory report')} · 08:52 · ${txn(412, '{n} bay', '{n} bays')}`); c.toast(tx('Report saved')); } },
-    { cap: tx('Open a bay: what to add, what to delete.'), read: tx('Each bay is compared with the report: codes to add on the PDT, codes to delete, and what matches.'), dev: 'The compare is <b>reviewRows()</b> in shared/backfill.js: pure, so it reads the same on every device.', run: async c => { await c.tap('.b36'); c.cls('.b36', 'on', true); c.html('.det', `<div class="ph-h"><span class="baybox"><small>${tx('BAY')}</small><b>7036</b></span><span><b>K2 Toys</b><small>${txn(3, '{n} code', '{n} codes')}</small></span></div><div class="diff"><span class="add">+ 42977636 Puzzle 500pc</span><span>${tx('Add to {bay}', { bay: '7036' })}</span><span class="add">+ 43615502 Plush bear</span><span>${tx('Add to {bay}', { bay: '7036' })}</span><span class="del">− 43601177 Kite</span><span>${tx('Delete from system')}</span><span>43648803 Lego set</span><span>${tx('match')}</span></div><div class="sh-acts" style="margin-top:6px"><span class="btnx ok ready">${ic('check')}${tx('Ready')}</span><span class="btnx sub" style="opacity:.5">${tx('Submit')}</span></div>`); } },
-    { cap: tx('Mark it ready when the PDT matches.'), read: tx('Make the changes on the PDT, then press Ready (or Enter).'), dev: 'The system-only codes go as scanned:false, then <b>submission.ready</b> carries the report’s list; its status becomes corrected.',
-      ev: [E('submission.update', 'stockroom', { bay: '7036', date: '2026-10-25' }, { codes: { 43601177: false } }), E('submission.ready', 'stockroom', { bay: '7036', date: '2026-10-25' }, { system: ['43601177', '43648803'] })],
-      run: async c => { await c.tap('.ready'); c.text('.s36', tx('Ready')); c.cls('.s36', 'ok', true); c.cls('.s36', 'acc', false); c.style('.sub', 'opacity', '1'); c.toast(tx('{bay} marked ready: history recorded', { bay: '7036' })); } },
-    { cap: tx('Submit once the PDT is finalised.'), read: tx('Submit closes the bay for today and counts it on the board and in History.'), dev: 'Bays from earlier days left ready are submitted at midnight with <b>auto: true</b> (<b>rolloverDue()</b> in shared/backfill.js).',
-      ev: [E('submission.submit', 'stockroom', { bay: '7036', date: '2026-10-25' }, {})],
-      run: async c => { await c.tap('.sub'); c.text('.s36', tx('Submitted')); } },
-  ],
-  whatif: [[tx('Forgot to paste the report?'), S(tx('Bays still show what was scanned.'), tx('The compare appears once it is pasted.'))], [tx('Submitted one by mistake?'), tx('Unfinalise it: it goes back to Ready.')], [tx('Left bays ready overnight?'), tx('They are submitted automatically at midnight.')]],
-},
+bfscan,
+bfreview,
 {
   id: 'pull', grp: 'stockroom', icon: 'pkg', title: tx('Live pull: floor and stockroom'), device: 'duo', where: tx('Phone · More › Live pull'), for: ['floor', 'stockroom'],
   intro: S(tx('One person scans on the floor and sends how many.'), tx('The stockroom’s phones buzz and pull it straight away.')),
@@ -371,30 +267,9 @@ export const SCENES = [
   whatif: [[tx('A cage wasn’t seen on a sweep?'), S(tx('It shows as missing.'), tx('After two sweeps in a row it shows as lost.'))], [tx('The tag fell off?'), tx('Re-tag it: the cage keeps what is on it.')], [tx('Finished with a cage?'), tx('Close it once it is empty.')]],
 },
 // ═══ Back dock ═══
-{
-  id: 'manifests', grp: 'dock', fresh: true, icon: 'clip', title: tx('Manifests by day and truck'), device: 'pc', where: tx('PC · Back dock › Plan › Manifests'), for: ['dock', 'manager'],
-  intro: tx('Every manifest sits under the day and truck it came on, so you can tell at a glance which is which.'),
-  html: () => {
-    const dd = d => `<span class="tk"><small>${day(d, { weekday: 'short' })}</small><b>${Number(d.slice(8))}</b></span>`, tn = n => `<span class="pill">${ic('truck')}${tx('Truck {no}', { no: n })}</span>`;
-    const ctn = (cartons, consols) => tx('<b>{cartons}</b> ctn · <b>{consols}</b> consols', { cartons, consols });
-    const range = (a, b) => `${day(a, { day: 'numeric', month: 'short' })} – ${day(b, { day: 'numeric', month: 'short' })}`;
-    return pc('n1', `${tabsx([['planner', tx('Planner')], ['manifests', tx('Manifests')], ['profiles', tx('Carton profiles')], ['offsite', tx('Off-site pallets')]], 'manifests')}<div class="pc-h"><h3>${tx('Manifests')}</h3><p>${tx('by week, each on the day and truck it came on')}</p></div>
-    <div class="cols2" style="grid-template-columns:440px minmax(0,1fr)"><div class="rows mlist">
-      <div class="grp-h g-free">${tx('No day yet')}</div><div class="rw m-free"><span class="tk none">${ic('cal')}</span><span class="g"><b class="mono">7032071</b><small>${ctn(22, 3)} · ${tx('published {date}', { date: day('2026-10-23') })}</small></span><span class="pill">${tx('Published')}</span></div>
-      <div class="grp-h">${tx('Next week · {range}', { range: range('2026-10-26', '2026-11-01') })}</div><div class="rw">${dd('2026-10-26')}<span class="g"><b class="mono">7032055</b> ${tn(1)}<small>${ctn(88, 12)} · ${tx('due {time}', { time: '06:30' })}</small></span><span class="pill acc">${tx('Planned')}</span></div>
-      <div class="grp-h g-wk">${tx('This week · {range}', { range: range('2026-10-19', '2026-10-25') })}</div><div class="rw">${dd('2026-10-25')}<span class="g"><b class="mono">7032012</b> ${tn(1)}<small>${ctn(96, 13)}</small></span><span class="pill ok">${tx('Done')}</span></div><div class="rw m2">${dd('2026-10-25')}<span class="g"><b class="mono">7032044</b> ${tn(2)}<small>${ctn(120, 14)} · ${tx('due {time}', { time: '13:30' })}</small></span><span class="pill acc">${tx('Planned')}</span></div></div>
-      <div class="card mdet" style="align-self:start"><span style="color:#5B6472">${tx('Open a manifest to see its truck, day and consolidations.')}</span></div></div>`, { on: 'plan' });
-  },
-  steps: [
-    { cap: tx('Plan › Manifests groups them by week, day and truck.'), read: S(tx('No day yet comes first.'), tx('Then each week, newest first, its manifests by day and truck.')), dev: '<b>grouped()</b> in js/views/backdock/manifests.js; each one’s day and truck come from <b>placeIndex()</b> in shared/manifeststats.js: the truck that carried it, then a day set by hand, then its Planner slot.', run: async c => { c.cls('.mlist', 'glow', true); await c.wait(1300); c.cls('.mlist', 'glow', false); } },
-    { cap: tx('The truck badge says which is which.'), read: tx('Each row leads with its day, then the manifest, its truck, its status and when it’s due.'), dev: 'Planned rows carry the slot’s eta from the Planner.', run: async c => { c.cls('.m2', 'on', true); await c.wait(900); } },
-    { cap: tx('Open one: it says its truck and day.'), read: tx('The header reads “Planned for Truck 2 · Today”, with the time it’s due, above its consolidations and cartons.'), dev: 'Reading a manifest sends nothing: the device holds the Back dock projection.', run: async c => { await c.tap('.m2'); c.html('.mdet', `<b class="mono" style="font-size:15px">7032044</b><span style="font-size:12px">${tx('Planned for Truck <b>{no}</b> · {day}', { no: 2, day: tx('Today · {date}', { date: day('2026-10-25') }) })} · ${tx('due {time}', { time: '13:30' })}</span><div class="facts"><div><b>14</b><span>${tx('Consols')}</span></div><div><b>120</b><span>${tx('Cartons')}</span></div><div><b>${num(1840)}</b><span>${tx('Units')}</span></div></div>`); } },
-    { cap: S(tx('No day yet?'), tx('Give it the day and truck it came on.')), read: S(tx('Set its day and truck on the manifest, or put it on a truck in the Planner.'), tx('The list moves it under that week.')), dev: 'Set by hand it is <b>manifest.day</b>; a Planner slot holding it (<b>plan.set</b>) places it too.',
-      ev: [E('manifest.day', 'backdock', { manNo: '7032071' }, { day: '2026-10-24', truck: 1 })],
-      run: async c => { c.cls('.m2', 'on', false); c.cls('.m-free', 'glow', true); await c.wait(800); c.cls('.m-free', 'glow', false); c.remove('.m-free'); c.remove('.g-free'); c.add('.mlist', `<div class="rw on"><span class="tk"><small>${day('2026-10-24', { weekday: 'short' })}</small><b>24</b></span><span class="g"><b class="mono">7032071</b> <span class="pill">${ic('truck')}${tx('Truck {no}', { no: 1 })}</span><small>${tx('<b>{cartons}</b> ctn · <b>{consols}</b> consols', { cartons: 22, consols: 3 })}</small></span><span class="pill">${tx('Came in')}</span></div>`); c.toast(tx('{man}: came on {day}', { man: '7032071', day: `${day('2026-10-24')} · ${tx('Truck {no}', { no: 1 })}` })); } },
-  ],
-  whatif: [[tx('On the wrong truck?'), tx('Change its day and truck on the manifest, or its slot in the Planner; the list follows.')], [tx('Truck number missing?'), tx('No truck, Planner slot or hand-set day has placed it yet.')], [tx('Looking for an old one?'), S(tx('Earlier weeks list below, most recent first.'), tx('Search finds any manifest number.'))]],
-},
+manifests,
+receivePhone,
+decant,
 {
   id: 'receive', grp: 'dock', icon: 'truck', title: tx('Receiving a truck'), device: 'pc', where: tx('PC · Back dock › Receiving'), for: ['dock', 'manager'],
   intro: S(tx('Start the truck and land each pallet on its square.'), tx('Then start and finish each one with the person on it.')),

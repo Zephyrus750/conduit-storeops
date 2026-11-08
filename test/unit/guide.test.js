@@ -1,4 +1,5 @@
-// The Visual Guide (js/guide/scenes.js) stays true to the code it shows:
+// The Visual Guide (js/guide/scenes.js and js/guide/chapters/) stays true to
+// the code it shows, its What ifs too:
 // every event in its event log is in the shared catalogue, in its area,
 // with the catalogue's entity keys and required payload fields; every
 // route it sends to is one the worker answers; every file a developer note
@@ -14,7 +15,9 @@ import { CATALOGUE } from '../../shared/catalogue.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const steps = SCENES.flatMap(s => s.steps.map((st, i) => ({ s, st, at: `${s.id} step ${i + 1}` })));
+// A chapter's steps, then each of its What ifs' steps.
+const steps = SCENES.flatMap(s => [...s.steps.map((st, i) => ({ s, st, at: `${s.id} step ${i + 1}` })),
+  ...(s.stories || []).flatMap(w => w.steps.map((st, i) => ({ s, st, at: `${s.id} › ${w.id} step ${i + 1}` })))]);
 const events = steps.flatMap(({ st, at }) => (st.ev || []).filter(e => e.type).map(e => ({ e, at })));
 const requests = steps.flatMap(({ st, at }) => (st.ev || []).filter(e => e.route).map(e => ({ e, at })));
 const notes = steps.map(({ st, at }) => ({ dev: String(st.dev || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'), at }));
@@ -29,6 +32,7 @@ test('guide: chapters have unique ids, a known group and steps that can run', ()
   for (const s of SCENES) {
     assert.ok(GROUPS.some(g => g[0] === s.grp), `${s.id}: group ${s.grp}`);
     assert.ok(s.steps.length > 0 && s.steps.every(st => typeof st.run === 'function' && st.cap && st.read && st.dev), `${s.id}: every step has cap, read, dev and run`);
+    for (const w of s.stories || []) assert.ok(w.title && w.blurb && w.know?.length && w.steps.length > 0 && w.steps.every(st => typeof st.run === 'function' && st.cap && st.read && st.dev), `${s.id} › ${w.id}: a What if has a title, a blurb, what to know and steps with cap, read, dev and run`);
     assert.ok(typeof s.html() === 'string' && s.html().includes('class="dvs'), `${s.id}: draws a device`);
   }
 });

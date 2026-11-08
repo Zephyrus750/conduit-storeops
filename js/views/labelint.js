@@ -6,13 +6,21 @@ import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, setStrip, sx
 import { SUBS, MICRO, microId, microCode, microName, microCount } from '../data/micros.js';
 import { printSheet, table, signoff } from '../print.js';
 import { tx, txn, locale } from '../i18n.js';
-import { recallFor } from '../recallflag.js';
+import { recallFor, recallWord } from '../recallflag.js';
+import { isKeycode } from '../../shared/keycode.js';
+import { gs1Parse } from '../../shared/gs1.js';
 
 // A selected micro-department is checked; its shelves change only in
 // assigning mode, which only a desk opens (Assign shelves, or Settings ›
 // Departments). On the phone a tap on a shelf opens the micro-department it
 // belongs to (decision 32).
 let selected = null, openSub = null, varianceFor = null, assigning = false;
+// The phone lets go of the micro-department in hand when its sheet closes
+// or the Labels tab is left (a redraw of the tab mounts it again at once:
+// visit tells the two apart), so the departments and the wrong labels come
+// back under the arrow.
+let visit = 0;
+const letGo = () => { selected = null; varianceFor = null; };
 
 function model(ctx) {
   const L = ctx.store.get('labels');
@@ -57,7 +65,7 @@ export default {
     const m = model(ctx);
     return vh(tx('Label integrity'), sub(cycleLabel(m.cycle), txn(m.daysLeft, '{cycle} · {n} day left', '{cycle} · {n} days left', { cycle: CYCLE_NAME[m.L.cycleLen] || m.L.cycleLen }), txn(m.total, '{n} numbered micro-department', '{n} numbered micro-departments')), `<button class="btn" data-act="print-sheets" title="${tx('Marking sheets for the open sub-department, or all of them')}">${ic('print')}${tx('Marking sheets')}</button><button class="btn primary" data-act="check-selected">${ic('barcode')}${tx('Check a micro-dept')}</button>`, 'm-labelint') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
-      `<div class="mapleg">${crumbx(tx('Label integrity'), ctx.storeNo)}<span><i style="background:#2563EB"></i>${tx('Checked this cycle')}</span><span><i style="background:#DC2626"></i>${tx('Wrong label found')}</span><span><i style="background:transparent;border:2px solid #D24E0E"></i>${tx('Selected micro-dept')}</span><span><i style="background:#CBD0D8"></i>${tx('Not yet checked')}</span></div></div>` +
+      `<div class="mapleg">${crumbx(tx('Label integrity'), ctx.storeNo)}<span><i style="background:#DCFCE7;border:2px solid #16A34A"></i>${tx('Checked this cycle')}</span><span><i style="background:#FEE2E2;border:2px solid #DC2626"></i>${tx('Wrong label found')}</span><span><i style="background:#F3EEFC;border:2px solid #5B21B6"></i>${tx('Selected micro-dept')}</span><span><i style="background:#CBD0D8;border:2px solid #B9BFC9"></i>${tx('Not yet checked')}</span></div></div>` +
       `<div class="sidecol" id="liside"></div></div>`;
   },
   mobile(ctx) {
@@ -65,6 +73,7 @@ export default {
     return mvMap({ badge: badgeText(m) }) + `<div class="mv-sel mode" id="limob"></div>`;
   },
   mount(ctx, root) {
+    const me = ++visit;
     // From Settings › Departments: open assigning that micro-department.
     if (ctx.isMobile) assigning = false;
     if (ctx.arg?.micro && ALL.includes(ctx.arg.micro) && (selected !== ctx.arg.micro || !assigning) && !ctx.isMobile) { selected = ctx.arg.micro; openSub = selected.split('-')[0]; assigning = true; setTimeout(() => ctx.rerender(), 0); }
@@ -126,6 +135,8 @@ export default {
       map.select(sel); requestAnimationFrame(() => { map.zoomTo(sel); map.ping(sel); });
     }
     root.addEventListener('click', async e => {
+      // The strip's arrow closing the phone's sheet (the shell toggles it after this).
+      if (ctx.isMobile && e.target.closest('[data-shell-act="sheet"]') && root.classList.contains('sheet-open') && (selected || varianceFor)) { letGo(); map.select(''); paint(); return; }
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.getAttribute('data-act'), m = model(ctx);
       try {
@@ -142,17 +153,18 @@ export default {
         else if (act === 'variance-cancel') { varianceFor = null; paint(); }
         else if (act === 'variance-save') {
           const kc = $('[data-field="keycode"]', root)?.value.trim(), note = $('[data-field="note"]', root)?.value.trim();
-          if (!/^\d{6,13}$/.test(kc || '')) return toast(tx('Keycode must be 6 to 13 digits'), 'bad');
+          if (!isKeycode(kc)) return toast(gs1Parse(kc)?.gtin ? tx('That is an item barcode (APN), not a keycode') : tx('Type a keycode of 6 to 9 digits'), 'bad');
           await ctx.store.dispatch({ type: 'label.variance', entity: { micro: varianceFor, cycle: m.cycle }, payload: { keycode: kc, note } });
-          // A label for a recalled product: the stock behind it comes off sale.
-          const rec = recallFor(ctx.store, kc);
+          // A label for a recalled or withdrawn product: the stock behind it
+          // comes off sale, worded as the recall flag words it (js/recallflag.js).
+          const rec = recallFor(ctx.store, kc), bay = ctx.store.get('recalls')?.bay || '';
           varianceFor = null; paint();
-          if (rec) toast(tx('Variance logged. {product} is recalled: move it to the recall bay and tell a manager.', { product: rec.title }), 'bad'); else toast(tx('Variance logged'));
+          if (rec) toast(`${tx('Variance logged')}. ${recallWord(rec)} · ${rec.title}. ${bay ? tx('Move it to the recall bay ({bay}) and tell a manager.', { bay }) : tx('Move it to the recall bay and tell a manager.')}`, 'bad'); else toast(tx('Variance logged'));
         }
         else if (act === 'zoom-dept') map.filterDept(a.getAttribute('data-dept'));
       } catch (err) { toast(err.message, 'bad'); }
     });
-    return [ctx.store.on('labels', paint)];
+    return [ctx.store.on('labels', paint), () => { if (ctx.isMobile) queueMicrotask(() => { if (visit === me) letGo(); }); }];
   },
 };
 
@@ -205,7 +217,7 @@ function liStrip(m) {
 function mobileInner(m) {
   if (varianceFor) return `<div class="mv-mh">${ic('m-labelint')}<b>${tx('Wrong label · {micro}', { micro: esc(varianceFor) })}</b></div><label class="fld"><span>${tx('Keycode')}</span><input data-field="keycode" inputmode="numeric"></label><label class="fld"><span>${tx('What is wrong')}</span><input data-field="note"></label><div class="mv-two">${mbig(tx('Log variance'), '', 'check', ' data-act="variance-save"')}${mghost(tx('Cancel'), ' data-act="variance-cancel"')}</div>`;
   const [subId, code] = selected.split('-'); const entry = (MICRO[subId] || []).find(x => microCode(x) === code) || code; const c = m.checks[selected];
-  return `<div class="mv-mh">${ic('m-labelint')}<b>${esc(code)} ${esc(microName(entry))}</b><span>${m.done} / ${m.total}</span></div><div class="mv-hint">${c ? tx('{cycle} · <b>{n}d left</b> · {sub} · checked {date}', { cycle: cycleLabel(m.cycle), n: m.daysLeft, sub: subId.toUpperCase(), date: fmtDate(c.at) }) : tx('{cycle} · <b>{n}d left</b> · {sub} · not checked yet', { cycle: cycleLabel(m.cycle), n: m.daysLeft, sub: subId.toUpperCase() })}</div><div class="mv-two">${mbig(c ? tx('Uncheck') : tx('Checked'), c ? 'sec' : '', 'check', ` data-act="check" data-micro="${esc(selected)}"`)}${mbig(tx('Price is wrong'), 'warn', 'alert', ` data-act="variance" data-micro="${esc(selected)}"`)}</div><div class="mv-hint"><a data-act="toggle-sub" data-sub="${subId}">${tx('Choose another')}</a></div>`;
+  return `<div class="mv-mh">${ic('m-labelint')}<b>${esc(code)} ${esc(microName(entry))}</b><span>${m.done} / ${m.total}</span></div><div class="mv-hint">${c ? tx('{cycle} · <b>{n}d left</b> · {sub} · checked {date}', { cycle: cycleLabel(m.cycle), n: m.daysLeft, sub: subId.toUpperCase(), date: fmtDate(c.at) }) : tx('{cycle} · <b>{n}d left</b> · {sub} · not checked yet', { cycle: cycleLabel(m.cycle), n: m.daysLeft, sub: subId.toUpperCase() })}</div><div class="mv-two">${mbig(c ? tx('Uncheck') : tx('Checked'), c ? 'sec' : '', 'check', ` data-act="check" data-micro="${esc(selected)}"`)}${mbig(tx('Price is wrong'), 'warn', 'alert', ` data-act="variance" data-micro="${esc(selected)}"`)}</div><div class="mv-hint"><a data-act="close-micro">${tx('Choose another')}</a></div>`;
 }
 
 // ShelfSearcher's marking sheets: one page per micro-department with 100

@@ -325,7 +325,6 @@ export default {
   "{n} could not be added.": "{n} konnten nicht hinzugefügt werden.",
   "Classes": "Klassen",
   "Loading the snapshots…": "Snapshots werden geladen…",
-  "No snapshot yet. Paste this week's SOH report and save it; the classes need three snapshots to tell flat from moving.": "Noch kein Snapshot. Den SOH-Bericht dieser Woche einfügen und speichern; die Klassen brauchen drei Snapshots, um Stillstand von Bewegung zu unterscheiden.",
   "Keycode, location or name": "Keycode, Lagerplatz oder Name",
   "Class": "Klasse",
   "Loc": "Platz",
@@ -574,4 +573,6 @@ export default {
   "The classes are worked out again without it.": "Die Klassen werden ohne ihn neu berechnet.",
   "The event log keeps a record of the delete.": "Das Ereignisprotokoll hält das Löschen fest.",
   "{bay} on {date} leaves the board and History.": "{bay} am {date} verschwindet von der Tafel und aus dem Verlauf.",
+  "No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.": "Noch kein Snapshot. Den heutigen SIM-Bericht speichern oder den SOH-Bericht hier einfügen; die Klassen brauchen drei Snapshots, um Stillstand von Bewegung zu unterscheiden.",
+  "Nothing flagged on the latest snapshot.": "Im neuesten Snapshot ist nichts markiert.",
 };

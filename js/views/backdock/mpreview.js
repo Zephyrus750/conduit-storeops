@@ -20,6 +20,7 @@ import { SUBS } from '../../data/micros.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
 import { manifestCheck } from '../../../shared/manifest.js';
 import { placeIndex, suggestPlace, usualGap } from '../../../shared/manifeststats.js';
+import { checkText } from './mbatch.js';
 
 // The groups the explorer rolls up to, and each sub-department's code and name.
 const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'Kids', '#F59E0B'], ['flex', 'Flex', '#64748B'], ['?', tx('Unknown'), '#94A3B8']];
@@ -111,8 +112,8 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
         `</tbody></table></div>${parsed.consols.length > 30 ? `<p class="lbl">${tx('{n} more consolidations', { n: parsed.consols.length - 30 })}</p>` : ''}` +
         (prods.length ? `<div class="pt3">${tx('Largest products')}<span class="cs-dim">${tx('by units')}</span></div><div class="mp-tw"><table class="wb-t mp-pt"><thead><tr><th>${tx('Keycode')}</th><th>${tx('Product')}</th><th>${tx('Micro-department')}</th><th class="n">${tx('Units')}</th><th class="n">${tx('Cartons')}</th></tr></thead><tbody>` +
           prods.map(r => `<tr><td class="mono">${esc(r.k)}</td><td class="mp-pd">${esc(r.d || '—')}</td><td>${micro(r.dept, false)}</td><td class="n">${r.units.toLocaleString()}</td><td class="n">${r.cartons || '—'}</td></tr>`).join('') + `</tbody></table></div>` : '') + `</div>` +
-                // The checks' text is shared/manifest.js's: the fixed ones are translated (test/unit/i18n-keys/dock1.json); those carrying counts stay English.
-        `<div class="mp-side">${cameHtml()}<div class="pt3">${tx('Checks')}</div><ul class="mp-checks">${chk.checks.map(c => `<li class="${c.level}">${c.level === 'ok' ? '✓' : c.level === 'bad' ? '⛔' : '⚠'} ${esc(tx(c.text))}</li>`).join('')}</ul>` +
+        // The checks' text is shared/manifest.js's, in English: checkText() (mbatch.js) says each in this device's language.
+        `<div class="mp-side">${cameHtml()}<div class="pt3">${tx('Checks')}</div><ul class="mp-checks">${chk.checks.map(c => `<li class="${c.level}">${c.level === 'ok' ? '✓' : c.level === 'bad' ? '⛔' : '⚠'} ${esc(checkText(c.text))}</li>`).join('')}</ul>` +
         `<div class="mp-acts"><button class="btn primary" data-mp="publish"${chk.blocking || noNum || busy ? ' disabled' : ''}>${busy ? tx('Publishing…') : attachTo ? `${ic('truck')}${tx('Publish & attach to Truck {n}', { n: esc(truckNo(attachTo)) })}` : `${ic('check')}${tx('Publish to the library')}`}</button><button class="btn" data-mp="cancel"${busy ? ' disabled' : ''}>${tx('Cancel')}</button></div>` +
         `<p class="lbl">${chk.blocking ? tx('Fix what is marked ⛔ first: the worker would refuse this report.') : tx('Publishing lists it on every device; a truck attaches it when it lands.')}</p></div></div>` });
     };

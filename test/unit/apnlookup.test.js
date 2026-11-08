@@ -43,7 +43,7 @@ test('barcode lookup: helpers', () => {
 });
 
 // Fakes: Browser Rendering, Google Books and Open Library, the catalogue object, the edge cache.
-function fakes({ html = null, renderFails = false, book = null, titles = [] } = {}) {
+function fakes({ html = null, renderFails = false, book = null, titles = [], kept = {} } = {}) {
   const calls = [];
   const fetchImpl = async (u, init) => {
     calls.push(String(u));
@@ -53,7 +53,13 @@ function fakes({ html = null, renderFails = false, book = null, titles = [] } = 
     throw new Error('unexpected fetch ' + u);
   };
   const searched = [];
-  const env = { CF_ACCOUNT_ID: 'acc', BROWSER_TOKEN: 'tok', CATALOGUE: { idFromName: () => 'id', get: () => ({ fetch: async u => { searched.push(new URL(u).searchParams.get('slug')); return Response.json({ items: titles }); } }) } };
+  const catalogue = async u => {
+    const url = new URL(u);
+    if (url.pathname === '/barcodes') return Response.json({ items: Object.fromEntries(url.searchParams.get('gtin').split(',').filter(g => kept[g]).map(g => [g, kept[g]])) });
+    if (url.pathname === '/lookup') return Response.json({ items: Object.fromEntries(url.searchParams.get('kc').split(',').map(kc => [kc, { name: 'Kept Thing', slug: 'kept-thing', url: `https://www.kmart.com.au/product/kept-thing-${kc}/` }])) });
+    searched.push(url.searchParams.get('slug')); return Response.json({ items: titles });
+  };
+  const env = { CF_ACCOUNT_ID: 'acc', BROWSER_TOKEN: 'tok', CATALOGUE: { idFromName: () => 'id', get: () => ({ fetch: catalogue }) } };
   const store = new Map(), cache = { match: async r => store.get(r.url)?.clone(), put: async (r, res) => { store.set(r.url, res); } };
   return { calls, searched, env, cache, store, fetchImpl };
 }
@@ -85,4 +91,10 @@ test('barcode lookup: a book Kmart’s search misses is found by its title; noth
   const h = fakes({ renderFails: true });
   const d = await findByBarcode(h.env, '9341234567893', h);
   assert.deepEqual([d.candidates, h.store.size], [[], 0], 'a failed render is not cached');
+});
+
+test('barcode lookup: a barcode a product page named is a sure match at once, with no search', async () => {
+  const f = fakes({ kept: { 9341234567893: '43300411' }, html: '<html>never asked</html>' });
+  const a = await findByBarcode(f.env, '9341234567893', f);
+  assert.deepEqual([a.source, a.sure, a.candidates[0].kc, a.candidates[0].name, f.calls.length], ['kmart', true, '43300411', 'Kept Thing', 0], 'no render, no cache');
 });

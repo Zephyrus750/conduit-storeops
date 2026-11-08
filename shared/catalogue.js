@@ -69,7 +69,7 @@ export const CATALOGUE = {
   'pull.session.end':    T('floor', FS, ['session']),
   'pull.join':           T('floor', FS, ['session']),                            // a requester joins
   'pull.zone.set':       T('floor', S, ['session'], { bays: 'array' }),          // a puller joins with the bays this phone pulls
-  'pull.request':        T('floor', FS, ['session', 'line'], { kc: 'string', bays: 'array' }),   // qty | all: true; carton, name, shelf
+  'pull.request':        T('floor', FS, ['session', 'line'], { kc: 'string', bays: 'array' }),   // qty | all: true; carton, name, shelf; seen (bays seen lately)
   'pull.update':         T('floor', FS, ['session', 'line']),                    // qty | all while it waits; cancel: true takes it back
   'pull.mark':           T('floor', S, ['session', 'line'], { st: 'string' }),   // pulled | short | gone | todo (undo); got { bay: n }
   'pull.cage.send':      T('floor', S, ['session'], { cage: 'number' }),         // payload.tag
@@ -86,7 +86,7 @@ export const CATALOGUE = {
   'cage.sweepEnd':       T('stockroom', S, ['sweep']),
   'cage.pair':           T('stockroom', S, ['apn'], { keycode: 'string' }),
   'submission.open':     T('stockroom', S, ['bay', 'date']),
-  'submission.update':   T('stockroom', S, ['bay', 'date']),                    // codes {code: scanned}, remove [], incorrect [], sent
+  'submission.update':   T('stockroom', S, ['bay', 'date']),                    // codes {code: scanned}, remove [], incorrect [], sent; swap (the desk's Did you mean)
   'submission.ready':    T('stockroom', S, ['bay', 'date']),                    // status → corrected
   'submission.submit':   T('stockroom', S, ['bay', 'date']),                    // status → submitted; payload.auto
   'submission.reopen':   T('stockroom', S, ['bay', 'date']),

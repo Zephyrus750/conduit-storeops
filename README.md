@@ -142,7 +142,7 @@ D1, R2 and KV bindings are added when the features that need them land
 | `POST /v1/store/:no/soh` | stockroom code or manager | live: save the day's SOH report snapshot (`{ date, rows: [{ kc, loc, soh, price, name }], merge? }`, ≤ 20,000 rows, one row a keycode a location; a re-save that day replaces it, or with `merge: true` replaces only the locations it holds and carries its store-wide SOH into the rest); logs `soh.publish`; every day is kept for 14 days, then the last of each week for 26 weeks |
 | `GET /v1/store/:no/soh?n=12[&weekly=1]`, `DELETE /v1/store/:no/soh/:date` | stockroom code, manager or owner | live: the newest n snapshots, oldest first, or with `weekly=1` the last of each of the newest n weeks (what the stock classes read); remove logs `soh.remove` |
 | `POST /v1/store/:no/backfill/report`, `GET /v1/store/:no/backfill/report?date=` | stockroom code or manager to save; any stockroom device (or the owner) to read | live: the Backfill review desk's pasted SIM report, whole (`{ date, report: { at, byLoc, range, delta, bayAt, soh, apn } }`; `apn` maps each APN on the report to its keycode, ≤ 1.9 MB, one a day, last three kept); saving logs `backfill.report.publish` (`state.backfill.report`: date, at, bays, codes, rev) so every device fetches the newer one |
-| `GET /v1/store/:no/pull/find?code=` | any device of the store, stockroom entitled, Live pull on | live: one scan for Live pull, so a floor phone never reads the report itself: `{ code, gtin, kc, via (keycode \| apn \| paired), report: { date, at }, bays, soh, carton, truck }`. The keycode comes straight from the code, from an APN the latest report lists, or from a person's link (`cage.pair` or `pull.pair`, the newer wins); a barcode nothing links answers with `gtin` and no `kc`; `bays` are the report's stockroom bays for it in order (none: no stockroom location); `carton` is from the carton profiles; `truck` is a truck planned or on the dock today whose manifest carries it (`{ truck, eta, onDock, manNo, units, cartons }`) |
+| `GET /v1/store/:no/pull/find?code=` | any device of the store, stockroom entitled, Live pull on | live: one scan for Live pull, so a floor phone never reads the report itself: `{ code, gtin, kc, via (keycode \| apn \| paired), report: { date, at }, bays, soh, carton, truck }`. The keycode comes straight from the code, from an APN the latest report lists, or from a person's link (`cage.pair` or `pull.pair`, the newer wins); a barcode nothing links answers with `gtin` and no `kc`; `bays` are the report's stockroom bays for it in order (none: no stockroom location); `carton` is from the carton profiles; `truck` is a truck planned or on the dock today whose manifest carries it (`{ truck, eta, onDock, manNo, units, cartons }`); an item with a keycode and no bay on the report also gets `seen`: up to three bays it was in over the last 14 days, newest first, one a bay (`[{ bay, date, via: backfill \| report \| soh }]`: scanned there by Backfill, or listed there on an earlier report or SOH snapshot) |
 | `GET /v1/store/:no/bays?kc=a,b` | any device of a store with the Stockroom | live: each keycode's stockroom bays from the latest inventory report (up to 50 keycodes), `{ report: { date, at } \| null, bays: { kc: [bay…] } }`; bays only, no SOH. The PC's product card shows them |
 | `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`carton-profiles/1`, the shape of Decant Visualiser’s `dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes; `last` holds every keycode's latest delivery, ungated, so a first delivery still gives a carton size |
 | `POST /v1/store/:no/photo` | store token for that store | live: an issue photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
@@ -222,16 +222,27 @@ them (Google's `<image:loc>` inside a product's `<url>`): the weekly read
 keeps each product's first picture, the last build records how many, and
 the picture check tests the kept picture when the page reads fail.
 
-The same rendering answers a barcode with its keycode (`worker/apnlookup.js`):
-Kmart's site search finds a product by its barcode, so a clearance ticket or
-shelf talker, which carries the item's own barcode, needs no keycode typed.
-A book is also found by its title (Google Books, then Open Library) matched
-against the catalogue. Live pull, Cages and Adjust on the phone search first
-(`js/barcodesearch.js`) for a barcode the store can't match itself, find the
-item from the answer and link nothing; when nothing is found the keycode is
-typed in the same scan box. The answer is cached by barcode, so the next scan
-of it is quick. Pairs made earlier (`cage.pair`, `pull.pair`) are still read;
-no screen makes new ones.
+The same rendering answers a barcode with its keycode (`worker/apnlookup.js`).
+First, at once: every product page read for its picture and price also gives
+the product's own barcodes (its data's `gtin` fields, `pageGtins()`), which the
+catalogue object keeps (`barcodes` table), so a barcode any page has named is
+a sure match with no search. Otherwise Kmart's site search finds a product by
+its barcode (10 to 30 seconds), and a book is also found by its title (Google
+Books, then Open Library) matched against the catalogue. Cages and Adjust
+search first (`js/barcodesearch.js`) for a barcode the store can't match
+itself and link nothing; when nothing is found the keycode is typed in the
+same scan box. The answer is cached by barcode, so the next scan of it is
+quick.
+
+Live pull never waits on a search (8 Nov 2026): `pull/find` matches a barcode
+from the store's barcode book (every inventory report's APN column, kept after
+the report itself goes: the `apnbook` table), a person's link (`cage.pair`,
+`pull.pair`) and the catalogue's kept barcodes, all at once; a barcode none of
+them knows is searched in the background, in a tray under the scan box, while
+the requester scans on, and lands there found, as a choice, or to type. A
+match a person confirms there (a search's answer tapped, or the keycode typed
+for it) is kept with `pull.pair`, so the next scan of that barcode is instant;
+"Wrong item?" replaces it.
 The deploy workflow passes `CLOUDFLARE_ACCOUNT_ID` to the worker as
 `CF_ACCOUNT_ID` and attaches the `BROWSER_TOKEN` repository secret
 (docs/SETUP.md step 11).
@@ -360,9 +371,14 @@ already in the log:
   and caches the search even if the phone stops waiting): one sure match
   from Kmart's site search is found at once, other candidates are a one-tap
   choice, and only when nothing is found is the keycode on the ticket typed
-  in the scan box. Live pull links nothing (`pull.pair` stays in the
-  catalogue for the events already logged); `GET …/pull/find` answers with the report's stockroom bays (none:
-  "No stockroom location", and it isn't added), the carton size and any
+  in the scan box, without holding up the next scan (the tray under the scan
+  box); a match confirmed there is kept (`pull.pair`); `GET …/pull/find`
+  answers at once from the store's barcode book and the catalogue's kept
+  barcodes, with the report's stockroom bays (none:
+  "No stockroom location", and it isn't added, unless it was seen in a bay
+  over the last two weeks: backfilled there, or on an earlier report or SOH
+  snapshot; then the phone offers "Ask for it there" and the request carries
+  `seen`, so the puller and the PC tab show it as SUGGESTED), the carton size and any
   truck today whose manifest carries it, and the phone adds what was pulled
   earlier today. The number pad sends `pull.request` (a number, a carton, or
   all there is); scanning an item that is still waiting offers Add, Change or
@@ -606,8 +622,10 @@ in arrives: one box takes the clipboard or a file and says what it found
 before anything is saved, and a list says what is due today (the morning SIM
 report is required, the midday one optional), what each feeds and where it
 comes from. Each kind is saved by the screen it feeds, through that screen's
-code: the SIM report through Backfill review's `pasteReport`, the SOH report
-in Stock intelligence (opened with the paste read), a DC manifest through the
+code: the SIM report through Backfill review's `pasteReport` (its lines at 0
+or less go to Adjustments and its SOH lines into today's Stock intelligence
+snapshot, `reportToIntel`, replacing the bays it lists), the SOH report in
+Stock intelligence (opened with the paste read), a DC manifest through the
 publish preview, the off-site list and other loads through `loads.js`. Its
 rail row shows 1 while today's morning report is missing. Today's morning
 setup marks the morning report Required and the midday one Optional (it never

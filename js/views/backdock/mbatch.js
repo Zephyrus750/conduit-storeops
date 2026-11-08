@@ -6,6 +6,7 @@
 //
 //   publishMany(ctx, files, known)  known: manNo → { publishedAt } (the library) → [manNo published] | null
 //   dateMany(ctx, list)             list: [{ manNo, despatch, consols, totalCartons }] → number dated | null
+//   checkText(text)                 one of shared/manifest.js's checks in this device's language
 //
 // A day is suggested from the Planner: a truck the dock ran or planned with
 // no manifest near the despatch date, else the despatch date plus the gap
@@ -21,6 +22,34 @@ import { manifestCheck } from '../../../shared/manifest.js';
 import { placeIndex, usualGap, suggestPlace, despatchDay } from '../../../shared/manifeststats.js';
 
 const VIA = { plan: tx('from the Planner'), label: tx('set by hand') };
+
+// The checks' words, here and in the upload preview (mpreview.js). shared/manifest.js
+// writes them in English with their counts (it runs on the worker too); each is read
+// back here and said in this device's language. A fixed one is its own key
+// (test/unit/i18n-keys/dock1.json); one that matches nothing shows as written.
+const CHECKS = [
+  [/^Every row read \((\d+) lines\)\.$/, m => tx('Every row read ({n} lines).', { n: m[1] })],
+  [/^Every row read\.$/, () => tx('Every row read.')],
+  [/^This report is for store (.+?), not (.+?)\. Check you saved the right email attachment\.$/, m => tx('This report is for store {store}, not {ours}. Check you saved the right email attachment.', { store: m[1], ours: m[2] })],
+  [/^(\d+) consolidations: a manifest takes up to (\d+)\. Split the report\.$/, m => tx('{n} consolidations: a manifest takes up to {max}. Split the report.', { n: m[1], max: m[2] })],
+  [/^(\d+) rows? had (?:its|the) consolidation stored as a number /, m => txn(Number(m[1]), '{n} row had its consolidation stored as a number (Excel rounds those) and was left out. Format the column as Text and re-export to keep them.', '{n} rows had the consolidation stored as a number (Excel rounds those) and were left out. Format the column as Text and re-export to keep them.')],
+  [/^(\d+) rows? had no readable keycode /, m => txn(Number(m[1]), '{n} row had no readable keycode and was left out.', '{n} rows had no readable keycode and were left out.')],
+  [/^(\d+) rows? looked like data but matched no layout/, m => txn(Number(m[1]), '{n} row looked like data but matched no layout, and was left out.', '{n} rows looked like data but matched no layout, and were left out.')],
+  [/^(\d+) consolidations? (?:has|have) more than (\d+) lines/, m => txn(Number(m[1]), '{n} consolidation has more than {max} lines; the first {max} of each are kept.', '{n} consolidations have more than {max} lines; the first {max} of each are kept.', { max: m[2] })],
+  [/^(\d+) consolidations? with no cartons \((.*)\)\.$/, m => txn(Number(m[1]), '{n} consolidation with no cartons ({ids}).', '{n} consolidations with no cartons ({ids}).', { ids: m[2] })],
+  [/^(\d+) pallet label ids? (?:is|are) shared by two consolidations \((.*?)\): /, m => txn(Number(m[1]), '{n} pallet label id is shared by two consolidations ({ids}): a scan of it matches the first.', '{n} pallet label ids are shared by two consolidations ({ids}): a scan of them matches the first.', { ids: m[2] })],
+  [/^(\d+) lines? without a department\.$/, m => txn(Number(m[1]), '{n} line without a department.', '{n} lines without a department.')],
+  [/^(\d+) rows? (?:was|were) skipped: /, m => txn(Number(m[1]), '{n} row was skipped: the consolidation is not a 9 to 22 digit number.', '{n} rows were skipped: the consolidation is not a 9 to 22 digit number.')],
+  [/^Manifest (.+?) is already published \((.*?)\) and attached to Truck (\S+): /, m => tx('Manifest {man} is already published ({date}) and attached to Truck {no}: publishing replaces the library copy; the truck keeps the copy it has.', { man: m[1], date: m[2], no: m[3] })],
+  [/^Manifest (.+?) is already published \((.*?)\): /, m => tx('Manifest {man} is already published ({date}): publishing replaces the library copy.', { man: m[1], date: m[2] })],
+  [/^Despatched (.+?), (\d+) days ago: is this an old report\?$/, m => tx('Despatched {date}, {n} days ago: is this an old report?', { date: m[1], n: m[2] })],
+  [/^Despatch date (.+?) is (\d+) days ahead\.$/, m => tx('Despatch date {date} is {n} days ahead.', { date: m[1], n: m[2] })],
+];
+export function checkText(text) {
+  for (const [re, say] of CHECKS) { const m = re.exec(text); if (m) return say(m); }
+  return tx(text);
+}
+
 const stateOf = ctx => ({ dock: ctx.store.get('dock'), plan: ctx.store.get('plan') || { days: {} } });
 const dayText = d => fmtDay(d);
 // Where a report already is, when the dock placed it: on a truck, finalised, or staged.
@@ -46,8 +75,8 @@ function table(rows, { files }) {
   const checks = r => {
     if (r.error) return `<span class="mb-chk bad" title="${esc(r.error)}">⛔ ${esc(r.error)}</span>`;
     if (!r.checks) return '';
-    const bad = r.checks.filter(c => c.level === 'bad'), warn = r.checks.filter(c => c.level === 'warn'), tip = r.checks.map(c => tx(c.text)).join('\n');
-    return bad.length ? `<span class="mb-chk bad" title="${esc(tip)}">⛔ ${esc(tx(bad[0].text))}</span>` : warn.length ? `<span class="mb-chk warn" title="${esc(tip)}">⚠ ${txn(warn.length, '{n} to look at', '{n} to look at')}</span>` : `<span class="mb-chk ok">✓ ${tx('All read')}</span>`;
+    const bad = r.checks.filter(c => c.level === 'bad'), warn = r.checks.filter(c => c.level === 'warn'), tip = r.checks.map(c => checkText(c.text)).join('\n');
+    return bad.length ? `<span class="mb-chk bad" title="${esc(tip)}">⛔ ${esc(checkText(bad[0].text))}</span>` : warn.length ? `<span class="mb-chk warn" title="${esc(tip)}">⚠ ${txn(warn.length, '{n} to look at', '{n} to look at')}</span>` : `<span class="mb-chk ok">✓ ${tx('All read')}</span>`;
   };
   const state = r => r.done ? `<span class="status good">${ic('check')}${tx('Done')}</span>` : r.failed ? `<span class="status bad" title="${esc(r.failed)}">${esc(r.failed)}</span>` : r.busy ? `<span class="cs-dim">${tx('Publishing…')}</span>` : '';
   const head = `<tr><th></th>${files ? `<th>${tx('File')}</th>` : ''}<th>${tx('Manifest')}</th><th>${tx('Despatch')}</th><th class="n">${tx('Consols')}</th><th class="n">${tx('Cartons')}</th>${files ? `<th>${tx('Checks')}</th>` : ''}<th>${tx('Came on')}</th><th></th></tr>`;

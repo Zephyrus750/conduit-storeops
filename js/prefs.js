@@ -52,7 +52,9 @@ export function applyPrefs(frame = document.querySelector('.frame')) {
   // folds search into the logo; a per-device choice in Settings › Display.
   frame.classList.add('rail-' + look.rail, 'bars-plain', p.hdr === 'title' ? 'hdr-title' : 'hdr-classic');
   const s = frame.style;
-  s.setProperty('--accent', a[1]); s.setProperty('--accent-ink', a[2]); s.setProperty('--accent-soft', a[3]); s.setProperty('--accent-line', a[4]);
+  // The frame and the page itself: the camera screens, the live reader and the
+  // toasts are mounted on the body, outside the frame, and take the same accent.
+  for (const st of [s, document.documentElement.style]) { st.setProperty('--accent', a[1]); st.setProperty('--accent-ink', a[2]); st.setProperty('--accent-soft', a[3]); st.setProperty('--accent-line', a[4]); }
   document.documentElement.style.colorScheme = 'light';
   const app = frame.querySelector('#app'); if (app) app.classList.toggle('railmin', !!p.railmin);
   const z = Number(p.scale) || 1; s.zoom = z === 1 ? '' : String(z);

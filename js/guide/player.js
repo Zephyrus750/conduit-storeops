@@ -6,6 +6,14 @@
 // person's chapters first; Developer notes add each step's note and the
 // event log. Ported from the "Conduit Visual Guide" showcase.
 //
+// A chapter may have What ifs that play: stories: [{ id, title, blurb, know,
+// steps, html? }] are side stories on the same device, opened from cards under
+// the stage, each with what to know and a way back to the chapter. On a wide
+// screen a phone chapter has its caption and controls beside the phone, and a
+// device is never taller than the window leaves room for, so Play and the
+// caption stay in view on a 1080p screen; on a narrow screen the stage comes
+// before the list of chapters.
+//
 //   mountGuide(host, { storeNo, storeName, arg }) → stop()
 //     renders into a shadow root on host (styles/guide.css inside it, so the
 //     mock screens' generic class names never meet the shell's), and stop()
@@ -27,7 +35,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const keep = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } return null; };
 
 // Where the reader was, kept while the app is open: Help opens again on it.
-const st = { mode: 'watch', sceneIx: 0, stepIx: 0, speed: 1, dev: keep('guide_dev') === '1', who: keep('guide_for') || 'all' };
+const st = { mode: 'watch', sceneIx: 0, stepIx: 0, side: null, speed: 1, dev: keep('guide_dev') === '1', who: keep('guide_for') || 'all' };
 if (!PEOPLE.some(p => p[0] === st.who)) st.who = 'all';
 let usedArg = null;   // the shell's argument is applied once, not on every re-render
 
@@ -44,14 +52,16 @@ const TO = { floor: 'Every device in the store', stockroom: 'Stockroom devices a
 const j = o => typeof o === 'string' ? o : JSON.stringify(o).replace(/"([a-zA-Z_]\w*)":/g, '$1: ').replace(/,(?=[a-zA-Z"{[])/g, ', ');
 function evCard(e, fresh) {
   if (e.route) return `<div class="evc route${fresh ? ' fresh' : ''}"><div class="t"><b>${esc(e.route)}</b><span class="x">to the worker</span></div>${e.body ? `<code>${esc(j(e.body))}</code>` : ''}<div class="to">${esc(e.note)}</div></div>`;
-  return `<div class="evc${e.wait ? ' wait' : ''}${fresh ? ' fresh' : ''}"><div class="t"><b>${esc(e.type)}</b><span class="ar">${esc(e.area)}</span>${e.n ? `<span class="x">×${e.n}</span>` : ''}</div><code>entity ${esc(j(e.entity))}${Object.keys(e.payload || {}).length ? `\npayload ${esc(j(e.payload))}` : ''}</code><div class="to">${e.wait ? `Waiting on this phone${e.why ? ` · ${esc(e.why)}` : ''}` : `→ ${TO[e.area]}`}</div></div>`;
+  return `<div class="evc${e.wait ? ' wait' : ''}${fresh ? ' fresh' : ''}"><div class="t"><b>${esc(e.type)}</b><span class="ar">${esc(e.area)}</span>${e.n ? `<span class="x">×${e.n}</span>` : ''}</div><code>entity ${esc(j(e.entity))}${Object.keys(e.payload || {}).length ? `\npayload ${esc(j(e.payload))}` : ''}</code><div class="to">${e.wait ? `Waiting on this device${e.why ? ` · ${esc(e.why)}` : ''}` : `→ ${TO[e.area]}`}</div></div>`;
 }
 
 // Scales a device to the width it has, keeping its height in the flow.
+// data-room on the box: the window's height less this many pixels is as tall as it may be.
 function fitIn(box, maxScale = 1) {
   const fit = box?.querySelector(':scope > .fit'), inner = fit?.firstElementChild; if (!inner) return;
   const w = inner.offsetWidth, h = inner.offsetHeight; if (!w || !box.clientWidth) return;
-  const k = Math.min(maxScale, box.clientWidth / w);
+  const room = Number(box.dataset.room) ? Math.max(320, innerHeight - Number(box.dataset.room)) / h : Infinity;
+  const k = Math.min(maxScale, box.clientWidth / w, room);
   fit.style.transform = `translateX(-50%) scale(${k})`; box.style.height = (h * k) + 'px';
 }
 // Toasts and the scanner belong to one step only.
@@ -74,6 +84,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
     usedArg = arg;
     const i = SCENES.findIndex(s => s.id === arg.chapter && seen(s));
     st.sceneIx = i >= 0 ? i : SCENES.indexOf(ordered()[0]); st.stepIx = 0;
+    const k = (SCENES[st.sceneIx].stories || []).findIndex(w => w.id === arg.story); st.side = k >= 0 ? k : null;
     if (st.mode !== 'try') st.mode = 'watch';
   }
 
@@ -144,7 +155,12 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
     const c = helpers(box, 'instant', tk);
     for (let k = 0; k <= upto; k++) { clearTransient(box); await scene.steps[k].run(c); }
   }
-  const scene = () => SCENES[st.sceneIx];
+  // The chapter, or the What if being played: a story borrows the chapter's device and place.
+  const chapter = () => SCENES[st.sceneIx];
+  const scene = () => {
+    const b = chapter(), w = st.side != null ? b.stories?.[st.side] : null;
+    return w ? { ...b, ...w, html: w.html || b.html, intro: w.blurb, whatif: [], stories: null, story: w, parent: b } : b;
+  };
 
   // ── the page ────────────────────────────────────────────────────────
   vg.innerHTML = `<header class="top"><div class="brand"><h1>${tx('Conduit Visual Guide')}</h1><p>${tx('Each task played on the device it’s done on.')} ${tx('Watch it, try it yourself, read it as a handbook, or print it.')}</p></div>` +
@@ -156,7 +172,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
   $('[data-f="who"]').value = st.who; $('[data-f="dev"]').checked = st.dev;
 
   function paintChapters() {
-    const row = s => `<button type="button" class="chap${mine(s) ? '' : ' other'}" data-i="${SCENES.indexOf(s)}"><span class="ci">${ic(s.icon)}</span><b>${s.title}</b><small>${txn(s.steps.length, '{device} · {n} step', '{device} · {n} steps', { device: DEVICE[s.device] })}</small></button>`;
+    const row = s => `<button type="button" class="chap${mine(s) ? '' : ' other'}" data-i="${SCENES.indexOf(s)}"><span class="ci">${ic(s.icon)}</span><b>${s.title}</b><small>${txn(s.steps.length, '{device} · {n} step', '{device} · {n} steps', { device: DEVICE[s.device] })}${s.stories?.length ? ` · ${txn(s.stories.length, '{n} What if', '{n} What ifs')}` : ''}</small></button>`;
     let h = '';
     for (const [g, label] of GROUPS) { const list = SCENES.filter(s => s.grp === g && mine(s) && seen(s)); if (list.length) h += `<span class="cgrp">${label}</span>` + list.map(row).join(''); }
     const rest = SCENES.filter(s => !mine(s) && seen(s));
@@ -165,19 +181,32 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
   }
   const markChapter = () => chapters.querySelectorAll('.chap').forEach(b => { const on = Number(b.dataset.i) === st.sceneIx; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'step' : 'false'); });
 
-  const headHtml = s => `<div class="sc-head"><h2>${s.title}</h2><span class="where">${s.where}</span></div><p class="sc-intro">${s.intro}</p>`;
-  const whatifHtml = s => `<section class="whatif"><h3>${tx('What if…')}</h3><div class="wi">${s.whatif.map(([q, a]) => `<div><b>${q}</b><span>${a}</span></div>`).join('')}</div></section>`;
+  const headHtml = s => (s.story ? `<div class="sbar"><span class="stag">${tx('What if')}</span><b>${s.story.title}</b><button type="button" class="sback" data-c="back">${ic('prev')}${tx('Back to the chapter')}</button></div>` : '') +
+    `<div class="sc-head"><h2>${s.story ? s.parent.title : s.title}</h2><span class="where">${s.where}</span></div><p class="sc-intro">${s.intro}</p>`;
+  // The chapter's What ifs: the ones that play, as cards, then the ones that are a line or two.
+  const whatifHtml = s => {
+    const b = s.parent || s, cards = b.stories || [], text = b.whatif || [];
+    if (!cards.length && !text.length) return '';
+    return `<section class="whatif"><h3>${tx('What if…')}</h3>` +
+      (cards.length ? `<div class="wis">${cards.map((w, i) => `<button type="button" class="wcard${st.side === i ? ' on' : ''}" data-story="${i}"${st.side === i ? ' aria-current="true"' : ''}><b>${w.title}</b><span>${w.blurb}</span><small>${ic('play')}${txn(w.steps.length, 'Play it · {n} step', 'Play it · {n} steps')}</small></button>`).join('')}</div>` : '') +
+      (text.length ? `<div class="wi">${text.map(([q, a]) => `<div><b>${q}</b><span>${a}</span></div>`).join('')}</div>` : '') + '</section>';
+  };
+  // A story's own section: what to know about it.
+  const knowHtml = s => s.story?.know?.length ? `<section class="know"><h3>${tx('What to know')}</h3><ul>${s.story.know.map(k => `<li>${k}</li>`).join('')}</ul></section>` : '';
   const observe = box => { ro.observe(box); };
 
   function renderWatch() {
     const s = scene(), tryIt = st.mode === 'try';
-    stage.innerHTML = headHtml(s) + `<div class="watch"><div class="theatre${tryIt ? ' trying' : ''}"><div class="fitbox" data-max="1"><div class="fit dev-host"></div></div></div>` +
-      `<aside class="evlog" ${st.dev ? '' : 'hidden'}><h3><i></i>Event log</h3><p class="evp">What each step sends, newest first, and which devices receive it.</p><div class="evlist"></div></aside></div>` +
-      `<div class="cap"><div class="cap-row"><span class="cap-n"></span><div style="min-width:0;flex:1"><p class="cap-t"></p></div></div><div class="dev capd" ${st.dev ? '' : 'hidden'}></div>` +
+    // Beside the device on a wide screen (a phone chapter), under it otherwise; the device
+    // keeps to the window's height so the caption and Play stay in view.
+    const room = s.device === 'pc' ? 330 : 150;
+    stage.innerHTML = headHtml(s) + `<div class="watch v2 ${s.device}"><div class="theatre${tryIt ? ' trying' : ''}"><div class="fitbox" data-max="1" data-room="${room}"><div class="fit dev-host"></div></div></div>` +
+      `<div class="wside"><div class="cap"><div class="cap-row"><span class="cap-n"></span><div style="min-width:0;flex:1"><p class="cap-t"></p></div></div><div class="dev capd" ${st.dev ? '' : 'hidden'}></div>` +
       (tryIt ? `<div class="trynote">${tx('Your turn: tap where the amber ring is, or tap the label when the scanner opens.')} ${tx('The next step starts by itself.')}</div><div class="donecard" hidden>${ic('check')}${tx('Chapter done.')} ${tx('Try another, or check the What if… below.')}</div>` : '') +
       `<div class="ctl"><button type="button" data-c="prev" aria-label="${tx('Previous step')}">${ic('prev')}</button>${tryIt ? '' : `<button type="button" class="play" data-c="play">${ic('play')}${tx('Play')}</button>`}<button type="button" data-c="next" aria-label="${tryIt ? tx('Skip this step') : tx('Next step')}">${ic('next')}</button>` +
       `<div class="dots">${s.steps.map((_, i) => `<button type="button" data-step="${i}" aria-label="${tx('Step {n}', { n: i + 1 })}"></button>`).join('')}</div>` +
-      `<button type="button" data-c="again" aria-label="${tx('Start again')}">${ic('again')}</button>${tryIt ? '' : `<select data-f="speed" aria-label="${tx('Speed')}"><option value="0.6">${tx('Slow')}</option><option value="1">${tx('Normal')}</option><option value="1.6">${tx('Fast')}</option></select>`}</div></div>` + whatifHtml(s);
+      `<button type="button" data-c="again" aria-label="${tx('Start again')}">${ic('again')}</button>${tryIt ? '' : `<select data-f="speed" aria-label="${tx('Speed')}"><option value="0.6">${tx('Slow')}</option><option value="1">${tx('Normal')}</option><option value="1.6">${tx('Fast')}</option></select>`}</div></div>` + knowHtml(s) +
+      `<aside class="evlog" ${st.dev ? '' : 'hidden'}><h3><i></i>Event log</h3><p class="evp">What each step sends, newest first, and which devices receive it.</p><div class="evlist"></div></aside></div></div>` + whatifHtml(s);
     if (!tryIt) $('[data-f="speed"]').value = String(st.speed);
     observe(stage.querySelector('.fitbox'));
     if (tryIt) tryFrom(0); else showStep(st.stepIx, null);
@@ -234,7 +263,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
 
   async function renderBook() {
     const s = scene();
-    stage.innerHTML = headHtml(s) + `<p class="book-note">${tx('Every step of this chapter as a still frame.')} ${tx('The ring shows where to tap.')}</p><div class="book"></div>` + whatifHtml(s);
+    stage.innerHTML = headHtml(s) + `<p class="book-note">${tx('Every step of this chapter as a still frame.')} ${tx('The ring shows where to tap.')}</p><div class="book v2"></div>` + knowHtml(s) + whatifHtml(s);
     const book = $('.book'), tk = newToken();
     try {
       for (let i = 0; i < s.steps.length; i++) {
@@ -252,9 +281,10 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
   async function paperPage(s, into, tk) {
     const phoneish = s.device === 'phone', cols = phoneish ? 4 : s.device === 'pc' ? 2 : s.device === 'duo' || s.steps.length > 4 ? 3 : 2, max = phoneish ? 0.5 : 1;
     const qr = qrSvg(guideLink(storeNo, s.id), { cell: 3 });
-    into.insertAdjacentHTML('beforeend', `<div class="a4"><div class="a4-h"><span class="mk"></span><div><small>Conduit · ${GROUPS.find(g => g[0] === s.grp)[1]} · ${DEVICE[s.device]}</small><h2>${s.title}</h2></div><span class="pg">${esc(storeName)} ${esc(storeNo)}</span></div>` +
+    into.insertAdjacentHTML('beforeend', `<div class="a4"><div class="a4-h"><span class="mk"></span><div><small>Conduit · ${GROUPS.find(g => g[0] === s.grp)[1]} · ${DEVICE[s.device]}${s.story ? ` · ${s.parent.title}` : ''}</small><h2>${s.story ? s.story.title : s.title}</h2></div><span class="pg">${esc(storeName)} ${esc(storeNo)}</span></div>` +
       `<p class="a4-i">${s.intro}</p><div class="a4-g" style="--cols:${cols}"></div>` +
-      `<div class="a4-w"><h4>${tx('What if…')}</h4>${s.whatif.map(([q, a]) => `<div><b>${q}</b> ${a}</div>`).join('')}</div>` +
+      (s.story ? `<div class="a4-w"><h4>${tx('What to know')}</h4>${s.story.know.map(k => `<div>${k}</div>`).join('')}</div>`
+        : `<div class="a4-w"><h4>${tx('What if…')}</h4>${[...(s.stories || []).map(w => [w.title, w.blurb]), ...(s.whatif || [])].map(([q, a]) => `<div><b>${q}</b> ${a}</div>`).join('')}</div>`) +
       `<div class="a4-f">${qr ? `<span class="qrbox">${qr}</span>` : ''}<div><b>${tx('Scan to watch it on a phone')}</b>${tx('The QR code opens this chapter in the guide.')}</div><span class="sp"></span><span>${printedOn()}</span></div></div>`);
     const page = into.lastElementChild, g = page.querySelector('.a4-g');
     for (let i = 0; i < s.steps.length; i++) {
@@ -305,7 +335,11 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
   // ── listeners: on the shadow root, and one on the document for the arrow keys ──
   const onClick = e => {
     const chap = e.target.closest('.chap');
-    if (chap) { st.sceneIx = Number(chap.dataset.i); st.stepIx = 0; render(); if (vg.clientWidth < 908) stage.scrollIntoView({ behavior: reduce() ? 'auto' : 'smooth' }); return; }
+    if (chap) { st.sceneIx = Number(chap.dataset.i); st.stepIx = 0; st.side = null; render(); if (vg.clientWidth < 908) stage.scrollIntoView({ behavior: reduce() ? 'auto' : 'smooth' }); return; }
+    // A What if card plays its story; Back returns to the chapter.
+    const card = e.target.closest('.wcard[data-story]');
+    if (card) { st.side = Number(card.dataset.story); st.stepIx = 0; if (st.mode === 'paper') st.mode = 'watch'; render(); stage.scrollIntoView({ behavior: reduce() ? 'auto' : 'smooth', block: 'start' }); return; }
+    if (e.target.closest('[data-c="back"]')) { st.side = null; st.stepIx = 0; render(); stage.scrollIntoView({ behavior: reduce() ? 'auto' : 'smooth', block: 'start' }); return; }
     const m = e.target.closest('.modes button[data-mode]');
     if (m) { if (m.dataset.mode !== st.mode) { st.mode = m.dataset.mode; st.stepIx = 0; render(); } return; }
     const t = e.target.closest('button'); if (!t || t.closest('.dv') || !stage.contains(t)) return;
