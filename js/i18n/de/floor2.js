@@ -933,4 +933,13 @@ export default {
   "The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.": "Der Bestandsbericht geht an die Auffüll-Prüfung, die Tagesliste, die Korrekturen und die Bestandsanalyse.",
   "Stock intelligence was not updated: {error}": "Die Bestandsanalyse wurde nicht aktualisiert: {error}",
   "Stock intelligence updated": "Bestandsanalyse aktualisiert",
+  "backfilled {date}": "aufgefüllt am {date}",
+  "inventory report {date}": "Bestandsbericht vom {date}",
+  "SOH report {date}": "SOH-Bericht vom {date}",
+  "Not on today’s report: asked for where it was seen lately, so it may not be there": "Nicht im heutigen Bericht: dort angefordert, wo es zuletzt gesehen wurde, daher ist es vielleicht nicht da",
+  "SUGGESTED": "VORSCHLAG",
+  "Not on today’s report, but seen lately": "Nicht im heutigen Bericht, aber kürzlich gesehen",
+  "It may not have been scanned in. Ask for it where it was seen and the stockroom checks there.": "Vielleicht wurde es nicht eingescannt. Fordern Sie es dort an, wo es gesehen wurde, und das Lager sieht dort nach.",
+  "Ask for it in these bays": "An diesen Lagerplätzen anfordern",
+  "Ask for it there": "Dort anfordern",
 };

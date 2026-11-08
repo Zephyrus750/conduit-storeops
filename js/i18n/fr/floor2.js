@@ -933,4 +933,13 @@ export default {
   "The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.": "Le rapport de stock va dans la revue du réassort, la liste du jour, les ajustements et l’analyse des stocks.",
   "Stock intelligence was not updated: {error}": "L’analyse des stocks n’a pas été mise à jour : {error}",
   "Stock intelligence updated": "Analyse des stocks mise à jour",
+  "backfilled {date}": "réassorti le {date}",
+  "inventory report {date}": "rapport de stock du {date}",
+  "SOH report {date}": "rapport de SOH du {date}",
+  "Not on today’s report: asked for where it was seen lately, so it may not be there": "Absent du rapport du jour : demandé là où il a été vu récemment, il n’y est peut-être pas",
+  "SUGGESTED": "SUGGÉRÉ",
+  "Not on today’s report, but seen lately": "Absent du rapport du jour, mais vu récemment",
+  "It may not have been scanned in. Ask for it where it was seen and the stockroom checks there.": "Il n’a peut-être pas été scanné. Demandez-le là où il a été vu et la réserve vérifie sur place.",
+  "Ask for it in these bays": "Le demander à ces emplacements",
+  "Ask for it there": "Le demander là",
 };

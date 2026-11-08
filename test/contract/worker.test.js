@@ -1206,7 +1206,18 @@ test('live pull: a floor phone finds an item’s stockroom bays by keycode or AP
   const byApn = (await find('9341234567893')).body;
   assert.deepEqual([byApn.kc, byApn.via, byApn.bays], ['43648803', 'apn', ['7036', '7041']], 'the barcode on the item finds its keycode');
   const none = (await find('11112222')).body;
-  assert.deepEqual([none.kc, none.bays], ['11112222', []], 'not in the report: no stockroom location');
+  assert.deepEqual([none.kc, none.bays, none.seen], ['11112222', [], []], 'not in the report: no stockroom location, and not seen lately');
+  // Not on today's report but seen in the last two weeks: a backfill scan put it in 7050 three days ago, an SOH
+  // snapshot listed it in 7060 yesterday; three weeks ago in 7070 is too long ago. Newest first, one a bay.
+  const { addDays } = await import('../../shared/time.js');
+  const scanned = await api('POST', '/v1/store/1241/events', { events: [
+    event('submission.update', { bay: '7050', date: addDays(today, -3) }, { codes: { 11112222: true } }, 'stockroom'),
+    event('submission.update', { bay: '7070', date: addDays(today, -21) }, { codes: { 11112222: true } }, 'stockroom'),
+  ] }, sr);
+  assert.deepEqual(scanned.body.results.map(r => r.ok), [true, true], JSON.stringify(scanned.body));
+  assert.equal((await api('POST', '/v1/store/1241/soh', { date: addDays(today, -1), rows: [{ kc: '11112222', loc: '7060', soh: 4 }, { kc: '11112222', loc: '7050', soh: 4 }] }, sr)).status, 201);
+  assert.deepEqual((await find('11112222')).body.seen, [{ bay: '7050', date: addDays(today, -1), via: 'soh' }, { bay: '7060', date: addDays(today, -1), via: 'soh' }], 'the newest sighting of each bay');
+  assert.equal(byKc.body.seen, undefined, 'an item with a bay on the report needs none');
   // A clearance ticket: the book's own barcode, which nothing links yet. The floor phone links it to the keycode printed on the ticket.
   const ticket = (await find('9780241813799')).body;
   assert.deepEqual([ticket.gtin, ticket.kc, ticket.bays], ['9780241813799', null, []], 'a barcode nothing links: no keycode, so the phone asks for it');

@@ -10,7 +10,9 @@
 //     id, name, dept, at, by, shelves, closedAt, cage (the one being filled), cages n → { at, by, tag, lines },
 //     people device → { part: req | pull, bays: [ '7000-7029' | '7036' | 'all' ], at },
 //     lines id → { id, kc, name, bays[], qty (n | 'all'), carton, shelf, at, by,
-//                  st: todo | pulled | short | gone | cancelled, got { bay: n } | null, doneAt, doneBy, cage }
+//                  st: todo | pulled | short | gone | cancelled, got { bay: n } | null, doneAt, doneBy, cage,
+//                  seen?: [{ bay, date, via: backfill | report | soh }] (asked for where it was seen
+//                  lately: the morning report had no bay for it, so it is a suggestion) }
 //   }
 //   pulls.apn gtin → { kc, at, by }   an item barcode linked to its keycode
 //
@@ -32,6 +34,7 @@ import { gs1Parse } from '../gs1.js';
 import { isKeycode } from '../keycode.js';
 
 export const PULL_STATES = ['todo', 'pulled', 'short', 'gone', 'cancelled'];
+export const SEEN_VIA = ['backfill', 'report', 'soh'];
 export const KEEP_PULL_DAYS = 7, SESSION_CAP = 80, LINE_CAP = 600, BAYS_MAX = 12, QTY_MAX = 999, APN_CAP = 3000;
 const KC_RE = /^\d{6,13}$/, BAY_RE = /^[\w-]{1,12}$/, ZONE_RE = /^(all|\d{1,6}(-\d{1,6})?)$/, DEPT_RE = /^[a-z0-9]{1,12}$/, SHELF_RE = /^[\w .-]{1,16}$/, TAG_RE = /^[\w-]{1,20}$/;
 const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, n);
@@ -50,6 +53,13 @@ function openSession(s, e) {
   return ses;
 }
 // The bays a request names: 1 to BAYS_MAX distinct stockroom bays.
+// Where a suggested request was seen: one entry a bay it is asked for in.
+function seenList(v, bays) {
+  if (!Array.isArray(v) || !v.length || v.length > BAYS_MAX) return reject('invalid_event', `seen is 1 to ${BAYS_MAX} sightings`);
+  const out = v.map(x => ({ bay: String(x?.bay ?? '').trim(), date: String(x?.date ?? ''), via: String(x?.via ?? '') }));
+  if (out.some(x => !bays.includes(x.bay) || !/^\d{4}-\d{2}-\d{2}$/.test(x.date) || !SEEN_VIA.includes(x.via))) return reject('invalid_event', 'each sighting is a requested bay, a date and backfill, report or soh');
+  return out;
+}
 function bayList(v) {
   if (!Array.isArray(v) || !v.length) return reject('invalid_event', 'a request names at least one stockroom bay');
   const out = [...new Set(v.map(b => String(b).trim()))];
@@ -110,7 +120,8 @@ export const pullReducers = {
     if (p.carton !== undefined && !whole(p.carton, 1, QTY_MAX)) return reject('invalid_event', `carton is 1 to ${QTY_MAX}`);
     const shelf = p.shelf ? String(p.shelf).trim().toUpperCase() : '';
     if (shelf && !SHELF_RE.test(shelf)) return reject('invalid_event', 'shelf is a floor shelf (A16 S1)');
-    ses.lines[id] = { id, kc, name: clean(p.name, 80), bays, qty, ...(p.carton ? { carton: p.carton } : {}), ...(shelf ? { shelf } : {}), at: e.at, by: who(e), st: 'todo', got: null, doneAt: null, doneBy: null, cage: null };
+    const seen = p.seen === undefined ? null : seenList(p.seen, bays); if (seen?.code) return seen;
+    ses.lines[id] = { id, kc, name: clean(p.name, 80), bays, qty, ...(p.carton ? { carton: p.carton } : {}), ...(shelf ? { shelf } : {}), ...(seen ? { seen } : {}), at: e.at, by: who(e), st: 'todo', got: null, doneAt: null, doneBy: null, cage: null };
     if (!ses.people[who(e)]) join(ses, e, 'req');
     return null;
   },

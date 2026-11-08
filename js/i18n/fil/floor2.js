@@ -933,4 +933,13 @@ export default {
   "The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.": "Napupunta ang inventory report sa Backfill review, sa Day list, sa Adjustments at sa Stock intelligence.",
   "Stock intelligence was not updated: {error}": "Hindi na-update ang Stock intelligence: {error}",
   "Stock intelligence updated": "Na-update ang Stock intelligence",
+  "backfilled {date}": "na-backfill noong {date}",
+  "inventory report {date}": "inventory report noong {date}",
+  "SOH report {date}": "SOH report noong {date}",
+  "Not on today’s report: asked for where it was seen lately, so it may not be there": "Wala sa report ngayong araw: hiniling kung saan ito huling nakita, kaya baka wala na roon",
+  "SUGGESTED": "MUNGKAHI",
+  "Not on today’s report, but seen lately": "Wala sa report ngayong araw, pero nakita kamakailan",
+  "It may not have been scanned in. Ask for it where it was seen and the stockroom checks there.": "Baka hindi ito na-scan. Hilingin ito kung saan ito nakita at titingnan doon ng stockroom.",
+  "Ask for it in these bays": "Hilingin sa mga bay na ito",
+  "Ask for it there": "Hilingin doon",
 };

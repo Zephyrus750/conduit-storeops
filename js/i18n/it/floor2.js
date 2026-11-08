@@ -933,4 +933,13 @@ export default {
   "The inventory report goes to Backfill review, the Day list, Adjustments and Stock intelligence.": "Il report giacenze va alla verifica rifornimento, alla lista del giorno, alle rettifiche e all’analisi giacenze.",
   "Stock intelligence was not updated: {error}": "L’analisi giacenze non è stata aggiornata: {error}",
   "Stock intelligence updated": "Analisi giacenze aggiornata",
+  "backfilled {date}": "rifornito il {date}",
+  "inventory report {date}": "report giacenze del {date}",
+  "SOH report {date}": "report SOH del {date}",
+  "Not on today’s report: asked for where it was seen lately, so it may not be there": "Non è nel report di oggi: richiesto dove è stato visto di recente, quindi potrebbe non esserci",
+  "SUGGESTED": "SUGGERITO",
+  "Not on today’s report, but seen lately": "Non è nel report di oggi, ma visto di recente",
+  "It may not have been scanned in. Ask for it where it was seen and the stockroom checks there.": "Forse non è stato scansionato. Richiedilo dove è stato visto e il magazzino controlla lì.",
+  "Ask for it in these bays": "Richiedilo in queste ubicazioni",
+  "Ask for it there": "Richiedilo lì",
 };
