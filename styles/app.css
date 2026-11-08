@@ -392,8 +392,8 @@ svg.map.real { background: #fff; }
    is green with a white outline whatever its department; a planned shelf
    shows its plan colour at full strength. The name badges stay off. */
 .map.real.rf .shelf-group .shelf { fill: #6b7280 !important; }
-.map.real.rf[data-focus] .shelf-group:not([data-mark="focus"]):not([data-mark="done"]):not([data-plan]) .shelf { fill-opacity: .09 !important; }
-.map.real.rf[data-focus] .shelf-group:not([data-mark="focus"]):not([data-mark="done"]):not([data-plan]) .shelf-label { opacity: 0 !important; }
+.map.real.rf[data-focus] .shelf-group:not([data-mark="focus"]):not([data-mark="done"]):not([data-plan]):not([data-flash]) .shelf { fill-opacity: .09 !important; }
+.map.real.rf[data-focus] .shelf-group:not([data-mark="focus"]):not([data-mark="done"]):not([data-plan]):not([data-flash]) .shelf-label { opacity: 0 !important; }
 .map.real.rf .shelf-group[data-plan] .shelf { fill-opacity: 1 !important; }
 /* Static on purpose: an animation here re-rasters the map every frame on hundreds of shelves. */
 .map.real.rf .shelf-group[data-mark="done"] .shelf { fill: #16a34a !important; fill-opacity: 1 !important; stroke: #4ade80 !important; stroke-width: 3 !important; }
@@ -956,7 +956,11 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .hist-tools .pills { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 @container shell (max-width: 1100px) { .hgrid { grid-template-columns: 1fr; } }
 /* Stocktake: missing list and past sessions; a located shelf rings orange */
-.map.real .shelf-group[data-flash] .shelf { stroke: #f97316 !important; stroke-width: 6 !important; fill-opacity: 1 !important; }
+/* The flash outranks every mode's marks (done, focus, counted…), which are
+   !important too: one selector a mode that colours marked shelves. */
+.map.real .shelf-group[data-flash] .shelf,
+.map.real.mono .shelf-group[data-flash][data-mark] .shelf, .map.real.rf .shelf-group[data-flash][data-mark] .shelf, .map.real.rfplan .shelf-group[data-flash][data-mark] .shelf,
+.map.real.li .shelf-group[data-flash][data-mark] .shelf, .map.real.fm .shelf-group[data-flash][data-mark] .shelf { stroke: #f97316 !important; stroke-width: 6 !important; fill-opacity: 1 !important; }
 .st-miss-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; max-height: 220px; overflow: auto; }
 .st-loc { font: 600 12px/1 var(--mono, ui-monospace, monospace); padding: 6px 9px; border-radius: 8px; background: var(--chip); color: var(--ink); border: 1px solid var(--line); cursor: pointer; }
 .st-loc.counting { border-color: #EAB308; background: rgba(234,179,8,.14); }
@@ -2054,6 +2058,8 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .frame.rail-ink .railfoot { border-top-color: rgba(255,255,255,.14); }
 .frame.rail-ink .rrow .badge { background: rgba(255,255,255,.16); color: #fff; }
 .frame.rail-ink .rrow.on .badge { background: #fff; color: var(--accent-ink); }
+/* An overdue count (cages, equipment, recalls) stays red on every rail style, the selected row too. */
+.frame[class*="rail-"] .rrow .badge.red { background: #DC2626; color: #fff; }
 .frame.rail-ink .railscroll { scrollbar-color: rgba(255,255,255,.3) transparent; }
 .frame.rail-ink .rsec.adm .own { background: var(--accent); color: #fff; }
 .frame.rail-ink .bsearch { color: rgba(255,255,255,.85); }
@@ -3757,6 +3763,9 @@ details.bf-g[open] > summary svg.cv { transform: rotate(180deg); }
 .bf-code .nm { flex: 1; min-width: 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bf-code.new { background: var(--accent-soft); }
 .bf-code.warn { background: color-mix(in srgb, var(--amber) 14%, transparent); }
+/* A flagged row's hint (one digit from …) wraps rather than being cut off on a phone. */
+.bf-code.warn { padding-block: 6px; }
+.bf-code.warn .nm { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.3; }
 .bf-code em { flex: none; font-style: normal; font-size: 11.5px; font-weight: 800; color: var(--green-ink); background: color-mix(in srgb, var(--green) 16%, transparent); border-radius: 99px; padding: 2px 8px; }
 .bf-code .mv-x { margin: 0; }
 .bf-list .bf-empty { display: block; margin: 0; padding: 12px 14px 14px; font-size: 13.5px; color: var(--dim); text-align: left; }

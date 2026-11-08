@@ -731,6 +731,8 @@ function scanView(ctx, m) {
   // Every code scanned here, newest first, each removable (K2B could
   // delete any code, with undo); a pair one digit apart is flagged.
   const all = codes.slice().reverse(), dsp = disputes(codes), nDsp = Object.keys(dsp).length, recallNow = st.mRecall ? ctx.store.get('recalls')?.items?.[st.mRecall.id] : null;
+  // last: the code just scanned (it gets the row's highlight); the strip falls
+  // back to the newest code still here once that one is removed.
   const held = heldFor(bay), d = deptForBay(rangesOf(ctx), bay), last = st.mLast && codes.includes(st.mLast) ? st.mLast : null;
   warmReader();   // the reading engine loads while the location is open, so Scan starts quickly
   const row = (c, i) => `<div class="bf-code${i === 0 && c === last ? ' new' : ''}${dsp[c] ? ' warn' : nameOf(c) === null || recallFor(ctx.store, c) ? ' bad' : ''}"><b class="mono" data-kccard="${esc(c)}">${esc(c)}</b><span class="nm">${dsp[c] ? `<span class="mv-dsp">${ic('alert')}${esc(disputeHint(c, dsp[c][0]))}</span>` : nameHtml(c)}</span>${i === 0 && c === last ? `<em>${tx('just now')}</em>` : ''}` +
@@ -742,7 +744,7 @@ function scanView(ctx, m) {
     (nDsp ? `<div class="mv-note warn">${ic('alert')}${nDsp / 2 === 1 ? tx('Two codes are one digit apart: check which is on the shelf and remove the other.') : tx('{n} codes are one digit apart: check which is on the shelf and remove the other.', { n: nDsp })}</div>` : '');
   const list = `<div class="card bf-list"><div class="bf-lh">${tx('Scanned here')}<span>${tx('newest first')}</span></div>${all.length ? all.map(row).join('') : `<p class="bf-empty">${tx('Tap Scan to read the PDT’s list, or scan each product.')}</p>`}</div>`;
   const strip = bfStrip(`<div class="dk-st"><div class="dk-l1"><b>${codes.length}</b><span>${txn(codes.length, 'code in {bay}', 'codes in {bay}', { bay: esc(bay) })}</span></div>` +
-    `<div class="dk-l2">${held.size ? `<b class="w">${txn(held.size, '{n} held', '{n} held')}</b> · ` : ''}${last ? `${tx('Last')} <b>${esc(last)}</b> ${esc(nameOf(last) || '')}` : tx('Nothing scanned yet')}</div></div>` +
+    `<div class="dk-l2">${held.size ? `<b class="w">${txn(held.size, '{n} held', '{n} held')}</b> · ` : ''}${(last || all[0]) ? `${tx('Last')} <b>${esc(last || all[0])}</b> ${esc(nameOf(last || all[0]) || '')}` : tx('Nothing scanned yet')}</div></div>` +
     `<button class="dk-go ok" data-act="m-send">${ic('check')}${tx('Submit for review')}</button>`);
   return topBar(title, d ? deptBadge(d) : '', 2) + `<div class="dk-body">${entry}${notes}${list}</div>` + (st.mPanel ? scanPanel(bay) : '') + strip;
 }
