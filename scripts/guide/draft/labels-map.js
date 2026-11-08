@@ -29,7 +29,7 @@ const BADGES = [['A11', -235, 269], ['A13', -155, 269], ['A15', -75, 269], ['A17
 
 // The colours of styles/app.css .map.real.li: [fill, stroke, stroke width].
 const LOOK = { base: ['#CBD0D8', '#B9BFC9', 1.5], checked: ['#DCFCE7', '#16A34A', 1.6], wrong: ['#FEE2E2', '#DC2626', 2.2], focus: ['#F3EEFC', '#5B21B6', 2.6] };
-export const VIEW = [-262, -330, 580, 994];
+export const VIEW = [-262, -440, 580, 994];
 
 // checked, wrong: the micro-departments so marked this cycle; open: the one
 // in hand; tapped: the shelf last tapped.

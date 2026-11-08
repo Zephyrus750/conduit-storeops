@@ -53,7 +53,7 @@
 .lb2-r > svg.i { width: 16px; height: 16px; flex: none; color: #9CA3AF; }
 .lb2-r .k { flex: 1; min-width: 0; }
 .lb2-r .k b { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb2-r .k span { display: block; color: #9CA3AF; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb2-r .k span { display: block; color: #9CA3AF; font-size: 12px; }
 .lb2-r .lb2-bar { width: 61px; flex: none; }
 .lb2-r .v { font-size: 12px; font-weight: 800; white-space: nowrap; color: #D1D5DB; }
 .lb2-r .v.ok { color: #4ADE80; } .lb2-r .v.warn { color: #FBBF24; } .lb2-r .v.dim { color: #6B7280; font-weight: 700; }

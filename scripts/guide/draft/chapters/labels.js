@@ -36,8 +36,8 @@ const WRONG = { 'k2-047': '047 Action/Vehicle Toys', 'h1-056': '056 Appliances',
 // A state: checked (micro-departments on the map), wrong (the list), open
 // (the micro-department in hand), when (the day each Kitchen one was checked),
 // tapped (the shelf last tapped), sheet ('' | depts | h1 | end | micro | form),
-// kc and note (the form as typed).
-const at = o => ({ checked: ['h1-038', 'h1-021', 'c1-004', 'c1-005', 'c1-052'], wrong: W0, open: '', tapped: '', sheet: '', kc: '', note: '', when: {}, ...o });
+// kc, note and focus (the form as typed, and the box being typed in).
+const at = o => ({ checked: ['h1-038', 'h1-021', 'c1-004', 'c1-005', 'c1-052'], wrong: W0, open: '', tapped: '', sheet: '', kc: '', note: '', focus: '', when: {}, ...o });
 const kitchen = s => s.checked.filter(m => m.startsWith('h1-')).length;
 const count = s => OTHERS + kitchen(s);
 
@@ -59,8 +59,8 @@ const dep = d => `<span class="lb2-dep" style="background:${DEPT_COLOUR[d]};colo
 function panel(s) {
   const n = count(s), head = `<div class="lb2-sxh">${ai('m-labelint')}${tx('Label check')}<span class="n">${n} / ${TOTAL}</span></div>` +
     `<div class="lb2-sxsub">${txn(LEFT, '{cycle} · {n} day left', '{cycle} · {n} days left', { cycle: cyc() })}</div>${bar(n, TOTAL, '#0E7CA8')}`;
-  if (s.sheet === 'form') return head + `<label class="lb2-fld"><span>${tx('Keycode')}</span><span class="lb2-in kc${s.kc || s.note ? '' : ' on'}">${s.kc}</span></label>` +
-    `<label class="lb2-fld"><span>${tx('What is wrong')}</span><span class="lb2-in nt${s.note ? ' on' : ''}">${s.note}</span></label>` +
+  if (s.sheet === 'form') return head + `<label class="lb2-fld"><span>${tx('Keycode')}</span><span class="lb2-in kc${s.focus === 'kc' ? ' on' : ''}">${s.kc}</span></label>` +
+    `<label class="lb2-fld"><span>${tx('What is wrong')}</span><span class="lb2-in nt${s.focus === 'nt' ? ' on' : ''}">${s.note}</span></label>` +
     `<div class="lb2-two" style="margin-top:0"><span class="lb2-big log">${ai('check')}${tx('Log variance')}</span><span class="lb2-ghost">${tx('Cancel')}</span></div>`;
   if (s.sheet === 'micro') {
     const c = s.checked.includes(s.open), w = { cycle: cyc(), n: LEFT, sub: 'H1' };
@@ -75,22 +75,25 @@ function panel(s) {
     `<div class="lb2-sec"><div class="lb2-sl">${tx('Wrong labels this cycle')}<span>${tx('{n} found', { n: s.wrong.length })}</span></div><div class="lb2-rows">${wrong}</div></div>`;
 }
 // Repaints the map, its badge, the strip and the sheet for a state.
+const marks = s => ({ ...s, wrong: s.wrong.map(w => w[0]) });
 function paint(c, s) {
-  c.html('.lb2-map', liMap(s)); c.html('.lb2-badge', badge(s)); c.html('.p2-strip', strip(s));
+  c.html('.lb2-map', liMap(marks(s))); c.html('.lb2-badge', badge(s)); c.html('.p2-strip', strip(s));
   c.html('.lb2-pan', s.sheet ? panel(s) : ''); c.cls('.lb2-pan', 'end', s.sheet === 'end'); if (s.sheet) c.show('.lb2-pan'); else c.hide('.lb2-pan');
 }
-const phone = (s = at()) => phone2('lb', `<div class="lb2-mv"><div class="lb2-map">${liMap(s)}</div><div class="lb2-badge">${badge(s)}</div>${tools()}</div><div class="lb2-pan${s.sheet === 'end' ? ' end' : ''}"${s.sheet ? '' : ' hidden'}>${s.sheet ? panel(s) : ''}</div>`,
+const phone = (s = at()) => phone2('lb', `<div class="lb2-mv"><div class="lb2-map">${liMap(marks(s))}</div><div class="lb2-badge">${badge(s)}</div>${tools()}</div><div class="lb2-pan${s.sheet === 'end' ? ' end' : ''}"${s.sheet ? '' : ' hidden'}>${s.sheet ? panel(s) : ''}</div>`,
   { area: 'floor', on: 'labelint', strip: strip(s) });
 // The app's toast, over the strip.
 const note = (c, text, tone = '') => toast2(c, text, tone);
-// Types into the form's boxes.
-const typeIn = async (c, kc, nt) => { await c.type('.lb2-pan .kc', kc); c.cls('.lb2-pan .kc', 'on', false); c.cls('.lb2-pan .nt', 'on', true); await c.type('.lb2-pan .nt', nt); };
+// Taps the form's boxes and types into them.
+const typeIn = async (c, kc, nt) => { await c.tap('.lb2-pan .kc'); c.cls('.lb2-pan .kc', 'on', true); await c.type('.lb2-pan .kc', kc); c.cls('.lb2-pan .kc', 'on', false); await c.tap('.lb2-pan .nt'); c.cls('.lb2-pan .nt', 'on', true); await c.type('.lb2-pan .nt', nt); };
+// A step with nothing to tap leaves no finger on the last spot.
+const still = c => c.cls('#lb .fg', 'show', false);
 
 // The chapter's states, step by step.
 const A16 = { open: 'h1-056', tapped: 'A16 S1' };
 const KC = '43307685', WHY = 'ticket $15, shelf edge $12', W1 = [['h1-056', KC, WHY, 25], ...W0];
 const S4 = at(A16), S5 = at({ ...A16, sheet: 'micro' }), S6 = at({ ...A16, sheet: 'form' });
-const S7 = at({ ...A16, sheet: 'form', kc: KC, note: WHY }), S8 = at({ ...A16, sheet: 'micro', wrong: W1 });
+const S7 = at({ ...A16, sheet: 'form', kc: KC, note: WHY, focus: 'nt' }), S8 = at({ ...A16, sheet: 'micro', wrong: W1 });
 const S9 = at({ ...S8, checked: [...at().checked, 'h1-056'], when: { 'h1-056': 25 } });
 const S10 = at({ ...S9, sheet: '', open: 'h1-040', tapped: 'A12 S1' });
 const S11 = at({ ...S10, checked: [...S10.checked, 'h1-023'] });
@@ -101,7 +104,7 @@ export const labels = {
   intro: S(tx('Each micro-department gets one label check per cycle.'), tx('Tap a shelf, fix or record the wrong labels, mark it checked.')),
   html: () => phone(),
   steps: [
-    { cap: tx('Labels shows the cycle on the map.'), read: S(tx('Each numbered micro-department gets one label check per cycle: the badge and the strip count them, with the days left.'), tx('Green shelves are on a micro-department checked this cycle, red ones on one with a wrong label found, grey ones still to check.')),
+    { cap: tx('Labels shows the cycle on the map.'), read: S(tx('Each numbered micro-department gets one label check per cycle: the badge and the strip count them, with the days left.'), tx('Green shelves are on a micro-department checked this cycle, red ones on one with a wrong label found; the rest are grey.')),
       dev: 'The phone view is <b>mobile()</b> in js/views/labelint.js: <b>marksFor()</b> marks each shelf from the micro-department it is assigned to, and styles/app.css (.map.real.li) colours it. The cycle is <b>cycleId()</b> in js/ui.js, monthly unless the store sets weekly or fortnightly.', ev: [],
       run: async c => { await c.wait(400); } },
     { cap: tx('The arrow opens the cycle: every department’s progress.'), read: S(tx('Each department shows how many of its micro-departments are checked.'), tx('Below them are the wrong labels found this cycle.')),
@@ -112,14 +115,14 @@ export const labels = {
       run: async c => { await c.tap('.lb2-pan [data-sub="h1"]'); paint(c, at({ sheet: 'h1' })); } },
     { cap: tx('Further down: the wrong labels found this cycle.'), read: S(tx('Each with its micro-department, the keycode, what was wrong and the day.'), tx('The five newest show, with the count of all of them.')),
       dev: 'The list is the cycle’s <b>label.variance</b> events, newest first.', ev: [],
-      run: async c => { await c.wait(500); paint(c, at({ sheet: 'end' })); } },
+      run: async c => { still(c); await c.wait(500); paint(c, at({ sheet: 'end' })); } },
     { cap: tx('Close it and tap a shelf: its micro-department opens.'), read: S(tx('{shelf} is on {micro}, so it opens on the strip.', { shelf: 'A16 S1', micro: '056 Appliances' }), tx('All its shelves are outlined in purple: here runs {a} and {b}.', { a: 'A16', b: 'A18' })),
       dev: 'A tap calls <b>onSelect</b> in js/views/labelint.js, which finds the shelf’s micro-department. On a phone a tap never changes which shelves a micro-department has.', ev: [],
       run: async c => { await c.tap('.p2-strip .lb2-tog'); paint(c, at({ sheet: '' })); await c.tap('.lb2-svg [data-s="A16 S1"]'); paint(c, S4); } },
     { cap: tx('Check every label on its shelves, then open the arrow.'), read: S(tx('The sheet says whether it is checked this cycle.'), tx('Checked and Price is wrong are its two buttons.')),
       dev: 'With a micro-department open, the sheet is <b>mobileInner()</b> in js/views/labelint.js.', ev: [],
       run: async c => { await c.tap('.p2-strip .lb2-tog'); paint(c, S5); } },
-    { cap: tx('A price is wrong? Fix the ticket, then tap Price is wrong.'), read: S(tx('It records the wrong label for the cycle’s report.'), tx('The strip says Wrong label while the form is open.')),
+    { cap: tx('A price is wrong? Fix the ticket, then tap Price is wrong.'), read: S(tx('It records the wrong label for this cycle.'), tx('The strip says Wrong label while the form is open.')),
       dev: 'Price is wrong opens the form in <b>mobileInner()</b>, and <b>liStrip()</b> shows Wrong label. Nothing is sent yet.', ev: [],
       run: async c => { await c.tap('.lb2-pan .pw'); paint(c, S6); } },
     { cap: tx('Type the keycode and what was wrong.'), read: S(tx('The keycode is on the ticket.'), tx('The box takes 6 to 13 digits, so the item’s barcode works too.')),
@@ -136,8 +139,8 @@ export const labels = {
       dev: 'In <b>marksFor()</b> a wrong label wins over checked, and the open micro-department is outlined over both.', ev: [],
       run: async c => { await c.tap('.p2-strip .lb2-tog'); paint(c, at({ ...S9, sheet: '' })); await c.tap('.lb2-svg [data-s="A12 S1"]'); paint(c, S10); } },
     { cap: tx('Every device sees the count go up.'), read: S(tx('A colleague checks {micro} on their phone: its shelves turn green on yours.', { micro: '023 Books' }), tx('Nobody refreshes anything.')),
-      dev: 'Floor events go to every device in the store; the view repaints when the labels change (<b>store.on()</b> in client/store.js).', ev: [ev('label.check', 'h1-023')],
-      run: async c => { await c.wait(900); paint(c, S11); } },
+      dev: 'Floor events go to every device in the store; <b>mount()</b> in js/views/labelint.js repaints the view whenever the labels change.', ev: [ev('label.check', 'h1-023')],
+      run: async c => { still(c); await c.wait(900); paint(c, S11); } },
   ],
   whatif: [[tx('No wifi in that aisle?'), S(tx('Keep checking.'), tx('It sends when the phone is back in range.'))]],
   stories: [],
@@ -146,7 +149,7 @@ export const labels = {
 // ── What ifs ─────────────────────────────────────────────────────────
 labels.stories.push({
   id: 'noshelf', title: tx('What if a shelf isn’t on a micro-department?'), blurb: tx('Nothing opens and it says so: open the micro-department from the list instead.'),
-  know: [tx('A tap opens the micro-department the shelf is assigned to. A shelf on none yet says so, and nothing is sent.'),
+  know: [S(tx('A tap opens the micro-department the shelf is assigned to.'), tx('A shelf on none yet says so, and nothing is sent.')),
     tx('Only a store PC assigns shelves: Assign shelves on its Label integrity screen, or Settings › Departments.'),
     tx('Each shelf is assigned on its own, so the two sides of a run can be on different micro-departments.'),
     tx('Any micro-department can still be opened from the list under the arrow.')],
@@ -164,19 +167,19 @@ labels.stories.push({
 const RC = '43125715', RWHY = 'ticket $29, shelf edge $25', A12 = { open: 'h1-040', tapped: 'A12 S1' };
 labels.stories.push({
   id: 'recall', title: tx('What if the product is recalled?'), blurb: tx('The wrong label is logged, and a red message says to move the stock to the recall bay.'),
-  know: [tx('Every keycode logged is checked against the store’s recall list. Every device holds the list, so this works without wifi.'),
+  know: [S(tx('Every keycode logged is checked against the store’s recall list.'), tx('Every device holds the list, so this works without wifi.')),
     tx('A recalled product can’t be sold: move it to the recall bay and tell a manager.'), tx('The wrong label is logged all the same.'),
-    tx('The box takes 6 to 13 digits: a keycode, or the item’s barcode. A shorter code is turned away and nothing is sent.')],
+    S(tx('The box takes 6 to 13 digits, so the item’s barcode works too.'), tx('A shorter code is turned away and nothing is sent.'))],
   html: () => phone(at({ ...A12 })),
   steps: [
     { cap: tx('Open the arrow and tap Price is wrong.'), read: tx('{micro} is open: a sandwich press is ticketed wrong.', { micro: '040 Dining' }), dev: 'Nothing is sent yet.', ev: [],
       run: async c => { await c.tap('.p2-strip .lb2-tog'); paint(c, at({ ...A12, sheet: 'micro' })); await c.tap('.lb2-pan .pw'); paint(c, at({ ...A12, sheet: 'form' })); } },
-    { cap: tx('A digit short? It is turned away.'), read: S(tx('The keycode needs 6 to 13 digits.'), tx('Nothing is sent: type it again.')),
+    { cap: tx('A digit short? It is turned away.'), read: tx('A shorter code is turned away and nothing is sent.'),
       dev: 'variance-save in js/views/labelint.js checks the digits before it sends; the reducer checks them again.', ev: [],
-      run: async c => { await c.type('.lb2-pan .kc', '43125'); paint(c, at({ ...A12, sheet: 'form', kc: '43125' })); await c.tap('.lb2-pan .log'); note(c, tx('Keycode must be 6 to 13 digits'), 'bad'); } },
+      run: async c => { await c.tap('.lb2-pan .kc'); c.cls('.lb2-pan .kc', 'on', true); await c.type('.lb2-pan .kc', '43125'); paint(c, at({ ...A12, sheet: 'form', kc: '43125', focus: 'kc' })); await c.tap('.lb2-pan .log'); paint(c, at({ ...A12, sheet: 'form', kc: '43125' })); note(c, tx('Keycode must be 6 to 13 digits'), 'bad'); } },
     { cap: tx('Type the whole keycode and what was wrong.'), read: tx('The keycode is on the ticket.'), dev: 'The form is typed.', ev: [],
-      run: async c => { paint(c, at({ ...A12, sheet: 'form', kc: '' })); await typeIn(c, RC, RWHY); paint(c, at({ ...A12, sheet: 'form', kc: RC, note: RWHY })); } },
-    { cap: tx('Log variance: a red message says the product is recalled.'), read: S(tx('The wrong label is logged.'), tx('Then take the stock off the shelf to the recall bay and tell a manager.')),
+      run: async c => { paint(c, at({ ...A12, sheet: 'form', kc: '' })); await typeIn(c, RC, RWHY); paint(c, at({ ...A12, sheet: 'form', kc: RC, note: RWHY, focus: 'nt' })); } },
+    { cap: tx('Log variance: a red message says the product is recalled.'), read: S(tx('The wrong label is logged all the same.'), tx('Then take the stock off the shelf to the recall bay and tell a manager.')),
       dev: 'After <b>label.variance</b>, <b>recallFor()</b> in js/recallflag.js finds the keycode on the recall list and the toast says so.',
       ev: [ev('label.variance', 'h1-040', { keycode: RC, note: RWHY })],
       run: async c => { await c.tap('.lb2-pan .log'); paint(c, at({ ...A12, sheet: 'micro', wrong: [['h1-040', RC, RWHY, 25], ...W0] }));
