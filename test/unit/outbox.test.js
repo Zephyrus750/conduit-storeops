@@ -1,7 +1,9 @@
 // The device outbox on one store instance, against a stand-in worker: it
 // keeps sending after a moment offline (audit 19 Oct D1), keeps a change
 // the worker refused for a reason that can clear and sends it again later
-// (D2), and judges its own changes with the worker's role (D7).
+// (D2), and judges its own changes with the worker's role (D7). Opened
+// offline it says Offline from the start, and the list of what waits names
+// each change in words.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,6 +15,7 @@ import { primaryRole } from '../../shared/roles.js';
 import { storeDay, DEFAULT_TZ } from '../../shared/time.js';
 import { ulid } from '../../shared/ulid.js';
 import { localIso } from '../../client/store.js';
+import { pillState, changeLabel } from '../../js/sync.js';
 
 const timers = { setTimeout: () => 0, clearTimeout() {} };   // no background retries: each test sends when it says so
 
@@ -162,4 +165,29 @@ test('a change not yet confirmed is this device’s: a hold on a bay is not read
   await s.dispatch({ type: 'submission.open', entity: { bay: '7000', date: day }, payload: {} });
   await s.dispatch({ type: 'submission.claim', entity: { bay: '7000', date: day }, payload: {} });
   assert.equal(s.get('backfill').claims['7000']?.by, 'dev-1');
+});
+
+test('a store opened offline says Offline from the start: the pill never says Sending while the browser is offline', async () => {
+  const storage = memoryStorage();
+  const before = open({ session: fakeSession(['floor']), transport: fakeWorker(), online: () => false, storage });
+  await before.load(); await before.dispatch(mark('A16 S1')); before.close();   // the app closed with one change waiting
+  class NoSocket { constructor() { this.readyState = 0; } send() {} close() {} }   // a socket that never opens (no network)
+  for (const WebSocketImpl of [NoSocket, null]) {   // the socket, then the polling fallback
+    const s = open({ session: fakeSession(['floor']), transport: fakeWorker(), online: () => false, storage, WebSocketImpl });
+    const pills = []; s.on('status', st => pills.push(pillState(st)?.text));
+    await s.load(); await s.connect();
+    assert.ok(pills.length > 1);
+    assert.deepEqual([...new Set(pills)], ['Offline · 1'], `opened offline: ${pills.join(' → ')}`);
+    s.close();
+  }
+});
+
+test('the list of changes on the device names each in words: the common ones by name, the rest by their tool, else their area', () => {
+  assert.equal(changeLabel({ type: 'refresh.mark', area: 'floor' }), 'Shelf refreshed');
+  assert.equal(changeLabel({ type: 'cage.create', area: 'stockroom' }), 'New cage');
+  assert.equal(changeLabel({ type: 'pallet.done', area: 'backdock' }), 'Pallet decanted');
+  assert.equal(changeLabel({ type: 'halt.start', area: 'backdock' }), 'Receiving, Team Board and Dock screen');
+  assert.equal(changeLabel({ type: 'scan.preset', area: 'stockroom' }), 'Stockroom');
+  assert.equal(changeLabel({ type: 'feedback.send', area: 'store' }), 'Store');
+  for (const [type, info] of Object.entries(CATALOGUE)) assert.doesNotMatch(changeLabel({ type, area: info.area }), /\.|^[a-z]/, `${type} shows as words`);
 });

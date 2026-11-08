@@ -72,7 +72,7 @@ function cont({ who = tx('Manager'), ask = false } = {}) {
 const AREA = () => ({ stockroom: tx('Stockroom'), backdock: tx('Back dock') });
 function unlock(a, { val = '', err = '', focus = true } = {}) {
   const name = AREA()[a];
-  return `<div class="si2-card"><h2>${tx('{area} code', { area: name })}</h2><div class="si2-sub">${tx('The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.', { area: name })}</div>` +
+  return `<div class="si2-card"><h2>${tx('{area} code', { area: name })}</h2><div class="si2-sub">${tx('The {area} crew code opens this workspace on this device for one shift (12 hours), or until the device is signed out or locked after sitting idle.', { area: name })} ${tx('A manager code here opens every area; managers can also sign in as Manager to skip this.')}</div>` +
     `<label>${tx('Code')}</label><span class="si2-in si2-ucode${focus ? ' on' : ''}${val ? '' : ' si2-ph'}">${val || (a === 'backdock' ? 'DK-0000' : 'SR-0000')}</span>` +
     (err ? `<div class="si2-err">${err}</div>` : '') +
     `<span class="si2-cta si2-ugo">${tx('Open {area}', { area: name })}${ai('arrow')}</span><div class="si2-foot"><span class="si2-lk si2-notnow">${tx('Not now')}</span><span>1241</span></div></div>`;
@@ -88,7 +88,7 @@ const head = title => `<div class="si2-shh"><b>${title}</b><span class="si2-x">$
 // Where are you working? (js/shell.js openLauncher, js/registry.js WORKSPACES).
 const WS = () => [['floor', tx('Floor'), 'm-map', tx('Map, refresh, labels, routes, stocktake')], ['stockroom', tx('Stockroom'), 'box', tx('Backfill scan, cages, adjustments, day list')], ['backdock', tx('Back dock'), 'truck', tx('Land and decant pallets, run the truck')]];
 function launcher({ open = [], mgr = false, hot = 'floor' } = {}) {
-  return head(tx('Where are you working?')) + `<p class="si2-shs">${tx('Pick your area to begin.')} ${mgr ? tx('Signed in as manager: every area is open.') : tx('Stockroom and Back dock take their crew code once on this device.')}</p>` +
+  return head(tx('Where are you working?')) + `<p class="si2-shs">${tx('Pick your area to begin.')} ${mgr ? tx('Signed in as manager: every area is open.') : tx('Stockroom and Back dock ask for their crew code, which lasts one shift (12 hours) on this device.')}</p>` +
     `<div class="si2-tiles">${WS().map(([k, l, i, s]) => `<span class="si2-tile${k === hot ? ' hot' : ''}" data-ws="${k}"><span class="ti">${ai(i)}</span><span class="tx"><b>${l}</b><span>${s}</span></span>${k === 'floor' || mgr || open.includes(k) ? '<span></span>' : ai('lock', 'lk')}${ai('chev', 'fwd')}</span>`).join('')}</div>`;
 }
 // More (js/shell.js openMore): the store and area, the area's tools, then the store and app.

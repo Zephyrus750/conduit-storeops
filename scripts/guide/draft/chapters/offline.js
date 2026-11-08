@@ -86,7 +86,7 @@ function syncSheet({ held = false, rows = [] } = {}) {
     (held ? `<span class="of2-pri">${ai('refresh')}${tx('Try again now')}</span>` : '') + '</div>';
 }
 const WS = () => [['floor', tx('Floor'), 'm-map', tx('Map, refresh, labels, routes, stocktake')], ['stockroom', tx('Stockroom'), 'box', tx('Backfill scan, cages, adjustments, day list')], ['backdock', tx('Back dock'), 'truck', tx('Land and decant pallets, run the truck')]];
-const launcher = () => head(tx('Where are you working?')) + `<p class="of2-shs">${tx('Pick your area to begin.')} ${tx('Stockroom and Back dock take their crew code once on this device.')}</p>` +
+const launcher = () => head(tx('Where are you working?')) + `<p class="of2-shs">${tx('Pick your area to begin.')} ${tx('Stockroom and Back dock ask for their crew code, which lasts one shift (12 hours) on this device.')}</p>` +
   `<div class="of2-tiles">${WS().map(([k, l, i, s]) => `<span class="of2-ht${k === 'floor' ? ' hot' : ''}" data-ws="${k}"><span class="ti">${ai(i)}</span><span class="tx"><b>${l}</b><span>${s}</span></span>${k === 'floor' ? '' : ai('lock', 'lk')}${ai('chev', 'fwd')}</span>`).join('')}</div>`;
 const more = () => head(tx('More')) + `<div class="of2-mob"><div class="of2-who"><span>1241</span><div><b>Busselton · ${tx('Floor')}</b><small>${tx('Signed in on this phone')}</small></div></div>` +
   `<div class="of2-msec">${tx('Tools')}</div><div class="of2-mlist">${[['packages', tx('Live pull'), tx('Ask the stockroom for stock, or pull it')], ['m-stocktake', tx('Stocktake'), tx('Count shelves in a session')], ['edit', tx('Suggest map edits'), tx('A wrong name or a missing shelf')]].map(([i, l, s]) => `<span class="of2-mo">${ai(i)}<b>${l}<small>${s}</small></b>${ai('chev', 'fwd')}</span>`).join('')}</div>` +
@@ -96,7 +96,7 @@ const mk = () => `<svg class="of2-vm" viewBox="0 0 32 32" aria-hidden="true"><re
 const welcome = () => `<div class="of2-card"><div class="of2-brand">${mk()}<b>Conduit</b></div><h2>${tx('Welcome back')}</h2><div class="of2-sub">${tx('This device is signed in.')}</div>` +
   `<div class="of2-store"><span class="of2-sav">1241</span><div><b>Busselton</b><small>${tx('Store {no}', { no: '1241' })} · ${tx('Floor')}</small></div><span class="of2-ready">${ai('check')}${tx('Ready')}</span></div>` +
   `<span class="of2-cta of2-cgo">${tx('Continue in {name}', { name: 'Busselton' })}${ai('arrow')}</span><span class="of2-alt">${tx('Use a different store')}</span></div>`;
-const code = (val = '') => `<div class="of2-card"><h2>${tx('{area} code', { area: tx('Stockroom') })}</h2><div class="of2-sub">${tx('The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.', { area: tx('Stockroom') })}</div>` +
+const code = (val = '') => `<div class="of2-card"><h2>${tx('{area} code', { area: tx('Stockroom') })}</h2><div class="of2-sub">${tx('The {area} crew code opens this workspace on this device for one shift (12 hours), or until the device is signed out or locked after sitting idle.', { area: tx('Stockroom') })} ${tx('A manager code here opens every area; managers can also sign in as Manager to skip this.')}</div>` +
   `<label>${tx('Code')}</label><span class="of2-in${val ? '' : ' of2-ph'}">${val || 'SR-0000'}</span><span class="of2-cta of2-ugo">${tx('Open {area}', { area: tx('Stockroom') })}${ai('arrow')}</span><div class="of2-foot"><span>${tx('Not now')}</span><span>1241</span></div></div>`;
 // The low-poly ground behind Welcome back (js/lowpoly.js), a still of it.
 const POLY = (() => {
@@ -126,8 +126,8 @@ const toFloorHome = c => { c.view('of2-home'); c.html('.p2-tabs', tabs('floor', 
 
 // ── the chapter ──────────────────────────────────────────────────────
 const S1 = st(['A15 S1']), S2 = st(['A15 S1', 'A15 S2']), S3 = st(['A15 S1', 'A15 S2', 'A16 S1']);
-// The rows name the event type as the app does (js/sync.js typeLabel): English, not translated.
-const ROWS = () => [['Refresh mark', `A15 S1 · ${WK}`, tx('made {time}', { time: '06:41' })], ['Refresh mark', `A15 S2 · ${WK}`, tx('made {time}', { time: '06:42' })]];
+// The rows name each change in words, as the app does (js/sync.js changeLabel).
+const ROWS = () => [[tx('Shelf refreshed'), `A15 S1 · ${WK}`, tx('made {time}', { time: '06:41' })], [tx('Shelf refreshed'), `A15 S2 · ${WK}`, tx('made {time}', { time: '06:42' })]];
 export const offline = {
   id: 'offline', grp: 'start', icon: 'nowifi', title: tx('When the wifi drops'), device: 'phone', where: tx('Phone · any screen'), for: ['floor', 'stockroom', 'dock', 'manager'],
   intro: S(tx('Nothing stops when the wifi does.'), tx('Work saves on the phone and sends itself when it can.')),
@@ -205,7 +205,7 @@ offline.stories.push({
       run: async c => { await c.wait(700); noRing(c); c.hide('.p2 > .dv-toast'); pill(c, 'bad', tx('{n} waiting', { n: 1 })); toast2(c, `<span>${txn(1, '{n} change will send once the Stockroom code is entered again.', '{n} changes will send once the Stockroom code is entered again.')}</span><u>${tx('See')}</u>`); c.cls('.p2 > .dv-toast', 'of2-warn', true); } },
     { cap: tx('Tap the pill: it says what the change is waiting for.'), read: S(tx('Discard drops one for good: it never reached the store.'), tx('Try again now sends at once.')),
       dev: '<b>holdReason()</b> in js/sync.js; Discard takes it out of the outbox, and nothing is deleted from the store’s log.', ev: [],
-      run: async c => { await c.tap('.of2-pill'); sheet(c, syncSheet({ held: true, rows: [['Cage create', 'BSN1240421', `${tx('Waits for the Stockroom code')} · ${tx('made {time}', { time: '06:31' })}`]] })); } },
+      run: async c => { await c.tap('.of2-pill'); sheet(c, syncSheet({ held: true, rows: [[tx('New cage'), 'BSN1240421', `${tx('Waits for the Stockroom code')} · ${tx('made {time}', { time: '06:31' })}`]] })); } },
     { cap: tx('More, Switch area, Stockroom: it asks for the code.'), read: tx('Stockroom and Back dock show a lock until their crew code has been entered on this phone.'),
       dev: 'The tiles follow the token’s roles.', ev: [],
       run: async c => { await c.tap('.p2-sheet .of2-x'); unsheet(c); await c.tap('.p2-tabs [data-tab="more"]'); sheet(c, more()); await c.tap('.p2-sheet .of2-switch'); sheet(c, launcher()); await c.tap('.p2-sheet [data-ws="stockroom"]'); unsheet(c); cover(c, code(), true); } },
