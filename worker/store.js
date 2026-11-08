@@ -46,6 +46,7 @@ import { cleanStoreInfo } from '../shared/maprender.js';
 import { storeDay, storeIso, msToStoreMidnight, addDays, DEFAULT_TZ } from '../shared/time.js';
 import { retiring, rowKey } from '../shared/retain.js';
 import { gs1Parse } from '../shared/gs1.js';
+import { keptBarcodes } from './catalogue.js';
 
 const SNAPSHOT_EVERY = 1000;
 const MANIFEST_MAX = 8_000_000;
@@ -98,6 +99,7 @@ export class StoreObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS manifest_sums (manNo TEXT PRIMARY KEY, head TEXT NOT NULL, kc TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS soh (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS simreport (date TEXT PRIMARY KEY, doc TEXT NOT NULL, at TEXT NOT NULL, by TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS apnbook (gtin TEXT PRIMARY KEY, kc TEXT NOT NULL, date TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, at TEXT NOT NULL, by TEXT NOT NULL, size INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS archive (kind TEXT NOT NULL, key TEXT NOT NULL, date TEXT NOT NULL, row TEXT NOT NULL, PRIMARY KEY (kind, key));
@@ -192,7 +194,7 @@ export class StoreObject extends DurableObject {
           const ph = url.pathname.match(/^\/photo\/([0-9A-HJKMNP-TV-Z]{26})$/);
           if (ph) return await (request.method === 'DELETE' ? this.deletePhoto(ph[1], claims) : this.getPhoto(ph[1], claims));
           if (url.pathname === '/soh') { const no = needArea(claims, 'stockroom') || this.needTool('intel'); if (no) return no; return request.method === 'POST' ? this.publishSoh(await readJson(request, SOH_MAX), claims) : this.sohDocs(Number(url.searchParams.get('n') || 12), url.searchParams.get('weekly') === '1'); }
-          if (url.pathname === '/pull/find') return this.pullFind(url.searchParams.get('code'), claims);
+          if (url.pathname === '/pull/find') return await this.pullFind(url.searchParams.get('code'), claims);
           if (url.pathname === '/bays') return this.itemBays(url.searchParams.get('kc'), claims);
           if (url.pathname === '/backfill/report') { const no = needArea(claims, 'stockroom'); if (no) return no; return request.method === 'POST' ? this.publishReport(await readJson(request, REPORT_MAX), claims) : this.reportDoc(url.searchParams.get('date') || ''); }
           const sohDay = url.pathname.match(/^\/soh\/(\d{4}-\d{2}-\d{2})$/);
@@ -613,6 +615,7 @@ export class StoreObject extends DurableObject {
     if (!res.ok) throw new HttpError(res.code === 'unauthorised' ? 403 : 400, res.code, res.message);
     this.sql.exec('INSERT OR REPLACE INTO simreport (date, doc, at, by) VALUES (?, ?, ?, ?)', date, doc, ev.at, by);
     this.reportIdx = null; this.seenIdx = null;
+    this.bookReport(date, JSON.parse(doc).apn);
     const keep = this.sql.exec('SELECT date FROM simreport ORDER BY date DESC').toArray().map(x => x.date).slice(0, REPORT_KEEP);
     this.sql.exec(`DELETE FROM simreport WHERE date NOT IN (${keep.map(() => '?').join(',')})`, ...keep);
     return json({ ok: true, date, at, bays, codes, seq: res.seq }, 201);
@@ -634,7 +637,7 @@ export class StoreObject extends DurableObject {
   // kc, so the phone can ask for the keycode printed on the ticket. An item
   // the report gives no bay comes back with seen: the bays it was seen in
   // over the last two weeks (seenBays), so it can still be asked for there.
-  pullFind(code, claims) {
+  async pullFind(code, claims) {
     if (!(claims.caps || []).includes('stockroom')) return fail(403, 'not_entitled', 'Live pull needs the Stockroom, which is not enabled for this store');
     const off = this.needTool('livepull'); if (off) return off;
     const raw = String(code || '').trim(), digits = raw.replace(/\D/g, '');
@@ -644,9 +647,14 @@ export class StoreObject extends DurableObject {
     if (rep?.bays.has(digits)) { kc = digits; via = 'keycode'; }
     else if (gtin && rep?.apn.has(gtin)) { kc = rep.apn.get(gtin); via = 'apn'; }
     else if (gtin) {
-      // A person's link: on a cage (cage.pair) or from a ticket in Live pull (pull.pair); the newer wins.
+      // The store's barcode book (every report's APN column, kept), a
+      // person's link (cage.pair or pull.pair, the newer wins), then the
+      // barcodes Kmart's product pages named (the catalogue keeps them).
       const a = this.state.apnPairs?.[gtin], b = this.state.pulls?.apn?.[gtin], p = a && b ? (String(b.at) > String(a.at) ? b : a) : a || b;
-      if (p) { kc = p.kc; via = 'paired'; }
+      const booked = this.apnBooked(gtin);
+      if (booked) { kc = booked; via = 'apn'; }
+      else if (p) { kc = p.kc; via = 'paired'; }
+      else { const k = (await keptBarcodes(this.env, [gtin]).catch(() => ({})))[gtin]; if (k) { kc = k; via = 'kmart'; } }
     }
     else if (/^\d{6,9}$/.test(digits)) { kc = digits; via = 'keycode'; }
     const prof = kc ? this.profiles() : null;
@@ -705,6 +713,18 @@ export class StoreObject extends DurableObject {
     }
     if (memo.size > 20) memo.clear();
     memo.set(manNo, by); return by;
+  }
+  // The store's barcode book: every item barcode a pasted inventory report's
+  // APN column gave, with its keycode, kept after the report itself is gone
+  // (reports are kept three days), so a product's own barcode is matched at
+  // once on any later day. A newer report's match replaces an older one.
+  bookReport(date, apn) {
+    for (const [a, kc] of Object.entries(apn || {})) { const g = gs1Parse(a)?.gtin; if (g && /^\d{6,9}$/.test(String(kc))) this.sql.exec('INSERT INTO apnbook (gtin, kc, date) VALUES (?, ?, ?) ON CONFLICT(gtin) DO UPDATE SET kc = excluded.kc, date = excluded.date WHERE excluded.date >= apnbook.date', g, String(kc), date); }
+  }
+  apnBooked(gtin) {
+    // The first look fills the book from the reports already kept (a store whose reports came before the book).
+    if (!this.bookFilled) { this.bookFilled = true; if (!this.sql.exec('SELECT 1 FROM apnbook LIMIT 1').toArray().length) for (const r of this.sql.exec('SELECT date, doc FROM simreport ORDER BY date').toArray()) this.bookReport(r.date, JSON.parse(r.doc).apn); }
+    return this.sql.exec('SELECT kc FROM apnbook WHERE gtin = ?', gtin).toArray()[0]?.kc || null;
   }
   // The latest inventory report as lookups (rebuilt when a report is saved).
   reportIndex() {

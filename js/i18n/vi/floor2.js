@@ -942,4 +942,11 @@ export default {
   "It may not have been scanned in. Ask for it where it was seen and the stockroom checks there.": "Có thể hàng chưa được quét vào. Hãy yêu cầu tại nơi đã thấy và kho sẽ kiểm tra ở đó.",
   "Ask for it in these bays": "Yêu cầu ở các vị trí này",
   "Ask for it there": "Yêu cầu ở đó",
+  "Searching kmart.com.au…": "Đang tìm trên kmart.com.au…",
+  "Ask for it": "Yêu cầu",
+  "{n} possible item": "{n} mặt hàng có thể",
+  "{n} possible items": "{n} mặt hàng có thể",
+  "Pick": "Chọn",
+  "Barcodes being looked up": "Mã vạch đang được tra cứu",
+  "Keep scanning: each one lands here when kmart.com.au answers.": "Cứ tiếp tục quét: mỗi mã sẽ hiện ở đây khi kmart.com.au trả lời.",
 };

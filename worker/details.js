@@ -11,6 +11,8 @@
 // Without them the catalogue falls back to DETAILS_URL (the legacy details
 // worker) while it is still deployed, and otherwise answers name and link only.
 
+import { gs1Parse } from '../shared/gs1.js';
+
 const ALLOWED_HOSTS = ['www.kmart.com.au', 'kmart.com.au'];
 const CONCURRENCY = 2;
 const RENDER_TIMEOUT_MS = 45_000;
@@ -80,6 +82,17 @@ export function keycodePictures(html, kc) {
 }
 
 // Several independent strategies, first hit wins per field (as v1.6).
+// The product's own barcodes (GTINs) a page names: its structured data's
+// gtin fields and the same fields in the page's own data. Check digits
+// verified; kept by the catalogue object so a scan of the item's barcode
+// finds its keycode at once (GET /v1/catalogue/barcode).
+export function pageGtins(html) {
+  const out = new Set();
+  for (const m of String(html || '').matchAll(/"(?:gtin|gtin8|gtin12|gtin13|gtin14|ean|barcode|apn)"\s*:\s*"?(\d{8,14})"?/gi)) {
+    const g = gs1Parse(m[1])?.gtin; if (g) out.add(g);
+  }
+  return [...out].slice(0, 8);
+}
 export function extractDetails(html, kc = '') {
   const out = { price: null, was: null, img: null, clr: false };
   if (!html) return out;
@@ -131,7 +144,7 @@ export async function renderDetails(env, items, fetchImpl = fetch, { onItem, sto
       const it = list[next++];
       const r = await renderPage(it.u, env, fetchImpl);
       if (!r.html || isAccessDenied(r.html)) { out[it.kc] = { found: false, why: r.html ? 'refused by kmart.com.au (Access Denied)' : r.err }; if (stopOnRefusal) refused = true; continue; }
-      const d = extractDetails(r.html, it.kc), found = d.price !== null || d.img !== null;
+      const d = { ...extractDetails(r.html, it.kc), gtins: pageGtins(r.html) }, found = d.price !== null || d.img !== null;
       out[it.kc] = { found, ...d, ...(found ? {} : { why: blockedBy(r.html) ? 'blocked by kmart.com.au' : 'no price or picture on the page' }) };
       if (found) onItem?.(it.kc, out[it.kc]);
     }

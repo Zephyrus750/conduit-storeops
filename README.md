@@ -222,16 +222,27 @@ them (Google's `<image:loc>` inside a product's `<url>`): the weekly read
 keeps each product's first picture, the last build records how many, and
 the picture check tests the kept picture when the page reads fail.
 
-The same rendering answers a barcode with its keycode (`worker/apnlookup.js`):
-Kmart's site search finds a product by its barcode, so a clearance ticket or
-shelf talker, which carries the item's own barcode, needs no keycode typed.
-A book is also found by its title (Google Books, then Open Library) matched
-against the catalogue. Live pull, Cages and Adjust on the phone search first
-(`js/barcodesearch.js`) for a barcode the store can't match itself, find the
-item from the answer and link nothing; when nothing is found the keycode is
-typed in the same scan box. The answer is cached by barcode, so the next scan
-of it is quick. Pairs made earlier (`cage.pair`, `pull.pair`) are still read;
-no screen makes new ones.
+The same rendering answers a barcode with its keycode (`worker/apnlookup.js`).
+First, at once: every product page read for its picture and price also gives
+the product's own barcodes (its data's `gtin` fields, `pageGtins()`), which the
+catalogue object keeps (`barcodes` table), so a barcode any page has named is
+a sure match with no search. Otherwise Kmart's site search finds a product by
+its barcode (10 to 30 seconds), and a book is also found by its title (Google
+Books, then Open Library) matched against the catalogue. Cages and Adjust
+search first (`js/barcodesearch.js`) for a barcode the store can't match
+itself and link nothing; when nothing is found the keycode is typed in the
+same scan box. The answer is cached by barcode, so the next scan of it is
+quick.
+
+Live pull never waits on a search (8 Nov 2026): `pull/find` matches a barcode
+from the store's barcode book (every inventory report's APN column, kept after
+the report itself goes: the `apnbook` table), a person's link (`cage.pair`,
+`pull.pair`) and the catalogue's kept barcodes, all at once; a barcode none of
+them knows is searched in the background, in a tray under the scan box, while
+the requester scans on, and lands there found, as a choice, or to type. A
+match a person confirms there (a search's answer tapped, or the keycode typed
+for it) is kept with `pull.pair`, so the next scan of that barcode is instant;
+"Wrong item?" replaces it.
 The deploy workflow passes `CLOUDFLARE_ACCOUNT_ID` to the worker as
 `CF_ACCOUNT_ID` and attaches the `BROWSER_TOKEN` repository secret
 (docs/SETUP.md step 11).
@@ -360,8 +371,10 @@ already in the log:
   and caches the search even if the phone stops waiting): one sure match
   from Kmart's site search is found at once, other candidates are a one-tap
   choice, and only when nothing is found is the keycode on the ticket typed
-  in the scan box. Live pull links nothing (`pull.pair` stays in the
-  catalogue for the events already logged); `GET …/pull/find` answers with the report's stockroom bays (none:
+  in the scan box, without holding up the next scan (the tray under the scan
+  box); a match confirmed there is kept (`pull.pair`); `GET …/pull/find`
+  answers at once from the store's barcode book and the catalogue's kept
+  barcodes, with the report's stockroom bays (none:
   "No stockroom location", and it isn't added, unless it was seen in a bay
   over the last two weeks: backfilled there, or on an earlier report or SOH
   snapshot; then the phone offers "Ask for it there" and the request carries

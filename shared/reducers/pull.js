@@ -17,11 +17,11 @@
 //   pulls.apn gtin → { kc, at, by }   an item barcode linked to its keycode
 //
 // A clearance ticket's barcode is the item's own (an EAN, often a book's
-// ISBN), not its keycode, and the morning report rarely knows it. Until
-// 25 Oct 2026 the first requester to scan one typed the keycode printed on
-// the ticket and pull.pair linked the two. Live pull now searches Kmart's
-// site first and links nothing; pull.pair stays for the links already made,
-// which pull/find still reads.
+// ISBN), not its keycode, and the morning report rarely knows it. Live pull
+// searches Kmart's site for it in the background, and a match a person
+// confirms (the search's answer tapped, or the keycode typed) is kept with
+// pull.pair, which pull/find reads, so the next scan of it is instant
+// (25 Oct 2026 it linked nothing; 8 Nov 2026 it keeps confirmed matches).
 //
 // Conflict rules: the first mark wins (a second phone marking the same line
 // is refused); a mark comes back (undo) only until its cage has gone down;

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { productsFromSitemap, readSitemapIndex, shardNameForUrl, slugToName, oneDigitVariants, sweepPlan } from '../../worker/sitemap.js';
-import { extractDetails, okHost } from '../../worker/details.js';
+import { extractDetails, okHost, pageGtins } from '../../worker/details.js';
 
 test('sitemap: product URLs give keycode → slug (8 and 9 digit codes); other URLs are ignored', () => {
   const xml = '<urlset><url><loc>https://www.kmart.com.au/product/12-pk-diecast-vehicles-42977636/</loc></url>'
@@ -308,4 +308,10 @@ test('sitemap: a product sitemap that names its pictures gives keycode → pictu
     '<url><loc>https://www.kmart.com.au/product/plain-http-43166022/</loc><image:image><image:loc>http://insecure.example/43166022.jpg</image:loc></image:image></url></urlset>';
   assert.deepEqual(picturesFromSitemap(xml), { 41989326: 'https://assets.kmart.example/images/41989326-1.jpg?w=800&q=80', 43307685: 'https://assets.kmart.example/images/43307685.webp' });
   assert.deepEqual(picturesFromSitemap('<urlset><url><loc>https://www.kmart.com.au/product/x-42977636/</loc></url></urlset>'), {});
+});
+
+test('product page: the barcodes its data names, check digits verified', () => {
+  const page = `<script type="application/ld+json">${JSON.stringify({ '@type': 'Product', gtin13: '9341234567893', sku: '43300411' })}</script><script>{"ean":"9341234567890","barcode":"12345"}</script>`;
+  assert.deepEqual(pageGtins(page), ['9341234567893'], 'a bad check digit or a short number is not a barcode');
+  assert.deepEqual(pageGtins('<p>nothing</p>'), []);
 });

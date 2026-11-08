@@ -20,6 +20,8 @@
 //   GET  /search?slug=         → { items: [{ kc, slug, name }] } whose name holds the slug (a book's title)
 //   GET  /pictures?kc=a,b      → { items: { kc: img } } for the codes with a kept picture
 //   POST /pictures { items }   → keeps { kc: img } (pictures found on product pages)
+//   GET  /barcodes?gtin=a,b    → { items: { gtin: kc } } for the barcodes a product page named
+//   POST /barcodes { items }   → keeps { gtin: kc } (barcodes found on product pages)
 //   GET  /status               → { total, pictures, files, lastbuild, build, collected, next }
 //   POST /rebuild { trigger }  → starts a build unless one is running or ran in the last 20 h (force: true overrides)
 
@@ -45,6 +47,7 @@ export class CatalogueObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS shards (name TEXT PRIMARY KEY, count INTEGER NOT NULL, at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS pictures (kc TEXT PRIMARY KEY, img TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS barcodes (gtin TEXT PRIMARY KEY, kc TEXT NOT NULL, at INTEGER NOT NULL);
     `);
     // The weekly read is an alarm; a new object (or one woken after a
     // deploy) schedules it. It never starts a build by itself on creation:
@@ -76,6 +79,8 @@ export class CatalogueObject extends DurableObject {
         case 'GET /search': return json(this.search(url.searchParams.get('slug')));
         case 'GET /pictures': return json(this.pictures(url.searchParams.get('kc')));
         case 'POST /pictures': { const b = await request.json().catch(() => ({})); return json(this.keepPictures(b.items)); }
+        case 'GET /barcodes': return json(this.barcodes(url.searchParams.get('gtin')));
+        case 'POST /barcodes': { const b = await request.json().catch(() => ({})); return json(this.keepBarcodes(b.items)); }
         case 'GET /status': return json(await this.status());
         case 'POST /rebuild': { const b = await request.json().catch(() => ({})); return json(await this.startBuild(String(b.trigger || 'owner').slice(0, 20), !!b.force)); }
         default: return fail(404, 'not_found', `catalogue has no ${request.method} ${url.pathname}`);
@@ -116,6 +121,24 @@ export class CatalogueObject extends DurableObject {
     }
     return { kept };
   }
+  // Every product barcode a page read has named (its structured data's
+  // gtin), with the page's keycode: a scan of the item's own barcode is
+  // matched here at once, without searching kmart.com.au. Like pictures, the
+  // weekly sitemap read never touches it; a page naming a barcode again
+  // (a new keycode for the same item) replaces the old match.
+  barcodes(raw) {
+    const codes = [...new Set(String(raw || '').split(',').map(c => c.replace(/\D/g, '')).filter(c => /^\d{8,14}$/.test(c)))].slice(0, 50), items = {};
+    if (codes.length) for (const r of this.sql.exec(`SELECT gtin, kc FROM barcodes WHERE gtin IN (${codes.map(() => '?').join(',')})`, ...codes).toArray()) items[r.gtin] = r.kc;
+    return { items };
+  }
+  keepBarcodes(items) {
+    const now = Date.now(); let kept = 0;
+    for (const [gtin, kc] of Object.entries(items && typeof items === 'object' ? items : {}).slice(0, 200)) {
+      if (!/^\d{8,14}$/.test(gtin) || !/^\d{6,9}$/.test(String(kc))) continue;
+      this.sql.exec('INSERT OR REPLACE INTO barcodes (gtin, kc, at) VALUES (?, ?, ?)', gtin, String(kc), now); kept += 1;
+    }
+    return { kept };
+  }
   nearMiss(raw) {
     const code = String(raw || '').replace(/\D/g, '');
     if (!/^\d{6,13}$/.test(code)) throw new HttpError(400, 'invalid_request', 'kc must be a keycode of 6 to 13 digits');
@@ -139,7 +162,7 @@ export class CatalogueObject extends DurableObject {
     const files = this.sql.exec('SELECT name, count, at FROM shards ORDER BY name').toArray();
     const build = this.get('build');
     return {
-      total: this.total(), pictures: this.sql.exec('SELECT COUNT(*) AS n FROM pictures').toArray()[0].n, files: files.length, fileCounts: Object.fromEntries(files.map(f => [f.name, f.count])),
+      total: this.total(), pictures: this.sql.exec('SELECT COUNT(*) AS n FROM pictures').toArray()[0].n, barcodes: this.sql.exec('SELECT COUNT(*) AS n FROM barcodes').toArray()[0].n, files: files.length, fileCounts: Object.fromEntries(files.map(f => [f.name, f.count])),
       lastbuild: this.get('lastbuild'), collected: this.get('collected'), next: await this.ctx.storage.getAlarm(),
       build: build ? { trigger: build.trigger, started: build.started, phase: build.phase, done: build.i || 0, of: (build.targets || []).length, ingested: build.ingested || 0 } : null,
     };

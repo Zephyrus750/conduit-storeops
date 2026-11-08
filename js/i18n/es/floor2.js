@@ -942,4 +942,11 @@ export default {
   "It may not have been scanned in. Ask for it where it was seen and the stockroom checks there.": "Puede que no se escaneara. Pídelo donde se vio y el almacén lo revisa allí.",
   "Ask for it in these bays": "Pedirlo en estas ubicaciones",
   "Ask for it there": "Pedirlo allí",
+  "Searching kmart.com.au…": "Buscando en kmart.com.au…",
+  "Ask for it": "Pedirlo",
+  "{n} possible item": "{n} artículo posible",
+  "{n} possible items": "{n} artículos posibles",
+  "Pick": "Elegir",
+  "Barcodes being looked up": "Códigos de barras en búsqueda",
+  "Keep scanning: each one lands here when kmart.com.au answers.": "Sigue escaneando: cada uno aparece aquí cuando kmart.com.au responde.",
 };

@@ -1218,6 +1218,10 @@ test('live pull: a floor phone finds an item’s stockroom bays by keycode or AP
   assert.equal((await api('POST', '/v1/store/1241/soh', { date: addDays(today, -1), rows: [{ kc: '11112222', loc: '7060', soh: 4 }, { kc: '11112222', loc: '7050', soh: 4 }] }, sr)).status, 201);
   assert.deepEqual((await find('11112222')).body.seen, [{ bay: '7050', date: addDays(today, -1), via: 'soh' }, { bay: '7060', date: addDays(today, -1), via: 'soh' }], 'the newest sighting of each bay');
   assert.equal(byKc.body.seen, undefined, 'an item with a bay on the report needs none');
+  // The store's barcode book: an earlier report's APN column still finds the keycode after today's report replaced it.
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: addDays(today, -2), report: { at: Date.now(), byLoc: { 7041: ['43652214'] }, apn: { 9300012345672: '43652214' } } }, sr)).status, 201);
+  const booked = (await find('9300012345672')).body;
+  assert.deepEqual([booked.kc, booked.via, booked.bays], ['43652214', 'apn', ['7041']], 'found from the book, its bays from today’s report');
   // A clearance ticket: the book's own barcode, which nothing links yet. The floor phone links it to the keycode printed on the ticket.
   const ticket = (await find('9780241813799')).body;
   assert.deepEqual([ticket.gtin, ticket.kc, ticket.bays], ['9780241813799', null, []], 'a barcode nothing links: no keycode, so the phone asks for it');

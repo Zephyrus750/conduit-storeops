@@ -942,4 +942,11 @@ export default {
   "It may not have been scanned in. Ask for it where it was seen and the stockroom checks there.": "Baka hindi ito na-scan. Hilingin ito kung saan ito nakita at titingnan doon ng stockroom.",
   "Ask for it in these bays": "Hilingin sa mga bay na ito",
   "Ask for it there": "Hilingin doon",
+  "Searching kmart.com.au…": "Hinahanap sa kmart.com.au…",
+  "Ask for it": "Hilingin ito",
+  "{n} possible item": "{n} posibleng item",
+  "{n} possible items": "{n} posibleng item",
+  "Pick": "Pumili",
+  "Barcodes being looked up": "Mga barcode na hinahanap",
+  "Keep scanning: each one lands here when kmart.com.au answers.": "Tuloy lang sa pag-scan: lalabas dito ang bawat isa kapag sumagot ang kmart.com.au.",
 };
