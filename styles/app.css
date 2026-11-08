@@ -89,7 +89,8 @@ form.li { margin: 0; }
 @container shell (max-width:600px) { .ad-grid2 { grid-template-columns: 1fr; } .ad-form .ch, .ad-two .ch { flex-wrap: wrap; } .ad-form .ch h3, .ad-two .ch h3 { flex: none; white-space: normal; } .ad-tabs { overflow: auto; } .ad-banner { font-size: 12.5px; } .ad-banner.actas { bottom: 78px; } .ad-banner.actas span { display: none; } .pd-name { font-size: 16px; margin-left: 6px; } .si-panel.si-owner { width: min(460px, 92%); } .si-own { padding: 28px 22px 24px; } .ad-filters .search { max-width: none; } }
 
 /* ── stockroom (app-side) ── */
-.mv-scan.typed { display: flex; flex-direction: column; gap: 8px; border: 2px dashed var(--accent-line); border-radius: 16px; padding: 12px 14px; background: var(--panel); }
+/* The shell's .mv-scan is the dark camera block (white text); the typed box sits on the panel, so it takes the panel's ink. */
+.mv-scan.typed { display: flex; flex-direction: column; gap: 8px; border: 2px dashed var(--accent-line); border-radius: 16px; padding: 12px 14px; background: var(--panel); color: var(--ink); }
 .mv-scan.typed .cap { font-weight: 700; font-size: 14px; }
 .mv-scan.typed .hint { font-size: 12.5px; color: var(--dim); }
 .mv-scan.typed .mv-field input { width: 100%; box-sizing: border-box; font: inherit; font-size: 18px; letter-spacing: .04em; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--ground); color: var(--ink); }
@@ -117,6 +118,7 @@ form.li { margin: 0; }
 .hist-deps .status { font-size: 10.5px; }
 .swp-row { grid-template-columns: 22px auto minmax(0, 1fr); }
 .swp-row .cg { white-space: nowrap; }
+.swp-row.miss .swp-ic, .swp-row.miss .st { color: var(--amber-ink); }
 .unlock .si-form input.si-pin { letter-spacing: .12em; font-size: 20px; text-transform: uppercase; }
 .unlock .si-foot a { cursor: pointer; font-weight: 600; color: var(--accent-ink); }
 /* At a half screen the shell hides the Ready column: the middle takes its width. */

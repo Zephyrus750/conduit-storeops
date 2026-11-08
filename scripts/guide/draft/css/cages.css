@@ -126,6 +126,7 @@
 .cg2-sr.cg2-ok .cg2-si { color: var(--gr); }
 .cg2-sr.cg2-todo .cg2-si, .cg2-sr.cg2-todo .cg2-st { color: #6B7280; }
 .cg2-sr.cg2-lost .cg2-si, .cg2-sr.cg2-lost .cg2-st { color: #DC2626; }
+.cg2-sr.cg2-miss .cg2-si, .cg2-sr.cg2-miss .cg2-st { color: #B45309; }
 .cg2-st .cg2-btn { margin-left: 4px; }
 /* The toast sits above the tabs on this screen. */
 #cg2 .p2 > .dv-toast { top: auto; bottom: 96px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 92%; font-size: 13.5px; padding: 9px 14px; border-radius: 10px; }

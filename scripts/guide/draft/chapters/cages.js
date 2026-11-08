@@ -76,26 +76,31 @@ const notFound = code => `<div class="cg2-bca cg2-warn">${ai('barcode')}<span><b
 const flag = () => `<div class="cg2-rc">${ai('alert')}<div class="cg2-rct"><b>${tx('Recalled')} · Bubble Wand Set</b><span>${tx('Don’t sell, pull or backfill it: it is a safety recall.')} ${tx('Move it to the recall bay ({bay}) and tell a manager.', { bay: '<b>BAY 7001</b>' })}</span><small>Return to DC: choking hazard.</small></div><span class="cg2-btn cg2-moved">${ai('check')}${tx('I moved some')}</span></div>`;
 
 // ── the sweep (cages.js mobile(), Sweep) ──────────────────────────────
-// A sweep's list: [tag, where, state] in the app's order (oldest seen first); state ok | todo | lost.
+// A sweep's list: [tag, where, state] in the app's order (oldest seen first); state ok (seen: on this
+// sweep while one runs, else today) | todo | lost (not seen for 7 days) | miss (Finish marked it missing).
 const S0 = [['BSN1240403', 'MEZZANINE', 'lost'], ['BSN1240412', 'AISLE 2', 'todo'], ['BSN1240415', 'BAY 7020', 'todo'], ['BSN1240417', 'DOCK DOOR', 'todo'], ['BSN1240409', null, 'todo'], [TAG, 'AISLE 2', 'todo']];
 const S1 = [...S0.slice(0, 5), [TAG, 'AISLE 2', 'ok']];
 const S3 = [['BSN1240403', 'MEZZANINE', 'lost'], ['BSN1240417', 'DOCK DOOR', 'todo'], ['BSN1240409', null, 'todo'], [TAG, 'AISLE 2', 'ok'], ['BSN1240412', 'AISLE 2', 'ok'], ['BSN1240415', 'BAY 7020', 'ok']];
 const S4 = [['BSN1240403', 'MEZZANINE', 'lost'], ['BSN1240409', null, 'todo'], [TAG, 'AISLE 2', 'ok'], ['BSN1240412', 'AISLE 2', 'ok'], ['BSN1240415', 'BAY 7020', 'ok'], ['BSN1240417', 'DOCK DOOR', 'ok']];
-const Z1 = [['BSN1240403', 'MEZZANINE', 'lost'], ['BSN1240412', 'AISLE 2', 'todo'], ['BSN1240417', 'DOCK DOOR', 'todo'], ['BSN1240409', null, 'todo'], [TAG, 'AISLE 2', 'todo'], ['BSN1240415', 'AISLE 4', 'ok']];
-const Z2 = [['BSN1240412', 'AISLE 2', 'todo'], ['BSN1240417', 'DOCK DOOR', 'todo'], ['BSN1240409', null, 'todo'], [TAG, 'AISLE 2', 'todo'], ['BSN1240415', 'AISLE 4', 'ok'], ['BSN1240403', 'AISLE 4', 'ok']];
+// Finished: the two not seen are marked missing.
+const S5 = S4.map(([id, z, s]) => [id, z, s === 'ok' ? s : 'miss']);
+// A second sweep: nothing seen on it yet; the two missing still show it.
+const Z0 = S0.map(([id, z, s]) => [id, z, ['BSN1240403', 'BSN1240409'].includes(id) ? 'miss' : 'todo']);
+const Z1 = [['BSN1240403', 'MEZZANINE', 'miss'], ['BSN1240412', 'AISLE 2', 'todo'], ['BSN1240417', 'DOCK DOOR', 'todo'], ['BSN1240409', null, 'miss'], [TAG, 'AISLE 2', 'todo'], ['BSN1240415', 'AISLE 4', 'ok']];
+const Z2 = [['BSN1240412', 'AISLE 2', 'todo'], ['BSN1240417', 'DOCK DOOR', 'todo'], ['BSN1240409', null, 'miss'], [TAG, 'AISLE 2', 'todo'], ['BSN1240415', 'AISLE 4', 'ok'], ['BSN1240403', 'AISLE 4', 'ok']];
 function swList(cs) {
   const z = {}; for (const c of cs) (z[c[1] || tx('Not parked')] ||= []).push(c);
-  const st = s => s === 'ok' ? tx('Seen') : s === 'lost' ? tx('Not seen {age}', { age: tx('{n}d', { n: 9 }) }) : tx('To find');
+  const st = s => s === 'ok' ? tx('Seen') : s === 'lost' ? tx('Not seen {age}', { age: tx('{n}d', { n: 9 }) }) : s === 'miss' ? tx('cage state::Missing') : tx('To find');
   return `<div class="cg2-swl">${Object.entries(z).map(([name, g]) => `<div class="cg2-zn"><div class="cg2-zh">${name}<span>${tx('{n} of {total}', { n: g.filter(c => c[2] === 'ok').length, total: g.length })}</span></div>` +
-    g.map(([id, , s]) => `<div class="cg2-sr cg2-${s}" data-id="${id}"><span class="cg2-si">${ai(s === 'ok' ? 'check' : s === 'lost' ? 'alert' : 'clock')}</span><b>${id}</b><span class="cg2-st">${st(s)}${s === 'ok' ? '' : ` <span class="cg2-btn cg2-seen">${tx('Seen')}</span>`}</span></div>`).join('') + '</div>').join('')}</div>`;
+    g.map(([id, , s]) => `<div class="cg2-sr cg2-${s}" data-id="${id}"><span class="cg2-si">${ai(s === 'ok' ? 'check' : s === 'todo' ? 'clock' : 'alert')}</span><b>${id}</b><span class="cg2-st">${st(s)}${s === 'ok' ? '' : ` <span class="cg2-btn cg2-seen">${tx('Seen')}</span>`}</span></div>`).join('') + '</div>').join('')}</div>`;
 }
-function sweep({ running = false, n = 0, cs = S0, zone = '', typed = '' } = {}) {
-  const today = cs.filter(c => c[2] === 'ok').length, total = cs.length;
+function sweep({ running = false, cs = S0, zone = '', typed = '' } = {}) {
+  const seen = cs.filter(c => c[2] === 'ok').length, total = cs.length;
   const zb = `<span class="cg2-btn cg2-zone">${ai('pin')}${zone ? tx('Zone <b>{zone}</b>', { zone }) : tx('Set zone')}</span>`;
-  const ctl = running ? `<div class="cg2-ct"><b>${tx('Sweep running')}</b><span>· ${tx('{n} of {total} seen', { n, total })}</span><small>${tx('started {time}', { time: at(7, 58) })} · d_k0hcvxemtl5c</small></div><span class="cg2-btn cg2-pri cg2-fin">${ai('check')}${tx('Finish sweep')}</span>${zb}`
+  const ctl = running ? `<div class="cg2-ct"><b>${tx('Sweep running')}</b><span>· ${tx('{n} of {total} seen', { n: seen, total })}</span><small>${tx('started {time}', { time: at(7, 58) })} · ${tx('this device')}</small></div><span class="cg2-btn cg2-pri cg2-fin">${ai('check')}${tx('Finish sweep')}</span>${zb}`
     : `<div class="cg2-ct"><b>${tx('No sweep running')}</b><small>${tx('Start one, then scan every cage tag in the room')}</small></div><span class="cg2-btn cg2-pri cg2-start">${ai('listcheck')}${tx('Start a sweep')}</span>${zb}`;
-  return head(tx('Cage sweep'), tx('{n} of {total} seen today', { n: today, total })) + `<div class="cg2-cs">${tabs('sweep')}<div class="cg2-ctl">${ctl}</div>` +
-    `<div class="cg2-prog"><div class="cg2-big"><b>${today}</b><span>${tx('of {total} seen', { total })}</span></div><div class="cg2-track"><i style="width:${Math.round(today / total * 100)}%"></i></div></div>` +
+  return head(tx('Cage sweep'), running ? tx('{n} of {total} seen', { n: seen, total }) : tx('{n} of {total} seen today', { n: seen, total })) + `<div class="cg2-cs">${tabs('sweep')}<div class="cg2-ctl">${ctl}</div>` +
+    `<div class="cg2-prog"><div class="cg2-big"><b>${seen}</b><span>${tx('of {total} seen', { total })}</span></div><div class="cg2-track"><i style="width:${Math.round(seen / total * 100)}%"></i></div></div>` +
     scanBox({ cap: tx('Scan a cage tag'), ph: tx('Cage tag'), val: typed, hint: tx('Or tap Seen on the cage in front of you') }) + swList(cs) + '</div>';
 }
 
@@ -148,7 +153,7 @@ export const cages = {
     { cap: tx('A new cage: pick its ring, then scan its tag.'), read: S(tx('Pick its ring: New lines, Overstock, Can’t work or Online picks.'), tx('Then scan the cage’s tag with the camera, or type it.')),
       dev: 'The ring is the coloured ring on the cage (<b>RINGS</b> in shared/reducers/stockroom.js); the tag goes to <b>pickCage()</b>, and an SSCC label counts as its 18 digits (<b>tagOf()</b>).', ev: [],
       run: async c => { await c.tap('#cg2-pk .cg2-rp [data-v="overstock"]'); c.cls('#cg2-pk .cg2-rp .cg2-ring', 'cg2-ron', false); c.cls('#cg2-pk .cg2-rp [data-v="overstock"] .cg2-ring', 'cg2-ron', true);
-        await typeIn(c, 'cg2-pk', TAG); off(c); ask(c, tx('{cage} is not an open cage. Open it now with a {ring} ring?', { cage: TAG, ring: tx('Overstock') })); } },
+        await typeIn(c, 'cg2-pk', TAG); off(c); ask(c, tx('{cage} is not an open cage. Open it now with the {ring} ring?', { cage: TAG, ring: tx('Overstock') })); } },
     { cap: tx('A tag not on the register opens a new cage: tap OK.'), read: S(tx('A tag the store hasn’t seen opens a new cage.'), tx('The cage is ready to fill: its tag, its ring and where it is parked.')),
       dev: 'A plain confirm, then <b>cage.create</b>. A tag that is already an open cage just opens it.', ev: [E('cage.create', 'stockroom', { cage: TAG }, { ring: 'overstock' })],
       run: async c => { await c.tap('.cg2-dw .cg2-ok'); off(c); shut(c); paint(c, 'cg2-tg', target()); c.view('cg2-tg'); paint(c, 'cg2-pk', picker({ on: 'overstock' })); } },
@@ -182,15 +187,15 @@ export const cages = {
     { cap: tx('Sweep: start one, then walk the room.'), read: S(tx('Start a sweep and scan each tag you pass.'), tx('Only one sweep runs at a time in the store.')),
       dev: '<b>cage.sweepStart</b> opens a sweep under a new id; another phone’s start is refused while one runs (sweep_open).', ev: [E('cage.sweepStart', 'stockroom', { sweep: SW }, {})],
       run: async c => { scroll(c, 'cg2-pk', 0); await c.tap('#cg2-pk .cg2-tsw'); paint(c, 'cg2-sw', sweep()); c.view('cg2-sw'); await c.wait(500); await c.tap('#cg2-sw .cg2-start'); off(c); paint(c, 'cg2-sw', sweep({ running: true })); say(c, tx('Sweep started: scan every cage tag you pass')); } },
-    { cap: tx('Scan each cage tag you pass, or tap Seen.'), read: S(tx('Each cage you scan turns Seen, under the place it is parked.'), tx('The big number counts the cages seen today.')),
+    { cap: tx('Scan each cage tag you pass, or tap Seen.'), read: S(tx('Each cage you scan turns Seen, under the place it is parked.'), tx('The big number counts the cages seen on this sweep.')),
       dev: '<b>sweepTag()</b> sends <b>cage.sweep</b> with the sweep and any zone (<b>sweepPayload()</b>); Seen in the list sends the same.', ev: [E('cage.sweep', 'stockroom', { cage: TAG }, { session: SW }, { n: 4 })],
-      run: async c => { await typeIn(c, 'cg2-sw', TAG); off(c); paint(c, 'cg2-sw', sweep({ running: true, n: 1, cs: S1 })); say(c, tx('{cage} seen', { cage: TAG })); await c.wait(900);
-        paint(c, 'cg2-sw', sweep({ running: true, n: 3, cs: S3 }), 360); say(c, tx('{cage} seen', { cage: 'BSN1240415' })); await c.wait(700);
-        await c.tap('#cg2-sw .cg2-sr[data-id="BSN1240417"] .cg2-seen'); off(c); paint(c, 'cg2-sw', sweep({ running: true, n: 4, cs: S4 }), 360); say(c, tx('{cage} seen', { cage: 'BSN1240417' })); } },
-    { cap: tx('Finish the sweep: cages not seen are marked missing.'), read: S(tx('Finish asks first when cages are still to find.'), tx('A cage missed on two sweeps in a row is lost; the PC shows both.')),
-      dev: '<b>cage.sweepEnd</b>: every open cage not seen, opened before the sweep began, is missing, and lost on its second miss. The PC’s Sweeps card keeps the last five.', ev: [E('cage.sweepEnd', 'stockroom', { sweep: SW }, {})],
+      run: async c => { await typeIn(c, 'cg2-sw', TAG); off(c); paint(c, 'cg2-sw', sweep({ running: true, cs: S1 })); say(c, tx('{cage} seen', { cage: TAG })); await c.wait(900);
+        paint(c, 'cg2-sw', sweep({ running: true, cs: S3 }), 360); say(c, tx('{cage} seen', { cage: 'BSN1240415' })); await c.wait(700);
+        await c.tap('#cg2-sw .cg2-sr[data-id="BSN1240417"] .cg2-seen'); off(c); paint(c, 'cg2-sw', sweep({ running: true, cs: S4 }), 360); say(c, tx('{cage} seen', { cage: 'BSN1240417' })); } },
+    { cap: tx('Finish the sweep: cages not seen are marked missing.'), read: S(tx('Finish asks first when cages are still to find.'), tx('The list marks them Missing; a cage missed on two sweeps in a row is Lost.')),
+      dev: '<b>cage.sweepEnd</b>: every open cage not seen, opened before the sweep began, is missing, and lost on its second miss; the list shows Missing or Lost until the cage is seen again. While a sweep runs, Seen and the count are this sweep’s (cur.seen), as Finish counts them. The PC’s Sweeps card keeps the last five.', ev: [E('cage.sweepEnd', 'stockroom', { sweep: SW }, {})],
       run: async c => { scroll(c, 'cg2-sw', 0); await c.tap('#cg2-sw .cg2-fin'); off(c); ask(c, txn(2, '{n} cage has not been seen on this sweep. Finish anyway? It is marked missing.', '{n} cages have not been seen on this sweep. Finish anyway? They are marked missing.'));
-        await c.wait(600); await c.tap('.cg2-dw .cg2-ok'); off(c); shut(c); paint(c, 'cg2-sw', sweep({ cs: S4 })); say(c, `${tx('Sweep done · {n} of {total} seen', { n: 4, total: 6 })} · ${tx('{n} missing', { n: 2 })}`); } },
+        await c.wait(600); await c.tap('.cg2-dw .cg2-ok'); off(c); shut(c); paint(c, 'cg2-sw', sweep({ cs: S5 })); say(c, `${tx('Sweep done · {n} of {total} seen', { n: 4, total: 6 })} · ${tx('{n} missing', { n: 2 })}`); } },
   ],
   whatif: [[tx('Picked the wrong cage?'), tx('Change cage goes back to the list; scanning another cage’s tag switches to it.')],
     [tx('The tag fell off?'), tx('Re-tag it on a PC, from the cage in Cages: it keeps what is on it.')],
@@ -217,7 +222,7 @@ cages.stories.push({
       dev: '<b>barcodeCard()</b>: none (no results) or failed (not reached); failed adds Search again.', ev: [],
       run: async c => { await c.wait(900); paint(c, 'cg2-tg', target({ items: I4, loc: 'AISLE 2', bc: notFound(APN2) }), 100); } },
     { cap: tx('Type the keycode from the ticket, then Add.'), read: S(tx('It goes on like any keycode, with the count in the stepper.'), tx('The green card shows it was added.')),
-      dev: '<b>scanOnto()</b>: digits that are not an item barcode or a cage tag go on as a keycode (<b>parseKeycodes()</b> in shared/backfill.js).', ev: [E('cage.scan', 'stockroom', { cage: TAG }, { keycode: '43302210', qty: 1 })],
+      dev: '<b>scanOnto()</b>: a keycode is <b>isKeycode()</b>’s (shared/keycode.js); a code that is neither a keycode, an item barcode nor a cage tag is refused, and a misread barcode (its check digit fails) asks for another scan.', ev: [E('cage.scan', 'stockroom', { cage: TAG }, { keycode: '43302210', qty: 1 })],
       run: async c => { scroll(c, 'cg2-tg', 0); await typeIn(c, 'cg2-tg', '43302210'); await c.tap('#cg2-tg .cg2-add'); off(c); paint(c, 'cg2-tg', target({ items: { ...I4, 43302210: 2 }, loc: 'AISLE 2', last: ['43302210', 1] }), 100); } },
   ],
 });
@@ -236,7 +241,7 @@ cages.stories.push({
     { cap: tx('Moved it? Tap I moved some.'), read: S(tx('Say how many went to the recall bay and where they were.'), tx('Here two came out of a carton for this cage.')),
       dev: '<b>openFound()</b> in js/recallflag.js: the shared sheet, the same on every screen that flags a recall.', ev: [],
       run: async c => { await c.tap('#cg2-tg .cg2-moved'); off(c); sheet(c, found()); await c.wait(400); await c.tap('.p2-sheet .cg2-rplus'); c.text('.p2-sheet .cg2-n', '2'); await c.tap('.p2-sheet .cg2-rw'); c.cls('.p2-sheet .cg2-rw', 'cg2-ph', false); await c.type('.p2-sheet .cg2-wt', 'AISLE 2'); off(c); } },
-    { cap: tx('Save: the find is recorded, then tell a manager.'), read: S(tx('The recall counts every find, from every phone.'), tx('The flag stays until the next product goes on the cage.')),
+    { cap: tx('Save: the find is recorded, then tell a manager.'), read: S(tx('The recall counts every find, from every phone.'), tx('The flag stays until the next product goes on the cage, or until you change cage.')),
       dev: 'One <b>recall.found</b> with the count and where; the first find moves the recall to removing.', ev: [E('recall.found', 'floor', { recall: RC }, { kc: '43350142', n: 2, where: 'AISLE 2' })],
       run: async c => { await c.tap('.p2-sheet .cg2-save'); off(c); unsheet(c); say(c, tx('Saved. Now tell a manager.')); } },
   ],
@@ -248,17 +253,17 @@ cages.stories.push({
     tx('A cage parked somewhere else moves to your zone, and the sweep counts it as moved.'),
     tx('A cage not seen on a sweep is missing, and lost after two sweeps in a row; scanned again, it is found.'),
     tx('A tag that isn’t on the register is refused on a sweep: a sweep never opens a cage.')],
-  html: () => phone({ on: 'sw', sw: sweep({ running: true }) }),
+  html: () => phone({ on: 'sw', sw: sweep({ running: true, cs: Z0 }) }),
   steps: [
     { cap: tx('Set zone: type where you are standing.'), read: S(tx('An aisle, a bay or an area, like {zone}.', { zone: 'AISLE 4' }), tx('The button shows the zone from then on.')),
       dev: 'The zone is the phone’s own (st.zone in cages.js, a plain prompt); <b>sweepPayload()</b> sends it as location with every sweep scan.', ev: [],
       run: async c => { await c.tap('#cg2-sw .cg2-zone'); ask(c, tx('Which zone are you in? (aisle, bay or area: a cage scanned here that was parked elsewhere is moved here)'), ''); await c.type('.cg2-dw .cg2-dt', 'AISLE 4'); await c.tap('.cg2-dw .cg2-ok'); off(c); shut(c); paint(c, 'cg2-sw', sweep({ running: true, zone: 'AISLE 4' })); } },
     { cap: tx('Scan a cage parked somewhere else: it moves to your zone.'), read: S(tx('{cage} was parked in {from}; now it is in {to}.', { cage: 'BSN1240415', from: 'BAY 7020', to: 'AISLE 4' }), tx('The message says where it moved from.')),
       dev: 'The <b>cage.sweep</b> reducer moves a cage seen somewhere else, counts it in the sweep’s moved list and clears any map point.', ev: [E('cage.sweep', 'stockroom', { cage: 'BSN1240415' }, { session: SW2, location: 'AISLE 4' })],
-      run: async c => { await typeIn(c, 'cg2-sw', 'BSN1240415'); off(c); paint(c, 'cg2-sw', sweep({ running: true, n: 1, cs: Z1, zone: 'AISLE 4' }), 400); say(c, `${tx('{cage} seen', { cage: 'BSN1240415' })} · ${tx('moved {from} → {to}', { from: 'BAY 7020', to: 'AISLE 4' })}`); } },
+      run: async c => { await typeIn(c, 'cg2-sw', 'BSN1240415'); off(c); paint(c, 'cg2-sw', sweep({ running: true, cs: Z1, zone: 'AISLE 4' }), 400); say(c, `${tx('{cage} seen', { cage: 'BSN1240415' })} · ${tx('moved {from} → {to}', { from: 'BAY 7020', to: 'AISLE 4' })}`); } },
     { cap: tx('A cage that was missing is found again.'), read: S(tx('{cage} was missed on the last sweep.', { cage: 'BSN1240403' }), tx('Seen here, it is found again and moves to your zone too.')),
       dev: 'A missing or lost cage seen again is logged as found and counted in the sweep’s found list.', ev: [E('cage.sweep', 'stockroom', { cage: 'BSN1240403' }, { session: SW2, location: 'AISLE 4' })],
-      run: async c => { scroll(c, 'cg2-sw', 0); await typeIn(c, 'cg2-sw', 'BSN1240403'); off(c); paint(c, 'cg2-sw', sweep({ running: true, n: 2, cs: Z2, zone: 'AISLE 4' }), 360);
+      run: async c => { scroll(c, 'cg2-sw', 0); await typeIn(c, 'cg2-sw', 'BSN1240403'); off(c); paint(c, 'cg2-sw', sweep({ running: true, cs: Z2, zone: 'AISLE 4' }), 360);
         say(c, `${tx('{cage} seen', { cage: 'BSN1240403' })} · ${tx('moved {from} → {to}', { from: 'MEZZANINE', to: 'AISLE 4' })} · ${tx('found again')}`); } },
   ],
 });
