@@ -658,6 +658,7 @@ export default {
   "Load removed": "Lieferung entfernt",
   "Arrivals, {period}": "Eingänge, {period}",
   "Pallet ID": "Paletten-ID",
+  "Description": "Beschreibung",
   "Quantity": "Menge",
   "kept the first 400 pallets": "die ersten 400 Paletten übernommen",
   "choose the Pallet ID and Keycode columns": "Spalten Paletten-ID und Keycode wählen",

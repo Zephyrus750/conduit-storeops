@@ -658,6 +658,7 @@ export default {
   "Load removed": "Đã xóa chuyến hàng",
   "Arrivals, {period}": "Hàng đến, {period}",
   "Pallet ID": "Mã pallet",
+  "Description": "Mô tả",
   "Quantity": "Số lượng",
   "kept the first 400 pallets": "giữ 400 pallet đầu tiên",
   "choose the Pallet ID and Keycode columns": "chọn cột Mã pallet và Keycode",

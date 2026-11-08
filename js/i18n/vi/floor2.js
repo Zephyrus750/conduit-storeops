@@ -329,7 +329,6 @@ export default {
   "Date": "Ngày",
   "Import": "Nhập",
   "Keycode": "Keycode",
-  "Description": "Mô tả",
   "Department": "Ngành hàng",
   "Edited": "Đã sửa",
   "Reopened (recurring)": "Mở lại (lặp lại)",

@@ -658,6 +658,7 @@ export default {
   "Load removed": "Inalis ang load",
   "Arrivals, {period}": "Mga dumating, {period}",
   "Pallet ID": "Pallet ID",
+  "Description": "Paglalarawan",
   "Quantity": "Dami",
   "kept the first 400 pallets": "kinuha ang unang 400 pallet",
   "choose the Pallet ID and Keycode columns": "piliin ang column ng Pallet ID at Keycode",

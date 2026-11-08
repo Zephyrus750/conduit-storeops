@@ -164,6 +164,20 @@ export async function keptBarcodes(env, gtins) {
   try { const r = await stub.fetch(`https://catalogue/barcodes?gtin=${gtins.join(',')}`); return r.ok ? ((await r.json()).items || {}) : {}; }
   catch { return {}; }
 }
+// Product names (the item's title on kmart.com.au) for keycodes, straight
+// from the catalogue's own table: no product page is read, so a scan's
+// answer can carry the name. Waits at most `ms`; past that the answer goes
+// without it and the phone's catalogue lookup brings it as before.
+export const NAME_WAIT_MS = 800;
+export async function catalogueNames(env, kcs, ms = NAME_WAIT_MS) {
+  const stub = catalogueStub(env); if (!stub || !kcs.length) return {};
+  const ask = stub.fetch(`https://catalogue/lookup?kc=${kcs.join(',')}`).then(r => r.ok ? r.json() : {})
+    .then(j => Object.fromEntries(Object.entries(j.items || {}).filter(([, it]) => it?.name).map(([kc, it]) => [kc, it.name])))
+    .catch(() => ({}));
+  let timer;
+  const out = await Promise.race([ask, new Promise(r => { timer = setTimeout(() => r({}), ms); })]);
+  clearTimeout(timer); return out;
+}
 export const catalogueStub = env => env.CATALOGUE ? env.CATALOGUE.get(env.CATALOGUE.idFromName('catalogue')) : null;
 // Conduit's own catalogue: { built, found, down }. built is false until its
 // first build has landed products, which is what keeps the legacy fallback

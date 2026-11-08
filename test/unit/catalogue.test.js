@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { productsFromSitemap, readSitemapIndex, shardNameForUrl, slugToName, oneDigitVariants, sweepPlan } from '../../worker/sitemap.js';
 import { extractDetails, okHost, pageGtins } from '../../worker/details.js';
+import { catalogueNames } from '../../worker/catalogue.js';
 
 test('sitemap: product URLs give keycode → slug (8 and 9 digit codes); other URLs are ignored', () => {
   const xml = '<urlset><url><loc>https://www.kmart.com.au/product/12-pk-diecast-vehicles-42977636/</loc></url>'
@@ -314,4 +315,17 @@ test('product page: the barcodes its data names, check digits verified', () => {
   const page = `<script type="application/ld+json">${JSON.stringify({ '@type': 'Product', gtin13: '9341234567893', sku: '43300411' })}</script><script>{"ean":"9341234567890","barcode":"12345"}</script>`;
   assert.deepEqual(pageGtins(page), ['9341234567893'], 'a bad check digit or a short number is not a barcode');
   assert.deepEqual(pageGtins('<p>nothing</p>'), []);
+});
+
+test('product names for a scan’s answer come from the catalogue’s table, and never hold the answer up', async () => {
+  const env = fetch => ({ CATALOGUE: { idFromName: n => n, get: () => ({ fetch }) } });
+  const asked = [];
+  const quick = env(async url => { asked.push(url); return new Response(JSON.stringify({ total: 2, items: { 43652214: { name: 'Travel Ribbed Pots', slug: 'travel-ribbed-pots', url: 'u' }, 43577460: null } })); });
+  assert.deepEqual(await catalogueNames(quick, ['43652214', '43577460']), { 43652214: 'Travel Ribbed Pots' }, 'a code the catalogue does not know has no name');
+  assert.deepEqual(asked, ['https://catalogue/lookup?kc=43652214,43577460'], 'one read of its table, no product page');
+  const t0 = Date.now();
+  assert.deepEqual(await catalogueNames(env(() => new Promise(() => {})), ['43652214'], 30), {}, 'a slow catalogue: the answer goes without the name');
+  assert.ok(Date.now() - t0 < 500);
+  assert.deepEqual(await catalogueNames(env(async () => { throw new Error('down'); }), ['43652214']), {}, 'a catalogue that fails: no name');
+  assert.deepEqual(await catalogueNames({}, ['43652214']), {}, 'no catalogue bound: no name');
 });

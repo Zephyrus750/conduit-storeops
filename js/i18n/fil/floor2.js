@@ -329,7 +329,6 @@ export default {
   "Date": "Petsa",
   "Import": "I-import",
   "Keycode": "Keycode",
-  "Description": "Paglalarawan",
   "Department": "Department",
   "Edited": "Na-edit",
   "Reopened (recurring)": "Binuksan muli (paulit-ulit)",

@@ -40,7 +40,6 @@ export default {
   "Confirmed": "Confirmés",
   "Unplaced": "Sans emplacement",
   "Keycode": "Keycode",
-  "Description": "Description",
   "Department": "Rayon",
   "Dept": "Rayon",
   "Price": "Prix",

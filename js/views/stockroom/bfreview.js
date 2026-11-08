@@ -15,7 +15,7 @@
 import { haptic } from '../../device.js';
 import { recallFor, recallFlag } from '../../recallflag.js';
 import { $, $$, ic, esc, vh, sub, status, fmtTime, toast, mhead, mscan, mrows, productImg, mbig, mghost, mfoot, camButton, depInk, accChip, accBand } from '../../ui.js';
-import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
+import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, reportDescs, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { printSheet, code as pcode, tick, table, section, signoff } from '../../print.js';
@@ -231,8 +231,10 @@ async function saveReport(ctx, report) {
 }
 async function pushReport(ctx, r) {
   try {
-    await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report`, { method: 'POST', body: { date: todayKey(), report: { at: r.at, byLoc: r.byLoc, range: r.range ?? null, delta: r.delta || {}, bayAt: r.bayAt || {}, soh: r.soh || {}, apn: r.apn || {} } }, timeoutMs: 60000 });
-    if (r.unsent) { delete r.unsent; await ctx.storage.set(reportKey(ctx), r); }
+    await ctx.api(`/v1/store/${ctx.storeNo}/backfill/report`, { method: 'POST', body: { date: todayKey(), report: { at: r.at, byLoc: r.byLoc, range: r.range ?? null, delta: r.delta || {}, bayAt: r.bayAt || {}, soh: r.soh || {}, apn: r.apn || {}, ...(r.desc ? { desc: r.desc } : {}) } }, timeoutMs: 60000 });
+    // The descriptions go once, with the paste: the store keeps them in its
+    // description book, so later saves of the day's report leave them out.
+    if (r.unsent || r.desc) { delete r.unsent; delete r.desc; await ctx.storage.set(reportKey(ctx), r); }
     return true;
   } catch { if (!r.unsent) { r.unsent = true; await ctx.storage.set(reportKey(ctx), r); } return false; }
 }
@@ -245,7 +247,7 @@ export async function pasteReport(ctx, text) {
   const byLoc = parseReportByLocation(text), n = Object.keys(byLoc).length; if (!n) return null;
   await loadReport(ctx);
   const prev = st.report?.byLoc || {}, lines = parseReportLines(text), soh = Object.fromEntries(Object.entries(lines).map(([kc, r]) => [kc, r.soh]));
-  await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh }, apn: { ...(st.report?.apn || {}), ...reportApns(text) } });
+  await saveReport(ctx, { at: Date.now(), byLoc: { ...prev, ...byLoc }, range: reportRange(text, byLoc), delta: pasteDelta(prev, byLoc), bayAt: {}, soh: { ...(st.report?.soh || {}), ...soh }, apn: { ...(st.report?.apn || {}), ...reportApns(text) }, desc: { ...(st.report?.desc || {}), ...reportDescs(text) } });
   const sent = await reportToAdjust(ctx, byLoc, lines), intel = await reportToIntel(ctx, text);
   return { bays: n, codes: Object.values(byLoc).reduce((x, l) => x + l.length, 0), sent, intel };
 }

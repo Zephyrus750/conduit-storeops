@@ -329,7 +329,6 @@ export default {
   "Date": "Data",
   "Import": "Importa",
   "Keycode": "Keycode",
-  "Description": "Descrizione",
   "Department": "Reparto",
   "Edited": "Modificata",
   "Reopened (recurring)": "Riaperta (ricorrente)",

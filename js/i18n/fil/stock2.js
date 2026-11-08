@@ -40,7 +40,6 @@ export default {
   "Confirmed": "Kumpirmado",
   "Unplaced": "Walang lugar",
   "Keycode": "Keycode",
-  "Description": "Paglalarawan",
   "Department": "Department",
   "Dept": "Dept",
   "Price": "Presyo",

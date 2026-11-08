@@ -40,7 +40,6 @@ export default {
   "Confirmed": "Đã xác nhận",
   "Unplaced": "Chưa có vị trí",
   "Keycode": "Keycode",
-  "Description": "Mô tả",
   "Department": "Ngành hàng",
   "Dept": "Ngành",
   "Price": "Giá",

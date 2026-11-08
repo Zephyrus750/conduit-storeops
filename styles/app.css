@@ -2973,6 +2973,7 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .lp-pic img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .lp-pn { flex: 1; min-width: 0; }
 .lp-pn b { display: block; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-prod .lp-pn b { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }   /* the scan's answer: a report's description is long, two lines show it */
 .lp-pn small { display: block; font-size: 12.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* A ticket whose barcode nothing links: the keycode printed on it, then the link. */
 .lp-pn small.lp-from { white-space: normal; overflow: visible; }
