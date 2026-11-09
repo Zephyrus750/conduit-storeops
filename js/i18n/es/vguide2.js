@@ -1388,7 +1388,6 @@ export default {
   "Back dock › Receiving has no truck yet: the desk enters the sheet from the top.": "Muelle de carga › Recepción aún no tiene camión: el puesto introduce la hoja desde arriba.",
   "New truck: Truck 1 is picked, with its manifest from the week plan.": "Nuevo camión: el camión 1 está elegido, con su manifiesto del plan semanal.",
   "Landed at fills in with the time now: type the one on the sheet, 05:40.": "«Llegó a las» se rellena con la hora actual: escribe la de la hoja, 05:40.",
-  "Leave the decant start: blank starts it at Take 5.": "Deja vacío el inicio del desembalaje: así empieza en el Take 5.",
   "Create & go live: Truck 1 is receiving, landed at 05:40.": "Crear e iniciar: el camión 1 está en recepción, llegó a las 05:40.",
   "Manifest 7040301 comes with it from the plan: 12 consols, 72 cartons.": "El manifiesto 7040301 llega con él desde el plan: 12 consolidados, 72 cajas.",
   "Each pallet is timed as the desk enters it; the truck keeps 05:40.": "Cada palé lleva la hora en que el puesto lo introduce; el camión conserva las 05:40.",
@@ -1482,4 +1481,5 @@ export default {
   "Too soon? Click the Receiving chip: the hand-over is undone.": "¿Demasiado pronto? Haz clic en la etiqueta Recepción: la entrega se deshace.",
   "Truck 1 is receiving again, with Finish receiving as the next step.": "El camión 1 vuelve a estar en recepción, con Terminar recepción como siguiente paso.",
   "Confirm it again when the truck is empty.": "Vuelve a confirmar cuando el camión esté vacío.",
+  "There is no decant start to set: the decant starts at Take 5.": "No hay inicio de desembalaje que poner: el desembalaje empieza en el Take 5.",
 };

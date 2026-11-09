@@ -129,6 +129,7 @@ export const CATALOGUE = {
   'pallet.remove':       T('backdock', D, ['truck', 'bay']),
   'pallet.scan':         T('backdock', D, ['truck', 'bay'], { code: 'string' }),
   'pallet.unscan':       T('backdock', D, ['truck', 'bay'], { id: 'string' }),     // a wrong scan comes off the pallet
+  'pallet.offsite':      T('backdock', M, ['truck'], { bays: 'array' }),          // Send to off-site: payload.cb, req, note; the pallets go on the off-site register
   'pallet.move':         T('backdock', D, ['truck', 'bay'], { to: 'string' }),
   'pallet.join':         T('backdock', D, ['truck', 'bay'], { pid: 'string' }),
   'pallet.handover':     T('backdock', D, ['truck', 'bay'], { toPid: 'string' }),
@@ -140,14 +141,14 @@ export const CATALOGUE = {
   'huddle.plan':         T('backdock', D, ['truck'], { mins: 'number' }),
   'break.start':         T('backdock', D, ['truck'], { pid: 'string' }),
   'break.end':           T('backdock', D, ['truck'], { pid: 'string' }),
-  'plan.set':            T('backdock', D, ['date', 'slot']),
+  'plan.set':            T('backdock', D, ['date', 'slot']),                    // payload.pids / load: what it brings back from off-site (Call back)
   'manifest.linkLate':   T('backdock', M, ['truck'], { links: 'array' }),        // [{ bay, consolIds, basis: scan|cartons|time|manual }]
   'plan.queues':         T('backdock', D, ['truck'], { queues: 'object' }),       // payload.basis x2 | personal
   'truck.take5':         T('backdock', D, ['truck'], { items: 'array' }),
   'dock.roster':         T('backdock', D, [], { pids: 'array' }),
   'plan.remove':         T('backdock', D, ['date', 'slot']),
   'plan.noTrucks':       T('backdock', D, ['date']),                            // a day confirmed with no trucks; payload.on false clears it
-  'plan.route':          T('backdock', M, ['date', 'slot']),                    // a truck not coming to the dock: payload.route offsite | diverted | null (Receive here), lands, to, reason, note, manNo
+  'plan.route':          T('backdock', M, ['date', 'slot']),                    // a truck not coming to the dock: payload.route offsite | diverted | null (Receive here), lands, to, reason, note, manNo, pallets
 
   // Off-site pallets and other loads: the Inventory hub's events, Floor
   // until it moved to the Back dock (23 Oct 2026).
@@ -202,6 +203,7 @@ export const PAYLOAD_MAX = {
   'inventory.offsite.add': 128_000,
   'store.settings.set': 128_000,
   'plan.queues': 128_000,
+  'plan.route': 64_000,             // an off-site truck's consols for the register
   'picklist.set': 128_000,
   'pallet.editTimes': 64_000,
   'refresh.clearDept': 64_000,

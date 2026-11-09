@@ -1388,7 +1388,6 @@ export default {
   "Back dock › Receiving has no truck yet: the desk enters the sheet from the top.": "Warenannahme › Wareneingang hat noch keinen LKW: der Schreibtisch trägt das Blatt von oben ein.",
   "New truck: Truck 1 is picked, with its manifest from the week plan.": "Neuer LKW: LKW 1 ist gewählt, mit seinem Lieferschein aus dem Wochenplan.",
   "Landed at fills in with the time now: type the one on the sheet, 05:40.": "„Angekommen um“ steht auf jetzt: tippe die Zeit vom Blatt ein, 05:40.",
-  "Leave the decant start: blank starts it at Take 5.": "Lass den Auspackbeginn leer: dann beginnt er mit Take 5.",
   "Create & go live: Truck 1 is receiving, landed at 05:40.": "„Anlegen & starten“: LKW 1 ist im Wareneingang, angekommen um 05:40.",
   "Manifest 7040301 comes with it from the plan: 12 consols, 72 cartons.": "Lieferschein 7040301 kommt aus dem Plan mit: 12 Sammelsendungen, 72 Kartons.",
   "Each pallet is timed as the desk enters it; the truck keeps 05:40.": "Jede Palette bekommt die Zeit, zu der der Schreibtisch sie einträgt; der LKW behält 05:40.",
@@ -1482,4 +1481,5 @@ export default {
   "Too soon? Click the Receiving chip: the hand-over is undone.": "Zu früh? Klicke auf den Chip Wareneingang: die Übergabe ist zurückgenommen.",
   "Truck 1 is receiving again, with Finish receiving as the next step.": "LKW 1 ist wieder im Wareneingang, mit „Wareneingang abschließen“ als nächstem Schritt.",
   "Confirm it again when the truck is empty.": "Bestätige erneut, wenn der LKW leer ist.",
+  "There is no decant start to set: the decant starts at Take 5.": "Ein Auspackbeginn wird nicht eingetragen: das Auspacken beginnt mit Take 5.",
 };

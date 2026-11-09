@@ -82,7 +82,8 @@ function phb(s) {
   const n = all(s).length, line = s.ph === 0 ? tx('Not landed yet') : s.ph === 1 ? `${txn(n, '{n} pallet landed', '{n} pallets landed')} · ${tx('{m} of {n} consols matched', { m: matched(s), n: 12 })}`
     : s.ph === 2 ? tx('Layout confirmed {time} · Take 5, then start', { time: s.conf }) : tx('{done} of {n} pallets done · {c} of {total} ctn', { done: 0, n, c: 0, total: ctn(s) });
   const go = s.ph === 0 ? tx('New truck') : s.ph === 1 ? tx('Finish receiving') : s.ph === 2 ? tx('Start decant') : '';
-  return `<div class="rc2-phb"><ol>${PHASE().map((p, i) => `<li class="${i < s.ph ? 'dn' : i === s.ph ? 'on' : ''}"><i></i><span>${p}</span></li>`).join('')}</ol>` +
+  // phaseSteps() in shared/dockphase.js: a received truck has Received done and Decanting next up.
+  return `<div class="rc2-phb"><ol>${PHASE().map((p, i) => `<li class="${s.ph === 2 ? (i <= 2 ? 'dn' : i === 3 ? 'nx' : '') : i < s.ph ? 'dn' : i === s.ph ? 'on' : ''}"><i></i><span>${p}</span></li>`).join('')}</ol>` +
     `<div class="n"><span class="t"><b>${s.ph ? `${tx('Truck {n}', { n: 1 })} · ` : ''}${PHASE()[s.ph]}</b><small>${line}</small></span>${go ? `<span class="pc2-btn sm pri rc2-go">${go}${ai('arrow')}</span>` : ''}</div></div>`;
 }
 // Finish receiving (finishSheet() in phase.js): the layout against the manifest.
@@ -171,11 +172,11 @@ function landed(s) {
 const board = () => `<div class="rc2-card rc2-db"><div class="rc2-ch"><h3>${tx('Today’s decants')}</h3><span class="dim">1</span></div><div class="rc2-dbc"><b>${tx('Truck {n}', { n: 1 })}</b><span class="rc2-tst">${tx('Planned')}</span>` +
   `<small>${tx('no start time')} · ${tx('waiting on Receiving')}</small><small>${txn(12, '{n} consol', '{n} consols')} · 7040301 · ${tx('{n} on the team', { n: 3 })}</small><em>${tx('Tap when it lands →')}</em></div></div>`;
 const emptyCard = () => `<div class="rc2-card rc2-empty">${ai('truck')}<b>${tx('No truck on the dock')}</b><p class="rc2-lbl">${tx('Start receiving the next truck here, or let a dock phone land it. The board wakes either way.')}</p><span class="pc2-btn pri rc2-start">${ai('plus')}${tx('Start receiving a truck')}</span></div>`;
-const ntCard = s => `<div class="rc2-card rc2-nt"><div class="rc2-ch"><h3>${tx('New truck')}</h3><span class="rc2-ib">${ai('x')}</span></div><p class="rc2-lbl">${tx('It starts in its planned slot: the manifest, team and start time come with it.')}</p>` +
+const ntCard = s => `<div class="rc2-card rc2-nt"><div class="rc2-ch"><h3>${tx('New truck')}</h3><span class="rc2-ib">${ai('x')}</span></div><p class="rc2-lbl">${tx('It starts in its planned slot: the manifest and team come with it.')}</p>` +
   `<div class="rc2-ntl"><span class="rc2-ntc on"><b>${tx('Truck {n}', { n: 1 })}</b><span class="rc2-ok">${tx('selected')}</span><small class="ok">${ai('file')}${tx('Manifest {no} · {c} ctn · {n} consols', { no: '7040301', c: 72, n: 12 })}</small><small>${tx('no start time')} · ${txn(3, '{n} decanter', '{n} decanters')}</small></span>` +
   `<span class="rc2-ntc"><b>${ai('plus')}${tx('Unplanned truck')}</b><small>${tx('not in the week plan · becomes Truck {n}', { n: 2 })}</small></span></div>` +
-  `<div class="rc2-ntt"><label>${tx('Landed at')}<span class="rc2-in mono rc2-landed"><span class="t">${s.landed}</span>${ai('clock')}</span></label><label>${tx('Decant start')}<span class="rc2-in mono ph">--:--${ai('clock')}</span></label></div>` +
-  `<p class="rc2-lbl">${tx('Landed is for the record. The decant start is when pace, goal and timeline are measured from; blank starts it at Take 5.')}</p>` +
+  `<div class="rc2-ntt"><label>${tx('Landed at')}<span class="rc2-in mono rc2-landed"><span class="t">${s.landed}</span>${ai('clock')}</span></label></div>` +
+  `<p class="rc2-lbl">${tx('Landed is for the record. The decant starts at Take 5.')}</p>` +
   `<div class="rc2-acts"><span class="pc2-btn pri rc2-ntgo">${ai('truck')}${tx('Create & go live · Truck {n}', { n: 1 })}</span><span class="pc2-btn">${tx('Cancel')}</span></div></div>`;
 // The dock sheet the dock lead filled in, on the desk beside the screen: each
 // pallet's bay, type, labels and cartons, ticked off as the desk enters it.
@@ -255,7 +256,7 @@ export const receivepc = {
     { cap: tx('The phones were down this morning: Truck 1 came off on a dock sheet.'), read: S(tx('Each pallet is a row: its bay, its type, the labels on it and its cartons.'), tx('Back dock › Receiving has no truck yet: the desk enters the sheet from the top.')),
       dev: 'With no truck on the dock, <b>desktop()</b> in js/views/backdock/receiving.js draws <b>phaseBar(null)</b>, <b>decantBoard()</b> from js/views/backdock/plan.js and the empty card. Looking sends nothing.', ev: [],
       run: async c => { await c.tap('#v-rc .rc2-paper'); glow(c, '#v-rc .rc2-paper', true); await c.wait(900); } },
-    { cap: tx('New truck: Truck 1 is picked, with its manifest from the week plan.'), read: S(tx('Landed at fills in with the time now: type the one on the sheet, 05:40.'), tx('Leave the decant start: blank starts it at Take 5.')),
+    { cap: tx('New truck: Truck 1 is picked, with its manifest from the week plan.'), read: S(tx('Landed at fills in with the time now: type the one on the sheet, 05:40.'), tx('There is no decant start to set: the decant starts at Take 5.')),
       dev: '<b>newTruckSheet()</b> in js/views/backdock/phase.js; <b>ntDefaults()</b> picks the first planned slot and fills Landed at with the time now. Nothing is sent yet.', ev: [],
       run: async c => { glow(c, '#v-rc .rc2-paper', false); await c.tap('#v-rc .rc2-go'); paint(c, P1); off(c); await c.wait(300); await c.tap('#v-rc .rc2-landed'); await c.type('#v-rc .rc2-landed .t', '05:40'); paint(c, P2); } },
     { cap: tx('Create & go live: Truck 1 is receiving, landed at 05:40.'), read: S(tx('Manifest 7040301 comes with it from the plan: 12 consols, 72 cartons.'), tx('Each pallet is timed as the desk enters it; the truck keeps 05:40.')),

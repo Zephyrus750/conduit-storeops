@@ -16,7 +16,7 @@
 
 import { ic, esc } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
-import { PHASES, truckPhase, phaseCounts } from '../../../shared/dockphase.js';
+import { PHASES, truckPhase, phaseCounts, phaseSteps } from '../../../shared/dockphase.js';
 import { liveAudit } from '../../../shared/reducers/backdock.js';
 import { truckNo, fmtHM, todayKey, unfinished, PT_NAME } from './common.js';
 import { routeTag } from './routes.js';
@@ -48,9 +48,9 @@ export function nextStep(t) {
 }
 
 export function phaseBar(t, { link = false } = {}) {
-  const ph = truckPhase(t), at = PHASES.indexOf(ph), n = nextStep(t);
+  const ph = truckPhase(t), at = PHASES.indexOf(ph), n = nextStep(t), steps = phaseSteps(ph);
   const btn = !n ? '' : link ? `<button class="btn primary sm phb-go" data-view="${n.act === 'begin' || n.act === 'finalise' ? 'decant' : 'receiving'}">${esc(n.label)}${ic('arrow')}</button>` : `<button class="btn primary sm phb-go" data-act="phase-${n.act}">${esc(n.label)}${ic('arrow')}</button>`;
-  return `<div class="phb ph-${ph}" role="group" aria-label="${tx('Truck phase')}"><ol class="phb-s">${PHASES.map((p, i) => `<li class="${i < at ? 'dn' : i === at ? 'on' : ''}"${i === at ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[p]}</span></li>`).join('')}</ol>` +
+  return `<div class="phb ph-${ph}" role="group" aria-label="${tx('Truck phase')}"><ol class="phb-s">${PHASES.map((p, i) => `<li class="${steps[i]}"${i === at ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[p]}</span></li>`).join('')}</ol>` +
     `<div class="phb-n"><span class="phb-t"><b>${t ? tx('Truck {n}', { n: esc(truckNo(t.id)) }) + ' · ' : ''}${PHASE_NAME[ph]}</b><small>${line(t, ph)}</small></span>${btn}</div></div>`;
 }
 export const phaseChip = t => { const ph = truckPhase(t); return `<span class="phb-chip ph-${ph}">${PHASE_NAME[ph]}</span>`; };
@@ -70,13 +70,12 @@ function today(dock, plan) {
 }
 export function ntDefaults(dock, plan, now = new Date()) {
   const d = today(dock, plan), first = Object.keys(d.slots).map(Number).sort((a, b) => a - b).find(n => !d.taken[n]);
-  return { slot: first ?? 'u', landed: hhmm(now), start: first ? d.slots[first].eta || '' : '', keep: true };
+  return { slot: first ?? 'u', landed: hhmm(now), keep: true };
 }
 export function ntPayload(dock, plan, nt, now = new Date()) {
   const d = today(dock, plan), n = nt.slot === 'u' ? d.free : Number(nt.slot), at = hm => { if (!/^\d{1,2}:\d{2}$/.test(hm || '')) return null; const x = new Date(now); const [h, m] = hm.split(':').map(Number); x.setHours(h, m, 0, 0); return x.toISOString(); };
   const payload = { landedAt: at(nt.landed) || now.toISOString() };
   if (nt.slot !== 'u') payload.slot = n;
-  if (at(nt.start)) payload.decantStartAt = at(nt.start);
   return { id: `${d.day}-T${n}`, n, payload };
 }
 export function newTruckSheet(dock, plan, nt, open) {
@@ -101,10 +100,10 @@ export function newTruckSheet(dock, plan, nt, open) {
   }
   const held = !open && dock.rollover ? (() => { const ps = Object.values(dock.rollover.pallets); return `<div class="nt-held"><b>${txn(ps.length, '{n} pallet held from Truck {t}', '{n} pallets held from Truck {t}', { t: esc(truckNo(dock.rollover.from)) })}</b><small>${esc(ps.map(p => `${p.ref} ${PT_NAME[p.ptype] || ''}`).join(' · '))}</small><div class="chips"><button class="chip${nt.keep ? ' on' : ''}" data-act="nt-keep" data-v="1">${tx('Keep them on Truck {n}', { n: no })}</button><button class="chip${nt.keep ? '' : ' on'}" data-act="nt-keep" data-v="0">${tx('Start fresh')}</button></div></div>`; })() : '';
   return `<div class="card nt"><div class="ch"><h3>${tx('New truck')}</h3><button class="ibtn" data-act="nt-cancel" aria-label="${tx('Close')}">${ic('x')}</button></div>` +
-    `<p class="lbl">${tx('It starts in its planned slot: the manifest, team and start time come with it.')}</p>${gate}` +
+    `<p class="lbl">${tx('It starts in its planned slot: the manifest and team come with it.')}</p>${gate}` +
     `<div class="nt-list">${nums.map(card).join('')}${un}</div>` +
-    `<div class="nt-times"><label>${tx('Landed at')}<input type="time" class="bdr-in" data-field="nt-landed" value="${esc(nt.landed)}"></label><label>${tx('Decant start')}<input type="time" class="bdr-in" data-field="nt-start" value="${esc(nt.start)}"></label></div>` +
-    `<p class="cs-dim nt-note">${tx('Landed is for the record. The decant start is when pace, goal and timeline are measured from; blank starts it at Take 5.')}</p>${held}` +
+    `<div class="nt-times"><label>${tx('Landed at')}<input type="time" class="bdr-in" data-field="nt-landed" value="${esc(nt.landed)}"></label></div>` +
+    `<p class="cs-dim nt-note">${tx('Landed is for the record. The decant starts at Take 5.')}</p>${held}` +
     `<div class="nt-acts"><button class="btn primary big" data-act="nt-go"${blocked ? ' disabled' : ''}>${ic('truck')}${tx('Create & go live · Truck {n}', { n: no })}</button><button class="btn" data-act="nt-cancel">${tx('Cancel')}</button></div></div>`;
 }
 

@@ -1388,7 +1388,6 @@ export default {
   "Back dock › Receiving has no truck yet: the desk enters the sheet from the top.": "Khu nhận hàng › Nhận hàng chưa có xe tải: máy bàn nhập phiếu từ trên xuống.",
   "New truck: Truck 1 is picked, with its manifest from the week plan.": "Xe tải mới: đã chọn xe tải 1, kèm bảng kê hàng từ kế hoạch tuần.",
   "Landed at fills in with the time now: type the one on the sheet, 05:40.": "Đến lúc tự điền giờ hiện tại: gõ giờ trên phiếu, 05:40.",
-  "Leave the decant start: blank starts it at Take 5.": "Để trống giờ bắt đầu dỡ hàng: khi đó nó bắt đầu lúc Take 5.",
   "Create & go live: Truck 1 is receiving, landed at 05:40.": "Tạo & bắt đầu: xe tải 1 đang nhận hàng, đến lúc 05:40.",
   "Manifest 7040301 comes with it from the plan: 12 consols, 72 cartons.": "Bảng kê hàng 7040301 đi kèm từ kế hoạch: 12 lô hàng gộp, 72 thùng.",
   "Each pallet is timed as the desk enters it; the truck keeps 05:40.": "Mỗi pallet được ghi giờ lúc máy bàn nhập nó; xe tải giữ 05:40.",
@@ -1482,4 +1481,5 @@ export default {
   "Too soon? Click the Receiving chip: the hand-over is undone.": "Quá sớm? Nhấp vào ô Nhận hàng: bàn giao được hủy.",
   "Truck 1 is receiving again, with Finish receiving as the next step.": "Xe tải 1 lại đang nhận hàng, với Hoàn tất nhận hàng là bước tiếp theo.",
   "Confirm it again when the truck is empty.": "Xác nhận lại khi xe tải đã trống.",
+  "There is no decant start to set: the decant starts at Take 5.": "Không cần đặt giờ bắt đầu dỡ hàng: việc dỡ hàng bắt đầu ở Take 5.",
 };

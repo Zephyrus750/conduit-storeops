@@ -82,6 +82,14 @@ differs from the default.
 | 36 | Numbers in the showcase's "What it changes" | **Decided 2026-11-07:** figures like a real store's (clear times, cartons an hour, shelves refreshed), from the demo day and labelled as a demo day, so nobody reads them as Busselton's own results | — |
 | 37 | When the new guide reaches Help | **Decided 2026-11-07:** it is worked out on a private review page first; Help changes only in a final PR once it is approved. **2026-11-08:** the first eight chapters approved and moved into Help with their translations; the rest are drawn the same way, one draft at a time. **2026-11-09:** the other nine approved and moved in (Live pull with a bigger pick; the PC's Receiving chapter became Entering a truck from paper, for a truck the dock phones couldn't take): every chapter is now drawn at the app's real sizes | `js/guide/chapters/`, `scripts/guide/draft/` |
 
+## The back dock calls of 9 Nov 2026 (D7–D9 on the Stocktake board)
+
+| # | Decision | What Conduit does today | Where |
+|---|---|---|---|
+| 38 | Off-site pallets by manifest (the 6 Nov off-site design, boards 5–7) | **Decided 2026-11-09, built:** every pallet in storage is a row on the one off-site register. A whole truck marked off-site lists its consols there under its manifest, and so do pallets a manager sends from the dock at Receiving (`pallet.offsite`): the truck closes without them, tagged *Part off-site · n of N*. The register reads **By manifest** (with off-site loads and the other pallets) or **By callback date**. **Call back** (on the register and the Planner's *Off-site, to call back* card) plans a truck that names the pallets it brings back (`plan.set` `pids`/`load`). A whole truck called back whole has its manifest staged. Each pallet is ticked Received as its label is scanned on any later truck, and that truck says *From off-site · sent …, n of N back*. Diverted manifests stay off the register. | `shared/offsite.js`, `js/views/backdock/offsite.js`, `callback.js`, `offsend.js` |
+| 39 | Where the decant starts | **Decided 2026-11-09, built:** only in Decant, at Take 5. The New truck sheet has no Decant start box. A truck that is received (layout confirmed) but not yet decanting shows *Received* done and *Decanting* next on the phase track. | `shared/dockphase.js` `phaseSteps`, `js/views/backdock/phase.js` |
+| 40 | A manifest whose truck is cleared but not closed | **Decided 2026-11-09 (the suggested option, as built):** Manifests shows it as Decanting until the truck is closed at Receiving. | `js/views/backdock/manifests.js` |
+
 ## The test pass on a real PC (1920×1080 first)
 
 Use store 1241 Busselton with the real map. Things only a real desk, real
@@ -105,7 +113,7 @@ reports and real devices can show:
    - Switch a tool off with a store device signed in and watch it go.
    - Export the registry CSV and open it in Excel.
 9. **Manifest upload preview:** a real DC `.xls`, including a report saved for the wrong store.
-10. **Off-site pallets and loads:** the real off-site master list (.xlsx), a real manifest's Departments on the map, a CSV load with heat on the map, and the clearance watch once product details are switched on.
+10. **Off-site pallets and loads:** the real off-site master list (.xlsx), a real manifest's Departments on the map, a CSV load with heat on the map, and the clearance watch once product details are switched on. Then a real truck with no room: send two pallets off-site from the grid, call them back on the Planner and scan them on the truck that brings them back (decision 38).
 11. **Map chrome:** double-tap, pinch and flick on the TC52x; Ctrl + / − / 0 on the PC; the symbols key; the price-check size cycle; tory lines on the BOH floor.
 12. **Field Mode** on a phone with the manager code: capture a few shelves, export the file.
 13. **The TC52x** with the browser's address bar showing (360×584): the map, Refresh, Labels, Emergency, Backfill scan and Land a pallet.

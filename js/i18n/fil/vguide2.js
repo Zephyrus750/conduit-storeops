@@ -1388,7 +1388,6 @@ export default {
   "Back dock › Receiving has no truck yet: the desk enters the sheet from the top.": "Wala pang truck ang Back dock › Receiving: ine-enter ng desk ang sheet mula sa itaas.",
   "New truck: Truck 1 is picked, with its manifest from the week plan.": "Bagong truck: napili ang Truck 1, kasama ang manifest nito mula sa week plan.",
   "Landed at fills in with the time now: type the one on the sheet, 05:40.": "Napupunan ng oras ngayon ang Nag-land nang: i-type ang nasa sheet, 05:40.",
-  "Leave the decant start: blank starts it at Take 5.": "Iwanang blangko ang simula ng decant: magsisimula ito sa Take 5.",
   "Create & go live: Truck 1 is receiving, landed at 05:40.": "Gawin at i-live: nagre-receive na ang Truck 1, nag-land nang 05:40.",
   "Manifest 7040301 comes with it from the plan: 12 consols, 72 cartons.": "Kasama nitong dumating ang manifest 7040301 mula sa plan: 12 consol, 72 carton.",
   "Each pallet is timed as the desk enters it; the truck keeps 05:40.": "Naka-oras ang bawat pallet kung kailan ito in-enter ng desk; nananatili sa truck ang 05:40.",
@@ -1482,4 +1481,5 @@ export default {
   "Too soon? Click the Receiving chip: the hand-over is undone.": "Masyadong maaga? I-click ang Receiving chip: na-undo ang hand-over.",
   "Truck 1 is receiving again, with Finish receiving as the next step.": "Nasa receiving ulit ang Truck 1, at Tapusin ang receiving ang susunod na hakbang.",
   "Confirm it again when the truck is empty.": "Kumpirmahin ulit kapag wala nang laman ang truck.",
+  "There is no decant start to set: the decant starts at Take 5.": "Walang simula ng decant na ilalagay: nagsisimula ang decant sa Take 5.",
 };

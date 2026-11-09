@@ -1388,7 +1388,6 @@ export default {
   "Back dock › Receiving has no truck yet: the desk enters the sheet from the top.": "Ricevimento merci › Ricevimento non ha ancora un camion: la postazione inserisce il foglio dall’alto.",
   "New truck: Truck 1 is picked, with its manifest from the week plan.": "Nuovo camion: il camion 1 è scelto, con il suo manifesto dal piano settimanale.",
   "Landed at fills in with the time now: type the one on the sheet, 05:40.": "«Arrivato alle» si compila con l’ora attuale: digita quella sul foglio, 05:40.",
-  "Leave the decant start: blank starts it at Take 5.": "Lascia vuoto l’inizio spacchettamento: così parte con il Take 5.",
   "Create & go live: Truck 1 is receiving, landed at 05:40.": "Crea e avvia: il camion 1 è in ricevimento, arrivato alle 05:40.",
   "Manifest 7040301 comes with it from the plan: 12 consols, 72 cartons.": "Il manifesto 7040301 arriva con lui dal piano: 12 consolidamenti, 72 cartoni.",
   "Each pallet is timed as the desk enters it; the truck keeps 05:40.": "Ogni pallet prende l’ora in cui la postazione lo inserisce; il camion mantiene le 05:40.",
@@ -1482,4 +1481,5 @@ export default {
   "Too soon? Click the Receiving chip: the hand-over is undone.": "Troppo presto? Fai clic sul riquadro Ricevimento: la consegna è annullata.",
   "Truck 1 is receiving again, with Finish receiving as the next step.": "Il camion 1 è di nuovo in ricevimento, con Termina ricevimento come passo successivo.",
   "Confirm it again when the truck is empty.": "Conferma di nuovo quando il camion è vuoto.",
+  "There is no decant start to set: the decant starts at Take 5.": "Non c’è un inizio spacchettamento da impostare: lo spacchettamento parte con il Take 5.",
 };

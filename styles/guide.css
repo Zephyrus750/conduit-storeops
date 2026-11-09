@@ -2929,6 +2929,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, .chap:focus-vis
 .pc2 .rc2-phb li i { display: block; height: 5px; border-radius: 999px; background: #E9EBEF; }
 .pc2 .rc2-phb li.dn { color: #15803D; } .pc2 .rc2-phb li.dn i { background: #16A34A; }
 .pc2 .rc2-phb li.on { color: #0B6183; } .pc2 .rc2-phb li.on i { background: #0E7CA8; }
+.pc2 .rc2-phb li.nx { color: #0B6183; } .pc2 .rc2-phb li.nx i { background: #A9D3E4; }
 .pc2 .rc2-phb .n { display: flex; align-items: center; gap: 10px; }
 .pc2 .rc2-phb .t { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .pc2 .rc2-phb .t b { font-size: 15px; } .pc2 .rc2-phb .t small { font-size: 12.5px; color: #6B7280; }

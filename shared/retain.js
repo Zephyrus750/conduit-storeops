@@ -95,6 +95,11 @@ export function retain(s, day) {
     l.cartons = (l.pallets || []).length; l.pallets = [{ pid: 'summary', items: Object.entries(by).map(([dept, q]) => ({ k: dept || '-', d: '', q, dept })) }]; l.summary = true; n('loadsSummarised');
   }
 
+  // Off-site pallets that came on a manifest (a whole truck, or sent from the
+  // dock) leave the register 60 days after they came back. The master list's
+  // own rows are replaced by its next import, so they are left alone.
+  for (const [pid, r] of Object.entries(s.inventory?.offsite || {})) if (r.via && /^\d{4}-\d{2}-\d{2}$/.test(r.rec || '') && r.rec < d60) { delete s.inventory.offsite[pid]; n('offsiteBack'); }
+
   // Devices not seen for 60 days.
   for (const [id, d] of Object.entries(s.devices || {})) if (String(d?.last || '').slice(0, 10) < d60) { delete s.devices[id]; n('devices'); }
   return done;
