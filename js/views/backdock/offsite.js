@@ -14,6 +14,8 @@ import { registerSummary, clearanceDiff, isFixture } from '../../../shared/inven
 import { addDays } from '../../../shared/time.js';
 import { inv, send, statusPill, stageFile, stagePanel, saveStage, stageChange } from './loads.js';
 import { tx, txn } from '../../i18n.js';
+import { routeManifest, broughtBy } from '../../../shared/dockroutes.js';
+import { routeTag } from './routes.js';
 
 const TABS = [['register', tx('Off-site register')], ['clearance', tx('Clearance')]];
 // A pallet back on site with no date ("Back" alone is the navigation button).
@@ -91,7 +93,18 @@ function register(ctx) {
   const { I, t, sum, all, rows } = model(ctx);
   const tiles = `<div class="wb-kpis inv-kpis"><div class="wb-kpi"><span>${tx('Off-site')}</span><b>${sum.live}</b><small>${txn(sum.fixtures, '{n} fixture pallet', '{n} fixture pallets')}</small></div><div class="wb-kpi${sum.overdue.length ? ' bad' : ''}"><span>${tx('Overdue returns')}</span><b>${sum.overdue.length}</b><small>${tx('callback date passed')}</small></div><div class="wb-kpi"><span>${tx('Due in 14 days')}</span><b>${sum.dueSoon.length}</b><small>${tx('next {date}', { date: sum.nextCallback ? esc(fmtDate(sum.nextCallback)) : '—' })}</small></div><div class="wb-kpi"><span>${tx('Received')}</span><b>${sum.received}</b><small>${I.offsiteAt ? (I.offsiteSrc ? tx('list from {src}', { src: esc(I.offsiteSrc) }) : tx('list from a file')) : tx('no list read yet')}</small></div></div>`;
   const list = rows.length ? rows.map(r => regRow(ctx, r, t)).join('') : `<p class="lbl" style="padding:14px">${all.length ? tx('Nothing in this list.') : tx('No off-site pallets yet. Import the off-site master list (.xlsx), or add a pallet by hand.')}</p>`;
-  return tiles + `<div class="card"><div class="ch"><h3>${tx('Returns by callback date')}</h3>${filterPills(sum, 'inv-filter')}<button class="btn sm" data-act="add">${ic('plus')}${tx('Add a pallet')}</button></div>${addForm()}<div class="inv-list">${list}</div></div>`;
+  return tiles + trucksAway(ctx, t) + `<div class="card"><div class="ch"><h3>${tx('Returns by callback date')}</h3>${filterPills(sum, 'inv-filter')}<button class="btn sm" data-act="add">${ic('plus')}${tx('Add a pallet')}</button></div>${addForm()}<div class="inv-list">${list}</div></div>`;
+}
+
+// Whole trucks marked off-site in the Planner (plan.route), not yet back:
+// the day each was due, its manifest and the day it lands here.
+function trucksAway(ctx, t) {
+  const xs = [];
+  for (const [date, d] of Object.entries(ctx.store.get('plan')?.days || {})) for (const [n, r] of Object.entries(d.routes || {})) if (r.route === 'offsite' && (!r.lands || r.lands >= t)) xs.push({ date, n, r });
+  if (!xs.length) return '';
+  xs.sort((a, b) => (a.r.lands || '9').localeCompare(b.r.lands || '9') || a.date.localeCompare(b.date));
+  return `<div class="card rt-away"><div class="ch"><h3>${tx('Whole trucks off-site')}</h3><span class="cs-dim">${xs.length}</span><button class="btn sm" data-view="planner">${ic('m-planner')}${tx('Open the Planner')}</button></div>` +
+    xs.map(({ date, n, r }) => { const back = broughtBy(ctx.store.get('plan'), ctx.store.get('dock'), { date, slot: n }); return `<div class="rt-away-r"><b>${tx('Truck {no} of {day}', { no: n, day: esc(fmtDate(date)) })}</b><span class="mono">${esc(routeManifest(r) || '—')}</span>${routeTag(r)}${back ? `<span class="rt-tag back">${ic('undo')}${tx('Called back: Truck {no} · {day}', { no: back.slice(12), day: esc(fmtDate(back.slice(0, 10))) })}</span>` : ''}${r.note ? `<small class="cs-dim">${esc(r.note)}</small>` : ''}</div>`; }).join('') + `</div>`;
 }
 
 // ── Phone ───────────────────────────────────────────────────────────────

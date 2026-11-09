@@ -5,12 +5,14 @@
 // or each person's own 28-day rate), the finish guard, and Take 5 before
 // the decant starts. Queues are a plan.queues event; times ride on the team.
 
-import { ic, esc, toast } from '../../ui.js';
+import { ic, esc, toast, fmtDate } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
 import { schedule, balance, finishCheck, personalRates, TAKE5, atTime } from '../../../shared/dockplan.js';
 import { fmtHM, truckNo, pallets, planOpts } from './common.js';
 import { truckPhase } from '../../../shared/dockphase.js';
+import { landingOn, broughtBy, routeManifest } from '../../../shared/dockroutes.js';
+import { routeTag, fromTag, routeLine } from './routes.js';
 
 const hm = ms => ms ? fmtHM(new Date(ms).toISOString()) : '—';
 const take5 = { truck: null, ticks: new Set() };
@@ -111,12 +113,16 @@ export async function onPlanChange(ctx, t, el, rates, rerender) {
 // opens the New truck sheet on itself where Receiving shows the board
 // (act), or links to Receiving elsewhere.
 export function decantBoard(dock, plan, day, { act = false } = {}) {
-  const slots = plan?.days?.[day]?.slots || {}, nums = new Set(Object.keys(slots).map(Number));
+  const slots = plan?.days?.[day]?.slots || {}, routes = plan?.days?.[day]?.routes || {}, nums = new Set([...Object.keys(slots), ...Object.keys(routes)].map(Number));
+  // Trucks that went off-site or were diverted, and any landing today after all.
+  const lands = landingOn(plan, day).filter(x => !broughtBy(plan, dock, { date: x.date, slot: x.n }));
+  const landRows = lands.length ? `<div class="db-land">${lands.map(x => `<div class="pland ${esc(x.route.route)}"><div class="pland-h">${ic('undo')}<b>${x.route.route === 'offsite' ? tx('Lands today from off-site') : tx('Lands today after a diversion')}</b></div><span>${tx('Truck {no} of {day}', { no: x.n, day: esc(fmtDate(x.date)) })}${routeManifest(x.route) ? ' · ' + esc(routeManifest(x.route)) : ''}</span></div>`).join('')}</div>` : '';
   for (const id of Object.keys(dock.trucks)) if (id.startsWith(day + '-T')) nums.add(Number(truckNo(id)));
   for (const h of dock.history || []) if (h.id.startsWith(day + '-T')) nums.add(Number(truckNo(h.id)));
-  if (!nums.size) return `<div class="card db"><div class="ch"><h3>${tx('Today’s decants')}</h3></div><p class="lbl">${plan?.days?.[day]?.noTrucks ? tx('No trucks today: confirmed in the Planner.') : tx('Nothing yet planned for today. A decant appears here the moment Receiving opens a truck.')}</p></div>`;
+  if (!nums.size) return `<div class="card db"><div class="ch"><h3>${tx('Today’s decants')}</h3></div><p class="lbl">${plan?.days?.[day]?.noTrucks ? tx('No trucks today: confirmed in the Planner.') : tx('Nothing yet planned for today. A decant appears here the moment Receiving opens a truck.')}</p>${landRows}</div>`;
   const card = n => {
-    const id = `${day}-T${n}`, t = dock.trucks[id], h = (dock.history || []).find(x => x.id === id), sl = slots[n];
+    const id = `${day}-T${n}`, t = dock.trucks[id], h = (dock.history || []).find(x => x.id === id), sl = slots[n], rt = routes[n];
+    if (rt && !t && !h) return `<div class="db-c routed ${esc(rt.route)}"><b>${tx('Truck {n}', { n })}</b>${routeTag(rt)}<small>${tx('Not coming to the dock')} · ${routeLine(rt)}</small>${routeManifest(rt) ? `<small>${esc(routeManifest(rt))}</small>` : ''}</div>`;
     if (h || t?.status === 'closed') return `<div class="db-c done"><b>${tx('Truck {n}', { n })}</b><span class="status good">${tx('Done')}</span><small>${h ? tx('{n} ctn cleared in {time}', { n: h.cartons, time: tx('{h}h {m}m', { h: Math.floor((h.clearMins || 0) / 60), m: String((h.clearMins || 0) % 60).padStart(2, '0') }) }) : tx('cleared')}</small></div>`;
     if (t) {
       const ph = truckPhase(t), ps = pallets(t), huddle = (t.halts || []).find(x => x.kind === 'huddle' && x.planned), crew = (t.team || []).length;
@@ -124,11 +130,11 @@ export function decantBoard(dock, plan, day, { act = false } = {}) {
       const chk = (ok, text) => `<li class="${ok ? 'ok' : ''}">${ok ? '✓' : '○'} ${text}</li>`;
       const list = `<ul class="db-chk">${chk(t.status === 'live', t.landedAt && t.status === 'live' ? tx('Landed {time}', { time: fmtHM(t.landedAt) }) : tx('Not landed yet'))}${chk(t.receivingConfirmed, t.receivingConfirmed ? tx('Layout confirmed {time}', { time: fmtHM(t.receivedAt) }) : tx('Layout not confirmed'))}${chk(!!t.manifest, t.manifest ? tx('Manifest {no} · {n} consols', { no: esc(t.manifest.manNo), n: t.manifest.consols.length }) : tx('No manifest'))}${chk(ps.length > 0, tx('{n} pallets · {c} ctn on the dock', { n: ps.length, c: ps.reduce((k, p) => k + (p.cartons || 0), 0) }) + (ps.some(p => p.carryover) ? ' · ' + tx('+{n} carried over', { n: ps.filter(p => p.carryover).length }) : ''))}${chk(crew > 0, txn(crew, '{n} decanter in', '{n} decanters in') + (huddle ? ' · ' + tx('huddle {n}m booked', { n: Math.round((Date.parse(huddle.end) - Date.parse(huddle.start)) / 60000) }) : '') + (t.decantStartAt ? ' · ' + tx('start {time}', { time: fmtHM(t.decantStartAt) }) : ''))}</ul>`;
       const go = ph === 'received' ? tx('Tap to open and begin →') : ph === 'receiving' || ph === 'planned' ? tx('Open: plan while it lands →') : ph === 'cleared' ? tx('Open and close the truck →') : tx('Open the run →');
-      return `<div class="db-c ph-${ph}${ph === 'received' ? ' ready' : ''}" data-view="${ph === 'receiving' || ph === 'planned' ? 'receiving' : 'decant'}" role="link" tabindex="0"><b>${tx('Truck {n}', { n })}</b><span class="status ${tag[0]}">${tag[1]}</span>${list}<em>${go}</em></div>`;
+      return `<div class="db-c ph-${ph}${ph === 'received' ? ' ready' : ''}" data-view="${ph === 'receiving' || ph === 'planned' ? 'receiving' : 'decant'}" role="link" tabindex="0"><b>${tx('Truck {n}', { n })}</b><span class="status ${tag[0]}">${tag[1]}</span>${t.from ? fromTag(plan, t.from) : ''}${list}<em>${go}</em></div>`;
     }
     const nc = sl.manifest ? (sl.manifest.ref ? sl.manifest.n : (sl.manifest.consols || []).length) : 0, crew = (sl.team || []).length;
     const open = act ? ` data-act="phase-newtruck" data-n="${n}" role="button" tabindex="0"` : ` data-view="receiving" role="link" tabindex="0"`;
-    return `<div class="db-c planned"${open}><b>${tx('Truck {n}', { n })}</b><span class="status">${tx('Planned')}</span><small>${sl.eta ? tx('start {time}', { time: esc(sl.eta) }) : tx('no start time')}${sl.huddleMins ? ' · ' + tx('huddle {n}m', { n: sl.huddleMins }) : ''} · ${tx('waiting on Receiving')}</small><small>${sl.manifest ? `${txn(nc, '{n} consol', '{n} consols')} · ${esc(sl.manifest.manNo)}` : tx('no manifest yet')} · ${tx('{n} on the team', { n: crew })}</small><em>${act ? tx('Tap when it lands →') : tx('Open Receiving →')}</em></div>`;
+    return `<div class="db-c planned"${open}><b>${tx('Truck {n}', { n })}</b><span class="status">${tx('Planned')}</span>${sl.from ? fromTag(plan, sl.from) : ''}<small>${sl.eta ? tx('start {time}', { time: esc(sl.eta) }) : tx('no start time')}${sl.huddleMins ? ' · ' + tx('huddle {n}m', { n: sl.huddleMins }) : ''} · ${tx('waiting on Receiving')}</small><small>${sl.manifest ? `${txn(nc, '{n} consol', '{n} consols')} · ${esc(sl.manifest.manNo)}` : tx('no manifest yet')} · ${tx('{n} on the team', { n: crew })}</small><em>${act ? tx('Tap when it lands →') : tx('Open Receiving →')}</em></div>`;
   };
-  return `<div class="card db"><div class="ch"><h3>${tx('Today’s decants')}</h3><span class="cs-dim">${nums.size}</span></div><div class="db-grid">${[...nums].sort((a, b) => a - b).map(card).join('')}</div></div>`;
+  return `<div class="card db"><div class="ch"><h3>${tx('Today’s decants')}</h3><span class="cs-dim">${nums.size}</span></div><div class="db-grid">${[...nums].sort((a, b) => a - b).map(card).join('')}</div>${landRows}</div>`;
 }

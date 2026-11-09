@@ -36,7 +36,7 @@ export const TOOLS = [
   T('manifests', 'backdock', 'Manifests', ['manifests'], ['manifest.publish', 'manifest.remove', 'manifest.day']),
   T('inventory', 'backdock', 'Off-site pallets and other loads', ['offsite'], ['inventory.']),   // the Inventory hub's id, kept so a store's switch carries over
   T('profiles', 'backdock', 'Carton profiles', ['profiles']),
-  T('planner', 'backdock', 'Planner', ['planner'], ['plan.set', 'plan.remove', 'plan.noTrucks']),
+  T('planner', 'backdock', 'Planner', ['planner'], ['plan.set', 'plan.remove', 'plan.noTrucks', 'plan.route']),
   T('rhistory', 'backdock', 'Receiving history', ['rhistory']),
   T('boards', 'backdock', 'Wallboard and analytics', ['wallboard', 'danalytics']),
   // Store-wide: the owner's library of files and links for the managers (no events: the registry keeps it).

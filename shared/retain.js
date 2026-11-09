@@ -68,7 +68,8 @@ export function retain(s, day) {
     if (d < d14 && !t.trimmed && t.manifest?.consols) { for (const c of t.manifest.consols) c.items = []; t.trimmed = true; n('trucksTrimmed'); }
   }
   if ((s.dock?.history || []).length > KEEP_DOCK_HISTORY) { done.dockHistory = s.dock.history.length - KEEP_DOCK_HISTORY; s.dock.history.splice(0, done.dockHistory); }
-  for (const d of Object.keys(s.plan?.days || {})) if (d < d60) { delete s.plan.days[d]; n('planDays'); }
+  // A day whose truck went off-site stays while it is still to land here (plan.route's lands).
+  for (const [d, day] of Object.entries(s.plan?.days || {})) if (d < d60 && !Object.values(day.routes || {}).some(r => r.lands && r.lands >= d60)) { delete s.plan.days[d]; n('planDays'); }
   // The consolidation ledger keeps 60 days of sightings, pruned here once a
   // day rather than on every consolidation recorded.
   const L = s.dock?.ledger || {};
