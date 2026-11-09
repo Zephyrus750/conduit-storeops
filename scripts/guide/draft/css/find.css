@@ -1,0 +1,153 @@
+/* Find a shelf on a phone (scripts/guide/draft/chapters/find.js): the
+   floor phone's Home, the store map, in the colours of styles/shell.css and
+   styles/app.css (.mv-map, .mv-mtools, .mcrumb, .mv-strip, .mv-sel and
+   .sx-*, #sdd, the shared sheet, js/scan.js's camera). */
+
+/* The map card (.mv-map), the crumb over it and the map tools. */
+.fd-mv { position: relative; flex: 1; min-height: 0; border: 1px solid #E5E7EB; border-radius: 18px; overflow: hidden; background: #fff; }
+.fd-map, .fd-map > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.fd-svg .fd-lm { fill: #1F2937; fill-opacity: .82; }
+.fd-svg .fd-l { font: 700 8px/1 Inter, system-ui, sans-serif; fill: #fff; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.fd-svg .fd-l.s { font-size: 6px; font-weight: 600; opacity: .92; }
+.fd-svg .fd-l.b { font-weight: 800; }
+.fd-svg .fd-b { font: 800 24px/1 Inter, system-ui, sans-serif; fill: #fff; text-anchor: middle; dominant-baseline: central; letter-spacing: .01em; pointer-events: none; }
+.fd-svg .fd-b.dk { fill: #1a1a2e; }
+.fd-svg .fd-pb { font: 800 16px/1 Inter, system-ui, sans-serif; fill: #fff; text-anchor: middle; dominant-baseline: central; }
+.fd-svg .fd-pl { font: 700 22px/1 Inter, system-ui, sans-serif; text-anchor: middle; dominant-baseline: central; }
+.fd-crumb { position: absolute; left: 10px; top: 10px; max-width: calc(100% - 20px); display: flex; align-items: center; gap: 5px; background: #fff; border: 1px solid #E5E7EB; border-radius: 999px; padding: 4px 11px 4px 8px; font-size: 12.5px; font-weight: 600; color: #4B5563; white-space: nowrap; box-shadow: 0 4px 12px -6px rgba(0, 0, 0, .3); }
+.fd-crumb svg.i { width: 15px; height: 15px; color: #6B7280; }
+.fd-crumb .fd-ca, .fd-crumb .fd-cd { display: inline-flex; align-items: center; gap: 5px; }
+.fd-crumb .fd-cs { font-style: normal; color: #9CA3AF; font-size: 14px; }
+.fd-crumb b { color: #111827; font-weight: 800; }
+.fd-crumb .fd-cg { color: #374151; }
+.fd-dep { display: inline-block; flex: none; font-size: 11.5px; font-weight: 800; line-height: 1.2; border-radius: 5px; padding: 2px 6px; }
+.fd-tools { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .35); z-index: 2; }
+.fd-tools span { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #374151; }
+.fd-tools span.scan { background: #0E7CA8; color: #fff; }
+.fd-tools svg.i { width: 19px; height: 19px; }
+
+/* The search bar: typing (amber ring) and listening (the red microphone). */
+#fd .p2-search.fd-on { border-color: #F59E0B; box-shadow: 0 0 0 1px #F59E0B; }
+#fd .p2-search .fd-q { color: #F3F4F6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#fd .p2-search .fd-q.fd-ph { color: #9CA3AF; }
+#fd .p2-search.fd-mic > svg:last-of-type { color: #fff; background: #DC2626; border-radius: 50%; box-shadow: 0 0 0 7px #DC2626; overflow: visible; }
+/* Its list (#sdd), under the bar. */
+.fd-dd { position: absolute; left: 10px; right: 104px; top: 60px; z-index: 25; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .4); }
+.fd-r2 { display: flex; align-items: center; gap: 8px; height: 39px; padding: 0 10px 0 12px; border-top: 1px solid #EEF0F3; font-size: 13px; }
+.fd-r2:first-child { border-top: 0; }
+.fd-r2.on { background: #E6F1F7; }
+.fd-r2 > i { flex: none; width: 9px; height: 9px; border-radius: 50%; }
+.fd-r2 > b { flex: none; font-size: 14.5px; font-weight: 800; color: #111827; white-space: nowrap; }
+.fd-r2 > b em { font-style: normal; color: #0B6183; }
+.fd-r2 > span:not(.fd-dep) { flex: 1; min-width: 0; color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The strip above the tabs (.mv-strip) and the shell's arrow. */
+#fd .p2-strip { height: 58px; padding: 0 8px 0 16px; gap: 8px; border-top: 1px solid rgba(255, 255, 255, .08); border-bottom: 0; }
+.fd-st { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; }
+.fd-st > svg.i { width: 20px; height: 20px; color: #5CC4EA; }
+.fd-st > b { font-size: 17px; font-weight: 800; white-space: nowrap; }
+.fd-st > b span { font-weight: 400; }
+.fd-sp { flex: 1; }
+.fd-ss { flex: 1; min-width: 0; color: #9CA3AF; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fd-act { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; background: #1F2937; border: 1px solid #2B3648; border-radius: 10px; font-size: 14px; font-weight: 700; color: #F3F4F6; white-space: nowrap; }
+.fd-act svg.i { width: 17px; height: 17px; color: #5CC4EA; }
+.fd-act.ic { width: 36px; padding: 0; justify-content: center; }
+.fd-tog { flex: none; width: 38px; height: 38px; border-radius: 12px; background: #1F2937; color: #E5E7EB; display: grid; place-items: center; }
+
+/* The panel (.mv-sel), a dark sheet over the bottom of the map. */
+.fd-panel { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; overflow: hidden; background: #111827; color: #F3F4F6; border-radius: 20px 20px 0 0; padding: 22px 16px 15px; box-shadow: 0 -16px 40px -12px rgba(17, 24, 39, .45); }
+.fd-panel::before { content: ""; position: absolute; top: 8px; left: 50%; width: 38px; height: 4px; margin-left: -19px; border-radius: 4px; background: #374151; }
+.fd-panel.emp { padding: 22px 16px 16px; }
+.fd-ar { display: flex; align-items: center; gap: 6px; line-height: 16px; font-size: 12.5px; font-weight: 700; color: #9CA3AF; }
+.fd-ar svg.i { width: 15px; height: 15px; }
+.fd-dn { display: flex; align-items: center; gap: 6px; margin-top: 3px; line-height: 20px; font-size: 15px; font-weight: 800; }
+.fd-big { margin-top: 3px; font-size: 31px; line-height: 38px; font-weight: 400; letter-spacing: -.02em; }
+.fd-big b { font-weight: 800; }
+.fd-sub { margin-top: 1px; line-height: 18px; font-size: 13px; color: #9CA3AF; }
+.fd-sl { margin: 14px 0 7px; line-height: 13px; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; }
+.fd-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fd-facts > div { background: #1A2333; border-radius: 10px; padding: 6px 10px; }
+.fd-facts small { display: block; line-height: 12px; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; }
+.fd-facts b { display: block; line-height: 17px; font-size: 13.5px; }
+.fd-rows { background: #1A2333; border-radius: 12px; overflow: hidden; }
+.fd-r { display: flex; align-items: center; gap: 12px; padding: 7px 12px; border-top: 1px solid #222C3D; }
+.fd-r:first-child { border-top: 0; }
+.fd-r > svg.i { color: #9CA3AF; }
+.fd-r .k { flex: 1; min-width: 0; }
+.fd-r .k b { display: block; line-height: 17px; font-size: 13.5px; }
+.fd-r .k span { display: block; line-height: 16px; font-size: 12.5px; color: #9CA3AF; }
+.fd-r .v { font-size: 12.5px; font-weight: 800; color: #6B7280; }
+.fd-acts { margin-top: 15px; overflow: hidden; }
+.fd-row { display: flex; gap: 8px; width: max-content; transition: transform .4s ease; }
+.fd-acts.sc .fd-row { transform: translateX(calc(358px - 100%)); }
+.fd-b2 { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 10px; background: #1F2937; border: 1px solid #2B3648; font-size: 13px; font-weight: 700; color: #F3F4F6; white-space: nowrap; }
+.fd-b2 svg.i { width: 16px; height: 16px; }
+.fd-b2.pri { background: #0E7CA8; border-color: #0E7CA8; }
+/* With nothing picked: the ways to find a shelf (.mvs-empty). */
+.fd-eh { display: flex; align-items: center; gap: 10px; }
+.fd-ei { flex: none; width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: #0E7CA8; }
+.fd-ei svg.i { width: 19px; height: 19px; color: #fff; }
+.fd-eh b { display: block; font-size: 15px; font-weight: 800; }
+.fd-eh small { display: block; font-size: 12.5px; color: #9CA3AF; }
+.fd-ebs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; }
+.fd-eb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 66px; padding: 7px 4px; border-radius: 14px; border: 1px solid #263145; background: #1A2333; font-size: 12px; font-weight: 700; }
+.fd-eb .d { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: rgba(14, 124, 168, .24); }
+.fd-eb .d svg.i { width: 18px; height: 18px; color: #3BA6D2; }
+
+/* The shared sheet on a phone: Share, and the Departments picker. */
+.fd-shh { display: flex; align-items: flex-start; gap: 10px; padding: 8px 14px 12px 18px; border-bottom: 1px solid #E5E7EB; }
+.fd-shh > div { flex: 1; min-width: 0; }
+.fd-shh b { flex: 1; display: block; font-size: 19px; font-weight: 800; line-height: 40px; }
+.fd-shh > div b { line-height: 1.3; }
+.fd-shh small { display: block; font-size: 14px; color: #6B7280; margin-top: 2px; }
+.fd-x { flex: none; width: 40px; height: 40px; border: 1px solid #E5E7EB; border-radius: 12px; display: grid; place-items: center; color: #374151; }
+.fd-x.g { border-color: #F3F4F6; background: #F3F4F6; }
+.fd-shb { padding: 16px 16px 12px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.fd-qr { width: 228px; padding: 18px; border: 1px solid #E5E7EB; border-radius: 12px; }
+.fd-qr svg { display: block; width: 100%; height: auto; }
+.fd-shb p { margin: 0; font-size: 14px; line-height: 1.4; color: #5B6472; align-self: stretch; }
+.fd-url { align-self: stretch; font: 500 13px/1.3 var(--vg-mono); color: #4B5563; background: #F3F4F6; border-radius: 8px; padding: 9px 10px; }
+.fd-shf { padding: 12px 16px 16px; border-top: 1px solid #E5E7EB; }
+.fd-pri { display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 12px; background: #0E7CA8; color: #fff; font-size: 16px; font-weight: 700; }
+.fd-mb { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.fd-mall { display: flex; align-items: center; gap: 12px; border: 1px solid #E5E7EB; border-radius: 14px; padding: 10px 14px; }
+.fd-mall svg.i { width: 20px; height: 20px; color: #374151; }
+.fd-mall b { display: block; font-size: 16px; font-weight: 800; }
+.fd-mall small { display: block; font-size: 13.5px; color: #6B7280; }
+.fd-mrow { display: grid; grid-template-columns: 78px repeat(4, minmax(0, 1fr)); gap: 6px; }
+.fd-ma { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 9px 8px; border: 1.5px solid #0E7CA8; background: #E6F1F7; border-radius: 14px; }
+.fd-ma svg.i { width: 21px; height: 21px; color: #0E7CA8; margin-bottom: 6px; }
+.fd-ma b { font-size: 14px; font-weight: 800; }
+.fd-ma span { font-size: 11.5px; color: #4B5563; }
+.fd-mt { display: flex; flex-direction: column; gap: 3px; min-height: 78px; padding: 7px 7px 8px; border: 1px solid #E5E7EB; border-radius: 14px; overflow: hidden; }
+.fd-mt i { height: 5px; border-radius: 3px; }
+.fd-mt b { font-size: 19px; font-weight: 800; margin-top: 4px; }
+.fd-mt span { font-size: 10.5px; line-height: 1.2; color: #4B5563; margin-top: auto; }
+.fd-mos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fd-mo { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 9px 6px; border: 1px solid #E5E7EB; border-radius: 14px; }
+.fd-mo .oi { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; }
+.fd-mo b { font-size: 13.5px; font-weight: 800; }
+
+/* The camera (js/scan.js, one code): a shelf edge and its label. */
+.fd-cam { position: absolute; inset: 0; z-index: 30; background: #000; display: flex; flex-direction: column; }
+.fd-cam[hidden] { display: none; }
+.fd-camt { display: flex; align-items: center; gap: 10px; padding: 16px 12px 12px 16px; color: #fff; }
+.fd-camt b { flex: 1; font-size: 16px; font-weight: 800; }
+.fd-camt span { width: 44px; height: 44px; border: 1px solid #374151; border-radius: 12px; background: #161616; display: grid; place-items: center; }
+.fd-camv { flex: 1; position: relative; overflow: hidden; background: linear-gradient(rgba(20, 24, 32, .35), rgba(20, 24, 32, .35)), repeating-linear-gradient(90deg, #9C7F66 0 46px, #6E8091 46px 92px, #B39B80 92px 132px, #7F8E79 132px 180px, #8C6F7A 180px 224px); }
+.fd-edge { position: absolute; left: 0; right: 0; top: 43%; height: 78px; background: #E4E7EB; border-top: 3px solid #C7CCD3; border-bottom: 3px solid #B9BFC8; display: grid; place-items: center; }
+.fd-tag { width: 210px; background: #fff; border-radius: 3px; padding: 7px 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
+.fd-tag svg { width: 100%; height: 40px; display: block; }
+.fd-tag b { font: 700 13px/1 var(--vg-mono); color: #111; letter-spacing: .08em; }
+.fd-aim { position: absolute; left: 50%; top: 50%; width: 312px; height: 200px; transform: translate(-50%, -50%); border: 2px solid rgba(255, 255, 255, .9); border-radius: 16px; transition: border-color .2s, background .2s; }
+.fd-cam.hit .fd-aim { border-color: #22C55E; background: rgba(34, 197, 94, .2); }
+.fd-hint { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; color: #fff; font-size: 14px; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+.fd-camf { display: flex; gap: 8px; padding: 10px 12px 14px; background: #111; }
+.fd-camf span:first-child { flex: 1; height: 44px; border: 1px solid #374151; border-radius: 12px; color: #6B7280; display: flex; align-items: center; padding: 0 12px; font-size: 15px; }
+.fd-camf span:last-child { width: 44px; height: 44px; border: 1px solid #374151; border-radius: 12px; display: grid; place-items: center; color: #fff; }
+
+/* The toast over the map, as the app shows it in a map mode (#toasts). */
+#fd .p2 > .dv-toast { top: auto; bottom: 146px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 351px; white-space: normal; text-align: left; background: #111827; color: #fff; font-size: 13.5px; font-weight: 400; line-height: 1.35; padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; gap: 14px; z-index: 40; box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .45); }
+#fd .p2 > .dv-toast[hidden] { display: none; }
+#fd .p2 > .dv-toast u { flex: none; font-weight: 700; color: #fff; }
+#fd .p2 > .dv-toast.bad { background: #DC2626; }

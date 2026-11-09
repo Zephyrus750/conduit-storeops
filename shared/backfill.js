@@ -61,6 +61,14 @@ export function reportApns(text) {
   for (const r of Object.values(parseReport(text).items)) for (const a of r.apns || []) if (/^\d{12,14}$/.test(a)) out[a] = r.kc;
   return out;
 }
+// The report's descriptions, by keycode: the store system's own words for
+// each item (with its colour), kept by the store's description book so an
+// item gone from kmart.com.au still has words to show (Live pull).
+export function reportDescs(text) {
+  const out = {};
+  for (const [kc, r] of Object.entries(parseReportLines(text))) if (r.desc) out[kc] = r.desc;
+  return out;
+}
 export function parseReportLines(text) {
   const out = {};
   for (const r of Object.values(parseReport(text).items)) out[r.kc] = { soh: r.soh, price: r.price, desc: r.desc || '' };

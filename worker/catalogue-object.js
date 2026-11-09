@@ -49,6 +49,10 @@ export class CatalogueObject extends DurableObject {
       CREATE TABLE IF NOT EXISTS pictures (kc TEXT PRIMARY KEY, img TEXT NOT NULL, at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS barcodes (gtin TEXT PRIMARY KEY, kc TEXT NOT NULL, at INTEGER NOT NULL);
     `);
+    // Barcodes kept before the one-barcode rule (pageGtins, 8 Nov 2026) may
+    // file a related product's barcode against the page's item: dropped
+    // once, and collected again as product pages are read.
+    if (this.get('barcodeRule') !== 2) { this.sql.exec('DELETE FROM barcodes'); this.put('barcodeRule', 2); }
     // The weekly read is an alarm; a new object (or one woken after a
     // deploy) schedules it. It never starts a build by itself on creation:
     // the owner's "Rebuild now" or the weekly slot does.

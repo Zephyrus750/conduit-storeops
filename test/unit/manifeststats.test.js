@@ -4,6 +4,7 @@ import { initialState, apply } from '../../shared/reducers.js';
 import { CATALOGUE } from '../../shared/catalogue.js';
 import { ulid } from '../../shared/ulid.js';
 import { manSummary, placeIndex, despatchDay, usualGap, suggestPlace, manifestStats } from '../../shared/manifeststats.js';
+import { routesOn, routeOfManifest, landingOn, broughtBy } from '../../shared/dockroutes.js';
 
 const ev = (type, entity, payload = {}, when = '2026-10-20T08:00', role = 'dock') => ({ id: ulid(), store: '1241', area: CATALOGUE[type].area, type, entity, payload, actor: { role, device: 'DK1', owner: false }, at: when + ':00+08:00', v: 1 });
 const ok = (s, ...a) => assert.equal(apply(s, ev(...a)), null, a[0]);
@@ -122,4 +123,26 @@ test('despatchDay: a day or month written with one digit reads the same', () => 
   assert.equal(despatchDay('05/09/2026'), '2026-09-05');
   assert.equal(despatchDay('2026-09-05T08:00'), '2026-09-05');
   assert.equal(despatchDay('Sept 5'), null);
+});
+
+test('a truck that went off-site or was diverted: its report counts on the day it lands, or apart, never as received', () => {
+  const s = initialState(), sums = [manSummary(doc('M1', '19/10/2026', [consol(1, 52, [{ k: '43307685', q: 10, dept: '024' }])])), manSummary(doc('M2', '19/10/2026', [consol(2, 38, [])])), manSummary(doc('M3', '19/10/2026', [consol(3, 20, [])]))];
+  ok(s, 'manifest.day', { manNo: 'M1' }, { day: '2026-10-20', truck: 1 });
+  ok(s, 'plan.route', { date: '2026-10-20', slot: 1 }, { route: 'offsite', lands: '2026-10-26' }, '2026-10-20T08:00', 'manager');
+  ok(s, 'plan.route', { date: '2026-10-20', slot: 2 }, { route: 'diverted', to: '1187', manNo: 'M2' }, '2026-10-20T08:00', 'manager');
+  ok(s, 'manifest.day', { manNo: 'M3' }, { day: '2026-10-20', truck: 3 });
+  const p = placeIndex(s);
+  assert.deepEqual([p.get('M1').via, p.get('M1').day, p.get('M1').away], ['route', '2026-10-26', false], 'a label on a routed truck lands on its callback day');
+  assert.deepEqual([p.get('M2').via, p.get('M2').day, p.get('M2').away, p.get('M2').route], ['route', '2026-10-20', true, 'diverted']);
+  const st = manifestStats(sums, s, { from: '2026-10-19', to: '2026-10-25' });
+  assert.equal(st.totals.manifests, 1, 'only M3 came in that week'); assert.equal(st.totals.cartons, 20);
+  assert.deepEqual(st.away.diverted, { manifests: 1, cartons: 38 }); assert.deepEqual(st.away.offsite, { manifests: 0, cartons: 0 }, 'M1 has a day: it counts there');
+  assert.equal(manifestStats(sums, s, { from: '2026-10-26', to: '2026-11-01' }).totals.cartons, 52, 'M1 on the day it lands');
+  assert.notEqual(suggestPlace(s, { despatch: '19/10/2026' }, undefined, { gap: 1, places: new Map() })?.truck, 1, 'a routed truck is no free number');
+  assert.deepEqual(routesOn(s.plan, '2026-10-20').map(([n]) => n), [1, 2]);
+  assert.equal(routeOfManifest(s.plan, 'M2').n, 2);
+  assert.deepEqual(landingOn(s.plan, '2026-10-26').map(x => x.n), [1]);
+  assert.equal(broughtBy(s.plan, s.dock, { date: '2026-10-20', slot: 1 }), null);
+  ok(s, 'plan.set', { date: '2026-10-26', slot: 2 }, { from: { date: '2026-10-20', slot: 1 } });
+  assert.equal(broughtBy(s.plan, s.dock, { date: '2026-10-20', slot: 1 }), '2026-10-26-T2');
 });

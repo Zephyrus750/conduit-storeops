@@ -31,6 +31,8 @@ import { statsPane, loadStats, statsHeat } from './mstats.js';
 import { toolOff } from '../../../shared/tools.js';
 import { tx, txn, locale } from '../../i18n.js';
 import { ask } from '../../sheet.js';
+import { routeManifest } from '../../../shared/dockroutes.js';
+import { routeSheet, routeTag, routeLine, isMgr } from './routes.js';
 
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { open: null, doc: null, docFor: null, error: null, q: '', tab: 'consols', sort: null, dir: -1, group: null, expanded: {}, load: null, paint: null, stage: null,
@@ -39,7 +41,7 @@ const chip = microChip;
 // Home, Clothing, Kids and Flex are department names: they stay as the store writes them.
 const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'Kids', '#F59E0B'], ['flex', 'Flex', '#64748B']];
 const groupOf = code => { const d = microDept(code); return !d ? '?' : d === 'flex' ? 'flex' : d[0]; };
-const STATUS = { done: [tx('Done'), 'good'], decanting: [tx('Decanting'), 'warn'], received: [tx('Received'), ''], receiving: [tx('Receiving'), ''], planned: [tx('Planned'), ''], arrived: [tx('Came in'), ''], library: [tx('Published'), ''] };
+const STATUS = { done: [tx('Done'), 'good'], decanting: [tx('Decanting'), 'warn'], received: [tx('Received'), ''], receiving: [tx('Receiving'), ''], planned: [tx('Planned'), ''], arrived: [tx('Came in'), ''], library: [tx('Published'), ''], offsite: [tx('Off-site'), 'warn'], diverted: [tx('Diverted'), ''] };
 // A manifest on a truck here stands where its truck does (shared/dockphase.js):
 // a truck not started yet is Planned; a cleared one is still decanting until it is closed.
 const BY_PHASE = { planned: 'planned', receiving: 'receiving', received: 'received', decanting: 'decanting', cleared: 'decanting', closed: 'done' };
@@ -63,6 +65,8 @@ function entries(ctx) {
   for (const [date, day] of Object.entries(plan.days || {})) for (const [slot, sl] of Object.entries(day.slots || {})) if (sl.manifest?.manNo) { const cur = by.get(sl.manifest.manNo); put(sl.manifest.manNo, { eta: sl.eta || '', despatch: cur?.despatch || sl.manifest.despatch || '', consols: cur?.consols ?? (sl.manifest.ref ? sl.manifest.n : sl.manifest.consols?.length || 0), totalCartons: cur?.totalCartons ?? sl.manifest.cartons }); }
   for (const r of dock.history || []) if (r.manifest?.manNo) { const cur = by.get(r.manifest.manNo); put(r.manifest.manNo, { despatch: cur?.despatch || r.manifest.despatch || '' }); }
   for (const t of Object.values(dock.trucks || {})) if (t.manifest?.manNo) put(t.manifest.manNo, { despatch: t.manifest.despatch || '', consols: t.manifest.consols.length, totalCartons: t.manifest.consols.reduce((n, c) => n + c.cartons, 0) });
+  // Trucks that went off-site or were diverted keep their manifest in the list, tagged.
+  for (const day of Object.values(plan.days || {})) for (const r of Object.values(day.routes || {})) { const no = routeManifest(r), m = r.slot?.manifest; if (no) { const cur = by.get(no); put(no, { despatch: cur?.despatch || m?.despatch || '', consols: cur?.consols ?? (m ? (m.ref ? m.n : m.consols?.length || 0) : undefined), totalCartons: cur?.totalCartons ?? m?.cartons }); } }
   const places = placeIndex({ dock, plan });
   for (const x of by.values()) {
     const p = places.get(x.manNo);
@@ -72,6 +76,8 @@ function entries(ctx) {
     if (p.via === 'truck') { x.truck = id; x.status = BY_PHASE[truckPhase(dock.trucks[id])]; }
     else if (p.via === 'history' || p.via === 'index') { x.truck = id; x.status = 'done'; }
     else if (p.via === 'plan') { x.slot = p.truck; x.status = 'planned'; }
+    // Off-site or diverted: listed on the day it was due, with its route, until a truck here carries it.
+    else if (p.via === 'route') { Object.assign(x, { day: p.from, n: p.fromTruck, rt: plan.days[p.from]?.routes?.[p.fromTruck] || null }); x.status = p.route === 'offsite' ? 'offsite' : 'diverted'; }
     else x.status = p.day <= d0 ? 'arrived' : 'planned';
   }
   return [...by.values()];
@@ -111,7 +117,7 @@ function listRow(x) {
   const status = x.status === 'planned' && x.eta ? tx('Planned · {time}', { time: esc(x.eta) }) : label;
   const meta = x.despatch ? tx('despatched {date}', { date: esc(despatchText(x.despatch)) }) : !x.day && x.publishedAt ? tx('published {date}', { date: esc(fmtDate(x.publishedAt.slice(0, 10))) }) : '';
   return `<div class="mfl-row tk${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}">${dayTile(x.day)}` +
-    `<span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b>${x.n ? `<span class="mfl-tn">${ic('truck')}${tx('Truck {no}', { no: x.n })}</span>` : ''}<span class="status ${cls}">${status}</span></span>` +
+    `<span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b>${x.n ? `<span class="mfl-tn">${ic('truck')}${tx('Truck {no}', { no: x.n })}</span>` : ''}${x.rt ? routeTag(x.rt) : `<span class="status ${cls}">${status}</span>`}</span>` +
     `<span class="mfl-fig"><span>${tx('<b>{n}</b> ctn', { n: x.totalCartons ?? '–' })}</span><span>${tx('<b>{n}</b> consols', { n: x.consols ?? '–' })}</span><span class="mfl-meta">${meta}</span></span></span>${ic('chev')}</div>`;
 }
 
@@ -203,7 +209,7 @@ function explorer(ctx, e, doc) {
   const tip = e?.truck
     ? tx('{cartons} cartons × {mpc} min a carton = {work} minutes of decanting for one person (Minutes per carton in Settings › Store settings, as this truck took it). Split it across the team: four people ≈ {share}.', { cartons: cartons.toLocaleString(), mpc, work: work.toLocaleString(), share })
     : tx('{cartons} cartons × {mpc} min a carton = {work} minutes of decanting for one person (Minutes per carton in Settings › Store settings). Split it across the team: four people ≈ {share}.', { cartons: cartons.toLocaleString(), mpc, work: work.toLocaleString(), share });
-  return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>${tx('despatch <b>{date}</b>', { date: esc(doc.despatch || '—') })}</span><span>${tx('DC <b>{no}</b>', { no: esc(doc.dcNo || '—') })}</span>${attachedTo ? `<span>${esc(dayName(e.day))}</span><span>${truckFact}</span>` : e?.slot ? `<span>${tx('Planned for Truck <b>{no}</b> · {day}', { no: esc(String(e.slot)), day: esc(dayName(e.day)) })}${e.eta ? ' · ' + tx('due {time}', { time: esc(e.eta) }) : ''}</span>` : e?.via === 'label' ? `<span>${e.n ? tx('Came on Truck <b>{no}</b> · {day}', { no: e.n, day: esc(dayName(e.day)) }) : tx('Came on {day}', { day: esc(fmtDay(e.day)) })}</span>` : ''}</span></div>` + (attachedTo ? '' : cameOn(ctx, e)) +
+  return `<div class="card mfd mfx"><div class="mfd-h"><span class="mfd-t">${ic('packages')}<b>${esc(doc.manNo)}</b>${e ? `<span class="status ${STATUS[e.status][1]}">${STATUS[e.status][0]}</span>` : ''}</span><span class="mfd-facts"><span>${tx('despatch <b>{date}</b>', { date: esc(doc.despatch || '—') })}</span><span>${tx('DC <b>{no}</b>', { no: esc(doc.dcNo || '—') })}</span>${attachedTo ? `<span>${esc(dayName(e.day))}</span><span>${truckFact}</span>` : e?.slot ? `<span>${tx('Planned for Truck <b>{no}</b> · {day}', { no: esc(String(e.slot)), day: esc(dayName(e.day)) })}${e.eta ? ' · ' + tx('due {time}', { time: esc(e.eta) }) : ''}</span>` : e?.via === 'label' ? `<span>${e.n ? tx('Came on Truck <b>{no}</b> · {day}', { no: e.n, day: esc(dayName(e.day)) }) : tx('Came on {day}', { day: esc(fmtDay(e.day)) })}</span>` : e?.rt ? `<span>${tx('For Truck <b>{no}</b> · {day}', { no: e.n, day: esc(dayName(e.day)) })}</span>` : ''}</span></div>` + (attachedTo ? '' : e?.rt ? '' : cameOn(ctx, e)) + (attachedTo ? '' : whereBar(ctx, e)) +
     `<div class="ps-facts mfx-stats">${stat(tx('Consols'), doc.consols.length)}${stat(tx('Cartons'), cartons.toLocaleString())}${stat(tx('Keycodes'), keycodes.toLocaleString())}${stat(tx('Units'), allUnits.toLocaleString())}${stat(tx('Est. work'), tx('{h}h {m}m', { h: Math.floor(work / 60), m: String(work % 60).padStart(2, '0') }), tip, tx('{mpc} min/ctn · one person', { mpc }))}</div>` + roll +
     `<div class="mfd-acts">${attachedTo ? `<span class="status good">${tx('On Truck {no}', { no: esc(truckNo(attachedTo)) })}</span>` : trucks.length ? `<select class="ad-in" data-field="truck">${trucks.map(t => `<option value="${esc(t.id)}">${tx('Truck {no} · {status}', { no: esc(truckNo(t.id)), status: esc(TRUCK_ST[t.status] || t.status) })}</option>`).join('')}</select><button class="btn primary sm" data-act="attach">${ic('truck')}${tx('Attach to truck')}</button>` : `<span class="cs-dim">${tx('No truck on the board to attach to')}</span>`}<button class="btn sm" data-act="remove" style="margin-left:auto">${ic('trash')}${tx('Remove')}</button></div>` +
     `<div class="mfx-bar"><div class="seg">${[['consols', tx('Consols')], ['products', tx('Products')], ['depts', tx('Departments')]].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="${tx('find consol, keycode, product, dept…')}" aria-label="${tx('Search this manifest')}"></div>${st.tab === 'depts' ? `<button class="btn sm${st.paint?.mode === 'heat' ? ' on' : ''}" data-act="heat">${ic('layers')}${tx('Whole load heat')}</button>` : ''}<span class="mfd-hit">${st.tab === 'depts' ? txn(list.length, '{n} department', '{n} departments') : st.tab === 'products' ? txn(list.length, '{n} product', '{n} products') : txn(list.length, '{n} consol', '{n} consols')}</span></div>` +
@@ -224,6 +230,17 @@ function cameOn(ctx, e) {
   const why = cur ? tx('Set by hand: the list and the stats place it here.') : sg ? (sg.via === 'plan' ? tx('Suggested from the Planner: a truck that had no manifest. Save to keep it.') : txn(usualGap(s), 'Suggested from the despatch date plus {n} day. Save to keep it.', 'Suggested from the despatch date plus {n} days. Save to keep it.'))
     : e.via === 'plan' ? tx('Staged on the Planner. If it came another day, set that here.') : tx('Pick the day it came and its truck.');
   return `<div class="mfd-came"><span class="mfd-cl">${ic('cal')}${tx('Came on')}</span><input type="date" class="ad-in" data-field="came-day" value="${esc(day)}" max="${esc(today())}" aria-label="${tx('Day it came')}"><select class="ad-in" data-field="came-tn" aria-label="${tx('Truck')}"><option value="">${tx('Truck —')}</option>${[1, 2, 3, 4].map(k => `<option value="${k}"${n === k ? ' selected' : ''}>${tx('Truck {no}', { no: k })}</option>`).join('')}</select><button class="btn sm${cur ? '' : ' primary'}" data-act="came-save">${ic('check')}${tx('Save')}</button>${cur ? `<button class="btn sm" data-act="came-clear">${tx('Clear')}</button>` : ''}<small class="cs-dim">${why}</small></div>`;
+}
+
+// Where it goes, beside the day and truck: Receive here, or a truck marked
+// off-site or diverted (plan.route), with the day it lands here after all.
+// Managers change it; a report needs its day and truck first.
+function whereBar(ctx, e) {
+  if (!e) return '';
+  const mgr = isMgr(ctx), btn = (label, icon) => mgr ? `<button class="btn sm" data-act="route" data-date="${esc(e.day)}" data-n="${e.n}">${ic(icon)}${label}</button>` : '';
+  if (e.rt) return `<div class="mfd-came mfd-where ${esc(e.rt.route)}"><span class="mfd-cl">${ic(e.rt.route === 'offsite' ? 'stack' : 'route')}${tx('Where it goes')}</span>${routeTag(e.rt)}<small class="cs-dim">${routeLine(e.rt)}</small>${btn(tx('Change'), 'edit')}</div>`;
+  if (!mgr || !e.day || !e.n || e.n > 4) return '';
+  return `<div class="mfd-came mfd-where"><span class="mfd-cl">${ic('truck')}${tx('Where it goes')}</span><span class="status good">${tx('Receive here')}</span>${btn(tx('Off-site or diverted…'), 'route')}</div>`;
 }
 
 function detail(ctx, list) {
@@ -301,6 +318,7 @@ export default {
           // The date alone: "Yesterday · …" heads a line and does not sit inside a sentence.
           toast(day ? tx('{man}: came on {day}', { man: st.open, day: fmtDay(day) + (tn ? ' · ' + tx('Truck {no}', { no: tn }) : '') }) : tx('{man}: day cleared', { man: st.open }));
         }
+        else if (act === 'route') { await routeSheet(ctx, { date: a.dataset.date, n: Number(a.dataset.n), manNo: st.open }); }
         else if (act === 'open-load') { st.load = a.dataset.id; st.paint = null; ctx.rerender(); }
         else if (act === 'toggle') { st.expanded[a.dataset.id] = !st.expanded[a.dataset.id]; ctx.rerender(); }
         else if (act === 'tab') { st.tab = a.dataset.tab; st.sort = null; st.paint = null; ctx.rerender(); }

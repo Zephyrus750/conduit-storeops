@@ -264,7 +264,10 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
     closed = false;
     if (!WebSocketImpl) return startPolling();
     if (ws || opening) return;                 // one socket: a second call while the token is fetched waits its turn
-    setStatus({ state: 'connecting' });
+    // A device the browser knows is offline still tries, but says Offline
+    // throughout: the pill used to flash Sending at every try (and when the
+    // app opened offline) until the socket failed.
+    setStatus({ state: online() ? 'connecting' : 'offline' });
     opening = true;
     let token; try { token = await session.token(); } finally { opening = false; }
     if (ws || closed) return;
@@ -304,7 +307,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   }
   function startPolling() {
     if (pollTimer) return;
-    setStatus({ state: 'polling' });
+    setStatus({ state: online() ? 'polling' : 'offline' });
     heartbeat();                       // sockets are down: keep reporting presence over HTTP
     const tick = async () => {
       if (closed) return;

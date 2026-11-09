@@ -24,7 +24,10 @@
 //   dock.manifests manNo → index entry (20 most recent)
 //   dock.manifestDays manNo → { day, truck, at, by }: the day and truck a report came on, set
 //                 for one that never went on a truck here (manifest.day)
-//   plan.days     date → slots: 1..4 → { eta, note, team, manifest }
+//   plan.days     date → slots: 1..4 → { eta, note, team, manifest, from }
+//                 routes: 1..4 → { route: offsite|diverted, lands, to, reason, note, slot, manNo, at, by }:
+//                 a truck not coming to the dock that day (plan.route); slot is the
+//                 planned slot it left, put back when it is set to Receive here again
 //
 // pallet.scan is the server-side half of the legacy client ingest: match the
 // 9-digit id against the truck's manifest, refuse a consol already on another
@@ -56,6 +59,13 @@ const BAY_RE = /^[A-Z]\d{1,2}$/;
 const MAX_CARTONS = 500;
 const TRUCK_RE = /^\d{4}-\d{2}-\d{2}-T\d+$/;
 export const TAKE5_IDS = ['brief', 'safe', 'equip', 'area', 'goal'];
+// Where a truck goes when it is not coming to the dock (plan.route), and why.
+export const ROUTES = ['offsite', 'diverted'];
+export const ROUTE_REASONS = ['room', 'closed', 'dc', 'other'];
+const ROUTE_LANDS_DAYS = 180;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const isDay = d => DAY_RE.test(d) && addDays(d, 0) === d;
+const plain = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
 
 export function backdockState() {
   return {
@@ -141,14 +151,18 @@ export const backdockReducers = {
     const startAt = e.payload.decantStartAt ?? null;
     if (startAt !== null && !isIso(startAt)) return reject('invalid_event', 'decantStartAt must be an ISO time');
     const date = id.slice(0, 10), slot = e.payload.slot ?? Number(id.slice(id.lastIndexOf('T') + 1));
-    const slotMan = s.plan.days[date]?.slots[slot]?.manifest || null;
+    // A truck marked off-site or diverted that comes after all takes back the slot it left.
+    const routed = s.plan.days[date]?.routes?.[slot] || null;
+    const slotMan = (s.plan.days[date]?.slots[slot] || routed?.slot)?.manifest || null;
     const slotConsols = slotMan && !slotMan.ref ? manifestConsols(slotMan) : null; if (slotConsols?.code) return slotConsols;
     const t = { status: 'staged', createdAt: e.at, landedAt: e.payload.landedAt || null, decantStartAt: startAt, goalAt: null, ...truckSetup(s), team: [], halts: [], breaks: [], manifest: null, pallets: {}, carriedConsols: [], receivingConfirmed: false, receivedAt: null };
     if (carry) t.grid = widerGrid(t.grid, carry.grid);
     // Creating from a planner slot consumes the slot's team and manifest.
     const day = s.plan.days[date];
+    if (routed) { if (routed.slot) day.slots[slot] = routed.slot; delete day.routes[slot]; if (!Object.keys(day.routes).length) delete day.routes; }
     if (day && day.slots[slot]) {
       const sl = day.slots[slot]; t.team = teamOf(sl.team) || [];
+      if (sl.from) t.from = sl.from;   // a truck bringing back what went off-site says so
       // A member's start follows the slot's ETA unless planned otherwise.
       if (sl.eta) for (const m of t.team) if (!m.start) m.start = sl.eta;
       if (sl.huddleMins) { const from = startAt || e.at; t.halts.push({ kind: 'huddle', reason: 'huddle', start: from, end: new Date(Date.parse(from) + sl.huddleMins * 60000).toISOString(), planned: true }); }
@@ -628,6 +642,11 @@ export const backdockReducers = {
     }
     const manifest = p.manifest === undefined ? undefined : slotManifest(p.manifest);
     if (manifest && manifest.code) return manifest;
+    // from: the off-site or diverted truck this one brings back ({ date, slot }, null clears it).
+    const from = p.from === undefined || p.from === null ? p.from : { date: String(p.from?.date || ''), slot: Number(p.from?.slot) };
+    if (from && (!isDay(from.date) || !(Number.isInteger(from.slot) && from.slot >= 1 && from.slot <= 4) || from.date >= e.entity.date)) return reject('invalid_event', 'from names an earlier day and its truck, 1..4');
+    const rt = s.plan.days[e.entity.date]?.routes?.[slot];
+    if (rt) return reject('routed', `Truck ${slot} on ${e.entity.date} is marked ${rt.route === 'offsite' ? 'off-site' : 'diverted'}: set it back to Receive here first`);
     const day = (s.plan.days[e.entity.date] ||= { slots: {} });
     delete day.noTrucks;   // a truck planned: the day expects one after all
     const cur = { ...(day.slots[slot] || { eta: null, note: '', team: [], manifest: null }) };
@@ -635,6 +654,7 @@ export const backdockReducers = {
     if (p.note !== undefined) cur.note = String(p.note || '').slice(0, 200);
     if (team !== undefined) cur.team = team;
     if (manifest !== undefined) cur.manifest = manifest;
+    if (from !== undefined) { if (from) cur.from = from; else delete cur.from; }
     // A staged manifest goes in the ledger as planned for this slot's truck,
     // so a label scanned on another truck can say where it belongs (DV's
     // "matches another manifest").
@@ -646,8 +666,45 @@ export const backdockReducers = {
     return null;
   },
   'plan.remove'(s, e) {
-    const day = s.plan.days[e.entity.date];
-    if (day) delete day.slots[Number(e.entity.slot)];
+    const day = s.plan.days[e.entity.date], n = Number(e.entity.slot);
+    if (day) { delete day.slots[n]; if (day.routes?.[n]) { delete day.routes[n]; if (!Object.keys(day.routes).length) delete day.routes; } }
+    return null;
+  },
+  // Where a truck goes when it is not coming to the dock (the off-site and
+  // diverted design, 6 Nov 2026): into off-site storage until it is called
+  // back, or to another store or site. It leaves the day's slots, so nothing
+  // expects it at Receiving, on the Dashboard or in the morning checklist,
+  // for plan.days[date].routes[n], which keeps the planned slot to put back
+  // when it is set to Receive here again (route null). A day with no truck
+  // planned can be marked the same way: its truck went off-site. lands: the
+  // day it is expected here after all (a callback day), which the Planner,
+  // the Dashboard and Receiving show on that day.
+  // payload { route: offsite|diverted|null, lands, to, reason: room|closed|dc|other, note, manNo }
+  'plan.route'(s, e) {
+    const d = String(e.entity.date), n = Number(e.entity.slot), p = e.payload || {};
+    if (!isDay(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');
+    if (!(Number.isInteger(n) && n >= 1 && n <= 4)) return reject('invalid_event', 'slot must be 1..4');
+    const day = s.plan.days[d], cur = day?.routes?.[n] || null;
+    if (p.route == null) {
+      if (!cur) return reject('not_routed', `Truck ${n} on ${d} is not marked off-site or diverted`);
+      delete day.routes[n]; if (!Object.keys(day.routes).length) delete day.routes;
+      if (cur.slot) day.slots[n] = cur.slot;
+      return null;
+    }
+    if (!ROUTES.includes(p.route)) return reject('invalid_event', 'route must be offsite or diverted');
+    const id = `${d}-T${n}`;
+    if (s.dock.trucks[id] || s.dock.history.some(h => h.id === id)) return reject('on_dock', `Truck ${n} on ${d} has already been on the dock`);
+    const lands = p.lands == null || p.lands === '' ? null : String(p.lands);
+    if (lands !== null && !isDay(lands)) return reject('invalid_event', 'lands must be a date, YYYY-MM-DD');
+    if (lands !== null && lands <= d) return reject('invalid_event', 'the day it lands is after the day it was due');
+    if (lands !== null && lands > addDays(d, ROUTE_LANDS_DAYS)) return reject('invalid_event', `the day it lands is at most ${ROUTE_LANDS_DAYS} days on`);
+    if (p.reason != null && !ROUTE_REASONS.includes(p.reason)) return reject('invalid_event', `reason must be one of ${ROUTE_REASONS.join(', ')}`);
+    const manNo = p.manNo == null || p.manNo === '' ? null : String(p.manNo);
+    if (manNo !== null && !MAN_NO.test(manNo)) return reject('invalid_event', 'manifest number must be 1 to 20 letters, digits or dashes');
+    const dd = (s.plan.days[d] ||= { slots: {} }), slot = cur ? cur.slot : (dd.slots[n] || null);
+    delete dd.noTrucks;   // the day had a truck after all: it went somewhere else
+    delete dd.slots[n];
+    (dd.routes ||= {})[n] = { route: p.route, lands, to: plain(p.to, 60), reason: p.reason || null, note: plain(p.note, 200), slot, manNo: manNo || cur?.manNo || slot?.manifest?.manNo || null, at: e.at, by: e.actor?.device || null };
     return null;
   },
   // A day confirmed with no trucks (from the Planner, ahead or on the day):
@@ -657,6 +714,7 @@ export const backdockReducers = {
     const d = String(e.entity.date); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');
     if (e.payload?.on === false) { if (s.plan.days[d]) delete s.plan.days[d].noTrucks; return null; }
     if (Object.keys(s.plan.days[d]?.slots || {}).length) return reject('day_has_trucks', `trucks are planned on ${d}: remove them first`);
+    if (Object.keys(s.plan.days[d]?.routes || {}).length) return reject('day_has_trucks', `a truck on ${d} is marked off-site or diverted: set it back first`);
     if (Object.keys(s.dock.trucks).some(id => id.startsWith(d + '-T')) || (s.dock.history || []).some(h => h.id.startsWith(d + '-T'))) return reject('day_has_trucks', `a truck has already been on the dock on ${d}`);
     (s.plan.days[d] ||= { slots: {} }).noTrucks = { at: e.at, by: e.actor?.device || null };
     return null;

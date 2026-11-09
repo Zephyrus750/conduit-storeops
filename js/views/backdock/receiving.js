@@ -11,7 +11,7 @@ import { PTYPES, PT_LETTER, PT_NAME, PT_ONE, PT_SHORT, PT_TINY, PT_COLOUR, HALT_
 import { haptic } from '../../device.js';
 import { previewManifest } from './mpreview.js';
 import { printAudit, canAudit } from './audit.js';
-import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, verifyContents, ss } from './phonesearch.js';
+import { searchSheet, infoSheet, palletContents, onSearchAct, onSearchInput, verifyContents, scanOnto, ss } from './phonesearch.js';
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
 import { liveAudit } from '../../../shared/reducers/backdock.js';
 import { planCard, take5Card, queuePicker, onPlanAct, onPlanChange, ratesFor, guard, decantBoard } from './plan.js';
@@ -101,7 +101,7 @@ function holdRow(t, h, live) {
   const back = h?.kind === 'break' && t?.plannedBreakMins ? ' · ' + tx('{n} min booked, back at {time}', { n: t.plannedBreakMins, time: fmtHM(new Date(Date.parse(h.start) + t.plannedBreakMins * 60000).toISOString()) }) : '';
   if (h) return `<div class="bdr-haltrow${h.kind && h.kind !== 'halt' ? ' planned' : ''}">${ic('alert')}<b>${esc(holdName(h))}</b>${h.note ? ` · ${esc(h.note)}` : ''} ${tx('since {time}', { time: fmtHM(h.start) })}${back} · ${tx('decant clock stopped')}<button class="btn sm" data-act="haltend">${esc(END_KIND[h.kind || 'halt'] || KIND_NAME[h.kind])}</button></div>`;
   if (!live) return '';
-  return `<div class="bdr-haltrow dim">${ic('clock')}${tx('Decant running')}<button class="btn sm" data-act="halt">${ic('alert')}${tx('Hold-up')}</button><button class="btn sm" data-act="huddleplan">${ic('users')}${tx('Book huddle')}</button></div>${st.halting ? holdPicker(t) : ''}`;
+  return `<div class="bdr-haltrow dim">${ic('clock')}${begun(t) ? tx('Decant running') : tx('Take 5, then Start decant')}<button class="btn sm" data-act="halt">${ic('alert')}${tx('Hold-up')}</button><button class="btn sm" data-act="huddleplan">${ic('users')}${tx('Book huddle')}</button></div>${st.halting ? holdPicker(t) : ''}`;
 }
 function landForm() {
   return `<div class="bdr-land"><span class="lbl">${tx('Land a pallet')}</span><input class="bdr-in mono" data-field="ref" placeholder="${tx('bay field::Bay')}" maxlength="3" title="${tx('Grid ref, e.g. A1, or click an empty cell')}" value="${esc(st.land.ref)}"><span class="bdr-pts${st.land.ptype ? '' : ' ask'}" title="${tx('Choose the type for each pallet')}">${PTYPES.map(p => `<button class="bdr-pt${st.land.ptype === p[0] ? ' on' : ''}" data-act="ptype" data-pt="${p[0]}" aria-pressed="${st.land.ptype === p[0]}"><i style="background:${p[2]}"></i>${p[1]}</button>`).join('')}</span><input class="bdr-in mono" data-field="cartons" inputmode="numeric" placeholder="${tx('Cartons')}" maxlength="3" value="${esc(st.land.cartons)}"><button class="btn primary sm" data-act="land"${st.land.ptype ? '' : ` disabled title="${tx('Choose the pallet type first')}"`}>${ic('plus')}${tx('Land')}</button></div>`;
@@ -704,7 +704,9 @@ async function onAct(ctx, a, root) {
       if (taken.length) toast(txn(taken.length, '{ids} is already on another pallet: left there.', '{ids} are already on other pallets: left there.', { ids: taken.join(', ') }), 'bad', open);
       else if (held.length) toast(txn(held.length, '{n} label is not on the manifest: open {ref} to flag or ignore it.', '{n} labels are not on the manifest: open {ref} to flag or ignore them.', { ref }), 'bad', open);
       else if (!sightToast(ctx, ref, was)) toast(codes.length ? txn(codes.length, 'Pallet landed at {ref} · {n} label', 'Pallet landed at {ref} · {n} labels', { ref }) : tx('Pallet landed at {ref}', { ref }), '', open);
-      if (!ctx.isMobile) return; return ctx.rerender();
+      // The land row starts empty for the next pallet (on a PC too: the
+      // dock's own redraw keeps what was typed in it).
+      return ctx.rerender();
     }
     if (act === 'arm') { st.arm = st.arm === a.dataset.pid ? null : a.dataset.pid; return ctx.rerender(); }
     if (act === 'pal-pt') { await dispatch(ctx, 'pallet.update', { truck: id, bay: st.sel }, { ptype: a.dataset.pt }); return; }
@@ -758,7 +760,7 @@ async function onAct(ctx, a, root) {
     if (act === 'pscan') {
       const raw = field('pscan').replace(/\D/g, ''); if (raw.length < 9) return toast(tx('A pallet label has at least 9 digits'), 'bad');
       const id9 = raw.slice(-9);
-      try { const was = sightOf(t.pallets[st.sel]); await dispatch(ctx, 'pallet.scan', { truck: id, bay: st.sel }, { code: raw }); sightToast(ctx, st.sel, was) || toast(tx('{id} on {ref}', { id: id9, ref: st.sel })); }
+      try { const was = sightOf(t.pallets[st.sel]); await scanOnto(ctx, id, st.sel, raw); sightToast(ctx, st.sel, was) || toast(tx('{id} on {ref}', { id: id9, ref: st.sel })); }
       catch (e) { if (e.code === 'not_on_manifest') { const p = t.pallets[st.sel]; if (!(p.held || []).includes(id9)) await dispatch(ctx, 'pallet.update', { truck: id, bay: st.sel }, { held: [...(p.held || []), id9] }); toast(tx('{id} is not on this manifest. Old label from a reused tub?', { id: id9 }), 'bad'); } else throw e; }
       return;
     }

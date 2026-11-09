@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseKeycodes, parseReportByLocation, parseReportSoh, reviewRows, compareCounts, readyPayload, phoneCode, disputes } from '../../shared/backfill.js';
+import { parseKeycodes, parseReportByLocation, parseReportSoh, reportDescs, reviewRows, compareCounts, readyPayload, phoneCode, disputes } from '../../shared/backfill.js';
 
 test('the report’s SOH column: the last number on each item’s line, by keycode', () => {
   const text = `STORE : 1241 Busselton                Page 1
@@ -12,6 +12,7 @@ Location : 7014
 43006311 KETTLE 0 29.00`;
   assert.deepEqual(parseReportSoh(text), { 43166022: -3, 43199310: 14, 42345501: 0 }, 'a number in the description is not the SOH; a line with no SOH gives none');
   assert.deepEqual(Object.keys(parseReportByLocation(text)).sort(), ['7012', '7014'], 'the bays read as before');
+  assert.deepEqual(reportDescs(text), { 43166022: 'BATH TOWEL 5PK WHITE', 43199310: 'PAPER PLATES 20 PK', 42345501: 'BATH MAT GREY' }, 'each item’s description, with its colour, without the status digit, price or SOH; a line with no SOH is no item');
 });
 
 test('report paste splits by location and skips APNs and headers', () => {

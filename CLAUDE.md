@@ -116,16 +116,22 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
   `js/shell.js`); listeners on a kept element are scoped to the view
   (`scopeListeners`). Moving the map re-styles and re-lays out all of it.
 - Never measure the map while a view mounts (the live map's width comes
-  from a ResizeObserver), never rewrite a viewBox or a fade variable
-  (`--badge-opacity`, `--label-*`) with the value it already has: each
-  write restyles or re-lays out every shelf.
+  from a ResizeObserver), never rewrite a viewBox or `--label-display`
+  with the value it already has: each write restyles or re-lays out every
+  shelf. Nothing that changes on every zoom step goes in a property the
+  whole map inherits (a custom property on the svg restyled all 6,000
+  nodes, 100 ms a step on a store phone): the badges' fade is the opacity
+  of their own group (`.badge-fade`).
 - No `transition` or `filter` on `.shelf`. A state that lands on hundreds
   of shelves at once (refresh marks, a route) re-rasters the whole map
   for every frame of a transition. Stroke and fill changes alone are cheap.
 - Shelf labels are `display:none` while the run badges show, and on a
   phone below 2.5× zoom in a view without badges (Refresh), where they are
   two pixels tall; two thousand invisible `<text>` elements still cost
-  layout and paint.
+  layout and paint. Names more than a view off screen are hidden as well
+  (`cullLabels` in `js/map.js`, re-checked 120 ms after a move stops):
+  every shown name is laid out again on each zoom step, 175 ms a step
+  with all 1,847 of Busselton's against 50 ms without.
 - Shelves and runs: "A16 S1" is a shelf, "A16" is its run (the shelves
   sharing that name). Every shelf is its own: tapped, scanned, counted,
   marked and assigned on its own. `groupsFor()` in `js/map.js` is the one

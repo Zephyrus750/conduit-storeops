@@ -1,0 +1,102 @@
+/* ── Equipment checks (draft chapter equip): every class starts eqv- ── */
+/* The map card's box: the store's map with the pins over it. */
+.pc2-eq.eqv { grid-template-columns: minmax(0, 1fr) 498px; }
+.eqv-box { position: relative; flex: 1; min-height: 0; background: #fff; }
+.eqv-box .mf2-map rect { fill-opacity: .92; }
+.eqv-pins .plus { font: 700 44px var(--body); text-anchor: middle; dominant-baseline: central; fill: #0E7CA8; }
+.eqv-spot { fill: rgba(14, 124, 168, .001); cursor: pointer; }
+.pc2-eq.eqv .leg .f { margin-left: 2px; }
+.pc2-eq.eqv .side { gap: 16px; min-height: 0; overflow: hidden; }
+/* The Equipment tab's count is red when it is not open (paintBadges()); the rail's is the PC frame's (styles/guide.css). */
+.pc2-gtab:not(.on) .bdg.eqv-red { background: #DC2626; color: #fff; }
+/* A status chip (.status in the app). */
+.eqv-st { display: inline-block; flex: none; border-radius: 8px; padding: 4px 10px; font-size: 14.5px; font-weight: 500; white-space: nowrap; background: #F3F4F6; color: #4B5563; }
+.eqv-st.bad { background: #FEE2E2; color: #B91C1C; } .eqv-st.warn { background: #FEF3C7; color: #92400E; }
+.eqv-st.good { background: #DCFCE7; color: #166534; } .eqv-st.info { background: #DBEAFE; color: #1E40AF; }
+/* A piece's pin in a list (.mt-pin.eq-pin) and its pictogram. */
+.eqv-pin { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid; display: inline-flex; align-items: center; justify-content: center; flex: none; background: #fff; box-sizing: border-box; }
+.eqv-pin.out { background: #111827; }
+.eqv-gl { width: 17px; height: 17px; display: block; }
+/* The list: the filters, then a row per piece. */
+.eqv-list { padding: 16px 18px; display: flex; flex-direction: column; }
+.eqv-pills { display: inline-flex; flex-wrap: wrap; align-self: flex-start; background: #F3F4F6; border-radius: 999px; padding: 3px; gap: 2px; margin-bottom: 12px; }
+.eqv-pills b { padding: 5px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #6B7280; white-space: nowrap; cursor: pointer; }
+.eqv-pills b.on { background: #0E7CA8; color: #fff; }
+.eqv-li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #F1F3F5; cursor: pointer; }
+.eqv-pills + .eqv-li, .eqv-due .ch + .eqv-li { border-top: 0; }
+.eqv-li.sel { background: #E7F2F6; margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 8px; border-top-color: transparent; }
+.eqv-li .nm { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.eqv-li .nm b { font-size: 14.5px; font-weight: 600; color: #111827; }
+.eqv-li .nm small { font-size: 12.5px; color: #6B7280; margin-top: 1px; }
+.eqv-li .nm .sev { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+/* Due in the next 14 days. */
+.eqv-due { padding: 18px 20px; }
+.eqv-due .ch { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.eqv-due h3 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+.eqv-due .ch span { font-size: 12.5px; color: #6B7280; }
+.eqv-due .none { margin: 6px 0 4px; font-size: 14px; color: #6B7280; }
+/* A piece's card and the forms that take its place. */
+.eqv-card { padding: 18px 20px; display: flex; flex-direction: column; }
+.eqv-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.eqv-h > b { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+.eqv-h .dim { font-size: 12.5px; color: #6B7280; }
+.eqv-h .eqv-st { font-size: 14.5px; }
+.eqv-mgr svg.i { width: 16px; height: 16px; color: #0E7CA8; }
+.eqv-facts { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 13px; color: #374151; margin-bottom: 8px; }
+.eqv-facts b { color: #111827; font-weight: 600; }
+.eqv-logs { display: flex; flex-direction: column; }
+.eqv-log { display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid #EEF0F3; font-size: 14.5px; }
+.eqv-log:last-child { border-bottom: 0; }
+.eqv-log span { font-size: 12.5px; color: #6B7280; flex: none; }
+.eqv-log b { font-weight: 400; color: #111827; }
+.eqv-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.eqv-acts .pc2-btn.sm { font-size: 13px; padding: 6px 11px; border-radius: 8px; }
+.eqv-acts .pc2-btn.pri.bad, .eqv-acts .pc2-btn.bad { background: #DC2626; border-color: #DC2626; color: #fff; }
+.eqv-acts .pc2-btn.off { opacity: .5; }
+.eqv-note { display: flex; gap: 8px; align-items: flex-start; border-radius: 10px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; }
+.eqv-note svg.i { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.eqv-note.out { background: rgba(220, 38, 38, .1); color: #991B1B; }
+.eqv-note.rm { background: rgba(217, 119, 6, .1); color: #8A5A10; }
+.eqv-form .eqv-sub { font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #6B7280; margin: 4px 0 8px; }
+.eqv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.eqv-chips b { border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; padding: 9px 12px; font-size: 13.5px; font-weight: 600; color: #374151; white-space: nowrap; cursor: pointer; }
+.eqv-chips b.on { border-color: #0E7CA8; box-shadow: 0 0 0 2px #E7F2F6; color: #0B6183; }
+.eqv-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+.eqv-fld { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 13px; color: #6B7280; }
+.eqv-in { display: flex; align-items: center; justify-content: space-between; font-size: 14.5px; color: #111827; background: #F3F4F6; border: 1px solid #E5E7EB; border-radius: 8px; padding: 8px 10px; min-height: 36px; box-sizing: border-box; white-space: nowrap; overflow: hidden; cursor: text; }
+.eqv-in.eqv-ph { color: #9CA3AF; }
+.eqv-in.date { background: #F3F4F6; } .eqv-in.date svg.i { width: 16px; height: 16px; color: #111827; }
+.eqv-help { margin: 2px 0 6px; font-size: 12.5px; color: #6B7280; line-height: 1.3; }
+.eqv-pts { margin-top: 12px; border: 1px solid #E5E7EB; border-radius: 10px; padding: 2px 10px 4px; }
+.eqv-pts .pth { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; font-size: 13.5px; }
+.eqv-pts .pth .pc2-btn.sm { font-size: 12.5px; padding: 5px 9px; border-radius: 8px; cursor: pointer; }
+.eqv-pt { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid #F1F3F5; font-size: 14px; color: #111827; }
+.eqv-pt > span:first-child { flex: 1; min-width: 0; }
+.eqv-pt .eqv-okf { display: flex; gap: 4px; flex: none; }
+.eqv-pt .eqv-okf i { font-style: normal; font-size: 13px; font-weight: 700; min-width: 54px; height: 37px; display: grid; place-items: center; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; color: #374151; cursor: pointer; }
+.eqv-pt .eqv-okf i.ok.on { background: #16A34A; border-color: #16A34A; color: #fff; }
+.eqv-pt .eqv-okf i.fail.on { background: #DC2626; border-color: #DC2626; color: #fff; }
+.eqv-form .eqv-note.out { margin: 10px 0 0; }
+.eqv-sw { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: 10px 0 0; color: #111827; }
+.eqv-sw i { width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid #9CA3AF; display: grid; place-items: center; }
+.eqv-sw i svg.i { width: 13px; height: 13px; color: #fff; display: none; }
+.eqv-sw i.on { background: #0E7CA8; border-color: #0E7CA8; } .eqv-sw i.on svg.i { display: block; }
+.eqv-why { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 10px; margin-top: 6px; cursor: pointer; }
+.eqv-why i { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid #6B7280; margin-top: 3px; flex: none; box-sizing: border-box; }
+.eqv-why.on { border-color: #0E7CA8; background: #E7F2F6; } .eqv-why.on i { border: 4px solid #0E7CA8; }
+.eqv-why b { display: block; font-size: 14px; font-weight: 600; } .eqv-why small { display: block; font-size: 12px; color: #6B7280; }
+/* The toast at the foot of the window (#toasts), warn in amber. */
+.pc2 > .dv-toast.eqv-t { left: 50%; bottom: 84px; font-size: 13.5px; font-weight: 400; padding: 10px 14px; border-radius: 10px; }
+.pc2 > .dv-toast.eqv-t.warn { background: #F59E0B; color: #1A1300; }
+.pc2 > .dv-toast.eqv-t u { font-weight: 700; margin-left: 10px; }
+/* The QR labels in the print preview (printLabels(): A4, 12 mm margins). */
+.eqv-print { position: absolute; inset: 0; z-index: 50; background: rgba(17, 24, 39, .55); display: grid; place-items: center; }
+.eqv-paper { width: 794px; height: 1123px; box-sizing: border-box; padding: 45px; background: #fff; color: #000; zoom: .9; box-shadow: 0 20px 50px rgba(0, 0, 0, .4); font: 15px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.eqv-paper .eqv-pph { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
+.eqv-paper h1 { font-size: 24px; margin: 0; } .eqv-paper .eqv-pph small { font-size: 12.5px; color: #333; }
+.eqv-paper .lbls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 23px; }
+.eqv-paper .lb { display: flex; gap: 15px; align-items: center; border: 1px dashed #999; border-radius: 11px; padding: 15px; }
+.eqv-paper .lb .q svg { width: 113px; height: 113px; display: block; }
+.eqv-paper .lb .t b { display: block; font: 700 29px ui-monospace, 'JetBrains Mono', monospace; }
+.eqv-paper .lb .t span { display: block; font-size: 15px; font-weight: 600; }
+.eqv-paper .lb .t small { display: block; font-size: 11px; color: #333; margin-top: 7px; }

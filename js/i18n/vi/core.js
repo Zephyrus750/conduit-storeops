@@ -18,4 +18,8 @@ export default {
   "Wrong code.": "Sai mã.",
   "Language": "Ngôn ngữ",
   "Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.": "Mọi màn hình trên thiết bị này, bằng một trong bảy ngôn ngữ. Tên kệ, sản phẩm và ngành hàng giữ nguyên như cửa hàng ghi.",
+  "This device is offline: check the wifi, then sign in again.": "Thiết bị này đang ngoại tuyến: hãy kiểm tra wifi rồi đăng nhập lại.",
+  "This device is offline: check the wifi, then enter the code again.": "Thiết bị này đang ngoại tuyến: hãy kiểm tra wifi rồi nhập lại mã.",
+  "The {area} crew code opens this workspace on this device for one shift (12 hours), or until the device is signed out or locked after sitting idle.": "Mã nhóm {area} mở khu vực này trên thiết bị này trong một ca (12 giờ), hoặc cho đến khi thiết bị đăng xuất hay bị khóa vì để lâu không thao tác.",
+  "A manager code here opens every area; managers can also sign in as Manager to skip this.": "Mã quản lý ở đây mở mọi khu vực; quản lý cũng có thể đăng nhập với tư cách Quản lý để bỏ qua bước này.",
 };

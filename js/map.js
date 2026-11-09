@@ -8,6 +8,7 @@ import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute
 import { markerGlyph, locationRange, markerSymbol, MARKER_NAMES, LANDMARK_NAMES, markerType } from '../shared/maprender.js';
 import { prefs, setPref } from './prefs.js';
 import { haptic } from './device.js';
+import { openScanner } from './scan.js';
 import { tx, txn } from './i18n.js';
 
 let floors = [], mapMeta = null;
@@ -158,14 +159,21 @@ export function oneShelf(root, code) {
   if (ids.length > 1) return { error: tx("{code} is a run of {n} shelves: scan the shelf's own label ({list})", { code: String(code).toUpperCase(), n: ids.length, list: ids.slice(0, 3).join(', ') + (ids.length > 3 ? '…' : '') }) };
   return { g: gs[0] };
 }
+// The view's own answer to a shelf label, by mounted map: the map tools'
+// Scan (bindMapChrome) hands its code there too.
+const shelfScans = new WeakMap();
 export function bindShelfScan(root, map, onShelf, onError) {
+  const take = code => {
+    const { g, error } = oneShelf(map.svg, code);
+    if (!g) { toast(error, 'bad'); onError?.(error); return; }
+    onShelf(map.shelfInfo(g));
+  };
+  shelfScans.set(map, take);
   root.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || !e.target.matches?.('[data-field="shelfscan"]')) return;
     e.preventDefault();
     const code = e.target.value.trim(); e.target.value = ''; if (!code) return;
-    const { g, error } = oneShelf(map.svg, code);
-    if (!g) { toast(error, 'bad'); onError?.(error); return; }
-    onShelf(map.shelfInfo(g));
+    take(code);
   });
 }
 // Repaint a panel that holds the scan field without dropping its focus, so
@@ -317,7 +325,12 @@ function buildBadges(floorEl) {
     const t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'sb'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('data-shelf', b.name); t.setAttribute('data-dept', b.dept); t.textContent = b.label;
     layer.appendChild(bg); layer.appendChild(t);
   }
-  floorEl.appendChild(layer);
+  // The zoom fade is the opacity of a group of its own: changing it restyles
+  // that one element, where a property the whole map inherits restyled all
+  // six thousand of them on every zoom step (about 100 ms a step on a store
+  // phone). View rules on .shelf-badges (dimmed, hidden) still apply inside.
+  const fade = document.createElementNS(NS, 'g'); fade.setAttribute('class', 'badge-fade'); fade.appendChild(layer);
+  floorEl.appendChild(fade);
 }
 
 // The map's DOM is built once per published document (parsing 800 KB of
@@ -329,10 +342,12 @@ let tpl = null, live = null, pv = null;
 // The shell calls this before it replaces a view's content: the live map
 // steps out first, so the next view re-inserts the same element instead of
 // the browser destroying five thousand nodes and building them again.
-// The label/badge fade lives in custom properties on the map: changing one
-// restyles every element of the map (about 130 ms on a store phone), so a
-// value is written only when it changes.
-const FADE_VARS = ['--badge-opacity', '--label-opacity', '--label-display'];
+// Whether shelf names show lives in a custom property on the map: changing
+// it restyles every element of the map (about 130 ms on a store phone), so it
+// is written only when it changes, once as the badges hand over. The badges'
+// fade is the opacity of their own group (.badge-fade), never a property of
+// the whole map, and names well off screen leave the tree (cullLabels).
+const FADE_VARS = ['--label-display'];
 const setVar = (el, k, v) => { if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v); };
 // The live map's width on screen, kept by a ResizeObserver: the marker scale
 // needs it, and measuring it while a view mounts would lay the whole map out
@@ -442,10 +457,30 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const k = Math.min(Math.max(w, b[2] / 40), b[2] * 1.6) / w, cx = Math.min(Math.max(x + w / 2, b[0]), b[0] + b[2]), cy = Math.min(Math.max(y + h / 2, b[1]), b[1] + b[3]);
     w *= k; h *= k; return [cx - w / 2, cy - h / 2, w, h];
   };
+  // Shelf names well off screen leave the tree: every name is laid out again
+  // on each zoom step (the text is drawn at the new scale), and with all
+  // 1,847 of Busselton's showing a step cost 175 ms on a store phone against
+  // 50 ms without them. A name outside the view and one view's margin on
+  // every side is hidden (data-far); checked when names come in, and 120 ms
+  // after a move stops, so a pan or a zoom out within the margin never shows
+  // a gap. Each floor's names and their x/y are read once.
+  let named = null, cullT = 0;
+  const cullLabels = () => {
+    clearTimeout(cullT); cullT = 0;
+    const host = floorEl(cur?.id); if (!host || !svg.isConnected) return;
+    if (named?.host !== host) named = { host, list: $$('.shelf-label', host).map(t => ({ t, x: Number(t.getAttribute('x')), y: Number(t.getAttribute('y')), far: t.hasAttribute('data-far') })) };
+    const [x, y, w, h] = api.vb(), x0 = x - w, x1 = x + 2 * w, y0 = y - h, y1 = y + 2 * h;
+    for (const l of named.list) {
+      const far = Number.isFinite(l.x) && Number.isFinite(l.y) && (l.x < x0 || l.x > x1 || l.y < y0 || l.y > y1);
+      if (far !== l.far) { l.far = far; l.t.toggleAttribute('data-far', far); }
+    }
+  };
+  let fadeNow = null, firstFade = true;
   const setLabelFade = () => {
     const z = (Number(vb0.split(' ')[2]) || 1) / (Number(svg.getAttribute('viewBox').split(' ')[2]) || 1);
     const badge = z <= BADGE_START ? 1 : z >= BADGE_END ? 0 : 1 - (z - BADGE_START) / (BADGE_END - BADGE_START);
-    setVar(svg, '--badge-opacity', badge.toFixed(2)); setVar(svg, '--label-opacity', (1 - badge).toFixed(2));
+    const op = badge >= 1 ? '' : badge.toFixed(2);
+    if (op !== fadeNow) { fadeNow = op; for (const f of $$('.badge-fade', svg)) f.style.opacity = op; }
     // Two thousand shelf labels that are invisible when zoomed out still
     // cost a layout and a paint each; take them out of the tree until the
     // badges start handing over (views without badges keep them).
@@ -453,7 +488,12 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // zoomed out, where they are two to four pixels tall: there they come
     // back from 2.5 times the whole-store zoom, about five pixels.
     const tiny = z < LABEL_MIN_Z && ((svg === live && liveW) || innerWidth) < 600;
-    setVar(svg, '--label-display', svg.classList.contains('nobadges') ? (tiny ? 'none' : 'inline') : badge >= 1 ? 'none' : 'inline');
+    const was = svg.style.getPropertyValue('--label-display'), show = svg.classList.contains('nobadges') ? (tiny ? 'none' : 'inline') : badge >= 1 ? 'none' : 'inline';
+    // Names coming in are culled before they are laid out; while they show,
+    // the check waits for the move to stop.
+    if (show === 'inline') { if (was !== 'inline' || firstFade) cullLabels(); else { clearTimeout(cullT); cullT = setTimeout(cullLabels, 120); } }
+    firstFade = false;
+    setVar(svg, '--label-display', show);
   };
   // Emergency markers are authored at translate(x,y) only; scale them so a
   // sign is about 32px on screen whatever the zoom (the legacy viewer did
@@ -1001,7 +1041,15 @@ export const sx = {
 };
 export function mvMap(o = {}) {
   const fls = mapFloors();
-  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-go="search" title="${tx('Scan')}">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="${tx('Next level')}">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Tory lines')}">${ic('route')}</span>` : ''}${planButton()}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}" aria-label="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="${tx('Zoom in')}" aria-label="${tx('Zoom in')}">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="${tx('Zoom out')}" aria-label="${tx('Zoom out')}">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}" aria-label="${tx('Fit the map')}">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+  return `<div class="mv-map mapbox"><div class="mapstage" id="mapstage"></div><div class="mv-mtools"><span class="ibtn scan" data-mapscan title="${tx('Scan a shelf label')}" aria-label="${tx('Scan a shelf label')}">${ic('barcode')}</span>${fls.length > 1 ? `<span class="ibtn" data-mapfloor-next title="${tx('Next level')}">${ic('layers')}</span>` : ''}${mapSymbols().some(x => x.kind === 'tory') ? `<span class="ibtn torybtn" data-tory hidden title="${tx('Tory lines')}">${ic('route')}</span>` : ''}${planButton()}${mapSymbols().some(x => x.kind === 'pc' || x.kind === 'order') ? `<span class="ibtn pcbtn" data-pcmode="${esc(prefs().priceChecks || 'small')}" title="${tx('Price checks: normal, large or hidden')}" aria-label="${tx('Price checks: normal, large or hidden')}">${ic('tag')}</span>` : ''}<span class="ibtn" data-zoom="in" title="${tx('Zoom in')}" aria-label="${tx('Zoom in')}">${ic('plus')}</span><span class="ibtn" data-zoom="out" title="${tx('Zoom out')}" aria-label="${tx('Zoom out')}">${ic('minus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}" aria-label="${tx('Fit the map')}">${ic('map')}</span></div>${o.badge ? `<div class="mv-mbadge" id="mvbadge">${o.badge}</div>` : ''}</div>`;
+}
+
+// A scanned shelf (or run) label found on a mounted map: selected, lit,
+// framed and pinged (locate()), and announced to the view as a find.
+function findShelf(map, code) {
+  if (!map.groups(code).length) return toast(tx('{code} is not a shelf on this map', { code }), 'bad');
+  const id = canonCode(code); map.locate(id);
+  map.stage.dispatchEvent(new CustomEvent('mapselect', { detail: { code: id, ...(map.code(id) || {}) } }));
 }
 
 // Wire zoom buttons and group chips on a mounted view.
@@ -1009,6 +1057,12 @@ export function bindMapChrome(root, map) {
   root.addEventListener('click', e => {
     const z = e.target.closest('[data-zoom]');
     if (z) { const k = z.getAttribute('data-zoom'); if (k === 'in') map.zoomBy(1 / 1.3, null, null, 300); else if (k === 'out') map.zoomBy(1.3, null, null, 300); else map.fit(400); return; }
+    // The map tools' Scan: a shelf label read with the camera. A view that
+    // scans shelves (bindShelfScan: Refresh marks one, Stocktake counts it)
+    // takes the code as its own scan; elsewhere the shelf is found on the
+    // map, as the phone Home's Scan label finds it, and the view hears of
+    // it as of a find ('mapselect').
+    if (e.target.closest('[data-mapscan]')) { openScanner({ title: tx('Scan a shelf label'), hint: tx('Point the camera at the shelf label'), onCode: code => (shelfScans.get(map) || (c => findShelf(map, c)))(code) }); return; }
     const pcb = e.target.closest('[data-pcmode]'); if (pcb) { const next = { small: 'large', large: 'off', off: 'small' }[prefs().priceChecks || 'small']; setPref('priceChecks', next); map.priceChecks(next); haptic('select'); for (const b of $$('[data-pcmode]', root)) b.setAttribute('data-pcmode', next); toast({ small: tx('Price checks: normal'), large: tx('Price checks: large'), off: tx('Price checks: hidden') }[next]); return; }
     const plb = e.target.closest('[data-planmode]');
     if (plb) {

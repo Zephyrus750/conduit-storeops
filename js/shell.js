@@ -27,7 +27,7 @@ import { VIEWS, RAIL, RAIL_TOP, RAIL_FOOT, GROUPS, GROUP_OF, STRIP, MORE, MORE_S
 import { toolForView, toolOff } from '../shared/tools.js';
 import { loadResources, cachedResources, useResource } from './resourcelib.js';
 import { openFound, useRecallStore } from './recallflag.js';
-import { ensureArea, ensureManager, hasArea, managerReason, managerCode } from './unlock.js';
+import { ensureArea, ensureManager, hasArea, managerReason, managerCode, offlineText } from './unlock.js';
 import { resetAdmin } from './views/admin.js';
 import { prefs, applyPrefs } from './prefs.js';
 import { VERSION } from './version.js';
@@ -266,7 +266,9 @@ function managerCheck() {
     else if (current) show(current, currentArg);
   });
 }
-function closeStore() { useRecallStore(null); team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; }
+// The store's sheets go with it (More, the launcher, the changes list): a
+// sign-out from More used to leave that sheet open over the sign-in card.
+function closeStore() { useRecallStore(null); team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; $('#msheet')?.classList.remove('open'); const d = $('#syncDlg'); if (d) d.hidden = true; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); applyPrefs(frame); actasBar(null); resetAdmin(); }
 async function signOut() {
   try { await store?.flush(); } catch {}
@@ -439,7 +441,7 @@ function showOwnerSignin(error) {
     catch (err) { $('#siErr', el).textContent = friendly(err, tx('Wrong owner key.')); btn.disabled = false; }
   });
 }
-const friendly = (err, wrong = tx('Wrong PIN.')) => err.code === 'locked_out' ? tx('Too many attempts. Try again in {n} min.', { n: Math.ceil((err.detail?.retryAfter || 60) / 60) }) : err.code === 'unauthorised' ? wrong : err.code === 'not_registered' ? tx('That store is not registered.') : err.code === 'not_configured' ? tx('The worker has no owner key set yet.') : err.message;
+const friendly = (err, wrong = tx('Wrong PIN.')) => err.code === 'locked_out' ? tx('Too many attempts. Try again in {n} min.', { n: Math.ceil((err.detail?.retryAfter || 60) / 60) }) : err.code === 'unauthorised' ? wrong : err.code === 'not_registered' ? tx('That store is not registered.') : err.code === 'not_configured' ? tx('The worker has no owner key set yet.') : err.network ? offlineText(true) : err.message;
 // The mark: a C in three parts, one tone each for the Floor, the Stockroom
 // and the Back dock, on the charcoal of the shell.
 const mark = () => `<svg class="vmark" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#111827"/><path d="M21.94 21.94A8.4 8.4 0 0 1 10.94 22.71" fill="none" stroke="#7DD3FC" stroke-width="5.4"/><path d="M9.66 21.51A8.4 8.4 0 0 1 9.66 10.49" fill="none" stroke="#22A6D6" stroke-width="5.4"/><path d="M10.94 9.29A8.4 8.4 0 0 1 21.94 10.06" fill="none" stroke="#0E7CA8" stroke-width="5.4"/></svg>`;
@@ -757,7 +759,7 @@ const SHEET_X = `<button class="sheet-x" data-act="close-more" aria-label="${tx(
 function openLauncher() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const caps = client.session.current?.caps || [];
-  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>${tx('Where are you working?')}</h3>${SHEET_X}</div><p class="mv-sheet-sub">${tx('Pick your area to begin.')} ${(client.session.current?.roles || []).includes('manager') ? tx('Signed in as manager: every area is open.') : tx('Stockroom and Back dock take their crew code once on this device.')}</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : tx('Not on for this store')}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div></div>`;
+  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>${tx('Where are you working?')}</h3>${SHEET_X}</div><p class="mv-sheet-sub">${tx('Pick your area to begin.')} ${(client.session.current?.roles || []).includes('manager') ? tx('Signed in as manager: every area is open.') : tx('Stockroom and Back dock ask for their crew code, which lasts one shift (12 hours) on this device.')}</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : tx('Not on for this store')}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div></div>`;
   sh.dataset.kind = ''; sh.classList.add('open');
 }
 // The phone's Departments picker: the whole floor; Home, Clothing and
@@ -814,10 +816,12 @@ document.addEventListener('click', e => {
     else if (act === 'recall-found') { if (store) openFound(store, sa.dataset.recall, sa.dataset.kc); }
     return;
   }
-  // The search palette routes its own rows (they carry select, dept or q);
-  // elsewhere a data-view element opens the view, with a store number for
-  // the console's store rows.
-  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no, ...(v.dataset.tab ? { tab: v.dataset.tab } : {}) } : undefined); return; }
+  // The search palette and the phone's search list route their own rows
+  // (they carry select, dept, micro or q; a list row has already left the
+  // list when the click gets here, so it is known by its class); elsewhere
+  // a data-view element opens the view, with a store number for the
+  // console's store rows.
+  const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni, .sdd-r')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no, ...(v.dataset.tab ? { tab: v.dataset.tab } : {}) } : undefined); return; }
   const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
   if (e.target.closest('.mdepts')) { if (store) (ws === 'floor' ? openDepts : openLauncher)(); return; }
   const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }

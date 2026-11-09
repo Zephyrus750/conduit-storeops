@@ -165,13 +165,15 @@ export default {
           paint(); if (act === 'move') { sheet(false); toast(tx('Tap the map where it lives now')); } else openSheet();
         }
         else if (act === 'draft-cancel') { draft = null; paint(); }
-        else if (act === 'draft-save') await saveDraft(ctx, root);
+        // Saved: the item's card, or the list (the store's own update paints
+        // while the form is still open, before the save lets it go).
+        else if (act === 'draft-save') { if (await saveDraft(ctx, root)) paint(); }
         else if (act === 'check') { const it = item(a.dataset.id || selected); if (!it) return; selected = it.id; checking = { id: it.id, day: today(), pts: {}, note: '', issue: true, due: '' }; draft = removing = null; paint(); openSheet(); }
         else if (act === 'pt') { readForms(root); checking.pts[a.dataset.key] = a.dataset.v; paint(); }
         else if (act === 'all-ok') { readForms(root); const it = item(checking.id); for (const [k] of pointsOf(it)) checking.pts[k] = 'ok'; paint(); }
         else if (act === 'issue-toggle') { readForms(root); checking.issue = !checking.issue; paint(); }
         else if (act === 'check-cancel') { checking = null; paint(); }
-        else if (act === 'check-save') await saveCheck(ctx, root, map);
+        else if (act === 'check-save') { if (await saveCheck(ctx, root, map)) paint(); }
         else if (act === 'remove') { if (!manager) return toast(tx('Only a manager can remove equipment'), 'bad'); removing = { id: selected, why: '', note: '' }; checking = draft = null; paint(); openSheet(); }
         else if (act === 'why') { readForms(root); removing.why = a.dataset.why; paint(); }
         else if (act === 'remove-cancel') { removing = null; paint(); }
@@ -222,6 +224,7 @@ async function saveDraft(ctx, root) {
     await ctx.store.dispatch({ type: 'equip.add', entity: { equip: id }, payload: { code: draft.code, kind: draft.kind, name: draft.name, every: draft.every, last: draft.last || null, ...(draft.due ? { due: draft.due } : {}), ...pos } });
     selected = id; toast(tx('{code} added', { code: draft.code })); draft = null;
   }
+  return true;
 }
 async function saveCheck(ctx, root, map) {
   readForms(root);
@@ -239,6 +242,7 @@ async function saveCheck(ctx, root, map) {
   await ctx.store.dispatch({ type: 'equip.check', entity: { equip: c.id }, payload });
   checking = null;
   toast(failed.length ? tx('{code} is out of service', { code: it.code }) + (issue ? ' · ' + tx('issue logged') : '') : tx('{code} checked OK', { code: it.code }), failed.length ? 'warn' : '');
+  return true;
 }
 
 // ── the desk's side column ───────────────────────────────────────────────
@@ -299,7 +303,7 @@ function draftForm(m) {
   const nextNote = draft.every ? (draft.last ? tx('Next due {date}, worked out from the last check.', { date: esc(fmtDate(addMonths(draft.last + 'T00:00:00Z', draft.every))) }) : tx('Due {n} months after its first check.', { n: draft.every })) : tx('A booked date, like a contractor’s service. After each one, enter the next.');
   return `<div class="card mtdet eq-form"><div class="ch"><h3>${draft.editId ? tx('Edit {code}', { code: esc(draft.code) }) : tx('Add equipment')}</h3><span class="cs-dim">${draft.x != null ? tx('placed on the map') : tx('tap the map to place it')}</span></div>` +
     `<div class="mv-sub">${tx('What is it?')}</div><div class="mv-chips">${kinds}</div>` +
-    `<div class="eq-two"><label class="fld"><span>${tx('Code')}</span><input data-draft="code" class="mono" value="${esc(draft.code)}" maxlength="16" autocapitalize="characters"></label><label class="fld"><span>${tx('Description')}</span><input data-draft="name" value="${esc(draft.name)}" maxlength="80" placeholder="${esc(KIND[draft.kind])}"></label></div>` +
+    `<div class="eq-two"><label class="fld"><span>${tx('Code')}</span><input data-draft="code" class="mono" value="${esc(draft.code)}" maxlength="16" autocapitalize="characters"></label><label class="fld"><span>${tx('Name')}</span><input data-draft="name" value="${esc(draft.name)}" maxlength="80" placeholder="${esc(KIND[draft.kind])}"></label></div>` +
     `<p class="cs-dim" style="margin:0 0 8px;font-size:12.5px">${tx('The next free number for its group. Use the number on its tag if it has one: the QR label prints with this code.')}</p>` +
     `<label class="fld"><span>${tx('Where it lives')}</span><input data-draft="loc" value="${esc(draft.loc)}" maxlength="60" placeholder="${tx('Stockroom, by bay 7012')}"></label>` +
     `<div class="mv-sub">${tx('Checked how often?')}</div><div class="mv-chips">${every}</div>` +
@@ -352,7 +356,7 @@ function phone(m, manager) {
     return `<div class="sx"><div class="sx-h">${ic('m-equipment')}${draft.editId ? tx('Edit {code}', { code: esc(draft.code) }) : tx('Add equipment')}</div><div class="sx-sub">${draft.x != null ? tx('Placed on the map. Tap again to move it.') : tx('Tap the map where it lives.')}</div>` +
       sx.sec(tx('What is it?'), `<div class="sx-chips">${kinds}</div>`) +
       sx.sec(tx('Code'), `<input class="sx-in mono" data-draft="code" value="${esc(draft.code)}" maxlength="16" autocapitalize="characters" aria-label="${tx('Code')}">`, tx('or the number on its tag')) +
-      sx.sec(tx('Description'), `<input class="sx-in" data-draft="name" value="${esc(draft.name)}" maxlength="80" placeholder="${esc(KIND[draft.kind])}" aria-label="${tx('Description')}">`, tx('optional')) +
+      sx.sec(tx('Name'), `<input class="sx-in" data-draft="name" value="${esc(draft.name)}" maxlength="80" placeholder="${esc(KIND[draft.kind])}" aria-label="${tx('Name')}">`, tx('optional')) +
       sx.sec(tx('Where it lives'), `<input class="sx-in" data-draft="loc" value="${esc(draft.loc)}" maxlength="60" placeholder="${tx('Stockroom, by bay 7012')}" aria-label="${tx('Where it lives')}">`) +
       sx.sec(tx('Checked how often?'), `<div class="sx-chips">${every}</div>`) +
       (draft.editId ? '' : sx.sec(tx('Last checked'), `<input class="sx-in" type="date" data-draft="last" value="${esc(draft.last || '')}" max="${today()}" aria-label="${tx('Last checked')}">`)) +

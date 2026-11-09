@@ -121,3 +121,10 @@ test('the 501st truck: its oldest history row is still there for retention to ar
   retain(s, DAY);
   assert.equal(s.dock.history.length, 500);
 });
+
+test('a planner day whose truck went off-site stays while it is still to land here', () => {
+  const s = initialState();
+  s.plan.days = { '2026-07-01': { slots: {}, routes: { 1: { route: 'offsite', lands: '2026-10-20' } } }, '2026-07-02': { slots: {}, routes: { 1: { route: 'offsite', lands: '2026-07-09' } } }, '2026-07-03': { slots: { 1: { eta: '06:30' } } } };
+  retain(s, DAY);
+  assert.deepEqual(Object.keys(s.plan.days), ['2026-07-01'], 'kept: it lands after the 60 days start; the others go');
+});

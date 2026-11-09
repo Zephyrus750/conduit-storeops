@@ -82,16 +82,42 @@ export function keycodePictures(html, kc) {
 }
 
 // Several independent strategies, first hit wins per field (as v1.6).
-// The product's own barcodes (GTINs) a page names: its structured data's
-// gtin fields and the same fields in the page's own data. Check digits
-// verified; kept by the catalogue object so a scan of the item's barcode
-// finds its keycode at once (GET /v1/catalogue/barcode).
-export function pageGtins(html) {
-  const out = new Set();
-  for (const m of String(html || '').matchAll(/"(?:gtin|gtin8|gtin12|gtin13|gtin14|ean|barcode|apn)"\s*:\s*"?(\d{8,14})"?/gi)) {
-    const g = gs1Parse(m[1])?.gtin; if (g) out.add(g);
+// The product's own barcode (GTIN), kept by the catalogue object so a scan
+// of the item finds its keycode at once (Live pull, GET /v1/catalogue/barcode).
+// Kept only when the page names exactly one, so a barcode is never filed
+// against the wrong item:
+//   - first the page's structured data: the Product block that is this
+//     item (its sku, productID or mpn is the keycode, or it names none),
+//     its own gtin fields and its offers'; never a related product's;
+//   - with none there, the gtin, ean, barcode or apn fields in the page's
+//     own data that sit near the keycode (within NEAR characters);
+//   - two or more different barcodes (colour variants, a "you may also
+//     like" row) keep none: a scan of it is searched as before.
+// Check digits verified. An empty list when there is no single barcode.
+const GTIN_KEYS = ['gtin', 'gtin8', 'gtin12', 'gtin13', 'gtin14'];
+const NEAR = 600;
+const asGtin = x => { const v = String(x ?? '').replace(/\s/g, ''); return /^\d{8,14}$/.test(v) ? gs1Parse(v)?.gtin || null : null; };
+export function pageGtins(html, kc = '') {
+  html = String(html || ''); kc = String(kc || '');
+  const own = new Set();
+  for (const block of html.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi) || []) {
+    try {
+      const data = JSON.parse(block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, ''));
+      for (const d of Array.isArray(data) ? data : data['@graph'] || [data]) {
+        if (!d || String(d['@type']).toLowerCase() !== 'product') continue;
+        const id = String(d.sku ?? d.productID ?? d.mpn ?? '').trim();
+        if (kc && id && id !== kc) continue;
+        for (const o of [d, ...[].concat(d.offers || [])]) for (const k of GTIN_KEYS) { const g = o && typeof o === 'object' ? asGtin(o[k]) : null; if (g) own.add(g); }
+      }
+    } catch { /* malformed block: the page's data next */ }
   }
-  return [...out].slice(0, 8);
+  if (!own.size) {
+    for (const m of html.matchAll(/"(?:gtin|gtin8|gtin12|gtin13|gtin14|ean|barcode|apn)"\s*:\s*"?(\d{8,14})"?/gi)) {
+      if (kc && !html.slice(Math.max(0, m.index - NEAR), m.index + m[0].length + NEAR).includes(kc)) continue;
+      const g = asGtin(m[1]); if (g) own.add(g);
+    }
+  }
+  return own.size === 1 ? [...own] : [];
 }
 export function extractDetails(html, kc = '') {
   const out = { price: null, was: null, img: null, clr: false };
@@ -144,7 +170,7 @@ export async function renderDetails(env, items, fetchImpl = fetch, { onItem, sto
       const it = list[next++];
       const r = await renderPage(it.u, env, fetchImpl);
       if (!r.html || isAccessDenied(r.html)) { out[it.kc] = { found: false, why: r.html ? 'refused by kmart.com.au (Access Denied)' : r.err }; if (stopOnRefusal) refused = true; continue; }
-      const d = { ...extractDetails(r.html, it.kc), gtins: pageGtins(r.html) }, found = d.price !== null || d.img !== null;
+      const d = { ...extractDetails(r.html, it.kc), gtins: pageGtins(r.html, it.kc) }, found = d.price !== null || d.img !== null;
       out[it.kc] = { found, ...d, ...(found ? {} : { why: blockedBy(r.html) ? 'blocked by kmart.com.au' : 'no price or picture on the page' }) };
       if (found) onItem?.(it.kc, out[it.kc]);
     }

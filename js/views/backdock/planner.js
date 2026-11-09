@@ -4,12 +4,14 @@
 // and manifest. Ported from Vector's backdock-planner to the showcase's
 // week grid with a side editor.
 
-import { $, ic, esc, vh, sub, toast, mhead, fmtDate, today as storeToday } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, mhead, fmtDate, fmtDay, today as storeToday } from '../../ui.js';
 import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, fmtHM, slotRef, attachManifest } from './common.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
 import { truckPhase, phaseCounts } from '../../../shared/dockphase.js';
 import { phaseChip } from './phase.js';
+import { routeSheet, routeTag, fromTag, routeLine, isMgr } from './routes.js';
+import { landingOn, broughtBy, routeManifest } from '../../../shared/dockroutes.js';
 
 const DOW = [tx('Mon'), tx('Tue'), tx('Wed'), tx('Thu'), tx('Fri'), tx('Sat'), tx('Sun')], MON = [tx('Jan'), tx('Feb'), tx('Mar'), tx('Apr'), tx('May'), tx('Jun'), tx('Jul'), tx('Aug'), tx('Sep'), tx('Oct'), tx('Nov'), tx('Dec')];
 const TRUCK_ST = { staged: tx('staged'), live: tx('live'), closed: tx('closed') };
@@ -28,13 +30,15 @@ const unitsOf = m => m?.ref ? m.units : (m?.consols || []).reduce((n, c) => n + 
 const abbr = n => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : n.toLocaleString();
 const metrics = m => tx('{consols} consols · {cartons}c · {keycodes} keycodes · {units} units', { consols: consolsN(m), cartons: abbr(cartonsOf(m)), keycodes: abbr(keycodesOf(m)), units: abbr(unitsOf(m)) });
 const truckOf = (dock, date, n) => dock.trucks[`${date}-T${n}`] || (dock.history || []).find(h => h.id === `${date}-T${n}`) && { status: 'closed' } || null;
-// Truck numbers with a slot planned or a truck created (a created truck consumes its slot).
-const numbersOf = (plan, dock, date) => [...new Set([...Object.keys(plan.days[date]?.slots || {}).map(Number), ...Object.keys(dock.trucks).filter(id => id.startsWith(date + '-T')).map(id => Number(truckNo(id))), ...(dock.history || []).filter(h => h.id.startsWith(date + '-T')).map(h => Number(truckNo(h.id)))])].filter(n => n >= 1 && n <= 4).sort((a, b) => a - b);
+// Truck numbers with a slot planned, marked off-site or diverted, or a truck created (a created truck consumes its slot).
+const numbersOf = (plan, dock, date) => [...new Set([...Object.keys(plan.days[date]?.slots || {}).map(Number), ...Object.keys(plan.days[date]?.routes || {}).map(Number), ...Object.keys(dock.trucks).filter(id => id.startsWith(date + '-T')).map(id => Number(truckNo(id))), ...(dock.history || []).filter(h => h.id.startsWith(date + '-T')).map(h => Number(truckNo(h.id)))])].filter(n => n >= 1 && n <= 4).sort((a, b) => a - b);
 const stl = t => t?.status === 'live' ? 'live' : t?.status === 'closed' ? 'done' : t ? 'staged' : '';
 
 // A slot's card (DV's planner card): Manifest, Truck and Decant rows that
 // go grey (not yet), amber (under way) and green (done) as the day happens.
 function slotHtml(ctx, date, n, slot, dock) {
+  const rt = ctx.store.get('plan').days[date]?.routes?.[n];
+  if (rt) return routedHtml(ctx, date, n, rt);
   const id = `${date}-${n}`, tid = `${date}-T${n}`, on = st.sel === id, t = truckOf(dock, date, n), live = dock.trucks[tid] ? { id: tid, ...dock.trucks[tid] } : null;
   const hist = (dock.history || []).find(h => h.id === tid), past = date < storeToday(), ph = live ? truckPhase(live) : hist ? 'closed' : 'planned';
   slot = slot || {};
@@ -57,12 +61,39 @@ function slotHtml(ctx, date, n, slot, dock) {
     : ph === 'decanting' ? row(1, 'users', tx('Decanting · {pct}%', { pct: pr?.pct ?? 0 }), tx('{done} / {total} ctn', { done: pr?.done ?? 0, total: pr?.total ?? 0 }), chips)
     : crew.length ? row(0, 'users', tx('{n} on decant', { n: crew.length }), ph === 'received' ? tx('Take 5, then start') : '', chips)
     : row(0, 'users', tx('No team yet'), tx('pick devices'));
-  return `<div class="pslot${on ? ' on' : ''}${stl(t) ? ' ' + stl(t) : ''}" data-act="sel" data-slot="${id}"><div class="pslot-h"><b>${tx('Truck {no}', { no: n })}</b>${live || hist ? phaseChip(live || { status: 'closed' }) : `<span class="eta">${ic('clock')}${esc(slot.eta || '—')}</span>`}</div>${man}${trk}${dec}${slot.huddleMins || slot.breakMins ? `<div class="prow">${ic('clock')}<div><span>${slot.huddleMins ? tx('huddle {n}m booked', { n: slot.huddleMins }) : ''}${slot.huddleMins && slot.breakMins ? ' · ' : ''}${slot.breakMins ? tx('team break {n}m', { n: slot.breakMins }) : ''}</span></div></div>` : ''}${slot.note ? `<div class="prow note">${ic('edit')}<div><span>${esc(slot.note)}</span></div></div>` : ''}</div>`;
+  const from = live?.from || slot.from;
+  return `<div class="pslot${on ? ' on' : ''}${stl(t) ? ' ' + stl(t) : ''}" data-act="sel" data-slot="${id}"><div class="pslot-h"><b>${tx('Truck {no}', { no: n })}</b>${live || hist ? phaseChip(live || { status: 'closed' }) : `<span class="eta">${ic('clock')}${esc(slot.eta || '—')}</span>`}</div>${from ? `<div class="rt-row">${fromTag(ctx.store.get('plan'), from)}</div>` : ''}${man}${trk}${dec}${slot.huddleMins || slot.breakMins ? `<div class="prow">${ic('clock')}<div><span>${slot.huddleMins ? tx('huddle {n}m booked', { n: slot.huddleMins }) : ''}${slot.huddleMins && slot.breakMins ? ' · ' : ''}${slot.breakMins ? tx('team break {n}m', { n: slot.breakMins }) : ''}</span></div></div>` : ''}${slot.note ? `<div class="prow note">${ic('edit')}<div><span>${esc(slot.note)}</span></div></div>` : ''}</div>`;
+}
+// A truck marked off-site or diverted keeps its place in the day, so the
+// week reads true: its tag, its manifest, where it went and that there is
+// nothing to decant.
+function routedHtml(ctx, date, n, rt) {
+  const id = `${date}-${n}`, man = rt.slot?.manifest, no = routeManifest(rt), idx = no ? manifestIndex(ctx.store.get('dock')).find(m => m.manNo === no) : null;
+  const row = (icon, b, sub) => `<div class="prow pr-x">${ic(icon)}<div><b>${b}</b>${sub ? `<span>${sub}</span>` : ''}</div></div>`;
+  const what = man ? `${metrics(man)}` : idx ? tx('{consols} consols · {cartons} cartons', { consols: idx.consols, cartons: idx.totalCartons }) : '';
+  return `<div class="pslot routed ${esc(rt.route)}${st.sel === id ? ' on' : ''}" data-act="sel" data-slot="${id}"><div class="pslot-h"><b>${tx('Truck {no}', { no: n })}</b>${rt.slot?.eta ? `<span class="eta">${ic('clock')}${esc(rt.slot.eta)}</span>` : ''}</div><div class="rt-row">${routeTag(rt)}</div>` +
+    row('file', no ? esc(no) : tx('No manifest'), what) + row(rt.route === 'offsite' ? 'stack' : 'route', tx('Not coming to the dock'), routeLine(rt)) + row('users', tx('Nothing to decant'), '') + `</div>`;
+}
+// The day a truck that went off-site (or was diverted) lands here after
+// all: the reference, and Plan it, which puts it on a truck that day with
+// its manifest staged (plan.set from).
+function landingHtml(ctx, plan, dock, k, today) {
+  return landingOn(plan, k).filter(x => !broughtBy(plan, dock, { date: x.date, slot: x.n })).map(x => {
+    const no = routeManifest(x.route);
+    return `<div class="pland ${esc(x.route.route)}"><div class="pland-h">${ic('undo')}<b>${x.route.route === 'offsite' ? tx('Lands from off-site') : tx('Lands after a diversion')}</b></div><span>${tx('Truck {no} of {day}', { no: x.n, day: esc(fmtDate(x.date)) })}${no ? ' · ' + esc(no) : ''}</span>${k >= today && isMgr(ctx) ? `<button class="btn sm" data-act="land-plan" data-date="${x.date}" data-n="${x.n}">${ic('plus')}${tx('Plan it')}</button>` : ''}</div>`;
+  }).join('');
 }
 function editor(ctx, plan, dock) {
   if (!st.sel) return `<div class="card"><div class="ch"><h3>${tx('Pick a truck')}</h3></div><p class="lbl">${tx('Click a slot to set its ETA, manifest and decant team, or + Truck on a day to plan one.')}</p></div>`;
   const [date, n] = [st.sel.slice(0, 10), Number(st.sel.slice(11))], slot = plan.days[date]?.slots?.[n] || { eta: '', note: '', team: [], manifest: null }, t = truckOf(dock, date, n);
-  const d = new Date(date + 'T00:00:00'), idx = manifestIndex(dock);
+  const d = new Date(date + 'T00:00:00'), idx = manifestIndex(dock), rt = plan.days[date]?.routes?.[n];
+  if (rt) {
+    const no = routeManifest(rt), mgr = isMgr(ctx);
+    return `<div class="card pedit"><div class="ch"><h3>${tx('Truck {no} · {day}', { no: n, day: dayLabel(d) })}</h3></div><div class="rt-row">${routeTag(rt)}</div><p class="lbl">${routeLine(rt)}</p>` +
+      `${no ? `<div class="pman">${ic('file')}<div><b>${esc(no)}</b><span>${rt.slot?.manifest ? tx('{consols} consols · {cartons} cartons', { consols: consolsN(rt.slot.manifest), cartons: cartonsOf(rt.slot.manifest) }) : tx('not coming to the dock')}</span></div></div>` : ''}` +
+      `<p class="lbl">${rt.lands ? tx('Expected here on {day}: the Planner shows it that day, with Plan it.', { day: esc(fmtDate(rt.lands)) }) : rt.route === 'offsite' ? tx('No callback day yet. Set one when it is called back.') : tx('It does not come here. If it does after all, set it back to Receive here.')}</p>` +
+      (mgr ? `<div class="pf-acts"><button class="btn primary" data-act="route" data-date="${date}" data-n="${n}">${ic('edit')}${tx('Change where it goes')}</button><button class="btn" data-act="route-back" data-date="${date}" data-n="${n}">${ic('truck')}${tx('Receive here')}</button><button class="btn" data-act="remove">${tx('Remove truck')}</button></div>` : `<p class="lbl">${tx('A manager changes where it goes.')}</p>`) + `</div>`;
+  }
   // A truck on the dock: its manifest goes straight on the truck (a closed one is History's).
   if (t) {
     const live = t.status !== 'closed', id = `${date}-T${n}`;
@@ -77,19 +108,21 @@ function editor(ctx, plan, dock) {
     `<div class="pf"><label>${tx('Huddle · break')}</label><span class="pf-pair"><input class="inp mono" data-field="huddle" type="number" min="0" max="120" value="${slot.huddleMins || ''}" placeholder="0"><span class="cs-dim">${tx('min huddle')}</span><input class="inp mono" data-field="break" type="number" min="0" max="120" value="${slot.breakMins || ''}" placeholder="0"><span class="cs-dim">${tx('min team break')}</span></span><span class="cs-dim">${tx('The huddle is booked at the decant start and stops the clock; the break is the plan’s allowance.')}</span></div>` +
     ((slot.team || []).length ? `<div class="pf"><label>${tx('start and finish::Times')}</label><div class="pf-times">${(slot.team || []).map(m => `<div class="pf-time"><b>${esc(who(m))}</b><input type="time" class="inp" data-mtime="start" data-pid="${esc(m.pid)}" value="${esc(m.start || '')}" title="${tx('Start (empty follows the ETA)')}"><input type="time" class="inp" data-mtime="finish" data-pid="${esc(m.pid)}" value="${esc(m.finish || '')}" title="${tx('Finish')}"></div>`).join('')}</div><span class="cs-dim">${tx('Empty start follows the ETA. Finish times keep auto-balance within each shift.')}</span></div>` : '') +
     `<div class="pf"><label>${tx('Note')}</label><input class="inp" data-field="note" value="${esc(slot.note || '')}" placeholder="${tx('Anything the dock should know')}" maxlength="200"></div>` +
+    (isMgr(ctx) && plan.days[date]?.slots?.[n] ? `<div class="pf"><label>${tx('Where it goes')}</label><span class="pf-pair"><span class="status good">${ic('truck')}${tx('Receive here')}</span><button class="btn sm" data-act="route" data-date="${date}" data-n="${n}">${ic('route')}${tx('Off-site or diverted…')}</button></span><span class="cs-dim">${tx('Not coming to the dock? Mark it off-site or diverted, with the day it lands here after all.')}</span></div>` : '') +
     `<div class="pf-acts"><button class="btn primary" data-act="save">${ic('check')}${tx('Save')}</button><button class="btn" data-act="remove">${tx('Remove truck')}</button></div></div>`;
 }
 // The library as a picker: unused reports first; then the ones already on a
 // truck or staged on a slot, labelled where (a re-run, or one staged to the
 // wrong day), so a published report is never hidden.
 function manSelect(idx, plan, dock, cur, forTruck) {
-  const staged = {}; for (const [date, day] of Object.entries(plan.days || {})) for (const [n, sl] of Object.entries(day.slots || {})) if (sl.manifest?.manNo) staged[sl.manifest.manNo] = `${date}-T${n}`;
-  const where = m => m.truck ? (dock.trucks[m.truck] && dock.trucks[m.truck].status !== 'closed' ? tx('on Truck {no} now', { no: truckNo(m.truck) }) : tx('used on Truck {no} · {date}', { no: truckNo(m.truck), date: fmtDate(m.truck.slice(0, 10)) })) : staged[m.manNo] ? tx('staged for Truck {no} · {date}', { no: truckNo(staged[m.manNo]), date: fmtDate(staged[m.manNo].slice(0, 10)) }) : '';
+  const staged = {}, away = {}; for (const [date, day] of Object.entries(plan.days || {})) { for (const [n, sl] of Object.entries(day.slots || {})) if (sl.manifest?.manNo) staged[sl.manifest.manNo] = `${date}-T${n}`; for (const r of Object.values(day.routes || {})) if (routeManifest(r)) away[routeManifest(r)] = { date, r }; }
+  const awayText = a => a.r.route === 'offsite' ? tx('off-site since {date}', { date: fmtDate(a.date) }) : tx('diverted on {date}', { date: fmtDate(a.date) });
+  const where = m => m.truck ? (dock.trucks[m.truck] && dock.trucks[m.truck].status !== 'closed' ? tx('on Truck {no} now', { no: truckNo(m.truck) }) : tx('used on Truck {no} · {date}', { no: truckNo(m.truck), date: fmtDate(m.truck.slice(0, 10)) })) : staged[m.manNo] ? tx('staged for Truck {no} · {date}', { no: truckNo(staged[m.manNo]), date: fmtDate(staged[m.manNo].slice(0, 10)) }) : away[m.manNo] ? awayText(away[m.manNo]) : '';
   const list = idx.filter(m => m.manNo !== cur && m.truck !== forTruck), free = list.filter(m => !where(m)), used = list.filter(m => where(m));
   const opt = m => `<option value="${esc(m.manNo)}">${esc(m.manNo)} · ${tx('{consols} consols · {cartons}c', { consols: m.consols, cartons: m.totalCartons })}${m.despatch ? ' · ' + esc(m.despatch) : ''}${where(m) ? ' · ' + esc(where(m)) : ''}</option>`;
   return `<select class="inp" data-field="man"><option value="">${!list.length ? tx('Nothing in the library yet: publish one in Manifests') : free.length ? tx('Choose a published manifest…') : tx('Every report is on a truck or staged: choose one below')}</option>${free.map(opt).join('')}${used.length ? `<optgroup label="${tx('Already on a truck or staged')}">${used.map(opt).join('')}</optgroup>` : ''}</select>`;
 }
-function usedManifests(plan) { const s = new Set(); for (const day of Object.values(plan.days || {})) for (const sl of Object.values(day.slots || {})) if (sl.manifest?.manNo) s.add(sl.manifest.manNo); return s; }
+function usedManifests(plan) { const s = new Set(); for (const day of Object.values(plan.days || {})) { for (const sl of Object.values(day.slots || {})) if (sl.manifest?.manNo) s.add(sl.manifest.manNo); for (const r of Object.values(day.routes || {})) if (routeManifest(r)) s.add(routeManifest(r)); } return s; }
 function waiting(ctx, plan, dock) {
   const used = usedManifests(plan), list = manifestIndex(dock).filter(m => !m.truck && !used.has(m.manNo));
   return `<div class="card"><div class="ch"><h3>${tx('Manifests without a slot')}</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${tx('{consols} consols · {cartons} cartons', { consols: m.consols, cartons: m.totalCartons })}${m.despatch ? ' · ' + tx('despatch {date}', { date: esc(m.despatch) }) : ''}</span><button class="btn sm${st.pick?.man === m.manNo && st.pick.day === 0 ? ' primary' : ''}" data-act="stage-next" data-day="0" data-man="${esc(m.manNo)}" title="${tx("Choose today's truck for it")}">${tx('Today')}</button><button class="btn sm${st.pick?.man === m.manNo && st.pick.day === 1 ? ' primary' : ''}" data-act="stage-next" data-day="1" data-man="${esc(m.manNo)}" title="${tx("Choose tomorrow's truck for it: for a report that came in the day before")}">${tx('Tomorrow')}</button></div>${st.pick?.man === m.manNo ? truckChooser(plan, dock, st.pick) : ''}`).join('')}</div>` : `<p class="lbl">${tx('Every published manifest has a truck.')}</p>`}<p class="lbl">${tx('Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.')}</p></div>`;
@@ -115,9 +148,9 @@ export default {
     const plan = ctx.store.get('plan'), dock = ctx.store.get('dock'), days = weekDays(st.week), today = storeToday();
     const count = days.reduce((n, d) => n + numbersOf(plan, dock, dkey(d)).length, 0), todayN = numbersOf(plan, dock, today).length;
     const range = `${dateLabel(days[0])} – ${dateLabel(days[6])}`;
-    const week = `<div class="pweek">${days.map(d => { const k = dkey(d), slots = plan.days[k]?.slots || {}, ns = numbersOf(plan, dock, k); let next = 1; while (ns.includes(next)) next++; return `<div class="pday${k === today ? ' today' : ''}"><div class="dl">${DOW[(d.getDay() + 6) % 7]}<b>${d.getDate()}</b>${ns.length ? `<span class="cs-dim">${txn(ns.length, '{n} truck', '{n} trucks')}</span>` : ''}</div>${ns.length ? ns.map(n => slotHtml(ctx, k, n, slots[n], dock)).join('') : noneHtml(plan, k, today)}${next <= 4 ? `<div class="padd" data-act="add" data-slot="${k}-${next}">+ ${tx('Truck {no}', { no: next })}</div>` : ''}</div>`; }).join('')}</div>`;
+    const week = `<div class="pweek">${days.map(d => { const k = dkey(d), slots = plan.days[k]?.slots || {}, ns = numbersOf(plan, dock, k); let next = 1; while (ns.includes(next)) next++; return `<div class="pday${k === today ? ' today' : ''}"><div class="dl">${DOW[(d.getDay() + 6) % 7]}<b>${d.getDate()}</b>${ns.length ? `<span class="cs-dim">${txn(ns.length, '{n} truck', '{n} trucks')}</span>` : ''}</div>${ns.length ? ns.map(n => slotHtml(ctx, k, n, slots[n], dock)).join('') : noneHtml(ctx, plan, k, today)}${landingHtml(ctx, plan, dock, k, today)}${next <= 4 ? `<div class="padd" data-act="add" data-slot="${k}-${next}">+ ${tx('Truck {no}', { no: next })}</div>` : ''}</div>`; }).join('')}</div>`;
     return vh(tx('Planner'), sub(st.week === 0 ? tx('This week') : st.week === 1 ? tx('Next week') : st.week === -1 ? tx('Last week') : tx('{n} weeks', { n: `${st.week > 0 ? '+' : ''}${st.week}` }), range, `${txn(count, '{n} truck', '{n} trucks')}${st.week === 0 ? ` · ${tx('{n} today', { n: todayN })}` : ''}`), `<span class="pills"><button data-act="wk" data-d="-1">‹</button><button class="${st.week === 0 ? 'on' : ''}" data-act="wk" data-d="0">${tx('This week')}</button><button data-act="wk" data-d="1">›</button></span>`, 'm-planner') +
-      `<div class="grid2 pgrid">${week}<div class="sidecol">${editor(ctx, plan, dock)}${noTruckCard(plan, dock, days, today)}${summary(plan, dock, days)}${roster(dock)}${waiting(ctx, plan, dock)}</div></div>`;
+      `<div class="grid2 pgrid">${week}<div class="sidecol">${editor(ctx, plan, dock)}${noTruckCard(ctx, plan, dock, days, today)}${summary(plan, dock, days)}${roster(dock)}${waiting(ctx, plan, dock)}</div></div>`;
   },
   mount(ctx, root) {
     const field = n => root.querySelector(`[data-field="${n}"]`)?.value ?? '';
@@ -152,6 +185,18 @@ export default {
         }
         else if (act === 'roster-add') { const pid = dnumId(field('roster').trim()); if (!pid) return toast(tx('Enter a D-number, like D4. Names are not kept.'), 'bad'); const cur0 = ctx.store.get('dock').roster?.pids || []; if (cur0.includes(pid)) return; await ctx.store.dispatch({ type: 'dock.roster', entity: {}, payload: { pids: [...cur0, pid] } }); }
         else if (act === 'roster-drop') { const cur0 = ctx.store.get('dock').roster?.pids || []; await ctx.store.dispatch({ type: 'dock.roster', entity: {}, payload: { pids: cur0.filter(x => x !== a.dataset.pid) } }); }
+        else if (act === 'route') { await routeSheet(ctx, { date: a.dataset.date, n: Number(a.dataset.n) }); }
+        else if (act === 'route-day') { const k = a.dataset.date, ns = numbersOf(ctx.store.get('plan'), ctx.store.get('dock'), k), free = [1, 2, 3, 4].filter(x => !ns.includes(x)); if (await routeSheet(ctx, { date: k, nums: free })) st.sel = null; }
+        else if (act === 'route-back') { await ctx.store.dispatch({ type: 'plan.route', entity: { date: a.dataset.date, slot: Number(a.dataset.n) }, payload: { route: null } }); toast(tx('Truck {no} on {day}: back on the plan', { no: a.dataset.n, day: fmtDay(a.dataset.date) })); }
+        else if (act === 'land-plan') {
+          const plan = ctx.store.get('plan'), date = a.dataset.date, n = Number(a.dataset.n), rt = plan.days[date]?.routes?.[n]; if (!rt?.lands) return;
+          const ns = numbersOf(plan, ctx.store.get('dock'), rt.lands), to = [1, 2, 3, 4].find(x => !ns.includes(x)); if (!to) return toast(tx('{day} already has four trucks', { day: fmtDay(rt.lands) }), 'bad');
+          a.disabled = true;
+          let manifest = rt.slot?.manifest || null; const no = routeManifest(rt);
+          if (!manifest && no) { try { manifest = slotRef(await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(no)}`)); } catch { manifest = null; } }
+          await set(rt.lands, to, { eta: rt.slot?.eta || null, note: '', from: { date, slot: n }, ...(manifest ? { manifest } : {}) });
+          st.sel = `${rt.lands}-${to}`; toast(tx('Planned as Truck {no} on {day}', { no: to, day: fmtDay(rt.lands) }));
+        }
         else if (act === 'notrucks' || act === 'notrucks-off') { const on = act === 'notrucks'; await ctx.store.dispatch({ type: 'plan.noTrucks', entity: { date: a.dataset.date }, payload: { on } }); toast(on ? tx('{date}: no trucks, confirmed', { date: fmtDate(a.dataset.date) }) : tx('{date}: no-trucks mark cleared', { date: fmtDate(a.dataset.date) })); }
         else if (act === 'attach-truck') { const manNo = field('man'); if (!manNo) return toast(tx('Choose a manifest first'), 'bad'); a.disabled = true; await attachManifest(ctx, a.dataset.truck, manNo); toast(tx('{man} attached to Truck {no}', { man: manNo, no: truckNo(a.dataset.truck) })); }
         else if (act === 'unstage') { const { date, n } = cur(); await set(date, n, { manifest: null }); }
@@ -173,20 +218,20 @@ export default {
 // cartons decanted.
 // Days without trucks: confirmed ahead (or on the day) so nothing expects a
 // manifest and the morning checklist reads green. Past days are history.
-function noneHtml(plan, k, today) {
-  const nt = plan.days[k]?.noTrucks;
+function noneHtml(ctx, plan, k, today) {
+  const nt = plan.days[k]?.noTrucks, away = isMgr(ctx) && k >= today ? `<button class="pnt" data-act="route-day" data-date="${k}">${ic('route')}${tx('Off-site or diverted…')}</button>` : '';
   if (nt) return `<div class="pempty pnone">${ic('check')}${tx('No trucks · confirmed')}${k >= today ? `<button class="pundo" data-act="notrucks-off" data-date="${k}" title="${tx('Trucks after all: undo')}">${tx('Undo')}</button>` : ''}</div>`;
-  return `<div class="pempty">${tx('No trucks')}</div>${k >= today ? `<button class="pnt" data-act="notrucks" data-date="${k}">${ic('check')}${tx('Confirm no trucks')}</button>` : ''}`;
+  return `<div class="pempty">${tx('No trucks')}</div>${k >= today ? `<button class="pnt" data-act="notrucks" data-date="${k}">${ic('check')}${tx('Confirm no trucks')}</button>` : ''}${away}`;
 }
-function noTruckCard(plan, dock, days, today) {
+function noTruckCard(ctx, plan, dock, days, today) {
   const ahead = days.map(dkey).filter(k => k >= today); if (!ahead.length) return '';
   const label = k => { const d = new Date(k + 'T00:00:00'); return k === today ? dayLabel(d, tx('Today')) : dayLabel(d); };
   const row = k => {
-    const n = numbersOf(plan, dock, k).length, nt = plan.days[k]?.noTrucks;
-    const st = n ? `<span class="cs-dim">${txn(n, '{n} truck', '{n} trucks')}</span>` : nt ? `<span class="status good">${tx('No trucks')}</span><button class="pundo" data-act="notrucks-off" data-date="${k}">${tx('Undo')}</button>` : `<span class="cs-dim">${tx('not planned')}</span><button class="btn sm" data-act="notrucks" data-date="${k}">${tx('No trucks')}</button>`;
+    const n = numbersOf(plan, dock, k).length, nt = plan.days[k]?.noTrucks, rts = Object.values(plan.days[k]?.routes || {});
+    const st = rts.length && rts.length === n ? rts.map(routeTag).join('') : n ? `<span class="cs-dim">${txn(n, '{n} truck', '{n} trucks')}</span>` : nt ? `<span class="status good">${tx('No trucks')}</span><button class="pundo" data-act="notrucks-off" data-date="${k}">${tx('Undo')}</button>` : `<span class="cs-dim">${tx('not planned')}</span><button class="btn sm" data-act="notrucks" data-date="${k}">${tx('No trucks')}</button>${isMgr(ctx) ? `<button class="btn sm" data-act="route-day" data-date="${k}" title="${tx('Off-site or diverted…')}">${ic('route')}${tx('Off-site')}</button>` : ''}`;
     return `<div class="row pnt-row${nt ? ' on' : ''}"><span>${label(k)}</span><span class="pnt-st">${st}</span></div>`;
   };
-  return `<div class="card pnt-card"><div class="ch"><h3>${tx('Days without trucks')}</h3></div><p class="lbl">${tx('Confirm a day ahead or on the day: it expects no truck and no manifest, and the Dashboard’s morning checklist marks it done. Planning a truck on it clears the mark.')}</p><div class="rows">${ahead.map(row).join('')}</div></div>`;
+  return `<div class="card pnt-card"><div class="ch"><h3>${tx('Days without trucks')}</h3></div><p class="lbl">${tx('Confirm a day ahead or on the day: it expects no truck and no manifest, and the Dashboard’s morning checklist marks it done. Planning a truck on it clears the mark.')} ${tx('Trucks going off-site or diverted instead? Mark them on the day: Off-site or diverted…')}</p><div class="rows">${ahead.map(row).join('')}</div></div>`;
 }
 function summary(plan, dock, days) {
   // Each truck once: a finalised truck is both on the dock record and in History.
@@ -194,7 +239,9 @@ function summary(plan, dock, days) {
   const cleared = (dock.history || []).filter(h => keys.includes(h.id.slice(0, 10))), ids = new Set([...trucks.map(([id]) => id), ...cleared.map(h => h.id)]), avg = cleared.length ? cleared.reduce((n, h) => n + (h.clearMins || 0), 0) / cleared.length : 0;
   const manCtn = slots.reduce((n, sl) => n + cartonsOf(sl.manifest), 0) + trucks.reduce((n, [, t]) => n + cartonsOf(t.manifest), 0);
   const row = (k, v) => `<div class="row">${k}<b>${v}</b></div>`;
-  return `<div class="card kpi"><div class="ch"><h3>${tx('This week')}</h3></div><div class="rows">${row(tx('Trucks planned'), slots.length + ids.size)}${row(tx('Cartons manifested'), manCtn.toLocaleString())}${row(tx('Trucks cleared'), cleared.length)}${row(tx('Average clear'), cleared.length ? fmtMins(avg) : '—')}${row(tx('Cartons decanted'), cleared.reduce((n, h) => n + (h.cartons || 0), 0).toLocaleString())}</div></div>`;
+  const away = keys.flatMap(k => Object.values(plan.days[k]?.routes || {})), awayCtn = r => cartonsOf(r.slot?.manifest) || manifestIndex(dock).find(m => m.manNo === routeManifest(r))?.totalCartons || 0;
+  const awayRows = ['offsite', 'diverted'].map(kind => { const xs = away.filter(r => r.route === kind); return xs.length ? row(kind === 'offsite' ? tx('Off-site') : tx('Diverted'), `${txn(xs.length, '{n} truck', '{n} trucks')} · ${tx('{n} ctn', { n: xs.reduce((n, r) => n + awayCtn(r), 0).toLocaleString() })}`) : ''; }).join('');
+  return `<div class="card kpi"><div class="ch"><h3>${tx('This week')}</h3></div><div class="rows">${row(tx('Trucks planned'), slots.length + ids.size)}${awayRows}${row(tx('Cartons manifested'), manCtn.toLocaleString())}${row(tx('Trucks cleared'), cleared.length)}${row(tx('Average clear'), cleared.length ? fmtMins(avg) : '—')}${row(tx('Cartons decanted'), cleared.reduce((n, h) => n + (h.cartons || 0), 0).toLocaleString())}</div></div>`;
 }
 // The week's decant roster: new trucks start with these D-numbers when
 // their slot names no team.

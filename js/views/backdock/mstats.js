@@ -46,10 +46,11 @@ function periodName(s, r) {
 }
 const versus = s => s.per === 'week' ? tx('vs the week before') : s.per === 'fortnight' ? tx('vs the fortnight before') : tx('vs the same days before');
 
-// What the dock holds that changes the numbers: reports, days set by hand, finalised trucks.
-const holding = dock => [Object.values(dock.manifests || {}).map(m => m.manNo + m.publishedAt + (m.truck || '')).sort().join(), Object.values(dock.manifestDays || {}).map(x => x.at).sort().at(-1) || '', Object.keys(dock.manifestDays || {}).length, (dock.history || []).length].join('|');
+// What the dock holds that changes the numbers: reports, days set by hand, finalised trucks, trucks marked off-site or diverted.
+const routesSig = plan => Object.values(plan?.days || {}).flatMap(d => Object.values(d.routes || {}).map(r => r.at)).sort().join();
+const holding = (dock, plan) => [Object.values(dock.manifests || {}).map(m => m.manNo + m.publishedAt + (m.truck || '')).sort().join(), Object.values(dock.manifestDays || {}).map(x => x.at).sort().at(-1) || '', Object.keys(dock.manifestDays || {}).length, (dock.history || []).length, routesSig(plan)].join('|');
 export function loadStats(ctx, s, done) {
-  const r = rangeOf(s), key = `${s.per}|${r.from}|${r.to}|${holding(ctx.store.get('dock'))}`;
+  const r = rangeOf(s), key = `${s.per}|${r.from}|${r.to}|${holding(ctx.store.get('dock'), ctx.store.get('plan'))}`;
   if (s.key === key) return;
   s.key = key; s.error = null; s.busy = true;
   ctx.api(`/v1/store/${ctx.storeNo}/manifests/stats${r.from ? `?from=${r.from}&to=${r.to}` : ''}`)
@@ -128,6 +129,8 @@ export function statsPane(ctx, s, paint) {
   if (s.error) return bar + `<div class="card"><p class="lbl">${tx('The stats did not load: {error}', { error: esc(s.error) })}</p><button class="btn" data-act="ms-retry">${ic('refresh')}${tx('Try again')}</button></div>`;
   if (!s.data) return bar + `<div class="card"><div class="ohint">${tx('Adding up the manifests…')}</div></div>`;
   if (!s.data.totals.manifests) return bar + `<div class="card"><p class="lbl">${s.per === 'all' ? tx('No manifests published yet.') : tx('No manifest came in this period. Pick another, or publish the reports for these days.')}</p></div>`;
-  return bar + (s.busy ? `<div class="ohint ms-busy">${tx('Updating…')}</div>` : '') + tiles(ctx, s) +
+  // Trucks that went off-site (with no day to land yet) or were diverted: counted apart, never as received.
+  const aw = s.data.away, awayLine = aw && (aw.offsite.manifests || aw.diverted.manifests) ? `<p class="lbl ms-away">${ic('route')}${[aw.offsite.manifests ? tx('Off-site: {n} manifests · {c} ctn', { n: aw.offsite.manifests, c: n0(aw.offsite.cartons) }) : '', aw.diverted.manifests ? tx('Diverted: {n} manifests · {c} ctn', { n: aw.diverted.manifests, c: n0(aw.diverted.cartons) }) : ''].filter(Boolean).join(' · ')} · ${tx('not counted as received')}</p>` : '';
+  return bar + (s.busy ? `<div class="ohint ms-busy">${tx('Updating…')}</div>` : '') + tiles(ctx, s) + awayLine +
     `<div class="ms-grid"><div>${chart(s)}${s.per !== 'week' ? weekdays(s) : ''}${departments(s, paint)}${mapCard(paint, hasMap())}</div><div>${products(s)}</div></div>` + reports(s);
 }

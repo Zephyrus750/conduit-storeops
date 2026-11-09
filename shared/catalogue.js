@@ -147,6 +147,7 @@ export const CATALOGUE = {
   'dock.roster':         T('backdock', D, [], { pids: 'array' }),
   'plan.remove':         T('backdock', D, ['date', 'slot']),
   'plan.noTrucks':       T('backdock', D, ['date']),                            // a day confirmed with no trucks; payload.on false clears it
+  'plan.route':          T('backdock', M, ['date', 'slot']),                    // a truck not coming to the dock: payload.route offsite | diverted | null (Receive here), lands, to, reason, note, manNo
 
   // Off-site pallets and other loads: the Inventory hub's events, Floor
   // until it moved to the Back dock (23 Oct 2026).

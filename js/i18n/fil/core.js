@@ -18,4 +18,8 @@ export default {
   "Wrong code.": "Maling code.",
   "Language": "Wika",
   "Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.": "Lahat ng screen sa device na ito, sa isa sa pitong wika. Nananatili ang pangalan ng shelf, produkto at department ayon sa pagkakasulat ng tindahan.",
+  "This device is offline: check the wifi, then sign in again.": "Offline ang device na ito: tingnan ang wifi, saka mag-sign in ulit.",
+  "This device is offline: check the wifi, then enter the code again.": "Offline ang device na ito: tingnan ang wifi, saka ilagay ulit ang code.",
+  "The {area} crew code opens this workspace on this device for one shift (12 hours), or until the device is signed out or locked after sitting idle.": "Binubuksan ng crew code ng {area} ang workspace na ito sa device na ito nang isang shift (12 oras), o hanggang mag-sign out ang device o ma-lock ito matapos maiwang walang galaw.",
+  "A manager code here opens every area; managers can also sign in as Manager to skip this.": "Binubuksan ng manager code dito ang lahat ng area; puwede ring mag-sign in ang mga manager bilang Manager para laktawan ito.",
 };

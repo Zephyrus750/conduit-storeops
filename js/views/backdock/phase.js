@@ -19,6 +19,7 @@ import { tx, txn } from '../../i18n.js';
 import { PHASES, truckPhase, phaseCounts } from '../../../shared/dockphase.js';
 import { liveAudit } from '../../../shared/reducers/backdock.js';
 import { truckNo, fmtHM, todayKey, unfinished, PT_NAME } from './common.js';
+import { routeTag } from './routes.js';
 
 // A truck's phase names (context keys: "Cleared" is not the shell's "erased").
 export const PHASE_NAME = { planned: tx('truck phase::Planned'), receiving: tx('truck phase::Receiving'), received: tx('truck phase::Received'), decanting: tx('truck phase::Decanting'), cleared: tx('truck phase::Cleared'), closed: tx('truck phase::Closed') };
@@ -56,14 +57,16 @@ export const phaseChip = t => { const ph = truckPhase(t); return `<span class="p
 
 // ── New truck ──────────────────────────────────────────────────────────
 // Today's trucks by number: planned slots (not yet a truck), trucks on the
-// dock, and trucks finalised today.
+// dock, trucks finalised today, and trucks marked off-site or diverted
+// (plan.route), which no new truck takes the number of unless it is that
+// truck after all.
 const hhmm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 function today(dock, plan) {
-  const day = todayKey(), slots = plan?.days?.[day]?.slots || {}, taken = {};
+  const day = todayKey(), slots = plan?.days?.[day]?.slots || {}, routes = plan?.days?.[day]?.routes || {}, taken = {};
   for (const id of Object.keys(dock.trucks || {})) if (id.startsWith(day + '-T')) taken[truckNo(id)] = dock.trucks[id].status === 'closed' ? 'done' : 'open';
   for (const h of dock.history || []) if (h.id.startsWith(day + '-T')) taken[truckNo(h.id)] = 'done';
-  let free = 1; while (taken[free] || slots[free]) free++;
-  return { day, slots, taken, free };
+  let free = 1; while (taken[free] || slots[free] || routes[free]) free++;
+  return { day, slots, routes, taken, free };
 }
 export function ntDefaults(dock, plan, now = new Date()) {
   const d = today(dock, plan), first = Object.keys(d.slots).map(Number).sort((a, b) => a - b).find(n => !d.taken[n]);
@@ -77,9 +80,12 @@ export function ntPayload(dock, plan, nt, now = new Date()) {
   return { id: `${d.day}-T${n}`, n, payload };
 }
 export function newTruckSheet(dock, plan, nt, open) {
-  const d = today(dock, plan), nums = [...new Set([...Object.keys(d.slots), ...Object.keys(d.taken)].map(Number))].sort((a, b) => a - b);
+  const d = today(dock, plan), nums = [...new Set([...Object.keys(d.slots), ...Object.keys(d.routes), ...Object.keys(d.taken)].map(Number))].sort((a, b) => a - b);
   const card = n => {
-    const sl = d.slots[n], tk = d.taken[n], on = String(nt.slot) === String(n);
+    const sl = d.slots[n], tk = d.taken[n], rt = d.routes[n], on = String(nt.slot) === String(n);
+    // Off-site: pick it only if this is that truck after all (it goes back on the plan); diverted: never here.
+    if (rt && !tk) return rt.route === 'diverted' ? `<div class="nt-c off"><b>${tx('Truck {n}', { n })}</b>${routeTag(rt)}<small>${tx('Diverted: it is not coming here. A manager sets it back in the Planner if it does.')}</small></div>`
+      : `<button class="nt-c routed${on ? ' on' : ''}" data-act="nt-slot" data-n="${n}" aria-pressed="${on}"><b>${tx('Truck {n}', { n })}</b>${routeTag(rt)}<small class="warn">${tx('Marked off-site: pick it only if this is that truck after all.')}</small></button>`;
     if (tk) return `<div class="nt-c off"><b>${tx('Truck {n}', { n })}</b><span class="status ${tk === 'done' ? 'good' : ''}">${tk === 'done' ? tx('Done ✓') : tx('On the dock')}</span></div>`;
     const man = sl.manifest, mtxt = man ? (man.ref ? tx('Manifest {no} · {c} ctn · {n} consols', { no: esc(man.manNo), c: man.cartons ?? '–', n: man.n }) : tx('Manifest {no}', { no: esc(man.manNo) })) : tx('no manifest yet');
     return `<button class="nt-c${on ? ' on' : ''}" data-act="nt-slot" data-n="${n}" aria-pressed="${on}"><b>${tx('Truck {n}', { n })}</b>${on ? `<span class="status good">${tx('selected')}</span>` : ''}<small class="${man ? 'ok' : 'warn'}">${ic('file')}${mtxt}</small><small>${sl.eta ? tx('start {time}', { time: esc(sl.eta) }) : tx('no start time')} · ${txn((sl.team || []).length, '{n} decanter', '{n} decanters')}${sl.huddleMins ? ' · ' + tx('huddle {n}m', { n: sl.huddleMins }) : ''}</small></button>`;

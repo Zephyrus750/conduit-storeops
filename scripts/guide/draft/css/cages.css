@@ -1,0 +1,177 @@
+/* ── Cages on the phone (scripts/guide/draft/chapters/cages.js): Cage scan,
+   Cage sweep, the camera on cartons and the browser's own dialogs, as
+   js/views/stockroom/cages.js draws them at 390 px (styles/shell.css .cs-*,
+   .swp-*, .mv-scan.typed, .mv-rows; app.css .bcs-*, .rc-flag). ── */
+.cg2-v { flex: 1; min-height: 0; overflow: hidden; margin: -2px -12px -12px; padding: 0 13px; }
+.cg2-sc { display: flex; flex-direction: column; gap: 12px; padding: 0 1px 24px; }
+.cg2-hd h2 { margin: 0; font: 800 24px/1.1 var(--body); letter-spacing: -.02em; color: var(--i); }
+.cg2-hd span { display: block; margin-top: 2px; font-size: 13px; color: #6B7280; }
+.cg2-cs { display: flex; flex-direction: column; gap: 10px; }
+.cg2-ring { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 50%; border: 3px solid var(--rc); vertical-align: -1px; }
+/* Scan | Sweep */
+.cg2-tabs { align-self: flex-start; display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; }
+.cg2-tabs span { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: #6B7280; }
+.cg2-tabs span.cg2-on { background: var(--a); color: #fff; }
+.p2 .cg2-tabs svg.i { width: 13px; height: 13px; }
+/* The scan box: caption, the field with the camera under it, a hint or the tools. */
+.cg2-scan { display: flex; flex-direction: column; gap: 8px; border: 1px dashed var(--al); border-radius: 16px; padding: 12px 14px; background: #fff; }
+.cg2-cap { font-size: 14px; font-weight: 700; color: var(--i); }
+.cg2-fld { display: flex; flex-direction: column; align-items: center; gap: 8px; border: 1px solid var(--l); border-radius: 14px; padding: 10px 14px; }
+.cg2-in { width: 100%; height: 42px; display: flex; align-items: center; padding: 0 12px; border: 1px solid var(--l); border-radius: 12px; background: var(--g); font-size: 18px; letter-spacing: .04em; color: var(--i); white-space: nowrap; overflow: hidden; }
+.cg2-in.cg2-ph { color: #757B85; }
+.cg2-cam { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--l); border-radius: 12px; color: var(--ai); }
+.p2 .cg2-cam svg.i { width: 20px; height: 20px; }
+.cg2-hint { padding: 2px 14px 0; font-size: 12.5px; color: #6B7280; }
+.cg2-tools { display: flex; align-items: center; gap: 8px; padding: 2px 14px 6px; }
+.cg2-step { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--l); border-radius: 10px; background: #fff; }
+.cg2-step > span { width: 38px; height: 36px; display: grid; place-items: center; border: 1px solid var(--l); border-radius: 10px; color: var(--i2); }
+.p2 .cg2-step svg.i { width: 16px; height: 16px; }
+.cg2-step b { min-width: 23px; text-align: center; font-size: 18px; color: var(--i); }
+.cg2-add { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--l); border-radius: 10px; background: #fff; font-size: 13.5px; font-weight: 600; color: var(--i2); }
+.p2 .cg2-add svg.i { width: 14px; height: 14px; }
+/* Ring for a new cage */
+.cg2-rp { display: flex; align-items: center; gap: 6px; }
+.cg2-rp small { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #6B7280; margin-right: 2px; }
+.cg2-rp > span { width: 40px; height: 40px; display: grid; place-items: center; }
+.cg2-rp .cg2-ring { width: 18px; height: 18px; border-width: 3.5px; opacity: .55; }
+.cg2-rp .cg2-ring.cg2-ron { opacity: 1; box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--rc); }
+.cg2-sub { margin-top: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--f); }
+/* Open cages */
+.cg2-rows { border: 1px solid var(--l); border-radius: 14px; background: #fff; overflow: hidden; }
+.cg2-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--ls); font-size: 14px; }
+.cg2-row:first-child { border-top: 0; }
+.cg2-a { font: 700 14px/1 var(--vg-mono); white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
+.cg2-a .cg2-ring { width: 11px; height: 11px; border-width: 2px; }
+.cg2-b { color: var(--i2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cg2-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 11px; border: 1px solid var(--l); border-radius: 10px; background: #fff; font-size: 12.5px; font-weight: 600; color: var(--i); white-space: nowrap; }
+.p2 .cg2-btn svg.i { width: 16px; height: 16px; }
+.cg2-btn.cg2-pri { background: var(--ai); border-color: var(--a); color: #fff; }
+/* The cage in hand */
+.cg2-tgt { border: 2px solid var(--a); border-radius: 14px; padding: 12px 14px; background: #fff; box-shadow: 0 0 0 4px var(--as); }
+.cg2-tag { display: flex; align-items: center; gap: 10px; }
+.cg2-cg { display: inline-flex; align-items: center; font-size: 28px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; color: var(--ai); }
+.cg2-cg .cg2-ring { width: 20px; height: 20px; border-width: 4.5px; margin-right: 8px; }
+.cg2-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--rc); background: color-mix(in srgb, var(--rc) 13%, #fff); }
+.cg2-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--rc); }
+.cg2-where { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 14px; color: var(--i2); }
+.p2 .cg2-where svg.i { width: 15px; height: 15px; color: var(--a); }
+.cg2-meta { margin-top: 2px; font-size: 12.5px; color: #6B7280; }
+.cg2-tacts { display: flex; gap: 8px; margin-top: 10px; }
+/* Added to the cage */
+.cg2-last { border: 1px solid #BBF7D0; border-radius: 12px; padding: 10px 12px; background: #F0FDF4; }
+.cg2-lh { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.cg2-kind { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #6B7280; }
+.cg2-tick { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--gr); }
+.p2 .cg2-lh svg.i { width: 14px; height: 14px; }
+.cg2-kc { margin-top: 4px; font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+.cg2-kc small { display: block; font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--i2); }
+.cg2-facts { margin-top: 6px; font-size: 12.5px; color: #6B7280; }
+.cg2-facts b { color: var(--i); }
+/* On this cage */
+.cg2-list { border: 1px solid var(--l); border-radius: 14px; padding: 12px 14px; background: #fff; }
+.cg2-lt { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.cg2-lt span { margin-left: auto; font-size: 12px; color: #6B7280; }
+.cg2-li { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--ls); font-size: 13.5px; }
+.cg2-li:last-child { border-bottom: 0; }
+.cg2-li.cg2-none { color: #6B7280; font-size: 13.5px; }
+.cg2-lk u { font: 700 13.5px/1.2 var(--vg-mono); text-decoration: underline dotted; text-underline-offset: 3px; }
+.cg2-lk small { display: block; font-size: 11.5px; color: #6B7280; }
+.cg2-li > b { min-width: 40px; text-align: right; }
+.cg2-done { display: flex; align-items: center; justify-content: center; gap: 8px; height: 39px; border-radius: 10px; background: var(--a); color: #fff; font-size: 13.5px; font-weight: 600; }
+/* The barcode search's cards */
+.cg2-bch { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--l); border-radius: 14px; background: #fff; color: #6B7280; }
+.p2 .cg2-bch > svg.i { width: 25px; height: 25px; }
+.cg2-bch p { margin: 0; font-size: 13.5px; line-height: 1.4; }
+.cg2-bch small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--f); }
+.cg2-bca { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
+.p2 .cg2-bca > svg.i { width: 19px; height: 19px; margin-top: 1px; }
+.cg2-bca b { display: block; font-size: 14px; }
+.cg2-bca.cg2-info { background: var(--as); border: 1px solid var(--al); color: var(--ai); }
+.cg2-bca.cg2-warn { background: var(--ams); border: 1px solid var(--aml); color: var(--am); }
+.cg2-picks { display: flex; flex-direction: column; gap: 8px; }
+.cg2-pick { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--l); border-radius: 14px; background: #fff; }
+.cg2-pic { flex: none; width: 49px; height: 49px; display: grid; place-items: center; border: 1px solid var(--ls); border-radius: 10px; background: var(--g); color: var(--f); }
+.cg2-pn { flex: 1; min-width: 0; }
+.cg2-pn b { display: block; font-size: 15px; font-weight: 800; }
+.cg2-pn small { display: block; font: 12.5px/1.3 var(--vg-mono); color: #6B7280; }
+.p2 .cg2-pick > svg.i { color: #6B7280; }
+.cg2-bcx { align-self: flex-start; padding: 4px 2px; font-size: 13.5px; color: var(--ai); }
+.cg2-gtin { margin: -2px 0 0; font-size: 12.5px; color: #6B7280; }
+.cg2-gtin span { font-family: var(--vg-mono); }
+/* A recalled product */
+.cg2-rc { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #DC2626; border-radius: 12px; background: #FEF2F2; color: #7F1D1D; }
+.p2 .cg2-rc > svg.i { align-self: flex-start; width: 21px; height: 21px; color: #DC2626; }
+.cg2-rct { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; line-height: 1.35; }
+.cg2-rct b { font-size: 14.5px; }
+.cg2-rct small { font-size: 12.5px; }
+.cg2-rc .cg2-btn { flex: none; }
+/* Cage sweep */
+.cg2-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--l); border-radius: 14px; background: #fff; }
+.cg2-ct { flex: 1 1 100%; display: flex; flex-direction: column; font-size: 16px; line-height: 1.2; }
+.cg2-ct small { font-size: 13.3px; color: #6B7280; }
+.cg2-prog { padding: 14px 16px; border: 1px solid var(--l); border-radius: 14px; background: #fff; }
+.cg2-big { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.cg2-big b { font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+.cg2-big span { font-size: 14px; color: #6B7280; }
+.cg2-track { height: 8px; border-radius: 6px; background: #E9EBEF; overflow: hidden; }
+.cg2-track i { display: block; height: 100%; border-radius: 6px; background: var(--a); }
+.cg2-swl { padding: 6px 14px 10px; border: 1px solid var(--l); border-radius: 14px; background: #fff; }
+.cg2-zn { padding: 8px 0; border-bottom: 1px solid var(--ls); }
+.cg2-zn:last-child { border-bottom: 0; }
+.cg2-zh { display: flex; justify-content: space-between; padding: 2px 0 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--f); }
+.cg2-sr { display: grid; grid-template-columns: 22px auto minmax(0, 1fr); gap: 8px; align-items: center; min-height: 48px; padding: 5px 0; font-size: 13.5px; }
+.cg2-sr.cg2-ok { min-height: 28px; }
+.p2 .cg2-si svg.i { width: 16px; height: 16px; }
+.cg2-sr > b { white-space: nowrap; }
+.cg2-sr.cg2-ok .cg2-si { color: var(--gr); }
+.cg2-sr.cg2-todo .cg2-si, .cg2-sr.cg2-todo .cg2-st { color: #6B7280; }
+.cg2-sr.cg2-lost .cg2-si, .cg2-sr.cg2-lost .cg2-st { color: #DC2626; }
+.cg2-sr.cg2-miss .cg2-si, .cg2-sr.cg2-miss .cg2-st { color: #B45309; }
+.cg2-st .cg2-btn { margin-left: 4px; }
+/* The toast sits above the tabs on this screen. */
+#cg2 .p2 > .dv-toast { top: auto; bottom: 96px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 92%; font-size: 13.5px; padding: 9px 14px; border-radius: 10px; }
+/* The camera, on cartons */
+.cg2-camx .cam2-v { background: #B48D5E; }
+.cg2-csc { position: absolute; top: 0; bottom: 0; left: 0; width: 780px; display: flex; align-items: center; gap: 90px; padding: 0 30px; transition: transform 1.1s ease-in-out; }
+.cg2-camx.cg2-pan .cg2-csc { transform: translateX(-420px); }
+.cg2-ctn { flex: none; width: 330px; padding: 22px 0; }
+.cg2-lab { background: #fff; border-radius: 4px; padding: 10px 14px 8px; color: #111; box-shadow: 0 2px 6px rgba(0, 0, 0, .25); font-family: var(--vg-mono); }
+.cg2-l1 { font: 800 15px/1.2 var(--body); }
+.cg2-l2 { display: flex; justify-content: space-between; margin: 4px 0 6px; font-size: 12px; }
+.cg2-lab svg { display: block; width: 100%; height: 62px; }
+.cg2-l3 { text-align: center; font-size: 13px; letter-spacing: .2em; margin-top: 3px; }
+/* The browser's confirm and prompt */
+.cg2-dw { position: absolute; inset: 0; z-index: 45; display: grid; place-items: center; background: rgba(17, 24, 39, .45); }
+.cg2-dlg { width: 312px; padding: 22px 22px 10px; border-radius: 22px; background: #fff; box-shadow: 0 20px 40px -14px rgba(0, 0, 0, .45); }
+.cg2-dlg p { margin: 0 0 14px; font-size: 15px; line-height: 1.45; color: var(--i); }
+.cg2-df { display: flex; align-items: center; height: 40px; margin-bottom: 8px; border-bottom: 2px solid var(--a); font-size: 16px; }
+.cg2-db { display: flex; justify-content: flex-end; gap: 6px; }
+.cg2-db span { padding: 10px 12px; font-size: 14.5px; font-weight: 600; color: var(--ai); }
+/* The sheets: the product, I moved some */
+.cg2-shh { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--l); }
+.cg2-shi { color: #DC2626; padding-top: 3px; }
+.p2 .cg2-shi svg.i { width: 20px; height: 20px; }
+.cg2-sht { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.cg2-sht b { font-size: 18px; line-height: 1.3; }
+.cg2-ppk { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; background: var(--g); font: 800 15px/1 var(--vg-mono); }
+.p2 .cg2-ppk svg.i { width: 15px; height: 15px; color: #6B7280; }
+.cg2-x { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--l); border-radius: 10px; color: var(--i2); }
+.cg2-shb { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 18px; }
+.cg2-img { height: 91px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--ls); border-radius: 14px; color: var(--f); }
+.p2 .cg2-img svg.i { width: 30px; height: 30px; }
+.cg2-img small { font-size: 12px; color: #6B7280; }
+.cg2-shf { display: flex; flex-direction: column; gap: 8px; padding: 12px 15px 16px; border-top: 1px solid var(--l); }
+.cg2-wide { display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border: 1px solid var(--l); border-radius: 10px; background: #fff; font-size: 15px; font-weight: 600; color: var(--i); }
+.cg2-wide.cg2-pri { background: var(--ai); border-color: var(--a); color: #fff; }
+.cg2-pbs { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #FEE2E2; color: #DC2626; }
+.p2 .cg2-pbs > svg.i { width: 24px; height: 24px; }
+.cg2-pbs b { display: block; color: #991B1B; font-size: 14.5px; }
+.cg2-pbs span { color: var(--i2); font-size: 14px; }
+.cg2-lbl { margin-top: 4px; font-size: 13.5px; color: #6B7280; }
+.cg2-rcn { display: grid; grid-template-columns: 50px 1fr 50px; gap: 10px; }
+.cg2-rcn > * { height: 44px; display: grid; place-items: center; border: 1px solid var(--l); border-radius: 10px; font-size: 18px; }
+.cg2-rcn b { border-color: var(--a); font-weight: 400; }
+.cg2-rw { height: 34px; display: flex; align-items: center; padding: 0 12px; border: 1px solid var(--l); border-radius: 10px; font-size: 14px; }
+.cg2-rw.cg2-ph { color: #6B7280; }
+.cg2-note { margin: 4px 0 0; font-size: 13.5px; color: #6B7280; }
+@media (prefers-reduced-motion: reduce) { .cg2-csc { transition: none; } }

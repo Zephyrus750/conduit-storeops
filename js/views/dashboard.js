@@ -8,7 +8,7 @@
 
 import { focusDone } from '../../shared/reducers/floor.js';
 import { addDays, retailPeriod } from '../../shared/time.js';
-import { ic, esc, vh, greeting, today, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip } from '../ui.js';
+import { ic, esc, vh, greeting, today, fmtDay, fmtDate, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip } from '../ui.js';
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
@@ -26,6 +26,8 @@ import { openPasteBox } from './pastebox.js';
 import { tx, txn, locale } from '../i18n.js';
 import { equipmentNeeds } from './equipment.js';
 import { recallsNeeding } from './recalls.js';
+import { routesOn, landingOn, broughtBy } from '../../shared/dockroutes.js';
+import { routeLine } from './backdock/routes.js';
 
 const TARGET = 100, DAILY = 20;
 const PERIODS = [['today', tx('Today')], ['week', tx('This week')], ['month', tx('This month')]];
@@ -262,18 +264,26 @@ function dockCard(ctx, r) {
     const slots = Object.entries(plan.slots || {}).map(([n, sl]) => [Number(n), sl]).sort((a, b) => a[0] - b[0]);
     const planned = new Set([...slots.map(([n]) => n), ...taken]).size, next = slots.find(([n]) => !taken.has(n));
     const last = done.at(-1), none = !planned && !!plan.noTrucks;
+    // Trucks marked off-site or diverted today (plan.route), and any that went
+    // off-site before and land today after all.
+    const plans = ctx.store.get('plan'), away = routesOn(plans, day), awayDay = !planned && !none && away.length > 0;
+    const landing = landingOn(plans, day).filter(x => !broughtBy(plans, dock, { date: x.date, slot: x.n }));
+    const awayTitle = away.every(([, x]) => x.route === 'offsite') ? tx('Off-site today') : away.every(([, x]) => x.route === 'diverted') ? tx('Diverted today') : tx('Not coming to the dock today');
+    const awayList = away.map(([n, x]) => `T${n} ${x.route === 'offsite' ? tx('off-site') : tx('diverted')}${x.lands ? ' · ' + tx('lands {day}', { day: esc(fmtDay(x.lands)) }) : ''}`).join(' · ');
     // The truck the card follows: the one on the dock, else the last one
     // closed today (shown as Closed until the next truck lands).
     const ph = t ? truckPhase(t) : last ? 'closed' : null, shown = t || last;
     const steps = ph ? `<ol class="dk-steps6" aria-label="${tx('Truck phase')}">${PHASES.map((x, i) => `<li class="${i < PHASES.indexOf(ph) ? 'dn' : x === ph ? 'on' : ''}"${x === ph ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[x]}</span></li>`).join('')}</ol>` : '';
-    const chip = shown ? `<span class="phb-chip ph-${ph}">${PHASE_NAME[ph]}</span> <b>${tx('Truck {no}', { no: esc(truckNo(shown.id)) })}</b>` : `<span class="phb-chip dock-st ${none ? 'none' : 'idle'}">${none ? tx('No trucks today') : tx('No truck on the dock')}</span>`;
+    const chip = shown ? `<span class="phb-chip ph-${ph}">${PHASE_NAME[ph]}</span> <b>${tx('Truck {no}', { no: esc(truckNo(shown.id)) })}</b>` : `<span class="phb-chip dock-st ${none || awayDay ? 'none' : 'idle'}${awayDay ? ' away' : ''}">${none ? tx('No trucks today') : awayDay ? awayTitle : tx('No truck on the dock')}</span>`;
     const cartons = done.reduce((n, h) => n + (h.cartons || 0), 0) + onDock.reduce((n, x) => n + progress(x).done, 0);
     const row = (label, value) => `<div class="row">${label}<b>${value}</b></div>`;
-    const common = row(tx('Trucks today'), planned ? tx('{done} of {n} cleared', { done: done.length, n: planned }) : none ? tx('none · confirmed in the Planner') : '—') +
+    const common = row(tx('Trucks today'), planned ? tx('{done} of {n} cleared', { done: done.length, n: planned }) : none ? tx('none · confirmed in the Planner') : awayDay ? txn(away.length, '{n} not coming to the dock', '{n} not coming to the dock') : '—') +
+      (away.length ? row(tx('Not coming'), awayList) : '') +
+      (landing.length ? row(tx('Lands today'), landing.map(x => tx('T{no} of {day}', { no: x.n, day: esc(fmtDate(x.date)) }) + ` · ${x.route.route === 'offsite' ? tx('from off-site') : tx('after a diversion')}`).join(' · ')) : '') +
       row(tx('Next truck'), next ? `T${next[0]}${next[1].eta ? ' · ' + esc(next[1].eta) : ''}${next[1].manifest?.manNo ? ' · ' + esc(next[1].manifest.manNo) : ''}` : '—') +
       row(tx('Cartons decanted today'), cartons.toLocaleString()) +
       row(tx('Last cleared'), last ? `T${esc(truckNo(last.id))}${last.clearedAt ? ' · ' + fmtHM(last.clearedAt) : ''}${last.clearMins ? ' · ' + fmtMins(last.clearMins) : ''}` : '—');
-    const fin = !t && (planned ? done.length >= planned : none), cls = fin ? 'done' : planned ? 'todo' : '';
+    const fin = !t && (planned ? done.length >= planned : none || awayDay), cls = fin ? 'done' : planned ? 'todo' : '';
     const open = `<a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a>`, head = `<div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${doneTag(cls)}${open}</div><div class="dk-chip">${chip}</div>${steps}`;
     const dayHero = `<div class="hero"><span class="n">${done.length}</span><span class="d">${planned ? tx('/ {n} trucks cleared today', { n: planned }) : txn(done.length, 'truck cleared today', 'trucks cleared today')}</span></div>`;
     const dayBar = planned ? `<div class="prog"><div class="track"><i style="width:${Math.round(done.length / planned * 100)}%"></i></div><b>${Math.round(done.length / planned * 100)}%</b></div>` : '';
@@ -281,7 +291,7 @@ function dockCard(ctx, r) {
     if (!t || ph === 'planned') {
       const wait = next ? tx('Waiting for truck {no}', { no: next[0] }) : '';
       const line = t ? phaseLine(t)
-        : none ? tx('No trucks today · confirmed in the Planner') : last ? [tx('Finalised {time}', { time: last.clearedAt ? fmtHM(last.clearedAt) : '—' }), wait || tx('Every truck today is cleared.')].join(' · ') : wait || tx('Nothing on the dock. Land a truck from Receiving.');
+        : none ? tx('No trucks today · confirmed in the Planner') : awayDay ? away.map(([n, x]) => `${tx('Truck {no}', { no: n })}: ${routeLine(x)}${x.lands ? ' · ' + tx('lands {day}', { day: esc(fmtDay(x.lands)) }) : ''}`).join(' · ') : last ? [tx('Finalised {time}', { time: last.clearedAt ? fmtHM(last.clearedAt) : '—' }), wait || tx('Every truck today is cleared.')].join(' · ') : wait || tx('Nothing on the dock. Land a truck from Receiving.');
       return `<div class="card kpi dk${cls ? ' ' + cls : ''}">${head}${dayHero}<div class="hl">${line}</div>${dockMini(ctx, t)}<div class="rows">${common}</div>${dayBar}</div>`;
     }
     const pr = progress(t), halt = openHalt(t), fc = forecast(t, Date.now(), ratesFor(ctx.store.get('dock'))), crew = (t.team || []).length;
@@ -327,13 +337,16 @@ function morning(ctx) {
   // truck takes over its planned slot) and the slots still to come.
   const tr = dock ? [...openTrucks(dock).filter(x => x.id.slice(0, 10) === t).map(x => [Number(x.id.slice(12)), x.manifest?.manNo || x.plannedManifest, tx('on the dock')]), ...(dock.history || []).filter(h => h.id.slice(0, 10) === t).map(h => [Number(h.id.slice(12)), h.manifest?.manNo, tx('done')])] : [];
   // Published reports not yet on a truck or a planner slot: uploaded and ready to attach.
-  const staged = new Set(Object.values(ctx.store.get('plan')?.days || {}).flatMap(d => Object.values(d.slots || {}).map(x => x.manifest?.manNo).filter(Boolean)));
+  const staged = new Set(Object.values(ctx.store.get('plan')?.days || {}).flatMap(d => [...Object.values(d.slots || {}).map(x => x.manifest?.manNo), ...Object.values(d.routes || {}).map(x => x.slot?.manifest?.manNo || x.manNo)].filter(Boolean)));
   const lib = dock ? manifestIndex(dock).filter(m => !m.truck && !staged.has(m.manNo)) : [];
   const mans = [...tr, ...slots.filter(([n]) => !tr.some(x => x[0] === Number(n))).map(([n, s]) => [Number(n), s.manifest?.manNo])].sort((a, b) => a[0] - b[0]);
   const tk = (() => { const d = new Date(t + 'T12:00:00'); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })(), ts = dockOk ? Object.values(ctx.store.get('plan')?.days?.[tk]?.slots || {}) : [];
   // A day confirmed in the Planner with no trucks: nothing expected, so its checklist items are done.
   const none = dockOk && !mans.length && !!ctx.store.get('plan')?.days?.[t]?.noTrucks, noneTmrw = dockOk && !ts.length && !!ctx.store.get('plan')?.days?.[tk]?.noTrucks;
-  const tmrw = ts.length ? ' · ' + tx('tomorrow {staged}/{total} staged', { staged: ts.filter(x => x.manifest).length, total: ts.length }) : noneTmrw ? ' · ' + tx('tomorrow no trucks') : '';
+  // Today's trucks all marked off-site or diverted: nothing to receive, so those items are done too.
+  const away = dockOk && !mans.length && !none ? routesOn(ctx.store.get('plan'), t) : [], awayTmrw = dockOk && !ts.length && routesOn(ctx.store.get('plan'), tk).length > 0;
+  const awayList = away.map(([n, x]) => `T${n} ${x.route === 'offsite' ? tx('off-site') : tx('diverted')}`).join(' · ');
+  const tmrw = ts.length ? ' · ' + tx('tomorrow {staged}/{total} staged', { staged: ts.filter(x => x.manifest).length, total: ts.length }) : noneTmrw ? ' · ' + tx('tomorrow no trucks') : awayTmrw ? ' · ' + tx('tomorrow not coming to the dock') : '';
   const first = dock ? [...openTrucks(dock).filter(x => x.id.slice(0, 10) === t), ...(dock.history || []).filter(h => h.id.slice(0, 10) === t)].sort((a, b) => a.id.localeCompare(b.id))[0] : null;
   const L = ctx.store.get('labels'), cyc = cycleId(L.cycleLen), liToday = Object.entries(L.checks[cyc] || {}).filter(([, c]) => dayOf(c.at) === t);
   // Today's inventory report: the store's (any desk pasted it), else this device's own copy.
@@ -341,11 +354,11 @@ function morning(ctx) {
   const rep = meta?.date === t ? meta : report && srOk ? { at: report.at, bays: Object.keys(report.byLoc || {}).length, codes: Object.values(report.byLoc || {}).reduce((n, l) => n + l.length, 0) } : null, midday = rep && new Date(rep.at).getHours() >= 12;
   const A = [
     srOk && [`${tx('Morning inventory report')} <span class="chip due">${tx('Required')}</span>`, rep ? tx('Pasted {time} · {bays} bays · {codes} codes', { time: fmtHM(new Date(rep.at).toISOString()), bays: rep.bays, codes: rep.codes }) : tx('Not pasted yet · the board compares against nothing until it is'), !!rep, tx('Paste whole report'), tx('Re-paste'), 'paste'],
-    dockOk && (none ? [tx('Manifests for today’s trucks'), tx('No trucks today · confirmed in the Planner') + tmrw, true, '', tx('Open'), 'planner'] : manRow(mans, lib, tmrw, dock, t)),
-    dockOk && none ? [tx('Planner'), tx('No trucks today · confirmed'), true, '', tx('Open'), 'planner'] : dockOk && [tx('Planner'), mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · ' + tx('teams set') : ''}` : tx('Today’s trucks not planned · or confirm no trucks in the Planner'), mans.length > 0, tx('Plan today’s trucks'), tx('Open'), 'planner'],
+    dockOk && (none ? [tx('Manifests for today’s trucks'), tx('No trucks today · confirmed in the Planner') + tmrw, true, '', tx('Open'), 'planner'] : away.length ? [tx('Manifests for today’s trucks'), tx('Not coming to the dock today: {list}', { list: awayList }) + tmrw, true, '', tx('Open'), 'planner'] : manRow(mans, lib, tmrw, dock, t)),
+    dockOk && none ? [tx('Planner'), tx('No trucks today · confirmed'), true, '', tx('Open'), 'planner'] : dockOk && away.length ? [tx('Planner'), tx('{list} · marked in the Planner', { list: awayList }), true, '', tx('Open'), 'planner'] : dockOk && [tx('Planner'), mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · ' + tx('teams set') : ''}` : tx('Today’s trucks not planned · or confirm no trucks in the Planner'), mans.length > 0, tx('Plan today’s trucks'), tx('Open'), 'planner'],
   ].filter(Boolean);
   const B = [
-    dockOk && none ? [tx('First truck decant'), tx('No trucks today'), true, '', tx('Open'), 'planner'] : dockOk && [tx('First truck decant'), !first ? tx('No truck on the dock yet today') : first.status === 'closed' || first.clearMins != null ? tx('Closed · {time}', { time: fmtMins(first.clearMins || 0) }) : first.goalAt ? tx('goal {time} · {pct}% decanted', { time: fmtHM(first.goalAt), pct: progress(first).pct }) : tx('{pct}% decanted', { pct: progress(first).pct }), !!first && (first.status === 'closed' || first.clearMins != null), tx('Open the dock'), tx('History'), first && first.clearMins != null ? 'rhistory' : 'receiving'],
+    dockOk && none ? [tx('First truck decant'), tx('No trucks today'), true, '', tx('Open'), 'planner'] : dockOk && away.length ? [tx('First truck decant'), tx('No truck to decant today'), true, '', tx('Open'), 'planner'] : dockOk && [tx('First truck decant'), !first ? tx('No truck on the dock yet today') : first.status === 'closed' || first.clearMins != null ? tx('Closed · {time}', { time: fmtMins(first.clearMins || 0) }) : first.goalAt ? tx('goal {time} · {pct}% decanted', { time: fmtHM(first.goalAt), pct: progress(first).pct }) : tx('{pct}% decanted', { pct: progress(first).pct }), !!first && (first.status === 'closed' || first.clearMins != null), tx('Open the dock'), tx('History'), first && first.clearMins != null ? 'rhistory' : 'receiving'],
     // Optional: the midday report takes about ten minutes to make, so it never holds the list back.
     srOk && [`${tx('Midday report')} <span class="chip opt">${tx('Optional')}</span>`, midday ? tx('Pasted {time}', { time: fmtHM(new Date(rep.at).toISOString()) }) : tx('After 12:00 if there is time · the room moves after the next truck lands'), !!midday, tx('Paste whole report'), tx('Re-paste'), 'paste', true],
     [tx('Label integrity · today’s department'), liToday.length ? tx('{list} · checked', { list: liToday.map(([id]) => { const [sid, code] = id.split('-'); const e = (MICRO[sid] || []).find(x => microCode(x) === code); return `${esc(sid.toUpperCase())} ${esc(code)}${e ? ' ' + esc(microName(e)) : ''}`; }).join(' · ') }) : tx('pick the micro-department and print the sheet'), liToday.length > 0, tx('Pick department'), tx('Open'), 'labelint'],

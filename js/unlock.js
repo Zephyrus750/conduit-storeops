@@ -8,6 +8,11 @@ import { tx } from './i18n.js';
 const ROLE_FOR = { stockroom: 'stockroom', backdock: 'dock' };
 const NAME = { stockroom: tx('Stockroom'), backdock: tx('Back dock') };
 
+// No answer from the worker (the device is offline, or the request timed
+// out): said plainly, never the browser's "Failed to fetch". A sign-in and
+// a code both need the connection; the Floor carries on without it.
+export const offlineText = (signIn = false) => signIn ? tx('This device is offline: check the wifi, then sign in again.') : tx('This device is offline: check the wifi, then enter the code again.');
+
 export function hasArea(session, area) {
   const roles = session.current?.roles || [];
   return roles.includes('manager') || roles.includes('owner') || roles.includes(ROLE_FOR[area] || area);
@@ -18,7 +23,8 @@ export function ensureArea({ session, frame, area }) {
   return new Promise(resolve => {
     $('#unlock')?.remove();
     const el = document.createElement('div'); el.id = 'unlock'; el.className = 'signin unlock';
-    el.innerHTML = `<div class="si-panel si-centre"><form class="si-form" id="unlockForm"><h2>${tx('{area} code', { area: NAME[area] })}</h2><div class="si-sub">${tx('The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.', { area: NAME[area] })}</div>` +
+    // A crew code lasts the worker's ROLE_TTL (a shift, 12 hours, from the last code entered), and goes sooner on sign-out or the idle re-lock.
+    el.innerHTML = `<div class="si-panel si-centre"><form class="si-form" id="unlockForm"><h2>${tx('{area} code', { area: NAME[area] })}</h2><div class="si-sub">${tx('The {area} crew code opens this workspace on this device for one shift (12 hours), or until the device is signed out or locked after sitting idle.', { area: NAME[area] })} ${tx('A manager code here opens every area; managers can also sign in as Manager to skip this.')}</div>` +
       `<label>${tx('Code')}</label><input class="si-pin" name="code" autocomplete="off" autocapitalize="characters" placeholder="${area === 'backdock' ? 'DK-0000' : 'SR-0000'}" required>` +
       `<div class="si-err" id="unlockErr"></div><button class="si-cta" type="submit">${tx('Open {area}', { area: NAME[area] })}${ic('arrow')}</button>` +
       `<div class="si-foot"><a data-unlock-cancel>${tx('Not now')}</a><span>${esc(session.current?.store || '')}</span></div></form></div>`;
@@ -29,7 +35,7 @@ export function ensureArea({ session, frame, area }) {
       e.preventDefault();
       const btn = e.target.querySelector('.si-cta'); btn.disabled = true;
       try { await session.unlock(e.target.code.value); done(hasArea(session, area)); }
-      catch (err) { $('#unlockErr', el).textContent = err.code === 'locked_out' ? tx('Too many attempts. Try again later.') : err.code === 'unauthorised' ? tx('Wrong code.') : err.message; btn.disabled = false; }
+      catch (err) { $('#unlockErr', el).textContent = err.code === 'locked_out' ? tx('Too many attempts. Try again later.') : err.code === 'unauthorised' ? tx('Wrong code.') : err.network ? offlineText() : err.message; btn.disabled = false; }
     });
     setTimeout(() => { try { $('input', el).focus(); } catch {} }, 30);
   });
@@ -49,7 +55,7 @@ export const managerReason = (why, lockMins = 0) => why === 'shift' ? tx('A mana
 // The code as typed: '' once the manager role is back, else what to say.
 export async function managerCode(session, code) {
   try { const s = await session.unlock(code); return (s?.roles || []).includes('manager') ? '' : tx('That is a crew code, not the manager code.'); }
-  catch (err) { return err.code === 'locked_out' ? tx('Too many attempts. Try again later.') : err.code === 'unauthorised' ? tx('Wrong code.') : err.message; }
+  catch (err) { return err.code === 'locked_out' ? tx('Too many attempts. Try again later.') : err.code === 'unauthorised' ? tx('Wrong code.') : err.network ? offlineText() : err.message; }
 }
 let mgrOpen = null;
 export function ensureManager({ session, frame, mobile, lockMins = 0, onSignOut }) {

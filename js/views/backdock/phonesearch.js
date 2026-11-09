@@ -95,6 +95,22 @@ export function palletContents(t, p) {
     cons.map(c => `<div class="pt3">${esc(c.id)}<span class="cs-dim">${tx('{n} ctn', { n: c.cartons })}</span></div>${(c.items || []).slice(0, 30).map(it => `<div class="mfc-it" data-kc="${esc(it.k)}" data-d="${esc(it.d || '')}"><span class="kc mono">${kcCopy(it.k)}</span><span class="nm">${itemName(it.k, it.d || '')}</span>${chip(it.dept)}<span class="ct">${tx('{n}u', { n: it.q })}</span></div>`).join('')}${(c.items || []).length > 30 ? `<div class="cs-dim">${tx('{n} more lines', { n: c.items.length - 30 })}</div>` : ''}`).join('') + '</details>';
 }
 
+// A label put on a landed pallet (its card, or stacked from the search
+// sheet). Each label adds its consol's cartons, which is right while the
+// pallet's count is what its labels add up to. A count a person typed (it
+// differs from its labels' sum: none yet, or some) stays, as when labels
+// come with the land: a typed 9 and a 9-carton label made 18. Throws as the
+// scan does (not_on_manifest, consol_taken).
+export async function scanOnto(ctx, truckId, ref, code) {
+  const truck = () => ctx.store.get('dock')?.trucks?.[truckId], pal = () => truck()?.pallets?.[ref];
+  const p = pal(), cons = truck() ? consolsOf(truck()) : [];
+  const fromLabels = (p?.consolIds || []).reduce((n, id) => n + (cons.find(c => c.id === id)?.cartons || 0), 0);
+  const typed = p && p.cartons != null && p.cartons !== fromLabels ? p.cartons : null;
+  await ctx.store.dispatch({ type: 'pallet.scan', entity: { truck: truckId, bay: ref }, payload: { code } });
+  const now = pal();
+  if (typed !== null && now && now.cartons !== typed) await ctx.store.dispatch({ type: 'pallet.update', entity: { truck: truckId, bay: ref }, payload: { cartons: typed } });
+}
+
 // A pallet's contents, opened: verify its lines against the catalogue and
 // repaint them in place (a rerender would close the panel).
 export function verifyContents(ctx, root) {
@@ -123,7 +139,7 @@ export async function onSearchAct(ctx, t, a, root, hooks = {}) {
     if (act === 'ps-land' && hooks.land) { hooks.land(ref, c.cons || c.id); return true; }
     try {
       if (act === 'ps-land') return true;
-      await ctx.store.dispatch({ type: 'pallet.scan', entity: { truck: t.id, bay: ref }, payload: { code: c.cons || c.id } });
+      await scanOnto(ctx, t.id, ref, c.cons || c.id);
       toast(tx('{id} stacked on {ref}', { id: c.id, ref }));
     } catch (e) { toast(e.message, 'bad'); }
   }

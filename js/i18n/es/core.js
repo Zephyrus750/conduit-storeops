@@ -18,4 +18,8 @@ export default {
   "Wrong code.": "Código incorrecto.",
   "Language": "Idioma",
   "Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.": "Todas las pantallas de este dispositivo, en uno de siete idiomas. Los nombres de estanterías, productos y departamentos se mantienen como los escribe la tienda.",
+  "This device is offline: check the wifi, then sign in again.": "Este dispositivo no tiene conexión: revisa el wifi y vuelve a iniciar sesión.",
+  "This device is offline: check the wifi, then enter the code again.": "Este dispositivo no tiene conexión: revisa el wifi y vuelve a introducir el código.",
+  "The {area} crew code opens this workspace on this device for one shift (12 hours), or until the device is signed out or locked after sitting idle.": "El código de equipo de {area} abre esta área en este dispositivo durante un turno (12 horas), o hasta que se cierre la sesión o el dispositivo se bloquee por inactividad.",
+  "A manager code here opens every area; managers can also sign in as Manager to skip this.": "Un código de gerente abre aquí todas las áreas; los gerentes también pueden iniciar sesión como Gerente para saltarse este paso.",
 };

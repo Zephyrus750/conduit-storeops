@@ -125,3 +125,52 @@ test('plan.noTrucks: a day confirmed without trucks; planning a truck or a truck
   assert.equal(s.plan.days['2026-09-08'].noTrucks, undefined, 'a truck that came anyway clears it');
   assert.equal(code(s, 'plan.noTrucks', { date: '8/9/2026' }, {}), 'invalid_event');
 });
+
+test('plan.route: a planned truck goes off-site or is diverted, leaves the day’s slots, and comes back to them as Receive here', () => {
+  const s = initialState(), D = '2026-09-07';
+  ok(s, 'plan.set', { date: D, slot: 1 }, { eta: '06:30', note: 'Xmas', manifest: { ref: true, manNo: '7040201', n: 1, cartons: 52, ids: ['601900021'] } });
+  ok(s, 'plan.route', { date: D, slot: 1 }, { route: 'offsite', lands: '2026-09-14', note: 'no room', reason: 'room' });
+  const r = s.plan.days[D].routes[1];
+  assert.equal(s.plan.days[D].slots[1], undefined, 'nothing expects it at the dock');
+  assert.equal(r.route, 'offsite'); assert.equal(r.lands, '2026-09-14'); assert.equal(r.manNo, '7040201', 'the staged manifest is named');
+  assert.equal(r.slot.eta, '06:30', 'the slot it left is kept');
+  ok(s, 'plan.route', { date: D, slot: 1 }, { route: 'diverted', to: '1187 Bunbury\u0007', lands: null });
+  assert.equal(s.plan.days[D].routes[1].to, '1187 Bunbury', 'control characters go');
+  assert.equal(s.plan.days[D].routes[1].slot.manifest.manNo, '7040201', 'a change keeps the slot');
+  assert.equal(code(s, 'plan.set', { date: D, slot: 1 }, { eta: '07:00' }), 'routed', 'set it back first');
+  ok(s, 'plan.route', { date: D, slot: 1 }, { route: null });
+  assert.equal(s.plan.days[D].routes, undefined); assert.equal(s.plan.days[D].slots[1].eta, '06:30', 'Receive here puts the slot back');
+  assert.equal(code(s, 'plan.route', { date: D, slot: 1 }, { route: null }), 'not_routed', 'nothing to undo is refused');
+});
+
+test('plan.route: a day with no truck planned marks its truck; the checks; a truck that comes after all takes the slot back', () => {
+  const s = initialState(), D = '2026-09-08';
+  ok(s, 'plan.noTrucks', { date: D }, {});
+  ok(s, 'plan.route', { date: D, slot: 1 }, { route: 'offsite', lands: '2026-09-10', manNo: '7040300' });
+  assert.equal(s.plan.days[D].noTrucks, undefined, 'it had a truck after all');
+  assert.equal(s.plan.days[D].routes[1].slot, null); assert.equal(s.plan.days[D].routes[1].manNo, '7040300');
+  assert.equal(code(s, 'plan.noTrucks', { date: D }, {}), 'day_has_trucks');
+  const before = JSON.stringify(s);
+  for (const [p, why] of [[{ route: 'storage' }, 'unknown route'], [{ route: 'offsite', lands: D }, 'lands on the same day'], [{ route: 'offsite', lands: '2026-09-31' }, 'not a date'], [{ route: 'offsite', lands: '2027-06-01' }, 'too far on'], [{ route: 'offsite', reason: 'rain' }, 'unknown reason'], [{ route: 'offsite', manNo: 'a b' }, 'bad manifest number']])
+    assert.equal(code(s, 'plan.route', { date: D, slot: 2 }, p), 'invalid_event', why);
+  assert.equal(code(s, 'plan.route', { date: D, slot: 5 }, { route: 'offsite' }), 'invalid_event', 'slots 1..4');
+  assert.equal(JSON.stringify(s), before, 'refused: nothing changed');
+  ok(s, 'plan.set', { date: '2026-09-09', slot: 1 }, { eta: '06:30' });
+  ok(s, 'plan.route', { date: '2026-09-09', slot: 1 }, { route: 'offsite' });
+  ok(s, 'truck.create', { truck: '2026-09-09-T1' }, {});
+  assert.equal(s.plan.days['2026-09-09'].routes, undefined, 'it came after all'); assert.equal(s.plan.days['2026-09-09'].slots[1], undefined, 'the truck took its slot');
+  assert.equal(code(s, 'plan.route', { date: '2026-09-09', slot: 1 }, { route: 'offsite' }), 'on_dock');
+  ok(s, 'plan.route', { date: D, slot: 2 }, { route: 'diverted' });
+  ok(s, 'plan.remove', { date: D, slot: 2 });
+  assert.equal(s.plan.days[D].routes[2], undefined, 'Remove truck takes a routed one off too');
+});
+
+test('plan.set from: the truck that brings back an off-site one says so, and so does the truck it starts', () => {
+  const s = initialState();
+  ok(s, 'plan.route', { date: '2026-09-07', slot: 1 }, { route: 'offsite', lands: '2026-09-10' });
+  assert.equal(code(s, 'plan.set', { date: '2026-09-10', slot: 2 }, { from: { date: '2026-09-10', slot: 1 } }), 'invalid_event', 'from an earlier day');
+  ok(s, 'plan.set', { date: '2026-09-10', slot: 2 }, { eta: '09:30', from: { date: '2026-09-07', slot: 1 } });
+  assert.deepEqual(s.plan.days['2026-09-10'].slots[2].from, { date: '2026-09-07', slot: 1 });
+  ok(s, 'truck.create', { truck: '2026-09-10-T2' }, {});
+  assert.deepEqual(s.dock.trucks['2026-09-10-T2'].from, { date: '2026-09-07', slot: 1 });
+});

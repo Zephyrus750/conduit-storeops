@@ -62,7 +62,16 @@ export function pillState(s) {
 // The list behind the pill (a phone sheet, or the desk's popover from the
 // footer): what is waiting and why, with Retry and Discard. esc and ic come
 // from the shell so this file stays free of the DOM.
-const typeLabel = t => { const w = String(t || '').replace(/\./g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase(); return w.charAt(0).toUpperCase() + w.slice(1); };
+// A row names the change in words, never its event type: the changes a
+// phone makes most by name, any other by its tool, else its area.
+const LABEL = {
+  'refresh.mark': tx('Shelf refreshed'), 'refresh.unmark': tx('Refresh mark taken off'), 'label.check': tx('Label check'),
+  'stocktake.scan': tx('Stocktake count'), 'issue.log': tx('Issue logged'), 'issue.update': tx('Issue updated'), 'equip.check': tx('Equipment check'),
+  'cage.create': tx('New cage'), 'cage.scan': tx('Cage scan'), 'cage.park': tx('Cage parked'), 'cage.close': tx('Cage closed'),
+  'submission.update': tx('Backfill scan'), 'submission.submit': tx('Backfill sent'), 'adjustment.set': tx('SOH adjustment'),
+  'pallet.land': tx('Pallet landed'), 'pallet.start': tx('Decant start'), 'pallet.pause': tx('Decant paused'), 'pallet.done': tx('Pallet decanted'),
+};
+export const changeLabel = e => { const type = String(e?.type || ''), t = toolForEvent(type); return LABEL[type] || (t ? tx(t.name) : e?.area === 'stockroom' || e?.area === 'backdock' ? AREA_NAME[e.area] : tx('Store')); };
 const what = e => { const v = Object.values(e?.entity || {}).filter(x => x !== '' && x != null).join(' · '); return v; };
 const hm = at => { const m = /T(\d{2}:\d{2})/.exec(String(at || '')); return m ? m[1] : ''; };
 
@@ -71,7 +80,7 @@ export function syncPanel({ status = {}, held = [], pending = [] }, { esc, ic })
   const head = status.state === 'offline' ? tx('Offline. Changes stay on this device and send when the connection is back.')
     : held.length ? tx('Some changes are waiting for something before they can send.')
     : queued.length ? tx('Sending…') : tx('Everything on this device has reached the store.');
-  const row = (e, sub, btn) => `<div class="sy-row"><div class="sy-t"><b>${esc(typeLabel(e.type))}${what(e) ? ` <span>${esc(what(e))}</span>` : ''}</b><small>${sub}</small></div>${btn || ''}</div>`;
+  const row = (e, sub, btn) => `<div class="sy-row"><div class="sy-t"><b>${esc(changeLabel(e))}${what(e) ? ` <span>${esc(what(e))}</span>` : ''}</b><small>${sub}</small></div>${btn || ''}</div>`;
   const heldHtml = held.length ? `<div class="sy-sec">${tx('Waiting · {n}', { n: held.length })}</div><div class="sy-list">${held.map(h => row(h.event, `${esc(holdReason(h))}${hm(h.event.at) ? ` · ${tx('made {time}', { time: hm(h.event.at) })}` : ''}`, `<button type="button" class="btn sm" data-sync="discard" data-id="${esc(h.event.id)}">${tx('Discard')}</button>`)).join('')}</div>` : '';
   const shown = queued.slice(0, 20);
   const queuedHtml = queued.length ? `<div class="sy-sec">${tx('To send · {n}', { n: queued.length })}</div><div class="sy-list">${shown.map(e => row(e, hm(e.at) ? tx('made {time}', { time: hm(e.at) }) : '')).join('')}${queued.length > shown.length ? `<div class="sy-more">${tx('and {n} more', { n: queued.length - shown.length })}</div>` : ''}</div>` : '';

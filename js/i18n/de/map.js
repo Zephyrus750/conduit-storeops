@@ -60,7 +60,6 @@ export default {
   "Price checks: normal, large or hidden": "Preisprüfer: normal, groß oder ausgeblendet",
   "Show the tory lines": "Tory-Linien anzeigen",
   "FOH · Ground": "FOH · Erdgeschoss",
-  "Scan": "Scannen",
   "Next level": "Nächste Etage",
   "Tory lines": "Tory-Linien",
   "Zoom in": "Vergrößern",

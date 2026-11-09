@@ -45,6 +45,10 @@ export function paperMap({ floor = null, frame = 'floor', dept = null, marks = n
     svg.style.setProperty('--label-display', L.labels ? 'inline' : 'none'); svg.style.setProperty('--label-opacity', L.labels ? '1' : '0'); svg.style.setProperty('--badge-opacity', L.badges ? '1' : '0');
     for (const el of svg.querySelectorAll('.mfl')) if (el.style.display === 'none') el.remove();   // other floors are not printed
     for (const el of svg.querySelectorAll('[data-sel]')) el.removeAttribute('data-sel');
+    // Paper shows every name and the badges as asked, whatever the zoom left
+    // off screen or faded on the live map (js/map.js cullLabels, .badge-fade).
+    for (const el of svg.querySelectorAll('.shelf-label[data-far]')) el.removeAttribute('data-far');
+    for (const el of svg.querySelectorAll('.badge-fade')) el.style.removeProperty('opacity');
     const out = svg.cloneNode(true);
     out.style.removeProperty('width'); out.style.removeProperty('height'); out.setAttribute('width', '100%'); out.setAttribute('height', '100%'); out.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     if (!L.badges) out.classList.add('nobadges');

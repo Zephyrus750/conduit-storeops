@@ -63,8 +63,9 @@ function pullerNames(ctx, ses) {
 }
 const zoneText = z => (!z?.length || z.includes('all') ? tx('every bay') : z.join(', '));
 
-// Names come with the request (the requester's catalogue); a line without
-// one asks this device's catalogue once.
+// Names come with the request (the product name the requester's scan
+// brought, else the item's description); a line without one asks this
+// device's catalogue once.
 function nameOf(ctx, l, repaint) {
   if (l.name) return l.name;
   if (names.has(l.kc)) return names.get(l.kc) || l.kc;
@@ -171,7 +172,7 @@ function requester(ctx, ses, repaint) {
   const lines = liveLines(ses).sort((a, b) => String(b.at).localeCompare(String(a.at)));
   const lastCage = ses.cages?.[ses.cage - 1];
   const sheet = sheetHtml(`<div class="sx-h">${ic('listcheck')}${esc(ses.name)}${c.todo ? `<span class="n">${tx('{n} waiting', { n: c.todo })}</span>` : ''}</div><p class="sx-sub">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers'), tx('since {time}', { time: hm(ses.at) }), ses.shelves ? tx('shelf scan on') : tx('shelf scan off')].join(' · ')}</p>` +
-    (lastCage ? sx.sec(tx('Cage {n}', { n: ses.cage - 1 }), sx.rows([sx.row('cage', tx('On its way: {n} lines', { n: lastCage.lines }), tx('sent down {time}', { time: hm(lastCage.at) }), tx('Coming'), 'acc')])) : '') +
+    (lastCage ? sx.sec(tx('Cage {n}', { n: ses.cage - 1 }), sx.rows([sx.row('cage', txn(lastCage.lines, 'On its way: {n} line', 'On its way: {n} lines'), tx('sent down {time}', { time: hm(lastCage.at) }), tx('Coming'), 'acc')])) : '') +
     sx.sec(tx('Requests'), lines.length ? sx.rows(lines.slice(0, 60).map(l => { const [t, tone] = stateText(l); return sx.row('box', `${esc(nameOf(ctx, l, repaint))} · ${esc(qtyText(l))}`, `<span class="mono">${esc(l.kc)}</span> · ${esc(baysText(l))} · ${hm(l.at)}`, t, tone); })) : `<p class="sx-sub">${tx('Nothing asked for yet.')}</p>`, tx('newest first')) +
     sx.acts([sx.btn('x', tx('Leave session'), 'data-act="lp-leave"'), sx.btn('check', tx('End session'), 'data-act="lp-end"')]));
   return `<div class="lp-body">${head}${scan}${behindTray()}${card}${showPad ? pad : ''}</div>${sheet}${strip('listcheck', esc(ses.name), countsLine(c), c.todo || '')}`;
@@ -180,8 +181,9 @@ function requester(ctx, ses, repaint) {
 // person made earlier (Cages, Adjust), or Kmart's site search.
 const FROM = { apn: () => tx('found from the barcode'), paired: () => tx('found from the barcode'), kmart: () => tx('found from the barcode'), web: () => tx('found on kmart.com.au from the barcode') };
 function productRow(f, bays) {
-  const price = Number.isFinite(f.price) ? ` · $${Number(f.price).toFixed(2)}` : '';
-  return `<div class="card lp-prod"><span class="lp-pic">${productImg(f.img) || ic('box')}</span><span class="lp-pn"><b>${esc(f.name || f.kc || f.code)}</b><small><span class="mono">${esc(f.kc || f.code)}</span>${price}${f.carton ? ' · ' + tx('carton of {n}', { n: f.carton }) : ''}</small>${FROM[f.via] ? `<small class="lp-from">${FROM[f.via]()}${f.via !== 'apn' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-wrong" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}</span>` +
+  // The keycode is the title until the name lands, and then the line under it.
+  const id = esc(f.kc || f.code), line = [f.name ? `<span class="mono">${id}</span>` : '', Number.isFinite(f.price) ? `$${Number(f.price).toFixed(2)}` : '', f.carton ? tx('carton of {n}', { n: f.carton }) : ''].filter(Boolean).join(' · ');
+  return `<div class="card lp-prod"><span class="lp-pic">${productImg(f.img) || ic('box')}</span><span class="lp-pn">${f.name ? `<b>${esc(f.name)}</b>` : `<b class="mono">${id}</b>`}${line ? `<small>${line}</small>` : ''}${FROM[f.via] ? `<small class="lp-from">${FROM[f.via]()}${f.via !== 'apn' && f.gtin ? ` · <button type="button" class="lp-a" data-act="lp-wrong" data-gtin="${esc(f.gtin)}">${tx('Wrong item?')}</button>` : ''}</small>` : ''}</span>` +
     (bays && f.bays?.length ? `<span class="lp-bay"><small>${f.bays.length > 1 ? tx('BAYS') : tx('BAY')}</small><b class="mono">${esc(f.bays[0])}</b>${f.bays.length > 1 ? `<small class="mono">+ ${esc(f.bays.slice(1).join(', '))}</small>` : ''}</span>` : '') + `</div>`;
 }
 // What the requester is told before the pad: already asked for in this
@@ -335,11 +337,14 @@ async function find(ctx, raw, viaCam = false) {
     // A barcode nothing in the store knows: searched in the background
     // (the tray under the scan box), and the next item can be scanned now.
     if (r.report && r.gtin && !r.kc) { searchBehind(ctx, r); st.find = null; haptic('warning'); ctx.rerender(); if (viaCam) setTimeout(() => openCam(ctx), 350); return; }
-    st.find = { ...r, state: r.bays?.length ? 'found' : r.seen?.length ? 'seen' : r.report ? 'none' : 'noreport', code };
+    // The words come with the answer: its product name, else its description
+    // (from the inventory reports), else the keycode shows alone.
+    st.find = { ...r, name: r.name || r.desc || '', state: r.bays?.length ? 'found' : r.seen?.length ? 'seen' : r.report ? 'none' : 'noreport', code };
+    if (r.gtin && r.kc) behind.delete(r.gtin);   // known now: its row leaves the tray
     haptic(recallFor(ctx.store, r.kc) ? 'error' : st.find.state === 'found' ? 'success' : 'warning');
     if (linkFor && r.kc) pair(ctx, linkFor, r.kc);
-    // The answer shows now; the product's name and picture follow when they land.
-    if (r.kc) ctx.catalogue.lookup(r.kc).then(it => { if (it && st.find?.code === code) { Object.assign(st.find, { name: it.name || '', img: it.img || '', price: it.price }); ctx.rerender(); } }).catch(() => {});
+    // The answer shows now; the picture and price follow when they land.
+    if (r.kc) ctx.catalogue.lookup(r.kc).then(it => { if (it && st.find?.code === code) { Object.assign(st.find, { name: it.name || st.find.name || '', img: it.img || '', price: it.price }); ctx.rerender(); } }).catch(() => {});
   } catch (e) { st.find = { state: 'error', code, message: e.message }; haptic('error'); }
   ctx.rerender();
 }

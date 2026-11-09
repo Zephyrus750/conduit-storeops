@@ -6,7 +6,10 @@
 //                                   { dept: [cartons, units] } and { keycode: [units, cartons, dept] }
 //   placeIndex(state)               manNo → { day, truck, via } for every report the dock has placed.
 //                                   via: truck (on the dock), history (finalised), index (the library
-//                                   points at a truck), label (manifest.day), plan (staged on a slot)
+//                                   points at a truck), label (manifest.day), plan (staged on a slot),
+//                                   route (its truck went off-site or was diverted: plan.route; placed
+//                                   on the day it lands, else on its own day with away: true, and
+//                                   route, from, fromTruck, lands)
 //   despatchDay('05/09/2026')       '2026-09-05' | null
 //   usualGap(state)                 days from despatch to the truck, by the store's own trucks (1 until known)
 //   suggestPlace(state, m, taken, { today })   where a report nothing places most likely came: a truck or planner
@@ -16,6 +19,7 @@
 //   manifestStats(sums, state, { from, to })   what came in from `from` to `to` (all of it without them)
 
 import { addDays } from './time.js';
+import { routeManifest } from './dockroutes.js';
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const r1 = x => Math.round(x * 10) / 10;
@@ -51,14 +55,18 @@ export function manSummary(doc) {
 }
 
 // The dock's own record first: a truck says when a report came; then a
-// day set by hand; then the planner slot it is staged on.
+// day set by hand; then the planner slot it is staged on. A report whose
+// truck went off-site or was diverted did not come that day: it is placed
+// on the day it lands here, or held away from what came in.
 export function placeIndex(state) {
-  const dock = state?.dock || {}, out = new Map(), put = (no, p) => { if (no && !out.has(String(no))) out.set(String(no), p); };
+  const dock = state?.dock || {}, days = state?.plan?.days || {}, out = new Map(), put = (no, p) => { if (no && !out.has(String(no))) out.set(String(no), p); };
+  const away = (date, n, r) => ({ day: r.lands || date, truck: null, via: 'route', away: !r.lands, route: r.route, from: date, fromTruck: Number(n), lands: r.lands || null });
   for (const [id, t] of Object.entries(dock.trucks || {})) { put(t.manifest?.manNo, placed(id, 'truck')); put(t.plannedManifest, placed(id, 'truck')); }
   for (let i = (dock.history || []).length - 1; i >= 0; i--) { const h = dock.history[i]; put(h.manifest?.manNo, placed(h.id, 'history')); }
   for (const m of Object.values(dock.manifests || {})) if (m.truck && /^\d{4}-\d{2}-\d{2}-T\d+$/.test(m.truck)) put(m.manNo, placed(m.truck, 'index'));
-  for (const [no, l] of Object.entries(dock.manifestDays || {})) put(no, { day: l.day, truck: l.truck ?? null, via: 'label' });
-  for (const [date, d] of Object.entries(state?.plan?.days || {})) for (const [n, sl] of Object.entries(d.slots || {})) put(sl.manifest?.manNo, { day: date, truck: Number(n), via: 'plan' });
+  for (const [no, l] of Object.entries(dock.manifestDays || {})) { const r = l.truck ? days[l.day]?.routes?.[l.truck] : null; put(no, r ? away(l.day, l.truck, r) : { day: l.day, truck: l.truck ?? null, via: 'label' }); }
+  for (const [date, d] of Object.entries(days)) for (const [n, sl] of Object.entries(d.slots || {})) put(sl.manifest?.manNo, { day: date, truck: Number(n), via: 'plan' });
+  for (const [date, d] of Object.entries(days)) for (const [n, r] of Object.entries(d.routes || {})) put(routeManifest(r), away(date, n, r));
   return out;
 }
 
@@ -79,6 +87,7 @@ export function suggestPlace(state, m, taken = new Set(), opts = {}) {
   const places = opts.places || placeIndex(state), gap = opts.gap ?? usualGap(state), want = addDays(base, gap);
   const held = new Set([...taken, ...[...places.values()].filter(p => p.day && p.truck).map(p => `${p.day}-T${p.truck}`)]);
   const dock = state?.dock || {}, plan = state?.plan?.days || {}, today = opts.today || null;
+  for (const [date, d] of Object.entries(plan)) for (const n of Object.keys(d.routes || {})) held.add(`${date}-T${n}`);   // a truck that went elsewhere is no free number
   let open = [];
   // Trucks the dock ran or planned with no manifest, from the despatch day
   // on and within two days of when the report should have come. A truck
@@ -103,20 +112,25 @@ export function suggestPlace(state, m, taken = new Set(), opts = {}) {
 }
 
 // What came in. A report the dock never placed counts on its despatch day
-// plus the usual gap ('despatch'), else the day it was published.
+// plus the usual gap ('despatch'), else the day it was published. One whose
+// truck went off-site counts on the day it lands; until it has one, and for
+// a diverted truck that never comes, it is counted apart (away: off-site
+// and diverted, by the day the truck was due), never as received.
 export function manifestStats(sums, state, { from = null, to = null } = {}) {
   const places = placeIndex(state), gap = usualGap(state);
-  const dated = sums.map(s => {
+  const all0 = sums.map(s => {
     const p = places.get(s.manNo), est = !p && despatchDay(s.despatch);
-    return { s, day: p?.day || (est ? addDays(est, gap) : String(s.at || '').slice(0, 10)), truck: p?.truck ?? null, via: p?.via || (est ? 'despatch' : 'published') };
+    return { s, day: p?.day || (est ? addDays(est, gap) : String(s.at || '').slice(0, 10)), truck: p?.truck ?? null, via: p?.via || (est ? 'despatch' : 'published'), away: p?.away ? p.route : null };
   }).filter(x => DAY_RE.test(x.day)).sort((a, b) => a.day.localeCompare(b.day) || (a.truck || 9) - (b.truck || 9));
+  const dated = all0.filter(x => !x.away), held = all0.filter(x => x.away);
   const all = !from && !to, lo = from || dated[0]?.day || null, hi = to || dated.at(-1)?.day || null;
   const cur = lo ? dated.filter(x => x.day >= lo && x.day <= hi) : [];
   const totals = xs => {
     const kcs = new Set(); for (const x of xs) for (const k of Object.keys(x.s.kc || {})) kcs.add(k);
     return { manifests: xs.length, trucks: new Set(xs.map(x => `${x.day}-${x.truck || x.s.manNo}`)).size, days: new Set(xs.map(x => x.day)).size, consols: xs.reduce((n, x) => n + x.s.consols, 0), cartons: xs.reduce((n, x) => n + x.s.cartons, 0), units: xs.reduce((n, x) => n + x.s.units, 0), keycodes: kcs.size };
   };
-  const out = { from: lo, to: hi, all, gap, totals: totals(cur), prev: null, newKeycodes: null, byDay: {}, depts: [], top: [], regular: [], fresh: [], list: [] };
+  const out = { from: lo, to: hi, all, gap, totals: totals(cur), away: { offsite: { manifests: 0, cartons: 0 }, diverted: { manifests: 0, cartons: 0 } }, prev: null, newKeycodes: null, byDay: {}, depts: [], top: [], regular: [], fresh: [], list: [] };
+  for (const x of held) if (all || (lo && x.day >= lo && x.day <= hi)) { const a = out.away[x.away]; if (a) { a.manifests++; a.cartons += x.s.cartons; } }
   if (!all && lo) { const span = daysBetween(lo, hi) + 1, pf = addDays(lo, -span), pt = addDays(lo, -1); out.prev = { from: pf, to: pt, totals: totals(dated.filter(x => x.day >= pf && x.day <= pt)) }; }
   const seen = all ? null : new Set(); if (seen) for (const x of dated) if (x.day < lo) for (const k of Object.keys(x.s.kc || {})) seen.add(k);
   const depts = {}, kc = {};

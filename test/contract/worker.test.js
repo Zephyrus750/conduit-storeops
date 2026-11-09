@@ -1222,6 +1222,16 @@ test('live pull: a floor phone finds an item’s stockroom bays by keycode or AP
   assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: addDays(today, -2), report: { at: Date.now(), byLoc: { 7041: ['43652214'] }, apn: { 9300012345672: '43652214' } } }, sr)).status, 201);
   const booked = (await find('9300012345672')).body;
   assert.deepEqual([booked.kc, booked.via, booked.bays], ['43652214', 'apn', ['7041']], 'found from the book, its bays from today’s report');
+  // The words come with the answer: the description book keeps a pasted report's descriptions (not the report row), so an item off kmart.com.au still has words.
+  assert.deepEqual([booked.name, booked.desc], ['', ''], 'no product name in an empty catalogue, no description before a report gave one');
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: addDays(today, -2), report: { at: Date.now(), byLoc: { 7041: ['43652214'] }, apn: { 9300012345672: '43652214' }, desc: { 43652214: 5 } } }, sr)).status, 400, 'a description is text');
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: addDays(today, -2), report: { at: Date.now(), byLoc: { 7041: ['43652214'] }, apn: { 9300012345672: '43652214' }, desc: { 43652214: '  OXX BODYCARE\tTRVL RIBBED POTS 20ML 2PK  ' } } }, sr)).status, 201);
+  assert.equal((await find('9300012345672')).body.desc, 'OXX BODYCARE TRVL RIBBED POTS 20ML 2PK', 'the report’s description, tidied');
+  assert.equal((await find('43652214')).body.desc, 'OXX BODYCARE TRVL RIBBED POTS 20ML 2PK', 'by keycode too');
+  const row = await api('GET', `/v1/store/1241/backfill/report?date=${addDays(today, -2)}`, undefined, sr);
+  assert.equal(row.body.desc, undefined, 'the report row itself does not carry them');
+  assert.equal((await api('POST', '/v1/store/1241/backfill/report', { date: addDays(today, -3), report: { at: Date.now(), byLoc: { 7041: ['43652214'] }, desc: { 43652214: 'AN OLDER WORDING' } } }, sr)).status, 201);
+  assert.equal((await find('43652214')).body.desc, 'OXX BODYCARE TRVL RIBBED POTS 20ML 2PK', 'an older report does not replace a newer one’s description');
   // A clearance ticket: the book's own barcode, which nothing links yet. The floor phone links it to the keycode printed on the ticket.
   const ticket = (await find('9780241813799')).body;
   assert.deepEqual([ticket.gtin, ticket.kc, ticket.bays], ['9780241813799', null, []], 'a barcode nothing links: no keycode, so the phone asks for it');
