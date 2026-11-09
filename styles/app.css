@@ -1548,11 +1548,6 @@ a.nm-go:hover { color: var(--accent-ink); text-decoration: underline; }
 .mp-facts b { font-size: 16px; }
 .mp-num { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
 .mp-num input { max-width: 200px; }
-.mp-depts { display: flex; flex-direction: column; gap: 3px; }
-.mp-dept { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 8px; align-items: center; font-size: 12.5px; }
-.mp-dept i { height: 8px; background: var(--chip); border-radius: 4px; overflow: hidden; }
-.mp-dept i b { display: block; height: 100%; background: #2563EB; }
-.mp-dept span { text-align: right; font-variant-numeric: tabular-nums; }
 .mp-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .mp-checks li { padding: 7px 10px; border-radius: 8px; font-size: 13px; background: var(--chip); border-left: 3px solid #16A34A; }
 .mp-checks li.warn { border-left-color: #F59E0B; } .mp-checks li.bad { border-left-color: #DC2626; background: rgba(220,38,38,.08); }
@@ -4070,7 +4065,6 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .mp-mcn > span { white-space: nowrap; }
 .mp-mcn b.mono { font-family: ui-monospace, Menlo, monospace; font-weight: 700; margin-right: 2px; }
 .mp-mcn small { font-size: 11px; color: var(--dim); }
-.mp-mt td:first-child { min-width: 210px; }
 .mp-bar { display: grid; grid-template-columns: minmax(60px, 1fr) 34px; align-items: center; gap: 8px; min-width: 120px; }
 .mp-bar i { height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; }
 .mp-bar i b { display: block; height: 100%; border-radius: 4px; }
@@ -4078,7 +4072,68 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .mp-cm { display: flex; flex-wrap: wrap; gap: 3px 14px; }
 .mp-cm > span { display: inline-flex; align-items: baseline; gap: 6px; }
 .mp-cm > span > small { font-size: 11px; color: var(--dim); white-space: nowrap; }
-.mp-pd { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-pd { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The preview's views (mpreview.js): the switcher and filter, sortable heads,
+   rows that open to their details, and the groups. */
+.mp-vbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.mp-seg { flex: none; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.mp-seg::-webkit-scrollbar { display: none; }
+.mp-seg button { flex: none; white-space: nowrap; }
+.mp-q { flex: 1 1 220px; min-width: 0; max-width: none; }
+.mp-view { display: flex; flex-direction: column; min-height: 240px; }
+.mp-t th { white-space: nowrap; }
+.mp-sort { font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.mp-sort:hover, .mp-sort.on { color: var(--ink); }
+.mp-sort:focus-visible, .mp-x:focus-visible, .mp-go:focus-visible, .mp-gm:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+.mp-t tr[data-mpx] { cursor: pointer; }
+.mp-t tr[data-mpx]:hover > td { background: var(--hover); }
+.mp-t tr.mp-r.open > td { background: var(--chip); border-bottom-color: transparent; }
+.mp-rh { display: inline-flex; align-items: center; gap: 4px; }
+.mp-x, .mp-x0 { flex: none; width: 24px; height: 24px; }
+.mp-x { display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--dim); cursor: pointer; }
+.mp-x:hover { background: var(--hover); color: var(--ink); }
+.mp-x svg.i { width: 14px; height: 14px; transform: rotate(-90deg); transition: transform .15s; }
+.mp-r.open .mp-x svg.i { transform: none; }
+.mp-t tr.mp-dr > td { padding: 0 8px 10px 34px; background: var(--chip); }
+.mp-dw { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.mp-dt { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--panel); border-radius: 8px; overflow: hidden; }
+.mp-dt th { text-align: left; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mp-dt td { padding: 4px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.mp-dt tr:last-child td { border-bottom: 0; }
+.mp-dt .n { text-align: right; font-variant-numeric: tabular-nums; }
+.mp-dt tr.hit td { background: rgba(245, 158, 11, .15); }
+.mp-more { align-self: flex-start; margin-top: 8px; }
+.mp-go { font: inherit; color: var(--accent-ink); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.mp-gh > td { font-weight: 700; background: var(--ground); }
+.mp-gn { display: inline-flex; align-items: center; gap: 8px; }
+.mp-gn i { width: 12px; height: 12px; border-radius: 3px; }
+.mp-groups td:first-child { min-width: 260px; }
+.mp-gs > td:first-child { padding-left: 26px; }
+.mp-gd { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.mp-gms { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.mp-gm { font: inherit; font-size: 11.5px; white-space: nowrap; display: inline-flex; align-items: baseline; gap: 5px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink2); cursor: pointer; }
+.mp-gm:hover { border-color: var(--accent); color: var(--accent-ink); }
+.mp-gm small { color: var(--dim); }
+/* The product card over the preview (it sits under every sheet otherwise). */
+.frame:has(> .mprev) > .pch { z-index: 81; }
+/* The tables fit the preview's main column: a narrow one (half a screen)
+   leaves the minor columns out, a phone's drops the bars' tracks too. */
+.mp-main { container: mp / inline-size; }
+@container mp (max-width: 760px) {
+  .mp-t .mp-lo, .mp-dt .mp-lo { display: none; }
+  .mp-pd { max-width: 220px; }
+  .mp-groups td:first-child { min-width: 200px; }
+}
+@container mp (max-width: 480px) {
+  .mp-t th, .mp-t td, .mp-dt th, .mp-dt td { padding-left: 4px; padding-right: 4px; }
+  .mp-t .mp-bar { display: block; min-width: 0; text-align: right; }
+  .mp-t .mp-bar i { display: none; }
+  .mp-t .mp-mcn > span { white-space: normal; }
+  .mp-pd { max-width: 130px; }
+  .mp-groups td:first-child { min-width: 0; }
+  .mp-gs > td:first-child { padding-left: 10px; }
+  .mp-t tr.mp-dr > td { padding-left: 6px; }
+}
 @media (min-width: 861px) and (max-width: 1100px) { .mp-body { grid-template-columns: minmax(0, 1fr) 300px; } }
 @media (max-width: 860px) { .mp-side { order: -1; } }
 
