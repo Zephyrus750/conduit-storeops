@@ -1,7 +1,7 @@
 // The guide's icons. The app's own set (icons.svg, as ic() in js/ui.js
 // draws it) wherever it has the glyph; the Visual Guide showcase's paths
 // only for the few it lacks (the player's controls, wifi, a book, a hand).
-// No DOM here: js/guide/scenes.js imports this, and so does its unit test.
+// No DOM here: the player and the chapters import this, and so does the guide's unit test.
 
 // The showcase's name → the app's icon.
 const APP = {

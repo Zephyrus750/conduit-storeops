@@ -10,7 +10,6 @@ export default {
   "Stockroom": "Kho",
   "Back dock": "Khu nhận hàng",
   "{area} code": "Mã {area}",
-  "The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.": "Mã nhóm {area} mở khu vực này trên thiết bị này cho đến khi đăng xuất. Mã quản lý ở đây mở mọi khu vực; quản lý cũng có thể đăng nhập với tư cách Quản lý để bỏ qua bước này.",
   "Code": "Mã",
   "Open {area}": "Mở {area}",
   "Not now": "Để sau",

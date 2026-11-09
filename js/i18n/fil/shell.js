@@ -124,7 +124,6 @@ export default {
   "Where are you working?": "Saan ka nagtatrabaho?",
   "Pick your area to begin.": "Piliin ang area mo para magsimula.",
   "Signed in as manager: every area is open.": "Naka-sign in bilang manager: bukas ang lahat ng area.",
-  "Stockroom and Back dock take their crew code once on this device.": "Isang beses hihingin ng Stockroom at Back dock ang crew code nila sa device na ito.",
   "Not on for this store": "Hindi naka-on para sa tindahang ito",
   "All of {group}": "Lahat ng {group}",
   "All {n}": "Lahat ng {n}",

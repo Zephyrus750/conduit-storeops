@@ -124,7 +124,6 @@ export default {
   "Where are you working?": "Dove lavori?",
   "Pick your area to begin.": "Scegli la tua area per iniziare.",
   "Signed in as manager: every area is open.": "Accesso come responsabile: tutte le aree sono aperte.",
-  "Stockroom and Back dock take their crew code once on this device.": "Magazzino e Ricevimento merci chiedono il codice di squadra una sola volta su questo dispositivo.",
   "Not on for this store": "Non attivo per questo negozio",
   "All of {group}": "Tutto {group}",
   "All {n}": "Tutti e {n}",

@@ -26,7 +26,7 @@ export const AREAS = {
   dock2: ['js/views/backdock/wallboard.js', 'js/views/backdock/screens.js', 'js/views/backdock/rhistory.js', 'js/views/backdock/danalytics.js', 'js/views/backdock/manifests.js', 'js/views/backdock/profiles.js', 'js/views/backdock/planner.js', 'js/views/backdock/offsite.js', 'js/views/backdock/loads.js', 'js/views/backdock/screenlist.js', 'js/views/backdock/mbatch.js', 'js/views/backdock/mstats.js'],
   admin: ['js/views/admin.js', 'js/views/adminresources.js', 'js/views/adminzones.js', 'js/pagepic.js'],
   vguide: ['js/guide/scenes.js', 'js/guide/player.js', 'js/guide/icons.js'],
-  vguide2: ['js/guide/frames.js', 'js/guide/pc.js', 'js/guide/refresh-map.js', 'js/guide/chapters/around.js', 'js/guide/chapters/refresh.js', 'js/guide/chapters/bfscan.js', 'js/guide/chapters/receive.js', 'js/guide/chapters/labels.js', 'js/guide/labels-map.js', 'js/guide/chapters/bfreview.js', 'js/guide/chapters/manifests.js', 'js/guide/manifests-map.js', 'js/guide/chapters/decant.js'],
+  vguide2: ['js/guide/frames.js', 'js/guide/pc.js', 'js/guide/refresh-map.js', 'js/guide/chapters/around.js', 'js/guide/chapters/refresh.js', 'js/guide/chapters/bfscan.js', 'js/guide/chapters/receive.js', 'js/guide/chapters/labels.js', 'js/guide/labels-map.js', 'js/guide/chapters/bfreview.js', 'js/guide/chapters/manifests.js', 'js/guide/manifests-map.js', 'js/guide/chapters/decant.js', 'js/guide/chapters/signin.js', 'js/guide/chapters/offline.js', 'js/guide/chapters/settings.js', 'js/guide/chapters/find.js', 'js/guide/find-map.js', 'js/guide/chapters/fault.js', 'js/guide/chapters/equip.js', 'js/guide/chapters/livepull.js', 'js/guide/chapters/cages.js', 'js/guide/chapters/receivepc.js'],
 };
 
 // A JS string literal's text: '…' or "…" with \' \" \\ \n escapes.

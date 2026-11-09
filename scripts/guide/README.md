@@ -19,11 +19,11 @@ support that work:
 
 ## Drawing a chapter (drafts)
 
-Help's chapters live in `js/guide/`: `scenes.js` lists them, and the ones
-drawn at the app's real sizes are in `js/guide/chapters/`, using the phone
-in `js/guide/frames.js` and the store PC in `js/guide/pc.js`. A chapter
-being drawn lives in `draft/` until it's approved, and Help keeps its
-current chapter until then.
+Help's chapters live in `js/guide/chapters/`, one file each, drawn at the
+app's real sizes on the phone in `js/guide/frames.js` and the store PC in
+`js/guide/pc.js`; `js/guide/scenes.js` lists them in Help's order. A
+chapter being drawn (a new one, or a redraw) lives in `draft/` until it's
+approved, and Help keeps its current chapter until then.
 
 - **`draft/chapters/`:** one file per chapter being drawn. `index.js` lists
   them. A chapter that keeps Help's id takes that chapter's place; one with a
