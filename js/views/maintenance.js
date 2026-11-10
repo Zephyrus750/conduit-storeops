@@ -21,7 +21,10 @@ let filter = 'active', selected = null, draft = null;
 // (Low, Medium, High, Urgent). Neither legacy app had targets; these are
 // Conduit's defaults.
 const SLA_DAYS = [14, 7, 3, 1];
-const ageDays = i => (Date.now() - Date.parse(i.created)) / 86400000;
+// The target runs from when the issue was logged, or from its last reopen
+// (decision 41, 10 Nov 2026): a fault that comes back gets a fresh target.
+const since = i => i.reopened || i.created;
+const ageDays = i => (Date.now() - Date.parse(since(i))) / 86400000;
 const overdue = i => i.status !== 'completed' && ageDays(i) > SLA_DAYS[i.sev ?? 1];
 const doneAt = i => [...(i.log || [])].reverse().find(l => l.a === 'Completed')?.t || i.updated;
 const thisMonth = iso => { const d = new Date(iso), n = new Date(); return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth(); };
@@ -231,7 +234,7 @@ function sidebar(m) {
   if (!i) return list;
   const sla = SLA_DAYS[i.sev ?? 1];
   const det = `<div class="card mtdet"><div class="ch"><h3>${esc(i.title)}</h3>${status(i.status === 'open' ? 'warn' : i.status === 'progress' ? 'info' : 'good', stName(i))}</div>` +
-    `<div class="mt-meta"><span><i class="sevdot" style="background:${SEV[i.sev][1]}"></i>${tx('{sev} severity', { sev: SEV[i.sev][0] })}</span><span>${esc(i.loc || CAT_NAME[i.cat])}</span><span>${tx('Logged {time}', { time: fmtTime(i.created) })}</span>${i.recur ? `<span class="recur">${tx('↻ Recurring · reopened {n}×', { n: i.recur })}</span>` : ''}${i.status !== 'completed' ? `<span class="${overdue(i) ? 'mt-od' : 'cs-dim'}">${txn(sla, 'Target {n} day', 'Target {n} days')}${overdue(i) ? ' · ' + tx('overdue') : ''}</span>` : ''}<span class="cs-dim">${i.by ? tx('{type} · by {who}', { type: CAT_NAME[i.cat], who: esc(i.by) }) : tx('{type} · by unknown device', { type: CAT_NAME[i.cat] })}</span></div>` +
+    `<div class="mt-meta"><span><i class="sevdot" style="background:${SEV[i.sev][1]}"></i>${tx('{sev} severity', { sev: SEV[i.sev][0] })}</span><span>${esc(i.loc || CAT_NAME[i.cat])}</span><span>${tx('Logged {time}', { time: fmtTime(i.created) })}</span>${i.reopened && i.status !== 'completed' ? `<span>${tx('Reopened {time}', { time: fmtTime(i.reopened) })}</span>` : ''}${i.recur ? `<span class="recur">${tx('↻ Recurring · reopened {n}×', { n: i.recur })}</span>` : ''}${i.status !== 'completed' ? `<span class="${overdue(i) ? 'mt-od' : 'cs-dim'}">${txn(sla, 'Target {n} day', 'Target {n} days')}${overdue(i) ? ' · ' + tx('overdue') : ''}</span>` : ''}<span class="cs-dim">${i.by ? tx('{type} · by {who}', { type: CAT_NAME[i.cat], who: esc(i.by) }) : tx('{type} · by unknown device', { type: CAT_NAME[i.cat] })}</span></div>` +
     photoStrip(i, i.status !== 'completed') +
     `<div class="list">${i.log.map(l => `<div class="li"><span class="rt" style="margin:0">${fmtTime(l.t)}</span><span class="nm">${esc(tx(l.a))}${l.n ? ' · ' + esc(l.n) : ''}</span></div>`).join('')}</div>` +
     `<div class="acts2" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${i.x != null ? `<span class="btn sm" data-act="show">${ic('pin')}${tx('Show on map')}</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" data-act="edit">${ic('edit')}${tx('Edit')}</span>` : ''}${i.status === 'open' ? `<span class="btn sm" style="color:#B45309" data-act="progress">${ic('tool')}${tx('Maintenance done')}</span>` : ''}${i.status === 'progress' ? `<span class="btn sm" data-act="reopen">${ic('refresh')}${tx('Not fixed')}</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" style="color:var(--green-ink)" data-act="close">${ic('check')}${tx('Complete')}</span>` : `<span class="btn sm" data-act="reopen">${ic('refresh')}${tx('Reopen')}</span>`}<span class="btn sm" data-act="work-order" title="${tx('A printed sheet for the contractor, with a QR code back to this issue')}">${ic('print')}${tx('Work order')}</span>${i.status !== 'completed' ? `<span class="btn sm" data-act="visit">${ic('users')}${tx('Contractor visited')}</span>` : ''}<span class="btn sm" style="color:var(--red)" data-act="remove">${ic('trash')}${tx('Remove')}</span></div></div>`;
@@ -273,7 +276,7 @@ function phone(m) {
     const sla = SLA_DAYS[i.sev ?? 1], open = i.status !== 'completed';
     return `<div class="sx"><div class="sx-h"><span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>${esc(i.title)}<span class="n${i.status === 'open' ? ' red' : ''}">${stName(i)}</span></div>` +
       `<div class="sx-sub">${esc(i.loc || CAT_NAME[i.cat])}${i.recur ? ` · <span class="recur">${tx('↻ reopened {n}×', { n: i.recur })}</span>` : ''}</div><div class="sx-sec">` +
-      sx.facts([[tx('Urgency'), SEV[i.sev][0]], [tx('Type'), CAT_NAME[i.cat]], [tx('Logged'), esc(fmtTime(i.created))], open ? [tx('repair::Target'), `${txn(sla, '{n} day', '{n} days')}${overdue(i) ? ' · ' + tx('overdue') : ''}`] : [tx('Completed'), esc(fmtTime(doneAt(i)))]]) + `</div>` +
+      sx.facts([[tx('Urgency'), SEV[i.sev][0]], [tx('Type'), CAT_NAME[i.cat]], [tx('Logged'), esc(fmtTime(i.created))], ...(i.reopened && open ? [[tx('issue::Reopened'), esc(fmtTime(i.reopened))]] : []), open ? [tx('repair::Target'), `${txn(sla, '{n} day', '{n} days')}${overdue(i) ? ' · ' + tx('overdue') : ''}`] : [tx('Completed'), esc(fmtTime(doneAt(i)))]]) + `</div>` +
       (i.note ? sx.sec(tx('Note'), `<div class="sx-sub" style="margin:0">${esc(i.note)}</div>`) : '') +
       ((i.photos || []).length || open ? sx.sec(tx('Photos'), photoStrip(i, open), tx('{n} of 4', { n: (i.photos || []).length })) : '') +
       sx.acts([
@@ -289,7 +292,7 @@ function phone(m) {
       sx.sec(tx('Log'), sx.rows([...i.log].reverse().map(l => sx.row('history', esc(tx(l.a)), l.n ? esc(l.n) : '', esc(fmtTime(l.t)))))) +
       sx.acts([sx.btn('x', tx('Back to the list'), 'data-act="back"')]) + `</div>`;
   }
-  const row = i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), `${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${timePassed(i.created)}`, overdue(i) ? tx('Overdue') : i.status === 'progress' ? tx('To check') : OPEN, overdue(i) ? 'bad' : i.status === 'progress' ? 'warn' : 'dim', `data-act="select" data-id="${esc(i.id)}"`);
+  const row = i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), `${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${timePassed(since(i))}`, overdue(i) ? tx('Overdue') : i.status === 'progress' ? tx('To check') : OPEN, overdue(i) ? 'bad' : i.status === 'progress' ? 'warn' : 'dim', `data-act="select" data-id="${esc(i.id)}"`);
   const open = [...m.open].sort((a, b) => (overdue(b) - overdue(a)) || (a.updated < b.updated ? 1 : -1));
   const done = m.all.filter(i => i.status === 'completed').sort((a, b) => (doneAt(a) < doneAt(b) ? 1 : -1)).slice(0, 5);
   return `<div class="sx"><div class="sx-h">${ic('m-maintenance')}${tx('Maintenance')}<span class="n${m.overdue ? ' red' : ''}">${tx('{n} open', { n: m.open.length })}</span></div>` +
@@ -333,12 +336,12 @@ const m0 = ctx => { const i = ctx.store.get('issues')[selected]; return i && !i.
 // log so far, and lines for the contractor to fill in; "Contractor visited"
 // logs it back.
 function printWorkOrder(ctx, i) {
-  const fl = mapFloors().find(f => f.id === i.floor), due = new Date(Date.parse(i.created) + SLA_DAYS[i.sev ?? 1] * 86400000);
+  const fl = mapFloors().find(f => f.id === i.floor), due = new Date(Date.parse(since(i)) + SLA_DAYS[i.sev ?? 1] * 86400000);
   const pm = i.x != null ? paperMap({ floor: i.floor, frame: { around: [i.x, i.y], span: 1600 }, pins: [{ x: i.x, y: i.y, colour: '#DC2626', glyph: GLYPH[i.cat] || GLYPH.other }], layers: { emergency: false, priceChecks: false }, aspect: 2 }) : null;
   const url = issueLink(ctx.storeNo, i.id), qr = qrSvg(url, { cell: 3 });
   const fact = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
   const body = `<div class="ps-facts">${fact(tx('Issue'), esc(i.title))}${fact(tx('Type'), esc(CAT_NAME[i.cat] || tx('Other')))}${fact(tx('Severity'), esc(SEV[i.sev ?? 1][0]))}${fact(tx('Status'), esc(stName(i)))}` +
-    `${fact(tx('Where'), esc(i.loc || '—') + (fl ? ` · ${esc(fl.name)}` : ''))}${fact(tx('Logged'), esc(fmtTime(i.created)))}${fact(tx('repair::Target'), esc(fmtDay(due)) + (overdue(i) ? ' · ' + tx('overdue') : ''))}${fact(tx('Reference'), `<span class="mono">${esc(i.id)}</span>`)}</div>` +
+    `${fact(tx('Where'), esc(i.loc || '—') + (fl ? ` · ${esc(fl.name)}` : ''))}${fact(tx('Logged'), esc(fmtTime(i.created)))}${i.reopened && i.status !== 'completed' ? fact(tx('issue::Reopened'), esc(fmtTime(i.reopened))) : ''}${fact(tx('repair::Target'), esc(fmtDay(due)) + (overdue(i) ? ' · ' + tx('overdue') : ''))}${fact(tx('Reference'), `<span class="mono">${esc(i.id)}</span>`)}</div>` +
     (i.note ? `<p class="ps-note">${tx('<b>Details:</b> {note}', { note: esc(i.note) })}</p>` : '') +
     `<div class="ps-wo">${pm ? `<div class="ps-wo-map">${pm.svg}</div>` : `<div class="ps-wo-map ps-none">${tx('Not pinned on the map')}</div>`}<div class="ps-wo-qr">${qr || ''}<span>${tx('Scan on a store device to open this issue in Conduit')}</span></div></div>` +
     `<h2>${tx('Log so far')}</h2>` + table([tx('When'), tx('What'), tx('Note')], i.log.slice(-5).map(l => [esc(fmtTime(l.t)), esc(tx(l.a)), esc(l.n || '')]), ['w20', 'w20', '']) +

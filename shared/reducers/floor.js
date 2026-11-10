@@ -8,7 +8,7 @@
 //   labels    cycleLen, assign micro → [shelves], checks cycle → micro → { at, device },
 //             variances cycle → [ { micro, keycode, note, at, device } ]
 //   stocktake sessions session → { phase, startedAt, startedBy, ended, shelves: shelf → { state, by, at, vby } }
-//   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, log[], removed?, photos?[] }
+//   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, reopened?, log[], removed?, photos?[] }
 //   assets    asset → { intMonths, due, log[], updated }
 //   picklists device → { items: [ { code, completed } ], at }
 //   inventory offsite pid → { pid, sent, time, desc, title, products[{kc,q}], req, cb, rec, note, at },
@@ -232,7 +232,8 @@ export const floorReducers = {
   'issue.reopen'(s, e) {
     const i = issue(s, e); if (i.code) return i;
     if (i.status === 'open') return null;
-    i.status = 'open'; i.recur = (i.recur || 0) + 1; i.updated = e.at;
+    // The repair target restarts from the reopen (decision 41, 10 Nov 2026).
+    i.status = 'open'; i.recur = (i.recur || 0) + 1; i.updated = e.at; i.reopened = e.at;
     i.log.push({ t: e.at, a: 'Reopened (recurring)', n: e.payload.note || '' });
     return null;
   },

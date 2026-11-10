@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { initialState, apply } from '../../shared/reducers.js';
 import { gs1Parse, gtinCheck } from '../../shared/gs1.js';
+import { inSweep, sweepCount } from '../../shared/reducers/stockroom.js';
 
 let clock = Date.parse('2026-10-05T00:00:00Z');
 const ev = (type, entity, payload = {}) => ({ type, entity, payload, at: new Date(clock += 60_000).toISOString(), actor: { device: 'phone-1' } });
@@ -60,4 +61,53 @@ test('pairing an item barcode with its keycode', () => {
   assert.equal(s.apnPairs['9300633603120'].kc, '43307685');
   assert.equal(apply(s, ev('cage.pair', { apn: '9300633603123' }, { keycode: '43307685' }))?.code, 'invalid_event', 'bad check digit');
   assert.equal(apply(s, ev('cage.pair', { apn: '9300633603120' }, { keycode: 'x' }))?.code, 'invalid_event');
+});
+
+test('cage keycodes are 6 to 9 digits; each log line keeps the role that wrote it (decision 41, 10 Nov 2026)', () => {
+  const s = initialState();
+  const as = (e, actor) => ({ ...e, actor });
+  ok(s, as(ev('cage.create', { cage: 'CG7' }, { ring: 'overstock' }), { device: 'phone-1', role: 'stockroom' }));
+  ok(s, as(ev('cage.scan', { cage: 'CG7' }, { keycode: '110148905', qty: 1 }), { device: 'phone-1', role: 'stockroom' }));
+  for (const kc of ['12345', '1234567890', '9300633603120', '43307685x']) {
+    const before = JSON.stringify(s);
+    assert.equal(apply(s, ev('cage.scan', { cage: 'CG7' }, { keycode: kc, qty: 1 }))?.code, 'invalid_event', kc);
+    assert.equal(JSON.stringify(s), before, `${kc}: refused, nothing changed`);
+  }
+  ok(s, as(ev('cage.park', { cage: 'CG7' }, { location: 'BOH A1' }), { device: 'desk-1', role: 'manager' }));
+  ok(s, as(ev('cage.close', { cage: 'CG7' }), { device: 'owner-pc', role: null, owner: true }));
+  assert.deepEqual(s.cages.CG7.log.map(l => l.role), ['stockroom', 'stockroom', 'manager', 'owner']);
+});
+
+test('a sweep counts only its own sightings, and Finish misses only cages open when it began', () => {
+  const s = initialState();
+  ok(s, ev('cage.create', { cage: 'A1' }, { ring: 'overstock' }));
+  ok(s, ev('cage.create', { cage: 'A2' }, { ring: 'overstock' }));
+  ok(s, ev('cage.sweepStart', { sweep: 'sw1' }));
+  ok(s, ev('cage.sweep', { cage: 'A1' }, { session: 'sw1' }));
+  ok(s, ev('cage.sweepEnd', { sweep: 'sw1' }));
+  ok(s, ev('cage.sweepStart', { sweep: 'sw2' }));
+  ok(s, ev('cage.create', { cage: 'A3' }, { ring: 'overstock' }));
+  ok(s, ev('cage.sweepEnd', { sweep: 'sw2' }));
+  const h = s.cageSweeps.history.at(-1);
+  assert.equal(h.seen, 0, 'the second sweep saw nothing itself');
+  assert.equal(h.total, 2, 'A3 is not on a sweep that began before it opened');
+  assert.deepEqual(h.missing.sort(), ['A1', 'A2'], 'A3 opened after the sweep began');
+});
+
+test('one count for a running sweep: a cage opened since it began counts only once seen', () => {
+  const s = initialState();
+  ok(s, ev('cage.create', { cage: 'B1' }, { ring: 'overstock' }));
+  ok(s, ev('cage.create', { cage: 'B2' }, { ring: 'overstock' }));
+  ok(s, ev('cage.sweepStart', { sweep: 'sw1' }));
+  ok(s, ev('cage.create', { cage: 'B3' }, { ring: 'overstock' }));
+  ok(s, ev('cage.create', { cage: 'B4' }, { ring: 'overstock' }));
+  const cur = () => s.cageSweeps.current;
+  assert.deepEqual(sweepCount(s.cages, cur()), { n: 0, total: 2 }, 'B3 and B4 are not on it');
+  assert.equal(inSweep(cur(), 'B3', s.cages.B3), false);
+  ok(s, ev('cage.sweep', { cage: 'B3' }, { session: 'sw1' }));
+  ok(s, ev('cage.sweep', { cage: 'B1' }, { session: 'sw1' }));
+  assert.deepEqual(sweepCount(s.cages, cur()), { n: 2, total: 3 }, 'B3 counts once seen');
+  ok(s, ev('cage.sweepEnd', { sweep: 'sw1' }));
+  const h = s.cageSweeps.history.at(-1);
+  assert.deepEqual([h.seen, h.total, h.missing], [2, 3, ['B2']], 'the summary counts as the phone did; B4 is not missed');
 });

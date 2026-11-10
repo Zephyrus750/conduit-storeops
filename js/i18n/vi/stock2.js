@@ -183,7 +183,6 @@ export default {
   "{cage} placed near {shelf}": "Đã đặt {cage} gần {shelf}",
   "{cage} placed": "Đã đặt {cage}",
   "missing": "thất lạc",
-  "{n} of {total} seen that day": "thấy {n}/{total} trong ngày đó",
   "no sweep yet": "chưa có đợt rà soát",
   "Type the cage tag": "Nhập thẻ lồng",
   "New tag for {cage} (scan or type it)": "Thẻ mới cho {cage} (quét hoặc nhập)",
@@ -575,4 +574,6 @@ export default {
   "{bay} on {date} leaves the board and History.": "{bay} ngày {date} sẽ rời khỏi bảng và Lịch sử.",
   "No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.": "Chưa có bản chụp. Lưu báo cáo SIM hôm nay hoặc dán báo cáo SOH vào đây; cần ba bản chụp để phân biệt đứng yên với đang biến động.",
   "Nothing flagged on the latest snapshot.": "Không có gì được đánh dấu trong bản chụp mới nhất.",
+  "{n} cage opened since the sweep began is not on it.": "{n} lồng mở sau khi bắt đầu rà soát không nằm trong lần này.",
+  "{n} cages opened since the sweep began are not on it.": "{n} lồng mở sau khi bắt đầu rà soát không nằm trong lần này.",
 };

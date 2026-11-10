@@ -963,4 +963,6 @@ export default {
   "Not coming to the dock today: {list}": "Hindi darating sa dock ngayon: {list}",
   "{list} · marked in the Planner": "{list} · naka-mark sa Planner",
   "No truck to decant today": "Walang truck na ide-decant ngayon",
+  "Reopened {time}": "Binuksan muli {time}",
+  "issue::Reopened": "Binuksan muli",
 };

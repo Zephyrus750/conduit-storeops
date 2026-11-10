@@ -183,7 +183,6 @@ export default {
   "{cage} placed near {shelf}": "Nailagay ang {cage} malapit sa {shelf}",
   "{cage} placed": "Nailagay ang {cage}",
   "missing": "nawawala",
-  "{n} of {total} seen that day": "{n} sa {total} ang nakita nang araw na iyon",
   "no sweep yet": "wala pang sweep",
   "Type the cage tag": "I-type ang cage tag",
   "New tag for {cage} (scan or type it)": "Bagong tag para sa {cage} (i-scan o i-type)",
@@ -575,4 +574,6 @@ export default {
   "{bay} on {date} leaves the board and History.": "Mawawala ang {bay} noong {date} sa board at sa History.",
   "No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.": "Wala pang snapshot. I-save ang SIM report ngayong araw o i-paste dito ang SOH report; kailangan ng tatlong snapshot para malaman kung flat o gumagalaw.",
   "Nothing flagged on the latest snapshot.": "Walang naka-flag sa pinakabagong snapshot.",
+  "{n} cage opened since the sweep began is not on it.": "Hindi kasama rito ang {n} cage na binuksan matapos magsimula ang sweep.",
+  "{n} cages opened since the sweep began are not on it.": "Hindi kasama rito ang {n} cage na binuksan matapos magsimula ang sweep.",
 };

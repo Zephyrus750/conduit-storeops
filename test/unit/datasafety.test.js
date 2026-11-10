@@ -122,7 +122,7 @@ test('payloads are capped: per type, and the lists a device sends', async () => 
   same(s, () => apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: 'abc', qty: 1 }, 'stockroom')));
   same(s, () => apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: '12345678', qty: 1e6 }, 'stockroom')));
   same(s, () => apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: '12345678', qty: 1.5 }, 'stockroom')));
-  assert.equal(apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: '9300000000001', qty: 2 }, 'stockroom')), null, 'an item barcode is a code too');
+  same(s, () => apply(s, ev('cage.scan', { cage: 'BSN1240417' }, { keycode: '9300000000001', qty: 2 }, 'stockroom')));   // a keycode is 6 to 9 digits; an item barcode goes on as its keycode, with apn (decision 41)
   same(s, () => apply(s, ev('label.assign', { micro: 'H1-01' }, { shelves: Array(401).fill('A1') }, 'floor')));
   same(s, () => apply(s, ev('label.assign', { micro: 'H1-01' }, { shelves: [big(30)] }, 'floor')));
   same(s, () => apply(s, ev('label.variance', { micro: 'H1-01', cycle: 'c1' }, { keycode: 'oops' }, 'floor')));

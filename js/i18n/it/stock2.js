@@ -183,7 +183,6 @@ export default {
   "{cage} placed near {shelf}": "{cage} posizionata vicino a {shelf}",
   "{cage} placed": "{cage} posizionata",
   "missing": "mancante",
-  "{n} of {total} seen that day": "{n} di {total} viste quel giorno",
   "no sweep yet": "ancora nessun giro",
   "Type the cage tag": "Digita l’etichetta della gabbia",
   "New tag for {cage} (scan or type it)": "Nuova etichetta per {cage} (scansionala o digitala)",
@@ -575,4 +574,6 @@ export default {
   "{bay} on {date} leaves the board and History.": "{bay} del {date} esce dalla bacheca e dalla Cronologia.",
   "No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.": "Ancora nessuna istantanea. Salva il report SIM di oggi o incolla qui il report SOH; alle classi servono tre istantanee per distinguere ciò che è fermo da ciò che si muove.",
   "Nothing flagged on the latest snapshot.": "Niente segnalato nell’ultima istantanea.",
+  "{n} cage opened since the sweep began is not on it.": "{n} gabbia aperta dopo l’inizio del giro non è inclusa.",
+  "{n} cages opened since the sweep began are not on it.": "{n} gabbie aperte dopo l’inizio del giro non sono incluse.",
 };

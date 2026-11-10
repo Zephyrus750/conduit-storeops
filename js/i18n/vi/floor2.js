@@ -963,4 +963,6 @@ export default {
   "Not coming to the dock today: {list}": "Hôm nay không về khu nhận hàng: {list}",
   "{list} · marked in the Planner": "{list} · đã đánh dấu trong Lập kế hoạch",
   "No truck to decant today": "Hôm nay không có xe để dỡ hàng",
+  "Reopened {time}": "Mở lại {time}",
+  "issue::Reopened": "Đã mở lại",
 };
