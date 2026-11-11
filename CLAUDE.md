@@ -129,7 +129,9 @@ record: the "Conduit Shell Swap" showcase (docs/showcase in vector-suite).
   phone below 2.5× zoom in a view without badges (Refresh), where they are
   two pixels tall; two thousand invisible `<text>` elements still cost
   layout and paint. Names more than a view off screen are hidden as well
-  (`cullLabels` in `js/map.js`, re-checked 120 ms after a move stops):
+  (`cullLabels` in `js/map.js`, re-checked 120 ms after a move stops, and
+  during a move each time the view has gone half a view, so a long pan or
+  a flick's coast never shows bare shelves):
   every shown name is laid out again on each zoom step, 175 ms a step
   with all 1,847 of Busselton's against 50 ms without.
 - Shelves and runs: "A16 S1" is a shelf, "A16" is its run (the shelves
