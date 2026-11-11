@@ -41,23 +41,13 @@ brackets below).
 
 ## On hold or waiting on you (2026-11-06)
 
-- **Confirm sheet, second pass** (on hold): the other `confirm()` questions
-  (end a stocktake, close a recall, flip to live, apply suggestions, submit
-  bays, a location mismatch…) and the 16 `prompt()` boxes (maintenance notes
-  and the contractor visit as one sheet, cage park/retag/zone, the SOH flag,
-  decline reasons, the emergency docket and interval).
 - **The phone's New truck sheet:** keep its Decant start time box, or take
   it off like Receive's?
 - **The Planner's week design** (boards F and F.2), **the live reader's
   option 6** (read both ways at once, a Settings trial, off by default) and
   **feedback on the ideas canvas** (dialogs, lists, calm screens, the More
   sheet, the outbox, gaps, handover, roster, weekly, photos, Tasks).
-- **Still to do from the review board:** one empty state and one page
-  header everywhere; one chip and badge family, a type scale and inline
-  styles to classes; a dark-mode pass, compact density, rail counts and a
-  print header and footer; and the features (Resources all pages, live pull
-  notify, shrink trend, Ctrl K recents, device health, an alerts bell,
-  compare stores, practice mode, a Tasks area).
+- **The review board's Ready list** (built 11 Nov, PR #94): one empty state and one page header; the confirm sheet's second pass; the alerts bell and rail counts; Ctrl K actions; a shrink trend; every page in Resources; Live pull answers for the requester; one look for print; density and dark; the manager phone's Today, Refresh and Back dock parts. Device health, compare stores, practice mode, a Tasks area and the chip/type/inline-style sweep land in the same PR as they finish.
 
 ## Built 2026-10-09 (the defaults taken)
 
@@ -106,7 +96,10 @@ code open Floor, Stockroom and Back dock at once; the phone drops back to the
 Floor after the store's idle re-lock. **Built 2026-10-14** for desktop and
 phone: the worker takes `managerCode` in place of the PIN (same lockout), the
 session holds the manager role for the shift (`ROLE_TTL_SECONDS`, 12 h), and
-no crew code is asked. Needs the worker deploy. Still to build on top of it:
+no crew code is asked. Needs the worker deploy. **Built 2026-11-11:** Today
+(the store at a glance, its strip), Refresh by department, refreshes per phone
+and the focus, and the Back dock's pace, rates, hold-ups, late manifests, roles
+and reopening (decision 45). The plan as it was:
 
 - **Today:** the store at a glance (needs you, Floor, Stockroom, Back dock,
   devices) and a strip of Today · Floor · Stock · Dock · More.

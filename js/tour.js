@@ -45,6 +45,9 @@ const AREA_CARDS = {
 const SEEN = 'walkthrough_seen';
 // Opens an area's walkthrough the first time this device enters it.
 export function firstRun(area) {
+  // A manager's Today has no tour of its own: it is where their device starts, so it shows the first one.
+  if (area === 'today') area = 'floor';
+  if (area !== 'floor' && !AREA_CARDS[area]) return;
   let seen = {}; try { seen = JSON.parse(localStorage.getItem(SEEN) || '{}'); } catch { return; }
   if (seen[area]) return;
   seen[area] = new Date().toISOString(); try { localStorage.setItem(SEEN, JSON.stringify(seen)); } catch { return; }
