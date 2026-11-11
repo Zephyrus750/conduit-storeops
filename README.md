@@ -708,6 +708,15 @@ a minute and the phone that sent it shows it on the map. Anything else is made
 in the map editor, then accepted. A map published from drawings alone has no
 source to change.
 
+On the map each shelf's name sits inside its shelf, so the shelf's state
+colours it and dimming fades it, in the ink that reads on its department's
+colour. Names show once they are 9 pixels tall on the screen, as the run
+badges fade. A tap waits out the 300 ms double-tap window, so a double-tap
+only zooms and never marks a shelf. A tap that misses takes the nearest shelf
+within 12 pixels; in Refresh, Stocktake, Pick list and while assigning
+labels, a shelf under 8 pixels on screen zooms in instead of being marked
+(decision 42).
+
 On a phone the map modes (Home, Refresh, Labels, Route, Emergency,
 Stocktake, Field Mode) give the map the screen: a dark strip above the tabs
 says what the mode is doing and carries its main action (Scan or type,

@@ -76,7 +76,7 @@ export default {
     return mvMap({ badge: sessBadge(m) }) + `<div class="mv-sel mode st" id="stmob"></div>`;
   },
   mount(ctx, root) {
-    const map = mountMap($('#mapstage', root), { mono: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info, info.long); } });
+    const map = mountMap($('#mapstage', root), { mono: true, writes: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info, info.long); } });
     bindMapChrome(root, map);
     const paint = () => keepScanFocus(root, () => {
       const m = model(ctx, map); map.setMarks(marksFor(m));

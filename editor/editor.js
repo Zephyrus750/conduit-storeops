@@ -634,57 +634,93 @@ function toggleSnap() {
   document.getElementById('statusSnapInfo').textContent = 'Snap: ' + (state.snapEnabled ? 'ON' : 'OFF');
 }
 
-// v0.261: Portal links between stairs/lift nodes are reciprocal and live on BOTH
-// floors' data, but undo only snapshots the current floor. To make undo/redo
-// restore both sides, we snapshot every floor's node->links map alongside each
-// undo record and restore it on undo/redo. Lightweight: just ids + links, not
-// full floor data.
-function snapshotPortalLinks() {
-  // sync the live current floor into its stored data first so the snapshot is complete
+// ── Undo (decision 42) ───────────────────────────────────────
+// A step is the whole map as it stood, kept as one string: every floor's
+// drawing, the departments and their groups, and the store details (not the
+// floor plans under the drawing, nor the view). So the steps survive a floor
+// switch, undoing a move to another floor puts the shelf back on its first
+// floor only, and departments and store details undo like anything else.
+// Callers save a step before they act (saveState). It is kept only when the
+// map really changes: one a click leaves unchanged (selecting a shelf) is
+// dropped when the gesture ends, and the draft is marked unsaved only once
+// something has changed. The moves of one drag are one step, and so is the
+// typing in one field (until it loses focus or is committed).
+var UNDO_SKIP = ['underlay', 'underlayOpacity', 'underlayScale', 'underlayX', 'underlayY', 'zoom', 'panX', 'panY'];
+var undoGesture = null, undoField = null, undoOpen = false;
+function mapSnapshot() {
   if (typeof syncCurrentFloor === 'function') syncCurrentFloor();
-  var snap = {};
+  var floors = {};
   (state.floors || []).forEach(function (f) {
-    var nodes = (f.data && f.data.pathNodes) || [];
-    var m = {};
-    nodes.forEach(function (n) {
-      if (n.links && n.links.length) m[n.id] = JSON.parse(JSON.stringify(n.links));
-    });
-    snap[f.id] = m;
+    var d = f.data || {}, o = {};
+    Object.keys(d).forEach(function (k) { if (UNDO_SKIP.indexOf(k) < 0) o[k] = d[k]; });
+    floors[f.id] = o;
   });
-  return snap;
+  return JSON.stringify({ floors: floors, current: state.currentFloorId, departments: state.departments || [], deptGroups: state.deptGroups || [], storeInfo: state.storeInfo || null });
 }
-function restorePortalLinks(snap) {
-  if (!snap) return;
-  (state.floors || []).forEach(function (f) {
-    var nodes = (f.data && f.data.pathNodes) || [];
-    var m = snap[f.id] || {};
-    nodes.forEach(function (n) {
-      if (m[n.id]) n.links = JSON.parse(JSON.stringify(m[n.id]));
-      else if (n.links) delete n.links;
-    });
-  });
-  // reflect onto the live current floor's pathNodes too
-  var cur = (state.floors || []).find(function (f) { return f.id === state.currentFloorId; });
-  if (cur && cur.data && cur.data.pathNodes) {
-    var liveMap = {};
-    cur.data.pathNodes.forEach(function (n) { liveMap[n.id] = n.links; });
-    (state.pathNodes || []).forEach(function (n) {
-      if (liveMap[n.id]) n.links = JSON.parse(JSON.stringify(liveMap[n.id]));
-      else if (n.links) delete n.links;
-    });
-  }
-}
-
 function saveState() {
-  state.undoStack.push({ shelves: JSON.parse(JSON.stringify(state.shelves)), landmarks: JSON.parse(JSON.stringify(state.landmarks)), walls: JSON.parse(JSON.stringify(state.walls)), toryLines: JSON.parse(JSON.stringify(state.toryLines)), boundary: JSON.parse(JSON.stringify(state.boundary)), deptZoomBoxes: JSON.parse(JSON.stringify(state.deptZoomBoxes)), emergencyMarkers: JSON.parse(JSON.stringify(state.emergencyMarkers)), priceChecks: JSON.parse(JSON.stringify(state.priceChecks || [])), toryDocks: JSON.parse(JSON.stringify(state.toryDocks || [])), pathNodes: JSON.parse(JSON.stringify(state.pathNodes || [])), pathEdges: JSON.parse(JSON.stringify(state.pathEdges || [])), portalLinks: snapshotPortalLinks() });
-  if (state.undoStack.length > 50) state.undoStack.shift();
-  state.redoStack = [];
-  markDirty();
+  var ev = window.event, t = ev && ev.type;
+  // Still the same drag, or still typing in the same field: the same step.
+  if ((undoGesture && undoGesture.stepped && /move$/.test(t || '')) || (t === 'input' && ev.target && ev.target === undoField)) { markDirty(); return; }
+  var snap = mapSnapshot();
+  // The last step changed nothing (it equals the map now): this one takes its place.
+  if (state.undoStack[state.undoStack.length - 1] !== snap) { state.undoStack.push(snap); if (state.undoStack.length > 50) state.undoStack.shift(); }
+  undoOpen = true;
+  if (undoGesture) undoGesture.stepped = true;
+  undoField = t === 'input' ? ev.target : null;
   updateUndoStatus();
+  setTimeout(function () { settleUndo(false); }, 0);
 }
-
-function undo() { if (!state.undoStack.length) return; state.redoStack.push({ shelves: JSON.parse(JSON.stringify(state.shelves)), landmarks: JSON.parse(JSON.stringify(state.landmarks)), walls: JSON.parse(JSON.stringify(state.walls)), toryLines: JSON.parse(JSON.stringify(state.toryLines)), boundary: JSON.parse(JSON.stringify(state.boundary)), deptZoomBoxes: JSON.parse(JSON.stringify(state.deptZoomBoxes)), emergencyMarkers: JSON.parse(JSON.stringify(state.emergencyMarkers)), priceChecks: JSON.parse(JSON.stringify(state.priceChecks || [])), toryDocks: JSON.parse(JSON.stringify(state.toryDocks || [])), pathNodes: JSON.parse(JSON.stringify(state.pathNodes || [])), pathEdges: JSON.parse(JSON.stringify(state.pathEdges || [])), portalLinks: snapshotPortalLinks() }); const s = state.undoStack.pop(); state.shelves = s.shelves; state.landmarks = s.landmarks; state.walls = s.walls || []; state.toryLines = s.toryLines || []; state.boundary = s.boundary || []; state.deptZoomBoxes = s.deptZoomBoxes || []; state.emergencyMarkers = s.emergencyMarkers || []; state.priceChecks = s.priceChecks || []; state.toryDocks = s.toryDocks || []; state.pathNodes = s.pathNodes || []; state.pathEdges = s.pathEdges || []; restorePortalLinks(s.portalLinks); state.selectedIds = []; state.selectedLandmarkIds = []; state.selectedLandmarkId = null; state.selectedWallIds = []; state.selectedWallId = null; state.selectedToryLineId = null; state.selectedZoomboxId = null; state.selectedEmergencyId = null; state.selectedPriceCheckId = null; state.selectedPathNodeId = null; state.selectedPathNodeIds = []; pathChainPrevId = null; renderAll(); updateUndoStatus(); }
-function redo() { if (!state.redoStack.length) return; state.undoStack.push({ shelves: JSON.parse(JSON.stringify(state.shelves)), landmarks: JSON.parse(JSON.stringify(state.landmarks)), walls: JSON.parse(JSON.stringify(state.walls)), toryLines: JSON.parse(JSON.stringify(state.toryLines)), boundary: JSON.parse(JSON.stringify(state.boundary)), deptZoomBoxes: JSON.parse(JSON.stringify(state.deptZoomBoxes)), emergencyMarkers: JSON.parse(JSON.stringify(state.emergencyMarkers)), priceChecks: JSON.parse(JSON.stringify(state.priceChecks || [])), toryDocks: JSON.parse(JSON.stringify(state.toryDocks || [])), pathNodes: JSON.parse(JSON.stringify(state.pathNodes || [])), pathEdges: JSON.parse(JSON.stringify(state.pathEdges || [])), portalLinks: snapshotPortalLinks() }); const s = state.redoStack.pop(); state.shelves = s.shelves; state.landmarks = s.landmarks; state.walls = s.walls || []; state.toryLines = s.toryLines || []; state.boundary = s.boundary || []; state.deptZoomBoxes = s.deptZoomBoxes || []; state.emergencyMarkers = s.emergencyMarkers || []; state.priceChecks = s.priceChecks || []; state.toryDocks = s.toryDocks || []; state.pathNodes = s.pathNodes || []; state.pathEdges = s.pathEdges || []; restorePortalLinks(s.portalLinks); state.selectedIds = []; state.selectedLandmarkIds = []; state.selectedLandmarkId = null; state.selectedWallIds = []; state.selectedWallId = null; state.selectedToryLineId = null; state.selectedZoomboxId = null; state.selectedEmergencyId = null; state.selectedPriceCheckId = null; state.selectedPathNodeId = null; state.selectedPathNodeIds = []; pathChainPrevId = null; renderAll(); updateUndoStatus(); }
+// After an action: once the map differs from the step saved before it, the
+// draft is unsaved and redo is gone. At the end of a gesture, a keystroke or
+// a field (final), a step that changed nothing is dropped.
+function settleUndo(final) {
+  if (!undoOpen) return;
+  var top = state.undoStack[state.undoStack.length - 1];
+  if (top === undefined) { undoOpen = false; return; }
+  if (mapSnapshot() !== top) { undoOpen = false; state.redoStack = []; markDirty(); updateUndoStatus(); return; }
+  if (final) { state.undoStack.pop(); undoOpen = false; updateUndoStatus(); }
+}
+function restoreSnapshot(snap) {
+  var s = JSON.parse(snap);
+  (state.floors || []).forEach(function (f) {
+    var d = s.floors[f.id]; if (!d) return;
+    var keep = {}; UNDO_SKIP.forEach(function (k) { if (f.data && f.data[k] !== undefined) keep[k] = f.data[k]; });
+    f.data = Object.assign({}, d, keep);
+  });
+  state.departments = s.departments || state.departments;
+  state.deptGroups = s.deptGroups || state.deptGroups;
+  state.storeInfo = s.storeInfo || state.storeInfo;
+  loadFloor(s.floors[s.current] ? s.current : state.currentFloorId);   // keeps the steps; clears the selection
+  state.selectedLandmarkIds = []; state.selectedWallIds = []; state.selectedWallId = null; state.selectedToryLineId = null; state.selectedPathNodeId = null; state.selectedPathNodeIds = []; pathChainPrevId = null;
+  if (typeof renderFloorTabs === 'function') renderFloorTabs();
+  if (typeof renderDeptList === 'function') renderDeptList();
+  if (typeof populateStoreInfoForm === 'function') populateStoreInfoForm();
+  renderAll(); markDirty(); updateUndoStatus();
+}
+function undo() {
+  settleUndo(true);   // a click that changed nothing leaves no step behind
+  var now = mapSnapshot(), snap;
+  do { snap = state.undoStack.pop(); } while (snap === now && state.undoStack.length);
+  if (snap === undefined || snap === now) { updateUndoStatus(); return; }
+  state.redoStack.push(now);
+  restoreSnapshot(snap);
+}
+function redo() {
+  settleUndo(true);
+  if (!state.redoStack.length) return;
+  var now = mapSnapshot(), snap = state.redoStack.pop();
+  state.undoStack.push(now);
+  restoreSnapshot(snap);
+}
+// A gesture is a pointer from down to up; a field's typing ends when it is
+// committed or loses focus. The check waits for the page's own handlers.
+window.addEventListener('pointerdown', function () { undoGesture = { stepped: false }; }, true);
+['pointerup', 'pointercancel'].forEach(function (k) { window.addEventListener(k, function () { setTimeout(function () { settleUndo(true); undoGesture = null; }, 0); }, true); });
+// While a pointer is down its pointerup settles the step: pressing on the
+// canvas moves the focus, and that focusout must not end a drag's step
+// before the drag has moved anything.
+['change', 'focusout'].forEach(function (k) { document.addEventListener(k, function () { setTimeout(function () { undoField = null; if (!undoGesture) settleUndo(true); }, 0); }, true); });
+document.addEventListener('keyup', function () { setTimeout(function () { if (!undoGesture) settleUndo(true); }, 0); }, true);
 function updateUndoStatus() {
   var el = document.getElementById('statusUndo');
   if (el) el.textContent = '\u21a9 ' + state.undoStack.length + ' | \u21aa ' + state.redoStack.length;
@@ -3531,6 +3567,7 @@ function saveDepartment() {
   if (parent === '__new__') {
     const gName = prompt('New group name (e.g. Home, Clothing):');
     if (!gName) return;
+    saveState();
     const gId = gName.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
     if (!state.deptGroups.find(g => g.id === gId)) {
       state.deptGroups.push({ id: gId, name: gName });
@@ -3538,6 +3575,7 @@ function saveDepartment() {
     parent = gId;
   }
 
+  saveState();   // undoable (decision 42)
   if (editingDeptId) {
     const d = state.departments.find(x => x.id === editingDeptId);
     if (d) { d.name = name; d.color = color; d.parent = parent || null; }
@@ -6106,7 +6144,7 @@ function splitShelfCross(id, frac, opts) {
     m1 = Math.max(1, Math.round(L1 / bayW)); m2 = Math.max(1, Math.round(L2 / bayW));
     bw1 = +(L1 / m1).toFixed(2); bw2 = +(L2 / m2).toFixed(2);   // exact-length pieces
   } else {
-    if (modules < 2) { if (!batch) { state.undoStack.pop(); } return false; }  // can't module-split one bay
+    if (modules < 2) return false;  // can't module-split one bay (the step saved for it changed nothing, so it is dropped)
     m1 = Math.max(1, Math.min(modules - 1, Math.round(frac * modules)));
     m2 = modules - m1; L1 = m1 * bayW; L2 = m2 * bayW;
   }
@@ -8021,9 +8059,9 @@ function defaultStoreInfo() {
   };
 }
 function ensureStoreInfo() { if (!state.storeInfo) state.storeInfo = defaultStoreInfo(); return state.storeInfo; }
-function updateStoreInfo(field, value) { ensureStoreInfo()[field] = value; if (typeof markDirty === 'function') markDirty(); }
-function updateStoreAddrLine(i, value) { var si = ensureStoreInfo(); if (!si.addressLines) si.addressLines = ['','','']; si.addressLines[i] = value; markDirty(); }
-function updateStoreHours(i, value) { var si = ensureStoreInfo(); if (!si.hoursDays) si.hoursDays = defaultStoreInfo().hoursDays; si.hoursDays[i] = [STORE_INFO_DAYS[i], value]; markDirty(); }
+function updateStoreInfo(field, value) { saveState(); ensureStoreInfo()[field] = value; if (typeof markDirty === 'function') markDirty(); }
+function updateStoreAddrLine(i, value) { saveState(); var si = ensureStoreInfo(); if (!si.addressLines) si.addressLines = ['','','']; si.addressLines[i] = value; markDirty(); }
+function updateStoreHours(i, value) { saveState(); var si = ensureStoreInfo(); if (!si.hoursDays) si.hoursDays = defaultStoreInfo().hoursDays; si.hoursDays[i] = [STORE_INFO_DAYS[i], value]; markDirty(); }
 function buildStoreHoursRows() {
   var box = document.getElementById('si-hours-rows'); if (!box) return;
   box.innerHTML = STORE_INFO_DAYS.map(function(d, i) {
@@ -8033,9 +8071,9 @@ function buildStoreHoursRows() {
   }).join('');
 }
 function siEscAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
-function addStoreHoliday() { var si = ensureStoreInfo(); if (!si.publicHolidays) si.publicHolidays = []; si.publicHolidays.push({ name: '', date: '', hours: '' }); renderStoreHolidays(); markDirty(); }
-function removeStoreHoliday(i) { var h = ensureStoreInfo().publicHolidays; if (h) { h.splice(i, 1); renderStoreHolidays(); markDirty(); } }
-function updateStoreHoliday(i, field, value) { var h = ensureStoreInfo().publicHolidays; if (h && h[i]) { h[i][field] = value; markDirty(); } }
+function addStoreHoliday() { saveState(); var si = ensureStoreInfo(); if (!si.publicHolidays) si.publicHolidays = []; si.publicHolidays.push({ name: '', date: '', hours: '' }); renderStoreHolidays(); markDirty(); }
+function removeStoreHoliday(i) { var h = ensureStoreInfo().publicHolidays; if (h) { saveState(); h.splice(i, 1); renderStoreHolidays(); markDirty(); } }
+function updateStoreHoliday(i, field, value) { var h = ensureStoreInfo().publicHolidays; if (h && h[i]) { saveState(); h[i][field] = value; markDirty(); } }
 function renderStoreHolidays() {
   var box = document.getElementById('si-holidays'); if (!box) return;
   var hols = ensureStoreInfo().publicHolidays || [];
@@ -8649,7 +8687,7 @@ function loadFloor(floorId) {
   // Clear selection
   state.selectedIds = []; state.selectedLandmarkId = null;
   state.selectedZoomboxId = null; state.selectedEmergencyId = null; state.selectedPriceCheckId = null;
-  state.undoStack = []; state.redoStack = [];
+  // The undo steps stay: each one holds every floor (decision 42).
   // Update underlay UI
   document.getElementById('underlayScale').value = Math.round(state.underlayScale * 100);
   document.getElementById('scaleValue').textContent = Math.round(state.underlayScale * 100) + '%';
@@ -9280,38 +9318,49 @@ function mergeFieldCaptures(ev) {
 }
 
 // Conduit's Field Mode file: captures keyed by the shelf they were taken on
-// ("A16 S2", with its floor), each with the label as read and a comment.
-// The label renames the shelf when it differs from the map ("A16S02" on a
-// shelf drawn as A16 S1); the comment becomes the shelf's note. Captures that
-// match no shelf are listed, not dropped.
+// ("A16 S2", with its floor and position), or "@floor:x,y" for a shelf the
+// map has no name for. Today's captures say what to do (kind rename / name /
+// flag, to, note); an older device's said differs, code and comment. A label
+// that differs from the map renames the shelf ("A16S02" on a shelf drawn as
+// A16 S1); the comment becomes the shelf's note. Each capture changes one
+// shelf (decision 42): the only one with that name, or the one at the
+// position it was captured on; it used to change every namesake. Captures
+// that match no shelf, or several with no position to tell them apart, are
+// listed, not dropped.
 function mergeConduitCaptures(payload, ev) {
   var canon = function (c) { return String(c || '').toUpperCase().replace(/[\s\-_.]+/g, '').replace(/([A-Z])0+(?=\d)/g, '$1'); };
   var CODE = /^([A-Z]{1,3}\d{1,4})([SEP]\d{1,2})?$/;
+  var at = function (s, pos) { return !!pos && Math.abs(Number(s.x) - pos.x) < 0.5 && Math.abs(Number(s.y) - pos.y) < 0.5; };
   if (payload.storeNumber && activeStoreId && String(payload.storeNumber) !== String(activeStoreId) &&
       !confirm('This capture is for store ' + payload.storeNumber + ', but ' + activeStoreId + ' is open.\n\nMerge anyway?')) { ev.target.value = ''; return; }
   if (typeof syncCurrentFloor === 'function') syncCurrentFloor();
   if (typeof saveState === 'function') saveState();
-  var renamed = 0, noted = 0, unmatched = [];
+  var renamed = 0, named = 0, noted = 0, unmatched = [], unsure = [];
   Object.keys(payload.captures).forEach(function (key) {
-    var c = payload.captures[key], want = canon(key), hits = [];
+    var c = payload.captures[key] || {}, hits = [];
+    var unnamed = c.kind === 'name' || key.charAt(0) === '@', want = canon(c.shelf || key);
+    var code = c.kind ? ((c.kind === 'rename' || c.kind === 'name') && c.to ? c.to : '') : (c.differs && c.code ? c.code : '');
+    var note = c.kind ? (c.note || '') : (c.comment || '');
     (state.floors || []).forEach(function (f) {
       if (c.floor && f.id !== c.floor) return;
-      ((f.data && f.data.shelves) || []).forEach(function (s) { if (canon((s.name || '') + (s.subname || '')) === want) hits.push(s); });
+      ((f.data && f.data.shelves) || []).forEach(function (s) { if (unnamed ? !s.name && at(s, c.pos) : canon((s.name || '') + (s.subname || '')) === want) hits.push(s); });
     });
-    if (!hits.length) { unmatched.push(key); return; }
-    hits.forEach(function (s) {
-      var m = c.differs && c.code ? CODE.exec(canon(c.code)) : null;
-      if (m) { s.name = m[1]; s.subname = m[2] || ''; renamed++; }
-      else if (c.differs && c.code) { s.note = ((s.note ? s.note + ' · ' : '') + 'Label reads ' + c.code).slice(0, 300); noted++; }
-      if (c.comment) { s.note = ((s.note && s.note.indexOf(c.comment) < 0 ? s.note + ' · ' : '') + c.comment).slice(0, 300); noted++; }
-    });
+    if (!hits.length) { unmatched.push(unnamed ? (c.near ? 'unnamed beside ' + c.near : key) : key); return; }
+    // shared/mapedits.js oneShelf (window.MapEdits, from editor/detect-boot.js).
+    var s = window.MapEdits ? window.MapEdits.oneShelf(hits, c.pos) : hits.length === 1 ? hits[0] : null;
+    if (!s) { unsure.push(key); return; }
+    var m = code ? CODE.exec(canon(code)) : null;
+    if (m) { s.name = m[1]; s.subname = m[2] || ''; if (unnamed) named++; else renamed++; }
+    else if (code) { s.note = ((s.note ? s.note + ' · ' : '') + 'Label reads ' + code).slice(0, 300); noted++; }
+    if (note) { s.note = ((s.note && s.note.indexOf(note) < 0 ? s.note + ' · ' : '') + note).slice(0, 300); noted++; }
   });
   if (typeof loadFloor === 'function' && state.currentFloorId) loadFloor(state.currentFloorId);
   if (typeof renderAll === 'function') renderAll();
   if (typeof markDirty === 'function') markDirty();
   ev.target.value = '';
-  alert('Field captures merged.\n\nRenamed from their labels: ' + renamed + '\nNotes added: ' + noted +
-    (unmatched.length ? '\n\nNo shelf on this map for ' + unmatched.length + ': ' + unmatched.slice(0, 12).join(', ') + (unmatched.length > 12 ? '…' : '') : ''));
+  alert('Field captures merged.\n\nRenamed from their labels: ' + renamed + (named ? '\nUnnamed shelves named: ' + named : '') + '\nNotes added: ' + noted +
+    (unmatched.length ? '\n\nNo shelf on this map for ' + unmatched.length + ': ' + unmatched.slice(0, 12).join(', ') + (unmatched.length > 12 ? '…' : '') : '') +
+    (unsure.length ? '\n\nMore than one shelf has the name, and the capture doesn\'t say which, for ' + unsure.length + ': ' + unsure.slice(0, 12).join(', ') + (unsure.length > 12 ? '…' : '') + '. Make those by hand.' : ''));
 }
 
 function initStoreSystem() {

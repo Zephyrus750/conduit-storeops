@@ -7,7 +7,9 @@
    (editor/conduit.js):
 
      · RENAME → [Accept] renames that one shelf ("A16 S2") when the new name
-       is a shelf code ("A17 S2"); a free-text name ("Kitchen gadgets") is
+       is a shelf code ("A17 S2"); when several shelves share the name, the
+       one at the position it was suggested from, never all of them. A
+       free-text name ("Kitchen gadgets") is
        shown so the owner can make the change by hand. Either way Conduit
        marks the suggestion accepted.
      · NAME   → (Field Mode) a shelf the map has no name for, found by its
@@ -66,28 +68,37 @@
   // that shelf; anything else returns -1 so the owner makes the change.
   var CODE = /^([A-Z]{1,3}\d{1,4})(?:[\s-]?([SEP]\d{1,2}))?$/;
   function fullOf(s) { return ((s.name || '') + (s.subname ? ' ' + s.subname : '')).toUpperCase(); }
+  // One shelf only (decision 42, as shared/mapedits.js applyEdit): the only
+  // shelf with that name on the suggestion's floor, or, when several share
+  // it (Busselton has 15 names used twice), the one at the position it was
+  // suggested from. It used to rename every namesake on every floor.
+  // Returns -1 (not a shelf code), 0 (none, or several and no position to
+  // tell them apart: make it by hand) or 1.
+  // shared/mapedits.js oneShelf, handed over by editor/detect-boot.js; until
+  // that module has loaded, only an unshared name is renamed.
+  function oneShelf(hits, pos) { return window.MapEdits ? window.MapEdits.oneShelf(hits, pos) : hits.length === 1 ? hits[0] : null; }
   function applyRename(p) {
     var to = String(p.to || '').trim().toUpperCase(), m = CODE.exec(to);
     if (!m) return -1;
-    if (typeof saveState === 'function') saveState();          // undo-able
     if (typeof syncCurrentFloor === 'function') { try { syncCurrentFloor(); } catch (e) {} }
-    var count = 0, want = String(p.shelf || '').toUpperCase();
-    function renameIn(arr) {
-      (arr || []).forEach(function (s) {
-        if (s && fullOf(s) === want) { s.name = m[1]; if (m[2]) s.subname = m[2]; count++; }
-      });
-    }
+    var hits = [], want = String(p.shelf || '').toUpperCase();
+    function findIn(arr) { (arr || []).forEach(function (s) { if (s && fullOf(s) === want) hits.push(s); }); }
     try {
       if (typeof state !== 'undefined') {
-        renameIn(state.shelves);
+        if (!p.floor || p.floor === state.currentFloorId) findIn(state.shelves);
         (state.floors || []).forEach(function (f) {
-          if (f.id === state.currentFloorId) return;   // current floor lives in state.shelves
-          renameIn(f.data && f.data.shelves);
+          if (f.id === state.currentFloorId || (p.floor && f.id !== p.floor)) return;   // current floor lives in state.shelves
+          findIn(f.data && f.data.shelves);
         });
       }
     } catch (e) {}
-    if (count && typeof renderAll === 'function') { try { renderAll(); } catch (e) {} }
-    return count;
+    var one = oneShelf(hits, p.pos);
+    if (!one) return 0;
+    if (typeof saveState === 'function') saveState();          // undo-able
+    one.name = m[1]; if (m[2]) one.subname = m[2];
+    if (typeof renderAll === 'function') { try { renderAll(); } catch (e) {} }
+    if (typeof markDirty === 'function') { try { markDirty(); } catch (e) {} }
+    return 1;
   }
 
   // A Field Mode name: the unnamed shelf at that position on that floor.
@@ -189,7 +200,7 @@
       if (p.kind === 'rename') {
         var n = applyRename(p);
         if (n === -1 && !confirm('"' + p.to + '" isn\'t a shelf code, so it can\'t be applied for you.\n\nMake the change on the map, then press OK to mark it accepted in Conduit.')) return;
-        if (n === 0 && !confirm('No shelf "' + p.shelf + '" on the loaded map.\n\nOpen the store from Conduit first, or mark it accepted anyway?')) return;
+        if (n === 0 && !confirm('No one shelf "' + p.shelf + '" to rename on the loaded map: it isn\'t there, or more than one shelf has that name and the suggestion doesn\'t say which.\n\nRename it on the map yourself (open the store from Conduit first if it isn\'t loaded), or mark it accepted anyway?')) return;
       } else if (p.kind === 'name') {
         var k = applyName(p);
         if (k === -1 && !confirm('"' + p.to + '" isn\'t a shelf code, so it can\'t be applied for you.\n\nName the shelf on the map, then press OK to mark it accepted in Conduit.')) return;

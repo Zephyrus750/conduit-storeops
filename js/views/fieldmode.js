@@ -59,7 +59,7 @@ export default {
     bindMapChrome(root, map);
     const onFloor = () => map.segments().filter(g => g.closest('.mfl')?.getAttribute('data-fid') === map.floorId());
     // The named shelf nearest an unnamed one, to say where it is.
-    const nearest = el => { const r = el.getBBox(), cx = r.x + r.width / 2, cy = r.y + r.height / 2; let best = null; for (const g of onFloor()) { if (!g.getAttribute('data-shelf')) continue; const b = g.getBBox(), d = (b.x + b.width / 2 - cx) ** 2 + (b.y + b.height / 2 - cy) ** 2; if (!best || d < best.d) best = { d, id: segmentId(g) }; } return best?.id || ''; };
+    const nearest = el => { const r = (el.querySelector('.shelf') || el).getBBox(), cx = r.x + r.width / 2, cy = r.y + r.height / 2; let best = null; for (const g of onFloor()) { if (!g.getAttribute('data-shelf')) continue; const b = g.getBBox(), d = (b.x + b.width / 2 - cx) ** 2 + (b.y + b.height / 2 - cy) ** 2; if (!best || d < best.d) best = { d, id: segmentId(g) }; } return best?.id || ''; };
     const paint = (focus = false) => {
       const d = read(ctx.storeNo), marks = {}; for (const c of Object.values(d.caps)) if (!c.kind || c.kind !== 'name') marks[c.key || c.shelf] = 'counted';
       map.setMarks(marks);

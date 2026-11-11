@@ -28,7 +28,7 @@ export default {
   },
   mobile(ctx) { return mvMap({ badge: '<span id="pkbadge"></span>' }) + `<div class="mv-sel route" id="pkmob"></div>`; },
   mount(ctx, root) {
-    const map = mountMap($('#mapstage', root), { cls: 'pk', onSelect: info => { if (info.kind !== 'shelf') return; const m = model(ctx); if (m.items.some(i => canonCode(i.code) === info.code)) return; save(ctx, [...m.items, { code: info.code, completed: false }]); } });
+    const map = mountMap($('#mapstage', root), { cls: 'pk', writes: true, onSelect: info => { if (info.kind !== 'shelf') return; const m = model(ctx); if (m.items.some(i => canonCode(i.code) === info.code)) return; save(ctx, [...m.items, { code: info.code, completed: false }]); } });
     bindMapChrome(root, map);
     // A typed, pasted or spoken code as the map names it, or null (groupsFor through map.groups).
     const lookup = c => (map.groups(c).length ? canonCode(c) : null);

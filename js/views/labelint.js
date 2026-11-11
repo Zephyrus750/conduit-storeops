@@ -78,7 +78,7 @@ export default {
     if (ctx.isMobile) assigning = false;
     if (ctx.arg?.micro && ALL.includes(ctx.arg.micro) && (selected !== ctx.arg.micro || !assigning) && !ctx.isMobile) { selected = ctx.arg.micro; openSub = selected.split('-')[0]; assigning = true; setTimeout(() => ctx.rerender(), 0); }
     const microOf = id => { const mods = shelvesOf(id); return Object.entries(model(ctx).L.assign).find(([, sh]) => expand(sh).some(k => mods.includes(k)))?.[0] || null; };
-    const map = mountMap($('#mapstage', root), { cls: 'li', onSelect: info => {
+    const map = mountMap($('#mapstage', root), { cls: 'li', writes: () => !!(assigning && selected), onSelect: info => {
       if (info.kind !== 'shelf') return;
       if (!assigning || !selected) {
         const micro = microOf(info.full);
