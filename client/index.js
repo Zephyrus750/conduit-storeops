@@ -25,7 +25,13 @@ export { createCatalogue } from './catalogue.js';
 export { createMaps } from './maps.js';
 
 export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, WebSocketImpl, app = 'conduit', timers } = {}) {
-  const transport = createTransport({ baseUrl, fetchImpl });
+  // One door to the worker for the session, the catalogue, the maps and the
+  // views (ctx.api). A gate (setGate) sees every call first and may refuse
+  // it with an error, which never leaves the device: practice mode
+  // (client/practice.js) shuts the worker off this way.
+  const wire = createTransport({ baseUrl, fetchImpl });
+  let gate = null;
+  const transport = { ...wire, request(path, opts) { const no = gate?.(path, opts || {}); return no ? Promise.reject(no) : wire.request(path, opts); } };
   const session = createSession({ transport, storage, app });
   const catalogue = createCatalogue({ transport, storage, timers, token: () => session.token() });
   const maps = createMaps({ transport, session, storage });
@@ -42,5 +48,5 @@ export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, W
   }
   function closeAll() { for (const s of stores.values()) s.close(); stores.clear(); }
   session.on('signin-required', closeAll);
-  return { transport, session, catalogue, maps, storage, open, closeAll, stores };
+  return { transport, session, catalogue, maps, storage, open, closeAll, stores, setGate: g => { gate = typeof g === 'function' ? g : null; } };
 }
