@@ -10,7 +10,8 @@
 //   isMgr(ctx)                       the signed-in device is a manager's (or the owner's)
 //   routeTag(r) / fromTag(plan, from)   the coloured tag
 //   routeLine(r)                     "Went to off-site storage · no room on the dock", in a sentence
-//   routeSheet(ctx, { date, n, manNo, nums }) → Promise<boolean>: mark a truck (n), or pick one of nums
+//   routeSheet(ctx, { date, n, manNo, nums }) → Promise<boolean>: mark a truck (n), or pick one of nums;
+//                                    off-site sends the report's consols for the off-site register
 
 import { ic, esc, toast, fmtDay } from '../../ui.js';
 import { tx } from '../../i18n.js';
@@ -80,6 +81,10 @@ export function routeSheet(ctx, { date, n = null, manNo = null, nums = [1, 2, 3,
       const payload = st.kind === 'here' ? { route: null } : { route: st.kind, lands: st.lands || null, to: st.to, reason: st.reason, note: st.note, ...(man ? { manNo: man } : {}) };
       st.busy = true; paint();
       try {
+        // Off-site: its consols go on the off-site register, each with its
+        // cartons and departments as the report has them (without the
+        // report, the staged consol ids alone).
+        if (st.kind === 'offsite' && man) { try { const doc = await ctx.api(`/v1/store/${ctx.storeNo}/manifest/${encodeURIComponent(man)}`); payload.pallets = (doc.consols || []).map(c => ({ id: String(c.id || String(c.cons || '').slice(-9)), ctn: Number(c.cartons) || 0, depts: [c.dept, ...(c.mix || []).map(m => m?.[0])].filter(Boolean).map(String) })).filter(x => /^\d{9}$/.test(x.id)).slice(0, 500); } catch { /* offline or not published: the ids */ } }
         await ctx.store.dispatch({ type: 'plan.route', entity: { date, slot: st.n }, payload });
         saved = true;
         toast(st.kind === 'here' ? tx('Truck {no} on {day}: back on the plan', { no: st.n, day: fmtDay(date) }) : st.kind === 'offsite' ? tx('Truck {no} on {day}: off-site', { no: st.n, day: fmtDay(date) }) : tx('Truck {no} on {day}: diverted', { no: st.n, day: fmtDay(date) }));

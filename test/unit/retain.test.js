@@ -128,3 +128,16 @@ test('a planner day whose truck went off-site stays while it is still to land he
   retain(s, DAY);
   assert.deepEqual(Object.keys(s.plan.days), ['2026-07-01'], 'kept: it lands after the 60 days start; the others go');
 });
+
+test('off-site pallets that came on a manifest leave the register 60 days after they came back; the master list’s stay', () => {
+  const s = initialState();
+  s.inventory = { offsite: {
+    601900021: { pid: '601900021', man: '7040201', via: 'route', rec: '2026-08-01' },
+    601900022: { pid: '601900022', man: '7040201', via: 'route', rec: '2026-09-20' },
+    601900023: { pid: '601900023', man: '7040201', via: 'dock', rec: '' },
+    51: { pid: '51', rec: '2026-07-01' },
+  }, loads: {} };
+  const done = retain(s, DAY);
+  assert.deepEqual(Object.keys(s.inventory.offsite).sort(), ['51', '601900022', '601900023']);
+  assert.equal(done.offsiteBack, 1);
+});

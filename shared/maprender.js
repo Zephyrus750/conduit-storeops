@@ -317,13 +317,16 @@ function shelves(list, data) {
     }
     if (!any) break;
   }
+  // Each name goes inside its shelf's group (decision 42), so a shelf's state
+  // and dimming reach it; the group's rotation turns it, so it needs none of
+  // its own. js/map.js still moves the names of maps published before this.
   let svg = '';
   list.forEach((s, idx) => {
-    svg += groups[idx];
-    const bi = badges.findIndex(b => b.idx === idx); if (bi < 0) return;
-    const b = badges[bi], tx = b.cx + off[bi].dx, ty = b.cy + off[bi].dy, tr = b.angle ? ` transform="rotate(${b.angle},${b.cx},${b.cy})"` : '';
-    if (b.sub) svg += `<text class="shelf-label" font-size="${b.fs}" x="${tx}" y="${ty - b.fs * 0.2}"${tr}>${esc(b.name)}</text><text class="shelf-label" font-size="${b.fs * 0.75}" x="${tx}" y="${ty + b.fs * 0.7}" fill="rgba(255,255,255,0.7)"${tr}>${esc(b.sub)}</text>`;
-    else svg += `<text class="shelf-label" font-size="${b.fs}" x="${tx}" y="${ty}"${tr}>${esc(b.name)}</text>`;
+    const bi = badges.findIndex(b => b.idx === idx); if (bi < 0) { svg += groups[idx]; return; }
+    const b = badges[bi], tx = b.cx + off[bi].dx, ty = b.cy + off[bi].dy;
+    const names = b.sub ? `<text class="shelf-label" font-size="${b.fs}" x="${tx}" y="${ty - b.fs * 0.2}">${esc(b.name)}</text><text class="shelf-label" font-size="${b.fs * 0.75}" x="${tx}" y="${ty + b.fs * 0.7}" fill="rgba(255,255,255,0.7)">${esc(b.sub)}</text>`
+      : `<text class="shelf-label" font-size="${b.fs}" x="${tx}" y="${ty}">${esc(b.name)}</text>`;
+    svg += groups[idx].replace(/<\/g>$/, names + '</g>');
   });
   return svg;
 }

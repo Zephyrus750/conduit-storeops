@@ -183,7 +183,6 @@ export default {
   "{cage} placed near {shelf}": "{cage} bei {shelf} platziert",
   "{cage} placed": "{cage} platziert",
   "missing": "vermisst",
-  "{n} of {total} seen that day": "{n} von {total} an dem Tag gesehen",
   "no sweep yet": "noch kein Rundgang",
   "Type the cage tag": "Gitterbox-Etikett eintippen",
   "New tag for {cage} (scan or type it)": "Neues Etikett für {cage} (scannen oder eintippen)",
@@ -575,4 +574,6 @@ export default {
   "{bay} on {date} leaves the board and History.": "{bay} am {date} verschwindet von der Tafel und aus dem Verlauf.",
   "No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.": "Noch kein Snapshot. Den heutigen SIM-Bericht speichern oder den SOH-Bericht hier einfügen; die Klassen brauchen drei Snapshots, um Stillstand von Bewegung zu unterscheiden.",
   "Nothing flagged on the latest snapshot.": "Im neuesten Snapshot ist nichts markiert.",
+  "{n} cage opened since the sweep began is not on it.": "{n} Gitterbox, die nach Beginn des Rundgangs geöffnet wurde, gehört nicht dazu.",
+  "{n} cages opened since the sweep began are not on it.": "{n} Gitterboxen, die nach Beginn des Rundgangs geöffnet wurden, gehören nicht dazu.",
 };

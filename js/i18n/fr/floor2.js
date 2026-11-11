@@ -963,4 +963,6 @@ export default {
   "Not coming to the dock today: {list}": "Ne vient pas au quai aujourd’hui : {list}",
   "{list} · marked in the Planner": "{list} · marqué dans le planificateur",
   "No truck to decant today": "Aucun camion à dépoter aujourd’hui",
+  "Reopened {time}": "Rouvert {time}",
+  "issue::Reopened": "Rouvert",
 };

@@ -8,7 +8,7 @@
 //   labels    cycleLen, assign micro → [shelves], checks cycle → micro → { at, device },
 //             variances cycle → [ { micro, keycode, note, at, device } ]
 //   stocktake sessions session → { phase, startedAt, startedBy, ended, shelves: shelf → { state, by, at, vby } }
-//   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, log[], removed?, photos?[] }
+//   issues    id → { cat, title, note, sev, status, recur, loc, dept, floor, x, y, by, created, updated, reopened?, log[], removed?, photos?[] }
 //   assets    asset → { intMonths, due, log[], updated }
 //   picklists device → { items: [ { code, completed } ], at }
 //   inventory offsite pid → { pid, sent, time, desc, title, products[{kc,q}], req, cb, rec, note, at },
@@ -22,6 +22,7 @@ import { isKeycode } from '../keycode.js';
 const DEPT_RE = /^[a-z0-9]{1,12}$/, MICRO_RE = /^[a-z0-9]{1,12}-[0-9a-z]{1,6}$/i;
 import { storeDay, DEFAULT_TZ } from '../time.js';
 import { OFFSITE_CAP, LOAD_CAP, LOAD_PALLET_CAP, LOAD_LINE_CAP, LOAD_STATUS } from '../inventory.js';
+import { offsiteRow } from '../offsite.js';
 
 export const ISSUE_CATS = ['leak', 'light', 'elec', 'ac', 'plumb', 'struct', 'fixture', 'door', 'safety', 'pest', 'other'];
 export const ISSUE_STATUS = ['open', 'progress', 'completed'];
@@ -231,7 +232,8 @@ export const floorReducers = {
   'issue.reopen'(s, e) {
     const i = issue(s, e); if (i.code) return i;
     if (i.status === 'open') return null;
-    i.status = 'open'; i.recur = (i.recur || 0) + 1; i.updated = e.at;
+    // The repair target restarts from the reopen (decision 41, 10 Nov 2026).
+    i.status = 'open'; i.recur = (i.recur || 0) + 1; i.updated = e.at; i.reopened = e.at;
     i.log.push({ t: e.at, a: 'Reopened (recurring)', n: e.payload.note || '' });
     return null;
   },
@@ -307,7 +309,12 @@ export const floorReducers = {
     const rows = e.payload.rows.map(r => offsiteRow(r, e.at)).filter(Boolean);
     if (e.payload.rows.length && !rows.length) return reject('invalid_payload', 'no row has a pallet number');
     if (rows.length > OFFSITE_CAP) return reject('too_large', `the register keeps at most ${OFFSITE_CAP} pallets`);
-    inv(s).offsite = Object.fromEntries(rows.map(r => [r.pid, r]));
+    // The master list replaces what it lists. Pallets that went off-site
+    // from a manifest (a whole truck, or sent from the dock) are Conduit's
+    // own and stay, unless the list names the same pallet.
+    const listed = new Set(rows.map(r => r.pid)), keep = Object.values(inv(s).offsite).filter(r => r.via && !listed.has(r.pid));
+    if (rows.length + keep.length > OFFSITE_CAP) return reject('too_large', `the register keeps at most ${OFFSITE_CAP} pallets`);
+    inv(s).offsite = Object.fromEntries([...keep, ...rows].map(r => [r.pid, r]));
     inv(s).offsiteAt = e.at; inv(s).offsiteSrc = String(e.payload.src || '').slice(0, 80);
     return null;
   },
@@ -322,7 +329,7 @@ export const floorReducers = {
     const r = inv(s).offsite[String(e.entity.pid)]; if (!r) return reject('not_found', 'no such pallet on the register');
     const p = e.payload || {};
     for (const k of ['cb', 'rec']) if (k in p && !(p[k] === '' || p[k] === 'yes' || DAY.test(p[k]))) return reject('invalid_payload', `${k} must be a date (YYYY-MM-DD) or empty`);
-    if ('cb' in p) r.cb = p.cb; if ('rec' in p) r.rec = p.rec; if ('note' in p) r.note = String(p.note || '').slice(0, 200);
+    if ('cb' in p) r.cb = p.cb; if ('rec' in p) { r.rec = p.rec; delete r.recTruck; } if ('note' in p) r.note = String(p.note || '').slice(0, 200);
     r.at = e.at; return null;
   },
   'inventory.load.add'(s, e) {
@@ -355,13 +362,6 @@ export const floorReducers = {
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const inv = s => (s.inventory ||= { offsite: {}, offsiteAt: null, offsiteSrc: '', loads: {} });
-function offsiteRow(r, at) {
-  const pid = String(r?.pid ?? '').trim().slice(0, 20); if (!pid) return null;
-  const day = v => (typeof v === 'string' && (DAY.test(v) || v === 'yes') ? v : '');
-  return { pid, sent: day(r.sent), time: String(r.time || '').slice(0, 8), desc: String(r.desc || '').slice(0, 200), title: String(r.title || '').slice(0, 80),
-    products: (Array.isArray(r.products) ? r.products : []).filter(x => x && /^\d{6,10}$/.test(String(x.kc))).slice(0, 20).map(x => ({ kc: String(x.kc), q: Number(x.q) || 0 })),
-    req: String(r.req || '').slice(0, 40), cb: day(r.cb), rec: day(r.rec), note: String(r.note || '').slice(0, 200), at };
-}
 
 // ── helpers ────────────────────────────────────────────────────────────
 function openSession(s, e) {

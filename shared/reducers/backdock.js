@@ -24,6 +24,7 @@
 //   dock.manifests manNo → index entry (20 most recent)
 //   dock.manifestDays manNo → { day, truck, at, by }: the day and truck a report came on, set
 //                 for one that never went on a truck here (manifest.day)
+//   truck.offsite  pallets sent off-site from the dock (pallet.offsite): [{ ref, pid, consolIds, cartons, ptype, at, by }]
 //   plan.days     date → slots: 1..4 → { eta, note, team, manifest, from }
 //                 routes: 1..4 → { route: offsite|diverted, lands, to, reason, note, slot, manNo, at, by }:
 //                 a truck not coming to the dock that day (plan.route); slot is the
@@ -37,6 +38,8 @@
 import { reject } from './util.js';
 import { settingsOf } from './store.js';
 import { storeDay, addDays, DEFAULT_TZ } from '../time.js';
+import { offsiteRow, regOf, sameSlot, rowHas, tickBack, untick, callRows } from '../offsite.js';
+import { OFFSITE_CAP } from '../inventory.js';
 
 export const PTYPES = ['chep', 'loscam', 'bulk'];
 export const PALLET_STATUS = ['landed', 'assigned', 'active', 'paused', 'done'];
@@ -159,7 +162,7 @@ export const backdockReducers = {
     if (carry) t.grid = widerGrid(t.grid, carry.grid);
     // Creating from a planner slot consumes the slot's team and manifest.
     const day = s.plan.days[date];
-    if (routed) { if (routed.slot) day.slots[slot] = routed.slot; delete day.routes[slot]; if (!Object.keys(day.routes).length) delete day.routes; }
+    if (routed) { if (routed.slot) day.slots[slot] = routed.slot; delete day.routes[slot]; if (!Object.keys(day.routes).length) delete day.routes; dropRouteRows(s, { date, slot }); }
     if (day && day.slots[slot]) {
       const sl = day.slots[slot]; t.team = teamOf(sl.team) || [];
       if (sl.from) t.from = sl.from;   // a truck bringing back what went off-site says so
@@ -541,6 +544,39 @@ export const backdockReducers = {
     delete t.pallets[bay(e)];
     return null;
   },
+  // Send to off-site (Receiving, managers): pallets the dock has no room for
+  // come off the grid and go on the off-site register under the truck's
+  // manifest, sent today. The truck closes without them and its audit no
+  // longer expects their consols. Only pallets nobody has started.
+  // payload { bays: ['A5', …], cb, req, note }
+  'pallet.offsite'(s, e) {
+    const t = truck(s, e); if (t.code) return t;
+    if (t.status === 'closed') return reject('truck_closed', `truck ${e.entity.truck} is finalised`);
+    const p = e.payload || {}, bays = Array.isArray(p.bays) ? [...new Set(p.bays.map(b => String(b).toUpperCase()))] : [];
+    if (!bays.length || bays.length > 40) return reject('invalid_event', 'bays lists 1 to 40 pallets on the truck');
+    const cb = p.cb == null ? '' : String(p.cb);
+    if (cb && !isDay(cb)) return reject('invalid_event', 'cb must be a date, YYYY-MM-DD');
+    for (const ref of bays) {
+      const pal = t.pallets[ref]; if (!pal) return reject('not_found', `no pallet at ${ref}`);
+      if (pal.segments.length || pal.status === 'done' || pal.status === 'active') return reject('pallet_started', `${ref} has been started: only pallets nobody has worked go off-site`);
+    }
+    const reg = regOf(s).offsite, id = e.entity.truck;
+    if (Object.keys(reg).length + bays.length > OFFSITE_CAP) return reject('too_large', `the register keeps at most ${OFFSITE_CAP} pallets`);
+    const pidOf = pal => { for (const c of [pal.consolIds[0], `${id}-${pal.ref}`]) if (c && !reg[c]) return c; return null; };
+    for (const ref of bays) if (!pidOf(t.pallets[ref])) return reject('exists', `${ref} is already on the off-site register`);
+    const day = storeDay(new Date(e.at), s.settings?.tz || DEFAULT_TZ), consols = consolsOf(t);
+    const of = Object.values(t.pallets).filter(x => !x.excluded).length + (t.offsite || []).length;
+    for (const ref of bays) {
+      const pal = t.pallets[ref], cs = consols.filter(c => pal.consolIds.includes(c.id)), pid = pidOf(pal);
+      const products = []; for (const c of cs) for (const it of c.items || []) if (products.length < 20 && it?.k) products.push({ kc: String(it.k), q: Number(it.q) || 0 });
+      reg[pid] = offsiteRow({ pid, man: t.manifest?.manNo || t.plannedManifest || '', via: 'dock', truck: id, bay: ref, sent: day, cb, req: plain(p.req, 40), note: plain(p.note, 200), ctn: pal.cartons, depts: cs.flatMap(c => [c.dept, ...(c.mix || [])]), consols: pal.consolIds, products, of }, e.at, true);
+      (t.offsite ||= []).push({ ref, pid, consolIds: pal.consolIds.slice(), cartons: pal.cartons, ptype: pal.ptype, at: e.at, by: e.actor?.device || null });
+      delete t.pallets[ref];
+      for (const refs of Object.values(t.plan?.queues || {})) { const i = refs.indexOf(ref); if (i >= 0) refs.splice(i, 1); }
+    }
+    return null;
+  },
+
   'pallet.scan'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     const t = s.dock.trucks[e.entity.truck];
@@ -565,7 +601,7 @@ export const backdockReducers = {
   'pallet.unscan'(s, e) {
     const p = pallet(s, e); if (p.code) return p;
     const t = s.dock.trucks[e.entity.truck], id = String(e.payload.id).replace(/\D/g, '').slice(-9);
-    const drop = k => { const L = s.dock.ledger?.[id]; if (L) { s.dock.ledger[id] = L.filter(x => !(x.t === e.entity.truck && x.k === k && x.ref === p.ref)); if (!s.dock.ledger[id].length) delete s.dock.ledger[id]; } };
+    const drop = k => { const L = s.dock.ledger?.[id]; if (L) { s.dock.ledger[id] = L.filter(x => !(x.t === e.entity.truck && x.k === k && x.ref === p.ref)); if (!s.dock.ledger[id].length) delete s.dock.ledger[id]; } untick(s, id, e.entity.truck); };
     if (p.consolIds.includes(id)) {
       p.consolIds = p.consolIds.filter(x => x !== id); drop('land');
       const c = consolsOf(t).find(x => x.id === id);
@@ -645,6 +681,15 @@ export const backdockReducers = {
     // from: the off-site or diverted truck this one brings back ({ date, slot }, null clears it).
     const from = p.from === undefined || p.from === null ? p.from : { date: String(p.from?.date || ''), slot: Number(p.from?.slot) };
     if (from && (!isDay(from.date) || !(Number.isInteger(from.slot) && from.slot >= 1 && from.slot <= 4) || from.date >= e.entity.date)) return reject('invalid_event', 'from names an earlier day and its truck, 1..4');
+    // pids: register pallets this truck brings back from off-site; load: an
+    // off-site load it brings back (Call back, the 6 Nov off-site design).
+    const pids = p.pids === undefined ? [] : Array.isArray(p.pids) ? [...new Set(p.pids.map(String))] : null;
+    if (!pids || pids.length > OFFSITE_CAP) return reject('invalid_event', `pids lists up to ${OFFSITE_CAP} pallets on the off-site register`);
+    const reg = s.inventory?.offsite || {};
+    for (const pid of pids) { const r = reg[pid]; if (!r) return reject('not_found', `${pid} is not on the off-site register`); if (r.rec) return reject('already_back', `${pid} is already back from off-site`); }
+    const load = p.load == null ? null : s.inventory?.loads?.[String(p.load)];
+    if (p.load != null && load?.status !== 'offsite') return reject('not_found', `${p.load} is not a load off-site`);
+    if ((pids.length || load) && (s.dock.trucks[`${e.entity.date}-T${slot}`] || s.dock.history.some(h => h.id === `${e.entity.date}-T${slot}`))) return reject('on_dock', `Truck ${slot} on ${e.entity.date} has already been on the dock`);
     const rt = s.plan.days[e.entity.date]?.routes?.[slot];
     if (rt) return reject('routed', `Truck ${slot} on ${e.entity.date} is marked ${rt.route === 'offsite' ? 'off-site' : 'diverted'}: set it back to Receive here first`);
     const day = (s.plan.days[e.entity.date] ||= { slots: {} });
@@ -663,11 +708,19 @@ export const backdockReducers = {
     // is reported apart from downtime) and the team break the plan allows.
     Object.assign(cur, booked);
     day.slots[slot] = cur;
+    const call = { date: e.entity.date, slot };
+    callRows(s, pids, call);
+    if (load) load.call = call;
     return null;
   },
   'plan.remove'(s, e) {
-    const day = s.plan.days[e.entity.date], n = Number(e.entity.slot);
-    if (day) { delete day.slots[n]; if (day.routes?.[n]) { delete day.routes[n]; if (!Object.keys(day.routes).length) delete day.routes; } }
+    const day = s.plan.days[e.entity.date], n = Number(e.entity.slot), here = { date: String(e.entity.date), slot: n }, id = `${here.date}-T${n}`;
+    if (day) { delete day.slots[n]; if (day.routes?.[n]) { delete day.routes[n]; if (!Object.keys(day.routes).length) delete day.routes; dropRouteRows(s, here); } }
+    // Pallets it was to bring back are off-site again (a truck that came keeps them).
+    if (!s.dock.trucks[id] && !s.dock.history.some(h => h.id === id)) {
+      callRows(s, Object.values(s.inventory?.offsite || {}).filter(r => !r.rec && sameSlot(r.call, here)).map(r => r.pid), null);
+      for (const l of Object.values(s.inventory?.loads || {})) if (sameSlot(l.call, here)) delete l.call;
+    }
     return null;
   },
   // Where a truck goes when it is not coming to the dock (the off-site and
@@ -679,7 +732,13 @@ export const backdockReducers = {
   // planned can be marked the same way: its truck went off-site. lands: the
   // day it is expected here after all (a callback day), which the Planner,
   // the Dashboard and Receiving show on that day.
-  // payload { route: offsite|diverted|null, lands, to, reason: room|closed|dc|other, note, manNo }
+  // payload { route: offsite|diverted|null, lands, to, reason: room|closed|dc|other, note, manNo,
+  //           pallets: [{ id, ctn, depts }] }
+  // An off-site truck's consols go on the off-site register under its
+  // manifest, one pallet each (pallets: what the routing device read from
+  // the report; else the staged manifest's consol ids), sent that day, back
+  // on its lands day. Set back to Receive here or diverted, the ones not
+  // called back or landed come off again.
   'plan.route'(s, e) {
     const d = String(e.entity.date), n = Number(e.entity.slot), p = e.payload || {};
     if (!isDay(d)) return reject('invalid_event', 'date must be YYYY-MM-DD');
@@ -689,6 +748,7 @@ export const backdockReducers = {
       if (!cur) return reject('not_routed', `Truck ${n} on ${d} is not marked off-site or diverted`);
       delete day.routes[n]; if (!Object.keys(day.routes).length) delete day.routes;
       if (cur.slot) day.slots[n] = cur.slot;
+      dropRouteRows(s, { date: d, slot: n });
       return null;
     }
     if (!ROUTES.includes(p.route)) return reject('invalid_event', 'route must be offsite or diverted');
@@ -701,10 +761,27 @@ export const backdockReducers = {
     if (p.reason != null && !ROUTE_REASONS.includes(p.reason)) return reject('invalid_event', `reason must be one of ${ROUTE_REASONS.join(', ')}`);
     const manNo = p.manNo == null || p.manNo === '' ? null : String(p.manNo);
     if (manNo !== null && !MAN_NO.test(manNo)) return reject('invalid_event', 'manifest number must be 1 to 20 letters, digits or dashes');
-    const dd = (s.plan.days[d] ||= { slots: {} }), slot = cur ? cur.slot : (dd.slots[n] || null);
+    const slotNow = cur ? cur.slot : (s.plan.days[d]?.slots?.[n] || null);
+    let pals = null;
+    if (p.route === 'offsite') {
+      if (p.pallets != null && (!Array.isArray(p.pallets) || p.pallets.length > 500 || p.pallets.some(x => !x || !/^\d{9}$/.test(String(x.id))))) return reject('invalid_event', 'pallets lists up to 500 consols, each with a 9-digit id');
+      const sm = slotNow?.manifest;
+      pals = p.pallets || (sm?.ref ? sm.ids.map(id => ({ id })) : (sm?.consols || []).map(c => ({ id: String(c.id || c.cons || '').slice(-9), ctn: c.cartons, depts: [c.dept, ...(c.mix || [])] })).filter(x => /^\d{9}$/.test(x.id)));
+      const reg = s.inventory?.offsite || {}, here = { date: d, slot: n };
+      pals = pals.filter(x => !reg[String(x.id)] || sameSlot(reg[String(x.id)].from, here));
+      if (Object.keys(reg).length + pals.filter(x => !reg[String(x.id)]).length > OFFSITE_CAP) return reject('too_large', `the register keeps at most ${OFFSITE_CAP} pallets`);
+    }
+    const dd = (s.plan.days[d] ||= { slots: {} }), slot = slotNow;
     delete dd.noTrucks;   // the day had a truck after all: it went somewhere else
     delete dd.slots[n];
     (dd.routes ||= {})[n] = { route: p.route, lands, to: plain(p.to, 60), reason: p.reason || null, note: plain(p.note, 200), slot, manNo: manNo || cur?.manNo || slot?.manifest?.manNo || null, at: e.at, by: e.actor?.device || null };
+    if (p.route !== 'offsite') { dropRouteRows(s, { date: d, slot: n }); return null; }
+    const reg = regOf(s).offsite, man = dd.routes[n].manNo, from = { date: d, slot: n }, was = cur?.route === 'offsite' ? cur.lands || '' : '';
+    for (const x of pals) {
+      const id = String(x.id), old = reg[id];
+      if (old) { if (!old.rec && (old.cb === was || !old.cb)) old.cb = lands || ''; if (x.ctn && !old.ctn) Object.assign(old, offsiteRow({ ...old, ctn: x.ctn, depts: x.depts }, old.at, true)); continue; }
+      reg[id] = offsiteRow({ pid: id, man, via: 'route', from, sent: d, cb: lands || '', req: '', note: plain(p.note, 200), ctn: x.ctn, depts: x.depts, consols: [id] }, e.at, true);
+    }
     return null;
   },
   // A day confirmed with no trucks (from the Planner, ahead or on the day):
@@ -781,6 +858,8 @@ function ledgerAdd(s, id, entry, at) {
   const L = (s.dock.ledger ||= {}), cutoff = new Date(Date.parse(at) - LEDGER_DAYS * 86400000).toISOString().slice(0, 10);
   const list = L[k] = (L[k] || []).filter(x => x.d >= cutoff);
   if (!list.some(x => x.t === entry.t && x.k === entry.k)) { list.push(entry); if (list.length > 8) list.splice(0, list.length - 8); }
+  // A consol landing on a truck (on its manifest or not) is back from off-site.
+  if (entry.k === 'land' || entry.k === 'off') tickBack(s, k, entry.t, entry.d);
 }
 function ledgerFind(s, id, kinds, notTruck) {
   const k = led9(id); return k ? (s.dock.ledger?.[k] || []).filter(x => kinds.includes(x.k) && x.t !== notTruck).sort((a, b) => b.d.localeCompare(a.d)) : [];
@@ -789,7 +868,11 @@ function ledgerFind(s, id, kinds, notTruck) {
 // on another planned truck's manifest it probably belongs to that truck;
 // seen on another truck before is a possible duplicate.
 function sighting(s, e, p, id) {
-  const day = e.entity.truck.slice(0, 10), man = ledgerFind(s, id, ['man'], e.entity.truck).find(x => x.d <= day);
+  const day = e.entity.truck.slice(0, 10);
+  // A pallet back from off-site is expected here, not late: the register ticks it off.
+  const back = Object.values(s.inventory?.offsite || {}).some(r => rowHas(r, led9(id)) && r.truck !== e.entity.truck && (!r.rec || r.recTruck === e.entity.truck));
+  if (back) { ledgerAdd(s, id, { t: e.entity.truck, d: day, k: 'off', ref: p.ref }, e.at); return; }
+  const man = ledgerFind(s, id, ['man'], e.entity.truck).find(x => x.d <= day);
   const plan = man ? null : ledgerFind(s, id, ['plan'], e.entity.truck)[0];
   if (man) p.lateFrom = { t: man.t, d: man.d };
   else if (plan) p.plannedFor = { t: plan.t, d: plan.d };
@@ -864,6 +947,15 @@ function widerGrid(a, b) {
   const rows = Math.max(a?.rows || 0, b?.rows || 0), cols = Math.max(a?.cols || 0, b?.cols || 0);
   return { rows, cols, rowLabels: 'ABCDEFGH'.slice(0, rows) };
 }
+// A truck marked off-site that is set back, diverted or comes after all:
+// its consols not called back or landed come off the register.
+function dropRouteRows(s, from) {
+  const reg = s.inventory?.offsite; if (!reg) return;
+  for (const [pid, r] of Object.entries(reg)) if (r.via === 'route' && sameSlot(r.from, from) && !r.rec && !r.call) delete reg[pid];
+}
+// Consols a truck no longer answers for: carried out on unfinished pallets,
+// or on pallets sent off-site from its dock.
+const goneIds = t => new Set([...(t.carriedOutIds || []), ...(t.offsite || []).flatMap(o => o.consolIds || [])]);
 // The truck's manifest consols plus any carried in with its pallets.
 export function consolsOf(t) { return [...(t.manifest?.consols || []), ...(t.carriedConsols || [])]; }
 // A truck keeps the grid and carton rate the store had when it was created,
@@ -987,7 +1079,7 @@ export function historyRow(id, t) {
     }
   }
   const cartons = done.reduce((n, p) => n + (p.cartons || 0), 0);
-  const carried = pallets.filter(p => p.carryover), gone = new Set(t.carriedOutIds || []), all = consolsOf(t).filter(c => !gone.has(c.id));
+  const carried = pallets.filter(p => p.carryover), gone = goneIds(t), all = consolsOf(t).filter(c => !gone.has(c.id));
   // Cartons per department: the manifest consols that landed on a done
   // pallet, by the consol's department.
   const byDept = {};
@@ -1047,6 +1139,6 @@ export function auditOf(consols, pallets) {
 }
 // The same audit for an open truck, as it stands.
 export function liveAudit(t) {
-  const gone = new Set(t.carriedOutIds || []), all = consolsOf(t).filter(c => !gone.has(c.id));
+  const gone = goneIds(t), all = consolsOf(t).filter(c => !gone.has(c.id));
   return all.length ? auditOf(all, Object.values(t.pallets || {})) : null;
 }

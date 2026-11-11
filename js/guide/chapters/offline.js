@@ -8,7 +8,7 @@
 // The day: Busselton 1241, Sunday 25 October 2026, week 2026-W43; Floor ›
 // Refresh in the Kitchen (js/guide/refresh-map.js), 23 of 100 done, focus H1
 // and K2, as the Location refresh chapter has it.
-// Every class here starts of2- (scripts/guide/draft/css/offline.css); the map
+// Every class here starts of2- (styles/guide.css); the map
 // and the strip use the Location refresh chapter's rf- styles.
 import { tx, txn } from '../../i18n.js';
 import { fmtDate } from '../../ui.js';

@@ -8,7 +8,7 @@
 // The day: Busselton 1241, five cages already open in the stockroom; the new
 // one is BSN1240421 on an Overstock ring. The phone asks with the browser's
 // own confirm and prompt, drawn here as a plain dialog.
-// Every class here starts cg2- (scripts/guide/draft/css/cages.css).
+// Every class here starts cg2- (styles/guide.css).
 import { tx, txn } from '../../i18n.js';
 import { fmtTime } from '../../ui.js';
 import { ai, phone2, sheet, unsheet, toast2, bars, tally } from '../frames.js';

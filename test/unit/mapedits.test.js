@@ -79,3 +79,18 @@ test('a rename changes one shelf: the only one with that name, or the one at its
   assert.equal(apply(s, ev('map.edit.suggest', { edit: 'e9pos' }, { shelf: 'A16 S2', kind: 'rename', to: 'A17 S2', floor: 'ground', pos: { x: 10, y: 60 } })), null);
   assert.deepEqual(s.mapedits.e9pos.pos, { x: 10, y: 60 });
 });
+
+test('a rename changes one shelf: the only namesake, or the one at its position (decision 42)', async () => {
+  const { oneShelf, applyEdit } = await import('../../shared/mapedits.js');
+  const a = { name: 'H2', subname: 'S1', x: 120, y: -1040 }, b = { name: 'H2', subname: 'S1', x: 240, y: -1040 }, c = { name: 'Q15', subname: '', x: 60, y: -280 };
+  assert.equal(oneShelf([c], null), c, 'the only one, with or without a position');
+  assert.equal(oneShelf([a, b], { x: 240, y: -1040 }), b, 'two share the name: the one tapped');
+  assert.equal(oneShelf([a, b], null), null, 'two share it and nothing says which: by hand');
+  assert.equal(oneShelf([a, b], { x: 999, y: 0 }), null);
+  assert.equal(oneShelf([], { x: 120, y: -1040 }), null);
+  const doc = { floors: [{ id: 'ground', shelves: [a, b, c] }] };
+  assert.equal(applyEdit(doc, { kind: 'rename', shelf: 'H2 S1', to: 'H3 S1', floor: 'ground', pos: { x: 240, y: -1040 } }), 1);
+  assert.deepEqual([a.name, b.name], ['H2', 'H3'], 'the left-hand H2 S1 keeps its name');
+  assert.equal(applyEdit(doc, { kind: 'rename', shelf: 'H2 S1', to: 'H9 S1' }), 1, 'now unshared, no position needed');
+  assert.equal(a.name, 'H9');
+});

@@ -19,7 +19,7 @@ import { nameOf, ensureNames } from './stockroom/common.js';
 import { flags as palletFlags } from './backdock/receiving.js';
 import { settingsOf } from '../../shared/reducers/store.js';
 import { phaseChip, phaseLine, PHASE_NAME } from './backdock/phase.js';
-import { PHASES, truckPhase } from '../../shared/dockphase.js';
+import { PHASES, truckPhase, phaseSteps } from '../../shared/dockphase.js';
 import { ratesFor } from './backdock/plan.js';
 import { toolOff } from '../../shared/tools.js';
 import { openPasteBox } from './pastebox.js';
@@ -273,7 +273,7 @@ function dockCard(ctx, r) {
     // The truck the card follows: the one on the dock, else the last one
     // closed today (shown as Closed until the next truck lands).
     const ph = t ? truckPhase(t) : last ? 'closed' : null, shown = t || last;
-    const steps = ph ? `<ol class="dk-steps6" aria-label="${tx('Truck phase')}">${PHASES.map((x, i) => `<li class="${i < PHASES.indexOf(ph) ? 'dn' : x === ph ? 'on' : ''}"${x === ph ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[x]}</span></li>`).join('')}</ol>` : '';
+    const steps = ph ? `<ol class="dk-steps6" aria-label="${tx('Truck phase')}">${PHASES.map((x, i) => `<li class="${phaseSteps(ph)[i]}"${x === ph ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[x]}</span></li>`).join('')}</ol>` : '';
     const chip = shown ? `<span class="phb-chip ph-${ph}">${PHASE_NAME[ph]}</span> <b>${tx('Truck {no}', { no: esc(truckNo(shown.id)) })}</b>` : `<span class="phb-chip dock-st ${none || awayDay ? 'none' : 'idle'}${awayDay ? ' away' : ''}">${none ? tx('No trucks today') : awayDay ? awayTitle : tx('No truck on the dock')}</span>`;
     const cartons = done.reduce((n, h) => n + (h.cartons || 0), 0) + onDock.reduce((n, x) => n + progress(x).done, 0);
     const row = (label, value) => `<div class="row">${label}<b>${value}</b></div>`;

@@ -142,7 +142,7 @@ export default {
       `<div class="mv-sel mode rf" id="rfmob"></div><div class="rf-scanhost" id="rfscan"></div>`;
   },
   mount(ctx, root) {
-    const map = mountMap($('#mapstage', root), { cls: 'rf', badges: false, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
+    const map = mountMap($('#mapstage', root), { cls: 'rf', badges: false, writes: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
       const m = model(ctx), mk = m.marks[markKeysFor(m.marks, info)[0]], c = m.plan[info.full];
       const plan = c ? `<span class="mx"><i class="pdot" style="background:${esc(c)}"></i>${tx('Planned · {colour}', { colour: planName(c) })}</span>` : '';
       if (mk) return tipLine('g', 'check', tx('Refreshed {time}', { time: fmtTime(mk.at) })) + plan;

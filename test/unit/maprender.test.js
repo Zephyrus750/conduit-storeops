@@ -74,8 +74,9 @@ test('a .json export renders the same floor from its data', () => {
   const j = renderMap(parseMapFile(jsonExport, 'x.json').data).floors[0];
   assert.deepEqual(j.paths, { nodes: [{ id: 'pn1', x: 0, y: 0 }, { id: 'pn2', x: 100, y: 0, type: 'stairs' }], edges: [{ a: 'pn1', b: 'pn2' }] }, 'the walk-path network travels with the floor');
   assert.equal(j.shelves, 3, 'an inactive shelf is drawn, dimmed, but not counted');
-  assert.match(j.svg, /<g class="shelf-group" data-shelf="A11" data-subname="S1" data-dept="h1" data-full="A11 S1" data-modules="3"><rect class="shelf" x="-230" y="225" width="20" height="120" fill="#FF8C00" fill-opacity="0.75" stroke="#FF8C00"\/><\/g>/);
-  assert.match(j.svg, /<text class="shelf-label" font-size="8" x="-220" y="[\d.-]+">A11<\/text><text class="shelf-label" font-size="6" x="-220" y="[\d.-]+" fill="rgba\(255,255,255,0.7\)">S1<\/text>/);
+  // The shelf's names sit inside its group (decision 42), so its state reaches them.
+  assert.match(j.svg, /<g class="shelf-group" data-shelf="A11" data-subname="S1" data-dept="h1" data-full="A11 S1" data-modules="3"><rect class="shelf" x="-230" y="225" width="20" height="120" fill="#FF8C00" fill-opacity="0.75" stroke="#FF8C00"\/><text class="shelf-label" font-size="8" x="-220" y="[\d.-]+">A11<\/text><text class="shelf-label" font-size="6" x="-220" y="[\d.-]+" fill="rgba\(255,255,255,0.7\)">S1<\/text><\/g>/);
+  assert.doesNotMatch(j.svg, /<\/g><text class="shelf-label"/, 'no name is left outside its shelf');
   assert.match(j.svg, /data-shelf="X9"[^>]*data-inactive="1"[^>]*><rect[^>]*fill-opacity="0.25"/);
   assert.match(j.svg, /<g class="landmark-group" data-landmark="true" data-label="ENTRY" data-lm-x="-600"[^>]*data-icon="entry">/);
   assert.match(j.svg, /<g class="wall-group" data-wall="true"/); assert.match(j.svg, /<g class="wall-group window"/);
@@ -109,6 +110,9 @@ test('modules, inactive shelves, angled shelves from a .js file and marker ids r
   assert.match(svg, /data-full="A22 S1" data-modules="7"/);
   assert.match(svg, /data-full="G6 S1"[^>]*transform="rotate\(-45,/, 'an angle with no orientation is an angled shelf');
   assert.doesNotMatch(svg, /data-full="G7 S1"[^>]*rotate/);
+  const g6 = /<g class="shelf-group"[^>]*data-full="G6 S1"[^>]*>.*?<\/g>/.exec(svg)?.[0] || '';
+  assert.match(g6, /<text class="shelf-label"[^>]*>G6<\/text>/, 'an angled shelf keeps its name inside');
+  assert.doesNotMatch(g6.replace(/^<g[^>]*>/, ''), /transform=/, 'turned by its shelf, not twice');
   assert.equal(shelfDims({ dept: 'stockroom' }, base).w, 180, 'a stockroom bay with no count is 3 modules, as the .js export means');
   assert.match(svg, /class="emergency-marker" data-id="em_12"/); assert.match(svg, /class="price-check-marker" data-id="pc_3"/);
 });

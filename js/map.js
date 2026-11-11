@@ -3,7 +3,7 @@
 // filter. Ported from the showcase's map chrome; the map document itself
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
-import { $, $$, ic, esc, dep, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast, scopeListeners } from './ui.js';
+import { $, $$, ic, esc, dep, depInk, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast, scopeListeners } from './ui.js';
 import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords, linkedNode } from '../shared/route.js';
 import { markerGlyph, locationRange, markerSymbol, MARKER_NAMES, LANDMARK_NAMES, markerType } from '../shared/maprender.js';
 import { prefs, setPref } from './prefs.js';
@@ -288,7 +288,12 @@ export function symbolsHtml(list = mapSymbols()) {
 // name reads when zoomed out; they fade into the per-shelf labels
 // as the map zooms in (the legacy viewer's shelf badges).
 const LABEL_MIN_Z = 2.5;   // a map without badges hides its labels below this zoom on a phone
-const BADGE_START = 5.5, BADGE_END = 8;   // zoom factors, relative to the floor fitted
+// Shelf names show once they would be 9 pixels tall on this screen, and the
+// run badges fade out as names grow from 9 to 11 (decision 42). The old fixed
+// 5.5 to 8 times the whole store brought names in about 5 px tall on a phone
+// and left 50 px badges on a 1080p PC; pixels give every screen and every
+// store readable text at each zoom.
+const NAME_PX = 9, BADGE_GONE_PX = 11;
 function buildBadges(floorEl) {
   const NS = 'http://www.w3.org/2000/svg', byName = new Map();
   for (const g of floorEl.querySelectorAll('.shelf-group[data-shelf]')) {
@@ -323,6 +328,7 @@ function buildBadges(floorEl) {
     const x = b.cx + b.dx, y = b.cy + b.dy;
     const bg = document.createElementNS(NS, 'rect'); bg.setAttribute('class', 'sb-bg'); bg.setAttribute('x', x - b.w / 2); bg.setAttribute('y', y - b.h / 2); bg.setAttribute('width', b.w); bg.setAttribute('height', b.h); bg.setAttribute('rx', 8); bg.setAttribute('fill', DEPT_COLOUR[b.dept] || '#374151'); bg.setAttribute('data-shelf', b.name); bg.setAttribute('data-dept', b.dept);
     const t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'sb'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('data-shelf', b.name); t.setAttribute('data-dept', b.dept); t.textContent = b.label;
+    if (depInk(DEPT_COLOUR[b.dept] || '#374151') !== '#fff') t.setAttribute('data-ink', 'dark');   // the ink that reads on its colour, every department
     layer.appendChild(bg); layer.appendChild(t);
   }
   // The zoom fade is the opacity of a group of its own: changing it restyles
@@ -385,6 +391,7 @@ function template(fl) {
   const host = document.createElement('div');
   host.innerHTML = `<svg class="map real" viewBox="${cur.vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${fl.map(f => `<g class="mfl" data-fid="${esc(f.id)}" data-ftype="${f.type}" style="${f === cur ? '' : 'display:none'}">${f.inner}</g>`).join('')}</svg>`;
   const svg = host.firstElementChild;
+  namesInside(svg);
   for (const f of svg.querySelectorAll('.mfl[data-ftype="foh"]')) buildBadges(f);
   // Legacy raw-SVG maps draw some marker icons with an icon font the shell
   // does not load (the AED showed as a blank disc): draw them as paths.
@@ -394,6 +401,41 @@ function template(fl) {
   }
   if (main) tpl = svg;
   return svg;
+}
+// Each shelf's name goes inside its shelf (decision 42). A map file draws a
+// name right after its shelf, outside it, so the rules that colour a name by
+// its shelf's state never reached it (a checked shelf's pale fill left its
+// white name unreadable) and dimming left it bright. A name drawn with its
+// shelf's rotation drops its own (the shelf's applies); one drawn otherwise
+// stays where it is. Maps published from now on draw names inside
+// (shared/maprender.js), so there is nothing to move in those.
+// Each name takes the ink that reads on its shelf (js/ui.js depInk), on the
+// white map (data-ink) and on the dark one (data-dkink): dark on the light
+// department colours, where white reached 4.5 to 1 on only one of fifteen.
+// A round table's name sits below it on the floor, so it takes the floor's.
+const MAP_BG = '#ffffff', MAP_BG_DARK = '#1c2533';
+function seen(fill, op, bg) {
+  const hex = c => { c = String(c || '').trim(); return /^#[0-9a-f]{3}$/i.test(c) ? '#' + [...c.slice(1)].map(x => x + x).join('') : /^#[0-9a-f]{6}$/i.test(c) ? c : null; };
+  const f = hex(fill), b = hex(bg); if (!f) return null;
+  const n = parseInt(f.slice(1), 16), m = parseInt(b.slice(1), 16), mix = (a, z) => Math.round(a * op + z * (1 - op));
+  return '#' + [mix(n >> 16, m >> 16), mix((n >> 8) & 255, (m >> 8) & 255), mix(n & 255, m & 255)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+function namesInside(svg) {
+  for (const g of svg.querySelectorAll('.shelf-group')) {
+    const tr = g.getAttribute('transform');
+    for (let t = g.nextElementSibling; t?.classList?.contains('shelf-label'); t = g.nextElementSibling) {
+      const lt = t.getAttribute('transform');
+      if (tr && lt !== tr) break;
+      if (lt && lt === tr) t.removeAttribute('transform');
+      g.appendChild(t);
+    }
+    const r = g.querySelector('.shelf'); if (!r || !g.querySelector('.shelf-label')) continue;
+    if (r.tagName === 'circle') { g.setAttribute('data-ink', 'dark'); continue; }
+    const fill = r.getAttribute('fill'), op = Math.min(1, Math.max(0, Number(r.getAttribute('fill-opacity') ?? 1)));
+    const light = seen(fill, op, MAP_BG), dark = seen(fill, op, MAP_BG_DARK);
+    if (light && depInk(light) !== '#fff') g.setAttribute('data-ink', 'dark');
+    if (dark && depInk(dark) !== '#fff') g.setAttribute('data-dkink', 'dark');
+  }
 }
 // clone: true builds a throwaway copy; 'preview' reuses one kept for the
 // search palette's small map, so opening the palette never pays for a
@@ -406,7 +448,7 @@ export function shelfPos(g) {
   const pos = r?.tagName === 'circle' ? { x: n('cx'), y: n('cy') } : { x: n('x'), y: n('y') };
   return Number.isFinite(pos.x) && Number.isFinite(pos.y) ? pos : null;
 }
-export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false, tip = null, tips = true, doc = null, badges = true, clone = false, unnamed = false } = {}) {
+export function mountMap(stage, { mono = false, cls = '', marks = {}, select = null, onSelect = null, showEmergency = false, tip = null, tips = true, doc = null, badges = true, clone = false, unnamed = false, writes = false } = {}) {
   const fl = doc ? parseFloors(doc) : floors;
   let cur = fl.find(f => f.type === 'foh') || fl[0];
   // A stage can outlive a view (the phone keeps its map between map modes):
@@ -476,9 +518,20 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     }
   };
   let fadeNow = null, firstFade = true;
+  // A floor's typical name size, in map units: the first name of each shelf
+  // (the run, not its S1), read once per floor from the drawing.
+  const nameFs = f => {
+    if (f.nameFs) return f.nameFs;
+    const v = $$('.shelf-group .shelf-label:first-of-type', floorEl(f.id)).map(t => Number(t.getAttribute('font-size'))).filter(n => n > 0).sort((a, b) => a - b);
+    return (f.nameFs = v.length ? v[v.length >> 1] : 8);
+  };
   const setLabelFade = () => {
-    const z = (Number(vb0.split(' ')[2]) || 1) / (Number(svg.getAttribute('viewBox').split(' ')[2]) || 1);
-    const badge = z <= BADGE_START ? 1 : z >= BADGE_END ? 0 : 1 - (z - BADGE_START) / (BADGE_END - BADGE_START);
+    const vb = svg.getAttribute('viewBox').split(' ').map(Number), z = (Number(vb0.split(' ')[2]) || 1) / (vb[2] || 1);
+    // The map's scale on screen: the live map's size comes from its
+    // ResizeObserver (never measured here); a clone goes by the window.
+    const W = (svg === live && liveW) || innerWidth, H = (svg === live && liveH) || innerHeight;
+    const namePx = (cur ? nameFs(cur) : 8) * Math.min(W / (vb[2] || 1), H / (vb[3] || 1));
+    const badge = namePx <= NAME_PX ? 1 : namePx >= BADGE_GONE_PX ? 0 : 1 - (namePx - NAME_PX) / (BADGE_GONE_PX - NAME_PX);
     const op = badge >= 1 ? '' : badge.toFixed(2);
     if (op !== fadeNow) { fadeNow = op; for (const f of $$('.badge-fade', svg)) f.style.opacity = op; }
     // Two thousand shelf labels that are invisible when zoomed out still
@@ -488,7 +541,7 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     // zoomed out, where they are two to four pixels tall: there they come
     // back from 2.5 times the whole-store zoom, about five pixels.
     const tiny = z < LABEL_MIN_Z && ((svg === live && liveW) || innerWidth) < 600;
-    const was = svg.style.getPropertyValue('--label-display'), show = svg.classList.contains('nobadges') ? (tiny ? 'none' : 'inline') : badge >= 1 ? 'none' : 'inline';
+    const was = svg.style.getPropertyValue('--label-display'), show = svg.classList.contains('nobadges') ? (tiny ? 'none' : 'inline') : namePx >= NAME_PX ? 'inline' : 'none';
     // Names coming in are culled before they are laid out; while they show,
     // the check waits for the move to stop.
     if (show === 'inline') { if (was !== 'inline' || firstFade) cullLabels(); else { clearTimeout(cullT); cullT = setTimeout(cullLabels, 120); } }
@@ -833,7 +886,14 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
       api.setVb([bb[0] - pad, bb[1] - pad, W, H]);
     },
     // Map coordinates of a client point (for placing pins).
-    pointAt(clientX, clientY) { const v = api.vb(), r = svg.getBoundingClientRect(); return [v[0] + (clientX - r.left) / r.width * v[2], v[1] + (clientY - r.top) / r.height * v[3]]; },
+    // The map point under a screen point, letterboxing included: a drawing
+    // fitted inside its element (meet) leaves bands the old sum ignored, so
+    // a pin dropped on the floor, or the nearest shelf to a tap, landed off.
+    pointAt(clientX, clientY) {
+      const m = svg.getScreenCTM?.();
+      if (m) { const q = new DOMPoint(clientX, clientY).matrixTransform(m.inverse()); return [q.x, q.y]; }
+      const v = api.vb(), r = svg.getBoundingClientRect(); return [v[0] + (clientX - r.left) / r.width * v[2], v[1] + (clientY - r.top) / r.height * v[3]];
+    },
     markers() {
       // A marker's id is the editor's (data-id), so its service history
       // follows it when it is moved. Maps published before ids keyed it by
@@ -913,31 +973,92 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const step = () => { vx *= .92; vy *= .92; if (Math.hypot(vx, vy) < .01) return; const v = api.vb(); api.setVb([v[0] - vx * 16 * k, v[1] - vy * 16 * k, v[2], v[3]]); coast = requestAnimationFrame(step); };
     coast = requestAnimationFrame(step);
   };
-  // Double-click, or a second tap within 300 ms, zooms in 1.8× on the spot.
-  stage.addEventListener('dblclick', e => { e.preventDefault(); api.zoomBy(1 / 1.8, e.clientX, e.clientY, 300); });
+  // A tap waits out the 300 ms double-tap window before it acts (decision 42):
+  // a second tap on the same spot within it zooms in 1.8× there and the first
+  // does nothing, so a double-tap never marks a shelf in Refresh or adds a
+  // stop to a pick list. A second tap on something else lets the first act at
+  // once. A long press acts at once too. Mouse and touch alike: the browser's
+  // own double-click is not used.
+  stage.addEventListener('dblclick', e => e.preventDefault());
+  let pending = null;
+  const flush = () => { if (!pending) return; const p = pending; pending = null; clearTimeout(p.timer); act(p.what, p.touch, p.long); };
+  off.signal.addEventListener('abort', () => { if (pending) clearTimeout(pending.timer); pending = null; });
   const lift = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; };
   stage.addEventListener('pointerup', e => {
     lift(e);
     if (!drag) return; const { moved, t, touch, vx, vy, lt } = drag; drag = null;
     if (moved) { if (touch && performance.now() - lt < 80) coastFrom(vx, vy); return; }
-    if (touch && ptrs.size === 0) {
-      const now = Date.now();
-      if (lastTap && now - lastTap.t < 300 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) { lastTap = null; api.zoomBy(1 / 1.8, e.clientX, e.clientY, 300); return; }
-      lastTap = { t: now, x: e.clientX, y: e.clientY };
+    // What was tapped is settled now, though it acts after the window: a pan
+    // started meanwhile doesn't change it.
+    const what = tapped(e.clientX, e.clientY), long = Date.now() - t > 500, now = Date.now();
+    if (!long && ptrs.size === 0 && lastTap && now - lastTap.t < 300 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30 && (!pending || pending.what.key === what.key)) {
+      if (pending) { clearTimeout(pending.timer); pending = null; }
+      lastTap = null; api.zoomBy(1 / 1.8, e.clientX, e.clientY, 300); return;
     }
-    const hit = document.elementFromPoint(e.clientX, e.clientY) || e.target;
-    const g = hit.closest?.('.shelf-group[data-shelf]');
+    flush();
+    lastTap = long ? null : { t: now, x: e.clientX, y: e.clientY };
+    if (long) { act(what, touch, true); return; }
+    pending = { what, touch, long: false, timer: setTimeout(flush, 300) };
+  });
+  // Taps that forgive (decision 42): a tap on no shelf takes the nearest one
+  // within 12 px on screen, as a shelf at the whole-store view is about 2 px
+  // deep on a phone; markers and pins still need a direct hit. Where a tap
+  // writes something (writes: Refresh, Stocktake, Pick list, assigning
+  // labels), a shelf under 8 px on screen zooms in instead of being marked.
+  const NEAR_PX = 12, SMALL_PX = 8;
+  let shapes = null;   // the current floor's shelves in their own coordinates, read at the first near-miss
+  const floorShapes = () => {
+    const host = floorEl(cur?.id); if (shapes?.host === host) return shapes.list;
+    const list = [];
+    for (const g of $$('.shelf-group', host)) {
+      if (g.hasAttribute('data-inactive') || (!g.getAttribute('data-shelf') && !unnamed)) continue;
+      const r = g.querySelector('.shelf'); if (!r) continue;
+      const n = k => Number(r.getAttribute(k)), m = g.transform?.baseVal?.consolidate?.()?.matrix || null;
+      const sh = r.tagName === 'circle' ? { g, c: [n('cx'), n('cy'), n('r')] } : { g, b: [n('x'), n('y'), n('width'), n('height')] };
+      if (m) sh.inv = m.inverse();
+      if ([...(sh.c || sh.b)].every(Number.isFinite)) list.push(sh);
+    }
+    shapes = { host, list }; return list;
+  };
+  const unitsPerPx = () => { const v = api.vb(), w = (svg === live && liveW) || svg.getBoundingClientRect().width || 1, h = (svg === live && liveH) || svg.getBoundingClientRect().height || 1; return Math.max(v[2] / w, v[3] / h); };
+  const nearShelf = (x, y) => {
+    const [px, py] = api.pointAt(x, y), u = unitsPerPx(), reach = NEAR_PX * u;
+    let best = null, bd = Infinity;
+    for (const sh of floorShapes()) {
+      let qx = px, qy = py;
+      if (sh.inv) { const q = new DOMPoint(px, py).matrixTransform(sh.inv); qx = q.x; qy = q.y; }
+      const d = sh.c ? Math.max(0, Math.hypot(qx - sh.c[0], qy - sh.c[1]) - sh.c[2]) : Math.hypot(Math.max(sh.b[0] - qx, 0, qx - sh.b[0] - sh.b[2]), Math.max(sh.b[1] - qy, 0, qy - sh.b[1] - sh.b[3]));
+      if (d < bd) { bd = d; best = sh; }
+    }
+    return best && bd <= reach ? best.g : null;
+  };
+  // A shelf's smaller side on screen, in px.
+  const shelfPx = g => { const sh = floorShapes().find(x => x.g === g); if (!sh) return Infinity; return (sh.c ? sh.c[2] * 2 : Math.min(sh.b[2], sh.b[3])) / unitsPerPx(); };
+  const tapped = (x, y) => {
+    const hit = document.elementFromPoint(x, y) || svg;
     const m = hit.closest?.('.emergency-marker[data-equip-type]'), pc = hit.closest?.('.price-check-marker'), pin = hit.closest?.('.pin[data-pin]');
-    const point = api.pointAt(e.clientX, e.clientY);
+    let g = hit.closest?.('.shelf-group[data-shelf]') || null, near = false;
+    if (!g && !m && !pc && !pin && svg.contains(hit)) { g = nearShelf(x, y); near = !!g; }
+    const key = pin ? 'pin:' + pin.getAttribute('data-pin') : pc ? 'pc' : g ? 'g:' + (g.getAttribute('data-full') || '') + ':' + JSON.stringify(shelfPos(g)) : m ? 'm' : 'floor';
+    return { x, y, g, m, pc, pin, near, key, point: api.pointAt(x, y) };
+  };
+  const act = (w, touch, long) => {
+    if (!svg.isConnected) return;
+    const { g, m, pc, pin, point } = w;
+    if (g && (typeof writes === 'function' ? writes() : writes) && shelfPx(g) < SMALL_PX) {
+      // Too small to have been seen: show it first.
+      const k = Math.min(6, Math.max(2, 16 / Math.max(shelfPx(g), 1)));
+      api.zoomBy(1 / k, w.x, w.y, 300); return;
+    }
     if (touch && (pc || g || pin)) haptic('tap');
     if (pin) onSelect?.({ kind: 'pin', id: pin.getAttribute('data-pin'), point });
     else if (pc && !svg.classList.contains('pc-off')) { const ga = k => pc.getAttribute(k) || ''; onSelect?.({ kind: 'pricecheck', variant: ga('data-variant'), label: ga('data-label'), location: ga('data-location'), detail: ga('data-detail'), dept: ga('data-loc-dept').toLowerCase(), deptName: ga('data-loc-dept-name'), deptColour: ga('data-loc-dept-color'), badge: ga('data-loc-dept-badge'), point, el: pc }); }
-    else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, pos: shelfPos(g), el: g, point, long: Date.now() - t > 500 }); }   // the shelf tapped, never its whole run
+    else if (g && g.getAttribute('data-shelf')) { const info = api.shelfInfo(g); api.select(info.code); onSelect?.({ kind: 'shelf', ...info, pos: shelfPos(g), el: g, point, long }); }   // the shelf tapped, never its whole run
     // Field Mode taps a shelf the map has no name for: it is known by its floor and position.
     else if (g && unnamed) onSelect?.({ kind: 'unnamed', el: g, point, floor: g.closest('.mfl')?.getAttribute('data-fid') || null, pos: shelfPos(g) });
     else if (m) onSelect?.({ kind: 'marker', ...api.markers().find(x => x.el === m), point });
-    else onSelect?.({ kind: 'floor', point: api.pointAt(e.clientX, e.clientY) });
-  });
+    else onSelect?.({ kind: 'floor', point });
+  };
   stage.addEventListener('pointercancel', e => { lift(e); drag = null; });
 
   // hover tooltip (mouse only; a touch shows nothing, the tap selects)

@@ -708,6 +708,15 @@ a minute and the phone that sent it shows it on the map. Anything else is made
 in the map editor, then accepted. A map published from drawings alone has no
 source to change.
 
+On the map each shelf's name sits inside its shelf, so the shelf's state
+colours it and dimming fades it, in the ink that reads on its department's
+colour. Names show once they are 9 pixels tall on the screen, as the run
+badges fade. A tap waits out the 300 ms double-tap window, so a double-tap
+only zooms and never marks a shelf. A tap that misses takes the nearest shelf
+within 12 pixels; in Refresh, Stocktake, Pick list and while assigning
+labels, a shelf under 8 pixels on screen zooms in instead of being marked
+(decision 42).
+
 On a phone the map modes (Home, Refresh, Labels, Route, Emergency,
 Stocktake, Field Mode) give the map the screen: a dark strip above the tabs
 says what the mode is doing and carries its main action (Scan or type,
@@ -782,7 +791,7 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 | --- | --- | --- |
 | Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list | ShelfSearcher refresh, label-integrity, stocktake, maintenance and em-service modes |
 | Stockroom | cages with ring colours, backfill submissions (pending, corrected, submitted; requested list; claims; rename), negative-SOH adjustments, day list | K2B review, adjust and scan modules |
-| Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits and the day and truck a report came on (`manifest.day`, for one no truck here carried), pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4 and days confirmed without trucks (`plan.noTrucks`: the morning checklist reads them as done; planning a truck or one arriving clears it) and trucks not coming to the dock (`plan.route`: off-site until called back, or diverted to another store or site, with the day it lands here after all; the truck leaves the day's slots and is put back when set to Receive here) (a staged manifest is a reference: number, counts and consol ids; the device that starts the truck attaches the report from the library), history rows on finalise; off-site pallets and other loads (`inventory.*`: register set, add, update; loads add, status, remove; Floor events until 23 Oct 2026) | Decant Visualiser receiving, manifests, planner, history; ShelfSearcher inventory mode |
+| Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits and the day and truck a report came on (`manifest.day`, for one no truck here carried), pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4 and days confirmed without trucks (`plan.noTrucks`: the morning checklist reads them as done; planning a truck or one arriving clears it) and trucks not coming to the dock (`plan.route`: off-site until called back, or diverted to another store or site, with the day it lands here after all; the truck leaves the day's slots and is put back when set to Receive here; an off-site truck's consols go on the off-site register under its manifest) and pallets sent off-site from the dock (`pallet.offsite`, managers: off the grid and onto the register; the truck closes without them); Call back is a planned slot naming the register pallets or load it brings back (`plan.set` `pids`, `load`), each ticked Received as its label is scanned on a later truck (a staged manifest is a reference: number, counts and consol ids; the device that starts the truck attaches the report from the library), history rows on finalise; off-site pallets and other loads (`inventory.*`: register set, add, update; loads add, status, remove; Floor events until 23 Oct 2026) | Decant Visualiser receiving, manifests, planner, history; ShelfSearcher inventory mode |
 | Store | map publish, roster rotation marker, settings, tools, map edit suggestions, feedback (device presence is a projection written directly from the socket `hb` frame or `POST /hb`, not an event) | |
 
 A catalogued type without a reducer would be rejected `not_implemented`; the

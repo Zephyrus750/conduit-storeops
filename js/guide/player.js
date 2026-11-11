@@ -64,8 +64,8 @@ function fitIn(box, maxScale = 1) {
   const k = Math.min(maxScale, box.clientWidth / w, room);
   fit.style.transform = `translateX(-50%) scale(${k})`; box.style.height = (h * k) + 'px';
 }
-// Toasts and the scanner belong to one step only.
-const clearTransient = root => { root.querySelectorAll('.dv-toast, .scanov').forEach(e => { e.hidden = true; }); root.querySelectorAll('.fg').forEach(f => f.classList.remove('try')); };
+// Toasts belong to one step only.
+const clearTransient = root => { root.querySelectorAll('.dv-toast').forEach(e => { e.hidden = true; }); root.querySelectorAll('.fg').forEach(f => f.classList.remove('try')); };
 
 export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mobile = false } = {}) {
   onPhone = !!mobile;
@@ -123,13 +123,6 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
         el.classList.add('pressed'); await wait(180); el.classList.remove('pressed'); await wait(160);
       },
       async type(sel, text) { const el = q(sel); if (!el) return; if (quick) { el.textContent = text; return; } el.textContent = ''; for (const ch of text) { el.textContent += ch; await wait(mode === 'try' ? 60 : 95); } await wait(250); },
-      async scan(code, fast = false, within = '') {
-        const s = (within && q(`${within} .dvs`)) || q('.dvs'), ov = s.querySelector(':scope > .scanov'), card = ov.querySelector('.scan-card'), hint = ov.querySelector('.hint');
-        ov.querySelector('.scan-code').textContent = code; card.classList.remove('read'); ov.hidden = false; hint.textContent = tx('Point the camera at the label');
-        if (mode === 'instant') { card.classList.add('read'); return; }
-        if (mode === 'try') { hint.textContent = tx('Tap the label to scan it'); await waitClick(card, tx('Scan')); live(); card.classList.add('read'); await sleep(260); ov.hidden = true; s.querySelector(':scope > .fg')?.classList.remove('show'); return; }
-        await wait(fast ? 500 : 1100); card.classList.add('read'); await wait(fast ? 220 : 420); ov.hidden = true;
-      },
       buzz(sel) { const el = q(sel); if (!el || quick) return; el.classList.remove('buzz'); void el.offsetWidth; el.classList.add('buzz'); },
       show(sel) { qa(sel).forEach(e => { e.hidden = false; }); },
       hide(sel) { qa(sel).forEach(e => { e.hidden = true; }); },
@@ -140,11 +133,7 @@ export function mountGuide(host, { storeNo = '', storeName = '', arg = null, mob
       remove(sel) { q(sel)?.remove(); },
       style(sel, k, v) { qa(sel).forEach(e => { e.style[k] = v; }); },
       view(id) { qa('.v').forEach(e => { e.hidden = e.id !== id; }); },
-      rail(name) { qa('.pc-row').forEach(e => e.classList.toggle('on', e.dataset.r === name)); },
-      tab(name) { qa('.ph-tabs span').forEach(e => e.classList.toggle('on', e.dataset.tab === name)); },
-      zoom(sel) { const t = q(sel), svg = t?.ownerSVGElement; if (!svg) return; const bx = t.getBBox(), vb = svg.viewBox.baseVal; svg.style.transformOrigin = `${(bx.x + bx.width / 2) / vb.width * 100}% ${(bx.y + bx.height / 2) / vb.height * 100}%`; svg.classList.add('zoom'); },
       toast(t, tone = '') { const el = q('.dvs')?.querySelector(':scope > .dv-toast'); if (!el) return; el.textContent = t; el.className = `dv-toast ${tone}`; el.hidden = false; },
-      pill(tone, t) { const el = q('.msync'); if (!el) return; el.hidden = tone === null; if (tone === null) return; el.className = `msync ${tone}`; el.querySelector('.mst').textContent = t; },
       // A real share code for this store (shared/qr.js), as the shelf card's Share draws it.
       qr(sel, kind, value) { const el = q(sel); if (el) el.innerHTML = qrSvg(kind === 'shelf' ? shelfLink(storeNo, value) : guideLink(storeNo, value), { cell: 3 }); },
     };

@@ -8,7 +8,7 @@ import { searchBarcode, barcodeCard } from '../../barcodesearch.js';
 import { haptic } from '../../device.js';
 import { $, ic, esc, vh, sub, today as storeToday, dayOf, status, fmtTime, timePassed, toast, mhead, mrows, mbig, mghost, mfoot, mscan } from '../../ui.js';
 import { isKeycode } from '../../../shared/keycode.js';
-import { RINGS } from '../../../shared/reducers/stockroom.js';
+import { RINGS, inSweep, sweepCount } from '../../../shared/reducers/stockroom.js';
 import { RING, ring, ageOf, kcCopy, ensureNames, nameHtml, nameOf, send } from './common.js';
 import { gs1Parse } from '../../../shared/gs1.js';
 import { ulid } from '../../../shared/ulid.js';
@@ -20,7 +20,7 @@ import { ask } from '../../sheet.js';
 
 let usedArg = null;
 const st = { sel: null, find: '', filter: 'all', sort: 'age', mode: 'scan', target: null, qty: 1, last: null, newRing: 'new-lines', placing: null, feed: 'all', tags: false, zone: '', bc: null };
-const LOG_NAME = { open: tx('Opened'), in: tx('Stock on'), out: tx('Stock off'), park: tx('Parked'), move: tx('Moved'), seen: tx('Seen'), found: tx('Found again'), missing: tx('Missing'), lost: tx('Lost'), retag: tx('Re-tagged'), close: tx('Closed') };
+const LOG_NAME = { open: tx('Opened'), in: tx('Stock on'), out: tx('Stock off'), park: tx('Parked'), move: tx('Moved'), seen: tx('Seen'), found: tx('Found again'), missing: tx('cage state::Missing'), lost: tx('Lost'), retag: tx('Re-tagged'), close: tx('Closed') };
 // A log line's detail as the reducer (shared/reducers/stockroom.js) wrote it, in the device's language: the ring a cage opened with, and the reducer's own few words.
 const logText = l => { const d = String(l.d || ''), miss = /^missed (\d+) sweeps$/.exec(d); return l.k === 'open' && RING[d] ? RING[d][0] : d === 'not seen on the sweep' ? tx('not seen on the sweep') : miss ? txn(+miss[1], 'missed {n} sweep', 'missed {n} sweeps') : d.replace(/ \(seen on a sweep\)$/, () => ` (${tx('seen on a sweep')})`).replace(/ \(item barcode ([^)]*)\)$/, (x, code) => ` (${tx('item barcode {code}', { code })})`); };
 const flag = c => c.lost ? `<span class="status bad">${tx('LOST')}</span>` : c.missing ? `<span class="status warn">${txn(c.missing.n, 'MISSING · {n} sweep', 'MISSING · {n} sweeps')}</span>` : '';
@@ -53,7 +53,7 @@ export default {
     const closed = m.all.filter(c => c.status === 'closed').length;
     return vh(tx('Cages'), sub(txn(m.open.length, '{n} cage open', '{n} cages open'), tx('{n} not seen this week', { n: m.stale.length }), tx('{n} closed', { n: closed })), `<button class="btn" data-act="tags">${ic('print')}${tx('Print tags')}</button><button class="btn primary" data-act="new">${ic('plus')}${tx('New cage')}</button>`, 'm-cages') +
       `<div class="grid2"><div class="lcol"><div class="card"><div class="ch"><h3>${tx('Open cages')}</h3><span class="pills" style="margin-left:auto"><button class="${st.sort === 'age' ? 'on' : ''}" data-act="sort" data-v="age">${tx('By age')}</button><button class="${st.sort === 'zone' ? 'on' : ''}" data-act="sort" data-v="zone">${tx('By zone')}</button><button class="${st.sort === 'type' ? 'on' : ''}" data-act="sort" data-v="type">${tx('By type')}</button></span></div>${chips}<div class="pcard clist" style="margin-top:10px">${rows}</div></div>` +
-      `<div class="card" style="margin-top:14px"><div class="ch"><h3>${tx('Sweeps')}</h3><span class="cs-dim">${tx('walk the room, scan every tag')}</span></div><div class="ad-kv"><span>${tx('Last sweep')}</span><b>${lastSweep(m.open)}</b><span>${tx('Not seen 7+ days')}</span><b>${m.stale.map(c => `<span class="mono">${esc(c.id)}</span>`).join(' · ') || tx('none')}</b><span>${tx('Closed')}</span><b>${txn(closed, '{n} cage emptied', '{n} cages emptied')}</b></div><p class="lbl">${tx('Sweeps are run from a phone: Cages › Sweep. A cage not seen on a sweep is missing, and lost after two in a row; one seen in another zone is moved there.')}</p>${sweepCard(ctx)}</div>${hasMap() ? `<div class="card cg-mapcard" style="margin-top:14px"><div class="ch"><h3>${tx('Back-of-house map')}</h3><span class="cs-dim">${tx('{n} of {total} cages placed', { n: m.open.filter(c => c.x != null).length, total: m.open.length })}${st.placing ? ` · ${tx('placing <b>{cage}</b>: tap where it stands', { cage: esc(st.placing) })}` : ''}</span></div>${mvMap({ id: 'cgmap' })}</div>` : ''}${feedCard(m)}</div>` +
+      `<div class="card" style="margin-top:14px"><div class="ch"><h3>${tx('Sweeps')}</h3><span class="cs-dim">${tx('walk the room, scan every tag')}</span></div><div class="ad-kv"><span>${tx('Last sweep')}</span><b>${lastSweep(ctx.store.get('cageSweeps'), ctx.store.get('cages'))}</b><span>${tx('Not seen 7+ days')}</span><b>${m.stale.map(c => `<span class="mono">${esc(c.id)}</span>`).join(' · ') || tx('none')}</b><span>${tx('Closed')}</span><b>${txn(closed, '{n} cage emptied', '{n} cages emptied')}</b></div><p class="lbl">${tx('Sweeps are run from a phone: Cages › Sweep. A cage not seen on a sweep is missing, and lost after two in a row; one seen in another zone is moved there.')}</p>${sweepCard(ctx)}</div>${hasMap() ? `<div class="card cg-mapcard" style="margin-top:14px"><div class="ch"><h3>${tx('Back-of-house map')}</h3><span class="cs-dim">${tx('{n} of {total} cages placed', { n: m.open.filter(c => c.x != null).length, total: m.open.length })}${st.placing ? ` · ${tx('placing <b>{cage}</b>: tap where it stands', { cage: esc(st.placing) })}` : ''}</span></div>${mvMap({ id: 'cgmap' })}</div>` : ''}${feedCard(ctx, m)}</div>` +
       `<div class="sidecol"><div class="cfind"><div class="search">${ic('search')}<input data-field="find" value="${esc(st.find)}" placeholder="${tx('Find a cage, zone or keycode…')}"></div></div>${found}<div class="card" id="newCage" ${st.newOpen ? '' : 'hidden'}><div class="ch"><h3>${tx('New cage')}</h3></div><div class="adj-form"><input class="ad-in mono" data-field="newid" placeholder="${tx('Cage tag e.g. BSN1240421')}" autocapitalize="characters"><span class="ringpick"><small>${tx('Ring')}</small>${RINGS.map(r => `<span data-act="newring" data-v="${r}" aria-label="${tx('{ring} ring', { ring: RING[r][0] })}" aria-pressed="${st.newRing === r}">${ring(r, st.newRing === r)}</span>`).join('')}</span><button class="btn primary" data-act="create">${ic('plus')}${tx('Open cage')}</button></div></div>${st.tags ? tagsCard(m) : ''}${detail}</div></div>`;
   },
   mobile(ctx) { return `<div id="cgmob">${mobile(ctx)}</div>`; },
@@ -90,7 +90,14 @@ export default {
     return [ctx.store.on('cages', () => { ensureNames(ctx, codes(), repaint); repaint(); }), ctx.store.on('cageSweeps', repaint), ctx.store.on('apnPairs', repaint)];
   },
 };
-function lastSweep(open) { const at = open.flatMap(c => c.sweeps.map(s => s.at)).sort().pop(); return at ? `${fmtTime(at)} · ${tx('{n} of {total} seen that day', { n: open.filter(c => c.sweeps.some(s => s.at.slice(0, 10) === at.slice(0, 10))).length, total: open.length })}` : tx('no sweep yet'); }
+// The last sweep as it counted itself: the one running (sweepCount, as the
+// phone counts it), else the last finished one (cage.sweepEnd's record),
+// never every sighting that day.
+function lastSweep(sw, cages) {
+  const cur = sw?.current, h = sw?.history?.at(-1);
+  if (cur) return `${fmtTime(cur.at)} · ${tx('{n} of {total} seen', sweepCount(cages, cur))}`;
+  return h ? `${fmtTime(h.at)} · ${tx('{n} of {total} seen', { n: h.seen, total: h.total })}` : tx('no sweep yet');
+}
 
 async function onClick(e, ctx, root, repaint) {
   const a = e.target.closest('[data-act]'); if (!a) return;
@@ -113,7 +120,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'feed') { st.feed = a.dataset.v; ctx.rerender(); }
   // phone
   else if (act === 'sw-start') { const id = ulid(); if (await send(ctx, 'cage.sweepStart', { sweep: id })) toast(tx('Sweep started: scan every cage tag you pass')); repaint(); }
-  else if (act === 'sw-end') { const cur = ctx.store.get('cageSweeps')?.current; if (!cur) return; const left = m.open.filter(c => !cur.seen[c.id]).length; if (left && !confirm(txn(left, '{n} cage has not been seen on this sweep. Finish anyway? It is marked missing.', '{n} cages have not been seen on this sweep. Finish anyway? They are marked missing.'))) return; if (await send(ctx, 'cage.sweepEnd', { sweep: cur.id })) { const h = ctx.store.get('cageSweeps').history.at(-1); toast(`${tx('Sweep done · {n} of {total} seen', { n: h.seen, total: h.total })}${h.moved.length ? ` · ${tx('{n} moved', { n: h.moved.length })}` : ''}${h.missing.length ? ` · ${tx('{n} missing', { n: h.missing.length })}` : ''}`); } repaint(); }
+  else if (act === 'sw-end') { const cur = ctx.store.get('cageSweeps')?.current; if (!cur) return; const k = sweepCount(ctx.store.get('cages'), cur), left = k.total - k.n; /* the ones cage.sweepEnd marks missing */ if (left && !confirm(txn(left, '{n} cage has not been seen on this sweep. Finish anyway? It is marked missing.', '{n} cages have not been seen on this sweep. Finish anyway? They are marked missing.'))) return; if (await send(ctx, 'cage.sweepEnd', { sweep: cur.id })) { const h = ctx.store.get('cageSweeps').history.at(-1); toast(`${tx('Sweep done · {n} of {total} seen', { n: h.seen, total: h.total })}${h.moved.length ? ` · ${tx('{n} moved', { n: h.moved.length })}` : ''}${h.missing.length ? ` · ${tx('{n} missing', { n: h.missing.length })}` : ''}`); } repaint(); }
   else if (act === 'zone') { const z = (prompt(tx('Which zone are you in? (aisle, bay or area: a cage scanned here that was parked elsewhere is moved here)'), st.zone) ?? st.zone).trim().toUpperCase(); st.zone = z; repaint(); }
   else if (act === 'bc-pick') { const g = st.bc?.gtin; if (g) { st.bc = null; await addLine(ctx, a.dataset.kc, repaint, g); } }
   else if (act === 'bc-type') { if (st.bc) { st.bc = { state: 'manual', gtin: st.bc.gtin, why: 'pick' }; repaint(); focusScan(); } }
@@ -189,13 +196,15 @@ function mobile(ctx) {
     const today = storeToday(), cur = ctx.store.get('cageSweeps')?.current;
     // Seen: while a sweep runs, on this sweep, as Finish counts it (cage.sweepEnd);
     // between sweeps, today and not missed by a sweep since. Missing and lost are Finish's marks.
+    // A running sweep lists the cages it counts (inSweep): one opened since it began is not on it.
     const ok = c => cur ? !!cur.seen[c.id] : !c.missing && c.sweeps.some(s => dayOf(s.at) === today);
     const row = c => ok(c) ? ['ok', 'check', tx('Seen')] : c.lost ? ['lost', 'alert', tx('Lost')] : c.missing ? ['miss', 'alert', tx('cage state::Missing')] : c.stale ? ['lost', 'alert', tx('Not seen {age}', { age: ageOf(c.seen) })] : ['todo', 'clock', tx('To find')];
-    const zones = {}; for (const c of m.open) (zones[c.location || tx('Not parked')] ||= []).push(c);
-    const seen = m.open.filter(ok).length, of = { n: seen, total: m.open.length };
+    const list = cur ? m.open.filter(c => inSweep(cur, c.id, c)) : m.open, since = m.open.length - list.length;
+    const zones = {}; for (const c of list) (zones[c.location || tx('Not parked')] ||= []).push(c);
+    const seen = list.filter(ok).length, of = { n: seen, total: list.length };
     const ctl = `<div class="card cg-swctl">${cur ? `<div><b>${tx('Sweep running')}</b> · ${tx('{n} of {total} seen', of)}<small>${tx('started {time}', { time: fmtTime(cur.at) })}${startedBy(ctx, cur)}</small></div><button class="btn sm primary" data-act="sw-end">${ic('check')}${tx('Finish sweep')}</button>` : `<div><b>${tx('No sweep running')}</b><small>${tx('Start one, then scan every cage tag in the room')}</small></div><button class="btn sm primary" data-act="sw-start">${ic('listcheck')}${tx('Start a sweep')}</button>`}<button class="btn sm" data-act="zone">${ic('pin')}${st.zone ? tx('Zone <b>{zone}</b>', { zone: esc(st.zone) }) : tx('Set zone')}</button></div>`;
     return mhead(tx('Cage sweep'), cur ? tx('{n} of {total} seen', of) : tx('{n} of {total} seen today', of)) + `<div class="cs">${cagetabs('sweep')}` + ctl +
-      `<div class="card swp-prog"><div class="swp-big"><b>${seen}</b><span>${tx('of {total} seen', { total: m.open.length })}</span></div><div class="track"><i style="width:${m.open.length ? Math.round(seen / m.open.length * 100) : 0}%"></i></div></div>` +
+      `<div class="card swp-prog"><div class="swp-big"><b>${seen}</b><span>${tx('of {total} seen', { total: list.length })}</span></div><div class="track"><i style="width:${list.length ? Math.round(seen / list.length * 100) : 0}%"></i></div>${since ? `<small class="cs-dim">${txn(since, '{n} cage opened since the sweep began is not on it.', '{n} cages opened since the sweep began are not on it.')}</small>` : ''}</div>` +
       mscan(tx('Scan a cage tag'), `<input data-field="msweep" autocomplete="off" autocapitalize="characters" placeholder="${tx('Cage tag')}" enterkeyhint="done">`, tx('Or tap Seen on the cage in front of you')) +
       `<div class="card swp-list">${Object.entries(zones).map(([z, cs]) => `<div class="swp-zone"><div class="swp-zh">${esc(z)}<span>${tx('{n} of {total}', { n: cs.filter(ok).length, total: cs.length })}</span></div>${cs.map(c => { const [cls, icon, say] = row(c); return `<div class="swp-row ${cls}"><span class="swp-ic">${ic(icon)}</span><span class="cg">${esc(c.id)}</span><span class="st">${say}${cls === 'ok' ? '' : ` <span class="btn sm" data-act="m-seen" data-id="${esc(c.id)}">${tx('Seen')}</span>`}</span></div>`; }).join('')}</div>`).join('') || `<div class="cs-dim" style="padding:12px">${tx('No open cages')}</div>`}</div></div>`;
   }
@@ -232,15 +241,19 @@ function nearestShelf(map, p) {
   }
   return best;
 }
+// Who did it: this device, else the role it signed in with (a device id
+// means nothing to a person); older lines without a role say nothing.
+const ROLE_SAY = { floor: tx('Floor'), stockroom: tx('Stockroom'), dock: tx('Back dock'), manager: tx('Manager'), owner: tx('Owner') };
+const whoDid = (ctx, l) => l.by && l.by === ctx.session?.device ? tx('this device') : ROLE_SAY[l.role] || '';
 // The activity feed: every open and recently closed cage's log, newest first.
-function feedCard(m) {
+function feedCard(ctx, m) {
   const rows = m.all.flatMap(c => (c.log || []).map(l => ({ ...l, id: c.id, ring: c.ring }))).filter(l => st.feed === 'all' || (st.feed === 'sel' ? l.id === st.sel : ['missing', 'lost', 'move', 'found'].includes(l.k))).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40);
   const tab = (v, l) => `<button class="${st.feed === v ? 'on' : ''}" data-act="feed" data-v="${v}">${l}</button>`;
-  return `<div class="card" style="margin-top:14px"><div class="ch"><h3>${tx('Activity')}</h3><span class="pills" style="margin-left:auto">${tab('all', tx('All'))}${tab('flags', tx('Moves & missing'))}${st.sel ? tab('sel', esc(st.sel)) : ''}</span></div><div class="cg-feed">${rows.map(l => `<div class="cg-ev ${l.k}"><span class="cs-dim">${fmtTime(l.at)}</span><span class="cg">${ring(l.ring)}${esc(l.id)}</span><b>${LOG_NAME[l.k] || l.k}</b><span>${esc(logText(l))}</span><span class="cs-dim">${esc(l.by || '')}</span></div>`).join('') || `<p class="lbl">${tx('Nothing yet. Opening, parking, scanning and sweeping cages all show here.')}</p>`}</div></div>`;
+  return `<div class="card" style="margin-top:14px"><div class="ch"><h3>${tx('Activity')}</h3><span class="pills" style="margin-left:auto">${tab('all', tx('All'))}${tab('flags', tx('Moves & missing'))}${st.sel ? tab('sel', esc(st.sel)) : ''}</span></div><div class="cg-feed">${rows.map(l => `<div class="cg-ev ${l.k}"><span class="cs-dim">${fmtTime(l.at)}</span><span class="cg">${ring(l.ring)}${esc(l.id)}</span><b>${LOG_NAME[l.k] || l.k}</b><span>${esc(logText(l))}</span><span class="cs-dim">${whoDid(ctx, l)}</span></div>`).join('') || `<p class="lbl">${tx('Nothing yet. Opening, parking, scanning and sweeping cages all show here.')}</p>`}</div></div>`;
 }
 function sweepCard(ctx) {
   const sw = ctx.store.get('cageSweeps') || { current: null, history: [] }, cur = sw.current;
-  const now = cur ? `<div class="cg-sweep live">${tx('<b>Sweep running</b> since {time}', { time: fmtTime(cur.at) })}${startedBy(ctx, cur)} · ${tx('{n} of {total} seen', { n: Object.keys(cur.seen).length, total: cur.open })}${cur.moved.length ? ` · ${tx('{n} moved', { n: cur.moved.length })}` : ''}${cur.found.length ? ` · ${tx('{n} found again', { n: cur.found.length })}` : ''}</div>` : '';
+  const now = cur ? `<div class="cg-sweep live">${tx('<b>Sweep running</b> since {time}', { time: fmtTime(cur.at) })}${startedBy(ctx, cur)} · ${tx('{n} of {total} seen', sweepCount(ctx.store.get('cages'), cur))}${cur.moved.length ? ` · ${tx('{n} moved', { n: cur.moved.length })}` : ''}${cur.found.length ? ` · ${tx('{n} found again', { n: cur.found.length })}` : ''}</div>` : '';
   const hist = sw.history.slice(-5).reverse().map(h => `<div class="cg-sweep"><span><b>${fmtTime(h.at)}</b> · ${tx('{n} of {total} seen', { n: h.seen, total: h.total })}</span>${h.moved.length ? `<span>${tx('moved: {list}', { list: h.moved.map(x => `<span class="mono">${esc(x.id)}</span> ${esc(x.from)} → ${esc(x.to)}`).join(', ') })}</span>` : ''}${h.missing.length ? `<span class="warn">${tx('missing: {list}', { list: h.missing.map(esc).join(', ') })}</span>` : ''}${h.lost.length ? `<span class="bad">${tx('lost: {list}', { list: h.lost.map(esc).join(', ') })}</span>` : ''}${h.found.length ? `<span class="good">${tx('found: {list}', { list: h.found.map(esc).join(', ') })}</span>` : ''}</div>`).join('');
   return now || hist ? `<div class="cg-sweeps">${now}${hist}</div>` : '';
 }

@@ -124,7 +124,6 @@ export default {
   "Where are you working?": "Bạn đang làm ở khu nào?",
   "Pick your area to begin.": "Chọn khu vực để bắt đầu.",
   "Signed in as manager: every area is open.": "Đã đăng nhập là quản lý: mọi khu vực đều mở.",
-  "Stockroom and Back dock take their crew code once on this device.": "Kho và Khu nhận hàng chỉ hỏi mã nhóm một lần trên thiết bị này.",
   "Not on for this store": "Chưa bật cho cửa hàng này",
   "All of {group}": "Toàn bộ {group}",
   "All {n}": "Cả {n}",

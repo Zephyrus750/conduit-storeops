@@ -5,7 +5,7 @@
 // Welcome back, sign out. Three What ifs play on the same phone.
 // The day: Busselton 1241 (the guide's day, Sunday 25 October 2026), a crew
 // phone at the start of the shift. Codes are examples (data), not the store's.
-// Every class here starts si2- (scripts/guide/draft/css/signin.css).
+// Every class here starts si2- (styles/guide.css).
 import { tx, txn, LANGS, lang } from '../../i18n.js';
 import { fmtDate } from '../../ui.js';
 import { ai, phone2, sheet, unsheet, toast2 } from '../frames.js';

@@ -6,7 +6,7 @@
 //   readOffsiteSheets(sheets)          { rows, diag } from the off-site master list (.xlsx)
 //   guessColumns(header)               { pallet, key, desc, qty, dept } column indexes (-1 = none)
 //   readGeneric(rows, map)             { pallets: [{ pid, items: [{ k, d, q, dept }] }], skipped }
-//   registerSummary(rows, today)       { live, received, fixtures, nextCallback, overdue, dueSoon, byCallback }
+//   registerSummary(rows, today)       { live, received, called, fixtures, nextCallback, overdue, dueSoon, byCallback }
 //   consolidate(pallets)               [[dept, units, lines]] largest first
 //   heatBands(deptUnits, shelvesOf)    Map shelf → band 1..5 (sqrt of units per shelf)
 //   loadTrends(loads, { weeks, today }) { weeks: [{ wk, cartons, units, loads, depts }], callouts }
@@ -99,14 +99,15 @@ export function readGeneric(rows, map) {
 // fortnight).
 export function registerSummary(rows, today) {
   const list = Object.values(rows || {}), live = list.filter(r => !r.rec), soon = addDays(today, 14);
-  const withCb = live.filter(r => r.cb).sort((a, b) => a.cb.localeCompare(b.cb) || a.pid.localeCompare(b.pid, undefined, { numeric: true }));
+  // A pallet called back on a planned truck is on its way: not overdue, not due.
+  const withCb = live.filter(r => r.cb && !r.call).sort((a, b) => a.cb.localeCompare(b.cb) || a.pid.localeCompare(b.pid, undefined, { numeric: true }));
   return {
-    live: live.length, received: list.length - live.length,
+    live: live.length, received: list.length - live.length, called: live.filter(r => r.call).length,
     fixtures: live.filter(isFixture).length,
     nextCallback: withCb.find(r => r.cb >= today)?.cb || null,
     overdue: withCb.filter(r => r.cb < today),
     dueSoon: withCb.filter(r => r.cb >= today && r.cb <= soon),
-    byCallback: [...withCb, ...live.filter(r => !r.cb).sort((a, b) => (a.sent || '').localeCompare(b.sent || ''))],
+    byCallback: [...withCb, ...live.filter(r => !r.cb || r.call).sort((a, b) => (a.sent || '').localeCompare(b.sent || ''))],
   };
 }
 export const isFixture = r => /fixture/i.test(r.req || '') || /^fixtures/i.test(r.title || '');

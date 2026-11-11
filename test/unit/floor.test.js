@@ -79,8 +79,10 @@ test('issues: log, progress, close, reopen bumps recur and keeps the log', () =>
   assert.equal(apply(s, ev('issue.progress', k, {})), null);
   assert.equal(apply(s, ev('issue.close', k, { note: 'plumber fixed' })), null);
   assert.equal(s.issues.m1abc.status, 'completed');
-  assert.equal(apply(s, ev('issue.reopen', k, {})), null);
+  assert.equal(apply(s, ev('issue.reopen', k, {}, { at: '2026-09-10T08:00:00+08:00' })), null);
   assert.equal(s.issues.m1abc.status, 'open'); assert.equal(s.issues.m1abc.recur, 1);
+  assert.equal(s.issues.m1abc.reopened, '2026-09-10T08:00:00+08:00', 'the repair target restarts from the reopen (decision 41)');
+  assert.equal(s.issues.m1abc.created, '2026-09-07T08:00:00+08:00', 'Logged stays the first day');
   assert.deepEqual(s.issues.m1abc.log.map(l => l.a), ['Logged', 'Edited', 'Maintenance done', 'Completed', 'Reopened (recurring)']);
 });
 

@@ -5,7 +5,8 @@
 //   cages        cage → { ring, location, x, y, floor (parked on the map), items: keycode → qty, sweeps[], status,
 //                created, seen, closed, log: [{ at, k, d, by }] (open, in, out, park, move, seen, found, missing, lost,
 //                retag, close), missing: { since, n } | null, lost }
-//   cageSweeps   current: { id, at, by, seen: cage → at, moved, found, open } | null, history: [summary] (last 20)
+//   cageSweeps   current: { id, at, by, seen: cage → at, moved, found } | null, history: [summary] (last 20);
+//                which cages a sweep counts is inSweep() / sweepCount(), the one rule for the phone, the PC and the summary
 //   apnPairs     item barcode (GTIN, 13 or 14 digits) → { kc, at, by }
 //   backfill     subs: `${bay}:${date}` → { bay, date, status, codes: code → { scanned, at, n (first scanned: time and order) }, incorrect: [],
 //                system: [codes] | null, removed: code → at (tombstones), metrics, statusAt, reopenedAt, readyAt, submittedDoneAt, autoSubmitted,
@@ -67,7 +68,9 @@ export const stockroomReducers = {
   'cage.scan'(s, e) {
     const c = openCage(s, e); if (c.code) return c;
     const kc = e.payload.keycode;
-    if (!/^\d{6,13}$/.test(kc)) return reject('invalid_event', 'keycode must be 6 to 13 digits');
+    // A keycode is 6 to 9 digits (shared/keycode.js); an item barcode goes on
+    // as its keycode, with the barcode in apn (decision 41, 10 Nov 2026).
+    if (!isKeycode(kc)) return reject('invalid_event', 'keycode must be 6 to 9 digits');
     if (!Number.isInteger(e.payload.qty) || !e.payload.qty || Math.abs(e.payload.qty) > 9999) return reject('invalid_event', 'qty must be a whole number from -9999 to 9999, not 0');
     if (!c.items[kc] && Object.keys(c.items).length >= CAGE_LINES_MAX) return reject('invalid_event', `a cage holds at most ${CAGE_LINES_MAX} lines`);
     c.items[kc] = (c.items[kc] || 0) + e.payload.qty;
@@ -121,19 +124,19 @@ export const stockroomReducers = {
   'cage.sweepStart'(s, e) {
     const sw = (s.cageSweeps ||= { current: null, history: [] }), id = String(e.entity.sweep);
     if (sw.current && Date.parse(e.at) - Date.parse(sw.current.at) < 12 * 3600e3) return reject('sweep_open', `a sweep started at ${sw.current.at.slice(11, 16)} is still running: finish it first`);
-    sw.current = { id, at: e.at, by: e.actor?.device || null, seen: {}, moved: [], found: [], open: Object.keys(s.cages).filter(k => s.cages[k].status === 'open').length };
+    sw.current = { id, at: e.at, by: e.actor?.device || null, seen: {}, moved: [], found: [] };
     return null;
   },
   'cage.sweepEnd'(s, e) {
     const sw = (s.cageSweeps ||= { current: null, history: [] }), cur = sw.current;
     if (!cur || cur.id !== String(e.entity.sweep)) return reject('not_found', 'no sweep is running under that id');
-    const missing = [], lost = [];
+    const missing = [], lost = [], count = sweepCount(s.cages, cur);
     for (const [id, c] of Object.entries(s.cages)) {
-      if (c.status !== 'open' || cur.seen[id] || Date.parse(c.created) > Date.parse(cur.at)) continue;
+      if (!inSweep(cur, id, c) || cur.seen[id]) continue;
       c.missing = { since: c.missing?.since || cur.at, n: (c.missing?.n || 0) + 1 }; missing.push(id);
       if (c.missing.n >= 2 && !c.lost) { c.lost = true; lost.push(id); cageLog(c, e, 'lost', `missed ${c.missing.n} sweeps`); } else if (!c.lost) cageLog(c, e, 'missing', 'not seen on the sweep');
     }
-    sw.history.push({ id: cur.id, at: cur.at, ended: e.at, by: cur.by, seen: Object.keys(cur.seen).length, total: Object.values(s.cages).filter(c => c.status === 'open').length, moved: cur.moved, found: cur.found, missing, lost });
+    sw.history.push({ id: cur.id, at: cur.at, ended: e.at, by: cur.by, seen: count.n, total: count.total, moved: cur.moved, found: cur.found, missing, lost });
     if (sw.history.length > 20) sw.history.splice(0, sw.history.length - 20);
     sw.current = null;
     return null;
@@ -394,7 +397,9 @@ export const stockroomReducers = {
 };
 
 // ── helpers ────────────────────────────────────────────────────────────
-function cageLog(c, e, k, d) { const l = (c.log ||= []); l.push({ at: e.at, k, d: String(d || '').slice(0, 80), by: e.actor?.device || null }); if (l.length > CAGE_LOG) l.splice(0, l.length - CAGE_LOG); }
+// Each line keeps who did it: the device, and the role it signed in with,
+// since a device id means nothing to a person (the Activity feed shows the role).
+function cageLog(c, e, k, d) { const l = (c.log ||= []); l.push({ at: e.at, k, d: String(d || '').slice(0, 80), by: e.actor?.device || null, role: e.actor?.owner ? 'owner' : e.actor?.role || null }); if (l.length > CAGE_LOG) l.splice(0, l.length - CAGE_LOG); }
 function openCage(s, e) {
   const c = s.cages[e.entity.cage];
   if (!c || c.status === 'closed') return reject('not_found', `cage ${e.entity.cage} is not open`);
@@ -429,3 +434,13 @@ export function metrics(sub) {
   return backfillMetrics(scanned, sub.system || Object.keys(sub.codes), sub.incorrect);
 }
 const numOrNull = v => v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
+
+// Which cages a sweep counts, one rule for the phone, the PC, Finish's confirm
+// and the sweep's summary (decision 41): the open cages it has to find, those
+// open when it began (Finish marks the unseen ones missing), and any opened
+// since that it has seen anyway. A cage opened during the sweep is not missed.
+export const inSweep = (cur, id, c) => c.status === 'open' && (!!cur.seen[id] || Date.parse(c.created) <= Date.parse(cur.at));
+export function sweepCount(cages, cur) {
+  const ids = Object.keys(cages || {}).filter(id => inSweep(cur, id, cages[id]));
+  return { n: ids.filter(id => cur.seen[id]).length, total: ids.length };
+}

@@ -10,7 +10,6 @@ export default {
   "Stockroom": "Lager",
   "Back dock": "Warenannahme",
   "{area} code": "Code für {area}",
-  "The {area} crew code opens this workspace on this device until it is signed out. A manager code here opens every area; managers can also sign in as Manager to skip this.": "Der Teamcode für {area} öffnet diesen Bereich auf diesem Gerät, bis es abgemeldet wird. Ein Manager-Code öffnet hier alle Bereiche; Manager können sich auch als Manager anmelden und diesen Schritt überspringen.",
   "Code": "Code",
   "Open {area}": "{area} öffnen",
   "Not now": "Nicht jetzt",

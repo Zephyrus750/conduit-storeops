@@ -16,6 +16,14 @@
 //   phaseCounts(t)       { pallets, done, cartons, decanted, noCartons } for the session
 
 export const PHASES = ['planned', 'receiving', 'received', 'decanting', 'cleared', 'closed'];
+// How each step of the phase track reads for a truck in phase ph: 'dn' done,
+// 'on' the phase it is in, 'nx' next up, '' not reached. A received truck
+// waiting for its decant has Received done and Decanting next up (the decant
+// starts in Decant, at Take 5), so the track never says it is still receiving.
+export function phaseSteps(ph) {
+  const at = PHASES.indexOf(ph);
+  return PHASES.map((p, i) => ph === 'received' ? (i <= at ? 'dn' : i === at + 1 ? 'nx' : '') : i < at ? 'dn' : i === at ? 'on' : '');
+}
 
 const inSession = t => Object.values(t?.pallets || {}).filter(p => !p.excluded);
 
