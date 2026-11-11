@@ -683,8 +683,34 @@ this device's catalogue cache (`installProductCard` in
 
 The colour scheme is fixed for every store device (managers share PCs):
 charcoal rail and phone bars with the Lagoon accent, set in `js/prefs.js`.
-The owner console keeps charcoal with Signal orange. Display size and the
-collapsed rail are the only per-device appearance settings.
+The owner console keeps charcoal with Signal orange. Per device: display
+size, the collapsed rail, Appearance (Light, Dark or Match this device; Light
+until someone changes it on that device, decision 44) and, on a PC, Density
+(Comfortable or Compact, `.frame.dense`).
+
+What needs someone is worked out once, in `js/alerts.js` (`waiting()`), from
+the store's own state: the rail's counts and the alerts bell in the header
+(`.hbell`, `.mbell` on a phone) read the same list, so they never disagree.
+Red is act now (trucks past their ETA, recalls, overdue checks, cages not
+seen for a week, changes waiting on the worker), amber is today (trucks
+without a manifest, maintenance past its days, checklists past their time,
+requests the owner answered), and routine work (the morning report, bays to
+review) counts on the rail only (decision 43). A line opens its screen; a
+phone sends a desk-only one to its phone screen (`PHONE_GO`).
+
+A manager's phone starts on Today (`js/views/mtoday.js`, decision 45): what
+needs them (the bell's list), then the Floor, Stockroom and Back dock with
+the day's numbers and the store's devices. Its strip (`STRIP.today`) is
+Today · Floor · Stock · Dock · More and stays while the manager moves between
+areas; Location refresh adds the focus, progress by department and
+refreshes by phone, and the Back dock home a manager card (pace against the
+goal, each person's rate against their 28 days, hold-ups, late manifests,
+roles, reopening a truck finished today).
+
+Every printed sheet (`printSheet` in `js/print.js`) has one look: the title,
+the store, when it was printed and a QR code back to the screen it came from
+(`?store=…&view=…`, `viewLink` in `js/share.js`, which `takeDeepLink` opens),
+and on every page a footer with the store, the title and page n of m.
 
 Floor views live on real data: Store map, Pick list, Location refresh, Label
 integrity, Emergency, Maintenance, Stocktake, plus Dashboard (its Back dock
