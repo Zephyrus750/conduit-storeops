@@ -1029,7 +1029,7 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .st-loc.counting { border-color: #EAB308; background: rgba(234,179,8,.14); }
 .st-past .nm small { display: block; color: var(--dim); font-size: var(--fs-xs); }
 /* Shelf scan field: typed, wedge or camera */
-.shelfscan { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; padding: 4px 4px 4px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card, #fff); }
+.shelfscan { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; padding: 4px 4px 4px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card, var(--panel)); }
 .shelfscan > svg.i { width: 16px; height: 16px; color: var(--dim); flex: none; }
 .shelfscan input { flex: 1; min-width: 0; border: 0; background: transparent; font: var(--fw-semi) var(--fs-md)/1.2 var(--mono, ui-monospace, monospace); padding: 8px 0; color: var(--ink); outline: none; text-transform: uppercase; }
 .shelfscan .mv-cam { flex: none; }
@@ -1077,7 +1077,7 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .li-ws { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-weight: var(--fw-bold); font-size: var(--fs-md); }
 .li-shelved { font-size: var(--fs-sm); color: var(--dim); margin: 4px 2px 8px; }
 /* Maintenance: pictogram list pins, duplicate warning, overdue */
-.mt-pin { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid; display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--card, #fff); }
+.mt-pin { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid; display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--card, var(--panel)); }
 .mt-gl { width: 16px; height: 16px; }
 .mt-dup { display: flex; gap: 8px; align-items: flex-start; background: rgba(217,119,6,.1); color: #8a5a10; border-radius: 10px; padding: 8px 10px; font-size: var(--fs-sm); margin-bottom: 10px; }
 .mt-dup svg.i { width: 15px; height: 15px; flex: none; margin-top: 1px; }
@@ -1089,7 +1089,7 @@ a.nm-ok:hover { color: var(--accent-ink); text-decoration: underline; }
 .sh-qr { display: flex; justify-content: center; }
 .sh-qr svg.qr { width: min(240px, 70vw); height: auto; border-radius: 10px; border: 1px solid var(--line); }
 .sh-url { font-size: var(--fs-xs); word-break: break-all; background: var(--chip); border-radius: 8px; padding: 8px; color: var(--dim); }
-.mv-share { margin-left: auto; flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--card, #fff); display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
+.mv-share { margin-left: auto; flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--card, var(--panel)); display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
 .mv-share svg.i { width: 17px; height: 17px; }
 /* Store details */
 .si-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -3117,7 +3117,7 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .eq-pt { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: var(--fs-md); color: var(--ink); }
 .eq-pt > span:first-child { flex: 1; min-width: 0; }
 .eq-okf { display: flex; gap: 4px; flex: none; }
-.eq-okf button { font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-bold); min-width: 54px; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--card, #fff); color: var(--ink2); cursor: pointer; }
+.eq-okf button { font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-bold); min-width: 54px; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--card, var(--panel)); color: var(--ink2); cursor: pointer; }
 .eq-okf button.on.ok { background: #16A34A; border-color: #16A34A; color: #fff; }
 .eq-okf button.on.fail { background: #DC2626; border-color: #DC2626; color: #fff; }
 .eq-pt.dark { border-top-color: #222C3D; color: #E5E7EB; }
@@ -4495,13 +4495,13 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .top .btn.hbell { position: relative; width: 38px; padding: 8px 0; justify-content: center; flex: none; color: var(--ink2); }
 .top .btn.hbell svg.i { margin: 0; }
 .top .btn.hbell.some { color: var(--amber-ink, #B45309); }
-.top .btn.hbell.bad { color: #B91C1C; }
+.top .btn.hbell.bad { color: var(--red-ink); }
 .frame.adm .top .btn.hbell, .frame.adm .m-appbar .mbell { display: none; }
 .bell-n { position: absolute; top: -6px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #D97706; color: #fff; font: var(--fw-bold) var(--fs-xs)/18px inherit; text-align: center; font-variant-numeric: tabular-nums; }
 .bad > .bell-n { background: #DC2626; }
 .bell-n[hidden] { display: none; }
 .m-appbar .mbell { position: relative; display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: #B45309; }
-.m-appbar .mbell.bad { color: #B91C1C; }
+.m-appbar .mbell.bad { color: var(--red-ink); }
 .m-appbar .mbell[hidden] { display: none; }
 .frame.rail-ink .m-appbar .mbell { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); color: #FCD34D; }
 .frame.rail-ink .m-appbar .mbell.bad { color: #FCA5A5; }
@@ -4511,8 +4511,8 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .al-row > span { flex: 1; min-width: 0; }
 .al-row > svg.i:first-child { width: 18px; height: 18px; flex: none; }
 .al-row > svg.i:last-child { width: 14px; height: 14px; color: var(--faint); flex: none; transform: rotate(-90deg); }
-.al-row.bad { border-left-color: #DC2626; } .al-row.bad > svg.i:first-child { color: #B91C1C; }
-.al-row.warn { border-left-color: #D97706; } .al-row.warn > svg.i:first-child { color: #B45309; }
+.al-row.bad { border-left-color: #DC2626; } .al-row.bad > svg.i:first-child { color: var(--red-ink); }
+.al-row.warn { border-left-color: #D97706; } .al-row.warn > svg.i:first-child { color: var(--amber-ink); }
 .al-row.info { border-left-color: var(--line); font-weight: var(--fw-regular); color: var(--ink2); }
 .al-row:hover, .al-row:focus-visible { background: var(--ground); }
 .al-sec { margin: 16px 0 6px; font-size: var(--fs-xs); font-weight: var(--fw-bold); letter-spacing: .07em; text-transform: uppercase; color: var(--dim); }
@@ -4525,7 +4525,7 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .sri-shrink .ch { flex-wrap: wrap; gap: 8px; }
 .sri-sh-tot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin: 4px 0 12px; font-size: var(--fs-md); color: var(--dim); }
 .sri-sh-tot b { display: block; font-size: 22px; font-weight: var(--fw-bold); color: var(--ink); font-variant-numeric: tabular-nums; }
-.sri-sh-tot .sh-a b { color: #B45309; } .sri-sh-tot .sh-v b { color: var(--accent-ink); }
+.sri-sh-tot .sh-a b { color: var(--amber-ink); } .sri-sh-tot .sh-v b { color: var(--accent-ink); }
 .sri-sh-bars { display: flex; align-items: stretch; gap: 8px; height: 140px; padding: 0 2px; border-bottom: 1px solid var(--line); }
 .sri-sh-bars .wk { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .sri-sh-bars .pair { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 3px; }
@@ -4581,7 +4581,7 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .mt-lock { margin: 0; font-size: var(--fs-md); color: var(--dim); }
 .mt-r { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: var(--fs-md); color: var(--ink2); border-top: 1px solid var(--line-soft); }
 .mt-r b { font-weight: var(--fw-bold); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
-.mt-r b.good { color: #15803D; } .mt-r b.warn { color: #B45309; } .mt-r b.bad { color: #B91C1C; }
+.mt-r b.good { color: var(--green-ink); } .mt-r b.warn { color: var(--amber-ink); } .mt-r b.bad { color: var(--red-ink); }
 /* Refresh on a manager's phone: the focus chips. */
 .rf-focus-set { display: flex; flex-wrap: wrap; gap: 6px; }
 .rf-fchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px 5px 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink2); font: var(--fw-semi) var(--fs-sm) inherit; }
@@ -4592,7 +4592,7 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .bdm-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .bdm-kpis > div { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: var(--ground); min-width: 0; }
 .bdm-kpis small { font-size: var(--fs-xs); color: var(--dim); } .bdm-kpis b { font-size: var(--fs-md); font-variant-numeric: tabular-nums; } .bdm-kpis span { font-size: var(--fs-xs); color: var(--dim); }
-.bdm-kpis b.good { color: #15803D; } .bdm-kpis b.warn { color: #B45309; } .bdm-kpis b.bad { color: #B91C1C; }
+.bdm-kpis b.good { color: var(--green-ink); } .bdm-kpis b.warn { color: var(--amber-ink); } .bdm-kpis b.bad { color: var(--red-ink); }
 .bdm-pp { display: flex; flex-direction: column; gap: 6px; }
 .bdm-p { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: var(--fs-md); }
 .bdm-p .bar { position: relative; height: 8px; border-radius: 4px; background: var(--ground); }
@@ -4748,6 +4748,77 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .wb-grid { grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr)); }
 /* Receiving's dock key. */
 .bdr-legend i.k-done { background: #C9F0D8; border: 1px solid #86D9A8; }
-.bdr-legend i.k-decant { background: #fff; border: 2px solid var(--accent); }
-.bdr-legend i.k-carry { background: #fff; border: 2px solid #7C3AED; }
-.bdr-legend i.k-over { background: #fff; border: 2px solid #DC2626; }
+.bdr-legend i.k-decant { background: var(--panel); border: 2px solid var(--accent); }
+.bdr-legend i.k-carry { background: var(--panel); border: 2px solid #7C3AED; }
+.bdr-legend i.k-over { background: var(--panel); border: 2px solid #DC2626; }
+
+/* ── Dark appearance (tidy-up batch 4) ──────────────────────────────────
+   Each screen's own tints in the shell's dark palette (shell.css
+   .frame.dark): a pale fill becomes a deep one, a dark ink a light one.
+   Paper stays light: print is always black on white. */
+/* A full-size empty state straight on the page (a phone's screen, the TV
+   boards): its icon tile takes the panel colour, not the page's. */
+.content.mv > .empty > svg.i, .content.mv > div:not(.card) > .empty > svg.i, .content.mv > div > .ofp-mob > .empty > svg.i, .dk-body > .empty > svg.i, .scr > .empty > svg.i { background: var(--panel); }
+/* Toasts sit on the page, outside the frame: a raised panel in the dark. */
+:root.dark .toast:not(.bad, .warn) { background: #1F2937; color: #F3F4F6; box-shadow: 0 0 0 1px #374151, 0 8px 24px -8px rgba(0, 0, 0, .6); }
+/* Sheets: an edge against the dimmed page. */
+.frame.dark .sht { box-shadow: 0 0 0 1px var(--line), 0 24px 64px -16px rgba(0, 0, 0, .7); }
+.frame.dark .sht-back { background: rgba(0, 0, 0, .55); }
+/* Good, warn and bad tints. */
+.frame.dark :is(.bdk-vrow.ok, .bdk-clock.pc-on, .bdk-clock.pc-under, .rd-h.ok, .fverdict.add, .pb-state.ok, .fm-desk .fmx-diff.ok, .dkt-st.st-done, .dkt-mk.st-done) { background: var(--tone-g); color: var(--tone-g-ink); }
+.frame.dark :is(.bdr-chip.ok, .lp-bay, .lp-sent, .focus-card.done) { background: #15562C; border-color: #2E8A4E; color: #92E7B2; }
+.frame.dark :is(.bdr-chip.ok .v, .pb-state.ok div b, .bp-verdict.ok, .fside-t.add) { color: #92E7B2; }
+.frame.dark .inp-saved { color: var(--green-ink); }
+.frame.dark :is(.bdk-vrow.warn, .bdk-clock.pc-near, .dkt-st.st-paused, .dkt-mk.st-paused, .dkt-fc) { background: var(--tone-w); color: var(--tone-w-ink); }
+.frame.dark :is(.bdk-sus, .gapnote.warn, .nt-warn, .lp-ans.warn, .bdm-late) { background: #3A2E0B; border-color: #8A772E; color: #FDE68A; }
+.frame.dark .btn.lit { background: #3A2E0B; border-color: #B45309; color: #FDE68A; }
+.frame.dark :is(.bp-verdict, .dkt-fl > div:not(.dkt-lbl)) { color: #FBBF24; }
+.frame.dark :is(.bdk-vrow.bad, .bdk-clock.pc-over, .fverdict.del, .pb-state.bad, .dkt-fc.off) { background: var(--tone-b); color: var(--tone-b-ink); }
+.frame.dark :is(.bdr-haltrow, .bdm-halt, .nt-warn.bad, .lp-ans.bad, .focus-card.bad, .rc-do) { background: #3B1414; border-color: #8A2E2E; color: #FECACA; }
+.frame.dark .bdr-haltrow.dim { background: var(--ground); color: var(--dim); }
+.frame.dark .pb-state.bad div b { color: #FECACA; }
+.frame.dark .mt-dup.eq-out { background: rgba(220, 38, 38, .18); color: #FCA5A5; }
+/* Trucks not coming to the dock: blue coming back, orange off-site, violet diverted. */
+.frame.dark .rt-effect { background: #14391F; color: #BBF7D0; }
+.frame.dark :is(.bdr-haltrow.planned, .rvp-msg.back, .rt-effect.back, .pland) { background: #152338; border-color: #2E4A7A; color: #BFDBFE; }
+.frame.dark :is(.pslot.routed.offsite, .db-c.routed.offsite, .mfd-where.offsite, .rt-effect.offsite, .off-bar) { background: #3A2410; border-color: #7A4A1E; color: #FED7AA; }
+.frame.dark :is(.pslot.routed.diverted, .db-c.routed.diverted, .mfd-where.diverted, .rt-effect.diverted, .pland.diverted, .ofg-note) { background: #261A47; border-color: #4C3A8A; color: #DDD6FE; }
+.frame.dark :is(small.called, .ofg-pr.called .ofg-pl) { color: #93C5FD; }
+.frame.dark :is(.ofg-pl, .off-what span) { color: #FDBA74; }
+.frame.dark :is(.dkt-co, .dkt-fc.co) { color: #C4B5FD; }
+.frame.dark .dkt-fc.co { background: #261A47; }
+/* Red words that were the light theme's dark red. */
+.frame.dark :is(.c-red, .mt-od, .sri-soh.r, .tr-loc .bad, .tr-dept-row .bad, .ss-locb.bad, .cg-ev.lost b, .cg-sweep .bad, .ad-alert.bad, .inv-row .cb.late input, .inv-row .cb.late small, .ofp-m.late .f input, .inv-ev.clr > b:first-child, .btn.lp-no, .lp-sum b.bad, .lp-kpis b.bad, .mb-chk.bad, .fs-r.bad b, .ofg-r .cb.late input, .ofg-pl.late, .plife .li .nm b.bad, .m-more .mo-foot button.out, .fside-t.del) { color: #F87171; }
+/* Resources: a document's cover in its kind's colour, as the kind chip. */
+.frame.dark .rs-cover i { background: #334155; color: #E2E8F0; }
+.frame.dark :is(.rs-cover.pdf) i { background: #4C1D1D; color: #FCA5A5; }
+.frame.dark :is(.rs-cover.doc, .rs-cover.docx) i { background: #1E3A5F; color: #93C5FD; }
+.frame.dark :is(.rs-cover.xls, .rs-cover.xlsx, .rs-cover.csv) i { background: #14532D; color: #86EFAC; }
+.frame.dark :is(.rs-cover.ppt, .rs-cover.pptx) i { background: #4A2511; color: #FDBA74; }
+.frame.dark :is(.rs-cover.png, .rs-cover.jpg, .rs-cover.jpeg, .rs-cover.gif, .rs-cover.webp) i { background: #3B2A63; color: #C4B5FD; }
+.frame.dark .rs-cover.link i { background: #134E4A; color: #5EEAD4; }
+/* Label integrity's map: the shelves still to check go slate, as the
+   other modes' greyed-out shelves do; checked, wrong and selected keep
+   their meaning in deep fills. Each rule mirrors the light one, so the
+   department being worked still shows its own colours. Fill and stroke
+   only: nothing here re-lays out the map. */
+.frame.dark .map.real.li .shelf-group .shelf { fill: #4B5563 !important; stroke: #5B6474 !important; }
+.frame.dark .map.real.li .shelf-badges .sb-bg { fill: #6B7280 !important; }
+.frame.dark .map.real.li[data-deptzoom] .shelf-group:not([data-dim]) .shelf { fill: revert-layer !important; stroke: #A78BFA !important; stroke-width: 2 !important; fill-opacity: revert-layer !important; }
+.frame.dark .map.real.li[data-deptzoom] .shelf-group:not([data-dim]) .shelf-badges .sb-bg, .frame.dark .map.real.li[data-deptzoom] .shelf-badges .sb-bg:not([data-dim]) { fill: revert-layer !important; }
+.frame.dark .map.real.li .shelf-group[data-mark="checked"] .shelf { fill: #15562C !important; stroke: #4ADE80 !important; }
+.frame.dark .map.real.li .shelf-group[data-mark="checked"] .shelf-label { fill: #BBF7D0 !important; }
+.frame.dark .map.real.li .shelf-group[data-mark="wrong"] .shelf { fill: #561515 !important; stroke: #F87171 !important; }
+.frame.dark .map.real.li .shelf-group[data-mark="wrong"] .shelf-label { fill: #FECACA !important; }
+.frame.dark .map.real.li .shelf-group[data-mark="focus"] .shelf { fill: #2E1F5E !important; stroke: #A78BFA !important; }
+.frame.dark .map.real.li .shelf-group[data-mark="focus"] .shelf-label { fill: #DDD6FE !important; }
+.frame.dark .map.real.li .shelf-group[data-mark="cand"] .shelf { stroke: #94A3B8 !important; }
+.frame.dark .map.real.li .shelf-group[data-sel] .shelf { stroke: #F9FAFB !important; }
+.frame.dark .map.real.li .shelf-group[data-flash][data-mark] .shelf { stroke: #f97316 !important; }
+.frame.dark .mapleg i.k-checked { background: #15562C; border-color: #4ADE80; }
+.frame.dark .mapleg i.k-wrong { background: #561515; border-color: #F87171; }
+.frame.dark .mapleg i.k-micro { background: #2E1F5E; border-color: #A78BFA; }
+.frame.dark .mapleg i.k-todo { background: #4B5563; border-color: #5B6474; }
+.frame.dark .mapleg i.k-noname { background: #0C2A3B; }
+/* Equipment's key: out of service is near-black on the light map; a grey mark in the dark. */
+.frame.dark .mapleg i.k-out { background: #9CA3AF; }

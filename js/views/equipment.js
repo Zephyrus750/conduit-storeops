@@ -98,7 +98,7 @@ export default {
     const m = model(ctx);
     return vh(tx('Equipment checks'), headSub(m), `<button class="btn" data-act="labels">${ic('qr')}${tx('Print QR labels')}</button><button class="btn" data-act="sheet">${ic('print')}${tx('Print check sheet')}</button><button class="btn primary" data-act="new">${ic('plus')}${tx('Add equipment')}</button>`, 'm-equipment') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
-      `<div class="mapleg">${crumbx(tx('Equipment checks'), ctx.storeNo)}${['ok', 'soon', 'late', 'out'].map(k => `<span><i class="sw-c k-dot" style="--c:${COLOUR[k]}"></i>${{ ok: tx('In date'), soon: tx('Due in 14 days'), late: tx('Overdue'), out: tx('Out of service') }[k]}</span>`).join('')}<span class="t-faint" id="eqhint"></span></div></div>` +
+      `<div class="mapleg">${crumbx(tx('Equipment checks'), ctx.storeNo)}${['ok', 'soon', 'late', 'out'].map(k => `<span><i class="sw-c k-dot k-${k}" style="--c:${COLOUR[k]}"></i>${{ ok: tx('In date'), soon: tx('Due in 14 days'), late: tx('Overdue'), out: tx('Out of service') }[k]}</span>`).join('')}<span class="t-faint" id="eqhint"></span></div></div>` +
       `<div class="sidecol fill" id="eqside"></div></div>`;
   },
   mobile(ctx) {
