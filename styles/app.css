@@ -381,7 +381,7 @@ form.li { margin: 0; }
 .mapbar .legchips .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .mapbar .floorseg { flex: none; height: 32px; box-sizing: border-box; padding: 2px; border-radius: 9px; background: var(--panel); }
 .mapbar .floorseg button { height: 26px; padding: 0 10px; border-radius: 7px; }
-.mapbar .zoom { flex: none; margin-left: auto; }
+.mapbar .zoom { flex: none; margin-left: auto; display: flex; gap: 6px; }
 .mapbar.mapsub { padding-top: 0; margin-top: -4px; }
 .mapbar.mapsub .legchips .chip b { font-weight: var(--fw-bold); margin-right: 2px; }
 
@@ -2340,7 +2340,7 @@ button.mv-row .c svg.i { width: 16px; height: 16px; transform: rotate(-90deg); }
 .sx-r .dep { flex: none; }
 .sx-r .sx-bar { width: 64px; flex: none; }
 .sx-bar { display: block; height: 6px; border-radius: 6px; background: #263145; overflow: hidden; }
-.sx-bar i { display: block; height: 100%; border-radius: 6px; }
+.sx-bar i { display: block; height: 100%; border-radius: 6px; width: var(--w, 0%); background: var(--c, var(--accent)); }
 .sx-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .sx-facts > div { background: #1A2333; border-radius: 10px; padding: 8px 10px; min-width: 0; }
 .sx-facts small { display: block; color: var(--faint); font-size: var(--fs-xs); font-weight: var(--fw-bold); letter-spacing: .06em; text-transform: uppercase; }
@@ -3990,7 +3990,7 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .dkg-float.mini { width: 240px; padding: 7px 9px; border-radius: 10px; font-size: 11.5px; }
 .dkt-full, .dkt-cmp, .dkt-mini { display: flex; flex-direction: column; gap: 10px; }
 .dkt-cmp { gap: 8px; } .dkt-mini { gap: 5px; }
-.dkt-i { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.dkt-i { width: 14px; height: 14px; flex: none; stroke-width: 2; }
 .dkt-h { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .dkt-h b { font-size: var(--fs-lg); white-space: nowrap; }
 .compact .dkt-h b { font-size: var(--fs-md); }
@@ -4038,7 +4038,7 @@ svg.flag { flex: none; width: 24px; height: 16px; border-radius: 3px; box-shadow
 .dkt-ig { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px 6px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 .dkt-iv { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-weight: var(--fw-bold); min-width: 0; }
 .dkt-iv .dkt-i { color: currentColor; opacity: .8; }
-.dkt-ig .dkt-iv:not([style]) .dkt-i, .dkt-ml .dkt-iv:not([style]) .dkt-i { color: var(--dim); opacity: 1; }
+.dkt-ig .dkt-iv:not(.inked) .dkt-i, .dkt-ml .dkt-iv:not(.inked) .dkt-i { color: var(--dim); opacity: 1; }
 .dkt-iv .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .dkt-ml { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .dkt-ml > .dkt-iv:last-child { margin-left: auto; }
@@ -4609,3 +4609,101 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .bdm-done .mv-ghost.sm { width: auto; min-height: 34px; padding: 0 12px; font-size: var(--fs-md); }
 /* shell.css sizes every icon inside an .empty: the action's button keeps its own. */
 .empty .em-a svg.i { width: 1.25em; height: 1.25em; margin: 0; color: inherit; stroke-width: 1.9; }
+
+/* ── Out of the screens' inline styles (tidy-up batch 4) ───────────────
+   A colour written inline in a view followed neither the dark appearance
+   nor Settings' tokens: the screens use these classes instead. A value
+   that is data (a department's colour, a bar's width, a grid's columns)
+   stays on the element as a custom property (--c, --dc, --w, --h, --x,
+   --cols) that a class reads. */
+:root { --red-ink: #B91C1C; }
+:root.dark, .frame.dark { --red-ink: #F87171; }
+/* Text in a tone, and the usual inks. */
+.t-bad { color: var(--red-ink); } .t-warn { color: var(--amber-ink); } .t-good { color: var(--green-ink); } .t-info { color: var(--blue-ink); }
+.t-ink { color: var(--ink); } .t-dim { color: var(--dim); } .t-faint { color: var(--faint); } .t-accent { color: var(--accent-ink); }
+.semi { font-weight: var(--fw-semi); }
+/* A short note under a form field or a list: no margins of its own. */
+.note { margin: 0; font-size: var(--fs-sm); }
+/* A log line: when, then what. */
+.li.log > .rt { margin: 0; }
+/* A map pin in its state's colour (Maintenance, Equipment). */
+.mt-pin { border-color: var(--c, var(--line)); }
+/* A map key's round mark. */
+.mapleg i.k-dot { border-radius: 50%; }
+/* Spacing in four steps, and the small layout moves that repeat. */
+.mt-s { margin-top: 8px; } .mt-m { margin-top: 12px; } .mt-l { margin-top: 16px; } .mt-xl { margin-top: 20px; }
+.mb-s { margin-bottom: 8px; } .mb-m { margin-bottom: 12px; }
+.m-0 { margin: 0; } .ml-auto { margin-left: auto; }
+.wrap { white-space: normal; }
+.blk { display: block; }
+.hand { cursor: pointer; }
+.hide { display: none; }
+/* A row of actions under a form or a detail. */
+.acts2 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+/* The filter pills over a list, a little tighter than the shell's. */
+.pills.tight button { padding: 5px 11px; font-size: var(--fs-sm); }
+/* A list row's second line. */
+.li .nm > .where { display: block; font-size: var(--fs-sm); color: var(--dim); }
+/* A department badge's colour is data: --dc. Its ink (--di, from depInk:
+   dark on a light colour) outranks a context's white, as the inline colour did. */
+.dep { background: var(--dc, #64748B); }
+.dep[style*="--di:"] { color: var(--di) !important; }
+/* A swatch, dot or key mark in a data colour. */
+.sw-c { background: var(--c); }
+/* A bar's share is data: --w (width), --h (height). */
+.track > i, .w-c { width: var(--w, 0%); }
+.h-c { height: var(--h, 0%); }
+/* The search palette's product picture. */
+.pcardx-img { display: block; width: 100%; max-height: 180px; object-fit: contain; border-radius: 8px; background: #fff; margin-bottom: 8px; }
+/* The launcher's area tile when the device has no code for it. */
+.mv-tile:disabled { opacity: .5; }
+/* The sign-in scenes crossfade one after another (js/lowpoly.js). */
+.si-bg.poly > i { animation-delay: calc(var(--i, 0) * 9s); }
+/* Refresh: the plan colours' heading sits in the row, no gap under it. */
+.pcard .plan > .pt3 { margin: 0; }
+/* Map keys: each mark the map's own colour for that state. */
+.mapleg i.k-red { background: #DC2626; } .mapleg i.k-amber { background: #D97706; } .mapleg i.k-green { background: #16A34A; }
+.mapleg i.k-yellow { background: #F59E0B; } .mapleg i.k-gold { background: #EAB308; } .mapleg i.k-blue { background: #2563EB; }
+.mapleg i.k-off { background: #CBD0D8; } .frame.dark .mapleg i.k-off { background: #4B5563; }
+.mapleg i.k-ring { background: transparent; border: 2px solid #D24E0E; }
+/* Emergency: a kind's title in its colour. */
+.tc { color: var(--c); }
+/* Stocktake: the actions stacked under the progress. */
+.pfoot.col { flex-direction: column; gap: 8px; margin-top: 14px; }
+.st-prog i u { width: var(--w, 0%); }
+/* The evacuation map on paper: one A4 page, the map most of it. */
+.pm-page.ev-page { height: 190mm; } .ev-page .pm-pmap { height: 150mm; }
+/* Refresh: the week's stacked bars (each department's share is data). */
+.bars.rf-stack { height: 66px; }
+.bars.rf-stack > div > u { flex: var(--f, 1); background: var(--c); }
+.pt3 > .aside { margin-left: auto; font-weight: var(--fw-semi); letter-spacing: 0; text-transform: none; }
+/* Store map: the selected shelf's facts. */
+.rows.sdet { margin-top: 12px; border-top: 1px solid var(--line-soft); }
+.rows.sdet > .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: var(--fs-md); color: var(--dim); }
+.rows.sdet > .row > b { color: var(--ink); }
+.sdet-plan { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; }
+/* Label integrity's map key, and the progress under the phone sheet's heading. */
+.mapleg i.k-checked { background: #DCFCE7; border: 2px solid #16A34A; }
+.mapleg i.k-wrong { background: #FEE2E2; border: 2px solid #DC2626; }
+.mapleg i.k-micro { background: #F3EEFC; border: 2px solid #5B21B6; }
+.mapleg i.k-todo { background: #CBD0D8; border: 2px solid #B9BFC9; }
+.sx-barrow { margin: 8px 0 4px; }
+/* Pick route's map key: the route's own colours. */
+.mapleg i.k-start { background: #22C55E; } .mapleg i.k-next { background: #F59E0B; } .mapleg i.k-picked { background: #6B7280; }
+.mapleg i.k-path { background: #0E7490; height: 5px; border-radius: 3px; }
+/* Field Mode's map key. */
+.mapleg i.k-unchecked { background: #F1F5F9; border: 1.5px dashed #94A3B8; } .mapleg i.k-noname { background: #E0F2FE; border: 1.5px dashed #0EA5E9; }
+.mapleg i.k-green { background: #16A34A; }
+.frame.dark .mapleg i.k-unchecked { background: #1F2937; }
+/* Print map: the page and map heights and the preview's shape come from the paper size. */
+.pm-page { height: var(--ph, auto); } .pm-pmap { height: var(--mh, auto); }
+.pm-paper { aspect-ratio: var(--ar, auto); } .pm-stage { flex: var(--f, 1) 1 0; }
+/* Live pull's bars. */
+.lp-bar i, .lp-sbar i { width: var(--w, 0%); }
+/* Dashboard: the dock's pallet cards and grid (sizes and colours are data). */
+.dkt-bar i { width: var(--w, 0%); }
+.dkt-bar.wide i { background: currentColor; }
+.dkt-mixbar i { flex: var(--f, 1); background: var(--c); }
+.dkg-grid { grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr)); max-width: calc(var(--cols, 7) * 80px); }
+.mprog i { width: var(--w, 0%); }
+.pt.k-red { background: #DC2626; } .pt.k-amber { background: #D97706; }

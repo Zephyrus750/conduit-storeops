@@ -102,7 +102,7 @@ function home(ctx) {
     const c = sessionCounts(s), p = sessionPeople(s), pct = c.asked ? Math.round((c.asked - c.todo) / c.asked * 100) : 0;
     return `<div class="lp-ses"><div class="lp-sr">${s.dept ? dep(s.dept) : ''}<b>${esc(s.name)}</b></div>` +
       `<span class="lp-dim">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers')].join(' · ')} · ${tx('since {time}', { time: hm(s.at) })}</span>` +
-      `<span class="lp-dim">${countsLine(c)}</span><span class="lp-bar"><i style="width:${pct}%"></i></span>` +
+      `<span class="lp-dim">${countsLine(c)}</span><span class="lp-bar"><i style="--w:${pct}%"></i></span>` +
       `<div class="lp-acts"><button class="btn sm primary" data-act="lp-join" data-sid="${esc(s.id)}" data-part="req">${ic('barcode')}${tx('Ask for stock')}</button><button class="btn sm" data-act="lp-join" data-sid="${esc(s.id)}" data-part="pull">${ic('box')}${tx('Pull stock')}</button></div></div>`;
   };
   return `<div class="lp-body">` + mhead(tx('Live pull'), tx('Ask the stockroom for stock from the floor')) +
@@ -293,7 +293,7 @@ function desk(ctx) {
     const n = (cls, key, v) => `<span class="${cls}">${tx(key, { n: `<b>${v}</b>` })}</span>`;
     return `<button class="lp-dsl a2${ses?.id === s.id ? ' on' : ''}" data-act="lp-desk" data-sid="${esc(s.id)}">` +
       `<span class="lp-dsl-h">${s.dept ? dep(s.dept) : ''}<b>${esc(s.name)}</b>${s.closedAt ? '' : pill(tx('Running'), 'good', { size: 'sm', icon: 'refresh' })}<span class="lp-dsl-t">${when}</span></span>` +
-      `<span class="lp-sbar" aria-hidden="true">${c.pulled ? `<i class="p" style="width:${w(c.pulled)}"></i>` : ''}${c.short ? `<i class="s" style="width:${w(c.short)}"></i>` : ''}${c.gone ? `<i class="g" style="width:${w(c.gone)}"></i>` : ''}</span>` +
+      `<span class="lp-sbar" aria-hidden="true">${c.pulled ? `<i class="p" style="--w:${w(c.pulled)}"></i>` : ''}${c.short ? `<i class="s" style="--w:${w(c.short)}"></i>` : ''}${c.gone ? `<i class="g" style="--w:${w(c.gone)}"></i>` : ''}</span>` +
       `<span class="lp-dsl-n">${n('p', '{n} pulled', c.pulled)}${n('w', '{n} waiting', c.todo)}${n('s', '{n} short', c.short)}${n('g', '{n} not there', c.gone)}<span class="of">${tx('of {n}', { n: `<b>${c.asked}</b>` })}</span></span>` +
       `<small>${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers')].join(' · ')}</small></button>`;
   };

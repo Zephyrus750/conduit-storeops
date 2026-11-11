@@ -200,14 +200,14 @@ function tipHtml(api, g, tip) {
   let mx = tip ? tip({ ...info, mark }, g) : undefined;
   if (mx === undefined) { const m = MARK_LINE[mark]; mx = m ? tipLine(m[0], m[1], m[2]) : ''; }
   const d = shelfDetail(api, info.code);   // this shelf's own locations and size, not the whole run's
-  return `<div class="md"><span class="dep" style="background:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
+  return `<div class="md"><span class="dep" style="--dc:${DEPT_COLOUR[info.dept] || '#64748B'}">${esc(info.dept.toUpperCase())}</span><span class="shid"><b>${esc(info.id)}</b>${info.sub ? `<small>${esc(info.sub)}</small>` : ''}</span></div>` +
     `<div class="mr"><b>${esc(DEPT_NAME[info.dept] || info.dept)}</b>${d.range ? `<span>${ic('tag')}${tx('Locations {range}', { range: esc(d.range) })}</span>` : ''}<span>${ic('side')}${esc(fixtureOf(g) || side)}</span><span>${ic('grid')}${esc(runText(info.id, info.sub, runSubs(api, info.id), info.segments))}${d.modules ? ' · ' + txn(d.modules, '{n} module', '{n} modules') : ''}</span><span>${ic('orient')}${horiz ? tx('Horizontal') : tx('Vertical')}${d.size ? ' · ' + esc(d.size) : ''}</span>${d.shared.length ? `<span>${ic('stack')}${tx('Also {list}', { list: d.shared.map(x => esc(x)).join(', ') })}</span>` : ''}${mx || ''}</div>`;
 }
 // Tooltips for what is not a shelf: an emergency sign, a price check or
 // order screen, a landmark (ShelfSearcher's desktop hover tips).
 function markerTip(el) {
   const ga = k => el.getAttribute(k) || '', loc = ga('data-location'), dc = ga('data-loc-dept-color'), badge = ga('data-loc-dept-badge');
-  const locLine = loc ? `<span>${dc ? `<i class="dchip" style="background:${esc(dc)}">${esc(badge)}</i>` : ic('m-map')}${esc(loc)}</span>` : '';
+  const locLine = loc ? `<span>${dc ? `<i class="dchip sw-c" style="--c:${esc(dc)}">${esc(badge)}</i>` : ic('m-map')}${esc(loc)}</span>` : '';
   if (el.classList.contains('price-check-marker')) {
     const order = ga('data-variant') === 'order';
     return `<div class="md mk">${markerSymbol(order ? 'order' : 'pc', 30)}</div><div class="mr"><b>${esc(ga('data-label') || (order ? tx('Order screen') : tx('Price check')))}</b>${locLine}<span>${ic(order ? 'bag' : 'barcode')}${order ? tx('Order screen') : tx('Price check')}</span>${ga('data-detail') ? `<span class="nt">${esc(clip(ga('data-detail')))}</span>` : ''}</div>`;
@@ -1133,8 +1133,8 @@ export function mapbar() {
   const fls = mapFloors(), floorSeg = fls.length > 1 ? `<div class="seg2 floorseg" data-floorseg>${fls.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}" title="${f.type === 'boh' ? tx('Back of house') : tx('Sales floor')}">${esc(f.name)}</button>`).join('')}</div>` : '';
   return `<div class="mapbar"><div class="search"><svg class="i"><use href="icons.svg#i-search"/></svg><input placeholder="${tx('Find a shelf or bay…')}" aria-label="${tx('Find a shelf, bay or product on the map')}" data-mapfind></div>` +
     `<div class="legchips">${chips.map((c, i) => `<span class="chip${i === 0 ? ' on' : ''}" data-mapgroup="${c[2]}">${ic(c[1])}${c[0]}</span>`).join('')}</div>${floorSeg}` +
-    `<div class="zoom" style="margin-left:auto;display:flex;gap:6px">${extraTools()}<span class="ibtn" data-zoom="out">${ic('minus')}</span><i class="mv-mdiv"></i><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}">${ic('map')}</span>` +
-    `<span class="keywrap"><span class="ibtn" data-key="1" title="${tx('Department key')}">${ic('layers')}</span><div class="keypop"><h4>${tx('Department key')}</h4>${DEPT_GROUPS.map(gp => `<div class="keygrp">${ic(gp[1])}${gp[0] === 'Other' ? tx('Other') : gp[0]}</div><div class="keygrid">${gp[2].map(d => `<div class="keyrow"><i style="background:${DEPT_COLOUR[d]}"></i><b>${d.toUpperCase()}</b><span>${DEPT_NAME[d]}</span></div>`).join('')}</div>`).join('')}${mapSymbols().length ? `<h4 class="symh">${tx('Map symbols')}</h4>${symbolsHtml()}` : ''}</div></span></div></div><div class="mapbar mapsub" data-subchips hidden></div>`;
+    `<div class="zoom">${extraTools()}<span class="ibtn" data-zoom="out">${ic('minus')}</span><i class="mv-mdiv"></i><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}">${ic('map')}</span>` +
+    `<span class="keywrap"><span class="ibtn" data-key="1" title="${tx('Department key')}">${ic('layers')}</span><div class="keypop"><h4>${tx('Department key')}</h4>${DEPT_GROUPS.map(gp => `<div class="keygrp">${ic(gp[1])}${gp[0] === 'Other' ? tx('Other') : gp[0]}</div><div class="keygrid">${gp[2].map(d => `<div class="keyrow"><i class="sw-c" style="--c:${DEPT_COLOUR[d]}"></i><b>${d.toUpperCase()}</b><span>${DEPT_NAME[d]}</span></div>`).join('')}</div>`).join('')}${mapSymbols().length ? `<h4 class="symh">${tx('Map symbols')}</h4>${symbolsHtml()}` : ''}</div></span></div></div><div class="mapbar mapsub" data-subchips hidden></div>`;
 }
 // Price-check size (small, large, hidden) when the map has any, and the
 // tory-line switch, shown only while a back-of-house floor with lines is up.
@@ -1162,7 +1162,7 @@ export const sx = {
   sec: (label, body, note = '') => `<div class="sx-sec"><div class="sx-lbl">${label}${note ? `<span>${note}</span>` : ''}</div>${body}</div>`,
   rows: rows => `<div class="sx-rows">${rows.join('')}</div>`,
   row: (icon, title, sub = '', value = '', tone = '', attrs = '') => `<div class="sx-r"${attrs ? ' ' + attrs : ''}>${icon.startsWith('<') ? icon : ic(icon)}<div class="k"><b>${title}</b>${sub ? `<span>${sub}</span>` : ''}</div>${value ? `<span class="v ${tone}">${value}</span>` : ''}</div>`,
-  bar: (n, of, colour = 'var(--accent)') => `<span class="sx-bar"><i style="width:${of ? Math.min(100, Math.round(100 * n / of)) : 0}%;background:${colour}"></i></span>`,
+  bar: (n, of, colour = 'var(--accent)') => `<span class="sx-bar"><i style="--w:${of ? Math.min(100, Math.round(100 * n / of)) : 0}%;--c:${colour}"></i></span>`,
   facts: pairs => `<div class="sx-facts">${pairs.filter(p => p && p[1]).map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('')}</div>`,
   btn: (icon, label, attrs, pri = false) => `<button class="sx-btn${pri ? ' sx-pri' : ''}" type="button" ${attrs}>${ic(icon)}${label}</button>`,
   acts: btns => `<div class="sx-acts">${btns.filter(Boolean).join('')}</div>`,
@@ -1231,7 +1231,7 @@ export function bindMapChrome(root, map) {
   const elsewhere = info => { const others = (info?.floors || []).filter(f => f.id !== map.floorId()); return others.length ? ' · ' + tx('also on {floors}', { floors: others.map(f => `<span class="crumb-jump" data-mapfloor="${esc(f.id)}">${esc(f.name)}</span> (${f.shelves})`).join(', ') }) : ''; };
   // Sub-department chips under the bar once a group is chosen, the floor
   // switch following the map, and the crumb saying where the map is.
-  const subchips = group => { const host = root.querySelector('[data-subchips]'); if (!host) return; host.hidden = !group; host.innerHTML = group ? `<div class="legchips">${group[2].map(d => `<span class="chip" data-mapdept="${esc(d)}"><i style="background:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b>${esc(DEPT_NAME[d] || d)}</span>`).join('')}</div>` : ''; };
+  const subchips = group => { const host = root.querySelector('[data-subchips]'); if (!host) return; host.hidden = !group; host.innerHTML = group ? `<div class="legchips">${group[2].map(d => `<span class="chip" data-mapdept="${esc(d)}"><i class="sw-c" style="--c:${DEPT_COLOUR[d] || '#64748B'}"></i><b>${esc(d.toUpperCase())}</b>${esc(DEPT_NAME[d] || d)}</span>`).join('')}</div>` : ''; };
   const readout = html => { const el = root.querySelector('[data-crumbdept]'); if (el) el.innerHTML = html ? ' ' + html : ''; };
   map.stage.addEventListener('mapfloor', e => {
     const f = e.detail; const el = root.querySelector('[data-crumbfloor]'); if (el) el.textContent = `${f.type.toUpperCase()} · ${f.name}`;
@@ -1280,8 +1280,8 @@ function mapFind(root, input, map) {
   const recent = () => { try { return JSON.parse(localStorage.getItem(KEY()) || '[]'); } catch { return []; } };
   const remember = name => { try { localStorage.setItem(KEY(), JSON.stringify([name, ...recent().filter(x => x !== name)].slice(0, 6))); } catch {} };
   const row = (it, i) => it.kind === 'shelf'
-    ? `<div class="row" data-i="${i}"><i class="dot" style="background:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length > 1 ? ' · ' + tx('run of {n} shelves', { n: it.sections.length }) : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
-    : `<div class="row" data-i="${i}"><i class="dot" style="background:${it.dept ? DEPT_COLOUR[it.dept] || '#64748B' : 'var(--ink)'}"></i><b class="code">${esc(it.kind === 'group' ? it.label : it.name)}</b><span class="dn">${it.kind === 'group' ? txn(it.ids.length, '{n} department', '{n} departments') : esc(it.label)}</span><span class="kind">${tx('Department')}</span></div>`;
+    ? `<div class="row" data-i="${i}"><i class="dot sw-c" style="--c:${DEPT_COLOUR[it.dept] || '#64748B'}"></i><b class="code">${esc(it.name)}</b><span class="dn">${esc(DEPT_NAME[it.dept] || it.dept)}${it.sections.length > 1 ? ' · ' + tx('run of {n} shelves', { n: it.sections.length }) : ''}${it.locations.length ? ` · ${esc(it.locations.join(', '))}` : ''}</span>${dep(it.dept)}</div>`
+    : `<div class="row" data-i="${i}"><i class="dot sw-c" style="--c:${it.dept ? DEPT_COLOUR[it.dept] || '#64748B' : 'var(--ink)'}"></i><b class="code">${esc(it.kind === 'group' ? it.label : it.name)}</b><span class="dn">${it.kind === 'group' ? txn(it.ids.length, '{n} department', '{n} departments') : esc(it.label)}</span><span class="kind">${tx('Department')}</span></div>`;
   const show = (list, header) => { items = list; focus = -1; if (!list.length) return hide(); ac.innerHTML = (header ? `<div class="hdr">${header}<span data-clear>${tx('Clear')}</span></div>` : '') + list.map(row).join(''); ac.classList.add('on'); };
   const hide = () => { ac.classList.remove('on'); ac.innerHTML = ''; items = []; focus = -1; };
   const matchGroups = q => {                         // groups the typed text points at

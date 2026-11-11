@@ -46,7 +46,7 @@ function requests(ctx) {
       : `<button class="btn sm" data-act="rq-open" data-id="${esc(q.id)}">${ic('refresh')}${tx('Reopen')}</button>`;
     return `<tr class="rq-${q.status}"><td><b>${esc(q.title)}</b>${q.note ? `<div class="cs-dim">${esc(q.note)}</div>` : ''}${q.reply ? `<div class="rq-reply">${tx('Answer: {reply}', { reply: esc(q.reply) })}</div>` : ''}${res ? `<div class="cs-dim">${tx('Added as {title}', { title: esc(res.title) })}</div>` : ''}</td><td>${esc(storeName(q.store, all))}</td><td class="mono">${esc(fmtDate(q.created))}</td><td><span class="status ${cls}">${label}</span></td><td class="rsa-acts">${acts}</td></tr>`;
   };
-  return `<div class="card rq-card"><div class="ch"><h3>${tx('Requests from stores')}</h3><span class="cs-dim">${open.length ? txn(open.length, '{n} waiting', '{n} waiting') : tx('All answered')}</span>${done.length > 5 ? `<button class="btn sm" data-act="rq-more" style="margin-left:auto">${st.allReqs ? tx('Latest answers only') : txn(done.length, 'Show all {n} answered', 'Show all {n} answered')}</button>` : ''}</div>` +
+  return `<div class="card rq-card"><div class="ch"><h3>${tx('Requests from stores')}</h3><span class="cs-dim">${open.length ? txn(open.length, '{n} waiting', '{n} waiting') : tx('All answered')}</span>${done.length > 5 ? `<button class="btn sm ml-auto" data-act="rq-more">${st.allReqs ? tx('Latest answers only') : txn(done.length, 'Show all {n} answered', 'Show all {n} answered')}</button>` : ''}</div>` +
     `<table class="wb-t rsa-t"><thead><tr><th>${tx('Document asked for')}</th><th>${tx('Store')}</th><th>${tx('Asked')}</th><th>${tx('State')}</th><th></th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table></div>`;
 }
 

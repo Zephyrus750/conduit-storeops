@@ -43,7 +43,7 @@ export default {
   desktop(ctx) {
     if (!isManager(ctx)) return vh(tx('Field Mode'), tx('Needs the manager code'), '', 'm-map') + `<div class="card"><p class="lbl">${tx('Field Mode checks shelves against their labels for the map. Enter the manager code on this device to use it.')}</p></div>`;
     return vh(tx('Field Mode'), sub(tx('Check shelves against their labels'), tx('kept on this device until sent to the owner')), `<button class="btn" data-go="settings">${ic('x')}${tx('leave::Exit')}</button>`, 'm-map') +
-      `<div class="mapview fmview"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="mapleg"><span><i style="background:#F1F5F9;border:1.5px dashed #94A3B8"></i>${tx('Not checked')}</span><span><i style="background:#16A34A"></i>${tx('Checked')}</span><span><i style="background:#E0F2FE;border:1.5px dashed #0EA5E9"></i>${tx('No name on the map')}</span></div></div><div class="card fm-panel fm-desk" id="fmpanel"></div></div>`;
+      `<div class="mapview fmview"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="mapleg"><span><i class="k-unchecked"></i>${tx('Not checked')}</span><span><i class="k-green"></i>${tx('Checked')}</span><span><i class="k-noname"></i>${tx('No name on the map')}</span></div></div><div class="card fm-panel fm-desk" id="fmpanel"></div></div>`;
   },
   mobile(ctx) {
     if (!isManager(ctx)) return mhead(tx('Field Mode'), tx('Needs the manager code')) + `<div class="mv-note">${ic('lock')}${tx('Enter the manager code on this device to check shelves.')}</div>`;
