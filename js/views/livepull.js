@@ -292,7 +292,7 @@ function desk(ctx) {
     const when = s.closedAt ? `${esc(fmtDay(s.at))} · ${hm(s.at)}–${hm(s.closedAt)}` : tx('since {time}', { time: hm(s.at) });
     const n = (cls, key, v) => `<span class="${cls}">${tx(key, { n: `<b>${v}</b>` })}</span>`;
     return `<button class="lp-dsl a2${ses?.id === s.id ? ' on' : ''}" data-act="lp-desk" data-sid="${esc(s.id)}">` +
-      `<span class="lp-dsl-h">${s.dept ? dep(s.dept) : ''}<b>${esc(s.name)}</b>${s.closedAt ? '' : pill(tx('Running'), 'good', { size: 'sm', icon: 'refresh' })}<span class="lp-dsl-t">${when}</span></span>` +
+      `<span class="lp-dsl-h">${s.dept ? dep(s.dept) : ''}<b>${esc(s.name)}</b>${s.closedAt ? '' : pill(tx('Running'), '', { size: 'sm', live: true })}<span class="lp-dsl-t">${when}</span></span>` +
       `<span class="lp-sbar" aria-hidden="true">${c.pulled ? `<i class="p" style="--w:${w(c.pulled)}"></i>` : ''}${c.short ? `<i class="s" style="--w:${w(c.short)}"></i>` : ''}${c.gone ? `<i class="g" style="--w:${w(c.gone)}"></i>` : ''}</span>` +
       `<span class="lp-dsl-n">${n('p', '{n} pulled', c.pulled)}${n('w', '{n} waiting', c.todo)}${n('s', '{n} short', c.short)}${n('g', '{n} not there', c.gone)}<span class="of">${tx('of {n}', { n: `<b>${c.asked}</b>` })}</span></span>` +
       `<small>${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers')].join(' · ')}</small></button>`;
