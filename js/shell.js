@@ -44,7 +44,7 @@ import { waiting, railCounts, bellCount, useAlertSource } from './alerts.js';
 import { openSheet } from './sheet.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
-import { installPractice } from './practice.js';
+import { installPractice, inPractice } from './practice.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -560,7 +560,7 @@ let answered = 0, answeredT = 0;
 const SEEN = no => `resources_seen:${no}`;
 function answeredLoad(no) {
   clearTimeout(answeredT); answered = 0;
-  if (!no || !isManager() || offView('resources')) return;
+  if (!no || !isManager() || offView('resources') || inPractice()) return;   // practice reads nothing of the store's from the worker
   client.session.token().then(token => client.transport.request('/v1/resources/requests', { token })).then(r => {
     let seen = ''; try { seen = localStorage.getItem(SEEN(no)) || ''; } catch {}
     answered = (r.requests || []).filter(q => q.status !== 'open' && String(q.updated || '') > seen).length; alertsSoon();
