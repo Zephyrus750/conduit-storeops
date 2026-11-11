@@ -35,7 +35,14 @@ const KEY = 'suite_prefs';
 // showcase did on a 1440-wide screen). Container queries see the scaled
 // width, so a half-screen window still gets the half-screen layout.
 export const SCALES = [['0.8', 'Small'], ['0.95', 'Compact'], ['1', 'Default'], ['1.15', 'Large']];
-const DEFAULTS = { railmin: false, scale: '0.95', hdr: 'classic' };
+// Density (the review board's des-density): Compact tightens rows, cards and
+// gaps so more fits on a 1080p store PC without scrolling; the phone keeps
+// its own spacing. Appearance (des-dark): Light, Dark, or the device's own
+// setting; a shared store PC stays Light unless someone changes it there.
+export const DENSITIES = [['comfortable', 'Comfortable'], ['compact', 'Compact']];
+export const SKINS = [['light', 'Light'], ['dark', 'Dark'], ['auto', 'Match this device']];
+const DEFAULTS = { railmin: false, scale: '0.95', hdr: 'classic', density: 'comfortable', skin: 'light' };
+const osDark = () => typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
 const LAGOON = ACCENTS.findIndex(a => a[0] === 'Lagoon');
 const STORE_LOOK = { accent: LAGOON, rail: 'ink' };
 // The console's rail is charcoal in its own stylesheet rules.
@@ -46,7 +53,9 @@ export function setPref(k, v) { prefs()[k] = v; try { localStorage.setItem(KEY, 
 export function applyPrefs(frame = document.querySelector('.frame')) {
   if (!frame) return;
   const p = prefs(), look = frame.classList.contains('adm') ? CONSOLE_LOOK : STORE_LOOK, a = ACCENTS[look.accent];
-  frame.classList.remove('dark');
+  const dark = p.skin === 'dark' || (p.skin === 'auto' && osDark());
+  frame.classList.toggle('dark', dark);
+  frame.classList.toggle('dense', p.density === 'compact');
   for (const c of ['rail-light', 'rail-tint', 'rail-solid', 'rail-deep', 'rail-ink', 'bars-plain', 'bars-tint', 'bars-strong', 'hdr-classic', 'hdr-title']) frame.classList.remove(c);
   // The title bar (hdr-title) moves each view's title into the header and
   // folds search into the logo; a per-device choice in Settings › Display.
@@ -54,8 +63,12 @@ export function applyPrefs(frame = document.querySelector('.frame')) {
   const s = frame.style;
   // The frame and the page itself: the camera screens, the live reader and the
   // toasts are mounted on the body, outside the frame, and take the same accent.
-  for (const st of [s, document.documentElement.style]) { st.setProperty('--accent', a[1]); st.setProperty('--accent-ink', a[2]); st.setProperty('--accent-soft', a[3]); st.setProperty('--accent-line', a[4]); }
-  document.documentElement.style.colorScheme = 'light';
+  for (const st of [s, document.documentElement.style]) { st.setProperty('--accent', a[1]); st.setProperty('--accent-ink', dark ? a[1] : a[2]); st.setProperty('--accent-soft', dark ? `color-mix(in srgb,${a[1]} 22%,#111827)` : a[3]); st.setProperty('--accent-line', dark ? `color-mix(in srgb,${a[1]} 45%,#111827)` : a[4]); }
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+  document.documentElement.classList.toggle('dark', dark);
   const app = frame.querySelector('#app'); if (app) app.classList.toggle('railmin', !!p.railmin);
   const z = Number(p.scale) || 1; s.zoom = z === 1 ? '' : String(z);
 }
+
+// Match this device: follow the device when it changes between light and dark.
+if (typeof matchMedia === 'function') { try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (prefs().skin === 'auto') applyPrefs(); }); } catch {} }

@@ -61,6 +61,19 @@ function shrinkOf(items) {
   for (const k of ['total', 'open', 'carton', 'cartonOpen', 'combined', 'combinedOpen']) r[k] = Math.round(r[k] * 100) / 100;
   return r;
 }
+// Each day's three shrink totals, kept as long as the log keeps the day's
+// list (60 days, shared/retain.js), for the trend on Stock intelligence
+// (the review board's imp-shrinktrend): what was adjusted (ticked off as
+// written off in the system), what was avoided (flagged but never adjusted
+// by the day's end: found, or corrected another way), and today's still open.
+export function shrinkDays(ctx) {
+  const all = ctx.store.get('adjustments') || {}, today = todayKey();
+  return Object.keys(all).sort().map(date => {
+    const items = Object.entries(all[date] || {}).map(([kc, it]) => ({ kc, ...it }));
+    const done = items.filter(i => i.done), rest = items.filter(i => !i.done);
+    return { date, items: items.length, adjustedN: done.length, avoidedN: date < today ? rest.length : 0, adjusted: shrinkOf(done), avoided: date < today ? shrinkOf(rest) : null, open: date === today ? shrinkOf(rest) : null };
+  });
+}
 // The list's three shrink figures, over the department shown.
 function shrinkLine(m) {
   const sh = m.shrink, lines = [];

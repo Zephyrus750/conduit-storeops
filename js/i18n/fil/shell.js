@@ -409,4 +409,5 @@ export default {
   "{n} requests answered by the owner": "{n} request ang sinagot ng may-ari",
   "{n} change waiting on the worker": "{n} pagbabago ang naghihintay sa server",
   "{n} changes waiting on the worker": "{n} pagbabago ang naghihintay sa server",
+  "Scan to open this screen": "I-scan para buksan ang screen na ito",
 };

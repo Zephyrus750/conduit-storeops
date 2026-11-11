@@ -409,4 +409,5 @@ export default {
   "{n} requests answered by the owner": "{n} yêu cầu đã được chủ trả lời",
   "{n} change waiting on the worker": "{n} thay đổi đang chờ máy chủ",
   "{n} changes waiting on the worker": "{n} thay đổi đang chờ máy chủ",
+  "Scan to open this screen": "Quét để mở màn hình này",
 };

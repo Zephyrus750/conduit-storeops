@@ -980,4 +980,6 @@ export default {
   "{name}: pulled {n}": "{name}: {n} sacado(s)",
   "{name}: short, {got} of {asked} found": "{name}: faltan, {got} de {asked} encontrados",
   "{name}: not there": "{name}: no está",
+  "Open full size for the rest": "Ábrelo a tamaño completo para el resto",
+  "That page could not be drawn here: {error}": "Esa página no se pudo mostrar aquí: {error}",
 };

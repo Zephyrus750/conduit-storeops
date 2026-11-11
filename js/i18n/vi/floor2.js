@@ -980,4 +980,6 @@ export default {
   "{name}: pulled {n}": "{name}: đã lấy {n}",
   "{name}: short, {got} of {asked} found": "{name}: thiếu, tìm được {got} trên {asked}",
   "{name}: not there": "{name}: không có ở đó",
+  "Open full size for the rest": "Mở cỡ đầy đủ để xem phần còn lại",
+  "That page could not be drawn here: {error}": "Không thể hiển thị trang đó ở đây: {error}",
 };

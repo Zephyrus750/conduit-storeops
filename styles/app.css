@@ -684,6 +684,11 @@ svg.barcode { background: #fff; max-width: 100%; height: auto; }
   #printroot .ps-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
   #printroot h1 { font-size: 18pt; margin: 0; }
   #printroot .ps-sub, #printroot .ps-when { font-size: 9.5pt; color: #333; }
+  #printroot .ps-meta { display: flex; align-items: flex-end; gap: 10px; flex: none; }
+  #printroot .ps-when { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; text-align: right; }
+  #printroot .ps-when b { color: #000; font-size: 10pt; }
+  #printroot .ps-when small { font-size: 7.5pt; color: #555; }
+  #printroot .ps-qr svg { width: 17mm; height: 17mm; display: block; }
   #printroot h2 { font-size: 12.5pt; margin: 12px 0 6px; }
   #printroot .ps-sec { break-inside: auto; }
   #printroot .ps-tbl { width: 100%; border-collapse: collapse; }
@@ -3388,7 +3393,7 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .rs-pv-in { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
 .rs-pv .sht-t small { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .rs-pv .sht-t small .rs-kind { height: 22px; }
-.rs-pv-pg { display: flex; align-items: center; justify-content: center; min-height: 0; padding: 28px; background: var(--ground); overflow: auto; }
+.rs-pv-pg { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; padding: 28px; background: var(--ground); overflow: auto; }
 .rs-pv-sheet { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 0; }
 .rs-pv-sheet img, .rs-pv-sheet .rs-blank { width: auto; max-width: 100%; height: auto; max-height: 100%; background: #fff; box-shadow: 0 2px 12px rgba(15, 23, 42, .2); }
 .rs-pv-sheet .rs-blank { height: 100%; }
@@ -4553,3 +4558,47 @@ td > .empty.sm, .list > .empty.sm { padding: 10px 12px; }
 /* Rail counts: amber for today's, red for urgent (des-badges). */
 .rrow .badge.amber, .gtab .badge.amber { background: #D97706; }
 .gtab .badge.red { background: #DC2626; }
+
+/* Shrink over weeks on Stock intelligence (imp-shrinktrend): adjusted in
+   amber, avoided in the accent, one pair of bars a week. */
+.sri-shrink .ch { flex-wrap: wrap; gap: 8px; }
+.sri-sh-tot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin: 4px 0 12px; font-size: 13px; color: var(--dim); }
+.sri-sh-tot b { display: block; font-size: 22px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sri-sh-tot .sh-a b { color: #B45309; } .sri-sh-tot .sh-v b { color: var(--accent-ink); }
+.sri-sh-bars { display: flex; align-items: stretch; gap: 8px; height: 140px; padding: 0 2px; border-bottom: 1px solid var(--line); }
+.sri-sh-bars .wk { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sri-sh-bars .pair { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 3px; }
+.sri-sh-bars .pair i { width: 40%; max-width: 18px; border-radius: 3px 3px 0 0; }
+.sri-sh-bars i.sh-a, .sri-sh-key i.sh-a { background: #D97706; } .sri-sh-bars i.sh-v, .sri-sh-key i.sh-v { background: var(--accent); }
+.sri-sh-bars small { text-align: center; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.sri-sh-key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 12px; color: var(--dim); }
+.sri-sh-key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+/* Every page in the Resources preview (imp-pages): the pager under the page. */
+.rs-pv-sheet { flex: 1 1 auto; }
+.rs-pv-sheet.busy { opacity: .45; transition: opacity .2s; }
+.rs-pv-pages { display: flex; align-items: center; gap: 10px; flex: none; font-size: 13.5px; font-weight: 600; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.rs-pv-pages .ibtn { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); display: grid; place-items: center; }
+.rs-pv-pages .ibtn:disabled { opacity: .4; cursor: default; }
+.rs-pv-pages .ibtn:first-child svg.i { transform: rotate(90deg); } .rs-pv-pages .ibtn:nth-of-type(2) svg.i { transform: rotate(-90deg); }
+.rs-pv-pages small { font-weight: 400; color: var(--dim); }
+
+/* ── Compact density (Settings › Display › Density, des-density): the PC's
+   cards, rows, tables and gaps tighten so more fits on a 1080p screen. The
+   phone keeps its spacing (a phone never gets the class's effect: the rules
+   sit behind the PC widths). */
+@container shell (min-width: 961px) {
+  .frame.dense .content { padding: 14px 18px 18px; }
+  .frame.dense .vh { margin-bottom: 12px; }
+  .frame.dense .vh h2 { font-size: 26px; }
+  .frame.dense .card { padding: 12px 14px; }
+  .frame.dense .card .ch { margin-bottom: 6px; }
+  .frame.dense .kpi { padding: 12px 14px; }
+  .frame.dense .li { padding: 6px 0; font-size: 13px; }
+  .frame.dense .grid2, .frame.dense .grid3 { gap: 10px; }
+  .frame.dense .wb-t th, .frame.dense .wb-t td { padding: 3px 5px; }
+  .frame.dense table td, .frame.dense table th { padding-top: 4px; padding-bottom: 4px; }
+  .frame.dense .rrow { padding-top: 6px; padding-bottom: 6px; }
+  .frame.dense .empty:not(.sm) { padding: 24px 16px; }
+  .frame.dense .btn { padding-top: 6px; padding-bottom: 6px; }
+}

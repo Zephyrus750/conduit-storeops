@@ -409,4 +409,5 @@ export default {
   "{n} requests answered by the owner": "{n} solicitudes respondidas por el propietario",
   "{n} change waiting on the worker": "{n} cambio esperando al servidor",
   "{n} changes waiting on the worker": "{n} cambios esperando al servidor",
+  "Scan to open this screen": "Escanea para abrir esta pantalla",
 };

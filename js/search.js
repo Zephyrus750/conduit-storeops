@@ -12,7 +12,7 @@
 
 import { despatchDay } from '../shared/manifeststats.js';
 import { recallTag } from './recallflag.js';
-import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip, fmtDate, fmtDay } from './ui.js';
+import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip, fmtDate, fmtDay, today } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
 import { VIEWS } from './registry.js';
 import { findRecords } from '../shared/finder.js';
@@ -34,6 +34,29 @@ export function classify(q) {
   if (/^[A-Za-z]?\d{1,4}$/.test(q)) return 'loc';
   return 'name';
 }
+// Places opened from the palette (a truck, a cage, a manifest, a screen),
+// newest first, so the last few are one keystroke away (imp-search).
+const PLACES_KEY = 'search_places';
+const places = () => { try { return JSON.parse(localStorage.getItem(PLACES_KEY) || '[]'); } catch { return []; } };
+function rememberPlace(view, arg, title, sub) {
+  try { const key = JSON.stringify([view, arg || null]); const r = places().filter(x => JSON.stringify([x.view, x.arg || null]) !== key); r.unshift({ view, arg: arg || null, title: String(title).slice(0, 120), sub: String(sub || '').slice(0, 120) }); localStorage.setItem(PLACES_KEY, JSON.stringify(r.slice(0, 5))); } catch {}
+}
+// Actions (imp-search): things to do, not only places to go. Each opens its
+// screen and presses that screen's own button (data-act), so an action does
+// exactly what the button does and has no logic of its own.
+function actionsFor(s, tools) {
+  const can = new Set(tools.map(t => t.id)), out = [];
+  const A = (view, icon, title, sub, extra = {}) => { if (can.has(view)) out.push({ view, icon, title, sub, ...extra }); };
+  const day = today();
+  for (const [id, t] of Object.entries(s?.dock?.trucks || {})) if (t.status !== 'closed') A('receiving', 'm-receiving', tx('Open Truck {no}', { no: tNo(id) }), id.slice(0, 10) === day ? tx('Receiving · today') : tx('Receiving · {day}', { day: fmtDay(id.slice(0, 10)) }), { arg: { truck: id } });
+  A('maintenance', 'tool', tx('Log a maintenance issue'), tx('Maintenance'), { press: 'new' });
+  A('adjust', 'print', tx('Print today’s adjustments'), tx('What is still to adjust, in the department shown'), { press: 'print' });
+  A('daylist', 'print', tx('Print the day list'), tx('The triage sheet for the walkers'), { press: 'print' });
+  if (!Object.values(s?.stocktake?.sessions || {}).some(x => !x.ended && !x.endedAt)) A('stocktake', 'm-stocktake', tx('Start a stocktake session'), tx('Stocktake'), { press: 'start' });
+  return out;
+}
+const actRow = (a, Q) => orow('', a.icon, hi(a.title, Q), esc(a.sub), tx('Do it'), `data-view="${a.view}"${a.arg?.truck ? ` data-truck="${esc(a.arg.truck)}"` : ''}${a.press ? ` data-press="${a.press}"` : ''}`);
+const placeRow = p => orow('', 'history', esc(p.title), esc(p.sub || ''), tx('Open'), `data-view="${esc(p.view)}"${Object.entries(p.arg || {}).map(([k, v]) => ARG_KEYS.includes(k) ? ` data-${k}="${esc(v)}"` : '').join('')}`);
 const RECENT_KEY = 'search_recent';
 const recent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } };
 const remember = (q, k) => { try { const r = recent().filter(x => x[0] !== q); r.unshift([q, k]); localStorage.setItem(RECENT_KEY, JSON.stringify(r.slice(0, 6))); } catch {} };
@@ -156,6 +179,10 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (k === 'none') {
       const r = recent();
       if (r.length) out += grp(tx('Recent')) + r.map(x => orow(x[1] === 'prod' ? 'p' : x[1] === 'name' ? '' : 's', 'history', esc(x[0]), KIND[x[1]] || '', tx('Search again'), `data-q="${esc(x[0])}"`)).join('');
+      const pl = places().filter(p => tools().some(t => t.id === p.view));
+      if (pl.length) out += grp(tx('Opened lately')) + pl.map(placeRow).join('');
+      const acts = actionsFor(data(), tools());
+      if (acts.length) out += grp(tx('Actions')) + acts.slice(0, 5).map(a => actRow(a, '')).join('');
       const used = mostUsed(resources(), 3);
       if (used.length) out += grp(tx('Resources used most on this PC')) + used.map(e => resRow(e, '')).join('');
       out += grp(tx('Jump to')) + tools().slice(0, 6).map(t => orow('', t.icon, esc(t.title), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
@@ -200,11 +227,13 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const depts = Object.entries(DEPT_NAME).filter(([, n]) => n.toLowerCase().includes(ql));
       const ts = tools().filter(t => t.title.toLowerCase().includes(ql));
       const rs = (resources() || []).filter(e => matches(e, Q));
+      const words = ql.split(/\s+/).filter(Boolean), as = actionsFor(data(), tools()).filter(a => words.every(w => a.title.toLowerCase().includes(w)));
+      if (as.length) out += grp(tx('Actions'), as.length) + as.map(a => actRow(a, Q)).join('');
       if (depts.length) out += grp(tx('Departments'), depts.length) + depts.map(([d, n]) => orow('s', 'map', `${hi(n, Q)} ${dep(d)}`, tx('Show the department on the map'), tx('Show'), `data-view="map" data-dept="${d}"`)).join('');
       if (ts.length) out += grp(tx('Tools'), ts.length) + ts.map(t => orow('', t.icon, hi(t.title, Q), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
       if (rs.length) out += grp(tx('Resources'), rs.length) + rs.slice(0, 6).map(e => resRow(e, Q)).join('') + (rs.length > 6 ? orow('', 'library', tx('All {n} resources matching “{q}”', { n: rs.length, q: esc(Q) }), tx('Open Resources with this search'), tx('Open'), `data-view="resources" data-q="${esc(Q)}"`) : '');
       const recs = recordsHtml(found(Q), Q); out += recs;
-      if (!depts.length && !ts.length && !rs.length && !recs) out += `<div class="ohint">${tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) })}</div>`;
+      if (!depts.length && !ts.length && !rs.length && !recs && !as.length) out += `<div class="ohint">${tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) })}</div>`;
     }
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();
@@ -229,7 +258,15 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (!row) return;
     const q = input.value.trim(); if (q) remember(q, classify(q));
     if (row.dataset.res) { close(); useResource(row.dataset.res); return; }   // still inside the click or the Enter: a tab may open
-    if (row.dataset.view) { const arg = {}; for (const k of ARG_KEYS) if (row.dataset[k] != null) arg[k] = row.dataset[k]; close(); go(row.dataset.view, Object.keys(arg).length ? arg : undefined); return; }
+    if (row.dataset.view) {
+      const arg = {}; for (const k of ARG_KEYS) if (row.dataset[k] != null) arg[k] = row.dataset[k];
+      const a = Object.keys(arg).length ? arg : undefined, press = row.dataset.press;
+      if (!press) rememberPlace(row.dataset.view, a, row.querySelector('.ot b')?.textContent || '', row.querySelector('.ot span')?.textContent || '');
+      close(); go(row.dataset.view, a);
+      // An action: the screen's own button, once the screen is up.
+      if (press) { let n = 0; const tick = () => { const b = document.querySelector(`#content [data-act="${press}"]`); if (b) b.click(); else if (n++ < 40) setTimeout(tick, 50); }; setTimeout(tick, 30); }
+      return;
+    }
     if (row.dataset.q != null) { open(row.dataset.q); return; }        // a recent search: run it again
     if (row.dataset.url) { try { window.open(row.dataset.url, '_blank', 'noopener'); } catch {} close(); return; }
   }

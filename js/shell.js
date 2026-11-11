@@ -19,7 +19,8 @@ import { loadMap, setMap, setPlanSource, mapInfo, parkMap, liveIn, mapStats, she
 import { initSearch } from './search.js';
 import { voiceSupported, listenOnce } from './voice.js';
 import { resolveSpoken } from '../shared/voice.js';
-import { takeDeepLink } from './share.js';
+import { takeDeepLink, viewLink } from './share.js';
+import { printFrom } from './print.js';
 import { installLog } from './diag.js';
 installLog();
 import { updates, initUpdates } from './updates.js';
@@ -138,6 +139,8 @@ function openPendingLink(s) {
   // The guide is the same in every store: a printed page's QR code opens its chapter here.
   if (l.guide) { show('help', { chapter: l.guide }); return true; }
   if (l.store !== s.store) { toast(l.equip ? tx('That equipment label is for store {store}. Add that store from Store details to open it.', { store: l.store }) : l.issue ? tx('That work order is for store {store}. Add that store from Store details to open it.', { store: l.store }) : tx('That shelf link is for store {store}. Add that store from Store details to open it.', { store: l.store })); return false; }
+  // A printed sheet's QR code: the screen it came from (one this device can't open goes home).
+  if (l.view) { show(VIEWS[l.view] ? l.view : 'mhome'); return true; }
   if (l.issue) { if (isMobile() && deskOnly(VIEWS.maintenance)) { toast(tx('Work orders open on a store PC')); return false; } show('maintenance', { issue: l.issue }); return true; }
   if (l.equip) { if (isMobile() && deskOnly(VIEWS.equipment)) { toast(tx('Equipment checks open on a store PC, or a manager’s phone')); return false; } show('equipment', { equip: l.equip }); return true; }
   show('map', { select: l.shelf }); return true;
@@ -751,6 +754,8 @@ function show(id, arg) {
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   if (keep) restorePlace(content, keep); else content.scrollTop = 0;
   team?.repaint();
+  // What a sheet printed from here says about where it came from (js/print.js).
+  printFrom({ store: cur?.store || '', name: cur?.name || '', view: view.id, link: v => (cur?.store && !admin ? viewLink(cur.store, v) : '') });
   if (view.id === 'resources' && store && cur?.store) answeredSeen(cur.store);
   markRail(); if (store && !useMobile) paintBadges(); else if (store) paintBell();
   // A sheet closes when the view changes; a repaint of the same view (a

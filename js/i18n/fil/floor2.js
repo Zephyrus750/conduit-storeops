@@ -980,4 +980,6 @@ export default {
   "{name}: pulled {n}": "{name}: nakuha ang {n}",
   "{name}: short, {got} of {asked} found": "{name}: kulang, {got} sa {asked} ang nakita",
   "{name}: not there": "{name}: wala roon",
+  "Open full size for the rest": "Buksan nang buo para sa iba pa",
+  "That page could not be drawn here: {error}": "Hindi maipakita rito ang pahinang iyon: {error}",
 };

@@ -6,7 +6,7 @@
 import { haptic, applyOrientation, isPhone } from '../device.js';
 import { $, ic, esc, vh, sub, toast, timePassed, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR, mgr } from '../ui.js';
 import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/reducers/store.js';
-import { SCALES, prefs, setPref } from '../prefs.js';
+import { SCALES, SKINS, DENSITIES, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
 import { tx, txn, langPicker, setLang } from '../i18n.js';
 import { ask, askText } from '../sheet.js';
@@ -49,6 +49,8 @@ export default {
       else if (act === 'haptics') { setPref('haptics', prefs().haptics === false); haptic('select'); ctx.rerender(); }
       else if (act === 'portrait') { setPref('allowLandscape', !prefs().allowLandscape); applyOrientation(); ctx.rerender(); }
       else if (act === 'scale') setPref('scale', a.getAttribute('data-v')), ctx.rerender();
+      else if (act === 'skin') setPref('skin', a.getAttribute('data-v')), ctx.rerender();
+      else if (act === 'density') setPref('density', a.getAttribute('data-v')), ctx.rerender();
       else if (act === 'railmin') setPref('railmin', !prefs().railmin), ctx.rerender();
       else if (act === 'hdr') setPref('hdr', prefs().hdr === 'title' ? 'classic' : 'title'), ctx.rerender();
       else if (act === 'signout') { if (await ask({ title: ctx.store ? tx('Sign out of this store on this device?') : tx('Sign out of the owner console on this device?'), ok: tx('Sign out'), cancel: tx('Stay signed in') })) await ctx.signOut(); }
@@ -80,7 +82,7 @@ function body(ctx, sec = currentSec()) {
   const p = prefs();
   if (sec === 'appearance') {
     const seg = (act, opts, cur) => `<span class="seg stg-seg">${opts.map(o => `<button class="${cur === o[0] ? 'on' : ''}" data-act="${act}" data-v="${o[0]}">${o[1]}</button>`).join('')}</span>`;
-    return `<div class="stg-card"><div class="stg-h">${tx('Display')}</div><p class="stg-p">${tx('Every store device shares one colour scheme. Size, the title bar and the rail are set on each device.')}</p>${row(tx('Language'), tx('Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.'), langPicker())}${row(tx('Display size'), tx('How large the whole app renders on this device. Small is 80%, Compact 95%, Large 115%.'), seg('scale', SCALES.map(([v, l]) => [v, tx(l)]), String(p.scale)))}${ctx.isMobile ? '' : row(tx('Title bar'), tx('Move each view’s title into the header and fold search into the logo.'), tgl(p.hdr === 'title', 'hdr')) + row(tx('Rail'), tx('Start with the rail collapsed to icons'), tgl(p.railmin, 'railmin'))}</div>`;
+    return `<div class="stg-card"><div class="stg-h">${tx('Display')}</div><p class="stg-p">${tx('Every store device shares one colour scheme. Size, light or dark, density, the title bar and the rail are set on each device.')}</p>${row(tx('Language'), tx('Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.'), langPicker())}${row(tx('Display size'), tx('How large the whole app renders on this device. Small is 80%, Compact 95%, Large 115%.'), seg('scale', SCALES.map(([v, l]) => [v, tx(l)]), String(p.scale)))}${row(tx('Appearance'), tx('Light or dark on this device, or the same as the device’s own setting.'), seg('skin', SKINS.map(([v, l]) => [v, tx(l)]), String(p.skin || 'light')))}${ctx.isMobile ? '' : row(tx('Density'), tx('Compact fits more rows on the screen: tighter rows, cards and gaps.'), seg('density', DENSITIES.map(([v, l]) => [v, tx(l)]), String(p.density || 'comfortable')))}${ctx.isMobile ? '' : row(tx('Title bar'), tx('Move each view’s title into the header and fold search into the logo.'), tgl(p.hdr === 'title', 'hdr')) + row(tx('Rail'), tx('Start with the rail collapsed to icons'), tgl(p.railmin, 'railmin'))}</div>`;
   }
   if (sec === 'store') return storeBody(ctx);
   if (sec === 'refresh') return refreshBody(ctx);
