@@ -47,7 +47,7 @@ brackets below).
   option 6** (read both ways at once, a Settings trial, off by default) and
   **feedback on the ideas canvas** (dialogs, lists, calm screens, the More
   sheet, the outbox, gaps, handover, roster, weekly, photos, Tasks).
-- **The review board's Ready list** (built 11 Nov, PR #94): one empty state and one page header; the confirm sheet's second pass; the alerts bell and rail counts; Ctrl K actions; a shrink trend; every page in Resources; Live pull answers for the requester; one look for print; density and dark; the manager phone's Today, Refresh and Back dock parts. Device health, compare stores, practice mode, a Tasks area and the chip/type/inline-style sweep land in the same PR as they finish.
+- **The review board's Ready list** (built 11 Nov, PR #94): one empty state and one page header; the confirm sheet's second pass; the alerts bell and rail counts; Ctrl K actions; a shrink trend; every page in Resources; Live pull answers for the requester; one look for print; density and dark; the manager phone's Today, Refresh and Back dock parts. Device health, compare stores, practice mode, a Tasks area and the chip, type and inline-style sweep with the dark pass are in the same PR (decisions 48 to 52).
 
 ## Built 2026-10-09 (the defaults taken)
 
