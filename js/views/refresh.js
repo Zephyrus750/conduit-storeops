@@ -131,7 +131,7 @@ export default {
   id: 'refresh', title: tx('Location refresh'), icon: 'm-refresh',
   desktop(ctx) {
     const m = model(ctx);
-    return vh(tx('Location refresh'), sub(tx('This week'), m.week, `${m.counted} / ${TARGET}`), `<button class="btn" data-act="scan-shelf">${ic('camera')}${tx('Scan shelves')}</button><button class="btn" data-act="reset-week">${ic('refresh')}${tx('Reset week')}</button>`, 'm-refresh') +
+    return vh(tx('Location refresh'), sub(`${m.counted} / ${TARGET}`, tx('This week'), m.week), `<button class="btn" data-act="scan-shelf">${ic('camera')}${tx('Scan shelves')}</button><button class="btn" data-act="reset-week">${ic('refresh')}${tx('Reset week')}</button>`, 'm-refresh') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx(tx('Location refresh'), ctx.storeNo)}<span><i style="background:#16A34A"></i>${tx('Refreshed this week ({n})', { n: m.done })}</span><span><i style="background:transparent;border:2px solid #D24E0E"></i>${tx('Focus department, not yet')}</span><span><i style="background:#CBD0D8"></i>${tx('Not in focus')}</span></div></div>` +
       `<div class="sidecol fill" id="rfside"></div></div>`;

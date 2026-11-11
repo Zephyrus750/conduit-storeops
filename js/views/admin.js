@@ -203,7 +203,7 @@ const storeView = {
     const c = forStore(st.no), rec = c.rec || (ctx.admin.stores || []).find(s => s.no === st.no);
     if (!rec) return vh(tx('Store'), '', `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a>`) + banner(tx('No store selected. Pick one from the rail or the Stores list.'));
     const tabs = [['over', tx('Overview')], ['events', tx('Events')], ['devices', tx('Devices')], ['boards', tx('Boards')], ['access', tx('Access')], ['map', tx('Map')], ['migr', tx('Migration')]];
-    const head = vh(`${esc(rec.no)} <span class="pd-name">${esc(rec.name)}</span>`, sub(esc(rec.region || ''), tst(rec.status), tx('registered {time}', { time: fmtTime(rec.created) })), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="actas">${ic('users')}${tx('Act as store')}</button>`);
+    const head = vh(`${esc(rec.no)} <span class="pd-name">${esc(rec.name)}</span>`, sub(esc(rec.region || ''), tx('registered {time}', { time: fmtTime(rec.created) }), tst(rec.status)), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="actas">${ic('users')}${tx('Act as store')}</button>`);
     const seg = `<div class="ad-tabs">${tabs.map(t => `<button class="${t[0] === st.tab ? 'on' : ''}" data-act="tab" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>`;
     const ro = ['access', 'map', 'migr'].includes(st.tab) ? '' : banner(tx('Read-only view of <b>{name}</b>. Nothing you do here changes the store until you <b>Act as store</b>.', { name: esc(rec.name) }), true);
     const body = st.tab === 'boards' ? boardsTab(rec, c) : st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : st.tab === 'migr' ? migrTab(rec, c) : overTab(rec, c);
@@ -640,7 +640,7 @@ const actions = {
   id: 'adminactions', title: tx('Owner actions'), icon: 'history',
   desktop(ctx) {
     const rows = (st.actions || []).map(a => `<tr><td class="mono">${a.seq}</td><td class="mono">${fmtTime(a.at)}</td><td class="mono">${esc(a.type)}</td><td class="mono">${a.store ? `<a class="go" data-view="adminstore" data-no="${esc(a.store)}">${esc(a.store)}</a>` : '—'}</td><td>${esc(short(a.detail))}</td></tr>`);
-    return vh(tx('Owner actions'), sub(tx('the registry log'), tx('newest first'), tx('{n} kept', { n: rows.length })), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`) +
+    return vh(tx('Owner actions'), sub(tx('the registry log'), tx('{n} kept', { n: rows.length }), tx('newest first')), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`) +
       `<div class="card">${table([tx('Seq'), tx('When'), tx('Action'), tx('Store'), tx('Detail')], rows, 'ad-ev')}</div>`;
   },
   mount(ctx, root) {

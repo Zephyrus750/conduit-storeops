@@ -9,7 +9,7 @@
 // Beside Equipment under Safety & upkeep on a desk; on a phone, managers
 // only, as Maintenance is.
 
-import { $, ic, esc, vh, sub, fmtDate, toast, mgr, empty } from '../ui.js';
+import { $, ic, esc, vh, sub, fmtDate, toast, mgr, empty, mhead } from '../ui.js';
 import { RECALL_STATUSES, liveRecalls } from '../../shared/reducers/recall.js';
 import { parseKeycodes } from '../../shared/backfill.js';
 import { gs1Parse } from '../../shared/gs1.js';
@@ -110,7 +110,7 @@ export default {
   // A manager's phone: the list, or one recall with a way back.
   mobile(ctx) {
     const m = model(ctx), manager = isManager(ctx.session.current), r = st.sel ? m.rc.items?.[st.sel] : null;
-    const head = `<div class="mv-head"><div><h2>${tx('Recalls')} ${mgr()}</h2><span>${headParts(m).join(' · ')}</span></div></div>`;
+    const head = mhead(`${tx('Recalls')} ${mgr()}`, headParts(m).join(' · '));
     if (st.draft) return `<div class="rc-m">${head}${form(st.draft)}</div>`;
     if (r) return `<div class="rc-m"><button class="btn sm rc-back" data-act="back">${ic('chev')}${tx('All recalls')}</button>${detail(ctx, r, manager)}</div>`;
     return `<div class="rc-m">${head}${manager ? `<button class="btn primary rc-add" data-act="new">${ic('plus')}${tx('Add a recall')}</button>` : ''}${listCard(m, manager)}</div>`;
