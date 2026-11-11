@@ -25,7 +25,7 @@ export const deptColour = id => DEPT_COLOUR[id] || srDept(id)?.color || '#64748B
 export function deptBadge(id, { short = false } = {}) {
   if (!id) return '';
   const d = srDept(id);
-  return `<span class="srdept" title="${esc(deptLabel(id))}"><span class="dep" style="background:${deptColour(id)};color:${depInk(deptColour(id))}">${esc(String(id).toUpperCase())}</span>${short || !d ? '' : `<span class="nm">${esc(d.name)}</span>`}</span>`;
+  return `<span class="srdept" title="${esc(deptLabel(id))}"><span class="dep" style="--dc:${deptColour(id)};--di:${depInk(deptColour(id))}">${esc(String(id).toUpperCase())}</span>${short || !d ? '' : `<span class="nm">${esc(d.name)}</span>`}</span>`;
 }
 export const ageOf = iso => { if (!iso) return '—'; const h = (Date.now() - new Date(iso)) / 3600000; return h < 1 ? tx('{n}m', { n: Math.max(1, Math.round(h * 60)) }) : h < 48 ? tx('{n}h', { n: Math.round(h) }) : tx('{n}d', { n: Math.round(h / 24) }); };
 

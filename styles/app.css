@@ -4707,3 +4707,18 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .dkg-grid { grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr)); max-width: calc(var(--cols, 7) * 80px); }
 .mprog i { width: var(--w, 0%); }
 .pt.k-red { background: #DC2626; } .pt.k-amber { background: #D97706; }
+/* Stockroom: a note under a list, a centred add button, the short bar charts. */
+.foot-note { padding: 10px 2px 0; }
+.btn.centre { justify-content: center; }
+.bars.short { height: 64px; } .bars.tall { height: 100px; }
+/* Cages: the quantity box, the cage's actions, a ring's chip in the ring's colour. */
+.ad-in.qty { max-width: 80px; }
+.acts.row-acts { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.mb-6 { margin: 0 0 6px; }
+.chip.ring-chip { background: color-mix(in srgb, var(--c) 13%, transparent); color: var(--c); }
+.chip.ring-chip > i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.frame.dark .chip.ring-chip { background: color-mix(in srgb, var(--c) 26%, transparent); color: color-mix(in srgb, var(--c) 55%, #fff); }
+/* Quick Scan's progress, the trends' heat cells and bars. */
+.cl-prog i { width: var(--w, 0%); }
+.tr-c { background: color-mix(in srgb, #14B8A6 var(--a, 0%), transparent); }
+.tr-bar > div i, .tr-bar1 i, .tr-times i { width: var(--w, 0%); }
