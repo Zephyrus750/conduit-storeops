@@ -10,7 +10,11 @@
 // top, so optimism is automatic and a rejection rolls back by rebuilding
 // without that event. One WebSocket per device with backoff and jitter;
 // long-polling /changes when sockets are unavailable. Heartbeat every three
-// minutes or on change. Everything persists through the storage adapter:
+// minutes or on change; it carries the app version, the language and the
+// kind of device (device(), else what the page shows: the <html lang> the
+// shell sets, a screen sign-in, a phone-width frame) and the device's last
+// five errors (the sync's and any uncaught page error, kept in memory).
+// Everything persists through the storage adapter:
 //   snap:<store>          { seq, state }
 //   outbox:<store>:<id>   the queued event
 
@@ -27,6 +31,17 @@ export const POLL_MS = 15_000;
 export const PERSIST_MS = 2_000;
 const APPLIED_KEEP = 2000;
 const RETRY_MS = 15_000;
+const ERRORS_KEPT = 5, ERROR_LEN = 200;   // the heartbeat's recent errors (the worker caps them the same)
+
+// What the page says about this device, for the heartbeat: its language
+// (js/i18n.js sets <html lang>) and its kind, as the shell decides its
+// layout: a dock screen's sign-in, else a phone when the frame is phone
+// width (600 px or less), else a PC. Nothing outside a page.
+export function pageDevice(session, doc = globalThis.document) {
+  if (!doc) return { lang: null, kind: null };
+  const w = doc.querySelector?.('.frame')?.clientWidth || globalThis.innerWidth || 0;
+  return { lang: doc.documentElement?.lang || null, kind: session?.current?.screen ? 'screen' : w && w <= 600 ? 'phone' : 'pc' };
+}
 
 // Refusals that can clear without the change being wrong: the area code
 // lapsed or was locked (unauthorised), the area or tool was switched off,
@@ -41,7 +56,7 @@ export function refusalWaits(r) {
   return r?.code === 'invalid_event' && (r.reason === 'unknown_type' || r.reason === 'schema_version' || /^unknown type |is at schema v\d/.test(r.message || ''));
 }
 
-export function createStore({ storeNo, session, transport, storage, WebSocketImpl = globalThis.WebSocket, timers = globalThis, online = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false) }) {
+export function createStore({ storeNo, session, transport, storage, WebSocketImpl = globalThis.WebSocket, timers = globalThis, online = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false), device = () => pageDevice(session) }) {
   const no = String(storeNo);
   const listeners = new Map();                 // key → Set(fn)
   let base = initialState();                   // server-confirmed projections
@@ -76,7 +91,7 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   // re-rendering), and a live Set would visit the new entry too, forever.
   const emit = (k, v) => { for (const f of [...(listeners.get(k) || [])]) { try { f(v); } catch (e) { console.error(e); } } };
   function on(k, f) { if (!listeners.has(k)) listeners.set(k, new Set()); listeners.get(k).add(f); return () => listeners.get(k).delete(f); }
-  function setStatus(patch) { status = { ...status, ...patch, queued: pending.length, held: held.size, seq: base.seq }; emit('status', status); }
+  function setStatus(patch) { if (patch.lastError && patch.lastError !== status.lastError) noteError(patch.lastError); status = { ...status, ...patch, queued: pending.length, held: held.size, seq: base.seq }; emit('status', status); }
   function changed(keys) { for (const k of keys) emit(k, state[k]); emit('*', { keys, state }); }
 
   // ── state ─────────────────────────────────────────────────────────────
@@ -324,9 +339,24 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   async function resync() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'hello', since: 0 })); else if (!pollTimer) startPolling(); }
 
   // ── heartbeat ─────────────────────────────────────────────────────────
+  // The device's last few errors for the console, newest first: each new
+  // sync error and any uncaught page error. In memory only: a reload starts
+  // the list again. The same message again only moves its time on.
+  const recentErrors = [];
+  function noteError(msg) {
+    const m = String(msg || '').trim().slice(0, ERROR_LEN); if (!m) return;
+    const at = localIso();
+    if (recentErrors[0]?.msg === m) { recentErrors[0].at = at; return; }
+    recentErrors.unshift({ at, msg: m }); if (recentErrors.length > ERRORS_KEPT) recentErrors.length = ERRORS_KEPT;
+  }
+  const onPageError = e => noteError(e?.message ? `${e.message}${e.filename ? ` (${String(e.filename).split('/').pop()}:${e.lineno || 0})` : ''}` : 'error');
+  const onRejection = e => noteError(e?.reason?.message || String(e?.reason ?? 'unhandled rejection'));
+  globalThis.addEventListener?.('error', onPageError);
+  globalThis.addEventListener?.('unhandledrejection', onRejection);
   function heartbeat() {
     timers.clearTimeout(hbTimer);
-    const hb = { app: session.app, online: online(), outbox: pending.length, lastError: status.lastError, area: session.current?.roles?.join(',') || null };
+    let dev = {}; try { dev = device() || {}; } catch {}
+    const hb = { app: session.app, online: online(), outbox: pending.length, lastError: status.lastError, area: session.current?.roles?.join(',') || null, lang: dev.lang || null, kind: dev.kind || null, errors: recentErrors.map(e => ({ ...e })) };
     // A device that only listens never asks for its token, so the
     // heartbeat does: it renews ahead of expiry and the socket follows.
     if (ws && ws.readyState === 1) { hbSent = Date.now(); ws.send(JSON.stringify({ t: 'hb', ...hb })); session.token().catch(() => {}); }
@@ -382,12 +412,13 @@ export function createStore({ storeNo, session, transport, storage, WebSocketImp
   function close() {
     closed = true; offSession(); timers.clearTimeout(wsTimer); timers.clearTimeout(hbTimer); timers.clearTimeout(hbSoon); timers.clearTimeout(retryTimer); retryTimer = null; stopPolling();
     globalThis.removeEventListener?.('online', onOnline); globalThis.removeEventListener?.('offline', onOffline);
+    globalThis.removeEventListener?.('error', onPageError); globalThis.removeEventListener?.('unhandledrejection', onRejection);
     timers.clearTimeout(persistTimer); persistTimer = null;   // never written after close: sign-out has just deleted it
     if (ws) { const s = ws; ws = null; try { s.close(); } catch {} }
     setStatus({ state: 'offline' });
   }
 
-  return { load, connect, close, resync, get, dispatch, flush, on, discard, retry: () => { breaker.succeed(); return retryHeld() || (flush(), 0); }, get status() { return status; }, get pending() { return pending.slice(); }, get held() { return pending.filter(e => held.has(e.id)).map(e => ({ event: e, ...held.get(e.id) })); }, get seq() { return base.seq; }, get clockOffset() { return clockOffset; } };
+  return { load, connect, close, resync, get, dispatch, flush, on, discard, retry: () => { breaker.succeed(); return retryHeld() || (flush(), 0); }, get status() { return status; }, get pending() { return pending.slice(); }, get held() { return pending.filter(e => held.has(e.id)).map(e => ({ event: e, ...held.get(e.id) })); }, get seq() { return base.seq; }, get clockOffset() { return clockOffset; }, get errors() { return recentErrors.map(e => ({ ...e })); } };
 }
 
 // A time as this device's wall clock writes it, with its zone: 08:00 in

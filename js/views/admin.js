@@ -1,5 +1,7 @@
 // Admin console: the owner's views. Stores (overview), one store (overview,
-// events, devices, access), register a store, and the owner action log.
+// events, devices, access), register a store, every store's devices (device
+// health), every store's numbers side by side (Compare stores), and the
+// owner action log.
 // Everything here talks to the worker's /v1/admin/* routes through
 // ctx.admin.api(); nothing touches a store's event log except "Act as store",
 // which hands the shell a store-scoped token whose writes carry actor.owner.
@@ -16,7 +18,7 @@ import { TOOLS } from '../../shared/tools.js';
 import { csvLines } from '../../shared/records.js';
 import wallboard from './backdock/wallboard.js';
 import { teamboard } from './backdock/screens.js';
-import { tx, txn } from '../i18n.js';
+import { tx, txn, LANGS, flagSvg } from '../i18n.js';
 import { ask, askText } from '../sheet.js';
 import { loadZones, zoneSelect, zoneHint, zonesChanged } from './adminzones.js';
 
@@ -37,7 +39,7 @@ const digits = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b
 export const gen = { pin: () => digits(6), stockroom: () => 'SR-' + digits(4), dock: () => 'BD-' + digits(4), manager: () => 'MG-' + digits(6) };
 
 // ── state and cache ───────────────────────────────────────────────────
-const st = { no: null, tab: 'over', filter: '', area: 'all', rot: null, edit: false, reg: null, regDone: null, health: null, actions: null, kpis: null, q: '', status: 'all', larea: 'all', zone: 'all' };
+const st = { no: null, tab: 'over', filter: '', area: 'all', rot: null, edit: false, reg: null, regDone: null, health: null, actions: null, kpis: null, q: '', status: 'all', larea: 'all', zone: 'all', dfilter: 'all', cmp: { key: 'no', dir: 1 } };
 const cache = {};                     // no → { rec, devices, tail, snap }
 const forStore = no => cache[no] || (cache[no] = {});
 export function invalidate(no) { if (no) delete cache[no]; else for (const k of Object.keys(cache)) delete cache[k]; st.actions = null; }
@@ -117,16 +119,65 @@ async function loadKpis(ctx) {
   await Promise.all(stores.map(s => ctx.admin.api(`/v1/admin/stores/${s.no}/kpis`).then(k => { out[s.no] = k; }).catch(e => { out[s.no] = { error: e.code || 'unreachable', devices: { seen24h: 0, versions: {}, errors: [] }, alerts: [] }; })));
   st.kpis = out;
 }
+// Every store's numbers once, for a page that needs them all (a second
+// call while they load waits on the first).
+const kpisMissing = ctx => (ctx.admin.stores || []).some(s => !st.kpis?.[s.no]);
+let kpisLoading = null;
+const kpisOnce = ctx => kpisLoading || (kpisLoading = loadKpis(ctx).finally(() => { kpisLoading = null; }));
 // Fleet: the app versions the stores' devices ran in the last day, and the
 // devices reporting an error.
 function fleetCard(stores) {
   if (!st.kpis) return '';
   const versions = {}, errors = [];
   for (const s of stores) { const k = st.kpis[s.no]; if (!k?.devices) continue; for (const [v, n] of Object.entries(k.devices.versions || {})) (versions[v] ||= { n: 0, stores: new Set() }).n += n, versions[v].stores.add(s.no); for (const e of k.devices.errors || []) errors.push({ ...e, no: s.no }); }
-  const vs = Object.entries(versions).sort((a, b) => b[0].localeCompare(a[0], 'en', { numeric: true })), latest = vs[0]?.[0];
-  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>${tx('Fleet · app versions')}</h3><span class="cs-dim">${tx('devices seen in the last day')}</span></div>${vs.length ? `<div class="list">${vs.map(([v, x]) => `<div class="li"><span class="loc mono">${esc(v)}</span><span class="nm">${txn(x.n, '{n} device', '{n} devices')} · ${[...x.stores].map(esc).join(', ')}</span>${v === latest ? `<span class="status good">${tx('newest')}</span>` : `<span class="status warn">${tx('app version::behind')}</span>`}</div>`).join('')}</div>` : empty(tx('No device has checked in today.'), { icon: 'phone' })}</div>` +
-    `<div class="card"><div class="ch"><h3>${tx('Fleet · errors')}</h3><span class="cs-dim">${tx('last error each device reported')}</span></div>${errors.length ? `<div class="list">${errors.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12).map(e => `<div class="li" data-view="adminstore" data-no="${esc(e.no)}"><span class="loc mono">${esc(e.no)}</span><span class="nm"><span class="mono">${esc(e.id)}</span> · ${esc(e.error)}</span><span class="rt">${fmtTime(e.at)}</span></div>`).join('')}</div>` : empty(tx('No device is reporting an error.'), { icon: 'check' })}</div></div>`;
+  const vs = Object.entries(versions).sort((a, b) => byVersion(a[0], b[0])), latest = vs[0]?.[0];
+  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>${tx('Fleet · app versions')}</h3><span class="cs-dim">${tx('devices seen in the last day')}</span><a class="go" data-view="admindevices" data-act="dfilter" data-v="behind" style="margin-left:auto">${tx('Devices')}</a></div>${vs.length ? `<div class="list">${vs.map(([v, x]) => `<div class="li"><span class="loc mono">${esc(v)}</span><span class="nm">${txn(x.n, '{n} device', '{n} devices')} · ${[...x.stores].map(esc).join(', ')}</span>${v === latest ? `<span class="status good">${tx('newest')}</span>` : `<span class="status warn">${tx('app version::behind')}</span>`}</div>`).join('')}</div>` : empty(tx('No device has checked in today.'), { icon: 'phone' })}</div>` +
+    `<div class="card"><div class="ch"><h3>${tx('Fleet · errors')}</h3><span class="cs-dim">${tx('last error each device reported')}</span><a class="go" data-view="admindevices" data-act="dfilter" data-v="errors" style="margin-left:auto">${tx('Devices')}</a></div>${errors.length ? `<div class="list">${errors.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12).map(e => `<div class="li" data-view="adminstore" data-no="${esc(e.no)}"><span class="loc mono">${esc(e.no)}</span><span class="nm"><span class="mono">${esc(e.id)}</span> · ${esc(e.error)}</span><span class="rt">${fmtTime(e.at)}</span></div>`).join('')}</div>` : empty(tx('No device is reporting an error.'), { icon: 'check' })}</div></div>`;
 }
+// App versions in order, newest first: numbers compare as numbers, so
+// 0.10.2 is newer than 0.9.9. The newest is the highest any device has
+// reported; a device on any other version is behind.
+const byVersion = (a, b) => String(b).localeCompare(String(a), 'en', { numeric: true });
+const newestApp = apps => [...apps].filter(Boolean).sort(byVersion)[0] || null;
+
+// ── device health ─────────────────────────────────────────────────────
+// Each device's last heartbeat (/devices): its kind, role, app version,
+// language, last seen, outbox and its last few errors. A device from
+// before the language, kind and error list sends only its last error.
+const QUIET_MS = 10 * 60000;
+const KIND = { pc: tx('device kind::PC'), phone: tx('device kind::Phone'), screen: tx('device kind::Screen') };
+const appName = a => String(a || '').replace(/^conduit\s+/i, '');
+function devHealth(d, newest, now = Date.now()) {
+  const errors = d.errors?.length ? d.errors : d.lastError ? [{ at: null, msg: d.lastError }] : [];
+  return { errors, quiet: !(now - Date.parse(d.last) <= QUIET_MS), behind: !!(newest && d.app && byVersion(d.app, newest) > 0), offline: d.online === false, outbox: d.outbox || 0 };
+}
+// The newest version across the fleet: every device the console has read, and the Fleet card's.
+function fleetNewest(ctx) {
+  const apps = (ctx.admin.stores || []).flatMap(s => Object.values(forStore(s.no).devices || {}).map(d => d.app));
+  for (const k of Object.values(st.kpis || {})) apps.push(...Object.keys(k?.devices?.versions || {}));
+  return newestApp(apps);
+}
+const langCell = c => { const l = LANGS.find(x => x[0] === c); return l ? `<span class="dv-lang">${flagSvg(c)}${esc(l[1])}</span>` : c ? `<span class="mono">${esc(c)}</span>` : '<span class="cs-dim">—</span>'; };
+const appCell = (d, h) => d.app ? `<span class="dv-app"><span class="mono">${esc(appName(d.app))}</span>${h.behind ? status('warn', tx('app version::behind')) : status('good', tx('newest'))}</span>` : '<span class="cs-dim">—</span>';
+const seenCell = (d, h) => `${status(h.offline || h.quiet ? 'warn' : 'good', h.offline ? tx('offline') : h.quiet ? tx('quiet') : tx('online'))}<small>${when(d.last)}</small>`;
+function errorsCell(h) {
+  if (!h.errors.length) return '<span class="cs-dim">—</span>';
+  const line = e => `<span class="dv-err">${esc(e.msg)}</span>${e.at ? `<small>${fmtTime(e.at)}</small>` : ''}`;
+  const [latest, ...rest] = h.errors;
+  return `<div class="dv-errs">${line(latest)}${rest.length ? `<details><summary>${txn(rest.length, '{n} earlier error', '{n} earlier errors')}</summary>${rest.map(e => `<div>${line(e)}</div>`).join('')}</details>` : ''}</div>`;
+}
+// Its roles: the token's first, then the rest the heartbeat lists (a manager's PC: floor · manager).
+const rolesOf = d => [...new Set([d.role, ...String(d.area || '').split(',')].map(r => String(r || '').trim()).filter(Boolean))];
+const DEV_HEADS = () => [tx('Device'), tx('Kind'), tx('Role'), tx('App version'), tx('Language'), tx('Last seen'), tx('Outbox'), tx('Recent errors')];
+const deviceCells = (id, d, h) => `<td class="mono"><b>${esc(id)}</b>${d.owner ? ` <span class="tst">${tx('owner')}</span>` : ''}</td><td>${KIND[d.kind] || '<span class="cs-dim">—</span>'}</td><td>${rolesOf(d).map(esc).join(' · ')}</td><td>${appCell(d, h)}</td><td>${langCell(d.lang)}</td><td>${seenCell(d, h)}</td><td class="n">${h.outbox ? `<b class="c-red">${h.outbox}</b>` : '0'}</td><td>${errorsCell(h)}</td>`;
+// Every store's devices, read the way the console reads /kpis: together,
+// a store that cannot be reached saying so (and not asked again until Refresh).
+async function loadDevices(ctx) {
+  const need = (ctx.admin.stores || []).filter(s => { const c = forStore(s.no); return !c.devices && !c.devErr && !c.devLoading; });
+  await Promise.all(need.map(s => { const c = forStore(s.no); c.devLoading = true; return ctx.admin.api(`/v1/admin/stores/${s.no}/devices`).then(r => { c.devices = r.devices || {}; }).catch(e => { c.devErr = e.code || 'unreachable'; }).finally(() => { delete c.devLoading; }); }));
+  return need.length > 0;
+}
+
 function setupCard(k) {
   if (!k) return '';
   const b = k.backfill, d = k.dock;
@@ -181,6 +232,7 @@ const overview = {
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'open-editor') return openEditor();
       if (a.dataset.act === 'reg-export') return exportRegistry(ctx.admin.stores || []);
+      if (a.dataset.act === 'dfilter') { st.dfilter = a.dataset.v; return; }   // the Fleet card's links: the shell then opens Devices
       if (a.dataset.act === 'refresh') { invalidate(); st.health = null; st.cat = null; st.kpis = null; try { await ctx.admin.refreshStores(); } catch (err) { return fail(err); } ctx.rerender(); }
       if (a.dataset.act === 'cat-probe') return runProbe(ctx, root);
       if (a.dataset.act === 'cat-rebuild') {
@@ -206,7 +258,7 @@ const storeView = {
     const head = vh(`${esc(rec.no)} <span class="pd-name">${esc(rec.name)}</span>`, sub(esc(rec.region || ''), tx('registered {time}', { time: fmtTime(rec.created) }), tst(rec.status)), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="actas">${ic('users')}${tx('Act as store')}</button>`);
     const seg = `<div class="ad-tabs">${tabs.map(t => `<button class="${t[0] === st.tab ? 'on' : ''}" data-act="tab" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>`;
     const ro = ['access', 'map', 'migr'].includes(st.tab) ? '' : banner(tx('Read-only view of <b>{name}</b>. Nothing you do here changes the store until you <b>Act as store</b>.', { name: esc(rec.name) }), true);
-    const body = st.tab === 'boards' ? boardsTab(rec, c) : st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : st.tab === 'migr' ? migrTab(rec, c) : overTab(rec, c);
+    const body = st.tab === 'boards' ? boardsTab(rec, c) : st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c, fleetNewest(ctx)) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : st.tab === 'migr' ? migrTab(rec, c) : overTab(rec, c);
     return head + ro + seg + body;
   },
   mount(ctx, root) {
@@ -217,6 +269,8 @@ const storeView = {
     // The Boards tab reads the store again every 30 seconds, as its screens repaint.
     const no = st.no, tick = st.tab === 'boards' ? setInterval(() => { const c = forStore(no); delete c.snap; load(ctx, no, ['snap']).then(() => { if (st.tab === 'boards' && st.no === no) ctx.rerender(); }).catch(() => {}); }, 30_000) : null;
     if (st.tab === 'over' && !st.kpis?.[st.no]) ctx.admin.api(`/v1/admin/stores/${st.no}/kpis`).then(k => { st.kpis = { ...(st.kpis || {}), [st.no]: k }; ctx.rerender(); }).catch(() => {});
+    // The newest app version is the fleet's: the Devices tab reads every store's numbers once.
+    if (st.tab === 'devices' && kpisMissing(ctx)) kpisOnce(ctx).then(() => ctx.rerender()).catch(() => {});
     root.addEventListener('click', e => onStoreClick(e, ctx));
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="filter"]')) { st.filter = e.target.value; const t = $('#adTail', root); if (t) t.innerHTML = tailRows(forStore(st.no)); } });
@@ -277,9 +331,10 @@ function tailRows(c) {
     .map(e => `<tr><td class="mono">${e.seq}</td><td class="mono">${fmtTime(e.at)}</td><td><i class="ad-dot ${esc(e.area)}"></i>${esc(e.area)}</td><td class="mono">${esc(e.type)}</td><td class="mono"><b>${esc(ent(e.entity))}</b></td><td class="mono">${actor(e.actor)}${e.actor?.role ? ' · ' + esc(e.actor.role) : ''}</td><td>${esc(short(e.payload))}</td></tr>`);
   return table([tx('Seq'), tx('Time'), tx('Area'), tx('Type'), tx('Entity'), tx('Actor'), tx('Payload')], rows, 'ad-ev');
 }
-function devicesTab(c) {
-  const rows = Object.entries(c.devices || {}).sort((a, b) => (a[1].last < b[1].last ? 1 : -1)).map(([id, d]) => { const stale = Date.now() - new Date(d.last) > 10 * 60000, bad = d.online === false || (d.outbox || 0) > 0 || stale; return `<tr class="${bad ? 'bad' : ''}"><td class="mono"><b>${esc(id)}</b>${d.owner ? ` <span class="tst">${tx('owner')}</span>` : ''}</td><td>${esc(d.role || '')}${d.area && d.area !== d.role ? ' · ' + esc(d.area) : ''}</td><td class="mono">${esc(d.app || '')}</td><td>${status(bad ? 'warn' : 'good', d.online === false ? tx('offline') : stale ? tx('quiet') : tx('online'))}</td><td class="mono">${when(d.last)}</td><td class="mono">${d.outbox ? `<b class="c-red">${d.outbox}</b>` : '0'}</td><td>${esc(d.lastError || '')}</td></tr>`; });
-  return `<div class="card"><div class="ch"><h3>${tx('Devices')}</h3><span class="cs-dim">${tx('heartbeat every 3 min while a device is open · {n} seen', { n: rows.length })}</span></div>${table([tx('Device'), tx('Role'), tx('App'), tx('State'), tx('Last seen'), tx('Outbox'), tx('Last error')], rows, 'ad-dev')}</div>`;
+function devicesTab(c, newest) {
+  const now = Date.now();
+  const rows = Object.entries(c.devices || {}).sort((a, b) => (a[1].last < b[1].last ? 1 : -1)).map(([id, d]) => { const h = devHealth(d, newest, now); return `<tr class="${h.offline || h.outbox || h.quiet ? 'bad' : ''}">${deviceCells(id, d, h)}</tr>`; });
+  return `<div class="card"><div class="ch"><h3>${tx('Devices')}</h3><span class="cs-dim">${tx('heartbeat every 3 min while a device is open · {n} seen', { n: rows.length })}</span><a class="go" data-view="admindevices" style="margin-left:auto">${tx('Every store’s devices')}</a></div>${table(DEV_HEADS(), rows, 'ad-tbl ad-dev dv-tbl')}</div>`;
 }
 function accessTab(rec) {
   const areas = `<div class="ad-ent">${AREAS.map(a => { const on = !!rec.entitlements?.[a]; return `<div class="card"><div class="ch"><h3>${AREA_NAME[a]}</h3><span class="ad-tgl ${on ? 'on' : ''}" data-act="entitle" data-area="${a}" role="switch" aria-checked="${on}"><i></i></span></div><div class="ad-tools${on ? '' : ' off'}">${toolsIn(a).map(t => { const live = on && !(rec.toolsOff || []).includes(t.id); return `<button type="button" class="ad-tool" data-act="tool" data-tool="${t.id}" role="switch" aria-checked="${live}"${on ? '' : ' disabled'} title="${live ? tx('On: click to switch it off for this store') : tx('Off: click to switch it on')}"><span class="tick ${live ? 'on' : ''}">${live ? ic('check') : ''}</span>${esc(tx(t.name))}</button>`; }).join('')}</div>${on && toolsIn(a).some(t => (rec.toolsOff || []).includes(t.id)) ? `<p class="lbl" style="margin:8px 0 0">${tx('{n} switched off: hidden on every device now, and the worker refuses their changes.', { n: toolsIn(a).filter(t => (rec.toolsOff || []).includes(t.id)).length })}</p>` : ''}${on ? `<div class="ad-inrow" style="margin-top:10px"><span class="lbl" style="margin:0">${tx('State')}</span><select class="ad-in" data-act="areastate" data-area="${a}">${['legacy', 'migrating', 'live'].map(v => `<option value="${v}" ${rec.areas?.[a] === v ? 'selected' : ''}>${stateName(v)}</option>`).join('')}</select></div>` : ''}</div>`; }).join('')}</div>`;
@@ -636,6 +691,106 @@ async function applyToMap(ctx, no, list) {
   invalidate(no); await ctx.admin.refreshStores(); ctx.rerender();
 }
 
+// ── Devices: every store's devices, problems first ─────────────────────
+// Spot an out-of-date PC before it causes trouble: one row per device
+// across the fleet, from each store's /devices, filtered to those behind
+// the newest version, those reporting errors, or those gone quiet.
+const DEV_FILTERS = [['all', tx('All')], ['behind', tx('device filter::Behind')], ['errors', tx('With errors')], ['quiet', tx('device filter::Quiet')]];
+const DEV_MATCH = { all: () => true, behind: x => x.h.behind, errors: x => x.h.errors.length > 0, quiet: x => x.h.quiet };
+const devScore = h => (h.errors.length ? 4 : 0) + (h.behind ? 4 : 0) + (h.outbox ? 2 : 0) + (h.offline ? 1 : 0) + (h.quiet ? 1 : 0);
+const devicesPage = {
+  id: 'admindevices', title: tx('Devices'), icon: 'phone',
+  desktop(ctx) {
+    const stores = ctx.admin.stores || [], now = Date.now();
+    const all = stores.flatMap(s => Object.entries(forStore(s.no).devices || {}).map(([id, d]) => ({ s, id, d })));
+    const newest = fleetNewest(ctx);
+    for (const x of all) x.h = devHealth(x.d, newest, now);
+    all.sort((a, b) => devScore(b.h) - devScore(a.h) || (a.d.last < b.d.last ? 1 : a.d.last > b.d.last ? -1 : 0));
+    const f = DEV_MATCH[st.dfilter] ? st.dfilter : 'all', shown = all.filter(DEV_MATCH[f]), count = k => all.filter(DEV_MATCH[k]).length;
+    const waiting = stores.filter(s => !forStore(s.no).devices && !forStore(s.no).devErr), failed = stores.filter(s => forStore(s.no).devErr);
+    const live = all.filter(x => !x.h.quiet).length, behind = count('behind'), errs = count('errors'), quiet = count('quiet');
+    const rows = shown.map(({ s, id, d, h }) => `<tr><td><a class="go mono" data-view="adminstore" data-no="${esc(s.no)}" data-tab="devices">${esc(s.no)}</a><small>${esc(s.name)}</small></td>${deviceCells(id, d, h)}</tr>`);
+    const pills = `<span class="pills" style="margin-left:auto">${DEV_FILTERS.map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-act="dfilter" data-v="${k}">${l} ${count(k)}</button>`).join('')}</span>`;
+    const note = [waiting.length ? tx('Reading {n} of {total} stores…', { n: stores.length - waiting.length, total: stores.length }) : '', failed.length ? tx('Could not read {stores}.', { stores: failed.map(s => esc(s.no)).join(', ') }) : ''].filter(Boolean).join(' ');
+    return vh(tx('Devices'), sub(tx('every store’s devices'), tx('from each device’s heartbeat'), newest ? tx('newest {version}', { version: `<span class="mono">${esc(appName(newest))}</span>` }) : ''), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="dev-refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`, 'phone') +
+      `<div class="ad-tiles">${tile(all.length, txn(all.length, 'device', 'devices'), tx('{n} seen in the last 10 min', { n: live }))}${tile(behind, tx('behind the newest version'), newest ? tx('newest {version}', { version: esc(appName(newest)) }) : tx('no version reported yet'), behind ? 'warn' : '')}${tile(errs, tx('reporting errors'), tx('their last five errors each'), errs ? 'warn' : '')}${tile(quiet, tx('quiet'), tx('not seen for 10 min or more'))}</div>` +
+      `<div class="card dv-card"><div class="ch"><h3>${tx('Every store’s devices')}</h3><span class="cs-dim">${tx('problems first: errors and old versions, then changes waiting, then quiet')}</span>${pills}</div>${note ? `<p class="lbl" style="margin:0 0 8px">${note}</p>` : ''}${table([tx('Store'), ...DEV_HEADS()], rows, 'ad-tbl ad-dev dv-tbl')}</div>`;
+  },
+  mount(ctx, root) {
+    loadDevices(ctx).then(did => { if (did) ctx.rerender(); }).catch(fail);
+    if (kpisMissing(ctx)) kpisOnce(ctx).then(() => ctx.rerender()).catch(() => {});
+    root.addEventListener('click', e => {
+      const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'dfilter') { st.dfilter = a.dataset.v; ctx.rerender(); }
+      else if (a.dataset.act === 'dev-refresh') { for (const s of ctx.admin.stores || []) { const c = forStore(s.no); delete c.devices; delete c.devErr; } st.kpis = null; ctx.rerender(); }
+    });
+    return [];
+  },
+};
+
+// ── Compare stores: the same measures side by side ─────────────────────
+// One row per store from its /kpis: backfill accuracy, this week's
+// location refresh, the dock's clear time and the Adjustments shrink. In
+// each column the best store is marked good and the worst a warning, once
+// two stores have a figure; a click on a column head sorts by it.
+const money = v => Number(v || 0).toLocaleString('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 });
+const hm = m => { m = Math.max(0, Math.round(m || 0)); return m >= 60 ? tx('{h}h {m}m', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') }) : tx('{n}m', { n: m }); };
+const DASH = '<span class="cs-dim">—</span>';
+// Shrink compares in dollars: what the store's ticked-off adjustments came to, back to zero and up to one carton.
+const shrinkVal = sh => sh && sh.items && sh.priced ? sh.adjusted.combined : null;
+const CMP = [
+  { key: 'acc', head: tx('Backfill accuracy'), span: tx('7 days'), better: 1, val: k => k?.backfill?.accuracy ?? null,
+    cell: k => k.backfill?.accuracy != null ? `${accChip(k.backfill.accuracy)}<small>${txn(k.backfill.week, '{n} bay', '{n} bays')}</small>` : DASH },
+  { key: 'refresh', head: tx('Location refresh'), span: tx('this week'), better: 1, val: k => (k?.refresh ? k.refresh.counted / (k.refresh.target || 1) : null),
+    cell: k => k.refresh ? `<b>${k.refresh.counted}</b> / ${k.refresh.target}${k.refresh.done !== k.refresh.counted ? `<small>${tx('{n} marked in all', { n: k.refresh.done })}</small>` : ''}` : DASH },
+  { key: 'clear', head: tx('Dock clear time'), span: tx('7 days'), better: -1, val: k => k?.dock?.clear7?.mins ?? null,
+    cell: k => !k.dock ? DASH : `${k.dock.clear7 ? `<b>${hm(k.dock.clear7.mins)}</b>` : DASH}<small>${k.dock.clear7 ? txn(k.dock.clear7.trucks, '{n} truck', '{n} trucks') + ' · ' : ''}<span class="cmp-nw">${k.dock.clear28 ? tx('28 days: {time}', { time: hm(k.dock.clear28.mins) }) : tx('28 days: none')}</span></small>` },
+  { key: 'shrink', head: tx('Shrink adjusted · avoided'), span: tx('7 days'), better: 1, val: k => shrinkVal(k?.shrink),
+    cell: k => { const sh = k.shrink; if (!sh || !sh.items) return sh ? `${DASH}<small>${tx('nothing on the lists')}</small>` : DASH;
+      if (!sh.priced) return `<b>${txn(sh.adjustedItems, '{n} item adjusted', '{n} items adjusted')}</b><small>${tx('{n} on the lists, none with a price', { n: sh.items })}</small>`;
+      return `<span class="cmp-sh"><b>${money(sh.adjusted.toZero)}</b> ${tx('shrink::adjusted')}</span><span class="cmp-sh"><b>${money(sh.adjusted.zeroToCarton)}</b> ${tx('shrink::avoided')}</span><small>${tx('{done} of {n} items ticked off', { done: sh.adjustedItems, n: sh.items })}${sh.unpriced ? ' · ' + tx('{n} without a price', { n: sh.unpriced }) : ''}</small>`; } },
+];
+const compare = {
+  id: 'admincompare', title: tx('Compare stores'), icon: 'chart',
+  desktop(ctx) {
+    const stores = ctx.admin.stores || [], rows = stores.map(s => ({ s, k: st.kpis?.[s.no] }));
+    // Each column's best and worst, among the stores with a figure.
+    const marks = {};
+    for (const c of CMP) {
+      const vals = rows.map(r => (r.k && !r.k.error ? c.val(r.k) : null)).filter(v => v != null);
+      if (vals.length < 2) continue;
+      const hi = Math.max(...vals), lo = Math.min(...vals);
+      if (hi !== lo) marks[c.key] = c.better > 0 ? { best: hi, worst: lo } : { best: lo, worst: hi };
+    }
+    const { key, dir } = st.cmp, col = CMP.find(c => c.key === key);
+    const byNo = (a, b) => String(a.s.no).localeCompare(String(b.s.no), 'en', { numeric: true });
+    const sortVal = r => (col ? (r.k && !r.k.error ? col.val(r.k) : null) : Number(r.s.no));
+    rows.sort((a, b) => { const x = sortVal(a), y = sortVal(b); if (x == null || y == null) return (x == null) - (y == null) || byNo(a, b); return (x - y) * dir || byNo(a, b); });
+    const arrow = k => (key === k ? `<i class="cmp-arr" aria-hidden="true">${dir > 0 ? '▲' : '▼'}</i>` : '');
+    const th = (k, head, span) => `<th aria-sort="${key === k ? (dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="cmp-h${key === k ? ' on' : ''}" data-act="cmp-sort" data-key="${k}">${head}${span ? `<small>${span}</small>` : ''}${arrow(k)}</button></th>`;
+    const cell = (c, k) => { const v = c.val(k), m = marks[c.key], cls = v == null || !m ? '' : v === m.best ? ' cmp-best' : v === m.worst ? ' cmp-worst' : ''; return `<td class="cmp-c${cls}"${cls ? ` title="${cls === ' cmp-best' ? tx('The best of the stores') : tx('The weakest of the stores')}"` : ''}>${c.cell(k)}</td>`; };
+    const body = rows.map(({ s, k }) => `<tr><td><a class="go mono" data-view="adminstore" data-no="${esc(s.no)}">${esc(s.no)}</a><small>${esc(s.name)}</small></td>${!k ? `<td colspan="${CMP.length}" class="cs-dim">${tx('Loading…')}</td>` : k.error ? `<td colspan="${CMP.length}"><span class="tst">${k.error === 'unreachable' ? tx('unreachable') : esc(k.error)}</span></td>` : CMP.map(c => cell(c, k)).join('')}</tr>`).join('');
+    const notes = [
+      [tx('Backfill accuracy'), tx('the average accuracy of the bays finished in the last 7 days, as in Backfill review.')],
+      [tx('Location refresh'), tx('shelves refreshed this week against the weekly target; with focus departments set, only shelves in them count, as on the store’s Location refresh.')],
+      [tx('Dock clear time'), tx('the average time from landing (or the decant start) to the last pallet, for trucks finished in the last 7 days; the small figure is the last 28 days.')],
+      [tx('Shrink'), tx('the Adjustments lists of the last 7 days, items ticked off as adjusted, at the report’s price. Adjusted: below zero back to zero. Avoided: from zero up to one carton (carton sizes from the manifests). Without prices the items are counted.')],
+    ];
+    return vh(tx('Compare stores'), sub(tx('the same measures for every store'), txn(stores.length, '{n} store', '{n} stores')), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="cmp-refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`, 'chart') +
+      `<div class="card"><div class="ad-scroll"><table class="rstbl ad-tbl cmp-tbl"><thead><tr>${th('no', tx('Store'), '')}${CMP.map(c => th(c.key, c.head, c.span)).join('')}</tr></thead><tbody>${body || `<tr><td colspan="${CMP.length + 1}" class="cs-dim">${tx('No stores yet')}</td></tr>`}</tbody></table></div>` +
+      `<dl class="cmp-notes">${notes.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join('')}<dt><span class="cmp-key best"></span><span class="cmp-key worst"></span></dt><dd>${tx('Green marks each column’s best store and amber its weakest, once two stores have a figure; a dash is no data. Shrink marks the most dealt with as the best. Click a column head to sort.')}</dd></dl></div>`;
+  },
+  mount(ctx, root) {
+    if (kpisMissing(ctx)) kpisOnce(ctx).then(() => ctx.rerender()).catch(fail);
+    root.addEventListener('click', e => {
+      const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'cmp-refresh') { st.kpis = null; ctx.rerender(); }
+      else if (a.dataset.act === 'cmp-sort') { const k = a.dataset.key, c = CMP.find(x => x.key === k); st.cmp = st.cmp.key === k ? { key: k, dir: -st.cmp.dir } : { key: k, dir: c ? -c.better : 1 }; ctx.rerender(); }
+    });
+    return [];
+  },
+};
+
 const actions = {
   id: 'adminactions', title: tx('Owner actions'), icon: 'history',
   desktop(ctx) {
@@ -673,6 +828,6 @@ function actionText(a) {
   }
 }
 
-export const ADMIN_VIEWS = [overview, storeView, register, actions, service, maps];
+export const ADMIN_VIEWS = [overview, storeView, register, actions, service, maps, devicesPage, compare];
 export function adminSelected() { return st.no; }
 export function resetAdmin() { st.no = null; st.tab = 'over'; st.reg = null; st.regDone = null; st.actions = null; st.health = null; invalidate(); }

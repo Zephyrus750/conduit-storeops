@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createStore, refusalWaits } from '../../client/store.js';
+import { createStore, refusalWaits, pageDevice, HEARTBEAT_MS } from '../../client/store.js';
 import { memoryStorage } from '../../client/storage.js';
 import { initialState, apply } from '../../shared/reducers.js';
 import { CATALOGUE } from '../../shared/catalogue.js';
@@ -190,4 +190,25 @@ test('the list of changes on the device names each in words: the common ones by 
   assert.equal(changeLabel({ type: 'scan.preset', area: 'stockroom' }), 'Stockroom');
   assert.equal(changeLabel({ type: 'feedback.send', area: 'store' }), 'Store');
   for (const [type, info] of Object.entries(CATALOGUE)) assert.doesNotMatch(changeLabel({ type, area: info.area }), /\.|^[a-z]/, `${type} shows as words`);
+});
+
+test('the heartbeat carries the language, the kind of device and the last errors (the console’s device health)', async () => {
+  const hbs = [], queued = [], tick = () => new Promise(r => setImmediate(r));
+  const later = { setTimeout: (f, ms) => { queued.push({ f, ms }); return queued.length; }, clearTimeout() {} };
+  const transport = { wsBase: 'ws://none', request: async (path, { body }) => { if (/\/hb$/.test(path)) { hbs.push(body); return { ok: true }; } throw new Error('worker unreachable'); } };
+  const s = createStore({ storeNo: '1241', session: fakeSession(['floor', 'stockroom']), transport, storage: memoryStorage(), WebSocketImpl: null, timers: later, online: () => true, device: () => ({ lang: 'fr', kind: 'phone' }) });
+  await s.load(); await s.connect(); await tick();
+  assert.equal(hbs.length, 1, 'polling: presence goes over POST /hb');
+  assert.deepEqual([hbs[0].lang, hbs[0].kind, hbs[0].errors], ['fr', 'phone', []]);
+  await s.dispatch({ type: 'cage.create', entity: { cage: 'BSN1240417' }, payload: { ring: 'overstock' } }); await tick();
+  await s.flush(); await tick();   // the same error again only moves its time on
+  assert.deepEqual(s.errors.map(e => e.msg), ['worker unreachable']);
+  queued.filter(q => q.ms === HEARTBEAT_MS).at(-1).f(); await tick();
+  assert.deepEqual(hbs.at(-1).errors.map(e => e.msg), ['worker unreachable']);
+  assert.match(hbs.at(-1).errors[0].at, /^\d{4}-\d\d-\d\dT/);
+  s.close();
+  // Outside a page there is nothing to say; a screen sign-in is a screen, a phone-width frame a phone.
+  assert.deepEqual(pageDevice({ current: {} }, undefined), { lang: null, kind: null });
+  const doc = w => ({ documentElement: { lang: 'vi' }, querySelector: () => ({ clientWidth: w }) });
+  assert.deepEqual([pageDevice({ current: { screen: true } }, doc(1920)), pageDevice({ current: {} }, doc(420)), pageDevice({ current: {} }, doc(960))], [{ lang: 'vi', kind: 'screen' }, { lang: 'vi', kind: 'phone' }, { lang: 'vi', kind: 'pc' }]);
 });

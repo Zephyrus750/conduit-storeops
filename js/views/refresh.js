@@ -2,7 +2,7 @@
 // plan paint. Reads store.get('refresh'); writes refresh.* events.
 
 import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig, today, mgr, empty } from '../ui.js';
-import { focusDone } from '../../shared/reducers/floor.js';
+import { focusDone, REFRESH_TARGET } from '../../shared/reducers/floor.js';
 import { retailPeriod } from '../../shared/time.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
 import { openScanner } from '../scan.js';
@@ -13,7 +13,7 @@ const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#e
 const PLAN_NAME = { '#a855f7': tx('Purple'), '#3b82f6': tx('Blue'), '#f59e0b': tx('Amber'), '#ec4899': tx('Pink'), '#14b8a6': tx('Teal'), '#ef4444': tx('Red') };
 const planName = c => PLAN_NAME[String(c).toLowerCase()] || tx('Planned');
 const planChip = c => `<span class="rfplan-c"><i style="background:${esc(c)}"></i>${planName(c)}</span>`;
-const TARGET = 100;
+const TARGET = REFRESH_TARGET;
 const isMgr = ctx => { const c = ctx.session.current; return !!c && (!!c.owner || (c.roles || []).includes('manager')); };
 const mgrTag = () => mgr();
 // The departments a week's focus can name (ShelfSearcher's fourteen).

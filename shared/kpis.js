@@ -1,17 +1,26 @@
 // The owner console's numbers for one store, from its state (Vector's
 // console KPIs): backfill today and over seven days with accuracy and the
-// bays the rollover auto-closed yesterday, the dock's last week, open
-// issues, the devices it has seen with their app versions and errors, and
-// set-up alerts: what is missing before the store can use what it is
-// entitled to. Pure: the store object serves it, tests build state by hand.
+// bays the rollover auto-closed yesterday, the dock's last week with its
+// clear times, this week's location refresh against its target, the last
+// seven days' shrink from the Adjustments lists, open issues, the devices
+// it has seen with their app versions and errors, and set-up alerts: what
+// is missing before the store can use what it is entitled to. Pure: the
+// store object serves it, tests build state by hand.
 //
-//   storeKpis(state, { today, caps, now, bytes }) → { backfill, dock, floor, devices, alerts: [{ level, text }], bytes }
+//   storeKpis(state, { today, caps, now, bytes, cartons }) →
+//     { backfill, dock, refresh, shrink, floor, devices, alerts: [{ level, text }], bytes }
+//
+// cartons is the store's carton profiles document (/profiles): the units a
+// carton the "up to one carton" shrink needs, as Adjustments reads them.
 
 import { addDays } from './time.js';
 import { settingsOf } from './reducers/store.js';
+import { focusDone, REFRESH_TARGET } from './reducers/floor.js';
+import { isoWeek, shrinkParts } from './stockintel.js';
+import { clearTime } from './dockstats.js';
 
 const DAY = 86400000;
-export function storeKpis(state, { today, caps = [], now = Date.now(), bytes = 0 } = {}) {
+export function storeKpis(state, { today, caps = [], now = Date.now(), bytes = 0, cartons = null } = {}) {
   const has = a => caps.includes(a), alerts = [], warn = (level, text) => alerts.push({ level, text });
   const yesterday = addDays(today, -1), weekFrom = addDays(today, -6);
   const subs = Object.values(state.backfill?.subs || {});
@@ -31,7 +40,14 @@ export function storeKpis(state, { today, caps = [], now = Date.now(), bytes = 0
     trucks: hist.length, cartons: hist.reduce((n, r) => n + (r.cartons || 0), 0),
     clearMins: hist.length ? Math.round(hist.reduce((n, r) => n + (r.clearMins || 0), 0) / hist.length) : null,
     open: open.length, manifests: Object.values(state.dock?.manifests || {}).filter(m => (m.publishedAt || '').slice(0, 10) >= weekFrom).length,
+    // Average clear time of the trucks finished in the last 7 and 28 days (Receiving history's clock).
+    clear7: clearTime(state.dock?.history, now, 7), clear28: clearTime(state.dock?.history, now, 28),
   } : null;
+  // Location refresh this week: what the PC's "X / 100 this week" counts
+  // (focus departments only, when the week has any), and every mark.
+  const rweek = isoWeek(today), marks = state.refresh?.weeks?.[rweek] || {}, focus = state.refresh?.focus?.[rweek] || [];
+  const refresh = has('floor') ? { week: rweek, counted: focusDone(marks, focus), done: Object.keys(marks).length, target: REFRESH_TARGET, focus: focus.length } : null;
+  const shrink = has('stockroom') ? shrinkWeek(state.adjustments, weekFrom, today, cartonLookup(cartons)) : null;
   const issues = Object.values(state.issues || {}).filter(i => !i.removed && !['closed', 'completed'].includes(i.status));
   const floor = has('floor') ? { openIssues: issues.length, urgent: issues.filter(i => (i.sev || 0) >= 2).length } : null;
   const devs = Object.entries(state.devices || {}), recent = devs.filter(([, d]) => now - Date.parse(d.last) < DAY);
@@ -50,5 +66,34 @@ export function storeKpis(state, { today, caps = [], now = Date.now(), bytes = 0
   // The live state is one 2 MB row; retention keeps it small. Over 1.2 MB, say so.
   if (bytes > 1_200_000) warn(bytes > 1_700_000 ? 'bad' : 'warn', `The store's live data is ${(bytes / 1e6).toFixed(1)} MB of the 2 MB a store can hold.`);
   if (backfill?.autoClosed) warn('info', `${backfill.autoClosed} bay${backfill.autoClosed === 1 ? '' : 's'} auto-closed at yesterday's rollover.`);
-  return { backfill, dock, floor, devices, alerts, bytes };
+  return { backfill, dock, refresh, shrink, floor, devices, alerts, bytes };
+}
+
+// Units a carton for a keycode, as the PC's Adjustments reads it: the
+// profile when three or more trucks agree, else the latest delivery's.
+const cartonLookup = doc => kc => doc?.profiles?.[kc]?.ctn || doc?.last?.[kc]?.ctn || null;
+
+// The last seven days' Adjustments lists (the list days weekFrom to today)
+// in the three parts the list adds up (shrinkParts): below zero back to
+// zero, from zero up to one carton, and the two combined. Over every item
+// at zero or below on the lists (listed) and over those ticked off as
+// adjusted (adjusted). Valued at the report's price; an item without one
+// is counted in unpriced, and one without a carton size in noSize.
+export function shrinkWeek(adjustments, from, to, cartonOf = () => null) {
+  const zero = () => ({ toZero: 0, zeroToCarton: 0, combined: 0 });
+  const r = { items: 0, adjustedItems: 0, priced: 0, unpriced: 0, noSize: 0, listed: zero(), adjusted: zero() };
+  for (const [date, day] of Object.entries(adjustments || {})) {
+    if (date < from || date > to) continue;
+    for (const [kc, it] of Object.entries(day || {})) {
+      if (!(Number(it?.qty) <= 0)) continue;
+      r.items++; if (it.done) r.adjustedItems++;
+      if (!(Number(it.price) > 0)) { r.unpriced++; continue; }
+      r.priced++;
+      const ctn = cartonOf(kc); if (!ctn) r.noSize++;
+      const p = shrinkParts(it.qty, ctn, it.price);
+      for (const k of ['toZero', 'zeroToCarton', 'combined']) { r.listed[k] += p[k]; if (it.done) r.adjusted[k] += p[k]; }
+    }
+  }
+  for (const part of [r.listed, r.adjusted]) for (const k of Object.keys(part)) part[k] = Math.round(part[k] * 100) / 100;
+  return r;
 }

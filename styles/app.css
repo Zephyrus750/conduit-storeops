@@ -4625,3 +4625,42 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .bdm-done .mv-ghost.sm { width: auto; min-height: 34px; padding: 0 12px; font-size: 13px; }
 /* shell.css sizes every icon inside an .empty: the action's button keeps its own. */
 .empty .em-a svg.i { width: 1.25em; height: 1.25em; margin: 0; color: inherit; stroke-width: 1.9; }
+/* ── Owner console: Devices (device health) ───────────────────────────── */
+.dv-tbl td { vertical-align: top; }
+.dv-tbl td small { display: block; margin-top: 2px; color: var(--dim); font-size: 11.5px; }
+.dv-tbl td .status { font-size: 11.5px; padding: 2px 8px; }
+.dv-app { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dv-lang { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dv-lang svg.flag { width: 20px; height: 13px; }
+.dv-errs { min-width: 220px; max-width: 420px; }
+.dv-err { display: block; color: var(--red); overflow-wrap: anywhere; }
+.dv-errs details { margin-top: 4px; }
+.dv-errs summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+.dv-errs details > div { padding: 4px 0 0 10px; border-left: 2px solid var(--line-soft); margin-top: 4px; }
+
+/* ── Owner console: Compare stores ────────────────────────────────────── */
+.cmp-tbl th { padding: 2px 4px 6px; vertical-align: bottom; }
+.cmp-h { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; background: none; border: 0; padding: 4px; border-radius: 6px; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; text-align: left; cursor: pointer; }
+.cmp-h:hover { background: var(--hover); color: var(--ink2); }
+.cmp-h.on { color: var(--accent-ink); }
+.cmp-h small { font-size: 10px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--dim); }
+.cmp-arr { font-style: normal; font-size: 9px; }
+.cmp-tbl td { vertical-align: top; padding: 9px 8px; }
+.cmp-tbl td small { display: block; margin-top: 3px; color: var(--dim); font-size: 11.5px; }
+.cmp-tbl td b { font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cmp-c { border-left: 3px solid transparent; }
+.cmp-best { background: rgba(22, 163, 74, .09); border-left-color: var(--green); }
+.cmp-worst { background: rgba(245, 158, 11, .12); border-left-color: var(--amber); }
+.cmp-sh { display: block; white-space: nowrap; }
+.cmp-sh + .cmp-sh b { font-size: 13px; }
+.cmp-notes { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 14px 0 0; padding: 12px 2px 0; border-top: 1px solid var(--line-soft); font-size: 12.5px; color: var(--ink2); }
+.cmp-notes dt { font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 4px; }
+.cmp-notes dd { margin: 0; }
+.cmp-key { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+.cmp-key.best { background: rgba(22, 163, 74, .2); border-left: 3px solid var(--green); }
+.cmp-key.worst { background: rgba(245, 158, 11, .25); border-left: 3px solid var(--amber); }
+@container shell (max-width: 1100px) { .cmp-notes { grid-template-columns: 1fr; } .cmp-notes dt { margin-top: 4px; } }
+.cmp-nw { white-space: nowrap; }
+.dv-card .ch { flex-wrap: wrap; row-gap: 8px; }
+.dv-card .ch h3 { flex: none; }
+@container shell (max-width: 1100px) { .dv-errs { min-width: 160px; } .dv-tbl td:nth-child(n+2) { padding-left: 6px; padding-right: 6px; } }

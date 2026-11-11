@@ -5,6 +5,8 @@
 //   await c.session.signIn({ store: '1241', pin: '2468' });
 //   const store = await c.open('1241');   // load cache, connect, ready to dispatch
 //
+// device: () => ({ lang, kind }) for the heartbeat, else read from the page
+// (client/store.js pageDevice).
 // c.maps.get(no) fetches the published map once per version; c.catalogue
 // .lookup(kc) answers product lookups from a week-long cache.
 // Shared modules (catalogue, validation, reducers) are the same files the
@@ -24,7 +26,7 @@ export { createStore } from './store.js';
 export { createCatalogue } from './catalogue.js';
 export { createMaps } from './maps.js';
 
-export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, WebSocketImpl, app = 'conduit', timers } = {}) {
+export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, WebSocketImpl, app = 'conduit', timers, device } = {}) {
   const transport = createTransport({ baseUrl, fetchImpl });
   const session = createSession({ transport, storage, app });
   const catalogue = createCatalogue({ transport, storage, timers, token: () => session.token() });
@@ -34,7 +36,7 @@ export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, W
     if (!storeNo) throw new Error('no store: sign in first');
     const no = String(storeNo);
     if (stores.has(no)) return stores.get(no);
-    const store = createStore({ storeNo: no, session, transport, storage, WebSocketImpl, timers });
+    const store = createStore({ storeNo: no, session, transport, storage, WebSocketImpl, timers, ...(device ? { device } : {}) });
     stores.set(no, store);
     await store.load();
     store.connect();
