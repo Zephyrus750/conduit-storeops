@@ -113,7 +113,7 @@ export function microDept(code) { const c = String(code || '').padStart(3, '0');
 export function microName(code) { const c = String(code || '').padStart(3, '0'); for (const list of Object.values(MICRO)) { const x = list.find(x => x.startsWith(c + ' ')); if (x) return x.slice(4); } return ''; }
 // A report line's department as a chip: its sub-department's colour and id,
 // the number and common name on hover; grey with the raw code when unknown.
-export function microChip(d) { const dd = microDept(d), nm = microName(d), c = dd ? dep(dd) : `<span class="dep" style="background:#64748B">${esc(d || '???')}</span>`; return nm ? c.replace('<span class="dep"', `<span class="dep" title="${esc(String(d).padStart(3, '0'))} ${esc(nm)}"`) : c; }
+export function microChip(d) { const dd = microDept(d), nm = microName(d), c = dd ? dep(dd) : `<span class="dep" style="--dc:#64748B">${esc(d || '???')}</span>`; return nm ? c.replace('<span class="dep"', `<span class="dep" title="${esc(String(d).padStart(3, '0'))} ${esc(nm)}"`) : c; }
 export const manifestIndex = dock => Object.values(dock.manifests || {}).sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
 
 // SheetJS reads the .xls (Crystal export) and .xlsx; it loads on first use

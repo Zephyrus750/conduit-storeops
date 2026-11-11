@@ -4722,3 +4722,32 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .cl-prog i { width: var(--w, 0%); }
 .tr-c { background: color-mix(in srgb, #14B8A6 var(--a, 0%), transparent); }
 .tr-bar > div i, .tr-bar1 i, .tr-times i { width: var(--w, 0%); }
+/* Back dock: bars, timelines and grids whose sizes and colours are data. */
+.bdm-p .bar i, .mv-tally i u, .da-bar > div i, .ms-wd div i, .mfx-pct i, .mp-bar i b, .bdr-bar i, .dk-bar i, .scr-bar > i, .tl i, .wb-ppbar i { width: var(--w, 0%); }
+.bdm-p .bar u, .dk-bar b, .wb-ppbar em, .wb-now, .wb-axis span { left: var(--x, 0); }
+.bdr-pace, .scr-pace { left: var(--x, 0); }
+.wb-halt, .wb-brk, .wb-seg { left: var(--x, 0); width: var(--w, 0%); }
+.wb-seg:not(.plan) { background: var(--c, #98A2B3); }
+.wb-sbar i, .mfx-roll .mfx-seg, .mp-roll span { flex: var(--f, 1); background: var(--c); }
+.mp-bar i b, .tl i { background: var(--c, #2563EB); }
+.tl i.on, .tlk i.on { background: #16A34A; }
+.da-trucks i { height: var(--h, 0%); }
+.wb-legend .l.clear { background: #94A3B8; } .wb-legend .l.rate { background: #2563EB; }
+.inv-legend i.k-other { background: #C9D3D9; }
+.mfx-pct i.blue { background: #3B82F6; }
+.track > i.ok { background: #16A34A; }
+.cpf-cls { background: var(--c); color: var(--ci); }
+.grp-note { margin: -4px 0 8px; }
+.cs-dim.pad { padding: 8px 2px; }
+.facts6.two { grid-template-columns: repeat(2, 1fr); }
+.ml-0 { margin-left: 0; }
+.inp.w-team { width: 70px; }
+.btn.big.wide { width: 100%; justify-content: center; margin-top: 10px; }
+.bdk-grid { grid-template-columns: repeat(var(--cols, 7), 1fr); }
+.scr-grid { grid-template-columns: repeat(var(--cols, 7), 1fr); }
+.wb-grid { grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr)); }
+/* Receiving's dock key. */
+.bdr-legend i.k-done { background: #C9F0D8; border: 1px solid #86D9A8; }
+.bdr-legend i.k-decant { background: #fff; border: 2px solid var(--accent); }
+.bdr-legend i.k-carry { background: #fff; border: 2px solid #7C3AED; }
+.bdr-legend i.k-over { background: #fff; border: 2px solid #DC2626; }

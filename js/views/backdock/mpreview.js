@@ -43,7 +43,7 @@ const GROUPS = [['h', 'Home', '#2563EB'], ['c', 'Clothing', '#DB2777'], ['k', 'K
 const SUB = Object.fromEntries(SUBS.map(x => [x[0], x]));
 const groupOf = code => { const d = microDept(code); return !d ? '?' : d === 'flex' ? 'flex' : d[0]; };
 const colourOf = code => (GROUPS.find(g => g[0] === groupOf(code)) || GROUPS[4])[2];
-const NO_DEPT = `<span class="dep" style="background:#94A3B8;color:#fff">?</span>`;
+const NO_DEPT = `<span class="dep" style="--dc:#94A3B8;--di:#fff">?</span>`;
 // A micro-department in words: its department's badge, its number and
 // name, and (sub) that department's name beneath, "Bed, Bath, Laundry".
 function micro(code, sub = true) {
@@ -162,7 +162,7 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
     const microsOf = () => micros0 ||= microRows(parsed), prodsOf = () => prods0 ||= productRows(parsed), groupsOf = () => groups0 ||= groupRows(microsOf());
     const listOf = v => v === 'depts' ? microsOf() : v === 'products' ? prodsOf() : parsed.consols || [];
     const rowsOf = v => { const f = SORTS[v][pick.sort[v]], list = listOf(v).filter(r => !q || HITS[v](r, q)); return f ? list.slice().sort((a, b) => f(b) - f(a)) : list; };
-    const bar = (c, max, colour) => `<span class="mp-bar"><i><b style="width:${Math.round(c / max * 100)}%;background:${colour}"></b></i><span>${num(c)}</span></span>`;
+    const bar = (c, max, colour) => `<span class="mp-bar"><i><b style="--w:${Math.round(c / max * 100)}%;--c:${colour}"></b></i><span>${num(c)}</span></span>`;
     const chev = key => `<button type="button" class="mp-x" data-mpa="x" aria-expanded="${open.has(key)}" aria-label="${tx('Show the details')}">${ic('chev')}</button>`;
     const th = (v, [label, key, cls = '']) => {
       if (!key) return `<th${cls ? ` class="${cls}"` : ''}>${label}</th>`;
@@ -210,7 +210,7 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
       const cells = (x, colour) => `<td>${bar(x.cartons, tot, colour)}</td><td class="n mp-lo">${Math.round(x.cartons / tot * 100)}%</td><td class="n">${num(x.units)}</td><td class="n mp-lo">${num(x.keys.size)}</td><td class="n">${x.consols.size}</td>`;
       const chip = m => `<button type="button" class="mp-gm" data-mpa="micro" data-code="${esc(m.code)}" title="${tx('Show it under Departments')}"><b class="mono">${esc(m.code)}</b>${esc(microName(m.code) || tx('Unknown micro-department'))}<small>${tx('{n} ctn', { n: m.cartons })}</small></button>`;
       return `<div class="mp-tw"><table class="wb-t mp-t mp-groups"><thead><tr><th>${tx('Department')}</th><th>${tx('Cartons')}</th><th class="n mp-lo">${tx('Share')}</th><th class="n">${tx('Units')}</th><th class="n mp-lo">${tx('Keycodes')}</th><th class="n">${tx('Consols')}</th></tr></thead><tbody>` +
-        groupsOf().map(g => `<tr class="mp-gh"><td><span class="mp-gn"><i style="background:${g.colour}"></i>${esc(g.name)}</span></td>${cells(g, g.colour)}</tr>` +
+        groupsOf().map(g => `<tr class="mp-gh"><td><span class="mp-gn"><i class="sw-c" style="--c:${g.colour}"></i>${esc(g.name)}</span></td>${cells(g, g.colour)}</tr>` +
           g.subs.map(s => `<tr class="mp-gs"><td><span class="mp-gd">${SUB[s.sd] ? dep(s.sd) : NO_DEPT}<span>${SUB[s.sd] ? esc(SUB[s.sd][2]) : tx('Not in the department list')}</span></span><span class="mp-gms">${s.micros.map(chip).join('')}</span></td>${cells(s, g.colour)}</tr>`).join('')).join('') +
         `</tbody></table></div>`;
     }
@@ -290,7 +290,7 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
         `${stat(tx('Keycodes'), s.keycodes.toLocaleString(), txn(s.lines, '{n} line', '{n} lines', { n: s.lines.toLocaleString() }))}${stat(tx('Units'), s.units.toLocaleString(), s.cartons ? tx('about {n} a carton', { n: Math.round(s.units / s.cartons) }) : '')}` +
         `${stat(tx('Est. work'), hm(s.workMins), tx('{mpc} min a carton · about {time} for four', { mpc, time: share }))}</div>` +
         `<div class="pt3">${tx('Departments')}<span class="cs-dim">${txn(micros.length, '{n} micro-department · cartons, largest first', '{n} micro-departments · cartons, largest first')}</span></div>` +
-        `<div class="mp-roll">${GROUPS.filter(g => gc[g[0]] > 0).map(g => `<span style="flex:${gc[g[0]]};background:${g[2]}" title="${esc(g[1])}: ${tx('{n} cartons', { n: gc[g[0]] })}">${gc[g[0]] / tot > 0.1 ? `${esc(g[1])} ${Math.round(gc[g[0]] / tot * 100)}%` : ''}</span>`).join('')}</div>` +
+        `<div class="mp-roll">${GROUPS.filter(g => gc[g[0]] > 0).map(g => `<span style="--f:${gc[g[0]]};--c:${g[2]}" title="${esc(g[1])}: ${tx('{n} cartons', { n: gc[g[0]] })}">${gc[g[0]] / tot > 0.1 ? `${esc(g[1])} ${Math.round(gc[g[0]] / tot * 100)}%` : ''}</span>`).join('')}</div>` +
         barHtml() + `<div class="mp-view">${viewHtml()}</div></div>` +
         // The checks' text is shared/manifest.js's, in English: checkText() (mbatch.js) says each in this device's language.
         `<div class="mp-side">${cameHtml()}<div class="pt3">${tx('Checks')}</div><ul class="mp-checks">${chk.checks.map(c => `<li class="${c.level}">${c.level === 'ok' ? '✓' : c.level === 'bad' ? '⛔' : '⚠'} ${esc(checkText(c.text))}</li>`).join('')}</ul>` +
