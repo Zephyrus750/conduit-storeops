@@ -8,7 +8,7 @@
 // The register and loads are store events (inventory.*), so every desk sees
 // them, as before.
 
-import { $, $$, ic, esc, toast, fmtDate, today, dep, empty } from '../../ui.js';
+import { $, $$, ic, esc, toast, fmtDate, today, dep, empty, pill } from '../../ui.js';
 import { MICRO } from '../../data/micros.js';
 import { loadXLSX } from './common.js';
 import { parseManifestSheets } from '../../../shared/manifest.js';
@@ -20,8 +20,8 @@ import { tx, txn } from '../../i18n.js';
 const CODE = new Map(); for (const [subId, list] of Object.entries(MICRO)) for (const entry of list) if (!CODE.has(entry.slice(0, 3))) CODE.set(entry.slice(0, 3), { sub: subId, name: entry.slice(4) });
 export const codeName = c => CODE.get(c)?.name || (c === '???' || c === '?' ? tx('No department') : tx('Department {code}', { code: c }));
 export const knownCode = c => CODE.has(c);
-export const LOAD_STATUS_NAME = { incoming: [tx('Incoming'), '#B45309'], received: [tx('Received'), '#15803D'], offsite: [tx('Off-site'), '#C2410C'] };
-export const statusPill = s => `<span class="inv-st" style="--c:${LOAD_STATUS_NAME[s]?.[1] || '#64748B'}">${LOAD_STATUS_NAME[s]?.[0] || esc(s)}</span>`;
+export const LOAD_STATUS_NAME = { incoming: [tx('Incoming'), 'warn'], received: [tx('Received'), 'good'], offsite: [tx('Off-site'), 'warn'] };
+export const statusPill = s => pill(LOAD_STATUS_NAME[s]?.[0] || esc(s), LOAD_STATUS_NAME[s]?.[1] || '', { size: 'sm' });
 export const units = n => Number(n || 0).toLocaleString('en-AU');
 export const loadUnits = l => (l.pallets || []).reduce((n, p) => n + p.items.reduce((k, i) => k + (Number(i.q) || 0), 0), 0);
 export const loadLines = l => (l.pallets || []).reduce((n, p) => n + p.items.length, 0);

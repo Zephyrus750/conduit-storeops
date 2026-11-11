@@ -4,7 +4,7 @@
 // device is signed in to, with switching. Details come from the map
 // editor's Store Info, published with the map (cleanStoreInfo).
 
-import { ic, esc, vh, sub, status, toast, fmtTime, mhead, fmtDay, empty } from '../ui.js';
+import { ic, esc, vh, sub, status, pill, toast, fmtTime, mhead, fmtDay, empty } from '../ui.js';
 import { mapInfo, mapStats, mapSymbols, symbolsHtml } from '../map.js';
 import { tx, txn } from '../i18n.js';
 import { ask } from '../sheet.js';
@@ -23,7 +23,7 @@ function details(ctx, si, phone = false) {
   const hours = si.hoursDays?.length ? `<table class="si-hours">${si.hoursDays.map(([d, t]) => `<tr${/^sat/i.test(d) ? ' class="wk"' : ''}><th>${esc(d)}</th><td>${esc(t)}</td></tr>`).join('')}</table>` : '';
   const today = isoDay(new Date());
   const hols = (si.publicHolidays || []).filter(h => h.date && h.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8);
-  const holsHtml = hols.length ? `<div class="si-hols">${hols.map(h => `<div class="${/closed/i.test(h.hours) ? 'closed' : ''}"><b>${esc(h.name || tx('Public holiday'))}</b>${h.date === today ? `<span class="si-today">${tx('today')}</span>` : ''}<span>${esc(dayLabel(h.date))}</span><span class="h">${esc(h.hours || '')}</span></div>`).join('')}</div>` : '';
+  const holsHtml = hols.length ? `<div class="si-hols">${hols.map(h => `<div class="${/closed/i.test(h.hours) ? 'closed' : ''}"><b>${esc(h.name || tx('Public holiday'))}</b>${h.date === today ? `${pill(tx('today'), '', { size: 'sm', live: true, cls: 'si-today' })}` : ''}<span>${esc(dayLabel(h.date))}</span><span class="h">${esc(h.hours || '')}</span></div>`).join('')}</div>` : '';
   const dirs = [link(dirGoogle(si), 'Google Maps', 'map'), link(dirApple(si, ctx.storeName), 'Apple Maps', 'map')].join('');
   return `<div class="card"><div class="ch"><h3>${tx('Details')}</h3></div>` +
     (addr ? `<div class="si-sec"><div class="si-k">${tx('Address')}</div><div>${addr}</div></div>` : '') +

@@ -8,7 +8,7 @@
 
 import { focusDone } from '../../shared/reducers/floor.js';
 import { addDays, retailPeriod } from '../../shared/time.js';
-import { ic, esc, vh, greeting, today, fmtDay, fmtDate, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip, empty } from '../ui.js';
+import { ic, esc, vh, greeting, today, fmtDay, fmtDate, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip, empty, pill } from '../ui.js';
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
@@ -18,7 +18,7 @@ import { itemCartons } from './backdock/manifests.js';
 import { nameOf, ensureNames } from './stockroom/common.js';
 import { flags as palletFlags } from './backdock/receiving.js';
 import { settingsOf } from '../../shared/reducers/store.js';
-import { phaseChip, phaseLine, PHASE_NAME } from './backdock/phase.js';
+import { phaseChip, phaseLine, PHASE_NAME, PHASE_TONE } from './backdock/phase.js';
 import { PHASES, truckPhase, phaseSteps } from '../../shared/dockphase.js';
 import { ratesFor } from './backdock/plan.js';
 import { toolOff } from '../../shared/tools.js';
@@ -274,7 +274,7 @@ function dockCard(ctx, r) {
     // closed today (shown as Closed until the next truck lands).
     const ph = t ? truckPhase(t) : last ? 'closed' : null, shown = t || last;
     const steps = ph ? `<ol class="dk-steps6" aria-label="${tx('Truck phase')}">${PHASES.map((x, i) => `<li class="${phaseSteps(ph)[i]}"${x === ph ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[x]}</span></li>`).join('')}</ol>` : '';
-    const chip = shown ? `<span class="phb-chip ph-${ph}">${PHASE_NAME[ph]}</span> <b>${tx('Truck {no}', { no: esc(truckNo(shown.id)) })}</b>` : `<span class="phb-chip dock-st ${none || awayDay ? 'none' : 'idle'}${awayDay ? ' away' : ''}">${none ? tx('No trucks today') : awayDay ? awayTitle : tx('No truck on the dock')}</span>`;
+    const chip = shown ? `${pill(PHASE_NAME[ph], PHASE_TONE[ph], { size: 'sm', live: ph === 'decanting' })} <b>${tx('Truck {no}', { no: esc(truckNo(shown.id)) })}</b>` : pill(none ? tx('No trucks today') : awayDay ? awayTitle : tx('No truck on the dock'), awayDay ? 'warn' : none ? 'info' : '', { size: 'sm' });
     const cartons = done.reduce((n, h) => n + (h.cartons || 0), 0) + onDock.reduce((n, x) => n + progress(x).done, 0);
     const row = (label, value) => `<div class="row">${label}<b>${value}</b></div>`;
     const common = row(tx('Trucks today'), planned ? tx('{done} of {n} cleared', { done: done.length, n: planned }) : none ? tx('none · confirmed in the Planner') : awayDay ? txn(away.length, '{n} not coming to the dock', '{n} not coming to the dock') : '—') +
@@ -353,14 +353,14 @@ function morning(ctx) {
   const meta = srOk ? ctx.store.get('backfill')?.report : null;
   const rep = meta?.date === t ? meta : report && srOk ? { at: report.at, bays: Object.keys(report.byLoc || {}).length, codes: Object.values(report.byLoc || {}).reduce((n, l) => n + l.length, 0) } : null, midday = rep && new Date(rep.at).getHours() >= 12;
   const A = [
-    srOk && [`${tx('Morning inventory report')} <span class="chip due">${tx('Required')}</span>`, rep ? tx('Pasted {time} · {bays} bays · {codes} codes', { time: fmtHM(new Date(rep.at).toISOString()), bays: rep.bays, codes: rep.codes }) : tx('Not pasted yet · the board compares against nothing until it is'), !!rep, tx('Paste whole report'), tx('Re-paste'), 'paste'],
+    srOk && [`${tx('Morning inventory report')} ${pill(tx('Required'), 'warn', { size: 'sm' })}`, rep ? tx('Pasted {time} · {bays} bays · {codes} codes', { time: fmtHM(new Date(rep.at).toISOString()), bays: rep.bays, codes: rep.codes }) : tx('Not pasted yet · the board compares against nothing until it is'), !!rep, tx('Paste whole report'), tx('Re-paste'), 'paste'],
     dockOk && (none ? [tx('Manifests for today’s trucks'), tx('No trucks today · confirmed in the Planner') + tmrw, true, '', tx('Open'), 'planner'] : away.length ? [tx('Manifests for today’s trucks'), tx('Not coming to the dock today: {list}', { list: awayList }) + tmrw, true, '', tx('Open'), 'planner'] : manRow(mans, lib, tmrw, dock, t)),
     dockOk && none ? [tx('Planner'), tx('No trucks today · confirmed'), true, '', tx('Open'), 'planner'] : dockOk && away.length ? [tx('Planner'), tx('{list} · marked in the Planner', { list: awayList }), true, '', tx('Open'), 'planner'] : dockOk && [tx('Planner'), mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · ' + tx('teams set') : ''}` : tx('Today’s trucks not planned · or confirm no trucks in the Planner'), mans.length > 0, tx('Plan today’s trucks'), tx('Open'), 'planner'],
   ].filter(Boolean);
   const B = [
     dockOk && none ? [tx('First truck decant'), tx('No trucks today'), true, '', tx('Open'), 'planner'] : dockOk && away.length ? [tx('First truck decant'), tx('No truck to decant today'), true, '', tx('Open'), 'planner'] : dockOk && [tx('First truck decant'), !first ? tx('No truck on the dock yet today') : first.status === 'closed' || first.clearMins != null ? tx('Closed · {time}', { time: fmtMins(first.clearMins || 0) }) : first.goalAt ? tx('goal {time} · {pct}% decanted', { time: fmtHM(first.goalAt), pct: progress(first).pct }) : tx('{pct}% decanted', { pct: progress(first).pct }), !!first && (first.status === 'closed' || first.clearMins != null), tx('Open the dock'), tx('History'), first && first.clearMins != null ? 'rhistory' : 'receiving'],
     // Optional: the midday report takes about ten minutes to make, so it never holds the list back.
-    srOk && [`${tx('Midday report')} <span class="chip opt">${tx('Optional')}</span>`, midday ? tx('Pasted {time}', { time: fmtHM(new Date(rep.at).toISOString()) }) : tx('After 12:00 if there is time · the room moves after the next truck lands'), !!midday, tx('Paste whole report'), tx('Re-paste'), 'paste', true],
+    srOk && [`${tx('Midday report')} ${pill(tx('Optional'), 'info', { size: 'sm' })}`, midday ? tx('Pasted {time}', { time: fmtHM(new Date(rep.at).toISOString()) }) : tx('After 12:00 if there is time · the room moves after the next truck lands'), !!midday, tx('Paste whole report'), tx('Re-paste'), 'paste', true],
     [tx('Label integrity · today’s department'), liToday.length ? tx('{list} · checked', { list: liToday.map(([id]) => { const [sid, code] = id.split('-'); const e = (MICRO[sid] || []).find(x => microCode(x) === code); return `${esc(sid.toUpperCase())} ${esc(code)}${e ? ' ' + esc(microName(e)) : ''}`; }).join(' · ') }) : tx('pick the micro-department and print the sheet'), liToday.length > 0, tx('Pick department'), tx('Open'), 'labelint'],
   ].filter(Boolean);
   // 'paste' opens the paste pop-up on the clipboard instead of a screen.

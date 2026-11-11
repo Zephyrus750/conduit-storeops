@@ -5,12 +5,12 @@
 // week grid with a side editor.
 
 import { $, ic, esc, vh, sub, toast, mhead, fmtDate, fmtDay, today as storeToday, empty } from '../../ui.js';
-import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, fmtHM, slotRef, attachManifest } from './common.js';
+import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, fmtHM, slotRef, attachManifest, stTag } from './common.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
 import { truckPhase, phaseCounts } from '../../../shared/dockphase.js';
 import { phaseChip } from './phase.js';
-import { routeSheet, routeTag, fromTag, routeLine, isMgr } from './routes.js';
+import { routeSheet, routeTag, fromTag, routeLine, isMgr, rtTag } from './routes.js';
 import { landingOn, broughtBy, routeManifest } from '../../../shared/dockroutes.js';
 import { offsiteGroups, backOn } from '../../../shared/offsite.js';
 import { backTag, groupName, groupSub, callbackSheet, callText } from './callback.js';
@@ -66,8 +66,8 @@ function slotHtml(ctx, date, n, slot, dock) {
     : crew.length ? row(0, 'users', tx('{n} on decant', { n: crew.length }), ph === 'received' ? tx('Take 5, then start') : '', chips)
     : row(0, 'users', tx('No team yet'), tx('pick devices'));
   const from = live?.from || slot.from, bt = backTag(ctx, tid);
-  const part = sentOff ? `<span class="rt-tag part">${ic('stack')}${tx('Part off-site · {n} of {of}', { n: sentOff, of: sentOff + Object.values(live.pallets || {}).filter(p => !p.excluded).length })}</span>` : '';
-  return `<div class="pslot${on ? ' on' : ''}${stl(t) ? ' ' + stl(t) : ''}" data-act="sel" data-slot="${id}"><div class="pslot-h"><b>${tx('Truck {no}', { no: n })}</b>${live || hist ? phaseChip(live || { status: 'closed' }) : `<span class="eta">${ic('clock')}${esc(slot.eta || '—')}</span>`}</div>${bt || from || part ? `<div class="rt-row">${bt || (from ? fromTag(ctx.store.get('plan'), from) : '')}${part}</div>` : ''}${man}${trk}${dec}${slot.huddleMins || slot.breakMins ? `<div class="prow">${ic('clock')}<div><span>${slot.huddleMins ? tx('huddle {n}m booked', { n: slot.huddleMins }) : ''}${slot.huddleMins && slot.breakMins ? ' · ' : ''}${slot.breakMins ? tx('team break {n}m', { n: slot.breakMins }) : ''}</span></div></div>` : ''}${slot.note ? `<div class="prow note">${ic('edit')}<div><span>${esc(slot.note)}</span></div></div>` : ''}</div>`;
+  const part = sentOff ? rtTag('warn', 'stack', tx('Part off-site · {n} of {of}', { n: sentOff, of: sentOff + Object.values(live.pallets || {}).filter(p => !p.excluded).length })) : '';
+  return `<div class="pslot${on ? ' on' : ''}${stl(t) ? ' ' + stl(t) : ''}" data-act="sel" data-slot="${id}"><div class="pslot-h"><b>${tx('Truck {no}', { no: n })}</b>${live || hist ? phaseChip(live || { status: 'closed' }, 'sm') : `<span class="eta">${ic('clock')}${esc(slot.eta || '—')}</span>`}</div>${bt || from || part ? `<div class="rt-row">${bt || (from ? fromTag(ctx.store.get('plan'), from) : '')}${part}</div>` : ''}${man}${trk}${dec}${slot.huddleMins || slot.breakMins ? `<div class="prow">${ic('clock')}<div><span>${slot.huddleMins ? tx('huddle {n}m booked', { n: slot.huddleMins }) : ''}${slot.huddleMins && slot.breakMins ? ' · ' : ''}${slot.breakMins ? tx('team break {n}m', { n: slot.breakMins }) : ''}</span></div></div>` : ''}${slot.note ? `<div class="prow note">${ic('edit')}<div><span>${esc(slot.note)}</span></div></div>` : ''}</div>`;
 }
 // A truck marked off-site or diverted keeps its place in the day, so the
 // week reads true: its tag, its manifest, where it went and that there is
@@ -104,9 +104,9 @@ function editor(ctx, plan, dock) {
     const live = t.status !== 'closed', id = `${date}-T${n}`;
     const pick = live && !t.manifest ? `<div class="pf"><label>${tx('Manifest')}</label><div class="pman">${manSelect(idx, plan, dock, null, id)}<button class="btn primary sm" data-act="attach-truck" data-truck="${esc(id)}">${tx('Attach')}</button></div><span class="cs-dim">${tx('Goes on the truck now, as attaching at Receiving does.')}</span></div>` : '';
     const has = t.manifest ? `<div class="pman">${ic('file')}<div><b>${esc(t.manifest.manNo)}</b><span>${tx('{consols} consols · {cartons} cartons · on the truck', { consols: (t.manifest.consols || []).length, cartons: cartonsOf(t.manifest) })}</span></div></div>` : t.plannedManifest ? `<p class="lbl">${tx('Manifest {man} is attaching from this slot.', { man: esc(t.plannedManifest) })}</p>` : '';
-    return `<div class="card pedit"><div class="ch"><h3>${tx('Truck {no} · {day}', { no: n, day: dayLabel(d) })}</h3><span class="tst ${esc(t.status)}">${esc(TRUCK_ST[t.status] || t.status)}</span></div><p class="lbl">${live ? tx('This truck is on the dock board; its team is managed at Receiving now.') : tx('This truck has been decanted and finalised. Its record is in Receiving history.')}</p>${has}${pick}<div class="pf-acts"><button class="btn${pick ? '' : ' primary'}" data-view="${live ? 'receiving' : 'rhistory'}">${ic(live ? 'truck' : 'm-rhistory')}${live ? tx('Open at Receiving') : tx('Open at History')}</button></div></div>`;
+    return `<div class="card pedit"><div class="ch"><h3>${tx('Truck {no} · {day}', { no: n, day: dayLabel(d) })}</h3>${stTag(t.status, esc(TRUCK_ST[t.status] || t.status))}</div><p class="lbl">${live ? tx('This truck is on the dock board; its team is managed at Receiving now.') : tx('This truck has been decanted and finalised. Its record is in Receiving history.')}</p>${has}${pick}<div class="pf-acts"><button class="btn${pick ? '' : ' primary'}" data-view="${live ? 'receiving' : 'rhistory'}">${ic(live ? 'truck' : 'm-rhistory')}${live ? tx('Open at Receiving') : tx('Open at History')}</button></div></div>`;
   }
-  return `<div class="card pedit"><div class="ch"><h3>${tx('Truck {no} · {day}', { no: n, day: dayLabel(d) })}</h3>${t ? `<span class="tst ${esc(t.status)}">${esc(TRUCK_ST[t.status] || t.status)}</span>` : ''}</div>` +
+  return `<div class="card pedit"><div class="ch"><h3>${tx('Truck {no} · {day}', { no: n, day: dayLabel(d) })}</h3>${t ? `${stTag(t.status, esc(TRUCK_ST[t.status] || t.status))}` : ''}</div>` +
     `<div class="pf"><label>${tx('ETA')}</label><input class="inp" data-field="eta" value="${esc(slot.eta || '')}" placeholder="06:30" maxlength="5"><span class="cs-dim">${tx('24h · the dock board sorts by it')}</span></div>` +
     `<div class="pf"><label>${tx('Manifest')}</label>${slot.manifest ? `<div class="pman">${ic('file')}<div><b>${esc(slot.manifest.manNo)}</b><span>${tx('{consols} consols · {cartons} cartons', { consols: consolsN(slot.manifest), cartons: cartonsOf(slot.manifest) })}</span></div><button class="btn sm" data-act="unstage">${tx('Remove')}</button></div>` : ''}<div class="pman">${manSelect(idx, plan, dock, slot.manifest?.manNo)}<button class="btn sm primary" data-act="stage">${tx('Stage')}</button></div></div>` +
     `<div class="pf"><label>${tx('Decant team')}</label><div class="dk-team">${(slot.team || []).map(m => `<span class="dk-tc on"><span class="av">${esc(who(m))}</span><button class="dk-x" data-act="team-drop" data-pid="${esc(m.pid)}" title="${tx('Remove')}">${ic('x')}</button></span>`).join('')}<span class="dk-tc add"><input class="inp" data-field="team" placeholder="D4" maxlength="6" autocapitalize="characters" style="width:70px"><button class="ibtn sm" data-act="team-add" title="${tx('Add')}">${ic('plus')}</button></span></div><span class="cs-dim">${tx('D-numbers only: no names are kept on the dock.')}</span></div>` +

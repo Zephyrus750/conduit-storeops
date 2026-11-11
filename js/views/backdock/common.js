@@ -99,7 +99,11 @@ export function grid(t) { const g = t?.grid || { rows: 4, cols: 7, rowLabels: 'A
 export const startable = p => p && (p.status === 'landed' || p.status === 'assigned' || p.status === 'paused');
 
 // ── manifests ──────────────────────────────────────────────────────────
-import { today, dep, esc } from '../../ui.js';
+import { today, dep, esc, pill } from '../../ui.js';
+// A truck's or a pallet's state as a chip (the chip family): solid while it
+// is live right now (the truck on the dock, the pallet being decanted).
+//   stTag(state, text)  state: live | active | staged | paused | done | closed | waiting
+export const stTag = (st, text) => pill(text, st === 'staged' ? 'info' : st === 'done' ? 'good' : st === 'paused' ? 'warn' : '', { size: 'sm', live: st === 'live' || st === 'active' });
 import { workedMs, startOf } from '../../../shared/reducers/backdock.js';
 import { estClear } from '../../../shared/dockplan.js';
 import { parseManifestSheets, manifestDoc, attachConsols } from '../../../shared/manifest.js';

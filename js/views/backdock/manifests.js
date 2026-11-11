@@ -16,7 +16,7 @@
 // paint on the store map: one department, or the whole of it as heat.
 
 import { despatchDay as isoDespatch } from '../../../shared/manifeststats.js';
-import { $, ic, esc, vh, sub, toast, dep, mhead, fmtDate, today, fmtDay, empty } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, dep, mhead, fmtDate, today, fmtDay, empty, pill } from '../../ui.js';
 import { mountMap, bindMapChrome, hasMap } from '../../map.js';
 import { ensureNames, nameOf, kcCopy, itemName } from '../stockroom/common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
@@ -117,7 +117,7 @@ function listRow(x) {
   const status = x.status === 'planned' && x.eta ? tx('Planned · {time}', { time: esc(x.eta) }) : label;
   const meta = x.despatch ? tx('despatched {date}', { date: esc(despatchText(x.despatch)) }) : !x.day && x.publishedAt ? tx('published {date}', { date: esc(fmtDate(x.publishedAt.slice(0, 10))) }) : '';
   return `<div class="mfl-row tk${x.manNo === st.open ? ' on' : ''}" data-act="open" data-man="${esc(x.manNo)}">${dayTile(x.day)}` +
-    `<span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b>${x.n ? `<span class="mfl-tn">${ic('truck')}${tx('Truck {no}', { no: x.n })}</span>` : ''}${x.rt ? routeTag(x.rt) : `<span class="status ${cls}">${status}</span>`}</span>` +
+    `<span class="mfl-main"><span class="mfl-top"><b>${esc(x.manNo)}</b>${x.n ? pill(tx('Truck {no}', { no: x.n }), '', { size: 'sm', icon: 'truck' }) : ''}${x.rt ? routeTag(x.rt) : `<span class="status ${cls}">${status}</span>`}</span>` +
     `<span class="mfl-fig"><span>${tx('<b>{n}</b> ctn', { n: x.totalCartons ?? '–' })}</span><span>${tx('<b>{n}</b> consols', { n: x.consols ?? '–' })}</span><span class="mfl-meta">${meta}</span></span></span>${ic('chev')}</div>`;
 }
 

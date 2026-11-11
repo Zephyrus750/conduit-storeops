@@ -7,7 +7,7 @@
 // soh.verify event against that snapshot. The desk prints the triage sheet,
 // with an SOH adjustment page for the stock that reads zero.
 
-import { $, ic, esc, vh, sub, toast, mhead, fmtDate, empty } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, mhead, fmtDate, empty, pill } from '../../ui.js';
 import { todayKey, send, nameOf, ensureNames, profileOf } from './common.js';
 import { sohData, clsBadge, bandSoh } from './intel.js';
 import { splitWalkers, TASK, sohBand, byLoc } from '../../../shared/stockintel.js';
@@ -33,7 +33,7 @@ function model(ctx, repaint) {
   return { date, dl, all, active, walkers: groups.map(g => g.map(l => byL[l])), source, snap, done, nChecks, nDone, excluded };
 }
 const letter = i => String.fromCharCode(65 + i);
-const status = (x, done) => !x.checks.length ? `<span class="sri-st visit">${tx('VISIT ONLY')}</span>` : x.checks.every(done) ? `<span class="sri-st ok">${tx('✓ VERIFIED')}</span>` : `<span class="sri-st todo">${tx('{n} TO VERIFY', { n: x.checks.filter(c => !done(c)).length })}</span>`;
+const status = (x, done) => !x.checks.length ? pill(tx('VISIT ONLY'), '', { size: 'sm' }) : x.checks.every(done) ? pill(tx('✓ VERIFIED'), 'good', { size: 'sm' }) : pill(tx('{n} TO VERIFY', { n: x.checks.filter(c => !done(c)).length }), 'warn', { size: 'sm' });
 const taskRow = (c, done) => `<div class="sri-task${done(c) ? ' done' : ''}"><span class="sri-task-l ${c.cls}">${tx(TASK[c.cls])}</span><span class="mono">${esc(c.kc)}</span><span class="nm">${esc(nameOf(c.kc) || c.name || '')}</span>${c.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${bandSoh(c.latest, c.ctn)}<button class="sri-tick${done(c) ? ' on' : ''}" data-act="verify" data-kc="${esc(c.kc)}" data-loc="${esc(c.loc)}" title="${done(c) ? tx('Counted: tap to undo') : tx('Mark counted')}" aria-pressed="${done(c)}">✓</button></div>`;
 
 export default {

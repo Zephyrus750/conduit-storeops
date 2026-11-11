@@ -11,7 +11,7 @@
 //   openFound(store, id, kc)      the "I moved some" pop-up (the shell opens it for any
 //                                 [data-shell-act="recall-found"] button)
 
-import { ic, esc, toast } from './ui.js';
+import { ic, esc, toast, pill } from './ui.js';
 import { recallOf } from '../shared/reducers/recall.js';
 import { tx } from './i18n.js';
 import { openSheet } from './sheet.js';
@@ -24,7 +24,7 @@ export const recallFor = (store, code) => recallOf((store || current)?.get?.('re
 // The red pill before a product's name, when it is recalled or withdrawn.
 export const recallTagFor = code => { const r = recallFor(null, code); return r ? recallTag(r) + ' ' : ''; };
 export const recallWord = r => (r.kind === 'withdrawal' ? tx('Withdrawn') : tx('Recalled'));
-export const recallTag = r => `<span class="rc-tag ${esc(r.kind)}" title="${esc(r.title)}">${ic('alert')}${recallWord(r)}</span>`;
+export const recallTag = r => pill(recallWord(r), r.kind === 'withdrawal' ? 'warn' : 'bad', { size: 'sm', icon: 'alert', title: esc(r.title) });
 
 export function recallFlag(store, r, kc = '') {
   const bay = store?.get?.('recalls')?.bay || '';

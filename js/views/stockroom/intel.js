@@ -8,7 +8,7 @@
 // Adjustments: reportToIntel(). The list filters on the latest snapshot's
 // flags too: under two cartons (to pull) and 0 or less (to adjust).
 
-import { ic, esc, vh, sub, toast, mhead, fmtDate, empty } from '../../ui.js';
+import { ic, esc, vh, sub, toast, mhead, fmtDate, empty, pill } from '../../ui.js';
 import { todayKey, kcCopy, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf, ctnOf, depthChip } from './common.js';
 import { openScreenScan } from '../../screenscan.js';
 import { parseReport, rowKey, sohBand, flagOf, flagsOf, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
@@ -44,7 +44,7 @@ export function bayRows(data, loc) {
   return snap.rows.filter(r => r.loc === want).map(r => { const ctn = ctnOf(r.kc); return { ...r, ctn, flag: flagOf(r.soh, ctn) }; })
     .sort((a, b) => (FLAG_ORDER[a.flag] ?? 2) - (FLAG_ORDER[b.flag] ?? 2) || a.kc.localeCompare(b.kc));
 }
-export const flagBadge = f => f === 'adjust' ? `<span class="sri-flag adjust" title="${tx('In a stockroom bay but the system says 0 or less: adjust it')}">ADJUST</span>` : f === 'pull' ? `<span class="sri-flag pull" title="${tx('Under two cartons in the whole store: the floor has most likely run out and the rest is out the back')}">PULL</span>` : '';
+export const flagBadge = f => f === 'adjust' ? pill('ADJUST', 'bad', { size: 'sm', title: tx('In a stockroom bay but the system says 0 or less: adjust it') }) : f === 'pull' ? pill('PULL', 'info', { size: 'sm', title: tx('Under two cartons in the whole store: the floor has most likely run out and the rest is out the back') }) : '';
 export function bayList(rows) {
   return `<div class="list sri-bay">${rows.map(r => `<div class="li"><span class="mono kc">${kcCopy(r.kc)}</span><span class="nm">${nameHtml(r.kc)}<small>${depthChip(r.kc)}</small></span>${bandSoh(r.soh, r.ctn)}${flagBadge(r.flag)}</div>`).join('')}</div>`;
 }

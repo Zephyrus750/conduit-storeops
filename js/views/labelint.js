@@ -1,7 +1,7 @@
 // Label integrity: one check per numbered micro-department per cycle, with
 // shelf assignment and variance capture. Reads store.get('labels').
 
-import { $, $$, ic, esc, vh, sub, prog, dep, DEPT_COLOUR, cycleId, daysLeftInCycle, fmtDate, toast, mhead, mbig, mghost, mfoot } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, prog, dep, DEPT_COLOUR, cycleId, daysLeftInCycle, fmtDate, toast, mhead, mbig, mghost, mfoot, pill } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, setStrip, sx } from '../map.js';
 import { SUBS, MICRO, microId, microCode, microName, microCount } from '../data/micros.js';
 import { printSheet, table, signoff } from '../print.js';
@@ -190,7 +190,7 @@ function sidebar(m) {
   const acc = `<div class="li-shelved">${tx('<b>{n}</b> of <b>{total}</b> micro-departments have shelving', { n: shelved, total: ALL.length })}</div><div class="subacc">${SUBS.map(sd => {
     const micros = MICRO[sd[0]] || []; const n = micros.filter(x => m.checks[microId(sd[0], x)]).length; const open = openSub === sd[0];
     const rows = micros.map(x => { const id = microId(sd[0], x), on = !!m.checks[id], wrong = m.variances.some(v => v.micro === id); return `<div class="micro${selected === id ? ' sel' : ''}" data-act="select" data-micro="${id}"><span class="tk${on ? ' on' : ''}" data-act="check" data-micro="${id}">${ic('check')}</span><span class="mc">${microCode(x)}</span><span class="mn">${esc(microName(x))}</span>${on ? `<span class="md">${fmtDate(m.checks[id].at)}</span>` : ''}${wrong ? `<span class="md" style="color:var(--red)">${tx('wrong')}</span>` : ''}<span class="sc">${(m.L.assign[id] || []).length} ▦</span></div>`; }).join('');
-    return `<div class="subrow"><div class="sh" data-act="toggle-sub" data-sub="${sd[0]}"><span class="pt" style="background:${DEPT_COLOUR[sd[0]]}"></span><span class="code">${sd[1]}</span><span class="nm">${sd[2]}</span><span class="ct${n === micros.length ? ' full' : ''}">${n}/${micros.length}</span><span class="ib">${ic(open ? 'minus' : 'plus')}</span></div><div class="micros"${open ? '' : ' hidden'}>${rows}</div></div>`;
+    return `<div class="subrow"><div class="sh" data-act="toggle-sub" data-sub="${sd[0]}"><span class="pt" style="background:${DEPT_COLOUR[sd[0]]}"></span><span class="code">${sd[1]}</span><span class="nm">${sd[2]}</span>${pill(`${n}/${micros.length}`, n === micros.length ? 'good' : '', { size: 'sm', cls: 'num' })}<span class="ib">${ic(open ? 'minus' : 'plus')}</span></div><div class="micros"${open ? '' : ' hidden'}>${rows}</div></div>`;
   }).join('')}</div>`;
   return cyc + (varianceFor ? varianceForm(m) : sel) + acc;
 }

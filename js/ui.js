@@ -44,6 +44,15 @@ export function mscan(cap, field, hint, btn) {
 export function mrows(rows) { return `<div class="mv-rows">${rows.map(r => `<div class="mv-row${r[3] ? ' ' + r[3] : ''}"><span class="a">${r[0]}</span><span class="b">${r[1]}</span><span class="c">${r[2] || ''}</span></div>`).join('')}</div>`; }
 export function card(title, body, right = '') { return `<div class="card"><div class="ch"><h3>${title}</h3>${right}</div>${body}</div>`; }
 export function prog(pct) { pct = Math.max(0, Math.min(100, Math.round(pct || 0))); return `<div class="prog"><div class="track"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`; }
+// The one chip family (styles/app.css .status): a status or a count.
+//   pill(text, tone, { size, live, icon, cls, title })  text: html (translated, escaped)
+//   tone: '' neutral | 'info' | 'good' | 'warn' | 'bad'
+//   size: 'sm' (in a row, beside a name) | '' | 'lg' (on its own)
+//   live: solid, for what is live right now; cls: layout classes of the place it sits.
+export function pill(text, tone = '', { size = '', live = false, icon = '', cls = '', title = '' } = {}) {
+  const c = ['status', tone, size, live ? 'live' : '', cls].filter(Boolean).join(' ');
+  return `<span class="${c}"${title ? ` title="${title}"` : ''}>${icon ? ic(icon) : ''}${text}</span>`;
+}
 export function status(cls, text) { return `<span class="status ${cls}">${text}</span>`; }
 // One empty state everywhere (the review board's fix-empty): an icon, one
 // sentence and, when there is one, the action that fills it. The full size

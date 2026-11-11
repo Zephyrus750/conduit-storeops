@@ -13,7 +13,7 @@
 //   routeSheet(ctx, { date, n, manNo, nums }) → Promise<boolean>: mark a truck (n), or pick one of nums;
 //                                    off-site sends the report's consols for the off-site register
 
-import { ic, esc, toast, fmtDay } from '../../ui.js';
+import { ic, esc, toast, fmtDay, pill } from '../../ui.js';
 import { tx } from '../../i18n.js';
 import { openSheet } from '../../sheet.js';
 import { addDays } from '../../../shared/time.js';
@@ -21,17 +21,19 @@ import { addDays } from '../../../shared/time.js';
 export const isMgr = ctx => { const c = ctx.session?.current; return !!c && (!!c.owner || (c.roles || []).includes('manager')); };
 export const REASONS = { room: tx('No room on the dock'), closed: tx('Store closed'), dc: tx('DC asked'), other: tx('Other') };
 
+// A route's tag: the chip family, small, wrapping in a narrow cell.
+export const rtTag = (tone, icon, text, cls = '') => pill(text, tone, { size: 'sm', icon, cls: 'wrap' + (cls ? ' ' + cls : '') });
 export function routeTag(r) {
   if (!r) return '';
-  if (r.route === 'offsite') return `<span class="rt-tag off">${ic('stack')}${r.lands ? tx('Off-site · lands {day}', { day: esc(fmtDay(r.lands)) }) : tx('Off-site')}</span>`;
+  if (r.route === 'offsite') return rtTag('warn', 'stack', r.lands ? tx('Off-site · lands {day}', { day: esc(fmtDay(r.lands)) }) : tx('Off-site'));
   const to = r.to ? tx('Diverted → {to}', { to: esc(r.to) }) : tx('Diverted');
-  return `<span class="rt-tag div">${ic('route')}${to}${r.lands ? ' · ' + tx('lands {day}', { day: esc(fmtDay(r.lands)) }) : ''}</span>`;
+  return rtTag('', 'route', `${to}${r.lands ? ' · ' + tx('lands {day}', { day: esc(fmtDay(r.lands)) }) : ''}`);
 }
 // A truck bringing back one that went off-site (or was diverted) says when it was due.
 export function fromTag(plan, from) {
   if (!from) return '';
   const r = plan?.days?.[from.date]?.routes?.[from.slot], day = esc(fmtDay(from.date));
-  return `<span class="rt-tag back">${ic('undo')}${r?.route === 'diverted' ? tx('Was diverted · due {day}', { day }) : tx('From off-site · was due {day}', { day })}</span>`;
+  return rtTag('info', 'undo', r?.route === 'diverted' ? tx('Was diverted · due {day}', { day }) : tx('From off-site · was due {day}', { day }));
 }
 export function routeLine(r) {
   const why = r.reason ? REASONS[r.reason] : '';
