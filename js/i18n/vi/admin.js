@@ -663,7 +663,6 @@ export default {
   "Apply and publish": "Áp dụng và đăng",
   "Decline {title}?": "Từ chối {title}?",
   "A word why, for the store (optional)": "Vài lời lý do cho cửa hàng (không bắt buộc)",
-  // The console’s Devices and Compare stores pages.
   "device kind::PC": "Máy tính",
   "device kind::Phone": "Điện thoại",
   "device kind::Screen": "Màn hình",
@@ -703,7 +702,6 @@ export default {
   "the average accuracy of the bays finished in the last 7 days, as in Backfill review.": "độ chính xác trung bình của các vị trí kho xong trong 7 ngày qua, như trong Duyệt bổ sung hàng.",
   "shelves refreshed this week against the weekly target; with focus departments set, only shelves in them count, as on the store’s Location refresh.": "số kệ đã làm mới tuần này so với mục tiêu tuần; khi có ngành hàng trọng tâm, chỉ kệ thuộc các ngành đó được tính, như trong Làm mới kệ của cửa hàng.",
   "the average time from landing (or the decant start) to the last pallet, for trucks finished in the last 7 days; the small figure is the last 28 days.": "thời gian trung bình từ lúc xe đến (hoặc lúc bắt đầu dỡ hàng) đến pallet cuối cùng, cho các xe tải xong trong 7 ngày qua; số nhỏ là 28 ngày qua.",
-  "the Adjustments lists of the last 7 days, items ticked off as adjusted, at the report’s price. Adjusted: below zero back to zero. Avoided: from zero up to one carton (carton sizes from the manifests). Without prices the items are counted.": "danh sách Điều chỉnh của 7 ngày qua, các mặt hàng đã đánh dấu là đã điều chỉnh, theo giá trong báo cáo. Đã điều chỉnh: từ dưới không về không. Đã tránh: từ không lên một thùng (cỡ thùng lấy từ bảng kê hàng). Không có giá thì đếm số mặt hàng.",
   "the same measures for every store": "cùng các chỉ số cho mọi cửa hàng",
   "Green marks each column’s best store and amber its weakest, once two stores have a figure; a dash is no data. Shrink marks the most dealt with as the best. Click a column head to sort.": "Màu xanh đánh dấu cửa hàng tốt nhất của mỗi cột và màu vàng cam là yếu nhất, khi có ít nhất hai cửa hàng có số liệu; dấu gạch là không có dữ liệu. Với hao hụt, xử lý được nhiều nhất là tốt nhất. Bấm vào tiêu đề cột để sắp xếp.",
   "{n} earlier error": "{n} lỗi trước đó",
@@ -712,4 +710,5 @@ export default {
   "devices": "thiết bị",
   "{n} item adjusted": "{n} mặt hàng đã điều chỉnh",
   "{n} items adjusted": "{n} mặt hàng đã điều chỉnh",
+  "the Adjustments lists of the last 7 days at the report’s price, below zero back to zero and then up to one carton (carton sizes from the manifests). Adjusted: ticked off as adjusted. Avoided: left unticked at the end of its day. Without prices the items are counted.": "danh sách Điều chỉnh của 7 ngày qua theo giá trong báo cáo, từ dưới 0 về 0 rồi lên đến một thùng (cỡ thùng lấy từ các manifest). Đã điều chỉnh: được đánh dấu là đã điều chỉnh. Tránh được: chưa đánh dấu khi hết ngày của nó. Không có giá thì các mặt hàng được đếm.",
 };

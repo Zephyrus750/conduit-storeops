@@ -663,7 +663,6 @@ export default {
   "Apply and publish": "Anwenden und veröffentlichen",
   "Decline {title}?": "{title} ablehnen?",
   "A word why, for the store (optional)": "Ein kurzer Grund für die Filiale (optional)",
-  // The console’s Devices and Compare stores pages.
   "device kind::PC": "PC",
   "device kind::Phone": "Handy",
   "device kind::Screen": "Bildschirm",
@@ -703,7 +702,6 @@ export default {
   "the average accuracy of the bays finished in the last 7 days, as in Backfill review.": "die durchschnittliche Genauigkeit der Lagerplätze, die in den letzten 7 Tagen fertig wurden, wie in der Auffüll-Prüfung.",
   "shelves refreshed this week against the weekly target; with focus departments set, only shelves in them count, as on the store’s Location refresh.": "diese Woche gepflegte Regale gegen das Wochenziel; sind Fokus-Abteilungen gesetzt, zählen nur Regale darin, wie in der Regalpflege der Filiale.",
   "the average time from landing (or the decant start) to the last pallet, for trucks finished in the last 7 days; the small figure is the last 28 days.": "die durchschnittliche Zeit vom Eintreffen (oder dem Start des Auspackens) bis zur letzten Palette, für LKW, die in den letzten 7 Tagen fertig wurden; die kleine Zahl gilt für die letzten 28 Tage.",
-  "the Adjustments lists of the last 7 days, items ticked off as adjusted, at the report’s price. Adjusted: below zero back to zero. Avoided: from zero up to one carton (carton sizes from the manifests). Without prices the items are counted.": "die Korrektur-Listen der letzten 7 Tage, als korrigiert abgehakte Artikel, zum Preis des Berichts. Korrigiert: von unter null zurück auf null. Vermieden: von null bis zu einem Karton (Kartongrößen aus den Lieferscheinen). Ohne Preise werden die Artikel gezählt.",
   "the same measures for every store": "dieselben Kennzahlen für jede Filiale",
   "Green marks each column’s best store and amber its weakest, once two stores have a figure; a dash is no data. Shrink marks the most dealt with as the best. Click a column head to sort.": "Grün markiert in jeder Spalte die beste Filiale und Gelb die schwächste, sobald zwei Filialen einen Wert haben; ein Strich heißt keine Daten. Beim Schwund gilt das meiste Erledigte als das Beste. Zum Sortieren auf einen Spaltenkopf klicken.",
   "{n} earlier error": "{n} früherer Fehler",
@@ -712,4 +710,5 @@ export default {
   "devices": "Geräte",
   "{n} item adjusted": "{n} Artikel korrigiert",
   "{n} items adjusted": "{n} Artikel korrigiert",
+  "the Adjustments lists of the last 7 days at the report’s price, below zero back to zero and then up to one carton (carton sizes from the manifests). Adjusted: ticked off as adjusted. Avoided: left unticked at the end of its day. Without prices the items are counted.": "die Anpassungslisten der letzten 7 Tage zum Preis aus dem Bericht, unter null zurück auf null und dann bis zu einem Karton (Kartongrößen aus den Manifesten). Korrigiert: als korrigiert abgehakt. Vermieden: am Ende seines Tages nicht abgehakt. Ohne Preise werden die Artikel gezählt.",
 };

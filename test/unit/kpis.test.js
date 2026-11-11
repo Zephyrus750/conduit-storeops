@@ -63,10 +63,14 @@ test('compare stores: the last seven days of Adjustments in its three parts, ove
   const cartons = { profiles: { 11111111: { ctn: 6 } }, last: { 22222222: { ctn: 4 }, 11111111: { ctn: 99 } } };
   const k = storeKpis(s, { today: '2026-10-08', caps: ['stockroom'], now, cartons });
   assert.deepEqual(k.shrink, {
-    items: 5, adjustedItems: 2, priced: 4, unpriced: 1, noSize: 2,
+    items: 5, adjustedItems: 2, avoidedItems: 0, priced: 4, unpriced: 1, noSize: 2,
     listed: { toZero: 17, zeroToCarton: 52, combined: 69 },
     adjusted: { toZero: 11, zeroToCarton: 12, combined: 23 },
+    avoided: { toZero: 0, zeroToCarton: 0, combined: 0 },
   });
+  // A past day's item left unticked counts as avoided; today's open ones don't.
+  const past = storeKpis({ ...s, adjustments: { ...s.adjustments, '2026-10-05': { 88888888: { qty: -3, price: 2 } } } }, { today: '2026-10-08', caps: ['stockroom'], now, cartons }).shrink;
+  assert.deepEqual([past.avoidedItems, past.avoided], [1, { toZero: 6, zeroToCarton: 0, combined: 6 }]);
   // Without carton sizes every part is back to zero only.
   const bare = storeKpis(s, { today: '2026-10-08', caps: ['stockroom'], now }).shrink;
   assert.deepEqual([bare.listed, bare.noSize], [{ toZero: 17, zeroToCarton: 0, combined: 17 }, 4]);

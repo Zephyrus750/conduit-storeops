@@ -663,7 +663,6 @@ export default {
   "Apply and publish": "I-apply at i-publish",
   "Decline {title}?": "Tanggihan ang {title}?",
   "A word why, for the store (optional)": "Kaunting dahilan para sa tindahan (opsyonal)",
-  // The console’s Devices and Compare stores pages.
   "device kind::PC": "PC",
   "device kind::Phone": "Phone",
   "device kind::Screen": "Screen",
@@ -703,7 +702,6 @@ export default {
   "the average accuracy of the bays finished in the last 7 days, as in Backfill review.": "ang average na accuracy ng mga bay na natapos sa huling 7 araw, gaya sa Backfill review.",
   "shelves refreshed this week against the weekly target; with focus departments set, only shelves in them count, as on the store’s Location refresh.": "mga shelf na na-refresh ngayong linggo laban sa lingguhang target; kapag may focus na department, ang mga shelf lang doon ang bilang, gaya sa Location refresh ng tindahan.",
   "the average time from landing (or the decant start) to the last pallet, for trucks finished in the last 7 days; the small figure is the last 28 days.": "ang average na oras mula sa pagdating (o simula ng decant) hanggang sa huling pallet, para sa mga truck na natapos sa huling 7 araw; ang maliit na numero ay para sa huling 28 araw.",
-  "the Adjustments lists of the last 7 days, items ticked off as adjusted, at the report’s price. Adjusted: below zero back to zero. Avoided: from zero up to one carton (carton sizes from the manifests). Without prices the items are counted.": "ang mga listahan ng Adjustments sa huling 7 araw, mga item na na-tick bilang na-adjust, sa presyo ng report. Na-adjust: mula ilalim ng zero pabalik sa zero. Naiwasan: mula zero hanggang isang carton (laki ng carton mula sa mga manifest). Kapag walang presyo, binibilang ang mga item.",
   "the same measures for every store": "parehong sukatan para sa bawat tindahan",
   "Green marks each column’s best store and amber its weakest, once two stores have a figure; a dash is no data. Shrink marks the most dealt with as the best. Click a column head to sort.": "Berde ang pinakamahusay na tindahan sa bawat column at amber ang pinakamahina, kapag may numero na ang dalawang tindahan; ang gitling ay walang data. Sa shrink, ang pinakamaraming naasikaso ang pinakamahusay. I-click ang ulo ng column para i-sort.",
   "{n} earlier error": "{n} naunang error",
@@ -712,4 +710,5 @@ export default {
   "devices": "mga device",
   "{n} item adjusted": "{n} item ang na-adjust",
   "{n} items adjusted": "{n} item ang na-adjust",
+  "the Adjustments lists of the last 7 days at the report’s price, below zero back to zero and then up to one carton (carton sizes from the manifests). Adjusted: ticked off as adjusted. Avoided: left unticked at the end of its day. Without prices the items are counted.": "ang mga listahan ng Adjustments sa nakaraang 7 araw sa presyo ng report, mula ilalim ng zero pabalik sa zero at saka hanggang isang karton (laki ng karton mula sa mga manifest). Na-adjust: na-tick bilang na-adjust. Naiwasan: hindi na-tick hanggang matapos ang araw nito. Kapag walang presyo, binibilang ang mga item.",
 };

@@ -76,24 +76,28 @@ const cartonLookup = doc => kc => doc?.profiles?.[kc]?.ctn || doc?.last?.[kc]?.c
 // The last seven days' Adjustments lists (the list days weekFrom to today)
 // in the three parts the list adds up (shrinkParts): below zero back to
 // zero, from zero up to one carton, and the two combined. Over every item
-// at zero or below on the lists (listed) and over those ticked off as
-// adjusted (adjusted). Valued at the report's price; an item without one
-// is counted in unpriced, and one without a carton size in noSize.
+// at zero or below on the lists (listed), over those ticked off as adjusted
+// (adjusted), and over those a past day's list left unticked (avoided: found
+// or put right another way, as the Stock intelligence shrink card counts
+// them; today's open items are neither). Valued at the report's price; an
+// item without one is counted in unpriced, and one without a carton size in
+// noSize.
 export function shrinkWeek(adjustments, from, to, cartonOf = () => null) {
   const zero = () => ({ toZero: 0, zeroToCarton: 0, combined: 0 });
-  const r = { items: 0, adjustedItems: 0, priced: 0, unpriced: 0, noSize: 0, listed: zero(), adjusted: zero() };
+  const r = { items: 0, adjustedItems: 0, avoidedItems: 0, priced: 0, unpriced: 0, noSize: 0, listed: zero(), adjusted: zero(), avoided: zero() };
   for (const [date, day] of Object.entries(adjustments || {})) {
     if (date < from || date > to) continue;
     for (const [kc, it] of Object.entries(day || {})) {
       if (!(Number(it?.qty) <= 0)) continue;
-      r.items++; if (it.done) r.adjustedItems++;
+      const avoided = !it.done && date < to;
+      r.items++; if (it.done) r.adjustedItems++; if (avoided) r.avoidedItems++;
       if (!(Number(it.price) > 0)) { r.unpriced++; continue; }
       r.priced++;
       const ctn = cartonOf(kc); if (!ctn) r.noSize++;
       const p = shrinkParts(it.qty, ctn, it.price);
-      for (const k of ['toZero', 'zeroToCarton', 'combined']) { r.listed[k] += p[k]; if (it.done) r.adjusted[k] += p[k]; }
+      for (const k of ['toZero', 'zeroToCarton', 'combined']) { r.listed[k] += p[k]; if (it.done) r.adjusted[k] += p[k]; if (avoided) r.avoided[k] += p[k]; }
     }
   }
-  for (const part of [r.listed, r.adjusted]) for (const k of Object.keys(part)) part[k] = Math.round(part[k] * 100) / 100;
+  for (const part of [r.listed, r.adjusted, r.avoided]) for (const k of Object.keys(part)) part[k] = Math.round(part[k] * 100) / 100;
   return r;
 }

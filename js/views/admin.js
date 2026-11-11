@@ -736,7 +736,10 @@ const devicesPage = {
 const money = v => Number(v || 0).toLocaleString('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 });
 const hm = m => { m = Math.max(0, Math.round(m || 0)); return m >= 60 ? tx('{h}h {m}m', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') }) : tx('{n}m', { n: m }); };
 const DASH = '<span class="cs-dim">—</span>';
-// Shrink compares in dollars: what the store's ticked-off adjustments came to, back to zero and up to one carton.
+// Shrink in dollars, combined (back to zero, then up to one carton), as the
+// Stock intelligence shrink card counts it: adjusted is what was ticked off,
+// avoided what a past day's list left unticked. It sorts by adjusted and has
+// no best or worst: a store that ticks nothing off would look best.
 const shrinkVal = sh => sh && sh.items && sh.priced ? sh.adjusted.combined : null;
 const CMP = [
   { key: 'acc', head: tx('Backfill accuracy'), span: tx('7 days'), better: 1, val: k => k?.backfill?.accuracy ?? null,
@@ -745,10 +748,10 @@ const CMP = [
     cell: k => k.refresh ? `<b>${k.refresh.counted}</b> / ${k.refresh.target}${k.refresh.done !== k.refresh.counted ? `<small>${tx('{n} marked in all', { n: k.refresh.done })}</small>` : ''}` : DASH },
   { key: 'clear', head: tx('Dock clear time'), span: tx('7 days'), better: -1, val: k => k?.dock?.clear7?.mins ?? null,
     cell: k => !k.dock ? DASH : `${k.dock.clear7 ? `<b>${hm(k.dock.clear7.mins)}</b>` : DASH}<small>${k.dock.clear7 ? txn(k.dock.clear7.trucks, '{n} truck', '{n} trucks') + ' · ' : ''}<span class="cmp-nw">${k.dock.clear28 ? tx('28 days: {time}', { time: hm(k.dock.clear28.mins) }) : tx('28 days: none')}</span></small>` },
-  { key: 'shrink', head: tx('Shrink adjusted · avoided'), span: tx('7 days'), better: 1, val: k => shrinkVal(k?.shrink),
+  { key: 'shrink', head: tx('Shrink adjusted · avoided'), span: tx('7 days'), better: 0, val: k => shrinkVal(k?.shrink),
     cell: k => { const sh = k.shrink; if (!sh || !sh.items) return sh ? `${DASH}<small>${tx('nothing on the lists')}</small>` : DASH;
       if (!sh.priced) return `<b>${txn(sh.adjustedItems, '{n} item adjusted', '{n} items adjusted')}</b><small>${tx('{n} on the lists, none with a price', { n: sh.items })}</small>`;
-      return `<span class="cmp-sh"><b>${money(sh.adjusted.toZero)}</b> ${tx('shrink::adjusted')}</span><span class="cmp-sh"><b>${money(sh.adjusted.zeroToCarton)}</b> ${tx('shrink::avoided')}</span><small>${tx('{done} of {n} items ticked off', { done: sh.adjustedItems, n: sh.items })}${sh.unpriced ? ' · ' + tx('{n} without a price', { n: sh.unpriced }) : ''}</small>`; } },
+      return `<span class="cmp-sh"><b>${money(sh.adjusted.combined)}</b> ${tx('shrink::adjusted')}</span><span class="cmp-sh"><b>${money(sh.avoided?.combined)}</b> ${tx('shrink::avoided')}</span><small>${tx('{done} of {n} items ticked off', { done: sh.adjustedItems, n: sh.items })}${sh.unpriced ? ' · ' + tx('{n} without a price', { n: sh.unpriced }) : ''}</small>`; } },
 ];
 const compare = {
   id: 'admincompare', title: tx('Compare stores'), icon: 'chart',
@@ -758,7 +761,7 @@ const compare = {
     const marks = {};
     for (const c of CMP) {
       const vals = rows.map(r => (r.k && !r.k.error ? c.val(r.k) : null)).filter(v => v != null);
-      if (vals.length < 2) continue;
+      if (!c.better || vals.length < 2) continue;
       const hi = Math.max(...vals), lo = Math.min(...vals);
       if (hi !== lo) marks[c.key] = c.better > 0 ? { best: hi, worst: lo } : { best: lo, worst: hi };
     }
@@ -774,7 +777,7 @@ const compare = {
       [tx('Backfill accuracy'), tx('the average accuracy of the bays finished in the last 7 days, as in Backfill review.')],
       [tx('Location refresh'), tx('shelves refreshed this week against the weekly target; with focus departments set, only shelves in them count, as on the store’s Location refresh.')],
       [tx('Dock clear time'), tx('the average time from landing (or the decant start) to the last pallet, for trucks finished in the last 7 days; the small figure is the last 28 days.')],
-      [tx('Shrink'), tx('the Adjustments lists of the last 7 days, items ticked off as adjusted, at the report’s price. Adjusted: below zero back to zero. Avoided: from zero up to one carton (carton sizes from the manifests). Without prices the items are counted.')],
+      [tx('Shrink'), tx('the Adjustments lists of the last 7 days at the report’s price, below zero back to zero and then up to one carton (carton sizes from the manifests). Adjusted: ticked off as adjusted. Avoided: left unticked at the end of its day. Without prices the items are counted.')],
     ];
     return vh(tx('Compare stores'), sub(tx('the same measures for every store'), txn(stores.length, '{n} store', '{n} stores')), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="cmp-refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`, 'chart') +
       `<div class="card"><div class="ad-scroll"><table class="rstbl ad-tbl cmp-tbl"><thead><tr>${th('no', tx('Store'), '')}${CMP.map(c => th(c.key, c.head, c.span)).join('')}</tr></thead><tbody>${body || `<tr><td colspan="${CMP.length + 1}" class="cs-dim">${tx('No stores yet')}</td></tr>`}</tbody></table></div>` +

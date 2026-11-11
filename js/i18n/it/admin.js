@@ -663,7 +663,6 @@ export default {
   "Apply and publish": "Applica e pubblica",
   "Decline {title}?": "Rifiutare {title}?",
   "A word why, for the store (optional)": "Due parole sul perché, per il negozio (facoltativo)",
-  // The console’s Devices and Compare stores pages.
   "device kind::PC": "PC",
   "device kind::Phone": "Telefono",
   "device kind::Screen": "Schermo",
@@ -703,7 +702,6 @@ export default {
   "the average accuracy of the bays finished in the last 7 days, as in Backfill review.": "la precisione media delle ubicazioni finite negli ultimi 7 giorni, come nella verifica rifornimento.",
   "shelves refreshed this week against the weekly target; with focus departments set, only shelves in them count, as on the store’s Location refresh.": "scaffali riordinati questa settimana rispetto all’obiettivo settimanale; con reparti in evidenza contano solo i loro scaffali, come nel riordino scaffali del negozio.",
   "the average time from landing (or the decant start) to the last pallet, for trucks finished in the last 7 days; the small figure is the last 28 days.": "il tempo medio dall’arrivo (o dall’inizio dello spacchettamento) all’ultimo pallet, per i camion finiti negli ultimi 7 giorni; il numero piccolo riguarda gli ultimi 28 giorni.",
-  "the Adjustments lists of the last 7 days, items ticked off as adjusted, at the report’s price. Adjusted: below zero back to zero. Avoided: from zero up to one carton (carton sizes from the manifests). Without prices the items are counted.": "le liste delle rettifiche degli ultimi 7 giorni, articoli spuntati come rettificati, al prezzo del report. Rettificato: da sotto zero di nuovo a zero. Evitato: da zero fino a un cartone (dimensioni del cartone dai manifesti). Senza prezzi gli articoli vengono contati.",
   "the same measures for every store": "le stesse misure per ogni negozio",
   "Green marks each column’s best store and amber its weakest, once two stores have a figure; a dash is no data. Shrink marks the most dealt with as the best. Click a column head to sort.": "Il verde segna il negozio migliore di ogni colonna e l’ambra il più debole, quando due negozi hanno un valore; un trattino indica nessun dato. Per l’ammanco, il più gestito conta come il migliore. Fai clic sull’intestazione di una colonna per ordinare.",
   "{n} earlier error": "{n} errore precedente",
@@ -712,4 +710,5 @@ export default {
   "devices": "dispositivi",
   "{n} item adjusted": "{n} articolo rettificato",
   "{n} items adjusted": "{n} articoli rettificati",
+  "the Adjustments lists of the last 7 days at the report’s price, below zero back to zero and then up to one carton (carton sizes from the manifests). Adjusted: ticked off as adjusted. Avoided: left unticked at the end of its day. Without prices the items are counted.": "le liste delle Rettifiche degli ultimi 7 giorni al prezzo del report, da sotto zero a zero e poi fino a un cartone (formati dei cartoni dai manifest). Rettificato: spuntato come rettificato. Evitato: non spuntato alla fine della sua giornata. Senza prezzi gli articoli vengono contati.",
 };

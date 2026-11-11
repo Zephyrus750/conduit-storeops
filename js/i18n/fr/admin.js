@@ -663,7 +663,6 @@ export default {
   "Apply and publish": "Appliquer et publier",
   "Decline {title}?": "Refuser {title} ?",
   "A word why, for the store (optional)": "Un mot d’explication pour le magasin (facultatif)",
-  // The console’s Devices and Compare stores pages.
   "device kind::PC": "PC",
   "device kind::Phone": "Téléphone",
   "device kind::Screen": "Écran",
@@ -703,7 +702,6 @@ export default {
   "the average accuracy of the bays finished in the last 7 days, as in Backfill review.": "la précision moyenne des emplacements terminés ces 7 derniers jours, comme dans la revue du réassort.",
   "shelves refreshed this week against the weekly target; with focus departments set, only shelves in them count, as on the store’s Location refresh.": "les étagères remises en ordre cette semaine par rapport à l’objectif de la semaine ; avec des rayons prioritaires, seules leurs étagères comptent, comme dans la remise en ordre du magasin.",
   "the average time from landing (or the decant start) to the last pallet, for trucks finished in the last 7 days; the small figure is the last 28 days.": "le temps moyen entre l’arrivée (ou le début du déconditionnement) et la dernière palette, pour les camions terminés ces 7 derniers jours ; le petit chiffre porte sur les 28 derniers jours.",
-  "the Adjustments lists of the last 7 days, items ticked off as adjusted, at the report’s price. Adjusted: below zero back to zero. Avoided: from zero up to one carton (carton sizes from the manifests). Without prices the items are counted.": "les listes d’ajustements des 7 derniers jours, articles cochés comme ajustés, au prix du rapport. Ajustée : de sous zéro à zéro. Évitée : de zéro à un carton (tailles de carton tirées des manifestes). Sans prix, les articles sont comptés.",
   "the same measures for every store": "les mêmes mesures pour chaque magasin",
   "Green marks each column’s best store and amber its weakest, once two stores have a figure; a dash is no data. Shrink marks the most dealt with as the best. Click a column head to sort.": "Le vert marque le meilleur magasin de chaque colonne et l’ambre le plus faible, dès que deux magasins ont un chiffre ; un tiret signifie aucune donnée. Pour la démarque, le plus traité est le meilleur. Cliquez sur un en-tête de colonne pour trier.",
   "{n} earlier error": "{n} erreur précédente",
@@ -712,4 +710,5 @@ export default {
   "devices": "appareils",
   "{n} item adjusted": "{n} article ajusté",
   "{n} items adjusted": "{n} articles ajustés",
+  "the Adjustments lists of the last 7 days at the report’s price, below zero back to zero and then up to one carton (carton sizes from the manifests). Adjusted: ticked off as adjusted. Avoided: left unticked at the end of its day. Without prices the items are counted.": "les listes d’ajustements des 7 derniers jours au prix du rapport, de sous zéro à zéro puis jusqu’à un carton (tailles de carton tirées des manifestes). Ajusté : coché comme ajusté. Évité : resté non coché à la fin de sa journée. Sans prix, les articles sont comptés.",
 };
