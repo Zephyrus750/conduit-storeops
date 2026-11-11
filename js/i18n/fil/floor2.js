@@ -975,4 +975,9 @@ export default {
   "Close {title}?": "Isara ang {title}?",
   "Its flags stop on every device.": "Titigil ang mga flag nito sa bawat device.",
   "Close recall": "Isara ang recall",
+  "Buzz when answered: on": "Buzz kapag nasagot: on",
+  "Buzz when answered: off": "Buzz kapag nasagot: off",
+  "{name}: pulled {n}": "{name}: nakuha ang {n}",
+  "{name}: short, {got} of {asked} found": "{name}: kulang, {got} sa {asked} ang nakita",
+  "{name}: not there": "{name}: wala roon",
 };

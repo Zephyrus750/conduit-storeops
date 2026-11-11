@@ -975,4 +975,9 @@ export default {
   "Close {title}?": "Đóng {title}?",
   "Its flags stop on every device.": "Cảnh báo sẽ dừng trên mọi thiết bị.",
   "Close recall": "Đóng thu hồi",
+  "Buzz when answered: on": "Rung khi có trả lời: bật",
+  "Buzz when answered: off": "Rung khi có trả lời: tắt",
+  "{name}: pulled {n}": "{name}: đã lấy {n}",
+  "{name}: short, {got} of {asked} found": "{name}: thiếu, tìm được {got} trên {asked}",
+  "{name}: not there": "{name}: không có ở đó",
 };

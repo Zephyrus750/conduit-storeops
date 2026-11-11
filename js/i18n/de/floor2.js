@@ -975,4 +975,9 @@ export default {
   "Close {title}?": "{title} abschließen?",
   "Its flags stop on every device.": "Die Markierungen enden auf jedem Gerät.",
   "Close recall": "Rückruf abschließen",
+  "Buzz when answered: on": "Vibrieren bei Antwort: an",
+  "Buzz when answered: off": "Vibrieren bei Antwort: aus",
+  "{name}: pulled {n}": "{name}: {n} geholt",
+  "{name}: short, {got} of {asked} found": "{name}: zu wenig, {got} von {asked} gefunden",
+  "{name}: not there": "{name}: nicht da",
 };

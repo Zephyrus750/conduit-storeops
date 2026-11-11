@@ -975,4 +975,9 @@ export default {
   "Close {title}?": "Clôturer {title} ?",
   "Its flags stop on every device.": "Ses alertes s’arrêtent sur chaque appareil.",
   "Close recall": "Clôturer le rappel",
+  "Buzz when answered: on": "Vibrer à la réponse : oui",
+  "Buzz when answered: off": "Vibrer à la réponse : non",
+  "{name}: pulled {n}": "{name} : {n} sorti(s)",
+  "{name}: short, {got} of {asked} found": "{name} : incomplet, {got} sur {asked} trouvé(s)",
+  "{name}: not there": "{name} : pas sur place",
 };

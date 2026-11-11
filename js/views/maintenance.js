@@ -26,6 +26,8 @@ const SLA_DAYS = [14, 7, 3, 1];
 const since = i => i.reopened || i.created;
 const ageDays = i => (Date.now() - Date.parse(since(i))) / 86400000;
 const overdue = i => i.status !== 'completed' && ageDays(i) > SLA_DAYS[i.sev ?? 1];
+// For the rail's count and the alerts bell (js/alerts.js).
+export const overdueIssues = store => Object.values(store.get('issues') || {}).filter(i => !i.removed && overdue(i)).length;
 const doneAt = i => [...(i.log || [])].reverse().find(l => l.a === 'Completed')?.t || i.updated;
 const thisMonth = iso => { const d = new Date(iso), n = new Date(); return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth(); };
 // The pictogram per category, stroked in a -8..8 box (ShelfSearcher's set).

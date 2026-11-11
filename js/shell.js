@@ -10,7 +10,7 @@
 
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
-import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners, mgr, installProductImages } from './ui.js';
+import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners, mgr, installProductImages, empty } from './ui.js';
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
@@ -39,8 +39,8 @@ import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
 import { installProductLinks, installProductCard } from './views/stockroom/common.js';
 import { installPullAlerts } from './views/livepull.js';
-import { equipmentNeeds } from './views/equipment.js';
-import { recallsNeeding } from './views/recalls.js';
+import { waiting, railCounts, bellCount } from './alerts.js';
+import { openSheet } from './sheet.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
 
@@ -175,6 +175,8 @@ async function enter() {
   let areasSig = JSON.stringify(store.get('areas')?.on || null);
   store.on('areas', a => { const sig = JSON.stringify(a?.on || null); if (sig === areasSig) return; areasSig = sig; client.session.refresh().catch(() => {}); });
   store.on('tools', () => { if (railSig() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
+  // The rail's counts and the bell follow the store, at most every 1.5 s.
+  store.on('*', alertsSoon); store.on('status', alertsSoon); answeredLoad(s.store);
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = tx('Store {no}', { no: s.store });
   buildRail(); paintBadges(); setWs('floor');
@@ -536,30 +538,71 @@ function groupTabs(id) {
   lastTabs[g] = id; try { localStorage.setItem('rail_tabs', JSON.stringify(lastTabs)); } catch {}
   return `<nav class="gtabs" role="tablist" aria-label="${esc(GROUPS[g].label)}">${tabs.map(([v, label]) => `<button type="button" role="tab" class="gtab${v === id ? ' on' : ''}" aria-selected="${v === id}" data-view="${v}">${ic(VIEWS[v].icon)}<span>${label}</span>${BADGED.includes(v) ? `<span class="badge" data-badge="${v}" hidden></span>` : ''}</button>`).join('')}</nav>`;
 }
-// Rail badges (the showcase's): Backfill review carries today's locations
-// waiting for review; Cages, in red, the open cages not seen for a week.
-// Each reads its area's projection, which is empty until the device holds
-// that area's code, so a badge stays hidden without it.
-const BADGED = ['inputs', 'bfreview', 'cages', 'equipment', 'recalls'];
-// Checks that need a person now: equipment overdue or out of service, and
-// Emergency's serviced markers past their due date.
-function checksNeeded(store, day) {
-  const eq = equipmentNeeds(store), assets = Object.values(store.get('assets') || {}).filter(a => a.due && a.due < day).length;
-  return eq.late + eq.out + assets;
+// Rail badges (the showcase's, then the review board's des-badges): a count
+// on each row with something waiting, red when any of it is urgent, amber
+// for today's. What counts is js/alerts.js, the same list the bell shows.
+// Each part reads its area's projection, which is empty until the device
+// holds that area's code, so a badge stays hidden without it.
+const BADGED = ['inputs', 'bfreview', 'cages', 'equipment', 'recalls', 'maintenance', 'planner', 'resources'];
+// Requests this store made that the owner has answered since a manager last
+// opened Resources (the library lives on the worker, not in the store's log).
+let answered = 0, answeredT = 0;
+const SEEN = no => `resources_seen:${no}`;
+function answeredLoad(no) {
+  clearTimeout(answeredT); answered = 0;
+  if (!no || !isManager() || offView('resources')) return;
+  client.session.token().then(token => client.transport.request('/v1/resources/requests', { token })).then(r => {
+    let seen = ''; try { seen = localStorage.getItem(SEEN(no)) || ''; } catch {}
+    answered = (r.requests || []).filter(q => q.status !== 'open' && String(q.updated || '') > seen).length; alertsSoon();
+  }, () => {}).finally(() => { answeredT = setTimeout(() => answeredLoad(no), 10 * 60000); });
 }
+function answeredSeen(no) { answered = 0; try { localStorage.setItem(SEEN(no), new Date().toISOString()); } catch {} alertsSoon(); }
+// On a phone a line opens the phone's screen for it; one only the desk has
+// (the morning report) stays on the rail of the PC.
+const PHONE_GO = { planner: 'receiving' };
+const alertList = () => {
+  const list = waiting({ store, session: client.session, offView, canRead: a => hasArea(client.session, a), answered });
+  if (!isMobile()) return list;
+  return list.map(x => VIEWS[x.go] && deskOnly(VIEWS[x.go]) ? (PHONE_GO[x.go] ? { ...x, go: PHONE_GO[x.go] } : null) : x).filter(Boolean);
+};
 function paintBadges() {
   if (!store) return;
-  const day = today(), bf = store.get('backfill'), cages = store.get('cages') || {};
-  // The morning report is due until any desk has pasted today's (a store with a Stockroom, its code on this device).
-  const caps = client.session.current?.caps || [], morningDue = caps.includes('stockroom') && hasArea(client.session, 'stockroom') && !offView('bfreview') && bf?.report?.date !== day;
-  const n = { inputs: morningDue ? 1 : 0, bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length, equipment: offView('equipment') ? 0 : checksNeeded(store, day), recalls: offView('recalls') ? 0 : recallsNeeding(store).need };
-  const titleOf = (k, v) => k === 'inputs' ? tx('The morning report is not pasted yet') : k === 'equipment' ? txn(v, '{n} check overdue or out of service', '{n} checks overdue or out of service') : k === 'recalls' ? txn(v, '{n} recall or withdrawal to act on', '{n} recalls or withdrawals to act on') : k === 'cages' ? txn(v, '{n} cage not seen this week', '{n} cages not seen this week') : txn(v, '{n} location to review today', '{n} locations to review today');
+  const list = alertList(), { n, lvl } = railCounts(list);
   for (const el of $$('[data-badge]')) {
     const keys = el.dataset.badge.split('+'), v = keys.reduce((t, k) => t + (n[k] || 0), 0);
     el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v);
-    el.classList.toggle('red', keys.some(k => ['cages', 'equipment', 'recalls'].includes(k) && n[k]));
-    el.title = keys.filter(k => n[k]).map(k => titleOf(k, n[k])).join(' · ');
+    el.classList.toggle('red', keys.some(k => n[k] && lvl[k] === 'bad'));
+    el.classList.toggle('amber', !keys.some(k => n[k] && lvl[k] === 'bad') && keys.some(k => n[k] && lvl[k] === 'warn'));
+    el.title = list.filter(x => keys.includes(x.key)).map(x => x.text).join(' · ');
   }
+  paintBell(list);
+}
+let alertsT = 0;
+function alertsSoon() { if (alertsT) return; alertsT = setTimeout(() => { alertsT = 0; paintBadges(); }, 1500); }
+// The alerts bell (new-bell): one place for what needs someone, each line
+// opening the screen it is about. Its number leaves out routine work (the
+// day's locations to review, the morning report), which the rail counts.
+function paintBell(list = alertList()) {
+  const { n, bad } = bellCount(list);
+  for (const b of $$('[data-shell-act="alerts"]')) {
+    const c = b.querySelector('.bell-n'); if (c) { c.hidden = !n; c.textContent = n > 99 ? '99+' : String(n); }
+    b.classList.toggle('bad', bad); b.classList.toggle('some', n > 0);
+    b.title = n ? txn(n, '{n} thing needs someone', '{n} things need someone') : tx('Nothing needs you right now.');
+    if (b.classList.contains('mbell')) b.hidden = !n;
+  }
+}
+let bellSheet = null;
+function openAlerts() {
+  if (!store) return;
+  bellSheet?.close();
+  const list = alertList(), order = { bad: 0, warn: 1, info: 2 }, { n } = bellCount(list);
+  const row = x => `<button type="button" class="al-row ${x.level}" data-al="${esc(x.go)}">${ic(x.icon)}<span>${esc(x.text)}</span>${ic('chev')}</button>`;
+  const now = list.filter(x => x.level !== 'info').sort((a, b) => order[a.level] - order[b.level]), routine = list.filter(x => x.level === 'info');
+  const body = (now.length ? `<div class="al-list">${now.map(row).join('')}</div>` : empty(tx('Nothing needs you right now.'), { icon: 'check' })) +
+    (routine.length ? `<div class="al-sec">${tx('Routine today')}</div><div class="al-list">${routine.map(row).join('')}</div>` : '');
+  bellSheet = openSheet({ kind: 'side', title: tx('Alerts'), sub: n ? txn(n, '{n} thing needs someone', '{n} things need someone') : tx('All clear'), body, cls: 'al-sheet',
+    onClose: () => { bellSheet = null; },
+    onClick: e => { const b = e.target.closest('[data-al]'); if (!b) return; const go = b.dataset.al; bellSheet?.close(); if (go === 'sync') openSync(); else show(go); } });
 }
 function setWs(w) {
   ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
@@ -708,7 +751,8 @@ function show(id, arg) {
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   if (keep) restorePlace(content, keep); else content.scrollTop = 0;
   team?.repaint();
-  markRail(); if (store && !useMobile) paintBadges();
+  if (view.id === 'resources' && store && cur?.store) answeredSeen(cur.store);
+  markRail(); if (store && !useMobile) paintBadges(); else if (store) paintBell();
   // A sheet closes when the view changes; a repaint of the same view (a
   // store update) leaves it open, so the launcher survives sign-in.
   if (prev !== view.id) $('#msheet')?.classList.remove('open');
@@ -804,6 +848,7 @@ document.addEventListener('click', e => {
     if (act === 'signout' || act === 'end-actas') signOut();
     else if (act === 'sheet') { sheetOpen = !sheetOpen; try { localStorage.setItem(SHEET_KEY, sheetOpen ? '1' : '0'); } catch {} paintSheet(); haptic('tap'); }
     else if (act === 'sync') openSync();
+    else if (act === 'alerts') openAlerts();
     else if (act === 'update-now') updates.apply();
     // The ? in the top bar and the phone's app bar: Help, at this screen's chapter of the guide.
     else if (act === 'guide') { if (store) show('help', { chapter: guideFor(current, isMobile()) }); }

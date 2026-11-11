@@ -175,7 +175,7 @@ function requester(ctx, ses, repaint) {
   const sheet = sheetHtml(`<div class="sx-h">${ic('listcheck')}${esc(ses.name)}${c.todo ? `<span class="n">${tx('{n} waiting', { n: c.todo })}</span>` : ''}</div><p class="sx-sub">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers'), tx('since {time}', { time: hm(ses.at) }), ses.shelves ? tx('shelf scan on') : tx('shelf scan off')].join(' · ')}</p>` +
     (lastCage ? sx.sec(tx('Cage {n}', { n: ses.cage - 1 }), sx.rows([sx.row('cage', txn(lastCage.lines, 'On its way: {n} line', 'On its way: {n} lines'), tx('sent down {time}', { time: hm(lastCage.at) }), tx('Coming'), 'acc')])) : '') +
     sx.sec(tx('Requests'), lines.length ? sx.rows(lines.slice(0, 60).map(l => { const [t, tone] = stateText(l); return sx.row('box', `${esc(nameOf(ctx, l, repaint))} · ${esc(qtyText(l))}`, `<span class="mono">${esc(l.kc)}</span> · ${esc(baysText(l))} · ${hm(l.at)}`, t, tone); })) : `<p class="sx-sub">${tx('Nothing asked for yet.')}</p>`, tx('newest first')) +
-    sx.acts([sx.btn('x', tx('Leave session'), 'data-act="lp-leave"'), sx.btn('check', tx('End session'), 'data-act="lp-end"')]));
+    sx.acts([sx.btn('phone', prefs().pullAnswerBuzz !== false ? tx('Buzz when answered: on') : tx('Buzz when answered: off'), 'data-act="lp-abuzz"'), sx.btn('x', tx('Leave session'), 'data-act="lp-leave"'), sx.btn('check', tx('End session'), 'data-act="lp-end"')]));
   return `<div class="lp-body">${head}${scan}${behindTray()}${card}${showPad ? pad : ''}</div>${sheet}${strip('listcheck', esc(ses.name), countsLine(c), c.todo || '')}`;
 }
 // How a scanned barcode found its keycode: the report's own APN, a pair a
@@ -463,6 +463,7 @@ export default {
       if (act === 'lp-zones-go') { if (!ses) return go(null); if (!(await send(ctx, 'pull.zone.set', { session: ses.id }, { bays: [...st.zone] }))) return; setMine(ctx, { sid: ses.id, part: 'pull' }); st.tab = 'todo'; return go(null); }
       if (act === 'lp-zones') { st.zone = null; return go('zones'); }
       if (act === 'lp-buzz') { setPref('pullBuzz', prefs().pullBuzz === false); if (prefs().pullBuzz !== false) haptic('success'); return ctx.rerender(); }
+      if (act === 'lp-abuzz') { setPref('pullAnswerBuzz', prefs().pullAnswerBuzz === false); if (prefs().pullAnswerBuzz !== false) haptic('success'); return ctx.rerender(); }
       if (act === 'lp-sound') { setPref('pullSound', !prefs().pullSound); if (prefs().pullSound) beep(); return ctx.rerender(); }
       // Leaving and ending
       if (act === 'lp-leave') { setMine(ctx, null); return go(null); }
@@ -544,12 +545,25 @@ function beep() {
     o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.4);
   } catch {}
 }
+// The requester hears back too (the review board's imp-pullnote): when a line
+// this phone asked for is pulled, short or not there, it buzzes (unless
+// turned off), plays the sound if that is on, and says so, so nobody waits
+// at the shelf for something that isn't coming.
+const answerText = l => l.st === 'pulled' ? tx('{name}: pulled {n}', { name: l.name || l.kc, n: l.qty === 'all' && !l.got ? tx('all there is') : gotOf(l) })
+  : l.st === 'short' ? tx('{name}: short, {got} of {asked} found', { name: l.name || l.kc, got: gotOf(l), asked: l.qty })
+  : tx('{name}: not there', { name: l.name || l.kc });
 export function installPullAlerts({ store, session, storeNo, isOpen, open }) {
-  const seen = new Set(), key = MINE(storeNo);
+  const seen = new Set(), was = new Map(), key = MINE(storeNo);
   const mineNow = () => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
   const scan = (first = false) => {
     const m = mineNow(), all = store.get('pulls')?.sessions || {};
     for (const ses of Object.values(all)) for (const l of Object.values(ses.lines || {})) {
+      const prev = was.get(l.id); was.set(l.id, l.st);
+      if (!first && prev === 'todo' && ['pulled', 'short', 'gone'].includes(l.st) && l.by === session.device && m?.sid === ses.id && m?.part === 'req') {
+        if (prefs().pullAnswerBuzz !== false) { try { navigator.vibrate?.(l.st === 'pulled' ? [80] : [120, 60, 120, 60, 120]); } catch {} }
+        if (prefs().pullSound) beep();
+        toast(answerText(l), l.st === 'pulled' ? '' : l.st === 'short' ? 'warn' : 'bad', isOpen() ? null : { label: tx('Open'), run: open }, 'pull-answer');
+      }
       if (seen.has(l.id)) continue; seen.add(l.id);
       if (first || m?.part !== 'pull' || m.sid !== ses.id || l.st !== 'todo' || l.by === session.device) continue;
       const zone = ses.people?.[session.device]?.bays || ['all'];
