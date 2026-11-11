@@ -4522,3 +4522,173 @@ td > .empty.sm, .list > .empty.sm { padding: 10px 12px; }
 .askf input:focus, .askf textarea:focus, .askf select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 .askf small { font-weight: 400; color: var(--dim); font-size: 12.5px; }
 .sht-form .sht-f .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Tasks (js/views/tasks.js): the managers' checklists and their walks.
+   PC: Tasks · today in two columns (one below 1100 px), a walk's answers in
+   a side sheet, the editor in another. Phone: today's checklists as cards,
+   the walk with a ✓ and a ✗ a thumb can hit, a ✗'s sheet, the summary. */
+.tk-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.tk-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.tk-col > .card { min-width: 0; }
+@container shell (max-width: 1100px) { .tk-grid { grid-template-columns: minmax(0, 1fr); } }
+.tk-rows, .tk-rzs, .tk-lis { display: flex; flex-direction: column; margin: 0 -6px; }
+.tk-row, .tk-rz, .tk-li { width: 100%; box-sizing: border-box; border: 0; border-top: 1px solid var(--line-soft); border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tk-rows > :first-child, .tk-rzs > :first-child, .tk-lis > :first-child { border-top-color: transparent; }
+.tk-row:hover, .tk-rz:hover, .tk-li:hover { background: var(--hover); }
+.tk-row { display: grid; grid-template-columns: 112px minmax(0, 1fr) 160px 132px; gap: 12px; align-items: center; padding: 10px 6px; }
+.tk-area { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--dim); overflow-wrap: anywhere; }
+.tk-nm { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tk-nm b { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+.tk-nm small { font-size: 12px; color: var(--dim); }
+.tk-pr { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tk-bar { flex: 1; min-width: 40px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; display: flex; }
+.tk-bar i { display: block; height: 100%; border-radius: 3px; }
+.tk-pr small { font-size: 12px; color: var(--ink2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-st { font-size: 12.5px; font-weight: 700; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-st.good { color: var(--green-ink); }
+.tk-st.bad { color: #B91C1C; }
+.tk-st.warn { color: var(--amber-ink); }
+.tk-st.late { color: var(--amber-ink); background: #FEF3C7; border-radius: 6px; padding: 2px 7px; justify-self: end; }
+.tk-st.info { color: var(--accent-ink); }
+.tk-st.dim { color: var(--dim); font-weight: 600; }
+@container shell (max-width: 760px) { .tk-row { grid-template-columns: minmax(0, 1fr) auto; } .tk-row .tk-area { grid-column: 1 / -1; } .tk-row .tk-pr { grid-column: 1; } }
+/* Photos from today's walks: a grid of tiles, each tagged ✓ or ✗ and its area. */
+.tk-pics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@container shell (max-width: 1400px) { .tk-pics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.tk-pic { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tk-img { position: relative; height: 112px; border-radius: 9px; background: var(--ground); display: grid; place-items: center; color: var(--faint); overflow: hidden; }
+.tk-img img { width: 100%; height: 100%; object-fit: cover; }
+.tk-img > svg.i { width: 28px; height: 28px; }
+.tk-pic:hover .tk-img { outline: 2px solid var(--accent-line); }
+.tk-tag { position: absolute; top: 7px; left: 7px; max-width: calc(100% - 14px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+.tk-tag.y { background: #DCFCE7; color: #166534; }
+.tk-tag.n { background: #FEE2E2; color: #991B1B; }
+.tk-pic b { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.tk-pic small { font-size: 12px; color: var(--dim); }
+.tk-gone { font-size: 12px; color: var(--dim); }
+/* Raised from walks, and the checklists list. */
+.tk-rz, .tk-li { display: flex; align-items: center; gap: 10px; padding: 9px 6px; }
+.tk-rz .tk-nm, .tk-li .tk-nm { flex: 1; }
+.tk-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
+.tk-dot.issue { background: var(--red); }
+.tk-dot.backfill { background: var(--amber); }
+.tk-dot.note { background: var(--faint); }
+.tk-dot.none { background: var(--green); }
+.tk-to { font-size: 12px; font-weight: 600; color: var(--accent-ink); white-space: nowrap; }
+.tk-li > svg.i { width: 16px; height: 16px; flex: none; color: var(--faint); }
+/* A walk's answers (the PC's side sheet). */
+.tk-tiles { display: flex; gap: 8px; }
+.tk-tiles span { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 10px 6px; border-radius: 10px; text-align: center; font-size: 12px; font-weight: 600; }
+.tk-tiles b { font-size: 22px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tk-tiles .g { background: #DCFCE7; color: #166534; }
+.tk-tiles .r { background: #FEE2E2; color: #991B1B; }
+.tk-tiles .n { background: var(--ground); color: var(--ink2); }
+.tk-when { margin: 0; font-size: 12.5px; color: var(--dim); }
+.tk-anss { display: flex; flex-direction: column; }
+.tk-ans { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.tk-mk { flex: none; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--faint); box-sizing: border-box; }
+.tk-mk svg.i { width: 15px; height: 15px; stroke-width: 2.4; }
+.tk-ans.y .tk-mk { background: var(--green); border-color: var(--green); color: #fff; }
+.tk-ans.n .tk-mk { background: var(--red); border-color: var(--red); color: #fff; }
+.tk-at { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tk-at b { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.tk-at small { font-size: 12.5px; color: var(--ink2); }
+.tk-at small.tk-sent { color: var(--accent-ink); }
+.tk-at small.cs-dim { color: var(--dim); }
+.tk-th { flex: none; width: 76px; height: 58px; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--ground); display: grid; place-items: center; color: var(--faint); cursor: pointer; }
+.tk-th img { width: 100%; height: 100%; object-fit: cover; }
+/* The checklist editor. */
+.tk-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.tk-day { min-width: 48px; height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink2); font: 600 13px/1 var(--body); cursor: pointer; }
+.tk-day.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tk-quick { display: flex; gap: 6px; margin-top: 6px; }
+.tk-ed .tk-rm { margin-right: auto; }
+.askf small.bad { color: var(--red); }
+/* Walks: the last 90 days as a table. */
+.tk-hist { padding: 8px 12px; }
+.tk-t tbody tr { cursor: pointer; }
+.tk-t tbody tr:hover td { background: var(--hover); }
+.tk-t td { padding: 8px 6px; }
+.tk-filter { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink2); }
+.tk-filter select { height: 36px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink); font: inherit; font-weight: 400; padding: 0 8px; }
+/* The phone: today's checklists as cards, then the ones not due today. */
+.tk-m { display: flex; flex-direction: column; gap: 10px; }
+.tk-m .mv-head h2 { display: flex; align-items: center; gap: 8px; }
+.tk-cards { display: flex; flex-direction: column; gap: 8px; }
+.tk-card { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tk-card > b { font-size: 15.5px; font-weight: 700; }
+.tk-card > small { font-size: 12.5px; color: var(--dim); }
+.tk-card .tk-pr { margin-top: 6px; }
+.tk-card .tk-st { margin-left: 4px; }
+.tk-lbl { padding: 2px 2px 0; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dim); }
+.tk-others { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); overflow: hidden; }
+.tk-other { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 14px; border: 0; border-top: 1px solid var(--line-soft); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tk-other:first-child { border-top: 0; }
+.tk-other .tk-nm { flex: 1; }
+.tk-other > svg.i { width: 18px; height: 18px; color: var(--faint); transform: rotate(-90deg); }
+/* The walk: its progress, then each item with ✓ and ✗ (48 px each). */
+.tk-wh { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.tk-wh > b { flex: 1; min-width: 0; font-size: 18px; font-weight: 800; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.tk-back { flex: none; width: 40px; height: 40px; }
+.tk-back svg.i { transform: rotate(90deg); }
+.tk-n { font-size: 13px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-wbar { height: 5px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.tk-wbar i { display: block; height: 100%; background: var(--accent); }
+.tk-items { display: flex; flex-direction: column; gap: 8px; }
+.tk-it { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.tk-it.n { border-color: #FCA5A5; }
+.tk-it.y { border-color: #BBF7D0; }
+.tk-it-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 14.5px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.tk-it-t small { display: flex; align-items: flex-start; gap: 5px; font-size: 12px; font-weight: 400; color: var(--dim); }
+.tk-it-t small svg.i { flex: none; width: 14px; height: 14px; margin-top: 1px; }
+.tk-yn { flex: none; width: 48px; height: 48px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--faint); display: grid; place-items: center; cursor: pointer; touch-action: manipulation; }
+.tk-yn svg.i { width: 22px; height: 22px; stroke-width: 2.4; }
+.tk-yn.y.on { background: var(--green); border-color: var(--green); color: #fff; }
+.tk-yn.n.on { background: var(--red); border-color: var(--red); color: #fff; }
+.tk-yn:focus-visible { outline: 3px solid var(--accent-line); outline-offset: 2px; }
+.tk-hint { margin: 0; padding: 0 2px; font-size: 12.5px; line-height: 1.45; color: var(--dim); }
+.tk-wide { width: 100%; justify-content: center; min-height: 48px; font-size: 15px; }
+/* The walk done: what it found, and what it sent. */
+.tk-sum { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.tk-sum-t { font-size: 17px; }
+.tk-sum > small { font-size: 12.5px; color: var(--dim); }
+.tk-sents { display: flex; flex-direction: column; gap: 8px; }
+.tk-sentrow { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.tk-sentrow .tk-nm { flex: 1; }
+.tk-sentrow .tk-nm b { font-size: 14px; }
+.tk-sentrow .tk-nm small { font-size: 12.5px; }
+/* A ✗: the photo beside the note, then where it goes. */
+.tk-fx .sht-t h3 > svg.i:first-child { box-sizing: border-box; width: 26px; height: 26px; padding: 4px; border-radius: 8px; background: var(--red); color: #fff; stroke-width: 2.6; }
+.tk-fx-top { display: flex; align-items: stretch; gap: 10px; }
+.tk-ph { position: relative; flex: none; width: 120px; min-height: 100px; border: 1.5px dashed var(--line); border-radius: 10px; background: var(--ground); color: var(--ink2); display: grid; place-items: center; overflow: hidden; cursor: pointer; }
+.tk-ph.has { border-style: solid; }
+.tk-ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tk-ph-b { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; font-size: 12.5px; font-weight: 600; text-align: center; }
+.tk-ph-b svg.i { width: 24px; height: 24px; }
+.tk-ph.has .tk-ph-b { position: absolute; left: 6px; bottom: 6px; flex-direction: row; padding: 3px 7px; border-radius: 6px; background: rgba(17, 24, 39, .72); color: #fff; font-size: 11.5px; }
+.tk-ph.has .tk-ph-b svg.i { width: 14px; height: 14px; }
+.tk-ph:focus-within { outline: 3px solid var(--accent-line); outline-offset: 2px; }
+.tk-fx-top textarea { flex: 1; min-width: 0; box-sizing: border-box; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: 400 14.5px/1.4 var(--body); resize: vertical; }
+.tk-fx-top textarea:focus { outline: none; border-color: var(--accent); }
+.tk-phx { align-self: flex-start; }
+.tk-ph-note { margin: 0; font-size: 12px; color: var(--dim); }
+.tk-fx .tk-lbl { margin-top: 4px; }
+.tk-opt { display: flex; align-items: center; gap: 10px; min-height: 52px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; cursor: pointer; }
+.tk-opt.on { border: 1.5px solid var(--accent); background: var(--accent-soft); }
+.tk-opt input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.tk-opt > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tk-opt b { font-size: 14px; font-weight: 600; }
+.tk-opt small { font-size: 12px; color: var(--dim); }
+.tk-opt.fixed { cursor: default; }
+.tk-opt.fixed > svg.i { flex: none; width: 18px; height: 18px; color: var(--green-ink); }
+.tk-bay { display: flex; flex-direction: column; gap: 6px; margin: -2px 0 2px 30px; }
+.tk-bay small { font-size: 12.5px; color: var(--ink2); }
+.tk-bayrow { display: flex; align-items: center; gap: 8px; }
+.tk-bayrow .mv-cam { flex: none; }
+.tk-in { flex: 1; min-width: 0; box-sizing: border-box; height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: 500 15px var(--body); text-transform: uppercase; }
+.tk-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tk-in::placeholder { text-transform: none; color: var(--faint); font-weight: 400; }
+.tk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tk-chip { height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); color: var(--ink); font: 600 13.5px var(--body); cursor: pointer; }
+.tk-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+@container shell (max-width: 380px) { .tk-ph { width: 100px; } .tk-yn { width: 44px; height: 44px; } }

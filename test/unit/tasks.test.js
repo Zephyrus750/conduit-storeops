@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { initialState, apply } from '../../shared/reducers.js';
 import { CATALOGUE, AREA_PROJECTIONS } from '../../shared/catalogue.js';
+import { toolForEvent, toolForView } from '../../shared/tools.js';
 import { validateEvent } from '../../shared/validate.js';
 import { retain } from '../../shared/retain.js';
 import { dueOn, isoDow, walkCounts, walkPhotos, walkKey, LIST_CAP } from '../../shared/reducers/tasks.js';
@@ -19,11 +20,12 @@ const W = { list: 'L1', day: DAY };
 const item = (s, id, payload, opts) => apply(s, ev('task.walk.item', { ...W, item: id }, payload, opts));
 const PHOTO = '01JCDE0000000000000000PH01', PHOTO2 = '01JCDE0000000000000000PH02';
 
-test('tasks: Floor events, managers only, every store device holds them', () => {
+test('tasks: Floor events in their own tool, managers only, every store device holds them', () => {
   for (const t of ['task.list.set', 'task.list.remove', 'task.walk.start', 'task.walk.item', 'task.walk.done']) {
-    assert.equal(CATALOGUE[t].area, 'floor', t); assert.deepEqual(CATALOGUE[t].roles, ['manager'], t);
+    assert.equal(CATALOGUE[t].area, 'floor', t); assert.deepEqual(CATALOGUE[t].roles, ['manager'], t); assert.equal(toolForEvent(t)?.id, 'tasks', t);
   }
   assert.ok(AREA_PROJECTIONS.floor.includes('tasks'));
+  assert.equal(toolForView('tasks').id, 'tasks'); assert.equal(toolForView('taskwalks').id, 'tasks');
   assert.deepEqual(CATALOGUE['task.walk.item'].entity, ['list', 'day', 'item']);
   // The envelope: a walk names its checklist, its day and (for an answer) its item.
   const bad = { ...ev('task.walk.item', { list: 'L1', day: DAY }, { a: 'y' }) };

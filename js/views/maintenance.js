@@ -56,7 +56,9 @@ function model(ctx) {
 // ── photos ──────────────────────────────────────────────────────────────
 // Shrunk on the device (longest side 1280 px, JPEG) before upload; read
 // back through the worker with this device's token and shown as blob URLs.
-const thumbs = new Map();      // photo id → object URL | 'gone'
+// Tasks shares them: a walk's ✗ takes its photo the same way, and one
+// raised as an issue is the same photo on both.
+export const thumbs = new Map();      // photo id → object URL | 'gone'
 async function shrink(file) {
   const bmp = await createImageBitmap(file), k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
@@ -64,14 +66,19 @@ async function shrink(file) {
   for (const q of [0.72, 0.55, 0.4]) { const b = await new Promise(r => c.toBlob(r, 'image/jpeg', q)); if (b && b.size < 780_000) return b; }
   throw new Error(tx('that photo is too large even after shrinking'));
 }
-async function uploadPhoto(ctx, issueId, file) {
+// Up to the worker: the photo's id, its picture kept for this device.
+export async function postPhoto(ctx, file) {
   const blob = await shrink(file);
   const r = await ctx.api(`/v1/store/${ctx.storeNo}/photo`, { method: 'POST', raw: blob, rawType: 'image/jpeg', timeoutMs: 30000 });
   thumbs.set(r.id, URL.createObjectURL(blob));
-  await ctx.store.dispatch({ type: 'issue.photo', entity: { issue: issueId }, payload: { photo: r.id } });
+  return r.id;
 }
-const photoError = e => e.status === 501 ? tx('Photos are not switched on for this store yet.') : e.network ? tx('Photos need a connection. Try again when online.') : e.message;
-function loadThumbs(ctx, ids, repaint) {
+async function uploadPhoto(ctx, issueId, file) {
+  const id = await postPhoto(ctx, file);
+  await ctx.store.dispatch({ type: 'issue.photo', entity: { issue: issueId }, payload: { photo: id } });
+}
+export const photoError = e => e.status === 501 ? tx('Photos are not switched on for this store yet.') : e.network ? tx('Photos need a connection. Try again when online.') : e.message;
+export function loadThumbs(ctx, ids, repaint) {
   const want = ids.filter(id => !thumbs.has(id)); if (!want.length) return;
   for (const id of want) thumbs.set(id, null);
   Promise.all(want.map(id => ctx.api(`/v1/store/${ctx.storeNo}/photo/${id}`, { blob: true }).then(b => thumbs.set(id, URL.createObjectURL(b))).catch(() => thumbs.set(id, 'gone')))).then(repaint);
@@ -317,10 +324,10 @@ function draftPhotos(head = true) {
   const files = draft.files || [];
   return `${head ? `<div class="mv-sub">${tx('Photos')}</div>` : ''}<div class="mt-phs">${files.map((f, n) => `<div class="mt-ph pend"><span>${ic('camera')}${esc(String(n + 1))}</span><button class="mt-ph-x" data-act="draft-photo-x" data-i="${n}" aria-label="${tx('Remove photo')}">${ic('x')}</button></div>`).join('')}${files.length < 4 ? `<label class="mt-ph add">${ic('camera')}<span>${tx('Add photo')}</span><input type="file" accept="image/*" capture="environment" data-photo-input hidden></label>` : ''}</div><p class="mt-ph-note">${tx('Photograph the fault, not people.')}</p>`;
 }
-function openPhoto(url) {
+export function openPhoto(url, alt = tx('Photo of the issue')) {
   if (!url || url === 'gone') return;
   const el = document.createElement('div'); el.className = 'sharesheet mt-full'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', tx('Photo'));
-  el.innerHTML = `<img src="${esc(url)}" alt="${tx('Photo of the issue')}"><button class="ibtn" aria-label="${tx('Close')}">${ic('x')}</button>`;
+  el.innerHTML = `<img src="${esc(url)}" alt="${esc(alt)}"><button class="ibtn" aria-label="${tx('Close')}">${ic('x')}</button>`;
   const close = () => { el.remove(); document.removeEventListener('keydown', k); }, k = e => { if (e.key === 'Escape') close(); };
   el.addEventListener('click', close); document.addEventListener('keydown', k); document.body.appendChild(el);
 }
@@ -352,7 +359,7 @@ function printWorkOrder(ctx, i) {
 // the delete follows the event that took it off (or removed the issue) to
 // the worker. Offline, or if the event is refused, the nightly sweep drops
 // the bytes instead.
-function dropPhotoWhenSent(ctx, ev, photo) {
+export function dropPhotoWhenSent(ctx, ev, photo) {
   const go = () => ctx.api(`/v1/store/${ctx.storeNo}/photo/${photo}`, { method: 'DELETE' }).catch(() => {});
   const sent = () => !ctx.store.pending.some(p => p.id === ev.id);
   if (sent()) return go();
