@@ -217,7 +217,7 @@ export const equip = {
   html: () => frame(S0),
   steps: [
     { cap: tx('Safety & upkeep › Equipment: every ladder and pallet jack, pinned where it lives.'), read: S(tx('The header counts the pieces, what is overdue and what is due in 14 days.'), tx('The red count on the rail is what needs a person now: overdue or out of service.')),
-      dev: 'The view is js/views/equipment.js: <b>model()</b> reads the equipment projection (shared/reducers/equip.js), <b>headSub()</b> counts it, and the rail’s count is <b>checksNeeded()</b> in js/shell.js. Looking sends nothing.', ev: [],
+      dev: 'The view is js/views/equipment.js: <b>model()</b> reads the equipment projection (shared/reducers/equip.js), <b>headSub()</b> counts it, and the rail’s count is <b>waiting()</b> in js/alerts.js, the same list the alerts bell shows. Looking sends nothing.', ev: [],
       run: async c => { paint(c, S0); await c.tap('#v-eq .pc2-gtab[data-t="equipment"]'); c.cls('#v-eq .pc2-vh .sub', 'glow', true); await c.wait(700); } },
     { cap: tx('A pin’s colour says where it stands: red is overdue.'), read: S(tx('Green is in date, amber is due within 14 days, red is overdue and black is out of service.'), tx('The list beside the map puts what needs a person first.')),
       dev: 'The colour is <b>equipStatus()</b> in shared/reducers/equip.js (14 days is SOON_DAYS); the pins are <b>drawPins()</b> in js/map.js and the list is sorted by <b>byNeed()</b>.', ev: [],
