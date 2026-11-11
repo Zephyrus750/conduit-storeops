@@ -5,7 +5,7 @@
 // or each person's own 28-day rate), the finish guard, and Take 5 before
 // the decant starts. Queues are a plan.queues event; times ride on the team.
 
-import { ic, esc, toast, fmtDate } from '../../ui.js';
+import { ic, esc, toast, fmtDate, empty } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
 import { schedule, balance, finishCheck, personalRates, TAKE5, atTime } from '../../../shared/dockplan.js';
@@ -46,7 +46,7 @@ export function planCard(t, rates, now = Date.now()) {
   return `<div class="card pl"><div class="ch"><h3>${tx('Decant plan')}</h3><span class="cs-dim">${loose ? txn(loose, '{n} pallet not queued', '{n} pallets not queued') : tx('every waiting pallet is queued')}</span></div>` +
     `<div class="pl-tools"><span class="seg"><button class="${basis === 'x2' ? 'on' : ''}" data-act="pl-basis" data-v="x2" title="${tx('Standard minutes per carton')}">${tx('Standard rate')}</button><button class="${basis === 'personal' ? 'on' : ''}" data-act="pl-basis" data-v="personal"${anyRate ? '' : ` disabled title="${tx('Needs 10+ pallets of history per person')}"`}>${tx('Personal rate')}</button></span>` +
     `<button class="btn sm" data-act="pl-balance" data-v="longest">${ic('refresh')}${tx('Auto-balance')}</button><button class="btn sm" data-act="pl-balance" data-v="tubs">${tx('Tubs first')}</button><button class="btn sm" data-act="pl-clear">${tx('Clear plan')}</button></div>` +
-    (cutters.length ? cutters.map(lane).join('') : `<p class="lbl">${tx('No cutters on the team. Set roles on the team card first.')}</p>`) +
+    (cutters.length ? cutters.map(lane).join('') : empty(tx('No cutters on the team. Set roles on the team card first.'), { sm: true, icon: 'users' })) +
     `<p class="lbl">${tx('Lanes run from each person’s start time. Auto-balance deals the waiting pallets to whoever frees first and keeps within finish times where it can.')}</p></div>`;
 }
 // The queue select in a pallet's panel.
@@ -119,7 +119,7 @@ export function decantBoard(dock, plan, day, { act = false } = {}) {
   const landRows = lands.length ? `<div class="db-land">${lands.map(x => `<div class="pland ${esc(x.route.route)}"><div class="pland-h">${ic('undo')}<b>${x.route.route === 'offsite' ? tx('Lands today from off-site') : tx('Lands today after a diversion')}</b></div><span>${tx('Truck {no} of {day}', { no: x.n, day: esc(fmtDate(x.date)) })}${routeManifest(x.route) ? ' · ' + esc(routeManifest(x.route)) : ''}</span></div>`).join('')}</div>` : '';
   for (const id of Object.keys(dock.trucks)) if (id.startsWith(day + '-T')) nums.add(Number(truckNo(id)));
   for (const h of dock.history || []) if (h.id.startsWith(day + '-T')) nums.add(Number(truckNo(h.id)));
-  if (!nums.size) return `<div class="card db"><div class="ch"><h3>${tx('Today’s decants')}</h3></div><p class="lbl">${plan?.days?.[day]?.noTrucks ? tx('No trucks today: confirmed in the Planner.') : tx('Nothing yet planned for today. A decant appears here the moment Receiving opens a truck.')}</p>${landRows}</div>`;
+  if (!nums.size) return `<div class="card db"><div class="ch"><h3>${tx('Today’s decants')}</h3></div>${empty(plan?.days?.[day]?.noTrucks ? tx('No trucks today: confirmed in the Planner.') : tx('Nothing yet planned for today. A decant appears here the moment Receiving opens a truck.'), { icon: 'truck' })}${landRows}</div>`;
   const card = n => {
     const id = `${day}-T${n}`, t = dock.trucks[id], h = (dock.history || []).find(x => x.id === id), sl = slots[n], rt = routes[n];
     if (rt && !t && !h) return `<div class="db-c routed ${esc(rt.route)}"><b>${tx('Truck {n}', { n })}</b>${routeTag(rt)}<small>${tx('Not coming to the dock')} · ${routeLine(rt)}</small>${routeManifest(rt) ? `<small>${esc(routeManifest(rt))}</small>` : ''}</div>`;

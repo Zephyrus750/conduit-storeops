@@ -3,7 +3,7 @@
 // filter. Ported from the showcase's map chrome; the map document itself
 // will come from GET /v1/store/:no/map/:version once that route lands.
 
-import { $, $$, ic, esc, dep, depInk, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast, scopeListeners } from './ui.js';
+import { $, $$, ic, esc, dep, depInk, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, setDepartments, camButton, toast, scopeListeners, empty } from './ui.js';
 import { build as buildGraph, routeBetween, orderStops, pathsOf, evacuationRoute, nearestStairsByWalk, nearestStairsByCoords, linkedNode } from '../shared/route.js';
 import { markerGlyph, locationRange, markerSymbol, MARKER_NAMES, LANDMARK_NAMES, markerType } from '../shared/maprender.js';
 import { prefs, setPref } from './prefs.js';
@@ -280,7 +280,7 @@ export function mapSymbols() {
   return list;
 }
 export function symbolsHtml(list = mapSymbols()) {
-  if (!list.length) return `<p class="lbl">${tx('This map has no symbols yet.')}</p>`;
+  if (!list.length) return empty(tx('This map has no symbols yet.'), { sm: true, icon: 'map' });
   return ['Emergency', 'Store'].map(gp => { const rows = list.filter(x => x.group === gp); return rows.length ? `<div class="keygrp">${gp === 'Emergency' ? tx('Emergency') : tx('Store')}</div><div class="symgrid">${rows.map(x => `<div class="symrow">${markerSymbol(x.kind, 22)}<span>${esc(x.name)}</span><small>${x.n}</small></div>`).join('')}</div>` : ''; }).join('');
 }
 

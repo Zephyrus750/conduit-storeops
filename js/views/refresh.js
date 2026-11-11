@@ -1,7 +1,7 @@
 // Location refresh: mark segments refreshed this week, focus departments,
 // plan paint. Reads store.get('refresh'); writes refresh.* events.
 
-import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig, empty } from '../ui.js';
 import { focusDone } from '../../shared/reducers/floor.js';
 import { retailPeriod } from '../../shared/time.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
@@ -234,7 +234,7 @@ function mobileBar(map, m) {
   const focus = sx.rows(fc.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${esc(f.d)}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) ;
   const outside = m.done - m.counted;
   return `<div class="sx">${head}${row}` +
-    sx.sec(tx('This week’s focus'), fc.length ? focus : sx.rows([sx.row('asterisk', tx('No focus departments set this week'), tx('Managers set them on a store PC'))]), fc.length ? tx('set by managers') : '') +
+    sx.sec(tx('This week’s focus'), fc.length ? focus : empty(`<b>${tx('No focus departments set this week')}</b><br>${tx('Managers set them on a store PC')}`, { sm: true, icon: 'asterisk' }), fc.length ? tx('set by managers') : '') +
     sx.sec(tx('Completed this week'), doneByDept(map, m), m.focus.length && outside > 0 ? txn(m.done, '{n} shelf · {out} outside the focus', '{n} shelves · {out} outside the focus', { out: outside }) : txn(m.done, '{n} shelf', '{n} shelves')) + '</div>';
 }
 // The phone's completed list: each department with its badge, name and
@@ -242,7 +242,7 @@ function mobileBar(map, m) {
 // "+N more" opens the rest.
 function doneByDept(map, m) {
   const groups = refreshedByDept(map, m);
-  if (!groups.length) return sx.rows([sx.row('check', tx('Nothing refreshed yet this week'), tx('Scan or tap a shelf once it is done'))]);
+  if (!groups.length) return empty(`<b>${tx('Nothing refreshed yet this week')}</b><br>${tx('Scan or tap a shelf once it is done')}`, { sm: true, icon: 'm-refresh' });
   return `<div class="rf-mdone">${groups.map(([d, segs]) => { const open = openDept === d, shown = open ? segs : segs.slice(0, 8);
     return `<div class="rf-mgrp"><div class="rf-mgh">${DEPT_NAME[d] ? dep(d) : ''}<b>${esc(DEPT_NAME[d] || (d === 'other' ? tx('Other') : d.toUpperCase()))}</b><span class="n">${segs.length}</span></div><div class="rf-chips">${shown.map(seg => `<button class="rf-seg" type="button" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}</button>`).join('')}${segs.length > shown.length ? `<button class="rf-seg more" type="button" data-act="open-dept" data-dept="${esc(d)}">${tx('+{n} more', { n: segs.length - shown.length })}</button>` : open && segs.length > 8 ? `<button class="rf-seg more" type="button" data-act="open-dept" data-dept="">${tx('Show less')}</button>` : ''}</div></div>`; }).join('')}</div>`;
 }
@@ -255,7 +255,7 @@ function deptOfSeg(map, segId) { for (const g of map.segments()) if (segmentId(g
 
 function groupsHtml(map, m) {
   const groups = refreshedByDept(map, m);
-  if (!groups.length) return `<div class="cs-dim" style="font-size:12px;padding:6px 0">${tx('No shelves refreshed yet this week.')}</div>`;
+  if (!groups.length) return empty(tx('No shelves refreshed yet this week.'), { sm: true, icon: 'm-refresh' });
   return `<div class="rf-groups">${groups.map(([d, segs]) => { const open = openDept === d, shown = open ? segs : segs.slice(0, 12);
     return `<div class="rf-grp"><div class="rf-gh">${dep(d)}<b>${esc(DEPT_NAME[d] || d.toUpperCase())}</b><span class="n">${segs.length}</span><button class="rf-reset" data-act="reset-dept" data-dept="${esc(d)}" title="${tx('Reset {dept} for this week', { dept: esc(d.toUpperCase()) })}">${tx('Reset')}</button></div><div class="rf-chips">${shown.map(seg => `<button class="rf-seg" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}${m.plan[seg] ? `<i style="background:${esc(m.plan[seg])}"></i>` : ''}</button>`).join('')}${segs.length > shown.length ? `<button class="rf-seg more" data-act="open-dept" data-dept="${esc(d)}">${tx('+{n} more', { n: segs.length - shown.length })}</button>` : open && segs.length > 12 ? `<button class="rf-seg more" data-act="open-dept" data-dept="">${tx('Show less')}</button>` : ''}</div></div>`; }).join('')}</div>`;
 }

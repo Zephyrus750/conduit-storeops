@@ -9,7 +9,7 @@
 // (js/livescan.js) and shows the codes one at a time, each as a big barcode
 // to scan into the PDT.
 
-import { $, ic, esc, vh, sub, toast, mhead, camButton } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, mhead, camButton, empty } from '../../ui.js';
 import { ensureNames, nameHtml, catalogueVerdict, copyText } from './common.js';
 import { openLiveReader, heldRows, resolveHeld } from '../../livescan.js';
 import { extractCodes } from '../../../shared/screenscan.js';
@@ -46,7 +46,7 @@ function focusCard(list) {
 function grid(list) {
   return list.length ? `<div class="cl-grid">${list.map((x, i) => `<div class="cl-cell${x.done ? ' done' : ''}" data-act="cl-open" data-i="${i}" title="${tx('Open one by one from here')}">${barcodeSvg(x.c, { module: 1.6, height: 52 })}<div class="cl-nm">${nameHtml(x.c)}</div><button class="ibtn cl-x" data-act="cl-rm" data-i="${i}" aria-label="${tx('Remove {code}', { code: esc(x.c) })}">${ic('x')}</button></div>`).join('')}</div>` : '';
 }
-const empty = `<div class="card" style="padding:24px"><b>${tx('No codes yet')}</b><p class="lbl">${tx('Paste a report, read one off the screen, or scan and type codes. Nothing here touches backfill: it just turns codes into barcodes to scan into the PDT.')}</p></div>`;
+const noCodes = () => `<div class="card">${empty(`<b>${tx('No codes yet')}</b><br>${tx('Paste a report, read one off the screen, or scan and type codes. Nothing here touches backfill: it just turns codes into barcodes to scan into the PDT.')}`, { icon: 'barcode' })}</div>`;
 
 export default {
   id: 'codelist', title: tx('Barcode list'), icon: 'barcode', area: 'stockroom',
@@ -58,7 +58,7 @@ export default {
       `<div class="seg"><button class="${st.view === 'grid' ? 'on' : ''}" data-act="cl-view" data-v="grid">${tx('Grid')}</button><button class="${st.view === 'one' ? 'on' : ''}" data-act="cl-view" data-v="one">${tx('One by one')}</button></div><button class="btn" data-act="cl-paste">${ic('clip')}${tx('Paste a report')}</button><button class="btn" data-act="cl-screen">${ic('expand')}${tx('Screen scan')}</button>${list.length ? `<button class="btn" data-act="cl-copy">${ic('clip')}${tx('Copy all')}</button><button class="btn" data-act="cl-clear">${ic('trash')}${tx('Clear')}</button>` : ''}`, 'barcode');
     const typeRow = `<div class="cl-add"><input class="ad-in mono" data-field="cl-code" inputmode="numeric" placeholder="${tx('Scan or type a keycode')}" autocomplete="off">${camButton('cl-code', true)}<button class="btn sm" data-act="cl-add">${ic('plus')}${tx('Add')}</button></div>`;
     const paste = st.paste ? (() => { const r = extractCodes(st.text), n = r.codes.length; return `<div class="card"><div class="ch"><h3>${tx('Paste any report')}</h3><span class="go" data-act="cl-paste">${tx('Close')}</span></div><textarea class="sri-ta" data-field="cl-text" placeholder="${tx('Paste the report text: keycodes are picked out, prices, quantities and APNs are left out')}">${esc(st.text)}</textarea><div class="sri-acts">${txn(n, '<b>{n}</b> code detected', '<b>{n}</b> codes detected')}${r.dups ? ` · ${txn(r.dups, '{n} duplicate removed', '{n} duplicates removed')}` : ''}<button class="btn primary sm" data-act="cl-make"${r.codes.length ? '' : ' disabled'}>${tx('Make the list')}</button>${list.length ? `<button class="btn sm" data-act="cl-append"${r.codes.length ? '' : ' disabled'}>${tx('Add to the list')}</button>` : ''}</div></div>`; })() : '';
-    return head + paste + typeRow + (list.length ? (st.view === 'one' ? focusCard(list) : grid(list)) : empty);
+    return head + paste + typeRow + (list.length ? (st.view === 'one' ? focusCard(list) : grid(list)) : noCodes());
   },
   mobile(ctx) { useStore(ctx.storeNo); return `<div id="clmob">${mobile(ctx)}</div>`; },
   mount(ctx, root) {
@@ -118,7 +118,7 @@ function mobile(ctx) {
   return mhead(tx('Quick Scan'), `${txn(list.length, '{n} code', '{n} codes')} · ${tx('{n} done', { n: done })}`) +
     `<div class="cl-add m"><input class="ad-in mono" data-field="cl-code" inputmode="numeric" placeholder="${tx('Scan or type a keycode')}" autocomplete="off">${camButton('cl-code', true)}<button class="btn sm" data-act="cl-add">${ic('plus')}</button></div>` +
     tools + heldHtml +
-    (!list.length ? `<div class="mv-note">${ic('barcode')}${tx('Scan or type codes to build a list. Each shows as a barcode the PDT can read off this screen.')}</div>`
+    (!list.length ? empty(tx('Scan or type codes to build a list. Each shows as a barcode the PDT can read off this screen.'), { icon: 'barcode' })
       : st.view === 'one' ? oneAtATime(list) : LIST_HTML(list));
 }
 // One code at a time, big enough for the PDT's trigger: Scanned · next marks it and moves on.

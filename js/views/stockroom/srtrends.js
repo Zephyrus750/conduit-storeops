@@ -5,7 +5,7 @@
 // every department and location with its accuracy and cadence. "All time"
 // adds the bays retention archived after 60 days (decision 29).
 
-import { ic, esc, vh, sub, mhead, DEPT_NAME, dep, accChip, accBand } from '../../ui.js';
+import { ic, esc, vh, sub, mhead, DEPT_NAME, dep, accChip, accBand, empty } from '../../ui.js';
 import { todayKey, loadArchive, archivedRecs, archiveState } from './common.js';
 import { visitsOf, trendsOf, BANDS, DAYS, GOAL } from '../../../shared/trends.js';
 import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
@@ -25,7 +25,7 @@ function spark(accs) {
   return `<svg class="tr-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><line x1="0" x2="${W}" y1="${y(GOAL)}" y2="${y(GOAL)}" class="goal"/><polyline points="${accs.map((a, i) => `${(i / (accs.length - 1) * (W - 2) + 1).toFixed(1)},${y(a).toFixed(1)}`).join(' ')}"/></svg>`;
 }
 function accChart(points) {
-  if (points.length < 2) return `<p class="lbl">${tx('Accuracy per day needs two days with a ready bay.')}</p>`;
+  if (points.length < 2) return empty(tx('Accuracy per day needs two days with a ready bay.'), { sm: true, icon: 'chart' });
   const W = 660, H = 130, P = 26, x = i => P + i / (points.length - 1) * (W - P * 2), y = a => H - 18 - (Math.max(50, Math.min(100, a)) - 50) / 50 * (H - 30);
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.acc).toFixed(1)}`).join('');
   const lab = i => `<text x="${x(i)}" y="${H - 3}" text-anchor="middle">${points[i].date.slice(5)}</text>`;
@@ -40,7 +40,7 @@ function page(ctx) {
   const note = st.days ? '' : { ready: '', loading: ` · ${tx('reading the archive…')}`, failed: ` · ${tx('last 60 days only (archive offline)')}` }[archiveState()];
   const seg = `<div class="seg">${WINDOWS.map(([d, l]) => `<button class="${st.days === d ? 'on' : ''}" data-act="tr-win" data-d="${d}">${l}</button>`).join('')}</div>`;
   const head = vh(tx('Trends'), sub(tx('Backfill'), txn(t.visits, '{n} visit', '{n} visits'), WINDOWS.find(w => w[0] === st.days)[1] + note), seg, 'chart');
-  if (!t.visits) return head + `<div class="card" style="padding:24px"><b>${tx('No ready bays in this window')}</b><p class="lbl">${tx('Trends fill in as bays are marked ready or submitted at Backfill review.')}</p></div>`;
+  if (!t.visits) return head + `<div class="card">${empty(`<b>${tx('No ready bays in this window')}</b><br>${tx('Trends fill in as bays are marked ready or submitted at Backfill review.')}`, { icon: 'chart' })}</div>`;
   const tiles = `<div class="wb-kpis tr-tiles"><div class="wb-kpi"><span>${tx('Locations done')}</span><b>${t.visits}</b><small>${tx('{n} active days · {per}/day', { n: t.activeDays, per: t.perDay })}</small></div><div class="wb-kpi ${accCls(t.avgAcc) === 'good' ? 'good' : accCls(t.avgAcc) === 'bad' ? 'bad' : 'warn'}"><span>${tx('Average accuracy')}</span><b>${t.avgAcc ?? '—'}<small>%</small></b><small>${tx('goal {n}%', { n: GOAL })}</small></div><div class="wb-kpi"><span>${tx('Trend')}</span><b>${arrow(t.trend)}</b><small>${tx('newer half against older')}</small></div><div class="wb-kpi"><span>${tx('Busiest day')}</span><b>${t.busiest == null ? '—' : tx(DAYS[t.busiest])}</b><small>${t.busiest == null ? '' : txn(t.byWd[t.busiest], '{n} visit', '{n} visits')}</small></div></div>`;
   const hmax = Math.max(1, ...t.heat.flat());
   const heat = `<div class="card"><div class="ch"><h3>${tx('When work happens')}</h3><span class="cs-dim">${tx('{n} of {total} visits have a completion time', { n: t.timed, total: t.visits })}</span></div><table class="tr-heat"><thead><tr><th></th>${BANDS.map(b => `<th>${tx(b[0])}</th>`).join('')}<th>${tx('Total')}</th></tr></thead><tbody>${DAYS.map((d, i) => `<tr><th>${tx(d)}</th>${t.heat[i].map(n => cell(n, hmax)).join('')}<td class="n"><b>${t.heat[i].reduce((a, b) => a + b, 0)}</b></td></tr>`).join('')}</tbody></table></div>`;

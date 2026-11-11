@@ -7,7 +7,7 @@
 // editor's Store Info shows as a banner with directions.
 
 import { haptic } from '../device.js';
-import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost, mgr, empty } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo, mapFloors, setStrip, sx } from '../map.js';
 import { paperMap } from '../printmap.js';
 import { printSheet, table, tick, signoff } from '../print.js';
@@ -110,7 +110,7 @@ function detail(r, phone = false, mark = false) {
 }
 function sidebar(m) {
   const sel = m.rows.find(r => r.id === selected);
-  const due = `<div class="card"><div class="ch"><h3>${tx('Service due')}</h3></div><div class="list emlist">${m.due.map(r => `<div class="li" data-act="select" data-id="${r.id}"><span class="pt" style="background:${(TYPES[r.type] || [])[1] || '#64748B'}"></span><span class="nm">${(TYPES[r.type] || [r.type])[0]} · ${esc(r.location || r.label || '')}<span class="where" style="display:block;font-size:12px;color:var(--dim)">${txn(r.rec.intMonths, 'every {n} month · due {date}', 'every {n} months · due {date}', { date: fmtDate(r.rec.due) })}</span></span>${status('warn', r.st === 'overdue' ? tx('Overdue') : tx('Due'))}</div>`).join('') || `<div class="li" style="color:var(--dim)">${tx('Nothing due in the next 30 days.')}</div>`}</div></div>`;
+  const due = `<div class="card"><div class="ch"><h3>${tx('Service due')}</h3></div><div class="list emlist">${m.due.map(r => `<div class="li" data-act="select" data-id="${r.id}"><span class="pt" style="background:${(TYPES[r.type] || [])[1] || '#64748B'}"></span><span class="nm">${(TYPES[r.type] || [r.type])[0]} · ${esc(r.location || r.label || '')}<span class="where" style="display:block;font-size:12px;color:var(--dim)">${txn(r.rec.intMonths, 'every {n} month · due {date}', 'every {n} months · due {date}', { date: fmtDate(r.rec.due) })}</span></span>${status('warn', r.st === 'overdue' ? tx('Overdue') : tx('Due'))}</div>`).join('') || empty(tx('Nothing due in the next 30 days.'), { sm: true, icon: 'check' })}</div></div>`;
   const eq = `<div class="card"><div class="ch"><h3>${tx('Equipment')}</h3></div><div class="list">${Object.entries(m.counts).map(([t, n]) => `<div class="li" data-act="filter" data-type="${filterType === t ? '' : t}"><span class="pt" style="background:${(TYPES[t] || [])[1] || '#64748B'}"></span><span class="nm">${(TYPES[t] || [t])[0]}</span><span class="rt">${tx('{n} in date', { n: m.rows.filter(r => r.type === t && r.st === 'ok').length })}</span><b>${n}</b></div>`).join('')}</div></div>`;
   return evacCard() + assemblyCard() + (sel ? detail(sel) : '') + due + eq;
 }

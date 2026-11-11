@@ -11,7 +11,7 @@
 //   teamChip({ store, session, storeNo, today }) → html for the Dashboard
 //   openTeamFor({ store, session, storeNo, today, onClose }) opens the sheet and marks it read
 
-import { ic, esc, toast, fmtTime } from './ui.js';
+import { ic, esc, toast, fmtTime, empty } from './ui.js';
 import { MESSAGE_MAX, BRIEFING_MAX } from '../shared/reducers/store.js';
 import { tx } from './i18n.js';
 import { openSheet, ask } from './sheet.js';
@@ -88,7 +88,7 @@ export function openTeam({ store, session, today, onClose }) {
   document.getElementById('teamsheet')?.remove();
   let editing = null;
   const block = (title, it, kind, w) => `<section class="tm-sec"><div class="tm-h"><h3>${title}</h3>${w && !editing ? `<button class="btn sm" data-tm="edit" data-kind="${kind}">${ic('edit')}${it ? tx('Edit') : tx('Write')}</button>` : ''}</div>` +
-    (editing === kind ? editor(kind, it) : it ? `<div class="tm-body">${richText(it.text)}</div><p class="tm-meta">${it.owner ? tx('From the owner') : tx('From a manager')} · ${fmtTime(it.at)}${kind === 'message' && it.until ? ` · ${tx('until {date}', { date: esc(it.until) })}` : ''}</p>` : `<p class="tm-empty">${kind === 'message' ? tx('No team message.') : tx('No briefing for today.')}</p>`) + '</section>';
+    (editing === kind ? editor(kind, it) : it ? `<div class="tm-body">${richText(it.text)}</div><p class="tm-meta">${it.owner ? tx('From the owner') : tx('From a manager')} · ${fmtTime(it.at)}${kind === 'message' && it.until ? ` · ${tx('until {date}', { date: esc(it.until) })}` : ''}</p>` : empty(kind === 'message' ? tx('No team message.') : tx('No briefing for today.'), { sm: true, icon: kind === 'message' ? 'users' : 'file' })) + '</section>';
   const editor = (kind, it) => `<textarea class="tm-in" data-tm-field="text" maxlength="${kind === 'message' ? MESSAGE_MAX : BRIEFING_MAX}" rows="${kind === 'message' ? 4 : 7}" placeholder="${kind === 'message' ? tx('A message every device in the store sees until it is cleared') : tx('Today: deliveries, focus, who is where…')}">${esc(it?.text || '')}</textarea>` +
     `<p class="tm-hint">${tx('Plain text. **bold**, and lines starting with “- ” become a list.')}</p>` +
     (kind === 'message' ? `<label class="tm-until">${tx('Show until')} <input type="date" data-tm-field="until" value="${esc(it?.until || '')}"> <small>${tx('(blank: until cleared)')}</small></label>` : '');

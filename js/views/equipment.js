@@ -10,7 +10,7 @@
 // only, as Maintenance is. Anyone adds, edits, moves and checks; only a
 // manager removes an item (its history stays, and it can come back).
 
-import { $, ic, esc, vh, sub, status, fmtDate, toast, mgr, today } from '../ui.js';
+import { $, ic, esc, vh, sub, status, fmtDate, toast, mgr, today, empty } from '../ui.js';
 import { mountMap, mapbar, crumbx, bindMapChrome, mvMap, setStrip, sx, mapFloors } from '../map.js';
 import { printSheet, table, tick, signoff } from '../print.js';
 import { qrSvg } from '../../shared/qr.js';
@@ -256,8 +256,9 @@ function row(it, m) {
   return `<div class="li mt-li${selected === it.id ? ' sel' : ''}" data-act="select" data-id="${esc(it.id)}">${pinMark(it)}<span class="nm" style="white-space:normal"><b style="font-weight:600"><span class="mono">${esc(it.code)}</span> ${esc(nameOf(it))}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)">${esc(it.loc || tx('Not on the map'))} · ${everyText(it)}${it.last ? ' · ' + tx('last {date}', { date: fmtDate(it.last) }) : ''}</span></span>${status(it.removed ? 'info' : tone(it.st), esc(stText(it, m.day)))}</div>`;
 }
 function sidebar(m, em, manager) {
-  const empty = showRemoved ? tx('Nothing removed.') : m.live.length ? tx('Nothing here.') : tx('No equipment yet. Add the store’s ladders, pallet jacks and trolleys, then tap the map where each lives.');
-  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills(m)}</div><div class="list">${m.list.map(it => row(it, m)).join('') || `<div class="li" style="color:var(--dim)">${empty}</div>`}</div></div>`;
+  const none = showRemoved ? tx('Nothing removed.') : m.live.length ? tx('Nothing here.') : tx('No equipment yet. Add the store’s ladders, pallet jacks and trolleys, then tap the map where each lives.');
+  const first = !showRemoved && !m.live.length;
+  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills(m)}</div><div class="list">${m.list.map(it => row(it, m)).join('') || empty(none, { sm: !first, icon: first ? 'm-equipment' : 'listcheck', act: first ? `<button class="btn primary" data-act="new">${ic('plus')}${tx('Add equipment')}</button>` : '' })}</div></div>`;
   if (draft) return draftForm(m) + list;
   const it = m.all.find(x => x.id === selected);
   if (checking && it) return checkForm(it, m) + list;
@@ -271,7 +272,7 @@ function dueCard(m, em) {
   const rows = [...eq.map(it => ({ rank: RANK[it.st], due: it.due || '', html: `<div class="li" data-act="select" data-id="${esc(it.id)}">${pinMark(it)}<span class="nm"><b style="font-weight:600"><span class="mono">${esc(it.code)}</span> ${esc(nameOf(it))}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)">${esc(it.loc || '')} · ${tx('Equipment')}</span></span>${status(tone(it.st), esc(stText(it, m.day)))}</div>` })),
     ...em.map(r => ({ rank: RANK[r.st], due: r.due, html: `<div class="li" data-act="emergency"><span class="mt-pin" style="border-color:${COLOUR[r.st]}">${ic('m-emergency')}</span><span class="nm"><b style="font-weight:600">${esc(r.name)}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)">${esc(r.where)}${r.where ? ' · ' : ''}${tx('Emergency')}</span></span>${status(tone(r.st), esc(r.st === 'late' ? txn(-daysUntil(r.due, m.day), 'Overdue {n} day', 'Overdue {n} days') : tx('Due {date}', { date: fmtDate(r.due) })))}</div>` }))]
     .sort((a, b) => a.rank - b.rank || a.due.localeCompare(b.due));
-  return `<div class="card"><div class="ch"><h3>${tx('Due in the next 14 days')}</h3><span class="cs-dim">${tx('Equipment and Emergency')}</span></div><div class="list">${rows.map(r => r.html).join('') || `<div class="li" style="color:var(--dim)">${tx('Nothing due. Every check is in date.')}</div>`}</div></div>`;
+  return `<div class="card"><div class="ch"><h3>${tx('Due in the next 14 days')}</h3><span class="cs-dim">${tx('Equipment and Emergency')}</span></div><div class="list">${rows.map(r => r.html).join('') || empty(tx('Nothing due. Every check is in date.'), { sm: true, icon: 'check' })}</div></div>`;
 }
 function logRows(it) {
   const label = Object.fromEntries(pointsOf(it));
@@ -393,7 +394,7 @@ function phone(m, manager) {
   const chips = GROUPS.filter(([g]) => g === 'all' || m.live.some(x => EQUIP_GROUP[x.kind] === g)).map(([g, label]) => `<button class="sx-chip${!showRemoved && filter === g ? ' on' : ''}" type="button" data-act="filter" data-filter="${g}">${label}</button>`).join('') + (m.removed.length ? `<button class="sx-chip${showRemoved ? ' on' : ''}" type="button" data-act="removed">${tx('Removed {n}', { n: m.removed.length })}</button>` : '');
   return `<div class="sx"><div class="sx-h">${ic('m-equipment')}${tx('Equipment')}<span class="n${m.late + m.out ? ' red' : ''}">${txn(m.live.length, '{n} piece', '{n} pieces')}</span></div>` +
     sx.acts([sx.btn('plus', tx('Add equipment'), 'data-act="new"', true)]) + `<div class="sx-chips" style="margin-top:10px">${chips}</div>` +
-    sx.sec(showRemoved ? tx('Removed') : tx('Equipment'), m.list.length ? sx.rows(m.list.slice(0, 80).map(r)) : sx.rows([sx.row('check', m.live.length || showRemoved ? tx('Nothing here.') : tx('No equipment yet'))]), tx('tap one to open it')) + `</div>`;
+    sx.sec(showRemoved ? tx('Removed') : tx('Equipment'), m.list.length ? sx.rows(m.list.slice(0, 80).map(r)) : empty(m.live.length || showRemoved ? tx('Nothing here.') : tx('No equipment yet'), { sm: true, icon: 'm-equipment' }), tx('tap one to open it')) + `</div>`;
 }
 
 // ── paper ─────────────────────────────────────────────────────────────────

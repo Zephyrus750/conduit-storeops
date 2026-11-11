@@ -10,7 +10,7 @@
 //   loadStats(ctx, s, done) fetches the period when it, or what the dock holds, changed
 //   statsHeat(s)            the period's cartons by department, as heat on the map
 
-import { ic, esc, today, fmtDate, fmtDay, fmtMonth } from '../../ui.js';
+import { ic, esc, today, fmtDate, fmtDay, fmtMonth, empty } from '../../ui.js';
 import { tx, txn, locale } from '../../i18n.js';
 import { hasMap } from '../../map.js';
 import { microDept, microChip, microName, STD_MINS_PER_CARTON } from './common.js';
@@ -109,9 +109,9 @@ function departments(s, paint) {
 const prow = (r, i, tail) => `<div class="da-top"><b>${i + 1}</b><span class="mono">${kcCopy(r.k)}</span><span class="nm">${itemName(r.k, '')}</span>${microChip(r.dept)}<span class="n">${tail(r)}</span></div>`;
 function products(s) {
   const d = s.data;
-  const top = `<div class="card"><div class="ch"><h3>${tx('Top products')}</h3><span class="cs-dim">${tx('by units')}</span></div>${d.top.map((r, i) => prow(r, i, x => `${tx('{n} units', { n: n0(x.units) })} <small class="cs-dim">${tx('{n} ctn', { n: n0(x.cartons) })}</small>`)).join('') || `<p class="lbl">${tx('No lines in these reports.')}</p>`}</div>`;
-  const fresh = d.newKeycodes == null ? '' : `<div class="card"><div class="ch"><h3>${tx('New this period')}</h3><span class="cs-dim">${txn(d.newKeycodes, '{n} keycode never on an earlier manifest', '{n} keycodes never on an earlier manifest', { n: n0(d.newKeycodes) })}</span></div>${d.fresh.map((r, i) => prow(r, i, x => tx('{n} units', { n: n0(x.units) }))).join('') || `<p class="lbl">${tx('Nothing new: every keycode has come before.')}</p>`}</div>`;
-  const reg = `<div class="card"><div class="ch"><h3>${tx('Keeps coming')}</h3><span class="cs-dim">${tx('on the most manifests')}</span></div>${d.regular.map((r, i) => prow(r, i, x => `${txn(x.manifests, 'on {n} manifest', 'on {n} manifests')} <small class="cs-dim">${tx('{n} units', { n: n0(x.units) })}</small>`)).join('') || `<p class="lbl">${tx('No keycode came more than once.')}</p>`}</div>`;
+  const top = `<div class="card"><div class="ch"><h3>${tx('Top products')}</h3><span class="cs-dim">${tx('by units')}</span></div>${d.top.map((r, i) => prow(r, i, x => `${tx('{n} units', { n: n0(x.units) })} <small class="cs-dim">${tx('{n} ctn', { n: n0(x.cartons) })}</small>`)).join('') || empty(tx('No lines in these reports.'), { sm: true, icon: 'box' })}</div>`;
+  const fresh = d.newKeycodes == null ? '' : `<div class="card"><div class="ch"><h3>${tx('New this period')}</h3><span class="cs-dim">${txn(d.newKeycodes, '{n} keycode never on an earlier manifest', '{n} keycodes never on an earlier manifest', { n: n0(d.newKeycodes) })}</span></div>${d.fresh.map((r, i) => prow(r, i, x => tx('{n} units', { n: n0(x.units) }))).join('') || empty(tx('Nothing new: every keycode has come before.'), { sm: true, icon: 'check' })}</div>`;
+  const reg = `<div class="card"><div class="ch"><h3>${tx('Keeps coming')}</h3><span class="cs-dim">${tx('on the most manifests')}</span></div>${d.regular.map((r, i) => prow(r, i, x => `${txn(x.manifests, 'on {n} manifest', 'on {n} manifests')} <small class="cs-dim">${tx('{n} units', { n: n0(x.units) })}</small>`)).join('') || empty(tx('No keycode came more than once.'), { sm: true, icon: 'check' })}</div>`;
   return top + fresh + reg;
 }
 
@@ -128,7 +128,7 @@ export function statsPane(ctx, s, paint) {
   const bar = `<div class="ms-bar"><div class="seg">${PERIODS.map(([k, l]) => `<button class="${s.per === k ? 'on' : ''}" data-act="ms-per" data-p="${k}">${l}</button>`).join('')}</div>${s.per !== 'all' ? `<span class="pills"><button data-act="ms-off" data-d="-1" aria-label="${tx('Previous period')}">‹</button><button class="${s.off === 0 ? 'on' : ''}" data-act="ms-off" data-d="0">${tx('Now')}</button><button data-act="ms-off" data-d="1" aria-label="${tx('Next period')}"${s.off >= 0 ? ' disabled' : ''}>›</button></span>` : ''}<b class="ms-name">${esc(periodName(s, r))}</b>${r.from ? `<span class="cs-dim">${esc(retailPeriod(r.from))}${retailPeriod(r.to) !== retailPeriod(r.from) ? ' – ' + esc(retailPeriod(r.to)) : ''}</span>` : ''}</div>`;
   if (s.error) return bar + `<div class="card"><p class="lbl">${tx('The stats did not load: {error}', { error: esc(s.error) })}</p><button class="btn" data-act="ms-retry">${ic('refresh')}${tx('Try again')}</button></div>`;
   if (!s.data) return bar + `<div class="card"><div class="ohint">${tx('Adding up the manifests…')}</div></div>`;
-  if (!s.data.totals.manifests) return bar + `<div class="card"><p class="lbl">${s.per === 'all' ? tx('No manifests published yet.') : tx('No manifest came in this period. Pick another, or publish the reports for these days.')}</p></div>`;
+  if (!s.data.totals.manifests) return bar + `<div class="card">${empty(s.per === 'all' ? tx('No manifests published yet.') : tx('No manifest came in this period. Pick another, or publish the reports for these days.'), { icon: 'm-manifests' })}</div>`;
   // Trucks that went off-site (with no day to land yet) or were diverted: counted apart, never as received.
   const aw = s.data.away, awayLine = aw && (aw.offsite.manifests || aw.diverted.manifests) ? `<p class="lbl ms-away">${ic('route')}${[aw.offsite.manifests ? tx('Off-site: {n} manifests · {c} ctn', { n: aw.offsite.manifests, c: n0(aw.offsite.cartons) }) : '', aw.diverted.manifests ? tx('Diverted: {n} manifests · {c} ctn', { n: aw.diverted.manifests, c: n0(aw.diverted.cartons) }) : ''].filter(Boolean).join(' · ')} · ${tx('not counted as received')}</p>` : '';
   return bar + (s.busy ? `<div class="ohint ms-busy">${tx('Updating…')}</div>` : '') + tiles(ctx, s) + awayLine +

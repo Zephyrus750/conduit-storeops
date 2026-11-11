@@ -6,7 +6,7 @@
 // own low-stock list comes from the official system; this finds the pulls
 // that are not obvious. Below the box: the bays with something to pull.
 
-import { $, ic, esc, mhead, mscan, fmtDate, toast } from '../../ui.js';
+import { $, ic, esc, mhead, mscan, fmtDate, toast, empty } from '../../ui.js';
 import { ensureNames, loadProfiles, ctnOf } from './common.js';
 import { bayRows, bayList, normLoc } from './intel.js';
 import { flagsOf, byLoc } from '../../../shared/stockintel.js';
@@ -30,7 +30,7 @@ function latest(ctx) {
 const st = { loc: '' };
 function body(ctx, repaint = () => paint()) {
   const d = latest(ctx);
-  if (d.none) return `<p class="lbl">${tx('No stockroom report has been saved yet. A manager pastes it at the desk (Stock intelligence) each morning.')}</p>`;
+  if (d.none) return empty(tx('No stockroom report has been saved yet. A manager pastes it at the desk (Stock intelligence) each morning.'), { icon: 'file' });
   if (!d.snap) return `<p class="lbl">${d.error ? esc(d.error) : tx('Loading the morning report…')}</p>`;
   const data = { latest: d.snap };
   if (st.loc) {
@@ -38,7 +38,7 @@ function body(ctx, repaint = () => paint()) {
     if (rows.length) ensureNames(ctx, rows.map(r => r.kc), repaint);
     const pull = rows.filter(r => r.flag === 'pull').length, adj = rows.filter(r => r.flag === 'adjust').length;
     return `<div class="mv-sub">${[txn(rows.length, 'Location {loc} · {n} item', 'Location {loc} · {n} items', { loc: esc(normLoc(st.loc)) }), pull ? tx('{n} to pull', { n: pull }) : '', adj ? tx('{n} to adjust', { n: adj }) : ''].filter(Boolean).join(' · ')}</div>` +
-      (rows.length ? bayList(rows) : `<p class="lbl">${tx('Nothing in this location on the morning report.')}</p>`) +
+      (rows.length ? bayList(rows) : empty(tx('Nothing in this location on the morning report.'), { sm: true, icon: 'search' })) +
       `<button class="mv-ghost" data-act="loc-clear">${tx('Another location')}</button>`;
   }
   // The bays with pulls (and adjustments), in walking order.
@@ -48,7 +48,7 @@ function body(ctx, repaint = () => paint()) {
   const list = Object.keys(bays).sort(byLoc);
   return `<div class="mv-sub">${txn(list.length, "From {date}'s report · {n} location with something to do", "From {date}'s report · {n} locations with something to do", { date: esc(fmtDate(d.snap.date)) })}</div>` +
     (list.length ? `<div class="mv-rows">${list.map(l => `<button class="mv-row" data-act="loc-open" data-loc="${esc(l)}"><span class="a">${esc(l)}</span><span class="b">${bays[l].pull ? `<b>${tx('{n} to pull', { n: bays[l].pull })}</b>` : ''}${bays[l].pull && bays[l].adjust ? ' · ' : ''}${bays[l].adjust ? tx('{n} to adjust', { n: bays[l].adjust }) : ''}</span><span class="c">${ic('chev')}</span></button>`).join('')}</div>`
-      : `<p class="lbl">${tx('Nothing on the report is under two cartons or at 0 or less, or the carton sizes are not known yet (they come from the manifests).')}</p>`);
+      : empty(tx('Nothing on the report is under two cartons or at 0 or less, or the carton sizes are not known yet (they come from the manifests).'), { sm: true, icon: 'check' }));
 }
 
 export default {

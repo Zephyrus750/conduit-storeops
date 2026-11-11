@@ -5,7 +5,7 @@
 // change is an owner action. Other console pages use loadZones() and
 // zoneSelect() for the dropdown.
 
-import { ic, esc, vh, sub, toast } from '../ui.js';
+import { ic, esc, vh, sub, toast, empty } from '../ui.js';
 import { tx, txn } from '../i18n.js';
 import { ask } from '../sheet.js';
 import { invalidate } from './admin.js';
@@ -47,7 +47,7 @@ function page(ctx) {
     : `<tr><td><b>${esc(z.name)}</b></td><td><div class="zn-stores">${z.stores.length ? z.stores.map(no => chip(no, nameOf(no))).join('') : `<span class="cs-dim">${tx('no stores yet')}</span>`}</div></td>` +
       `<td class="zn-acts"><button class="btn sm" data-act="zn-edit" data-zone="${esc(z.name)}">${ic('edit')}${tx('Rename')}</button><button class="btn sm" data-act="zn-del" data-zone="${esc(z.name)}"${z.stores.length ? ` disabled title="${tx('Move its stores to another zone first')}"` : ''}>${ic('trash')}${tx('Remove')}</button></td></tr>`;
   const table = list.length ? `<div class="card"><table class="wb-t zn-t"><thead><tr><th>${tx('Zone')}</th><th>${tx('Stores')}</th><th></th></tr></thead><tbody>${list.map(row).join('')}</tbody></table></div>`
-    : `<div class="card"><p class="lbl">${tx('No zones yet. Add the zones your stores belong to.')}</p></div>`;
+    : `<div class="card">${empty(tx('No zones yet. Add the zones your stores belong to.'), { icon: 'layers' })}</div>`;
   // Stores outside the list: no zone yet, or one typed before the list.
   const loose = all.filter(s => !s.region || !list.some(z => same(z.name, s.region)));
   const outside = loose.length ? `<div class="card"><div class="ch"><h3>${tx('Stores without a zone on the list')}</h3><span class="cs-dim">${txn(loose.length, '{n} store', '{n} stores')}</span></div><div class="zn-stores">${loose.map(s => chip(s.no, s.name, s.region)).join('')}</div><p class="lbl">${tx('Open a store and pick its zone under Edit.')}</p></div>` : '';
