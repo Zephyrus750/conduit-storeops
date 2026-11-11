@@ -276,6 +276,44 @@ test('device presence: POST /hb records the device (the polling fallback for the
   assert.equal((await api('POST', '/v1/store/1187/hb', {}, dev)).status, 403);
 });
 
+test('device health: the heartbeat carries the language, the kind of device and the last five errors, capped; an older device still lands', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'health-pc' })).body.token;
+  const errors = Array.from({ length: 8 }, (_, i) => ({ at: `2026-10-08T0${i}:00:00+08:00`, msg: `fault ${i} ` + 'é'.repeat(400) }));
+  const full = await api('POST', '/v1/store/1241/hb', { app: 'conduit 9.9.1', online: true, outbox: 0, area: 'floor', lang: 'de-and-then-much-too-long', kind: 'pc', errors }, dev);
+  assert.equal(full.status, 200, 'five long errors still fit the heartbeat');
+  const devices = async () => (await api('GET', '/v1/admin/stores/1241/devices', undefined, ownerToken)).body.devices;
+  let rec = (await devices())['health-pc'];
+  assert.equal(rec.lang, 'de-and-then-much', 'the language is capped at 16');
+  assert.equal(rec.kind, 'pc');
+  assert.equal(rec.errors.length, 5, 'at most five errors, newest first as sent');
+  assert.deepEqual(rec.errors.map(e => e.msg.slice(0, 7)), ['fault 0', 'fault 1', 'fault 2', 'fault 3', 'fault 4']);
+  assert.ok(rec.errors.every(e => e.msg.length === 200), 'each message capped at 200');
+  assert.equal(rec.errors[0].at, '2026-10-08T00:00:00+08:00');
+  // A kind outside pc, phone and screen, a bad time, an empty message and a non-list are dropped, not stored.
+  await api('POST', '/v1/store/1241/hb', { app: 'conduit 9.9.1', kind: 'toaster', errors: [{ at: 'yesterday', msg: 'late' }, { at: '2026-10-08T01:00:00Z', msg: '' }, 'nope'] }, dev);
+  rec = (await devices())['health-pc'];
+  assert.equal(rec.kind, null); assert.deepEqual(rec.errors, [{ at: null, msg: 'late' }]);
+  await api('POST', '/v1/store/1241/hb', { app: 'conduit 9.9.1', errors: 'boom' }, dev);
+  assert.deepEqual((await devices())['health-pc'].errors, []);
+  // A device from before these fields: recorded as before, the new ones empty.
+  await api('POST', '/v1/store/1241/hb', { app: 'conduit 0.9.0', online: true, outbox: 2, area: 'floor', lastError: 'old' }, dev);
+  rec = (await devices())['health-pc'];
+  assert.deepEqual([rec.app, rec.outbox, rec.lastError, rec.lang, rec.kind, rec.errors], ['conduit 0.9.0', 2, 'old', null, null, []]);
+  // The socket frame lands the same fields.
+  const res = await mf.dispatchFetch('http://conduit.test/v1/store/1241/ws', { headers: { Upgrade: 'websocket', 'Sec-WebSocket-Protocol': `conduit, ${dev}` } });
+  const ws = res.webSocket; ws.accept();
+  const clock = new Promise(resolve => ws.addEventListener('message', m => { if (JSON.parse(m.data).t === 'clock') resolve(); }));
+  ws.send(JSON.stringify({ t: 'hb', app: 'conduit 9.9.2', online: true, outbox: 0, lang: 'vi', kind: 'screen', errors: [{ at: '2026-10-08T02:00:00Z', msg: 'socket fault' }] }));
+  await clock; ws.close();
+  rec = (await devices())['health-pc'];
+  assert.deepEqual([rec.app, rec.lang, rec.kind, rec.errors], ['conduit 9.9.2', 'vi', 'screen', [{ at: '2026-10-08T02:00:00Z', msg: 'socket fault' }]]);
+  // The store object woken from hibernation (its state rebuilt from the snapshot and the log) still knows the device.
+  const stub = await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('1241')));
+  await stub.load();
+  const back = (await devices())['health-pc'];
+  assert.deepEqual([back.app, back.lang, back.kind, back.last], ['conduit 9.9.2', 'vi', 'screen', rec.last], 'device presence outlives the store object');
+});
+
 test('owner diagnostics and act-as', async () => {
   const tail = await api('GET', '/v1/admin/stores/1241/tail', undefined, ownerToken);
   assert.equal(tail.status, 200); assert.equal(tail.body.events[0].type, 'refresh.mark');

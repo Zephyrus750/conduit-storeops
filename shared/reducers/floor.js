@@ -393,6 +393,8 @@ export function addMonths(iso, months) {
   return d.toISOString().slice(0, 10);
 }
 
+// The week's target: shelves refreshed, out of REFRESH_TARGET.
+export const REFRESH_TARGET = 100;
 // What the weekly X/100 counts, as ShelfSearcher did (refresh-mode.js:573):
 // with focus departments set, only marks in them; with none, every mark.
 // deptOf(segment, mark) names a mark's department; an unknown one counts.
