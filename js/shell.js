@@ -44,6 +44,7 @@ import { waiting, railCounts, bellCount, useAlertSource } from './alerts.js';
 import { openSheet } from './sheet.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
+import { installPractice } from './practice.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -65,6 +66,8 @@ const areaName = a => AREA_NAME[a] || AREA_NAME.floor;
 const workerLine = () => WORKER === WORKER_DEFAULT ? '' : `<div class="si-worker">${ic('lock')}${tx('Signing in to <b>{host}</b>', { host: esc(new URL(WORKER).host) })}</div>`;
 
 const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
+// Practice mode (js/practice.js): a sandbox store kept off the worker; its gate goes on before anything is asked.
+const practice = installPractice({ client, frame: document.querySelector('.frame'), closeStore: () => closeStore() });
 let team = null;      // the team message strip (js/team.js)
 let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor', pullAlertsOff = null;
 const frame = $('.frame');
@@ -107,7 +110,7 @@ client.session.on('change', snap => {
   if (view && view.area && view.area !== 'store' && !(snap?.caps || []).includes(view.area)) { setWs('floor'); show(HOME.floor); }
   if (gone.length) { const [a, b, c] = gone.map(areaName); toast(c ? tx('{a}, {b} and {c} were switched off for this store', { a, b, c }) : b ? tx('{a} and {b} were switched off for this store', { a, b }) : tx('{a} was switched off for this store', { a })); }
 });
-client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: tx('Owner session expired. Sign in again.') } : { error: tx('This device was signed out. Sign in again.') }); });
+client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); if (practice.on) { practice.finish().finally(() => location.reload()); return; } showSignin(wasOwner ? { owner: true, error: tx('Owner session expired. Sign in again.') } : { error: tx('This device was signed out. Sign in again.') }); });
 // A shared shelf link (?store=…&shelf=…): open the map on that shelf once
 // signed in to that store (a guide link, ?guide=…, opens Help in any store). A store parked on this device is switched to; a
 // device that is not signed in gets the sign-in with that store chosen.
@@ -152,7 +155,7 @@ async function enter() {
   showLoading();
   const s = client.session.current;
   try {
-    store = await client.open(s.store); useRecallStore(store);
+    store = (await practice.open(s)) || await client.open(s.store); useRecallStore(store);
     await loadStoreMap(s.store);
   } catch (e) {
     if (s.actas) { await client.session.endActAs(); await enterAdmin(); toast(tx('Cannot open {store}: {error}', { store: s.store, error: e.message }), 'bad'); return; }
@@ -278,6 +281,8 @@ function managerCheck() {
 function closeStore() { useRecallStore(null); team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; $('#msheet')?.classList.remove('open'); const d = $('#syncDlg'); if (d) d.hidden = true; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); applyPrefs(frame); actasBar(null); resetAdmin(); }
 async function signOut() {
+  // Practice ends first: its store closes and its data goes, and the app reloads after, so nothing of it stays in memory.
+  const drill = practice.on; if (drill) { closeStore(); await practice.finish(); }
   try { await store?.flush(); } catch {}
   // A shared device keeps no store data past sign-out (the outbox was just
   // flushed; anything still queued stays so it is not lost).
@@ -285,8 +290,8 @@ async function signOut() {
   // Signed out from the Continue screen, the store was never opened: its outbox is read from the device.
   let queued = store?.pending?.length || 0; if (!store && no) try { queued = await client.storage.count(`outbox:${no}:`); } catch { queued = 1; }
   if (no && !client.session.current?.actas && !queued) try { await client.storage.del(`snap:${no}`); } catch {}
-  if (client.session.current?.actas) { closeStore(); await client.session.endActAs(); await enterAdmin(); return; }
-  leave(); await client.session.signOut(); showSignin();
+  if (client.session.current?.actas) { closeStore(); await client.session.endActAs(); if (drill) return location.reload(); await enterAdmin(); return; }
+  leave(); await client.session.signOut(); if (drill) return location.reload(); showSignin();
 }
 function actasBar(s) {
   $('#actasBar')?.remove(); if (!s) return;
@@ -627,6 +632,7 @@ function onHold(list) { toast(holdToast(list), 'warn', { label: tx('See'), run: 
 // the app bar that shows only when there is something to say (offline,
 // sending, or changes waiting). Both open the list of what is on the device.
 function paintStatus(s) {
+  if (practice.paint(s)) return;   // practice: the pill and the footer say so, whatever the practice store is doing
   const pill = $('#msync'), p = s.state === 'owner' ? null : pillState(s);
   if (pill) { pill.hidden = !p; if (p) { pill.className = `msync ${p.tone}`; pill.innerHTML = `<span class="dot"></span>${esc(p.text)}`; pill.setAttribute('aria-label', tx('Sync: {state}. Show the changes on this device', { state: p.text })); } }
   const el = $('#footSync'); if (!el) return;
@@ -728,7 +734,7 @@ function show(id, arg) {
   currentArg = arg !== undefined ? arg : (id === current ? currentArg : null);
   current = id;
   const cur = client.session.current;
-  const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, api: (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token })), storage: client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
+  const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, api: (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token })), storage: practice.storage || client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
   const useMobile = mobile && typeof view.mobile === 'function';
   // A view that fails to paint shows why and a way out, never an empty frame.
   let html; try { html = useMobile ? view.mobile(ctx) : view.desktop(ctx); }

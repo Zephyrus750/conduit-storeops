@@ -15,6 +15,7 @@ import { retailPeriod } from '../../shared/time.js';
 import { bundle, storagePots, releaseCache, fmtBytes } from '../diag.js';
 import { SUBS, MICRO, microId, microCode, microName } from '../data/micros.js';
 import { ulid } from '../../shared/ulid.js';
+import { practiceCard } from '../practice.js';
 
 let sec = 'general';
 const currentSec = () => sec;
@@ -98,6 +99,7 @@ function body(ctx, sec = currentSec()) {
     `<div class="stg-card"><div class="stg-h">${tx('Scanner and vibration')}</div>${row(tx('Beep on a read'), tx('The camera scanner beeps when it reads a code.'), tgl(prefs().scanSound !== false, 'scan-sound'))}${row(tx('Vibrate on a read'), tx('The phone buzzes when a code is read.'), tgl(prefs().scanVibrate !== false, 'scan-vibrate'))}${row(tx('Vibration feedback'), tx('A short buzz when a shelf is tapped, a department opens, a search finds or misses, and on errors (phones only).'), tgl(prefs().haptics !== false, 'haptics'))}${isPhone() ? row(tx('Rotation'), prefs().allowLandscape ? tx('Rotation allowed: the app turns with the phone.') : tx('Portrait locked: the app stays upright when the phone turns (installed app).'), tgl(!prefs().allowLandscape, 'portrait')) : ''}</div>` +
     `<div class="stg-card"><div class="stg-h">${tx('Updates')}</div>${updatesRow()}${row(tx('Force reload'), tx('Clears the cached release and reloads from the worker. Signed-in state, maps and queued changes are kept.'), `<span class="btn sm" data-act="force-reload">${ic('refresh')}${tx('Force reload')}</span>`)}${installRow()}</div>` +
     (ctx.isMobile ? '' : `<div class="stg-card"><div class="stg-h">${tx('Map')}</div>${row(tx('Hover details'), tx('Show a shelf’s department, run and status when the pointer rests on it.'), tgl(prefs().mapTips !== false, 'map-tips'))}${row(tx('Price checks'), tx('How price checks and order screens show on the map: normal, large (the same size at any zoom) or hidden.'), segOf('pc-mode', [['small', tx('Normal')], ['large', tx('Large')], ['off', tx('Hidden')]], prefs().priceChecks || 'small'))}</div>`) +
+    practiceCard(ctx) +
     `<div class="stg-card"><div class="stg-h">${tx('Account')}</div>${row(tx('Sign out'), ctx.store ? (cur?.actas ? tx('Returns to the owner console. Queued changes are sent first.') : tx('Forgets the store on this device. Queued changes are sent first.')) : tx('Forgets the owner session on this device.'), `<span class="btn sm" style="color:var(--red)" data-act="signout">${cur?.actas ? tx('Back to the console') : tx('Sign out')}</span>`)}</div>`;
 }
 function updatesRow() {

@@ -30,6 +30,8 @@ export function createMaps({ transport, session, storage }) {
     mem.set(no, entry); await storage.set(`map:${no}`, entry);
     return doc;
   }
+  // The copy this device holds, without asking the worker (null when none).
+  async function peek(storeNo) { return (await cached(String(storeNo)))?.doc || null; }
   async function info(storeNo) { return transport.request(`/v1/store/${storeNo}/map`, { token: await session.token() }); }
   async function publish(storeNo, body) { return transport.request(`/v1/store/${storeNo}/map`, { method: 'POST', body, token: await session.token() }); }
   async function forget(storeNo) { mem.delete(String(storeNo)); await storage.del(`map:${storeNo}`); }
@@ -47,5 +49,5 @@ export function createMaps({ transport, session, storage }) {
     await storage.set(`plans:${no}`, kept);
     return blob;
   }
-  return { get, info, publish, forget, plan };
+  return { get, peek, info, publish, forget, plan };
 }
