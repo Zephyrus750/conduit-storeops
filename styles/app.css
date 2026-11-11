@@ -4441,7 +4441,7 @@ small.called svg.i { width: 12px; height: 12px; }
 .off-more { align-self: flex-start; }
 .dk-tags { margin: -2px 0 0; }
 .rvp-msg.back { background: #EFF6FF; color: #1E3A8A; }
-.bdr-tt .rt-row { align-self: flex-start; }
+.bdr-tt .rt-row, .bdr-tt > .status { align-self: flex-start; }
 .bdr-manpick .li.routed { flex-wrap: wrap; }
 .mp-rt { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin-top: 4px; }
 .mp-rt small { color: var(--dim); font-size: var(--fs-sm); white-space: normal; }
