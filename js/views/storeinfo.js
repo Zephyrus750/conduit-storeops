@@ -4,7 +4,7 @@
 // device is signed in to, with switching. Details come from the map
 // editor's Store Info, published with the map (cleanStoreInfo).
 
-import { ic, esc, vh, sub, status, toast, fmtTime, mhead, fmtDay, empty } from '../ui.js';
+import { ic, esc, vh, sub, status, pill, toast, fmtTime, mhead, fmtDay, empty } from '../ui.js';
 import { mapInfo, mapStats, mapSymbols, symbolsHtml } from '../map.js';
 import { tx, txn } from '../i18n.js';
 import { ask } from '../sheet.js';
@@ -23,7 +23,7 @@ function details(ctx, si, phone = false) {
   const hours = si.hoursDays?.length ? `<table class="si-hours">${si.hoursDays.map(([d, t]) => `<tr${/^sat/i.test(d) ? ' class="wk"' : ''}><th>${esc(d)}</th><td>${esc(t)}</td></tr>`).join('')}</table>` : '';
   const today = isoDay(new Date());
   const hols = (si.publicHolidays || []).filter(h => h.date && h.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8);
-  const holsHtml = hols.length ? `<div class="si-hols">${hols.map(h => `<div class="${/closed/i.test(h.hours) ? 'closed' : ''}"><b>${esc(h.name || tx('Public holiday'))}</b>${h.date === today ? `<span class="si-today">${tx('today')}</span>` : ''}<span>${esc(dayLabel(h.date))}</span><span class="h">${esc(h.hours || '')}</span></div>`).join('')}</div>` : '';
+  const holsHtml = hols.length ? `<div class="si-hols">${hols.map(h => `<div class="${/closed/i.test(h.hours) ? 'closed' : ''}"><b>${esc(h.name || tx('Public holiday'))}</b>${h.date === today ? `${pill(tx('today'), '', { size: 'sm', live: true, cls: 'si-today' })}` : ''}<span>${esc(dayLabel(h.date))}</span><span class="h">${esc(h.hours || '')}</span></div>`).join('')}</div>` : '';
   const dirs = [link(dirGoogle(si), 'Google Maps', 'map'), link(dirApple(si, ctx.storeName), 'Apple Maps', 'map')].join('');
   return `<div class="card"><div class="ch"><h3>${tx('Details')}</h3></div>` +
     (addr ? `<div class="si-sec"><div class="si-k">${tx('Address')}</div><div>${addr}</div></div>` : '') +
@@ -49,7 +49,7 @@ function mapStatus() {
   return `<div class="card"><div class="ch"><h3>${tx('Map')}</h3>${status(foh >= 20 ? 'good' : 'warn', foh >= 20 ? tx('Ready') : tx('In development'))}</div>` +
     `<div class="si-areas">${area(foh >= 20, txn(foh, 'Front of house · {n} shelf', 'Front of house · {n} shelves'))}${area(boh >= 10, txn(boh, 'Back of house · {n} shelf', 'Back of house · {n} shelves'))}${area(em > 0, txn(em, 'Emergency · {n} marker', 'Emergency · {n} markers'))}</div>` +
     `<div class="list">${st.floors.map(f => `<div class="li"><span class="loc">${esc(f.name)}</span><span class="nm">${f.type === 'boh' ? tx('Back of house') : tx('Front of house')} · ${txn(f.shelves, '{n} shelf in {runs} runs', '{n} shelves in {runs} runs', { runs: f.runs })} · ${f.paths ? txn(f.paths, '{n} walk-path point', '{n} walk-path points') : tx('no walk paths')}</span></div>`).join('')}</div>` +
-    `<p class="lbl" style="margin-top:10px">${[tx('Version {v}', { v: esc(String(info.version)) }), info.at ? tx('published {time}', { time: esc(fmtTime(info.at)) }) : '', info.storeInfo?.lastUpdated ? tx('details updated {date}', { date: esc(info.storeInfo.lastUpdated) }) : '', info.metresPerUnit ? tx('scale set (1 unit = {cm} cm)', { cm: +(info.metresPerUnit * 100).toFixed(1) }) : tx('scale not set: distances and shelf sizes need the editor’s Set Scale')].filter(Boolean).join(' · ')}</p></div>`;
+    `<p class="lbl mt-m">${[tx('Version {v}', { v: esc(String(info.version)) }), info.at ? tx('published {time}', { time: esc(fmtTime(info.at)) }) : '', info.storeInfo?.lastUpdated ? tx('details updated {date}', { date: esc(info.storeInfo.lastUpdated) }) : '', info.metresPerUnit ? tx('scale set (1 unit = {cm} cm)', { cm: +(info.metresPerUnit * 100).toFixed(1) }) : tx('scale not set: distances and shelf sizes need the editor’s Set Scale')].filter(Boolean).join(' · ')}</p></div>`;
 }
 // The symbols drawn on this store's map, with how many of each.
 function symbols() {
@@ -63,7 +63,7 @@ function stores(ctx) {
     parked.map(p => `<div class="li"><span class="loc">${esc(p.store)}</span><span class="nm">${esc(p.name || '')}</span><button class="btn sm primary" data-act="switch" data-store="${esc(p.store)}">${tx('Switch')}</button><button class="ibtn" data-act="forget" data-store="${esc(p.store)}" title="${tx('Sign out of {store}', { store: esc(p.store) })}" aria-label="${tx('Sign out of {store}', { store: esc(p.store) })}">${ic('x')}</button></div>`).join('') + `</div>` +
     (adding ? `<form class="si-add" data-form="add"><input class="inp" name="store" inputmode="numeric" autocomplete="off" placeholder="${tx('Store number')}" aria-label="${tx('Store number')}" required><input class="inp" name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="${tx('Store PIN')}" aria-label="${tx('Store PIN')}" required><button class="btn primary sm">${tx('Sign in')}</button><button type="button" class="btn sm" data-act="add-cancel">${tx('Cancel')}</button></form>`
       : `<div class="si-acts"><button class="btn sm" data-act="add">${ic('plus')}${tx('Add another store')}</button></div>`) +
-    `<p class="lbl" style="margin-top:8px">${tx('Switching keeps each store signed in on this device; crew and manager codes are dropped when you switch away. Sign out signs out of every store here.')}</p></div>`;
+    `<p class="lbl mt-s">${tx('Switching keeps each store signed in on this device; crew and manager codes are dropped when you switch away. Sign out signs out of every store here.')}</p></div>`;
 }
 
 export default {

@@ -8,7 +8,7 @@
 // The register and loads are store events (inventory.*), so every desk sees
 // them, as before.
 
-import { $, $$, ic, esc, toast, fmtDate, today, dep, empty } from '../../ui.js';
+import { $, $$, ic, esc, toast, fmtDate, today, dep, empty, pill } from '../../ui.js';
 import { MICRO } from '../../data/micros.js';
 import { loadXLSX } from './common.js';
 import { parseManifestSheets } from '../../../shared/manifest.js';
@@ -20,8 +20,8 @@ import { tx, txn } from '../../i18n.js';
 const CODE = new Map(); for (const [subId, list] of Object.entries(MICRO)) for (const entry of list) if (!CODE.has(entry.slice(0, 3))) CODE.set(entry.slice(0, 3), { sub: subId, name: entry.slice(4) });
 export const codeName = c => CODE.get(c)?.name || (c === '???' || c === '?' ? tx('No department') : tx('Department {code}', { code: c }));
 export const knownCode = c => CODE.has(c);
-export const LOAD_STATUS_NAME = { incoming: [tx('Incoming'), '#B45309'], received: [tx('Received'), '#15803D'], offsite: [tx('Off-site'), '#C2410C'] };
-export const statusPill = s => `<span class="inv-st" style="--c:${LOAD_STATUS_NAME[s]?.[1] || '#64748B'}">${LOAD_STATUS_NAME[s]?.[0] || esc(s)}</span>`;
+export const LOAD_STATUS_NAME = { incoming: [tx('Incoming'), 'warn'], received: [tx('Received'), 'good'], offsite: [tx('Off-site'), 'warn'] };
+export const statusPill = s => pill(LOAD_STATUS_NAME[s]?.[0] || esc(s), LOAD_STATUS_NAME[s]?.[1] || '', { size: 'sm' });
 export const units = n => Number(n || 0).toLocaleString('en-AU');
 export const loadUnits = l => (l.pallets || []).reduce((n, p) => n + p.items.reduce((k, i) => k + (Number(i.q) || 0), 0), 0);
 export const loadLines = l => (l.pallets || []).reduce((n, p) => n + p.items.length, 0);
@@ -40,7 +40,7 @@ export function shelvesFor(ctx, code) {
   return { exact: assign[`${info.sub}-${code}`] || [], sub: info.sub };
 }
 export const paintLabel = p => !p ? tx('pick a department or Whole load') : p.mode === 'heat' ? tx('Heat: {label}', { label: esc(p.label) }) : `${esc(p.code)} ${esc(codeName(p.code))}`;
-const paintKey = p => p?.mode === 'heat' ? `<span>${tx('light')}</span>${HEAT.map(c => `<i style="background:${c}"></i>`).join('')}<span>${tx('heavy')}</span>` : p ? `<span><i class="hi"></i>${tx('assigned shelves')}</span><span><i class="sub"></i>${tx('the department’s sub-department (no shelves assigned)')}</span>` : '';
+const paintKey = p => p?.mode === 'heat' ? `<span>${tx('light')}</span>${HEAT.map(c => `<i class="sw-c" style="--c:${c}"></i>`).join('')}<span>${tx('heavy')}</span>` : p ? `<span><i class="hi"></i>${tx('assigned shelves')}</span><span><i class="sub"></i>${tx('the department’s sub-department (no shelves assigned)')}</span>` : '';
 export function mapCard(paint, hasMap) {
   return `<div class="card inv-mapcard"><div class="ch"><h3>${tx('On the map')}</h3><span class="cs-dim" id="invPaint">${paintLabel(paint)}</span><button class="btn sm" data-act="unpaint"${paint ? '' : ' hidden'}>${tx('Clear')}</button></div>` +
     (hasMap ? `<div class="mapbox"><div class="mapstage" id="mapstage"></div></div><div class="inv-heatkey">${paintKey(paint)}</div>` : empty(tx('No map published.'), { sm: true, icon: 'map' })) + `</div>`;
@@ -87,7 +87,7 @@ export function loadDetail(ctx, l, paint) {
   return `<div class="card"><div class="ch"><h3>${esc(l.label)}</h3>${statusSeg}<button class="btn sm ghost danger" data-act="load-remove" title="${tx('Remove this load')}">${ic('trash')}</button></div>` +
     `<div class="inv-facts"><span>${txn(l.pallets.length, '<b>{n}</b> pallet', '<b>{n}</b> pallets')}</span><span>${txn(loadLines(l), '<b>{n}</b> line', '<b>{n}</b> lines', { n: units(loadLines(l)) })}</span><span>${txn(total, '<b>{n}</b> unit', '<b>{n}</b> units', { n: units(total) })}</span><span>${txn(cons.length, '<b>{n}</b> department', '<b>{n}</b> departments')}</span>${l.recvDate ? `<span>${tx('received {date}', { date: esc(fmtDate(l.recvDate)) })}</span>` : l.date ? `<span>${esc(fmtDate(l.date))}</span>` : ''}</div>` +
     `<div class="inv-consh"><b>${tx('By department')}</b><button class="btn sm${paint?.mode === 'heat' ? ' on' : ''}" data-act="heat">${ic('layers')}${tx('Whole load heat')}</button></div>` +
-    `<div class="inv-cons">${cons.slice(0, 40).map(([c, u, n]) => { const info = CODE.get(c); return `<button class="inv-crow${paint?.mode === 'dept' && paint.code === c ? ' on' : ''}" data-act="paint" data-code="${esc(c)}"><span class="cd">${esc(c)}</span><span class="nm">${esc(codeName(c))}${info ? ` ${dep(info.sub)}` : ''}</span><span class="bar"><i style="width:${Math.max(2, Math.round(u / total * 100))}%"></i></span><b>${units(u)}</b><small>${txn(n, '{n} line', '{n} lines')}</small></button>`; }).join('')}</div>` +
+    `<div class="inv-cons">${cons.slice(0, 40).map(([c, u, n]) => { const info = CODE.get(c); return `<button class="inv-crow${paint?.mode === 'dept' && paint.code === c ? ' on' : ''}" data-act="paint" data-code="${esc(c)}"><span class="cd">${esc(c)}</span><span class="nm">${esc(codeName(c))}${info ? ` ${dep(info.sub)}` : ''}</span><span class="bar"><i style="--w:${Math.max(2, Math.round(u / total * 100))}%"></i></span><b>${units(u)}</b><small>${txn(n, '{n} line', '{n} lines')}</small></button>`; }).join('')}</div>` +
     paintNotes(ctx, cons.map(c => c[0])) +
     `<details class="inv-pallets"><summary>${tx('Pallets ({n})', { n: l.pallets.length })}</summary>${l.pallets.slice(0, 80).map(p => `<div class="inv-prow"><span class="pid">${esc(p.pid)}</span><span>${txn(p.items.length, '{n} line · {units} units', '{n} lines · {units} units', { units: units(p.items.reduce((n, i) => n + i.q, 0)) })}</span><span class="cs-dim">${esc([...new Set(p.items.map(i => i.dept).filter(Boolean))].slice(0, 4).join(' · '))}</span></div>`).join('')}${l.pallets.length > 80 ? `<p class="lbl">${tx('and {n} more', { n: l.pallets.length - 80 })}</p>` : ''}</details></div>`;
 }

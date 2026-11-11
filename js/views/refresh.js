@@ -12,7 +12,7 @@ import { sheetHtml, ask } from '../sheet.js';
 const PLAN_COLOURS = ['#a855f7', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#ef4444'];
 const PLAN_NAME = { '#a855f7': tx('Purple'), '#3b82f6': tx('Blue'), '#f59e0b': tx('Amber'), '#ec4899': tx('Pink'), '#14b8a6': tx('Teal'), '#ef4444': tx('Red') };
 const planName = c => PLAN_NAME[String(c).toLowerCase()] || tx('Planned');
-const planChip = c => `<span class="rfplan-c"><i style="background:${esc(c)}"></i>${planName(c)}</span>`;
+const planChip = c => `<span class="rfplan-c"><i class="sw-c" style="--c:${esc(c)}"></i>${planName(c)}</span>`;
 const TARGET = REFRESH_TARGET;
 const isMgr = ctx => { const c = ctx.session.current; return !!c && (!!c.owner || (c.roles || []).includes('manager')); };
 const mgrTag = () => mgr();
@@ -79,13 +79,13 @@ function dayBars(m) {
   const NAMES = [tx('MON'), tx('TUE'), tx('WED'), tx('THU'), tx('FRI'), tx('SAT'), tx('SUN')], { days, depts, todayI } = weekByDay(m);
   const tot = days.map(d => Object.values(d).reduce((a, b) => a + b, 0)), max = Math.max(1, ...tot);
   const toggle = `<span class="seg rf-cmode">${[['bars', tx('Bars')], ['line', tx('Line')]].map(([k, l]) => `<button class="${chartMode === k ? 'on' : ''}" data-act="chart" data-v="${k}">${l}</button>`).join('')}</span>`;
-  const legend = depts.length ? `<div class="rf-leg">${depts.map(d => `<span><i style="background:${DEPT_COLOUR[d] || '#94A3B8'}"></i>${esc(d.toUpperCase())}</span>`).join('')}</div>` : `<div class="cs-dim" style="font-size:12px">${tx('No scans yet this week')}</div>`;
+  const legend = depts.length ? `<div class="rf-leg">${depts.map(d => `<span><i class="sw-c" style="--c:${DEPT_COLOUR[d] || '#94A3B8'}"></i>${esc(d.toUpperCase())}</span>`).join('')}</div>` : `<div class="cs-dim">${tx('No scans yet this week')}</div>`;
   if (chartMode === 'line') {
     const W = 280, H = 100, x = i => 14 + i * (W - 28) / 6, y = v => H - 12 - v / max * (H - 26), INITIALS = dayInitials();
     const lines = depts.map(d => { const pts = days.slice(0, todayI + 1).map((dd, i) => [x(i), y(dd[d] || 0)]); return `<polyline fill="none" stroke="${DEPT_COLOUR[d] || '#94A3B8'}" stroke-width="2" points="${pts.map(p => p.join(',')).join(' ')}"/>${pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="2.6" fill="${DEPT_COLOUR[d] || '#94A3B8'}"/>`).join('')}`; }).join('');
     return toggle + `<svg class="rf-line" viewBox="0 0 ${W} ${H}" role="img" aria-label="${tx('Refreshes by day and department')}"><line x1="8" x2="${W - 8}" y1="${H - 12}" y2="${H - 12}" stroke="var(--line)"/>${lines}${INITIALS.map((n, i) => `<text x="${x(i)}" y="${H - 1}" text-anchor="middle">${esc(n)}</text>`).join('')}<text x="${W - 8}" y="10" text-anchor="end">${max}</text></svg>` + legend;
   }
-  return toggle + `<div class="bars rf-stack" style="height:66px">${days.map((d, i) => `<div class="${i === todayI ? 'hi' : ''}${i > todayI ? ' fut' : ''}" style="height:${tot[i] ? Math.max(2, Math.round(tot[i] / max * 100)) : 3}%" title="${NAMES[i]} · ${tot[i]}">${depts.filter(k => d[k]).map(k => `<u style="flex:${d[k]};background:${DEPT_COLOUR[k] || '#94A3B8'}"></u>`).join('')}<span>${i > todayI ? '·' : NAMES[i]}</span></div>`).join('')}</div>` + legend;
+  return toggle + `<div class="bars rf-stack">${days.map((d, i) => `<div class="${i === todayI ? 'hi' : ''}${i > todayI ? ' fut' : ''} h-c" style="--h:${tot[i] ? Math.max(2, Math.round(tot[i] / max * 100)) : 3}%" title="${NAMES[i]} · ${tot[i]}">${depts.filter(k => d[k]).map(k => `<u style="--f:${d[k]};--c:${DEPT_COLOUR[k] || '#94A3B8'}"></u>`).join('')}<span>${i > todayI ? '·' : NAMES[i]}</span></div>`).join('')}</div>` + legend;
 }
 // Refreshed this week, by department: each group can be reset on its own
 // and each segment found on the map.
@@ -148,7 +148,7 @@ export default {
     const m = model(ctx);
     return vh(tx('Location refresh'), sub(`${m.counted} / ${TARGET}`, tx('This week'), m.week), `<button class="btn" data-act="scan-shelf">${ic('camera')}${tx('Scan shelves')}</button><button class="btn" data-act="reset-week">${ic('refresh')}${tx('Reset week')}</button>`, 'm-refresh') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
-      `<div class="mapleg">${crumbx(tx('Location refresh'), ctx.storeNo)}<span><i style="background:#16A34A"></i>${tx('Refreshed this week ({n})', { n: m.done })}</span><span><i style="background:transparent;border:2px solid #D24E0E"></i>${tx('Focus department, not yet')}</span><span><i style="background:#CBD0D8"></i>${tx('Not in focus')}</span></div></div>` +
+      `<div class="mapleg">${crumbx(tx('Location refresh'), ctx.storeNo)}<span><i class="k-green"></i>${tx('Refreshed this week ({n})', { n: m.done })}</span><span><i class="k-ring"></i>${tx('Focus department, not yet')}</span><span><i class="k-off"></i>${tx('Not in focus')}</span></div></div>` +
       `<div class="sidecol fill" id="rfside"></div></div>`;
   },
   mobile(ctx) {
@@ -159,7 +159,7 @@ export default {
   mount(ctx, root) {
     const map = mountMap($('#mapstage', root), { cls: 'rf', badges: false, writes: true, onSelect: info => { if (info.kind === 'shelf') tap(ctx, info); }, tip: info => {
       const m = model(ctx), mk = m.marks[markKeysFor(m.marks, info)[0]], c = m.plan[info.full];
-      const plan = c ? `<span class="mx"><i class="pdot" style="background:${esc(c)}"></i>${tx('Planned · {colour}', { colour: planName(c) })}</span>` : '';
+      const plan = c ? `<span class="mx"><i class="pdot sw-c" style="--c:${esc(c)}"></i>${tx('Planned · {colour}', { colour: planName(c) })}</span>` : '';
       if (mk) return tipLine('g', 'check', tx('Refreshed {time}', { time: fmtTime(mk.at) })) + plan;
       if (m.focus.includes(info.dept)) return tipLine('o', 'asterisk', tx('Focus · not yet refreshed')) + plan;
       return tipLine('', 'minus', tx('Not in focus this week')) + plan;
@@ -217,11 +217,11 @@ export default {
 
 function sidebar(map, m) {
   const fc = focusCounts(m);
-  return `<div class="pcard"><div class="rfcount">${ic('asterisk')}<div class="n">${m.counted}<small> / ${TARGET}</small></div><div class="fx">${tx('Focus this week')}<div class="chips">${fc.map(f => `<span class="chip" data-act="zoom-dept" data-dept="${esc(f.d)}"><span class="sw" style="background:${DEPT_COLOUR[f.d]}"></span>${esc(f.d.toUpperCase())} ${f.done}/${f.total}</span>`).join('')}<span class="chip" style="color:var(--accent-ink)" data-act="mode" data-mode="focus">${tx('Choose…')}</span></div></div></div>${prog(m.done / TARGET * 100)}${shelfScanField(tx('Scan or type a shelf label to mark it'))}` +
-    (mode === 'focus' ? `<div class="chips" style="margin-top:10px">${FOCUS_DEPTS.map(d => `<span class="chip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}"><span class="sw" style="background:${DEPT_COLOUR[d]}"></span>${d.toUpperCase()}</span>`).join('')}<span class="chip" data-act="mode" data-mode="refresh">${tx('Done')}</span></div>` : '') + `</div>` +
+  return `<div class="pcard"><div class="rfcount">${ic('asterisk')}<div class="n">${m.counted}<small> / ${TARGET}</small></div><div class="fx">${tx('Focus this week')}<div class="chips">${fc.map(f => `<span class="chip" data-act="zoom-dept" data-dept="${esc(f.d)}"><span class="sw sw-c" style="--c:${DEPT_COLOUR[f.d]}"></span>${esc(f.d.toUpperCase())} ${f.done}/${f.total}</span>`).join('')}<span class="chip t-accent" data-act="mode" data-mode="focus">${tx('Choose…')}</span></div></div></div>${prog(m.done / TARGET * 100)}${shelfScanField(tx('Scan or type a shelf label to mark it'))}` +
+    (mode === 'focus' ? `<div class="chips mt-m">${FOCUS_DEPTS.map(d => `<span class="chip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}"><span class="sw sw-c" style="--c:${DEPT_COLOUR[d]}"></span>${d.toUpperCase()}</span>`).join('')}<span class="chip" data-act="mode" data-mode="refresh">${tx('Done')}</span></div>` : '') + `</div>` +
     `<div class="pcard"><div class="pt3">${tx('This week’s scanning')}</div><div class="rfchart">${dayBars(m)}</div></div>` +
-    `<div class="pcard"><div class="pt3">${tx('Refreshed this week')}<span style="margin-left:auto;font-weight:600;letter-spacing:0;text-transform:none">${txn(m.done, '{n} shelf', '{n} shelves')}</span></div>${groupsHtml(map, m)}</div>` +
-    `<div class="pcard"><div class="plan"><span class="pt3" style="margin:0">${tx('Plan')}</span><span class="sw2${mode === 'plan' ? ' on' : ''}" data-act="mode" data-mode="${mode === 'plan' ? 'refresh' : 'plan'}"></span></div><div class="pal">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c && mode === 'plan' ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<span class="er${planColour === 'erase' && mode === 'plan' ? ' on' : ''}" data-act="colour" data-colour="erase">${ic('x')}</span></div><div class="lbl">${mode === 'plan' ? tx('Plan mode: tap shelves to paint them for the team. Same colour again clears.') : tx('Pick a colour, then tap shelves to mark them.')}</div></div>` +
+    `<div class="pcard"><div class="pt3">${tx('Refreshed this week')}<span class="aside">${txn(m.done, '{n} shelf', '{n} shelves')}</span></div>${groupsHtml(map, m)}</div>` +
+    `<div class="pcard"><div class="plan"><span class="pt3">${tx('Plan')}</span><span class="sw2${mode === 'plan' ? ' on' : ''}" data-act="mode" data-mode="${mode === 'plan' ? 'refresh' : 'plan'}"></span></div><div class="pal">${PLAN_COLOURS.map(c => `<i style="--c:${c}" class="sw-c ${planColour === c && mode === 'plan' ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<span class="er${planColour === 'erase' && mode === 'plan' ? ' on' : ''}" data-act="colour" data-colour="erase">${ic('x')}</span></div><div class="lbl">${mode === 'plan' ? tx('Plan mode: tap shelves to paint them for the team. Same colour again clears.') : tx('Pick a colour, then tap shelves to mark them.')}</div></div>` +
     `<div class="pfoot"><button class="btn" data-act="reset-plan">${ic('refresh')}${tx('Reset planning')}</button></div>`;
 }
 // The phone's scan: one button opens a sheet with the camera and a box to
@@ -242,9 +242,9 @@ function scanSheet() {
 // and the shelves refreshed this week by department (a tap finds one).
 function mobileBar(map, m, mgr = null) {
   const fc = focusCounts(m), left = 7 - (new Date().getDay() + 6) % 7;
-  const head = `<div class="sx-h">${ic('m-refresh')}${tx('Location refresh')}<span class="n">${m.counted} / ${TARGET}</span></div><div class="sx-sub">${txn(left, 'This week · {period} · {n} day left', 'This week · {period} · {n} days left', { period: retailPeriod(new Date()) })}</div><div style="margin-top:8px">${sx.bar(m.counted, TARGET)}</div>`;
+  const head = `<div class="sx-h">${ic('m-refresh')}${tx('Location refresh')}<span class="n">${m.counted} / ${TARGET}</span></div><div class="sx-sub">${txn(left, 'This week · {period} · {n} day left', 'This week · {period} · {n} days left', { period: retailPeriod(new Date()) })}</div><div class="mt-s">${sx.bar(m.counted, TARGET)}</div>`;
   // The toggle keeps its place: in Plan the colours take the scan button's spot.
-  const row = `<div class="rf-row">${mode === 'plan' ? `<div class="rf-pal" role="group" aria-label="${tx('Plan colour')}">${PLAN_COLOURS.map(c => `<i style="background:${c}" class="${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="${tx('Erase')}" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<button class="rf-scanbtn" data-act="scan-open" aria-label="${tx('Scan or type a shelf')}">${ic('barcode')}<span>${tx('Scan or type')}</span></button>`}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">${tx('Refresh')}</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">${tx('Plan')}</button></div></div>`;
+  const row = `<div class="rf-row">${mode === 'plan' ? `<div class="rf-pal" role="group" aria-label="${tx('Plan colour')}">${PLAN_COLOURS.map(c => `<i style="--c:${c}" class="sw-c ${planColour === c ? 'on' : ''}" data-act="colour" data-colour="${c}"></i>`).join('')}<i class="er${planColour === 'erase' ? ' on' : ''}" title="${tx('Erase')}" data-act="colour" data-colour="erase">${ic('x')}</i></div>` : `<button class="rf-scanbtn" data-act="scan-open" aria-label="${tx('Scan or type a shelf')}">${ic('barcode')}<span>${tx('Scan or type')}</span></button>`}<div class="seg2"><button class="${mode !== 'plan' ? 'on' : ''}" data-act="mode" data-mode="refresh">${tx('Refresh')}</button><button class="${mode === 'plan' ? 'on' : ''}" data-act="mode" data-mode="plan">${tx('Plan')}</button></div></div>`;
   if (mode === 'plan') return `<div class="sx">${head}${row}<div class="sx-sub">${tx('Tap a shelf to paint it for the team. Tap the same colour again to clear.')}</div></div>`;
   const focus = sx.rows(fc.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${esc(f.d)}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) ;
   const outside = m.done - m.counted;
@@ -282,7 +282,7 @@ function groupsHtml(map, m) {
   const groups = refreshedByDept(map, m);
   if (!groups.length) return empty(tx('No shelves refreshed yet this week.'), { sm: true, icon: 'm-refresh' });
   return `<div class="rf-groups">${groups.map(([d, segs]) => { const open = openDept === d, shown = open ? segs : segs.slice(0, 12);
-    return `<div class="rf-grp"><div class="rf-gh">${dep(d)}<b>${esc(DEPT_NAME[d] || d.toUpperCase())}</b><span class="n">${segs.length}</span><button class="rf-reset" data-act="reset-dept" data-dept="${esc(d)}" title="${tx('Reset {dept} for this week', { dept: esc(d.toUpperCase()) })}">${tx('Reset')}</button></div><div class="rf-chips">${shown.map(seg => `<button class="rf-seg" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}${m.plan[seg] ? `<i style="background:${esc(m.plan[seg])}"></i>` : ''}</button>`).join('')}${segs.length > shown.length ? `<button class="rf-seg more" data-act="open-dept" data-dept="${esc(d)}">${tx('+{n} more', { n: segs.length - shown.length })}</button>` : open && segs.length > 12 ? `<button class="rf-seg more" data-act="open-dept" data-dept="">${tx('Show less')}</button>` : ''}</div></div>`; }).join('')}</div>`;
+    return `<div class="rf-grp"><div class="rf-gh">${dep(d)}<b>${esc(DEPT_NAME[d] || d.toUpperCase())}</b><span class="n">${segs.length}</span><button class="rf-reset" data-act="reset-dept" data-dept="${esc(d)}" title="${tx('Reset {dept} for this week', { dept: esc(d.toUpperCase()) })}">${tx('Reset')}</button></div><div class="rf-chips">${shown.map(seg => `<button class="rf-seg" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}${m.plan[seg] ? `<i class="sw-c" style="--c:${esc(m.plan[seg])}"></i>` : ''}</button>`).join('')}${segs.length > shown.length ? `<button class="rf-seg more" data-act="open-dept" data-dept="${esc(d)}">${tx('+{n} more', { n: segs.length - shown.length })}</button>` : open && segs.length > 12 ? `<button class="rf-seg more" data-act="open-dept" data-dept="">${tx('Show less')}</button>` : ''}</div></div>`; }).join('')}</div>`;
 }
 // A located segment rings orange for three seconds, as ShelfSearcher's flash.
 function flashSeg(map, seg) {

@@ -44,7 +44,7 @@ const tools = board => `<div class="scr-tools"><span class="scr-clock" data-cloc
 const holdBanner = h => h ? `<div class="scr-hold${h.kind && h.kind !== 'halt' ? ' planned' : ''}">${ic('alert')}<b>${esc(holdName(h))}</b>${h.note ? ` · ${esc(h.note)}` : ''}<span>${tx('since {time} · the decant clock is stopped', { time: fmtHM(h.start) })}</span></div>` : '';
 function progressBar(t, pr) {
   const gp = t.goalAt ? goalPace(t) : null;
-  return `<div class="scr-prog"><div class="scr-bar">${gp !== null ? `<b class="scr-pace" style="left:${Math.round(gp * 100)}%" title="${tx('Goal pace: where the team should be by now')}"></b>` : ''}<i style="width:${pr.pct}%"></i></div><div class="scr-progt"><span>${tx('<b>{done}</b> of {total} cartons · {pct}%', { done: pr.done, total: pr.total, pct: pr.pct })}</span>${gp !== null ? `<span class="scr-legend"><i></i>${tx('goal pace {pct}%', { pct: Math.round(gp * 100) })}</span>` : ''}<span>${tx('{done} of {total} pallets', { done: pr.doneCount, total: pr.count })}</span></div></div>`;
+  return `<div class="scr-prog"><div class="scr-bar">${gp !== null ? `<b class="scr-pace" style="--x:${Math.round(gp * 100)}%" title="${tx('Goal pace: where the team should be by now')}"></b>` : ''}<i style="--w:${pr.pct}%"></i></div><div class="scr-progt"><span>${tx('<b>{done}</b> of {total} cartons · {pct}%', { done: pr.done, total: pr.total, pct: pr.pct })}</span>${gp !== null ? `<span class="scr-legend"><i></i>${tx('goal pace {pct}%', { pct: Math.round(gp * 100) })}</span>` : ''}<span>${tx('{done} of {total} pallets', { done: pr.doneCount, total: pr.count })}</span></div></div>`;
 }
 
 // ── Dock screen ────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ function dockScreen(ctx) {
   }).join('');
   const run = running(t);
   const crew = (t.team || []).map(m => { const br = onBreak(t, m.pid); return `<span class="scr-crew${run[m.pid] ? ' on' : ''}${br ? ' brk' : ''}"><b>${esc(m.pid)}</b>${br ? tx('break') : run[m.pid] ? esc(run[m.pid]) : tx('free')}</span>`; }).join('');
-  return `<div class="scr dock">${head}${holdBanner(openHalt(t))}${progressBar(t, progress(t))}<div class="scr-grid" style="grid-template-columns:repeat(${g.cols},1fr);--rows:${Math.ceil(g.refs.length / g.cols)}">${cells}</div><div class="scr-crews">${crew || `<span class="cs-dim">${tx('No crew on this truck yet')}</span>`}</div>${palletSheet(t)}</div>`;
+  return `<div class="scr dock">${head}${holdBanner(openHalt(t))}${progressBar(t, progress(t))}<div class="scr-grid" style="--cols:${g.cols};--rows:${Math.ceil(g.refs.length / g.cols)}">${cells}</div><div class="scr-crews">${crew || `<span class="cs-dim">${tx('No crew on this truck yet')}</span>`}</div>${palletSheet(t)}</div>`;
 }
 
 // The pallet sheet (DV's palletSheet and personPicker): what the crew can

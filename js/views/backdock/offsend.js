@@ -19,6 +19,7 @@ import { ic, esc, toast, fmtDay, today } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { sheetHtml } from '../../sheet.js';
 import { truckNo } from './common.js';
+import { rtTag } from './routes.js';
 import { consolsOf } from '../../../shared/reducers/backdock.js';
 import { deptLine } from './callback.js';
 
@@ -29,7 +30,7 @@ export function pickClass(ref, p) { return off.pick ? (off.pick.has(ref) ? ' pk'
 export function partTag(t) {
   const n = t?.offsite?.length || 0; if (!n) return '';
   const of = n + Object.values(t.pallets || {}).filter(p => !p.excluded).length;
-  return `<span class="rt-tag part">${ic('stack')}${tx('Part off-site · {n} of {of}', { n, of })}</span>`;
+  return rtTag('warn', 'stack', tx('Part off-site · {n} of {of}', { n, of }));
 }
 // Picking belongs to one truck: switching truck lets it go.
 export function syncTruck(t) { if (off.truck !== (t?.id || null)) { reset(); off.truck = t?.id || null; } }

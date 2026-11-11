@@ -196,7 +196,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       out = grp(tx('Products'), item ? 1 : 0);
       if (item) {
         out += orow('p', 'barcode', `${hi(Q, Q)} · ${esc(item.name || tx('Product'))}`, [item.price != null ? money(item.price) : '', item.was != null && item.was !== item.price ? tx('was {price}', { price: money(item.was) }) : '', item.clr ? tx('clearance') : ''].filter(Boolean).join(' · ') || tx('On kmart.com.au'), tx('Open'), `data-url="${esc(item.url)}"`);
-        preview = `<div class="pcardx">${item.img ? `<img src="${esc(item.img)}" alt="" referrerpolicy="no-referrer" data-pimg style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:#fff;margin-bottom:8px">` : ''}<div class="kc">${esc(Q)}</div><div class="nm">${esc(item.name || '')}</div><div class="fx">${item.price != null ? `<span class="soh g">${money(item.price)}</span>` : ''}${item.was != null && item.was !== item.price ? `<span>${tx('was {price}', { price: money(item.was) })}</span>` : ''}${item.clr ? `<span class="status warn">${tx('Clearance')}</span>` : ''}</div></div><div class="pfacts"><span>${ic('clock')}${item.at ? tx('Price checked {date}', { date: fmtDate(item.at) }) : tx('Price checked never')}</span><span>${ic('m-product')}${tx('From the public product page')}</span></div><a class="btn accent sm" href="${esc(item.url)}" target="_blank" rel="noopener">${ic('ext')}${tx('Open on kmart.com.au')}</a>`;
+        preview = `<div class="pcardx">${item.img ? `<img src="${esc(item.img)}" alt="" referrerpolicy="no-referrer" data-pimg class="pcardx-img">` : ''}<div class="kc">${esc(Q)}</div><div class="nm">${esc(item.name || '')}</div><div class="fx">${item.price != null ? `<span class="soh g">${money(item.price)}</span>` : ''}${item.was != null && item.was !== item.price ? `<span>${tx('was {price}', { price: money(item.was) })}</span>` : ''}${item.clr ? `<span class="status warn">${tx('Clearance')}</span>` : ''}</div></div><div class="pfacts"><span>${ic('clock')}${item.at ? tx('Price checked {date}', { date: fmtDate(item.at) }) : tx('Price checked never')}</span><span>${ic('m-product')}${tx('From the public product page')}</span></div><a class="btn accent sm" href="${esc(item.url)}" target="_blank" rel="noopener">${ic('ext')}${tx('Open on kmart.com.au')}</a>`;
       } else {
         // A code nobody knows is often one digit off: offer the catalogue's near-misses.
         const near = await client.catalogue.nearMiss?.(Q) || [];
@@ -277,7 +277,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   const BAR_MAX = 6;
   const SUB_RANK = x => (x[0] === 'S' ? 0 : x[0] === 'E' ? 1 : x[0] === 'P' ? 2 : 3);
   const subWord = s => s[0] === 'S' ? tx('Side') : s[0] === 'E' ? tx('End') : s[0] === 'P' ? tx('Permanent end') : '';
-  const brow = (d, code, note, attrs) => { const c = DEPT_COLOUR[String(d || '').toLowerCase()] || '#64748B'; return `<div class="sdd-r" role="option" ${attrs}><i style="background:${c}"></i><b>${code}</b><span>${note}</span>${d ? dep(d) : ''}</div>`; };
+  const brow = (d, code, note, attrs) => { const c = DEPT_COLOUR[String(d || '').toLowerCase()] || '#64748B'; return `<div class="sdd-r" role="option" ${attrs}><i class="sw-c" style="--c:${c}"></i><b>${code}</b><span>${note}</span>${d ? dep(d) : ''}</div>`; };
   function barHtml(q) {
     const Q = q.trim(), ql = Q.toLowerCase(), k = classify(Q);
     if (!Q) {

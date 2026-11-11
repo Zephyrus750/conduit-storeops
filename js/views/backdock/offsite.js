@@ -18,7 +18,7 @@ import { addDays } from '../../../shared/time.js';
 import { inv, send, statusPill, stageFile, stagePanel, saveStage, stageChange } from './loads.js';
 import { tx, txn } from '../../i18n.js';
 import { routeManifest, broughtBy } from '../../../shared/dockroutes.js';
-import { routeTag, isMgr } from './routes.js';
+import { routeTag, isMgr, rtTag } from './routes.js';
 import { offsiteGroups } from '../../../shared/offsite.js';
 import { groupTag, groupSub, groupName, deptLine, callbackSheet, callText } from './callback.js';
 
@@ -27,7 +27,8 @@ const TABS = [['register', tx('Off-site register')], ['clearance', tx('Clearance
 const BACK = tx('returned::Back');
 let usedArg = null;   // a view's argument stays on re-renders: apply it once
 const st = { tab: 'register', view: 'man', filter: 'live', stage: null, adding: false, hl: null, open: new Set(), showBack: false };
-const pill = (cls, text) => `<span class="inv-pill ${cls}">${text}</span>`;
+// The chip family (styles/app.css .status), small: fixtures warn, clearance and late bad.
+const pill = (cls, text) => `<span class="status sm${{ fx: ' warn', clr: ' bad', late: ' bad' }[cls] || ''}">${text}</span>`;
 
 // ── Clearance watch (this device) ──────────────────────────────────────
 const PKEY = no => `inventory_prices:${no}`, EKEY = no => `inventory_clearance:${no}`;
@@ -156,7 +157,7 @@ function trucksAway(ctx, t) {
   if (!xs.length) return '';
   xs.sort((a, b) => (a.r.lands || '9').localeCompare(b.r.lands || '9') || a.date.localeCompare(b.date));
   return `<div class="card rt-away"><div class="ch"><h3>${tx('Whole trucks off-site')}</h3><span class="cs-dim">${xs.length}</span><button class="btn sm" data-view="planner">${ic('m-planner')}${tx('Open the Planner')}</button></div>` +
-    xs.map(({ date, n, r }) => { const back = broughtBy(ctx.store.get('plan'), ctx.store.get('dock'), { date, slot: n }); return `<div class="rt-away-r"><b>${tx('Truck {no} of {day}', { no: n, day: esc(fmtDate(date)) })}</b><span class="mono">${esc(routeManifest(r) || '—')}</span>${routeTag(r)}${back ? `<span class="rt-tag back">${ic('undo')}${tx('Called back: Truck {no} · {day}', { no: back.slice(12), day: esc(fmtDate(back.slice(0, 10))) })}</span>` : ''}${r.note ? `<small class="cs-dim">${esc(r.note)}</small>` : ''}</div>`; }).join('') + `</div>`;
+    xs.map(({ date, n, r }) => { const back = broughtBy(ctx.store.get('plan'), ctx.store.get('dock'), { date, slot: n }); return `<div class="rt-away-r"><b>${tx('Truck {no} of {day}', { no: n, day: esc(fmtDate(date)) })}</b><span class="mono">${esc(routeManifest(r) || '—')}</span>${routeTag(r)}${back ? rtTag('info', 'undo', tx('Called back: Truck {no} · {day}', { no: back.slice(12), day: esc(fmtDate(back.slice(0, 10))) })) : ''}${r.note ? `<small class="cs-dim">${esc(r.note)}</small>` : ''}</div>`; }).join('') + `</div>`;
 }
 
 // ── Phone ───────────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@
 //   finishSheet(t, { audit })            Finish receiving: what landed against the manifest
 //                                        (audit: offer the printed audit, a manager at a PC)
 
-import { ic, esc } from '../../ui.js';
+import { ic, esc, pill } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { PHASES, truckPhase, phaseCounts, phaseSteps } from '../../../shared/dockphase.js';
 import { liveAudit } from '../../../shared/reducers/backdock.js';
@@ -53,7 +53,9 @@ export function phaseBar(t, { link = false } = {}) {
   return `<div class="phb ph-${ph}" role="group" aria-label="${tx('Truck phase')}"><ol class="phb-s">${PHASES.map((p, i) => `<li class="${steps[i]}"${i === at ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[p]}</span></li>`).join('')}</ol>` +
     `<div class="phb-n"><span class="phb-t"><b>${t ? tx('Truck {n}', { n: esc(truckNo(t.id)) }) + ' · ' : ''}${PHASE_NAME[ph]}</b><small>${line(t, ph)}</small></span>${btn}</div></div>`;
 }
-export const phaseChip = t => { const ph = truckPhase(t); return `<span class="phb-chip ph-${ph}">${PHASE_NAME[ph]}</span>`; };
+// The chip family's tones: decanting is the one live right now (solid).
+export const PHASE_TONE = { planned: '', receiving: 'warn', received: 'good', decanting: '', cleared: 'good', closed: '' };
+export const phaseChip = (t, size = '') => { const ph = truckPhase(t); return pill(PHASE_NAME[ph], PHASE_TONE[ph], { size, live: ph === 'decanting' }); };
 
 // ── New truck ──────────────────────────────────────────────────────────
 // Today's trucks by number: planned slots (not yet a truck), trucks on the

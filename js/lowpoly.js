@@ -42,5 +42,5 @@ function scene(seed) {
 let cached = null;
 export function polyBackground() {
   cached ||= [11, 23, 37, 51].map(scene);
-  return `<div class="si-bg poly" aria-hidden="true">${cached.map((s, i) => `<i style="animation-delay:${i * 9}s">${s}</i>`).join('')}</div>`;
+  return `<div class="si-bg poly" aria-hidden="true">${cached.map((s, i) => `<i style="--i:${i}">${s}</i>`).join('')}</div>`;
 }

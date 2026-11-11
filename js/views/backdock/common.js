@@ -99,7 +99,11 @@ export function grid(t) { const g = t?.grid || { rows: 4, cols: 7, rowLabels: 'A
 export const startable = p => p && (p.status === 'landed' || p.status === 'assigned' || p.status === 'paused');
 
 // ── manifests ──────────────────────────────────────────────────────────
-import { today, dep, esc } from '../../ui.js';
+import { today, dep, esc, pill } from '../../ui.js';
+// A truck's or a pallet's state as a chip (the chip family): solid while it
+// is live right now (the truck on the dock, the pallet being decanted).
+//   stTag(state, text)  state: live | active | staged | paused | done | closed | waiting
+export const stTag = (st, text) => pill(text, st === 'staged' ? 'info' : st === 'done' ? 'good' : st === 'paused' ? 'warn' : '', { size: 'sm', live: st === 'live' || st === 'active' });
 import { workedMs, startOf } from '../../../shared/reducers/backdock.js';
 import { estClear } from '../../../shared/dockplan.js';
 import { parseManifestSheets, manifestDoc, attachConsols } from '../../../shared/manifest.js';
@@ -109,7 +113,7 @@ export function microDept(code) { const c = String(code || '').padStart(3, '0');
 export function microName(code) { const c = String(code || '').padStart(3, '0'); for (const list of Object.values(MICRO)) { const x = list.find(x => x.startsWith(c + ' ')); if (x) return x.slice(4); } return ''; }
 // A report line's department as a chip: its sub-department's colour and id,
 // the number and common name on hover; grey with the raw code when unknown.
-export function microChip(d) { const dd = microDept(d), nm = microName(d), c = dd ? dep(dd) : `<span class="dep" style="background:#64748B">${esc(d || '???')}</span>`; return nm ? c.replace('<span class="dep"', `<span class="dep" title="${esc(String(d).padStart(3, '0'))} ${esc(nm)}"`) : c; }
+export function microChip(d) { const dd = microDept(d), nm = microName(d), c = dd ? dep(dd) : `<span class="dep" style="--dc:#64748B">${esc(d || '???')}</span>`; return nm ? c.replace('<span class="dep"', `<span class="dep" title="${esc(String(d).padStart(3, '0'))} ${esc(nm)}"`) : c; }
 export const manifestIndex = dock => Object.values(dock.manifests || {}).sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
 
 // SheetJS reads the .xls (Crystal export) and .xlsx; it loads on first use

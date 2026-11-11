@@ -8,7 +8,7 @@
 // Adjustments: reportToIntel(). The list filters on the latest snapshot's
 // flags too: under two cartons (to pull) and 0 or less (to adjust).
 
-import { ic, esc, vh, sub, toast, mhead, fmtDate, empty } from '../../ui.js';
+import { ic, esc, vh, sub, toast, mhead, fmtDate, empty, pill } from '../../ui.js';
 import { todayKey, kcCopy, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf, ctnOf, depthChip } from './common.js';
 import { openScreenScan } from '../../screenscan.js';
 import { parseReport, rowKey, sohBand, flagOf, flagsOf, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
@@ -44,7 +44,7 @@ export function bayRows(data, loc) {
   return snap.rows.filter(r => r.loc === want).map(r => { const ctn = ctnOf(r.kc); return { ...r, ctn, flag: flagOf(r.soh, ctn) }; })
     .sort((a, b) => (FLAG_ORDER[a.flag] ?? 2) - (FLAG_ORDER[b.flag] ?? 2) || a.kc.localeCompare(b.kc));
 }
-export const flagBadge = f => f === 'adjust' ? `<span class="sri-flag adjust" title="${tx('In a stockroom bay but the system says 0 or less: adjust it')}">ADJUST</span>` : f === 'pull' ? `<span class="sri-flag pull" title="${tx('Under two cartons in the whole store: the floor has most likely run out and the rest is out the back')}">PULL</span>` : '';
+export const flagBadge = f => f === 'adjust' ? pill('ADJUST', 'bad', { size: 'sm', title: tx('In a stockroom bay but the system says 0 or less: adjust it') }) : f === 'pull' ? pill('PULL', 'info', { size: 'sm', title: tx('Under two cartons in the whole store: the floor has most likely run out and the rest is out the back') }) : '';
 export function bayList(rows) {
   return `<div class="list sri-bay">${rows.map(r => `<div class="li"><span class="mono kc">${kcCopy(r.kc)}</span><span class="nm">${nameHtml(r.kc)}<small>${depthChip(r.kc)}</small></span>${bandSoh(r.soh, r.ctn)}${flagBadge(r.flag)}</div>`).join('')}</div>`;
 }
@@ -174,7 +174,7 @@ function shrinkCard(ctx) {
   const head = `<div class="ch"><h3>${tx('Shrink over weeks')}</h3>${pills}</div>`;
   if (!list.some(x => x.nAdj || x.nAvo)) return `<div class="card sri-shrink">${head}${empty(tx('No adjustments recorded yet. Each day’s list adds to this once it is worked.'), { icon: 'chart', sm: true })}</div>`;
   const tot = list.reduce((t, x) => ({ adj: t.adj + x.adj, avo: t.avo + x.avo }), { adj: 0, avo: 0 });
-  const bar = (v, cls, label) => `<i class="${cls}" style="height:${Math.max(v ? 3 : 0, Math.round(v / max * 100))}%" title="${esc(label)}"></i>`;
+  const bar = (v, cls, label) => `<i class="${cls} h-c" style="--h:${Math.max(v ? 3 : 0, Math.round(v / max * 100))}%" title="${esc(label)}"></i>`;
   return `<div class="card sri-shrink">${head}` +
     `<div class="sri-sh-tot"><span class="sh-a"><b>${aud(tot.adj)}</b>${tx('adjusted')}</span><span class="sh-v"><b>${aud(tot.avo)}</b>${tx('avoided')}</span><span class="cs-dim">${txn(list.length, 'over the last {n} week', 'over the last {n} weeks')}</span></div>` +
     `<div class="sri-sh-bars" role="img" aria-label="${esc(tx('Adjusted and avoided shrink by week'))}">${list.map(x => `<div class="wk"><div class="pair">${bar(x.adj, 'sh-a', tx('{week}: {amount} adjusted · {n} items', { week: x.w, amount: aud(x.adj), n: x.nAdj }))}${bar(x.avo, 'sh-v', tx('{week}: {amount} avoided · {n} items', { week: x.w, amount: aud(x.avo), n: x.nAvo }))}</div><small>${esc(fmtDate(x.from))}</small></div>`).join('')}</div>` +

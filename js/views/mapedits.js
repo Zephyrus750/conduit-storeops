@@ -28,7 +28,7 @@ export default {
     const m = model(ctx);
     return vh(tx('Suggest map edits'), sub(tx('<span data-me-count>{n}</span> waiting', { n: m.open.length }), tx('the owner applies them in the map editor')), '', 'edit') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
-      `<div class="mapleg">${crumbx(tx('Suggest edits'), ctx.storeNo)}<span><i style="background:#F59E0B"></i>${tx('Edit suggested')}</span><span style="color:var(--faint)">${tx('Tap a shelf to suggest a new name or flag a problem')}</span></div></div>` +
+      `<div class="mapleg">${crumbx(tx('Suggest edits'), ctx.storeNo)}<span><i class="k-yellow"></i>${tx('Edit suggested')}</span><span class="t-faint">${tx('Tap a shelf to suggest a new name or flag a problem')}</span></div></div>` +
       `<div class="sidecol fill" id="meside"></div></div>`;
   },
   mobile() { return `<div id="memob"></div>`; },
@@ -89,16 +89,16 @@ function form(mobile) {
   const shelf = mobile || !draft.shelf ? `<label class="fld"><span>${tx('Shelf')}</span><input data-draft="shelf" class="mono" maxlength="40" value="${esc(draft.shelf)}" placeholder="A16 S1" autocapitalize="characters"></label>` : `<div class="me-shelf">${ic('pin')}<b>${esc(draft.shelf)}</b><span class="cs-dim">${tx('tap another shelf to change')}</span></div>`;
   if (mobile) return mhead(tx('Suggest a map edit'), tx('the owner makes the change')) + `<div class="mv-chips me-kinds">${kinds}</div>` + `<div class="me-form">${shelf}${what}</div>` + mfoot(mbig(tx('Send suggestion'), '', 'check', ' data-act="send"') + mghost(tx('Cancel'), ' data-act="cancel"'));
   return `<div class="card me-card"><div class="ch"><h3>${tx('Suggest an edit')}</h3></div><div class="pills me-kinds">${kinds}</div>${shelf}${what}` +
-    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px"><span class="btn primary sm" data-act="send">${ic('check')}${tx('Send suggestion')}</span><span class="btn sm" data-act="cancel">${tx('Cancel')}</span></div></div>`;
+    `<div class="acts2"><span class="btn primary sm" data-act="send">${ic('check')}${tx('Send suggestion')}</span><span class="btn sm" data-act="cancel">${tx('Cancel')}</span></div></div>`;
 }
 function item(x, m) {
   const [cls, label] = STATE[x.status] || STATE.open;
-  return `<div class="li me-li"><span class="me-k">${ic(KIND[x.kind]?.[1] || 'edit')}</span><span class="nm" style="white-space:normal"><b class="mono">${esc(x.shelf)}</b><span class="me-line">${line(x)}</span><small class="cs-dim">${timePassed(x.at)}${x.by ? ' · ' + esc(x.by) : ''}${x.reply ? ' · “' + esc(x.reply) + '”' : ''}</small></span>${status(cls, label)}${x.status === 'open' && m.manager ? `<button class="btn sm" data-act="decline" data-id="${esc(x.id)}">${tx('Decline')}${m.phone ? mgr() : ''}</button>` : ''}</div>`;
+  return `<div class="li me-li"><span class="me-k">${ic(KIND[x.kind]?.[1] || 'edit')}</span><span class="nm wrap"><b class="mono">${esc(x.shelf)}</b><span class="me-line">${line(x)}</span><small class="cs-dim">${timePassed(x.at)}${x.by ? ' · ' + esc(x.by) : ''}${x.reply ? ' · “' + esc(x.reply) + '”' : ''}</small></span>${status(cls, label)}${x.status === 'open' && m.manager ? `<button class="btn sm" data-act="decline" data-id="${esc(x.id)}">${tx('Decline')}${m.phone ? mgr() : ''}</button>` : ''}</div>`;
 }
 function sidebar(m) {
   const pills = [['open', tx('Waiting {n}', { n: m.open.length })], ['done', tx('Resolved {n}', { n: m.all.length - m.open.length })]];
-  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map(x => item(x, m)).join('') || empty(filter === 'open' ? tx('Nothing waiting. Tap a shelf to suggest an edit.') : tx('Nothing resolved yet.'), { sm: true, icon: filter === 'open' ? 'edit' : 'check' })}</div></div>`;
-  return (draft ? form(false) : `<div class="card me-card"><p class="lbl" style="margin:0">${tx('Tap a shelf on the map to suggest a new name or flag something wrong. The map only changes when the owner publishes a new version.')}</p><div style="margin-top:10px"><span class="btn sm" data-act="new">${ic('edit')}${tx('Type a shelf code instead')}</span></div></div>`) + list;
+  const list = `<div class="pcard"><div class="pills tight mb-m">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map(x => item(x, m)).join('') || empty(filter === 'open' ? tx('Nothing waiting. Tap a shelf to suggest an edit.') : tx('Nothing resolved yet.'), { sm: true, icon: filter === 'open' ? 'edit' : 'check' })}</div></div>`;
+  return (draft ? form(false) : `<div class="card me-card"><p class="lbl m-0">${tx('Tap a shelf on the map to suggest a new name or flag something wrong. The map only changes when the owner publishes a new version.')}</p><div class="mt-m"><span class="btn sm" data-act="new">${ic('edit')}${tx('Type a shelf code instead')}</span></div></div>`) + list;
 }
 function phone(m) {
   if (draft) return form(true);
