@@ -8,6 +8,7 @@
 import { $, ic, esc, vh, sub, status, timePassed, toast, mhead, mbig, mghost, mfoot, mgr } from '../ui.js';
 import { mountMap, mapbar, crumbx, bindMapChrome, tipLine, canonCode } from '../map.js';
 import { tx, txn } from '../i18n.js';
+import { askText } from '../sheet.js';
 
 let filter = 'open', draft = null;
 const newId = () => 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -69,8 +70,8 @@ export default {
           draft = null; filter = 'open'; toast(tx('Suggestion sent to the owner')); paint();
         }
         else if (act === 'decline') {
-          const note = prompt(tx('Decline this suggestion. Why? (optional)'), ''); if (note === null) return;
-          await ctx.store.dispatch({ type: 'map.edit.resolve', entity: { edit: a.getAttribute('data-id') }, payload: { status: 'declined', ...(note.trim() ? { note: note.trim() } : {}) } });
+          const note = await askText({ title: tx('Decline this suggestion?'), label: tx('Why? (optional)'), multiline: true, ok: tx('Decline') }); if (note === null) return;
+          await ctx.store.dispatch({ type: 'map.edit.resolve', entity: { edit: a.getAttribute('data-id') }, payload: { status: 'declined', ...(note ? { note } : {}) } });
         }
         else if (act === 'show' && map) { const s = a.getAttribute('data-shelf'); map.select?.(s.split(' ')[0]); }
       } catch (err) { toast(err.message, 'bad'); }

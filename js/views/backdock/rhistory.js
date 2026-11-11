@@ -10,6 +10,7 @@ import { ic, esc, vh, sub, toast, dep, mhead, mrows, fmtDate } from '../../ui.js
 import { HALT_NAME, holdName, truckNo, fmtHM, microDept, todayKey, manifestIndex, attachManifest } from './common.js';
 import { printAudit, canAudit } from './audit.js';
 import { linkSheet, linkPick, applyLinks, unlinked } from './late.js';
+import { ask } from '../../sheet.js';
 import { ratesFor } from './plan.js';
 import { layout } from './wallboard.js';
 import { tx, txn } from '../../i18n.js';
@@ -86,7 +87,7 @@ export default {
       else if (a.dataset.act === 'late-man') { try { await attachManifest(ctx, a.dataset.truck, a.dataset.man); toast(tx('{man} attached to Truck {no} · history rebuilt', { man: a.dataset.man, no: truckNo(a.dataset.truck) })); st.late = 'link'; } catch (err) { toast(err.message, 'bad'); } }
       else if (a.dataset.act === 'll-apply') { const o = model(ctx).open, dock = ctx.store.get('dock'), t = dock.trucks?.[o.id]; try { await applyLinks(ctx, { id: o.id, ...t }, ratesFor(dock)); st.late = null; } catch (err) { toast(err.message, 'bad'); } }
       else if (a.dataset.act === 'reopen') {
-        const id = a.dataset.id; if (!confirm(tx("Reopen Truck {no}? It goes back to live and its history row + rate credit are removed until it's closed again.", { no: truckNo(id) }))) return;
+        const id = a.dataset.id; if (!await ask({ title: tx('Reopen Truck {no}?', { no: truckNo(id) }), text: tx("It goes back to live and its history row + rate credit are removed until it's closed again."), ok: tx('Reopen truck') })) return;
         try { await ctx.store.dispatch({ type: 'truck.reopen', entity: { truck: id } }); toast(tx('Truck {no} is live again', { no: truckNo(id) })); st.open = null; ctx.go('receiving'); } catch (err) { toast(err.message, 'bad'); }
       }
       else if (a.dataset.act === 'export') {

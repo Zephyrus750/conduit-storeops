@@ -93,7 +93,7 @@ export default {
         const o = model(ctx).open; if (!o || o.requestedOnly || o.archived) return;
         const E = { bay: o.bay, date: o.date };
         if (a.dataset.act === 'unfinalise') { if (await send(ctx, 'submission.ready', E)) toast(tx('{bay} · {date} moved back to Ready', { bay: o.bay, date: o.date })); }
-        else if (a.dataset.act === 'reopen') { if (!confirm(o.date < todayKey() ? tx('Reopen {bay} ({date}) for review? An earlier day’s bay is submitted again automatically at the next end of day.', { bay: o.bay, date: o.date }) : tx('Reopen {bay} ({date}) for review?', { bay: o.bay, date: o.date }))) return; if (await send(ctx, 'submission.reopen', E)) toast(tx('{bay} is back in review', { bay: o.bay })); }
+        else if (a.dataset.act === 'reopen') { if (!await ask({ title: tx('Reopen {bay} ({date}) for review?', { bay: o.bay, date: o.date }), text: o.date < todayKey() ? tx('An earlier day’s bay is submitted again automatically at the next end of day.') : '', ok: tx('Reopen'), cancel: tx('Cancel'), danger: false })) return; if (await send(ctx, 'submission.reopen', E)) toast(tx('{bay} is back in review', { bay: o.bay })); }
         else { if (!await ask({ title: tx('Delete this history entry?'), text: `${tx('{bay} on {date} leaves the board and History.', { bay: o.bay, date: o.date })} ${tx('The event log keeps a record of the delete.')}`, ok: tx('Delete entry') })) return; if (await send(ctx, 'submission.delete', E)) { st.open = null; toast(tx('History entry deleted')); } }
       }
     });

@@ -17,7 +17,7 @@ import { csvLines } from '../../shared/records.js';
 import wallboard from './backdock/wallboard.js';
 import { teamboard } from './backdock/screens.js';
 import { tx, txn } from '../i18n.js';
-import { ask } from '../sheet.js';
+import { ask, askText } from '../sheet.js';
 import { loadZones, zoneSelect, zoneHint, zonesChanged } from './adminzones.js';
 
 const AREAS = ['floor', 'stockroom', 'backdock'];
@@ -434,16 +434,16 @@ async function onStoreClick(e, ctx) {
   }
   else if (act === 'edit-accept' || act === 'edit-decline') {
     const status = act === 'edit-accept' ? 'accepted' : 'declined';
-    const note = prompt(status === 'accepted' ? tx('Accepted: the change is in a published map version. Note for the store (optional):') : tx('Decline this suggestion. Why? (optional)'), '');
+    const note = await askText(status === 'accepted' ? { title: tx('Accept this suggestion?'), text: tx('Accept it once the change is in a published map version.'), label: tx('Note for the store (optional)'), multiline: true, ok: tx('Accept') } : { title: tx('Decline this suggestion?'), label: tx('Why? (optional)'), multiline: true, ok: tx('Decline') });
     if (note === null) return;
     a.disabled = true;
-    try { await ctx.admin.api(`/v1/admin/stores/${no}/mapedits/${encodeURIComponent(a.dataset.id)}`, { method: 'POST', body: { status, ...(note.trim() ? { note: note.trim() } : {}) } }); delete c.snap; st.actions = null; toast(status === 'accepted' ? tx('Suggestion accepted') : tx('Suggestion declined')); ctx.rerender(); }
+    try { await ctx.admin.api(`/v1/admin/stores/${no}/mapedits/${encodeURIComponent(a.dataset.id)}`, { method: 'POST', body: { status, ...(note ? { note } : {}) } }); delete c.snap; st.actions = null; toast(status === 'accepted' ? tx('Suggestion accepted') : tx('Suggestion declined')); ctx.rerender(); }
     catch (err) { a.disabled = false; fail(err); }
   }
   else if (act === 'area') { st.area = a.dataset.area; ctx.rerender(); }
   else if (act === 'actas') { a.disabled = true; try { await ctx.actAs(no); } catch (err) { a.disabled = false; fail(err); } }
-  else if (act === 'tool') { const id = a.dataset.tool, off = (c.rec?.toolsOff || []).includes(id), t = TOOLS.find(x => x.id === id); if (!off && !confirm(tx('Switch {tool} off for {no}? It disappears from every device now and the worker refuses its changes. Its records stay.', { tool: tx(t.name), no }))) return; await patchStore(ctx, { tools: { [id]: off } }); toast(off ? tx('{tool} on for {no}', { tool: tx(t.name), no }) : tx('{tool} off for {no}', { tool: tx(t.name), no })); }
-  else if (act === 'entitle') { const area = a.dataset.area, on = !c.rec?.entitlements?.[area]; if (!on && !confirm(tx('Turn {area} off for {no}? Devices lose the area the next time their token refreshes.', { area: AREA_NAME[area], no }))) return; await patchStore(ctx, { entitlements: { [area]: on } }); }
+  else if (act === 'tool') { const id = a.dataset.tool, off = (c.rec?.toolsOff || []).includes(id), t = TOOLS.find(x => x.id === id); if (!off && !await ask({ title: tx('Switch {tool} off for {no}?', { tool: tx(t.name), no }), text: [tx('It disappears from every device now and the worker refuses its changes.'), tx('Its records stay.')], ok: tx('Switch it off') })) return; await patchStore(ctx, { tools: { [id]: off } }); toast(off ? tx('{tool} on for {no}', { tool: tx(t.name), no }) : tx('{tool} off for {no}', { tool: tx(t.name), no })); }
+  else if (act === 'entitle') { const area = a.dataset.area, on = !c.rec?.entitlements?.[area]; if (!on && !await ask({ title: tx('Turn {area} off for {no}?', { area: AREA_NAME[area], no }), text: tx('Devices lose the area the next time their token refreshes.'), ok: tx('Turn it off') })) return; await patchStore(ctx, { entitlements: { [area]: on } }); }
   else if (act === 'revoke') { if (await ask({ title: tx('Sign out every device at store {no}?', { no: st.no }), text: tx('Each one needs the store PIN again.'), ok: tx('Sign out every device'), cancel: tx('Cancel') }) && await patchStore(ctx, { revoke: true })) toast(tx('Every device is signed out')); }
   else if (act === 'rot') { st.rot = a.dataset.name; st.rotValue = gen[a.dataset.name](); st.rotDone = null; st.reveal = null; ctx.rerender(); }
   else if (act === 'reveal') {
@@ -460,7 +460,7 @@ async function onStoreClick(e, ctx) {
   else if (act === 'gen') { const kind = a.dataset.kind || a.dataset.name; const el = a.closest('.ad-inrow')?.querySelector('input'); if (el && gen[kind]) el.value = gen[kind](); }
   else if (act === 'edit') { st.edit = true; ctx.rerender(); }
   else if (act === 'edit-cancel') { st.edit = false; ctx.rerender(); }
-  else if (act === 'flip') { const { area, state } = a.dataset; if (state === 'live' && !confirm(tx('Flip {area} for {no} to live? Devices treat Conduit as the system of record for it from now.', { area: AREA_NAME[area], no }))) return; try { await ctx.admin.api(`/v1/admin/stores/${no}/flip`, { method: 'POST', body: { area, state } }); st.actions = null; invalidate(no); await ctx.admin.refreshStores(); toast(tx('{area} is {state}', { area: AREA_NAME[area], state: STATE_NAME[state] || state })); ctx.rerender(); } catch (err) { fail(err); } }
+  else if (act === 'flip') { const { area, state } = a.dataset; if (state === 'live' && !await ask({ title: tx('Flip {area} for {no} to live?', { area: AREA_NAME[area], no }), text: tx('Devices treat Conduit as the system of record for it from now.'), ok: tx('Flip to live'), cancel: tx('Cancel'), danger: false })) return; try { await ctx.admin.api(`/v1/admin/stores/${no}/flip`, { method: 'POST', body: { area, state } }); st.actions = null; invalidate(no); await ctx.admin.refreshStores(); toast(tx('{area} is {state}', { area: AREA_NAME[area], state: STATE_NAME[state] || state })); ctx.rerender(); } catch (err) { fail(err); } }
   else if (act === 'import-accept') { const r = st.importResult; if (!r || !st.importPin) return toast(tx('Run the dry run again first'), 'bad'); const form = document.querySelector('form[data-form="import"]'); if (form) { if (r.source === 'dv') form.url.value = r.url; else { form.code.value = r.code; form.pin.value = st.importPin; } runImport(ctx, form, false); } }
   else if (act === 'import-src') { st.importSource = a.dataset.v; st.importResult = null; st.importPin = null; ctx.rerender(); }
 }
@@ -624,7 +624,7 @@ async function applyToMap(ctx, no, list) {
   for (const x of list) { const n = applyEdit(doc, x); shelves += n; (n ? done : missed).push(x); }
   if (!done.length) return toast(txn(missed.length, 'No single shelf on the published map matches that suggestion (the name is missing, or shared and the suggestion has no position): make it in the map editor', 'No single shelf on the published map matches those suggestions (the name is missing, or shared and the suggestion has no position): make them in the map editor'), 'bad');
   let version = bump(info.version);
-  if (!confirm(`${txn(done.length, "Apply {n} suggestion ({shelves}) to store {no}'s map and publish it as version {version}?", "Apply {n} suggestions ({shelves}) to store {no}'s map and publish it as version {version}?", { shelves: txn(shelves, '{n} shelf renamed or named', '{n} shelves renamed or named'), no, version })}${missed.length ? `\n\n${tx('{n} could not be matched to one shelf and stay waiting.', { n: missed.length })}` : ''}\n\n${tx('Every device gets the new map within a minute. Open the map editor from Conduit again before editing there.')}`)) return;
+  if (!await ask({ title: txn(done.length, "Apply {n} suggestion ({shelves}) to store {no}'s map and publish it as version {version}?", "Apply {n} suggestions ({shelves}) to store {no}'s map and publish it as version {version}?", { shelves: txn(shelves, '{n} shelf renamed or named', '{n} shelves renamed or named'), no, version }), text: [...(missed.length ? [tx('{n} could not be matched to one shelf and stay waiting.', { n: missed.length })] : []), tx('Every device gets the new map within a minute. Open the map editor from Conduit again before editing there.')], ok: tx('Apply and publish'), cancel: tx('Cancel'), danger: false })) return;
   const name = ctx.admin.stores.find(r => String(r.no) === String(no))?.name;
   for (let tries = 0; ; tries++) {
     try { await ctx.admin.api(`/v1/store/${no}/map`, { method: 'POST', body: publishBody(doc, { version, name }) }); break; }

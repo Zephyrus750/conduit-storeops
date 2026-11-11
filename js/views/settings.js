@@ -9,7 +9,7 @@ import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/r
 import { SCALES, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
 import { tx, txn, langPicker, setLang } from '../i18n.js';
-import { ask } from '../sheet.js';
+import { ask, askText } from '../sheet.js';
 import { updates } from '../updates.js';
 import { retailPeriod } from '../../shared/time.js';
 import { bundle, storagePots, releaseCache, fmtBytes } from '../diag.js';
@@ -53,13 +53,13 @@ export default {
       else if (act === 'hdr') setPref('hdr', prefs().hdr === 'title' ? 'classic' : 'title'), ctx.rerender();
       else if (act === 'signout') { if (await ask({ title: ctx.store ? tx('Sign out of this store on this device?') : tx('Sign out of the owner console on this device?'), ok: tx('Sign out'), cancel: tx('Stay signed in') })) await ctx.signOut(); }
       else if (act === 'reload') location.reload();
-      else if (act === 'force-reload') { if (confirm(tx('Reload Conduit from the worker? You stay signed in; queued changes are kept.'))) await updates.forceReload(); }
+      else if (act === 'force-reload') { if (await ask({ title: tx('Reload Conduit from the worker?'), text: tx('You stay signed in; queued changes are kept.'), ok: tx('Reload'), cancel: tx('Cancel'), danger: false })) await updates.forceReload(); }
       else if (act === 'install') { if (!(await updates.install())) toast(tx('Use the browser menu › Install app, or Share › Add to Home Screen on an iPhone')); ctx.rerender(); }
       else if (act === 'map-tips') setPref('mapTips', prefs().mapTips === false), ctx.rerender();
       else if (act === 'pc-mode') setPref('priceChecks', a.getAttribute('data-v')), ctx.rerender();
       else if (act === 'clear-pot') await clearPot(ctx, a.dataset.prefix);
       else if (act === 'clear-maps-cache') { try { await caches.delete('suite-maps-v1'); toast(tx('Map cache cleared')); } catch {} paintStorage(ctx, root); }
-      else if (act === 'copy-diag') { const t = await bundle(ctx, 'settings'); try { await navigator.clipboard.writeText(t); toast(tx('Diagnostics copied')); } catch { prompt(tx('Copy the diagnostics:'), t); } }
+      else if (act === 'copy-diag') { const t = await bundle(ctx, 'settings'); try { await navigator.clipboard.writeText(t); toast(tx('Diagnostics copied')); } catch { askText({ title: tx('Copy the diagnostics'), text: tx('Select it all and copy it.'), value: t, multiline: true, readonly: true, ok: tx('Done'), cancel: tx('Close') }); } }
       else if (act === 'send-feedback') await sendFeedback(ctx, root);
       else if (act === 'assign-micro') ctx.go('labelint', { micro: a.dataset.micro });
       else if (act === 'check-update') { a.textContent = tx('Checking…'); await updates.check(); ctx.rerender(); if (!updates.state.waiting) toast(tx('You are on the current release')); }
@@ -145,7 +145,7 @@ async function saveStore(ctx, root) {
   const payload = {};
   for (const k of Object.keys(next)) if (JSON.stringify(next[k]) !== JSON.stringify(cfg[k])) payload[k] = next[k];
   if (!Object.keys(payload).length) return toast(tx('Nothing changed'));
-  if (payload.dockGrid && !confirm(tx('Change the dock grid to {rows} × {cols}? Trucks already on the dock keep their grid.', { rows: payload.dockGrid.rows, cols: payload.dockGrid.cols }))) return;
+  if (payload.dockGrid && !await ask({ title: tx('Change the dock grid to {rows} × {cols}?', { rows: payload.dockGrid.rows, cols: payload.dockGrid.cols }), text: tx('Trucks already on the dock keep their grid.'), ok: tx('Change the grid'), cancel: tx('Cancel'), danger: false })) return;
   try { await ctx.store.dispatch({ type: 'store.settings.set', entity: {}, payload }); toast(tx('Store settings saved')); }
   catch (e) { toast(e.message, 'bad'); }
 }

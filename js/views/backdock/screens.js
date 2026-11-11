@@ -114,7 +114,7 @@ async function onScreenAct(ctx, a) {
     }
     if (act === 'scr-pick') {
       const pid = a.dataset.pid, kind = sheet.pick;
-      if (kind !== 'join' && !guard(t, pid, ref, ratesFor(ctx.store.get('dock')), true)) return;
+      if (kind !== 'join' && !await guard(t, pid, ref, ratesFor(ctx.store.get('dock')), true)) return;
       sheet = null;
       if (kind === 'handover') await dispatch('pallet.handover', { toPid: pid }); else await dispatch(kind === 'start' ? 'pallet.start' : kind === 'resume' ? 'pallet.resume' : 'pallet.join', { pid });
       toast(kind === 'join' ? tx('{pid} joined {ref}', { pid, ref }) : kind === 'handover' ? tx('{ref} handed to {pid}', { ref, pid }) : tx('{pid} on {ref}', { pid, ref }), '', kind === 'handover' ? (onNow.length === 1 ? undo('pallet.handover', { toPid: onNow[0] }) : null) : kind === 'resume' ? undo('pallet.pause') : undo('pallet.unstart'));

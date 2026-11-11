@@ -19,6 +19,8 @@
 //   openSheet({ ...the same, onClose, onClick, root }) → { el, body, set(parts), busy(on), close() }
 //     a pop-up of its own, on the frame.
 //   ask({ title, text, ok, cancel, danger }) → Promise<boolean>, in place of confirm().
+//   askForm({ title, text, fields, ok, cancel }) / askText({ title, text, label, value, … })
+//     → the answers (or null), in place of prompt().
 //   camScreen(el) / camClose(attrs) the camera screens' marker and close button.
 
 import { ic, esc } from './ui.js';
@@ -79,6 +81,46 @@ export function ask({ title, text = '', ok, cancel = tx('Keep it'), danger = tru
     });
     try { sheet.el.querySelector(`[data-ask="${danger ? 'no' : 'yes'}"]`).focus({ preventScroll: true }); } catch {}
   });
+}
+
+// A question that needs words back, in place of prompt(): what it is about,
+// a sentence on what happens, the fields, and buttons named by what they do.
+// Enter in a one-line field answers; a required field keeps the answer
+// button off until it has something in it. Esc, a click outside and the
+// cancel button answer null. Labels and text are plain text (escaped here);
+// values come back trimmed (upper: upper case), a select's as its value.
+//   askForm({ title, text, fields: [{ name, label, value, placeholder, hint,
+//     multiline, required, readonly, type, inputmode, upper, options: [[value, label]] }],
+//     ok, cancel, danger }) → Promise<{ [name]: string } | null>
+//   askText({ title, text, label, value, …the same for one field }) → Promise<string | null>
+export function askForm({ title, text = '', fields = [], ok = tx('Save'), cancel = tx('Cancel'), danger = false } = {}) {
+  return new Promise(resolve => {
+    let out = null;
+    const field = (f, i) => {
+      const id = `askf${seq}-${i}`, attrs = `id="${id}" data-askf="${esc(f.name)}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}${f.inputmode ? ` inputmode="${esc(f.inputmode)}"` : ''}${f.required ? ' required' : ''}${f.readonly ? ' readonly' : ''} autocomplete="off"`;
+      const ctl = f.options ? `<select ${attrs}>${f.options.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(f.value ?? '') ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
+        : f.multiline ? `<textarea ${attrs} rows="3">${esc(f.value ?? '')}</textarea>`
+        : `<input ${attrs} type="${f.type || 'text'}" value="${esc(f.value ?? '')}"${f.upper ? ' class="up"' : ''}>`;
+      return `<label class="askf" for="${id}"><span>${esc(f.label || '')}</span>${ctl}${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</label>`;
+    };
+    const sheet = openSheet({
+      cls: 'sht-ask sht-form', title: esc(title), label: title,
+      body: [].concat(text || []).map(t => `<p>${esc(t)}</p>`).join('') + fields.map(field).join(''),
+      foot: `<button type="button" class="btn" data-ask="no">${esc(cancel)}</button><button type="button" class="btn ${danger ? 'danger' : 'primary'}" data-ask="yes">${esc(ok)}</button>`,
+      onClose: () => resolve(out),
+      onClick: e => { const b = e.target.closest('[data-ask]'); if (!b || b.disabled) return; if (b.dataset.ask === 'yes') out = read(); sheet.close(); },
+    });
+    const els = () => [...sheet.el.querySelectorAll('[data-askf]')];
+    const read = () => Object.fromEntries(els().map((el, i) => { const f = fields[i] || {}; let v = String(el.value ?? '').trim(); if (f.upper) v = v.toUpperCase(); return [el.dataset.askf, v]; }));
+    const yes = sheet.el.querySelector('[data-ask="yes"]');
+    const check = () => { yes.disabled = els().some(el => el.required && !String(el.value || '').trim()); };
+    sheet.el.addEventListener('input', check); check();
+    sheet.el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches?.('input[data-askf]') && !e.isComposing) { e.preventDefault(); if (!yes.disabled) yes.click(); } });
+  });
+}
+export async function askText({ label = '', value = '', placeholder, hint, multiline, required, readonly, type, inputmode, upper, options, ...o } = {}) {
+  const r = await askForm({ ...o, fields: [{ name: 'v', label, value, placeholder, hint, multiline, required, readonly, type, inputmode, upper, options }] });
+  return r ? r.v : null;
 }
 
 // The camera screens: full-screen, the same × at the top right and the same Esc.

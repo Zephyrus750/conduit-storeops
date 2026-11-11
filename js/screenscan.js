@@ -196,7 +196,7 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
     else if (a === 'csv' || a === 'xls') exportAs(a);
     else if (a === 'use') {
       const lv = locVerdict(tally.locs, expected);
-      if (mode === 'compare' && lv.state === 'mismatch' && !confirm(`${tx('⚠ LOCATION MISMATCH')}\n\n${tx('The captured report reads location {seen}, but you are reviewing {expected}. This usually means the wrong report is open.', { seen: lv.seen, expected: lv.expected })}\n\n${tx('Use these codes anyway?')}`)) return;
+      if (mode === 'compare' && lv.state === 'mismatch' && !await ask({ title: tx('Use these codes anyway?'), text: tx('The captured report reads location {seen}, but you are reviewing {expected}. This usually means the wrong report is open.', { seen: lv.seen, expected: lv.expected }), ok: tx('Use these codes'), cancel: tx('Cancel') })) return;
       const codes = filtered(tally, showAll), out = kind === 'rows' ? { items: { ...items } } : { codes, locs: Object.fromEntries(codes.map(c => [c, tally.codes[c].loc || ''])) };
       close(); onUse?.(out);
     }

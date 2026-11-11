@@ -7,6 +7,7 @@ import { openScanner } from '../scan.js';
 import { printSheet, tick, table, section, signoff } from '../print.js';
 import { csvLines } from '../../shared/records.js';
 import { tx } from '../i18n.js';
+import { ask, askText } from '../sheet.js';
 
 // Counts per shelf. With the map mounted, a whole-run key from a session
 // opened before counts were per shelf counts once for each of its shelves,
@@ -62,11 +63,14 @@ async function tap(ctx, info, hold) {
   } catch (e) { toast(e.message, 'bad'); }
 }
 
+// The page header: painted again when a session opens, moves on or ends.
+const head = m => vh(tx('Stocktake'), m.sess ? sub(tx('Session open'), esc(m.id), m.sess.phase === 'final' ? tx('Final check · started {time}', { time: fmtTime(m.sess.startedAt) }) : tx('Counting · started {time}', { time: fmtTime(m.sess.startedAt) })) : sub(tx('No session open')), m.sess ? `<button class="btn" data-act="scan-shelf">${ic('camera')}${tx('Scan shelves')}</button>` : `<button class="btn primary" data-act="start">${ic('plus')}${tx('Start a session')}</button>`, 'm-stocktake');
+
 export default {
   id: 'stocktake', title: tx('Stocktake'), icon: 'm-stocktake',
   desktop(ctx) {
     const m = model(ctx);
-    return vh(tx('Stocktake'), m.sess ? sub(tx('Session open'), esc(m.id), m.sess.phase === 'final' ? tx('Final check · started {time}', { time: fmtTime(m.sess.startedAt) }) : tx('Counting · started {time}', { time: fmtTime(m.sess.startedAt) })) : sub(tx('No session open')), m.sess ? `<button class="btn" data-act="scan-shelf">${ic('camera')}${tx('Scan shelves')}</button>` : `<button class="btn primary" data-act="start">${ic('plus')}${tx('Start a session')}</button>`, 'm-stocktake') +
+    return head(m) +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx(tx('Stocktake'), ctx.storeNo)}<span><i style="background:#EAB308"></i>${tx('Counting')}</span><span><i style="background:#16A34A"></i>${tx('Counted')}</span><span><i style="background:#2563EB"></i>${tx('Verified')}</span><span><i style="background:#CBD0D8"></i>${tx('To start')}</span></div></div>` +
       `<div class="sidecol" id="stside"></div></div>`;
@@ -84,6 +88,8 @@ export default {
       const mob = $('#stmob', root); if (mob) mob.innerHTML = mobileBar(map, m, shelfTotal(map));
       setStrip(root, m.sess ? `${ic('m-stocktake')}<b>${tx('Stocktake')}</b><span class="n">${m.done}</span><span class="s">${m.sess.phase === 'final' ? tx('Final check') : tx('Counting')} · ${m.counts.verified} ✓✓</span><button class="act go" type="button" data-act="scan-shelf">${ic('camera')}${tx('Scan')}</button>` : `${ic('m-stocktake')}<b>${tx('Stocktake')}</b><span class="s">${tx('No session open')}</span>`);
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = sessBadge(m);
+      const vhEl = !ctx.isMobile && $('.vh', root), h = vhEl && head(m);
+      if (vhEl && h !== vhEl.outerHTML) { const t = document.createElement('div'); t.innerHTML = h; vhEl.replaceWith(t.firstElementChild); }
     });
     paint();
     bindShelfScan(root, map, info => tap(ctx, info, false));
@@ -102,10 +108,10 @@ export default {
           if (!g) return toast(error, 'bad');
           tap(ctx, map.shelfInfo(g), false);
         } });
-        if (act === 'start') { const id = prompt(tx('Session id'), today()); if (id) await ctx.store.dispatch({ type: 'stocktake.start', entity: { session: id.trim() } }); }
+        if (act === 'start') { const id = await askText({ title: tx('Start a stocktake session'), label: tx('Session id'), value: today(), required: true, ok: tx('Start session') }); if (id) await ctx.store.dispatch({ type: 'stocktake.start', entity: { session: id } }); }
         else if (act === 'phase') await ctx.store.dispatch({ type: 'stocktake.phase', entity: { session: m.id }, payload: { phase: m.sess.phase === 'final' ? 'counting' : 'final' } });
         else if (act === 'verify-all') await ctx.store.dispatch({ type: 'stocktake.verifyAll', entity: { session: m.id } });
-        else if (act === 'end') { if (confirm(tx('End stocktake session {id}?', { id: m.id }))) await ctx.store.dispatch({ type: 'stocktake.end', entity: { session: m.id } }); }
+        else if (act === 'end') { if (await ask({ title: tx('End stocktake session {id}?', { id: m.id }), ok: tx('End session'), cancel: tx('Keep counting') })) await ctx.store.dispatch({ type: 'stocktake.end', entity: { session: m.id } }); }
         else if (act === 'zoom-dept') map.filterDept(a.getAttribute('data-dept'));
       } catch (err) { toast(err.message, 'bad'); }
     });

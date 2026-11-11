@@ -16,7 +16,7 @@ import { hasMap, mountMap, bindMapChrome, mvMap, segmentId } from '../../map.js'
 import { printSheet } from '../../print.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
 import { tx, txn } from '../../i18n.js';
-import { ask } from '../../sheet.js';
+import { ask, askText } from '../../sheet.js';
 
 let usedArg = null;
 const st = { sel: null, find: '', filter: 'all', sort: 'age', mode: 'scan', target: null, qty: 1, last: null, newRing: 'new-lines', placing: null, feed: 'all', tags: false, zone: '', bc: null };
@@ -113,15 +113,15 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'sweep') { const c = m.open.find(x => x.id === st.sel); if (c) await send(ctx, 'cage.sweep', { cage: c.id }); }
   else if (act === 'close') { const c = m.open.find(x => x.id === st.sel); if (c && await ask({ title: tx('Close {cage}?', { cage: c.id }), text: tx('It is emptied and leaves the list.'), ok: tx('Close cage') })) { await send(ctx, 'cage.close', { cage: c.id }); st.sel = null; } }
   else if (act === 'place') { st.placing = st.placing === st.sel ? null : st.sel; ctx.rerender(); }
-  else if (act === 'retag') { const to = (prompt(tx('New tag for {cage} (scan or type it)', { cage: st.sel })) || '').trim().toUpperCase(); if (!to) return; const sscc = gs1Parse(to)?.sscc; if (await send(ctx, 'cage.retag', { cage: st.sel }, { to: sscc || to })) { toast(tx('{cage} is now {tag}', { cage: st.sel, tag: sscc || to })); st.sel = sscc || to; ctx.rerender(); } }
+  else if (act === 'retag') { const to = await askText({ title: tx('Retag {cage}', { cage: st.sel }), label: tx('New tag (scan or type it)'), upper: true, required: true, ok: tx('Retag') }); if (!to) return; const sscc = gs1Parse(to)?.sscc; if (await send(ctx, 'cage.retag', { cage: st.sel }, { to: sscc || to })) { toast(tx('{cage} is now {tag}', { cage: st.sel, tag: sscc || to })); st.sel = sscc || to; ctx.rerender(); } }
   else if (act === 'tag1') printTags([st.sel], ctx.storeName);
   else if (act === 'tags') { st.tags = !st.tags; ctx.rerender(); }
   else if (act === 'tags-print') { const pre = (root.querySelector('[data-field="tagpre"]')?.value || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, ''), from = Number(root.querySelector('[data-field="tagfrom"]')?.value) || 1, n = Math.max(1, Math.min(48, Number(root.querySelector('[data-field="tagn"]')?.value) || 8)); if (!pre) return toast(tx('A tag prefix is needed'), 'bad'); printTags(Array.from({ length: n }, (_, i) => `${pre}${String(from + i).padStart(4, '0')}`), ctx.storeName); }
   else if (act === 'feed') { st.feed = a.dataset.v; ctx.rerender(); }
   // phone
   else if (act === 'sw-start') { const id = ulid(); if (await send(ctx, 'cage.sweepStart', { sweep: id })) toast(tx('Sweep started: scan every cage tag you pass')); repaint(); }
-  else if (act === 'sw-end') { const cur = ctx.store.get('cageSweeps')?.current; if (!cur) return; const k = sweepCount(ctx.store.get('cages'), cur), left = k.total - k.n; /* the ones cage.sweepEnd marks missing */ if (left && !confirm(txn(left, '{n} cage has not been seen on this sweep. Finish anyway? It is marked missing.', '{n} cages have not been seen on this sweep. Finish anyway? They are marked missing.'))) return; if (await send(ctx, 'cage.sweepEnd', { sweep: cur.id })) { const h = ctx.store.get('cageSweeps').history.at(-1); toast(`${tx('Sweep done · {n} of {total} seen', { n: h.seen, total: h.total })}${h.moved.length ? ` · ${tx('{n} moved', { n: h.moved.length })}` : ''}${h.missing.length ? ` · ${tx('{n} missing', { n: h.missing.length })}` : ''}`); } repaint(); }
-  else if (act === 'zone') { const z = (prompt(tx('Which zone are you in? (aisle, bay or area: a cage scanned here that was parked elsewhere is moved here)'), st.zone) ?? st.zone).trim().toUpperCase(); st.zone = z; repaint(); }
+  else if (act === 'sw-end') { const cur = ctx.store.get('cageSweeps')?.current; if (!cur) return; const k = sweepCount(ctx.store.get('cages'), cur), left = k.total - k.n; /* the ones cage.sweepEnd marks missing */ if (left && !await ask({ title: tx('Finish the sweep?'), text: txn(left, '{n} cage has not been seen on this sweep. It is marked missing.', '{n} cages have not been seen on this sweep. They are marked missing.'), ok: tx('Finish sweep'), cancel: tx('Keep sweeping') })) return; if (await send(ctx, 'cage.sweepEnd', { sweep: cur.id })) { const h = ctx.store.get('cageSweeps').history.at(-1); toast(`${tx('Sweep done · {n} of {total} seen', { n: h.seen, total: h.total })}${h.moved.length ? ` · ${tx('{n} moved', { n: h.moved.length })}` : ''}${h.missing.length ? ` · ${tx('{n} missing', { n: h.missing.length })}` : ''}`); } repaint(); }
+  else if (act === 'zone') { const z = await askText({ title: tx('Which zone are you in?'), text: tx('A cage scanned here that was parked elsewhere is moved here.'), label: tx('Aisle, bay or area'), value: st.zone, upper: true, ok: tx('Set zone') }); if (z === null) return; st.zone = z; repaint(); }
   else if (act === 'bc-pick') { const g = st.bc?.gtin; if (g) { st.bc = null; await addLine(ctx, a.dataset.kc, repaint, g); } }
   else if (act === 'bc-type') { if (st.bc) { st.bc = { state: 'manual', gtin: st.bc.gtin, why: 'pick' }; repaint(); focusScan(); } }
   else if (act === 'bc-again') { if (st.bc) search(ctx, st.bc.gtin, repaint); }
@@ -129,16 +129,18 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-pick') { useCage(a.dataset.id); repaint(); setTimeout(() => root.querySelector('[data-field="mscan"]')?.focus(), 30); }
   else if (act === 'm-change') { useCage(null); repaint(); }
   else if (act === 'm-new') { st.newOpen = !st.newOpen; repaint(); }
-  else if (act === 'm-park') { const loc = prompt(tx('Park {cage} at (aisle or spot)', { cage: st.target }), m.open.find(c => c.id === st.target)?.location || ''); if (loc && loc.trim()) await send(ctx, 'cage.park', { cage: st.target }, { location: loc.trim() }); }
+  else if (act === 'm-park') { const loc = await parkAt(st.target, m.open.find(c => c.id === st.target)?.location || ''); if (loc) await send(ctx, 'cage.park', { cage: st.target }, { location: loc }); }
   else if (act === 'm-qty') { st.qty = Math.max(1, st.qty + Number(a.dataset.d)); repaint(); }
-  else if (act === 'm-done') { const c = m.open.find(x => x.id === st.target); if (c && !c.location) { const loc = prompt(tx('Park {cage} at (aisle or spot)', { cage: c.id })); if (loc && loc.trim()) await send(ctx, 'cage.park', { cage: c.id }, { location: loc.trim() }); } useCage(null); repaint(); }
+  else if (act === 'm-done') { const c = m.open.find(x => x.id === st.target); if (c && !c.location) { const loc = await parkAt(c.id, ''); if (loc) await send(ctx, 'cage.park', { cage: c.id }, { location: loc }); } useCage(null); repaint(); }
   else if (act === 'm-seen') { await send(ctx, 'cage.sweep', { cage: a.dataset.id }, sweepPayload(ctx)); }
   else if (act === 'm-scan-btn') { const i = root.querySelector('[data-field="mscan"]'); if (i) { await scanOnto(ctx, i.value, repaint); i.value = ''; } }
 }
+// Where a cage is parked: an aisle or a spot, typed or scanned.
+const parkAt = (cage, value) => askText({ title: tx('Park {cage}', { cage }), label: tx('Aisle or spot'), value, upper: true, required: true, ok: tx('Park') });
 async function pickCage(ctx, raw, repaint) {
   const id = tagOf(raw); if (!id) return;
   const c = ctx.store.get('cages')[id];
-  if (!c || c.status !== 'open') { if (!confirm(tx('{cage} is not an open cage. Open it now with the {ring} ring?', { cage: id, ring: RING[st.newRing][0] }))) return; const r = await send(ctx, 'cage.create', { cage: id }, { ring: st.newRing }); if (!r) return; }
+  if (!c || c.status !== 'open') { if (!await ask({ title: tx('{cage} is not an open cage', { cage: id }), text: tx('Open it now with the {ring} ring?', { ring: RING[st.newRing][0] }), ok: tx('Open cage'), cancel: tx('Cancel'), danger: false })) return; const r = await send(ctx, 'cage.create', { cage: id }, { ring: st.newRing }); if (!r) return; }
   useCage(id); repaint(); setTimeout(() => document.querySelector('[data-field="mscan"]')?.focus(), 30);
 }
 // The phone's cage to fill (or none): nothing from the last one comes along (the

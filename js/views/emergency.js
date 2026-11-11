@@ -11,6 +11,7 @@ import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost, mgr } from '
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo, mapFloors, setStrip, sx } from '../map.js';
 import { paperMap } from '../printmap.js';
 import { printSheet, table, tick, signoff } from '../print.js';
+import { askText } from '../sheet.js';
 import { markerSymbol, MARKER_NAMES } from '../../shared/maprender.js';
 import { tx, txn } from '../i18n.js';
 
@@ -89,8 +90,8 @@ export default {
         if (act === 'select') { selected = a.getAttribute('data-id'); const r = map.markers().find(x => x.id === selected); if (r) map.setVb([r.x - 600, r.y - 400, 1200, 800]); paint(); }
         else if (act === 'close') { selected = null; paint(); }
         else if (act === 'filter') { filterType = a.getAttribute('data-type'); paint(); }
-        else if (act === 'service') { if (!selected) return toast(tx('Tap a marker on the map first')); const note = prompt(tx('Technician / docket #'), ''); if (note == null) return; await ctx.store.dispatch({ type: 'asset.service', entity: { asset: selected }, payload: { note, ...fromKey(map, selected) } }); toast(tx('Service logged')); }
-        else if (act === 'schedule') { const mk = map.markers().find(x => x.id === selected), cur = (ctx.store.get('assets')[selected] || ctx.store.get('assets')[mk?.legacyId])?.intMonths || 12; const v = prompt(tx('Service interval in months'), String(cur)); const n = Number(v); if (!v || !Number.isInteger(n)) return; await ctx.store.dispatch({ type: 'asset.schedule', entity: { asset: selected }, payload: { months: n, ...fromKey(map, selected) } }); }
+        else if (act === 'service') { if (!selected) return toast(tx('Tap a marker on the map first')); const note = await askText({ title: tx('Log a service'), label: tx('Technician / docket #'), ok: tx('Log service') }); if (note == null) return; await ctx.store.dispatch({ type: 'asset.service', entity: { asset: selected }, payload: { note, ...fromKey(map, selected) } }); toast(tx('Service logged')); }
+        else if (act === 'schedule') { const mk = map.markers().find(x => x.id === selected), cur = (ctx.store.get('assets')[selected] || ctx.store.get('assets')[mk?.legacyId])?.intMonths || 12; const v = await askText({ title: tx('Set the service interval'), label: tx('Service interval in months'), value: String(cur), inputmode: 'numeric', required: true, ok: tx('Save') }); const n = Number(v); if (!v || !Number.isInteger(n)) return; await ctx.store.dispatch({ type: 'asset.schedule', entity: { asset: selected }, payload: { months: n, ...fromKey(map, selected) } }); }
       } catch (err) { toast(err.message, 'bad'); }
     });
     return [ctx.store.on('assets', paint)];

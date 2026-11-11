@@ -36,6 +36,7 @@ import { isKeycode } from '../../shared/keycode.js';
 import { settingsOf } from '../../shared/reducers/store.js';
 import { sessionCounts, sessionPeople, inZone, lineInZone, uncovered, pulledToday, gotOf } from '../../shared/reducers/pull.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 
 // screen: null (the session this phone is in, or home) | new | zones | cage | past
 // find: the last scan's answer { state: busy | found | seen | none | noreport | error, code, kc, bays, seen, soh, carton, truck, name, img }
@@ -465,7 +466,7 @@ export default {
       if (act === 'lp-sound') { setPref('pullSound', !prefs().pullSound); if (prefs().pullSound) beep(); return ctx.rerender(); }
       // Leaving and ending
       if (act === 'lp-leave') { setMine(ctx, null); return go(null); }
-      if (act === 'lp-end') { const sid = a.dataset.sid || ses?.id; if (!sid || !confirm(tx('End this session? Its list stays for the week, but no more requests can be sent.'))) return; if (await send(ctx, 'pull.session.end', { session: sid })) { if (ses?.id === sid) setMine(ctx, null); go(null); } return; }
+      if (act === 'lp-end') { const sid = a.dataset.sid || ses?.id; if (!sid || !await ask({ title: tx('End this session?'), text: tx('Its list stays for the week, but no more requests can be sent.'), ok: tx('End session'), cancel: tx('Keep it open') })) return; if (await send(ctx, 'pull.session.end', { session: sid })) { if (ses?.id === sid) setMine(ctx, null); go(null); } return; }
       // The requester
       if (act === 'lp-cam') return openCam(ctx);
       if (act === 'lp-cam-shelf') return openCam(ctx, code => { const s = SHELF(code); if (s) { st.shelf = s; ctx.rerender(); } else toast(tx('That isn’t a shelf label (like A16 S1)'), 'bad'); });

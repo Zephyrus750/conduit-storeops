@@ -15,6 +15,7 @@ import { parseKeycodes } from '../../shared/backfill.js';
 import { gs1Parse } from '../../shared/gs1.js';
 import { recallTag, recallWord } from '../recallflag.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 
 const isManager = s => (s?.roles || []).includes('manager') || !!s?.owner;
 const STATUS = { open: tx('issue status::Open'), removing: tx('Removing'), removed: tx('All removed'), closed: tx('Closed') };
@@ -143,7 +144,7 @@ export default {
         else if (act === 'save') await save(ctx, root);
         else if (act === 'status') {
           const x = ctx.store.get('recalls').items[st.sel]; if (!x) return;
-          if (a.dataset.st === 'closed' && !confirm(tx('Close {title}? Its flags stop on every device.', { title: x.title }))) return;
+          if (a.dataset.st === 'closed' && !await ask({ title: tx('Close {title}?', { title: x.title }), text: tx('Its flags stop on every device.'), ok: tx('Close recall') })) return;
           await ctx.store.dispatch({ type: 'recall.status', entity: { recall: x.id }, payload: { status: a.dataset.st } });
           toast(tx('{title}: {status}', { title: x.title, status: STATUS[a.dataset.st] }));
         }

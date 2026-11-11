@@ -10,7 +10,7 @@ import { issueLink } from '../share.js';
 import { qrSvg } from '../../shared/qr.js';
 import { mapFloors } from '../map.js';
 import { tx, txn } from '../i18n.js';
-import { ask } from '../sheet.js';
+import { ask, askText, askForm } from '../sheet.js';
 
 const SEV = [[tx('Low'), '#6B7280'], [tx('Medium'), '#D97706'], [tx('High'), '#DC2626'], [tx('Urgent'), '#7F1D1D']];
 // An issue's status word ("Open" alone is the verb on every link and button).
@@ -173,10 +173,11 @@ export default {
         // Each status change asks for a note for the log, as ShelfSearcher did; Cancel keeps the status.
         else if (act === 'progress' || act === 'close' || act === 'reopen') {
           const cur = ctx.store.get('issues')[a.getAttribute('data-id') || selected];
-          const note = prompt(act === 'progress' ? tx('Maintenance done. Note (optional):') : act === 'close' ? tx('Completed. Note (optional):') : cur?.status === 'progress' ? tx('Not fixed: reopen it. What is still wrong?') : tx('Reopen as recurring. What is wrong again?'), '');
+          const q = act === 'progress' ? [tx('Mark it maintenance done?'), tx('Note (optional)'), tx('Maintenance done')] : act === 'close' ? [tx('Mark it completed?'), tx('Note (optional)'), tx('Completed')] : cur?.status === 'progress' ? [tx('Not fixed: reopen it?'), tx('What is still wrong?'), tx('Reopen')] : [tx('Reopen as recurring?'), tx('What is wrong again?'), tx('Reopen')];
+          const note = await askText({ title: q[0], label: q[1], multiline: true, ok: q[2] });
           if (note === null) return;
           const type = act === 'progress' ? 'issue.progress' : act === 'close' ? 'issue.close' : 'issue.reopen';
-          await ctx.store.dispatch({ type, entity: { issue: act === 'reopen' ? a.getAttribute('data-id') || selected : selected }, payload: note.trim() ? { note: note.trim().slice(0, 500) } : {} });
+          await ctx.store.dispatch({ type, entity: { issue: act === 'reopen' ? a.getAttribute('data-id') || selected : selected }, payload: note ? { note: note.slice(0, 500) } : {} });
         }
         else if (act === 'remove') {
           const i = ctx.store.get('issues')[selected]; if (!i) return;
@@ -186,10 +187,8 @@ export default {
         }
         else if (act === 'work-order') { const i = m0(ctx); if (i) printWorkOrder(ctx, i); }
         else if (act === 'visit') {
-          const who = prompt(tx('Contractor visited: who came (name or company)?'), ''); if (who === null) return;
-          if (!who.trim()) return toast(tx('Say who visited'), 'bad');
-          const note = prompt(tx('What did they do? (optional)'), ''); if (note === null) return;
-          await ctx.store.dispatch({ type: 'issue.visit', entity: { issue: selected }, payload: { who: who.trim().slice(0, 80), ...(note.trim() ? { note: note.trim().slice(0, 500) } : {}) } }); toast(tx('Visit logged'));
+          const r = await askForm({ title: tx('Log a contractor visit'), fields: [{ name: 'who', label: tx('Who came (name or company)?'), required: true }, { name: 'note', label: tx('What did they do? (optional)'), multiline: true }], ok: tx('Log visit') }); if (!r) return;
+          await ctx.store.dispatch({ type: 'issue.visit', entity: { issue: selected }, payload: { who: r.who.slice(0, 80), ...(r.note ? { note: r.note.slice(0, 500) } : {}) } }); toast(tx('Visit logged'));
         }
         else if (act === 'photo-open') { openPhoto(thumbs.get(a.dataset.photo)); }
         else if (act === 'photo-remove') {

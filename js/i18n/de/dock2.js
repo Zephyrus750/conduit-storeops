@@ -264,7 +264,6 @@ export default {
   "{cartons} ctn · {pallets} pallets · {rate} ctn/hr": "{cartons} Ktn · {pallets} Paletten · {rate} Ktn/h",
   "No truck finalised yet.": "Noch kein LKW abgeschlossen.",
   "{man} attached to Truck {no} · history rebuilt": "{man} LKW {no} zugeordnet · Verlauf neu erstellt",
-  "Reopen Truck {no}? It goes back to live and its history row + rate credit are removed until it's closed again.": "LKW {no} wieder öffnen? Er wird wieder aktiv, und sein Verlaufseintrag samt Leistungsanrechnung wird entfernt, bis er erneut abgeschlossen ist.",
   "Truck {no} is live again": "LKW {no} ist wieder aktiv",
   "CSV downloaded": "CSV heruntergeladen",
   "Late manifest": "Später Lieferschein",
@@ -902,4 +901,7 @@ export default {
   "Show {n} manifests all back": "{n} vollständig zurückgekehrte Lieferscheine anzeigen",
   "{n} more pallet": "{n} weitere Palette",
   "{n} more pallets": "{n} weitere Paletten",
+  "Reopen Truck {no}?": "LKW {no} wieder öffnen?",
+  "It goes back to live and its history row + rate credit are removed until it's closed again.": "Er wird wieder aktiv, und sein Verlaufseintrag samt Leistungsanrechnung wird entfernt, bis er erneut abgeschlossen ist.",
+  "Reopen truck": "LKW wieder öffnen",
 };

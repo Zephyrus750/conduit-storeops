@@ -264,7 +264,6 @@ export default {
   "{cartons} ctn · {pallets} pallets · {rate} ctn/hr": "{cartons} thùng · {pallets} pallet · {rate} thùng/giờ",
   "No truck finalised yet.": "Chưa có xe tải nào được chốt.",
   "{man} attached to Truck {no} · history rebuilt": "Đã gắn {man} vào xe tải {no} · đã dựng lại lịch sử",
-  "Reopen Truck {no}? It goes back to live and its history row + rate credit are removed until it's closed again.": "Mở lại xe tải {no}? Xe sẽ chạy lại và dòng lịch sử + ghi công năng suất bị gỡ cho đến khi chốt lại.",
   "Truck {no} is live again": "Xe tải {no} đã chạy lại",
   "CSV downloaded": "Đã tải CSV",
   "Late manifest": "Bảng kê đến muộn",
@@ -902,4 +901,7 @@ export default {
   "Show {n} manifests all back": "Hiện {n} bảng kê đã về hết",
   "{n} more pallet": "Thêm {n} pallet",
   "{n} more pallets": "Thêm {n} pallet",
+  "Reopen Truck {no}?": "Mở lại xe tải {no}?",
+  "It goes back to live and its history row + rate credit are removed until it's closed again.": "Xe sẽ chạy lại và dòng lịch sử + ghi công năng suất bị gỡ cho đến khi chốt lại.",
+  "Reopen truck": "Mở lại xe tải",
 };

@@ -29,7 +29,7 @@ import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { openPasteBox } from '../pastebox.js';
 import { reportToIntel } from './intel.js';
 import { tx, txn } from '../../i18n.js';
-import { ask } from '../../sheet.js';
+import { ask, askText } from '../../sheet.js';
 
 // Desk state. report: the pasted SIM report { at, byLoc, range, delta, bayAt }
 // (delta: what changed per bay since the previous paste; bayAt: when one
@@ -402,11 +402,11 @@ async function useNear(ctx, m, code, other) {
   const s = m.subs.find(x => key(x) === st.sel), bay = s ? s.bay : st.sel?.startsWith('req:') ? st.sel.slice(4) : null;
   if (!bay || !other || s?.status === 'submitted') return;
   if (s?.codes[code]?.scanned) {
-    if (!confirm(tx('Use {other} instead of {code} in the scans for {bay}?', { other, code, bay }))) return;
+    if (!await ask({ title: tx('Use {other} instead of {code} in the scans for {bay}?', { other, code, bay }), ok: tx('Use {code}', { code: other }), cancel: tx('Cancel'), danger: false })) return;
     // One update, marked a swap: a correction, not a scan, so the crew's Send stands.
     if (!await send(ctx, 'submission.update', { bay: s.bay, date: s.date }, { codes: { [other]: true }, remove: [code], swap: true })) return;
   } else if ((st.report?.byLoc?.[bay] || []).includes(code)) {
-    if (!confirm(tx('Use {other} instead of {code} in the report list for {bay}?', { other, code, bay }))) return;
+    if (!await ask({ title: tx('Use {other} instead of {code} in the report list for {bay}?', { other, code, bay }), ok: tx('Use {code}', { code: other }), cancel: tx('Cancel'), danger: false })) return;
     await saveReport(ctx, { ...st.report, byLoc: { ...st.report.byLoc, [bay]: [...new Set(st.report.byLoc[bay].map(c => c === code ? other : c))] }, unsent: undefined });
   } else return;
   ensureNames(ctx, [other], () => ctx.rerender());
@@ -505,12 +505,12 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'finalise') {
     if (!m.ready.length) return toast(tx('No reviewed bays to submit'));
     const list = m.ready.map(s => `${s.bay}${s.metrics?.accuracy == null ? ` (${tx('no report')})` : ` ${s.metrics.accuracy}%`}`);
-    if (!confirm(`${txn(m.ready.length, 'Submit {n} reviewed bay? Each must already be finalised on the PDT.', 'Submit {n} reviewed bays? Each must already be finalised on the PDT.')}\n\n${list.slice(0, 30).join(', ')}${list.length > 30 ? `, ${tx('and {n} more', { n: list.length - 30 })}` : ''}`)) return;
+    if (!await ask({ title: txn(m.ready.length, 'Submit {n} reviewed bay?', 'Submit {n} reviewed bays?'), text: [tx('Each must already be finalised on the PDT.'), `${list.slice(0, 30).join(', ')}${list.length > 30 ? `, ${tx('and {n} more', { n: list.length - 30 })}` : ''}`], ok: tx('Submit'), cancel: tx('Cancel'), danger: false })) return;
     let n = 0; for (const s of m.ready) if (await send(ctx, 'submission.submit', { bay: s.bay, date })) n++;
     toast(txn(n, '{n} bay submitted', '{n} bays submitted'));
   }
   else if (act === 'delete') { const s = cur(); if (s && await ask({ title: tx('Delete {bay} from today’s board?', { bay: s.bay }), text: tx('Its scans are removed from the review.'), ok: tx('Delete bay') })) { await send(ctx, 'submission.delete', { bay: s.bay, date }); st.sel = null; } }
-  else if (act === 'rename') { const s = cur(); if (!s) return; const to = prompt(tx('Correct the bay number for {bay}', { bay: s.bay }), s.bay); if (to && to.trim().toUpperCase() !== s.bay) { const r = await send(ctx, 'submission.rename', { bay: s.bay, date }, { newBay: to.trim() }); if (r) st.sel = `${to.trim().toUpperCase()}:${date}`; } }
+  else if (act === 'rename') { const s = cur(); if (!s) return; const to = await askText({ title: tx('Correct the bay number for {bay}', { bay: s.bay }), label: tx('Bay'), value: s.bay, upper: true, required: true, ok: tx('Rename') }); if (to && to !== s.bay) { const r = await send(ctx, 'submission.rename', { bay: s.bay, date }, { newBay: to }); if (r) st.sel = `${to}:${date}`; } }
   else if (act === 'incorrect') { const s = cur(); if (!s) return; const set = new Set(s.incorrect); set.has(a.dataset.code) ? set.delete(a.dataset.code) : set.add(a.dataset.code); await send(ctx, 'submission.update', { bay: s.bay, date }, { incorrect: [...set] }); }
   else if (act === 'remove') { const s = cur(); if (s) await send(ctx, 'submission.update', { bay: s.bay, date }, { remove: [a.dataset.code] }); }
   else if (act === 'flag') {
@@ -518,7 +518,7 @@ async function onClick(e, ctx, root, repaint) {
     // is offered (and kept on Cancel), never overwritten with 0.
     const s = cur(); if (!s) return; const kc = a.dataset.code;
     const had = (ctx.store.get('adjustments') || {})[date]?.[kc], rep = st.report?.soh?.[kc];
-    const ans = prompt(`${tx('SOH for {code} on the report (0 or below)', { code: kc })}${had ? `\n${tx('Already flagged today at {qty}.', { qty: had.qty })}` : rep != null ? `\n${tx('The report says {soh}.', { soh: rep })}` : ''}`, had ? String(had.qty) : rep != null && rep <= 0 ? String(rep) : '0');
+    const ans = await askText({ title: tx('Flag {code} for Adjustments', { code: kc }), text: had ? tx('Already flagged today at {qty}.', { qty: had.qty }) : rep != null ? tx('The report says {soh}.', { soh: rep }) : '', label: tx('SOH for {code} on the report (0 or below)', { code: kc }), value: had ? String(had.qty) : rep != null && rep <= 0 ? String(rep) : '0', inputmode: 'numeric', required: true, ok: tx('Flag') });
     if (ans === null) return;
     const qty = Number(String(ans).trim().replace(/[^\d.-]/g, ''));
     if (!Number.isFinite(qty) || String(ans).trim() === '') return toast(tx('Type the SOH from the report, like -3 or 0'), 'bad');
@@ -538,7 +538,7 @@ async function onClick(e, ctx, root, repaint) {
     if (!ctx.store.get('backfill').subs[`${st.mBay}:${date}`]) { toast(tx('{bay} was deleted from today’s board at the desk, so nothing was submitted.', { bay: st.mBay }), 'bad'); st.mBay = null; st.mStep = 1; return repaint(); }
     // What isn't done yet is said first: codes the reader held stay out of the bay.
     const nHeld = heldFor(st.mBay).size;
-    if (nHeld && !confirm(`${txn(nHeld, '{n} code was held as a possible misread and is not in the bay.', '{n} codes were held as possible misreads and are not in the bay.')} ${tx('Submit {bay} for review anyway?', { bay: st.mBay })}`)) return;
+    if (nHeld && !await ask({ title: tx('Submit {bay} for review anyway?', { bay: st.mBay }), text: txn(nHeld, '{n} code was held as a possible misread and is not in the bay.', '{n} codes were held as possible misreads and are not in the bay.'), ok: tx('Submit'), cancel: tx('Cancel'), danger: false })) return;
     if (!await send(ctx, 'submission.update', { bay: st.mBay, date }, { sent: true })) return;
     mineAdd(st.mBay, date); st.mStep = 3; repaint();
   }
@@ -548,7 +548,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-remind-close') { st.mRemind = false; repaint(); }
   else if (act === 'm-dismiss') { if (!await ask({ title: tx('Clear {bay} from your list?', { bay: a.dataset.bay }), text: tx('It was removed from today’s board.'), ok: tx('Clear {bay}', { bay: a.dataset.bay }) })) return; mineSave(mineLocal().filter(x => !(x.bay === a.dataset.bay && x.date === a.dataset.date))); repaint(); }
   else if (act === 'm-done') {
-    const bay = a.dataset.bay, d = a.dataset.date; if (!confirm(tx('Mark "{bay}" as submitted on the PDT?', { bay }))) return;
+    const bay = a.dataset.bay, d = a.dataset.date; if (!await ask({ title: tx('Mark "{bay}" as submitted on the PDT?', { bay }), ok: tx('Mark submitted'), cancel: tx('Cancel'), danger: false })) return;
     const r = await send(ctx, 'submission.submit', { bay, date: d }); if (!r) return;
     st.mRemind = false; toast(tx('{bay} completed', { bay }));
     const n = readdOpen(ctx.store.get('backfill').subs[`${bay}:${d}`]).length;
@@ -557,7 +557,7 @@ async function onClick(e, ctx, root, repaint) {
   }
   else if (act === 'm-readd') { st.readd = { bay: a.dataset.bay, date: a.dataset.date }; st.mView = 'readd'; repaint(); setTimeout(() => root.querySelector('[data-field="mreadd"]')?.focus(), 30); }
   else if (act === 'm-readd-done') { const r = await send(ctx, 'submission.readd', { bay: a.dataset.bay, date: a.dataset.date }, { code: a.dataset.code, done: true }); if (r) { toast(tx('{code} scanned back in', { code: a.dataset.code })); repaint(); } }
-  else if (act === 'm-ready') { const s = m.pending.find(x => x.bay === a.dataset.bay); if (!s) return; if (!m.sys?.[s.bay] && !confirm(tx('There is no report for {bay} on this phone, so it is recorded as "no report". Mark it ready?', { bay: s.bay }))) return; await readyBay(ctx, s, m, false); repaint(); }
+  else if (act === 'm-ready') { const s = m.pending.find(x => x.bay === a.dataset.bay); if (!s) return; if (!m.sys?.[s.bay] && !await ask({ title: tx('Mark {bay} ready?', { bay: s.bay }), text: tx('There is no report for {bay} on this phone, so it is recorded as "no report".', { bay: s.bay }), ok: tx('Mark ready'), cancel: tx('Cancel'), danger: false })) return; await readyBay(ctx, s, m, false); repaint(); }
   else if (act === 'm-del') { await removeScan(ctx, a.dataset.code, repaint); }
   else if (act === 'm-undo') { if (st.mLast) { await send(ctx, 'submission.update', { bay: st.mBay, date }, { remove: [st.mLast] }); st.mLast = null; repaint(); } }
   else if (act === 'm-next') { st.mStep = 1; st.mBay = ''; st.mLast = null; repaint(); setTimeout(() => root.querySelector('[data-field="mbay"]')?.focus(), 30); }
@@ -568,7 +568,7 @@ async function onClick(e, ctx, root, repaint) {
 // metrics match), free it, and with next open the bay that slides into its
 // place on the review list (Vector's Enter = ready and next).
 async function readyBay(ctx, s, m, next) {
-  if (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) && !confirm(`${tx('{bay} has not been submitted for review from the phone yet, so it may still be scanning.', { bay: s.bay })} ${tx('Mark it ready anyway?')}`)) return;
+  if (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) && !await ask({ title: tx('Mark it ready anyway?'), text: tx('{bay} has not been submitted for review from the phone yet, so it may still be scanning.', { bay: s.bay }), ok: tx('Mark ready'), cancel: tx('Cancel'), danger: false })) return;
   const date = todayKey(), sys = m.sys?.[s.bay] || null, p = readyPayload(s, sys), order = m.pending.map(key), idx = order.indexOf(key(s));
   if (Object.keys(p.codes).length || p.incorrect.length) await send(ctx, 'submission.update', { bay: s.bay, date }, p);
   const r = await send(ctx, 'submission.ready', { bay: s.bay, date }, sys ? { system: sys } : {}); if (!r) return;

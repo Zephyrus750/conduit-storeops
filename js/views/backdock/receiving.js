@@ -695,7 +695,7 @@ async function onAct(ctx, a, root) {
         if (notBegun(t)) return;
         const pid = st.arm; st.arm = null;
         if (p.status === 'active') { await dispatch(ctx, 'pallet.join', { truck: id, bay: ref }, { pid }); toast(tx('{pid} joined {ref}', { pid, ref }), '', { label: tx('Undo'), run: () => dispatch(ctx, 'pallet.unstart', { truck: id, bay: ref }, {}).catch(e => toast(e.message, 'bad')) }); return; }
-        if (p.status !== 'paused' && !guard(t, pid, ref, rates, true)) return;
+        if (p.status !== 'paused' && !await guard(t, pid, ref, rates, true)) return;
         await dispatch(ctx, p.status === 'paused' ? 'pallet.resume' : 'pallet.start', { truck: id, bay: ref }, { pid });
         toast(tx('{pid} on {ref}', { pid, ref }), '', { label: tx('Undo'), run: () => dispatch(ctx, 'pallet.unstart', { truck: id, bay: ref }, {}).catch(e => toast(e.message, 'bad')) }); return;
       }
@@ -751,7 +751,7 @@ async function onAct(ctx, a, root) {
       const B = { truck: id, bay: st.sel }, ref = st.sel, undo = (type, payload = {}) => ({ label: tx('Undo'), run: () => dispatch(ctx, type, B, payload).catch(e => toast(e.message, 'bad')) }), undoStart = undo('pallet.unstart');
       const onNow = openSegs(p).map(x => x.pid);
       if ((kind === 'start' || kind === 'resume' || kind === 'join') && notBegun(t)) return;
-      if (kind === 'start' || kind === 'resume') { const pid = field('pid') || p.assignedTo; if (!pid) return toast(tx('Pick who is decanting first'), 'bad'); if (kind === 'start' && !guard(t, pid, ref, rates, true)) return; await dispatch(ctx, kind === 'start' ? 'pallet.start' : 'pallet.resume', B, { pid }); toast(tx('{pid} on {ref}', { pid, ref }), '', kind === 'start' ? undoStart : undo('pallet.pause')); return; }
+      if (kind === 'start' || kind === 'resume') { const pid = field('pid') || p.assignedTo; if (!pid) return toast(tx('Pick who is decanting first'), 'bad'); if (kind === 'start' && !await guard(t, pid, ref, rates, true)) return; await dispatch(ctx, kind === 'start' ? 'pallet.start' : 'pallet.resume', B, { pid }); toast(tx('{pid} on {ref}', { pid, ref }), '', kind === 'start' ? undoStart : undo('pallet.pause')); return; }
       if (kind === 'join') { const pid = field('pid'); if (!pid) return toast(tx('Pick who joins'), 'bad'); await dispatch(ctx, 'pallet.join', B, { pid }); toast(tx('{pid} joined {ref}', { pid, ref }), '', undoStart); return; }
       if (kind === 'handover') { const pid = field('pid'); if (!pid) return toast(tx('Pick who takes it'), 'bad'); await dispatch(ctx, 'pallet.handover', B, { toPid: pid }); toast(tx('{ref} handed to {pid}', { ref, pid }), '', onNow.length === 1 ? undo('pallet.handover', { toPid: onNow[0] }) : null); return; }
       if (kind === 'leave') { await dispatch(ctx, 'pallet.leave', B, { pid: a.dataset.pid }); toast(tx('{pid} stepped off {ref}', { pid: a.dataset.pid, ref })); return; }
@@ -798,7 +798,7 @@ async function onAct(ctx, a, root) {
     if (act === 'next-go') {
       if (notBegun(t)) return;
       const pid = a.dataset.pid, ref = a.dataset.ref, p = t.pallets[ref]; if (!p || !startable(p)) return toast(tx('{ref} cannot start now', { ref }), 'bad');
-      if (p.status !== 'paused' && !guard(t, pid, ref, rates, true)) return;
+      if (p.status !== 'paused' && !await guard(t, pid, ref, rates, true)) return;
       await dispatch(ctx, p.status === 'paused' ? 'pallet.resume' : 'pallet.start', { truck: id, bay: ref }, { pid });
       toast(tx('{pid} on {ref}', { pid, ref }), '', { label: tx('Undo'), run: () => dispatch(ctx, 'pallet.unstart', { truck: id, bay: ref }, {}).catch(e => toast(e.message, 'bad')) }); return;
     }

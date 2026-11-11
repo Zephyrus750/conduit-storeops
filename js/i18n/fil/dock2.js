@@ -264,7 +264,6 @@ export default {
   "{cartons} ctn · {pallets} pallets · {rate} ctn/hr": "{cartons} ctn · {pallets} pallet · {rate} ctn/hr",
   "No truck finalised yet.": "Wala pang na-finalise na truck.",
   "{man} attached to Truck {no} · history rebuilt": "Na-attach ang {man} sa Truck {no} · na-rebuild ang history",
-  "Reopen Truck {no}? It goes back to live and its history row + rate credit are removed until it's closed again.": "Buksan muli ang Truck {no}? Babalik ito sa live at aalisin ang history row + rate credit nito hanggang maisara ulit.",
   "Truck {no} is live again": "Live ulit ang Truck {no}",
   "CSV downloaded": "Na-download ang CSV",
   "Late manifest": "Nahuling manifest",
@@ -902,4 +901,7 @@ export default {
   "Show {n} manifests all back": "Ipakita ang {n} manifest na bumalik na lahat",
   "{n} more pallet": "{n} pang pallet",
   "{n} more pallets": "{n} pang pallet",
+  "Reopen Truck {no}?": "Buksan muli ang Truck {no}?",
+  "It goes back to live and its history row + rate credit are removed until it's closed again.": "Babalik ito sa live at aalisin ang history row + rate credit nito hanggang maisara ulit.",
+  "Reopen truck": "Buksan muli ang truck",
 };

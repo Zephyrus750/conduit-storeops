@@ -264,7 +264,6 @@ export default {
   "{cartons} ctn · {pallets} pallets · {rate} ctn/hr": "{cartons} ct · {pallets} pallet · {rate} ct/h",
   "No truck finalised yet.": "Ancora nessun camion chiuso.",
   "{man} attached to Truck {no} · history rebuilt": "{man} allegato al camion {no} · cronologia ricostruita",
-  "Reopen Truck {no}? It goes back to live and its history row + rate credit are removed until it's closed again.": "Riaprire il camion {no}? Torna in corso e la sua riga di cronologia + i crediti di resa vengono rimossi finché non viene richiuso.",
   "Truck {no} is live again": "Il camion {no} è di nuovo in corso",
   "CSV downloaded": "CSV arrivato",
   "Late manifest": "Manifesto in ritardo",
@@ -902,4 +901,7 @@ export default {
   "Show {n} manifests all back": "Mostra {n} manifesti tutti rientrati",
   "{n} more pallet": "Altri {n} pallet",
   "{n} more pallets": "Altri {n} pallet",
+  "Reopen Truck {no}?": "Riaprire il camion {no}?",
+  "It goes back to live and its history row + rate credit are removed until it's closed again.": "Torna in corso e la sua riga di cronologia + i crediti di resa vengono rimossi finché non viene richiuso.",
+  "Reopen truck": "Riapri il camion",
 };

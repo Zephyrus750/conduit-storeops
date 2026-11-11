@@ -17,7 +17,7 @@
 
 import { ic, esc, vh, sub, toast, fmtDate } from '../ui.js';
 import { tx, txn } from '../i18n.js';
-import { ask } from '../sheet.js';
+import { ask, askText } from '../sheet.js';
 import { fileKind, matches, sameTitle, FILE_EXTS, FILE_MAX } from '../../shared/resources.js';
 import { invalidate } from './admin.js';
 import { canPicture, readPdf, pictureOf } from '../pagepic.js';
@@ -166,7 +166,7 @@ export default {
       else if (act === 'rq-more') { st.allReqs = !st.allReqs; ctx.rerender(); }
       else if (act === 'rq-add' && q) { st.edit = 'new'; st.from = q.id; ctx.rerender(); root.querySelector('[data-form="resource"]')?.scrollIntoView({ block: 'nearest' }); root.querySelector('[name="title"]')?.focus(); }
       else if (act === 'rq-done' && q) { const have = (st.list || []).find(e => sameTitle(e.title, q.title)); await answer(q, { status: 'added', ...(have ? { resource: have.id } : {}) }, tx('{title} marked added', { title: q.title })); }
-      else if (act === 'rq-no' && q) { const why = prompt(tx('Decline {title}? A word why, for the store (optional):', { title: q.title }), ''); if (why === null) return; await answer(q, { status: 'declined', reply: why }, tx('{title} declined', { title: q.title })); }
+      else if (act === 'rq-no' && q) { const why = await askText({ title: tx('Decline {title}?', { title: q.title }), label: tx('A word why, for the store (optional)'), multiline: true, ok: tx('Decline') }); if (why === null) return; await answer(q, { status: 'declined', reply: why }, tx('{title} declined', { title: q.title })); }
       else if (act === 'rq-open' && q) await answer(q, { status: 'open' }, tx('{title} is waiting again', { title: q.title }));
       else if (act === 'rsa-new') { dropPic(); st.edit = 'new'; st.from = null; ctx.rerender(); root.querySelector('[name="title"]')?.focus(); }
       else if (act === 'rsa-edit') { dropPic(); st.edit = a.dataset.id; if (e?.file) pickFile(ctx, null, e); ctx.rerender(); root.querySelector('[name="title"]')?.focus(); }
