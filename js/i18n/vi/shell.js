@@ -416,4 +416,6 @@ export default {
   "Progress by department, set the focus": "Tiến độ theo ngành hàng, đặt trọng tâm",
   "The truck, the crew and their roles": "Xe tải, đội và vai trò của họ",
   "Scan a bay for review": "Quét một vị trí kho để duyệt",
+  "{n} checklist past its time": "{n} danh sách kiểm tra đã quá giờ",
+  "{n} checklists past their time": "{n} danh sách kiểm tra đã quá giờ",
 };

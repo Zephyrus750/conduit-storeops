@@ -416,4 +416,6 @@ export default {
   "Progress by department, set the focus": "Avance por sección, fijar la prioridad",
   "The truck, the crew and their roles": "El camión, el equipo y sus funciones",
   "Scan a bay for review": "Escanear una ubicación para revisión",
+  "{n} checklist past its time": "{n} lista fuera de su hora",
+  "{n} checklists past their time": "{n} listas fuera de su hora",
 };

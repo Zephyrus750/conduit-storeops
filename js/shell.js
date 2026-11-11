@@ -548,7 +548,7 @@ function groupTabs(id) {
 // for today's. What counts is js/alerts.js, the same list the bell shows.
 // Each part reads its area's projection, which is empty until the device
 // holds that area's code, so a badge stays hidden without it.
-const BADGED = ['inputs', 'bfreview', 'cages', 'equipment', 'recalls', 'maintenance', 'planner', 'resources'];
+const BADGED = ['inputs', 'bfreview', 'cages', 'equipment', 'recalls', 'maintenance', 'tasks', 'planner', 'resources'];
 // Requests this store made that the owner has answered since a manager last
 // opened Resources (the library lives on the worker, not in the store's log).
 let answered = 0, answeredT = 0;

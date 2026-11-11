@@ -19,6 +19,7 @@ import { openTrucks, truckNo } from './views/backdock/common.js';
 import { equipmentNeeds } from './views/equipment.js';
 import { recallsNeeding } from './views/recalls.js';
 import { overdueIssues } from './views/maintenance.js';
+import { dueOn, walkKey } from '../shared/reducers/tasks.js';
 
 const nowHM = () => { const { hh, mm } = storeParts(new Date(), storeTz()); return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; };
 
@@ -52,6 +53,13 @@ export function waiting({ store, session, offView = () => false, canRead = () =>
     add('equipment', n, 'bad', 'm-equipment', txn(n, '{n} check overdue or out of service', '{n} checks overdue or out of service'));
   }
   if (!offView('maintenance')) { const n = overdueIssues(store); add('maintenance', n, 'warn', 'tool', txn(n, '{n} maintenance issue overdue', '{n} maintenance issues overdue')); }
+  // Tasks: a checklist due today, past its time and not walked to the end (managers walk them).
+  const cur = session?.current;
+  if (!offView('tasks') && (cur?.owner || (cur?.roles || []).includes('manager'))) {
+    const t = store.get('tasks'), hm = nowHM();
+    const late = Object.values(t?.lists || {}).filter(l => l.due && l.due < hm && dueOn(l, day) && !t.walks?.[walkKey(l.id, day)]?.done).length;
+    add('tasks', late, 'warn', 'm-tasks', txn(late, '{n} checklist past its time', '{n} checklists past their time'));
+  }
   // Back dock: a planned truck past its ETA that hasn't landed, and today's trucks without a manifest.
   if (canRead('backdock') && !offView('planner')) {
     const { onDock, slots } = trucksToday(store, day), hm = nowHM();

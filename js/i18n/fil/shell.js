@@ -416,4 +416,6 @@ export default {
   "Progress by department, set the focus": "Progreso bawat department, itakda ang focus",
   "The truck, the crew and their roles": "Ang truck, ang crew at ang kanilang mga role",
   "Scan a bay for review": "Mag-scan ng bay para sa review",
+  "{n} checklist past its time": "{n} checklist na lampas na sa oras nito",
+  "{n} checklists past their time": "{n} checklist na lampas na sa kanilang oras",
 };
