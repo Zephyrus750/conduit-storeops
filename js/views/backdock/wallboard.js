@@ -120,15 +120,23 @@ export function layout(t) {
   return `<div class="card"><div class="ch"><h3>${tx('Dock layout')}</h3><span class="cs-dim">${tx('{n} landed', { n: progress(t).count })}</span></div><div class="wb-grid" style="grid-template-columns:repeat(${g.cols},minmax(0,1fr))">${g.refs.map(ref => { const p = t.pallets?.[ref]; if (!p || p.excluded) return `<i class="wb-cell empty"><small>${ref}</small></i>`; return `<i class="wb-cell ${p.status || 'landed'}" style="--pt:${PT_COLOUR[p.ptype] || '#98A2B3'}" title="${esc(ref)} · ${esc(PT_NAME[p.ptype] || '')} · ${tx('{n} ctn', { n: p.cartons ?? '–' })} · ${esc(PAL_ST[p.status || 'landed'] || p.status)}"><small>${ref}</small><b>${p.cartons ?? '–'}</b>${who[ref] ? `<em>${who[ref].map(esc).join('+')}</em>` : ''}</i>`; }).join('')}</div></div>`;
 }
 
-function board(ctx) {
-  const { dock, t } = current(ctx), now = Date.now();
-  const head = vh(tx('Wallboard'), sub(t ? tx('Truck {no} · {status}', { no: esc(truckNo(t.id)), status: esc(TRUCK_ST[t.status] || t.status) }) : tx('No truck on the dock'), tx('live read'), tx('every 30 s')), `<button class="btn sm" data-view="teamboard">${ic('users')}${tx('Team Board')}</button>`, 'chart');
-  if (!t) return head + `<div class="card" style="padding:28px;text-align:center"><b>${tx('No truck on the dock')}</b><p class="lbl">${tx('The wallboard wakes when the next truck starts.')}</p></div>`;
+// The truck's numbers now: pace against the goal, the forecast, the team's
+// rate and each person's against their 28 days, the downtime. The
+// wallboard and the manager's phone (the Back dock home) read the same.
+export function dockNow(dock, t, now = Date.now()) {
   const rates = ratesFor(dock), pr = progress(t), fc = forecast(t, now, rates), goal = Date.parse(t.goalAt) || null, gp = goal ? goalPace(t, now) : null;
   const ahead = gp !== null ? pr.done - Math.round(gp * pr.total) : null;
   const from = Date.parse(startOf(t)), haltMs = (t.halts || []).reduce((n, h) => n + ((Date.parse(h.end) || now) - Date.parse(h.start)), 0), downMs = (t.halts || []).filter(h => (h.kind || 'halt') === 'halt').reduce((n, h) => n + ((Date.parse(h.end) || now) - Date.parse(h.start)), 0);
   const active = from ? (now - from - haltMs) / 3600000 : 0, teamRate = active > 0.05 ? Math.round(pr.done / active) : null;
   const ppl = personNow(t, now, rates), norms = ppl.map(p => p.norm).filter(Boolean), teamNorm = norms.length ? Math.round(norms.reduce((a, b) => a + b, 0)) : null;
+  return { rates, pr, fc, goal, ahead, from, haltMs, downMs, active, teamRate, ppl, teamNorm };
+}
+
+function board(ctx) {
+  const { dock, t } = current(ctx), now = Date.now();
+  const head = vh(tx('Wallboard'), sub(t ? tx('Truck {no} · {status}', { no: esc(truckNo(t.id)), status: esc(TRUCK_ST[t.status] || t.status) }) : tx('No truck on the dock'), tx('live read'), tx('every 30 s')), `<button class="btn sm" data-view="teamboard">${ic('users')}${tx('Team Board')}</button>`, 'chart');
+  if (!t) return head + `<div class="card" style="padding:28px;text-align:center"><b>${tx('No truck on the dock')}</b><p class="lbl">${tx('The wallboard wakes when the next truck starts.')}</p></div>`;
+  const { rates, pr, fc, goal, ahead, from, downMs, teamRate, ppl, teamNorm } = dockNow(dock, t, now);
   const halt = openHalt(t), run = Object.keys(running(t)).length, nHalts = (t.halts || []).filter(h => (h.kind || 'halt') === 'halt').length;
   const kpis = `<div class="wb-kpis">` +
     tile(tx('Cartons decanted'), `${pr.done}<small>/${pr.total}</small>`, ahead === null ? tx('set a goal to see pace') : ahead >= 0 ? tx('▲ {n} ahead of pace', { n: ahead }) : tx('▼ {n} behind pace', { n: -ahead }), ahead === null ? '' : ahead >= 0 ? 'good' : 'warn') +

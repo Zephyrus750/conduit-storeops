@@ -520,4 +520,9 @@ export default {
   "Stay on {store}": "Manatili sa {store}",
   "Decline this suggestion?": "Tanggihan ang mungkahing ito?",
   "Why? (optional)": "Bakit? (opsyonal)",
+  "Set them below": "Itakda sa ibaba",
+  "Set this week’s focus": "Itakda ang focus ngayong linggo",
+  "Progress by department": "Progreso bawat department",
+  "Refreshes by phone": "Mga refresh bawat phone",
+  "Phone {id}": "Phone {id}",
 };

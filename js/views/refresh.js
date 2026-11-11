@@ -1,7 +1,7 @@
 // Location refresh: mark segments refreshed this week, focus departments,
 // plan paint. Reads store.get('refresh'); writes refresh.* events.
 
-import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig, today, mgr } from '../ui.js';
 import { focusDone } from '../../shared/reducers/floor.js';
 import { retailPeriod } from '../../shared/time.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
@@ -14,6 +14,8 @@ const PLAN_NAME = { '#a855f7': tx('Purple'), '#3b82f6': tx('Blue'), '#f59e0b': t
 const planName = c => PLAN_NAME[String(c).toLowerCase()] || tx('Planned');
 const planChip = c => `<span class="rfplan-c"><i style="background:${esc(c)}"></i>${planName(c)}</span>`;
 const TARGET = 100;
+const isMgr = ctx => { const c = ctx.session.current; return !!c && (!!c.owner || (c.roles || []).includes('manager')); };
+const mgrTag = () => mgr();
 // The departments a week's focus can name (ShelfSearcher's fourteen).
 const FOCUS_DEPTS = ['h1', 'h2', 'h3', 'h4', 'c1', 'c2', 'c3', 'c4', 'k1', 'k2', 'k3', 'k4', 'flex', 'checkouts'];
 let mode = 'refresh', planColour = PLAN_COLOURS[0], openDept = null;
@@ -44,6 +46,19 @@ function marksFor(m) {
   const out = {}, set = markSet(m.marks);
   for (const x of shelfIndex) { if (isDone(set, x)) out[x.id] = 'done'; else if (m.focus.includes(x.dept)) out[x.id] = 'focus'; }
   return out;
+}
+// Every department's week (the manager phone): its shelves refreshed of all of them.
+function deptCounts(m) {
+  const by = {}, tot = {}, set = markSet(m.marks);
+  for (const x of shelfIndex) { if (!x.dept) continue; tot[x.dept] = (tot[x.dept] || 0) + 1; if (isDone(set, x)) by[x.dept] = (by[x.dept] || 0) + 1; }
+  return Object.keys(tot).sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).map(d => ({ d, done: by[d] || 0, total: tot[d] }));
+}
+// Refreshes by phone (the manager phone): each mark goes to the phone that
+// made it first, this week and today. A phone is its device id: no names.
+function byPhone(m, mine) {
+  const out = {}, day = today();
+  for (const mk of Object.values(m.marks)) { const d = mk.devices?.[0] || 'unknown', x = (out[d] ||= { d, week: 0, today: 0 }); x.week++; if (String(mk.at || '').slice(0, 10) === day) x.today++; }
+  return Object.values(out).sort((a, b) => (b.d === mine) - (a.d === mine) || b.week - a.week);
 }
 function focusCounts(m) {
   const by = {}, tot = {}, set = markSet(m.marks);
@@ -155,7 +170,7 @@ export default {
       const m = model(ctx);
       map.setMarks(marksFor(m)); applyPlan(map, m.plan, m.marks, mode === 'plan'); map.svg.classList.toggle('rfplan', mode === 'plan'); map.svg.toggleAttribute('data-focus', m.focus.length > 0);
       const side = $('#rfside', root); if (side) side.innerHTML = sidebar(map, m);
-      const mob = $('#rfmob', root); if (mob) mob.innerHTML = mobileBar(map, m);
+      const mob = $('#rfmob', root); if (mob) mob.innerHTML = mobileBar(map, m, isMgr(ctx) ? { device: ctx.session.device, mark: mgrTag() } : null);
       const sc = $('#rfscan', root); if (sc) sc.innerHTML = scanOpen && mode !== 'plan' ? scanSheet() : '';
       setStrip(root, rfStrip(m));
       const badge = $('#mvbadge', root); if (badge) badge.innerHTML = weekBadge(m);
@@ -225,7 +240,7 @@ function scanSheet() {
 // The phone's Refresh sheet (opened from the strip): the week's progress,
 // scan and the Refresh/Plan toggle, each focus department with its own bar,
 // and the shelves refreshed this week by department (a tap finds one).
-function mobileBar(map, m) {
+function mobileBar(map, m, mgr = null) {
   const fc = focusCounts(m), left = 7 - (new Date().getDay() + 6) % 7;
   const head = `<div class="sx-h">${ic('m-refresh')}${tx('Location refresh')}<span class="n">${m.counted} / ${TARGET}</span></div><div class="sx-sub">${txn(left, 'This week · {period} · {n} day left', 'This week · {period} · {n} days left', { period: retailPeriod(new Date()) })}</div><div style="margin-top:8px">${sx.bar(m.counted, TARGET)}</div>`;
   // The toggle keeps its place: in Plan the colours take the scan button's spot.
@@ -234,8 +249,18 @@ function mobileBar(map, m) {
   const focus = sx.rows(fc.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${esc(f.d)}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) ;
   const outside = m.done - m.counted;
   return `<div class="sx">${head}${row}` +
-    sx.sec(tx('This week’s focus'), fc.length ? focus : sx.rows([sx.row('asterisk', tx('No focus departments set this week'), tx('Managers set them on a store PC'))]), fc.length ? tx('set by managers') : '') +
+    sx.sec(tx('This week’s focus'), fc.length ? focus : sx.rows([sx.row('asterisk', tx('No focus departments set this week'), mgr ? tx('Set them below') : tx('Managers set them on a store PC'))]), fc.length ? tx('set by managers') : '') +
+    (mgr ? mgrSections(m, mgr) : '') +
     sx.sec(tx('Completed this week'), doneByDept(map, m), m.focus.length && outside > 0 ? txn(m.done, '{n} shelf · {out} outside the focus', '{n} shelves · {out} outside the focus', { out: outside }) : txn(m.done, '{n} shelf', '{n} shelves')) + '</div>';
+}
+// A manager's phone (the manager phone, 12 Oct): the focus set from here,
+// progress in every department, and the week's refreshes by phone.
+function mgrSections(m, mgr) {
+  const focus = `<div class="rf-focus-set">${FOCUS_DEPTS.map(d => `<button type="button" class="rf-fchip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}" aria-pressed="${m.focus.includes(d)}">${dep(d)}<span>${esc(DEPT_NAME[d] || d.toUpperCase())}</span></button>`).join('')}</div>`;
+  const depts = deptCounts(m), phones = byPhone(m, mgr.device);
+  return sx.sec(tx('Set this week’s focus'), focus, mgr.mark) +
+    sx.sec(tx('Progress by department'), depts.length ? sx.rows(depts.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${esc(f.d)}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) : sx.rows([sx.row('map', tx('No map is published for this store yet.'))]), mgr.mark) +
+    sx.sec(tx('Refreshes by phone'), phones.length ? sx.rows(phones.map(p => sx.row('phone', p.d === mgr.device ? tx('This phone') : tx('Phone {id}', { id: esc(String(p.d).slice(-4).toUpperCase()) }), tx('{n} today', { n: p.today }), txn(p.week, '{n} shelf', '{n} shelves')))) : sx.rows([sx.row('check', tx('Nothing refreshed yet this week'))]), mgr.mark);
 }
 // The phone's completed list: each department with its badge, name and
 // count, and its shelves as chips (a tap finds one); the first eight, then

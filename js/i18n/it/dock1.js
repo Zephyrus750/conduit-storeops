@@ -861,4 +861,13 @@ export default {
   "{ref} (queued after their run) would run to about {end}, {mins} min past their finish time.": "{ref} (in coda dopo i suoi pallet) durerebbe fino alle {end} circa, {mins} min oltre la sua fine.",
   "Start anyway": "Avvia comunque",
   "Queue anyway": "Metti in coda comunque",
+  "Each person against their 28 days": "Ognuno rispetto ai suoi 28 giorni",
+  "28 days {n}": "28 giorni {n}",
+  "{n} today · {mins} down": "{n} oggi · {mins} di fermo",
+  "None on this truck": "Nessuno su questo camion",
+  "Move roles": "Sposta i ruoli",
+  "Late manifests": "Manifesti in ritardo",
+  "Finished today": "Terminati oggi",
+  "{n} finished truck this week has no manifest yet": "{n} camion terminato questa settimana non ha ancora un manifesto",
+  "{n} finished trucks this week have no manifest yet": "{n} camion terminati questa settimana non hanno ancora un manifesto",
 };

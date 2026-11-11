@@ -16,7 +16,7 @@ const LANGS = ['de', 'fr', 'fil', 'vi', 'es', 'it'];
 export const AREAS = {
   core: ['js/i18n.js', 'js/unlock.js'],
   shell: ['js/shell.js', 'js/ui.js', 'js/registry.js', 'js/prefs.js', 'js/sync.js', 'js/updates.js', 'js/diag.js', 'js/share.js', 'js/scan.js', 'js/voice.js', 'js/print.js', 'js/config.js', 'js/device.js', 'js/team.js', 'js/sheet.js', 'js/alerts.js', 'js/lowpoly.js', 'js/version.js', 'index.html'],
-  guide: ['js/views/settings.js', 'js/tour.js', 'js/whatsnew.js', 'js/views/help.js'],
+  guide: ['js/views/settings.js', 'js/views/mtoday.js', 'js/tour.js', 'js/whatsnew.js', 'js/views/help.js'],
   map: ['js/map.js', 'js/search.js', 'js/views/map.js', 'js/views/picklist.js', 'js/printmap.js', 'js/views/printmap.js', 'js/views/layouts.js'],
   floor: ['js/views/refresh.js', 'js/views/labelint.js', 'js/views/emergency.js', 'js/views/stocktake.js', 'js/views/storeinfo.js', 'js/views/mapedits.js', 'js/views/fieldmode.js'],
   floor2: ['js/views/dashboard.js', 'js/views/maintenance.js', 'js/views/inputs.js', 'js/views/pastebox.js', 'js/views/livepull.js', 'js/views/equipment.js', 'js/views/recalls.js', 'js/recallflag.js', 'js/barcodesearch.js', 'js/views/resources.js', 'js/resourcelib.js'],

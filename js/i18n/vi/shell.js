@@ -410,4 +410,10 @@ export default {
   "{n} change waiting on the worker": "{n} thay đổi đang chờ máy chủ",
   "{n} changes waiting on the worker": "{n} thay đổi đang chờ máy chủ",
   "Scan to open this screen": "Quét để mở màn hình này",
+  "The store at a glance: what needs you, each area, the devices": "Toàn cảnh cửa hàng: việc cần bạn, từng khu, các thiết bị",
+  "Stock": "Kho",
+  "Dock": "Bến",
+  "Progress by department, set the focus": "Tiến độ theo ngành hàng, đặt trọng tâm",
+  "The truck, the crew and their roles": "Xe tải, đội và vai trò của họ",
+  "Scan a bay for review": "Quét một vị trí kho để duyệt",
 };

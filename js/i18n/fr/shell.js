@@ -410,4 +410,10 @@ export default {
   "{n} change waiting on the worker": "{n} modification en attente du serveur",
   "{n} changes waiting on the worker": "{n} modifications en attente du serveur",
   "Scan to open this screen": "Scannez pour ouvrir cet écran",
+  "The store at a glance: what needs you, each area, the devices": "Le magasin d’un coup d’œil : ce qui vous attend, chaque zone, les appareils",
+  "Stock": "Réserve",
+  "Dock": "Quai",
+  "Progress by department, set the focus": "Avancement par rayon, définir la priorité",
+  "The truck, the crew and their roles": "Le camion, l’équipe et ses rôles",
+  "Scan a bay for review": "Scanner un emplacement pour revue",
 };

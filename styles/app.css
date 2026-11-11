@@ -4602,3 +4602,47 @@ td > .empty.sm, .list > .empty.sm { padding: 10px 12px; }
   .frame.dense .empty:not(.sm) { padding: 24px 16px; }
   .frame.dense .btn { padding-top: 6px; padding-bottom: 6px; }
 }
+
+/* ── The manager phone (12 Oct plan): Today, and the manager's parts of
+   Refresh and the Back dock home. */
+.mt { display: flex; flex-direction: column; gap: 8px; padding: 0 0 20px; }
+.mt-sec { margin: 10px 2px 2px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dim); }
+.mt-routine .al-row { padding: 8px 12px; }
+.mt-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@container shell (min-width: 600px) { .mt-grid { grid-template-columns: 1fr 1fr; } }
+.mt-card { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.mt-card.static { cursor: default; }
+.mt-ch { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.mt-ch b { flex: 1; font-size: 15px; }
+.mt-ch > svg.i:first-child { width: 20px; height: 20px; color: var(--accent-ink); }
+.mt-ch > svg.i:last-child { width: 14px; height: 14px; color: var(--faint); transform: rotate(-90deg); }
+.mt-card.locked { opacity: .75; } .mt-card.locked .mt-ch > svg.i:last-child { transform: none; }
+.mt-lock { margin: 0; font-size: 13px; color: var(--dim); }
+.mt-r { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 13.5px; color: var(--ink2); border-top: 1px solid var(--line-soft); }
+.mt-r b { font-weight: 700; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.mt-r b.good { color: #15803D; } .mt-r b.warn { color: #B45309; } .mt-r b.bad { color: #B91C1C; }
+/* Refresh on a manager's phone: the focus chips. */
+.rf-focus-set { display: flex; flex-wrap: wrap; gap: 6px; }
+.rf-fchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px 5px 5px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink2); font: 600 12.5px inherit; }
+.rf-fchip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+/* The Back dock home's manager card. */
+.bdm { margin: 10px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.bdm-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; } .bdm-h b { flex: 1; font-size: 15px; } .bdm-h > svg.i { width: 18px; height: 18px; color: var(--accent-ink); }
+.bdm-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bdm-kpis > div { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 10px; background: var(--ground); min-width: 0; }
+.bdm-kpis small { font-size: 11px; color: var(--dim); } .bdm-kpis b { font-size: 14px; font-variant-numeric: tabular-nums; } .bdm-kpis span { font-size: 11px; color: var(--dim); }
+.bdm-kpis b.good { color: #15803D; } .bdm-kpis b.warn { color: #B45309; } .bdm-kpis b.bad { color: #B91C1C; }
+.bdm-pp { display: flex; flex-direction: column; gap: 6px; }
+.bdm-p { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 13px; }
+.bdm-p .bar { position: relative; height: 8px; border-radius: 4px; background: var(--ground); }
+.bdm-p .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
+.bdm-p.low .bar i { background: #D97706; }
+.bdm-p .bar u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink2); }
+.bdm-p .v { text-align: right; font-variant-numeric: tabular-nums; } .bdm-p .v small { display: block; font-size: 11px; color: var(--dim); }
+.bdm-halt { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #FEF2F2; color: #991B1B; font-size: 13.5px; }
+.bdm-line { margin: 4px 0 0; font-size: 13px; color: var(--dim); }
+.bdm-acts { display: flex; gap: 8px; margin-top: 10px; } .bdm-acts .mv-ghost { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.bdm-late { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid #FCD34D; border-left-width: 4px; border-radius: 10px; background: #FFFBEB; color: #92400E; font: 600 13.5px inherit; text-align: left; }
+.bdm-late span { flex: 1; } .bdm-late > svg.i:last-child { transform: rotate(-90deg); width: 14px; height: 14px; }
+.bdm-done { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: 13.5px; } .bdm-done span { flex: 1; color: var(--dim); }
+.bdm-done .mv-ghost.sm { width: auto; min-height: 34px; padding: 0 12px; font-size: 13px; }

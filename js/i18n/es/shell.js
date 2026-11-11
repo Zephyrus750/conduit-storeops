@@ -410,4 +410,10 @@ export default {
   "{n} change waiting on the worker": "{n} cambio esperando al servidor",
   "{n} changes waiting on the worker": "{n} cambios esperando al servidor",
   "Scan to open this screen": "Escanea para abrir esta pantalla",
+  "The store at a glance: what needs you, each area, the devices": "La tienda de un vistazo: lo que te necesita, cada área, los dispositivos",
+  "Stock": "Almacén",
+  "Dock": "Muelle",
+  "Progress by department, set the focus": "Avance por sección, fijar la prioridad",
+  "The truck, the crew and their roles": "El camión, el equipo y sus funciones",
+  "Scan a bay for review": "Escanear una ubicación para revisión",
 };

@@ -410,4 +410,10 @@ export default {
   "{n} change waiting on the worker": "{n} pagbabago ang naghihintay sa server",
   "{n} changes waiting on the worker": "{n} pagbabago ang naghihintay sa server",
   "Scan to open this screen": "I-scan para buksan ang screen na ito",
+  "The store at a glance: what needs you, each area, the devices": "Ang tindahan sa isang tingin: ang kailangan sa iyo, bawat area, ang mga device",
+  "Stock": "Stock",
+  "Dock": "Dock",
+  "Progress by department, set the focus": "Progreso bawat department, itakda ang focus",
+  "The truck, the crew and their roles": "Ang truck, ang crew at ang kanilang mga role",
+  "Scan a bay for review": "Mag-scan ng bay para sa review",
 };

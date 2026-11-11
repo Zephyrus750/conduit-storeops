@@ -40,7 +40,7 @@ import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
 import { installProductLinks, installProductCard } from './views/stockroom/common.js';
 import { installPullAlerts } from './views/livepull.js';
-import { waiting, railCounts, bellCount } from './alerts.js';
+import { waiting, railCounts, bellCount, useAlertSource } from './alerts.js';
 import { openSheet } from './sheet.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
@@ -99,7 +99,7 @@ let capsSig = null, rolesSig = null;
 client.session.on('change', snap => {
   const sig = (snap?.caps || []).join(','), rsig = (snap?.roles || []).join(',');
   if (capsSig === null || !store || admin) { capsSig = sig; rolesSig = rsig; return; }
-  if (rsig !== rolesSig) { rolesSig = rsig; if (sig === capsSig) { buildRail(); paintBadges(); } managerCheck(); }
+  if (rsig !== rolesSig) { rolesSig = rsig; if (sig === capsSig) { buildRail(); paintBadges(); } if (ws === 'today' && !isManager()) { setWs('floor'); show(HOME.floor); } managerCheck(); }
   if (sig === capsSig) return;
   const gone = capsSig.split(',').filter(a => a && !sig.split(',').includes(a)); capsSig = sig;
   buildRail(); paintBadges();
@@ -192,7 +192,9 @@ async function enter() {
   // The phone goes back to the area it was last used in when this device can
   // still open it; otherwise it asks where you are working.
   const caps = s.caps || [];
-  if (last && caps.includes(last) && (last === 'floor' || hasArea(client.session, last))) { setWs(last); show(HOME[last] || 'mhome'); }
+  // A manager's phone starts on Today, the store at a glance (the manager phone, 12 Oct).
+  if (isManager() && !s.owner) { setWs('today'); show('mtoday'); }
+  else if (last && caps.includes(last) && (last === 'floor' || hasArea(client.session, last))) { setWs(last); show(HOME[last] || 'mhome'); }
   else { show('mhome'); openLauncher(); }
 }
 // The published map: the store's `map` projection names the current
@@ -564,6 +566,7 @@ function answeredSeen(no) { answered = 0; try { localStorage.setItem(SEEN(no), n
 // (the morning report) stays on the rail of the PC.
 const PHONE_GO = { planner: 'receiving' };
 const alertList = () => {
+  if (!store) return [];
   const list = waiting({ store, session: client.session, offView, canRead: a => hasArea(client.session, a), answered });
   if (!isMobile()) return list;
   return list.map(x => VIEWS[x.go] && deskOnly(VIEWS[x.go]) ? (PHONE_GO[x.go] ? { ...x, go: PHONE_GO[x.go] } : null) : x).filter(Boolean);
@@ -582,6 +585,7 @@ function paintBadges() {
 }
 let alertsT = 0;
 function alertsSoon() { if (alertsT) return; alertsT = setTimeout(() => { alertsT = 0; paintBadges(); }, 1500); }
+useAlertSource(() => alertList());
 // The alerts bell (new-bell): one place for what needs someone, each line
 // opening the screen it is about. Its number leaves out routine work (the
 // day's locations to review, the morning report), which the rail counts.
@@ -716,7 +720,7 @@ function show(id, arg) {
   if (store && railSig() !== toolsSig) { buildRail(); paintBadges(); setWs(ws); }
   if (store && view.managers && !isManager()) { toast(tx('{name} is for managers: sign in with the manager code', { name: view.title })); if (current && current !== view.id) return; view = VIEWS[mobile ? HOME[ws] || 'map' : 'dashboard']; }
   if (store && offView(view.id)) { toast(tx('{name} is switched off for this store', { name: tx(toolForView(view.id).name) })); if (current && current !== view.id && !offView(current)) return; view = VIEWS[mobile ? HOME[view.area] || 'map' : 'dashboard']; }
-  if (store && view.area && view.area !== ws && view.area !== 'admin') setWs(view.area);
+  if (store && view.area && view.area !== ws && view.area !== 'admin' && !(ws === 'today' && mobile)) setWs(view.area);
   // A phone-only view (a workspace home) opens its desktop counterpart on a wide screen.
   if (!mobile && view.desktopView && VIEWS[view.desktopView]) return show(view.desktopView, arg);
   id = view.id;
@@ -808,7 +812,8 @@ const SHEET_X = `<button class="sheet-x" data-act="close-more" aria-label="${tx(
 function openLauncher() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const caps = client.session.current?.caps || [];
-  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>${tx('Where are you working?')}</h3>${SHEET_X}</div><p class="mv-sheet-sub">${tx('Pick your area to begin.')} ${(client.session.current?.roles || []).includes('manager') ? tx('Signed in as manager: every area is open.') : tx('Stockroom and Back dock ask for their crew code, which lasts one shift (12 hours) on this device.')}</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : tx('Not on for this store')}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div></div>`;
+  const today = isManager() ? `<button class="mv-tile${ws === 'today' ? ' hot' : ''}" data-ws="today"><span class="ti">${ic('m-dashboard')}</span><span class="tx"><b>${tx('Today')}</b><span>${tx('The store at a glance: what needs you, each area, the devices')}</span></span><span></span>${ic('chev')}</button>` : '';
+  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>${tx('Where are you working?')}</h3>${SHEET_X}</div><p class="mv-sheet-sub">${tx('Pick your area to begin.')} ${(client.session.current?.roles || []).includes('manager') ? tx('Signed in as manager: every area is open.') : tx('Stockroom and Back dock ask for their crew code, which lasts one shift (12 hours) on this device.')}</p><div class="mv-tiles">${today}${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : tx('Not on for this store')}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div></div>`;
   sh.dataset.kind = ''; sh.classList.add('open');
 }
 // The phone's Departments picker: the whole floor; Home, Clothing and
@@ -872,7 +877,7 @@ document.addEventListener('click', e => {
   // a data-view element opens the view, with a store number for the
   // console's store rows.
   const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni, .sdd-r')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no, ...(v.dataset.tab ? { tab: v.dataset.tab } : {}) } : undefined); return; }
-  const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
+  const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor' || target === 'today') { setWs(target); show('mhome'); } else { if (ws === 'today') setWs(target); show(HOME[target] || 'mhome'); } return; }
   if (e.target.closest('.mdepts')) { if (store) (ws === 'floor' ? openDepts : openLauncher)(); return; }
   const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }
   // The store chip opens the device and store page (Settings); store details are still to come.

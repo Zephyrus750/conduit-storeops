@@ -78,3 +78,9 @@ export function bellCount(list) {
   const shown = list.filter(x => x.level !== 'info');
   return { n: shown.reduce((t, x) => t + x.n, 0), bad: shown.some(x => x.level === 'bad') };
 }
+// The shell's list for this device (its tool switches and area codes
+// applied, a phone's lines pointed at the phone's screens), for views that
+// show it too: the manager phone's Today.
+let source = () => [];
+export const useAlertSource = fn => { source = fn; };
+export const currentAlerts = () => source();

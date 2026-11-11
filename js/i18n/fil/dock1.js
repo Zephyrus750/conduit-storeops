@@ -861,4 +861,13 @@ export default {
   "{ref} (queued after their run) would run to about {end}, {mins} min past their finish time.": "Ang {ref} (naka-queue pagkatapos ng kanyang run) ay aabot ng mga {end}, {mins} min lampas sa finish time niya.",
   "Start anyway": "Simulan pa rin",
   "Queue anyway": "I-queue pa rin",
+  "Each person against their 28 days": "Bawat tao kumpara sa kanilang 28 araw",
+  "28 days {n}": "28 araw {n}",
+  "{n} today · {mins} down": "{n} ngayon · {mins} na tigil",
+  "None on this truck": "Wala sa truck na ito",
+  "Move roles": "Ilipat ang mga role",
+  "Late manifests": "Mga huling manifest",
+  "Finished today": "Natapos ngayon",
+  "{n} finished truck this week has no manifest yet": "{n} natapos na truck ngayong linggo ang wala pang manifest",
+  "{n} finished trucks this week have no manifest yet": "{n} natapos na truck ngayong linggo ang wala pang manifest",
 };

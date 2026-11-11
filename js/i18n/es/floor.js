@@ -520,4 +520,9 @@ export default {
   "Stay on {store}": "Quedarse en {store}",
   "Decline this suggestion?": "¿Rechazar esta sugerencia?",
   "Why? (optional)": "¿Por qué? (opcional)",
+  "Set them below": "Fíjalas abajo",
+  "Set this week’s focus": "Fijar la prioridad de esta semana",
+  "Progress by department": "Avance por sección",
+  "Refreshes by phone": "Reposiciones por teléfono",
+  "Phone {id}": "Teléfono {id}",
 };

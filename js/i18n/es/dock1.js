@@ -861,4 +861,13 @@ export default {
   "{ref} (queued after their run) would run to about {end}, {mins} min past their finish time.": "{ref} (en cola tras su tanda) duraría hasta las {end} aprox., {mins} min después de su hora de fin.",
   "Start anyway": "Empezar igualmente",
   "Queue anyway": "Poner en cola igualmente",
+  "Each person against their 28 days": "Cada persona frente a sus 28 días",
+  "28 days {n}": "28 días {n}",
+  "{n} today · {mins} down": "{n} hoy · {mins} parado",
+  "None on this truck": "Ninguno en este camión",
+  "Move roles": "Cambiar funciones",
+  "Late manifests": "Manifiestos atrasados",
+  "Finished today": "Terminados hoy",
+  "{n} finished truck this week has no manifest yet": "{n} camión terminado esta semana aún no tiene manifiesto",
+  "{n} finished trucks this week have no manifest yet": "{n} camiones terminados esta semana aún no tienen manifiesto",
 };

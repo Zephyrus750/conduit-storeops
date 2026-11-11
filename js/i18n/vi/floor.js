@@ -520,4 +520,9 @@ export default {
   "Stay on {store}": "Ở lại {store}",
   "Decline this suggestion?": "Từ chối đề xuất này?",
   "Why? (optional)": "Lý do? (không bắt buộc)",
+  "Set them below": "Đặt ở bên dưới",
+  "Set this week’s focus": "Đặt trọng tâm tuần này",
+  "Progress by department": "Tiến độ theo ngành hàng",
+  "Refreshes by phone": "Lượt làm mới theo điện thoại",
+  "Phone {id}": "Điện thoại {id}",
 };

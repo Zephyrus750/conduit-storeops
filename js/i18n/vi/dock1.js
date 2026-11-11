@@ -861,4 +861,13 @@ export default {
   "{ref} (queued after their run) would run to about {end}, {mins} min past their finish time.": "{ref} (xếp sau phần việc của họ) sẽ kéo dài đến khoảng {end}, quá giờ kết thúc {mins} phút.",
   "Start anyway": "Vẫn bắt đầu",
   "Queue anyway": "Vẫn xếp hàng",
+  "Each person against their 28 days": "Mỗi người so với 28 ngày của họ",
+  "28 days {n}": "28 ngày {n}",
+  "{n} today · {mins} down": "{n} hôm nay · dừng {mins}",
+  "None on this truck": "Không có trên xe này",
+  "Move roles": "Đổi vai trò",
+  "Late manifests": "Bảng kê đến muộn",
+  "Finished today": "Xong hôm nay",
+  "{n} finished truck this week has no manifest yet": "{n} xe tải đã xong tuần này chưa có bảng kê",
+  "{n} finished trucks this week have no manifest yet": "{n} xe tải đã xong tuần này chưa có bảng kê",
 };

@@ -861,4 +861,13 @@ export default {
   "{ref} (queued after their run) would run to about {end}, {mins} min past their finish time.": "{ref} (nach der Reihe eingeplant) würde bis etwa {end} dauern, {mins} Min. nach dem Ende.",
   "Start anyway": "Trotzdem starten",
   "Queue anyway": "Trotzdem einplanen",
+  "Each person against their 28 days": "Jede Person gegenüber ihren 28 Tagen",
+  "28 days {n}": "28 Tage {n}",
+  "{n} today · {mins} down": "{n} heute · {mins} Stillstand",
+  "None on this truck": "Keine bei diesem LKW",
+  "Move roles": "Rollen tauschen",
+  "Late manifests": "Fehlende Lieferscheine",
+  "Finished today": "Heute abgeschlossen",
+  "{n} finished truck this week has no manifest yet": "{n} abgeschlossener LKW dieser Woche hat noch keinen Lieferschein",
+  "{n} finished trucks this week have no manifest yet": "{n} abgeschlossene LKW dieser Woche haben noch keinen Lieferschein",
 };
