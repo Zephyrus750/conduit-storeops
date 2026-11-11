@@ -506,12 +506,18 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
   // every side is hidden (data-far); checked when names come in, and 120 ms
   // after a move stops, so a pan or a zoom out within the margin never shows
   // a gap. Each floor's names and their x/y are read once.
-  let named = null, cullT = 0;
+  // While the map moves, the check runs again whenever the view has travelled
+  // half a view since the last one (or zoomed out by half again), so a long
+  // drag or a flick's coast never outruns the margin: names used to stay off
+  // until the map stopped, and a pan of more than a view showed bare shelves.
+  let named = null, cullT = 0, culledAt = null;
+  const cullDue = v => !culledAt || Math.abs(v[0] + v[2] / 2 - culledAt[0]) > culledAt[2] / 2 || Math.abs(v[1] + v[3] / 2 - culledAt[1]) > culledAt[3] / 2 || v[2] > culledAt[2] * 1.5;
   const cullLabels = () => {
     clearTimeout(cullT); cullT = 0;
     const host = floorEl(cur?.id); if (!host || !svg.isConnected) return;
     if (named?.host !== host) named = { host, list: $$('.shelf-label', host).map(t => ({ t, x: Number(t.getAttribute('x')), y: Number(t.getAttribute('y')), far: t.hasAttribute('data-far') })) };
     const [x, y, w, h] = api.vb(), x0 = x - w, x1 = x + 2 * w, y0 = y - h, y1 = y + 2 * h;
+    culledAt = [x + w / 2, y + h / 2, w, h];
     for (const l of named.list) {
       const far = Number.isFinite(l.x) && Number.isFinite(l.y) && (l.x < x0 || l.x > x1 || l.y < y0 || l.y > y1);
       if (far !== l.far) { l.far = far; l.t.toggleAttribute('data-far', far); }
@@ -543,8 +549,9 @@ export function mountMap(stage, { mono = false, cls = '', marks = {}, select = n
     const tiny = z < LABEL_MIN_Z && ((svg === live && liveW) || innerWidth) < 600;
     const was = svg.style.getPropertyValue('--label-display'), show = svg.classList.contains('nobadges') ? (tiny ? 'none' : 'inline') : namePx >= NAME_PX ? 'inline' : 'none';
     // Names coming in are culled before they are laid out; while they show,
-    // the check waits for the move to stop.
-    if (show === 'inline') { if (was !== 'inline' || firstFade) cullLabels(); else { clearTimeout(cullT); cullT = setTimeout(cullLabels, 120); } }
+    // the check runs once the move stops, or sooner when the view has gone
+    // half a view since the last check (cullDue).
+    if (show === 'inline') { if (was !== 'inline' || firstFade || cullDue(vb)) cullLabels(); else { clearTimeout(cullT); cullT = setTimeout(cullLabels, 120); } }
     firstFade = false;
     setVar(svg, '--label-display', show);
   };
