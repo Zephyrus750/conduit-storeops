@@ -8,6 +8,7 @@ import { Miniflare } from 'miniflare';
 import { hashSecret, signToken } from '../../worker/auth.js';
 import { dvAnswer, DV_TRUCK } from '../fixtures/dv.js';
 import { ulid } from '../../shared/ulid.js';
+import { storeDay, DEFAULT_TZ } from '../../shared/time.js';
 
 const OWNER_KEY = 'owner-key-for-tests-only';
 let sitemapReads = 0;
@@ -1004,6 +1005,45 @@ test('issue photos: a store device adds a JPEG, the store and owner read it, oth
   assert.equal(await stub.sweepPhotos(Date.now() + 91 * 86400e3), 1, 'the removed issue\'s photo');
   assert.equal((await raw('GET', `/v1/store/2044/photo/${pGone}`, ownerToken)).status, 404);
   assert.equal((await raw('GET', `/v1/store/2044/photo/${pLive}`, dev2.token)).status, 200, 'a live issue keeps its photo');
+});
+
+test('walk photos: a photo on a walk item is the store’s to see while the walk lists it, kept 90 days after the walk', async () => {
+  assert.equal((await reg2('2045')).status, 201);
+  const mgr = (await api('POST', '/v1/auth/signin', { store: '2045', managerCode: 'MG-2045', device: 'ph-45m' })).body;
+  const crew = (await api('POST', '/v1/auth/signin', { store: '2045', pin: '135790', device: 'ph-45' })).body;
+  const raw = (method, path, token, body) => mf.dispatchFetch('http://conduit.test' + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'image/jpeg' } : {}) }, body });
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(300).fill(9), 0xff, 0xd9]);
+  const up = async () => (await (await raw('POST', '/v1/store/2045/photo', mgr.token, jpeg)).json()).id;
+  const [p1, p2, p3] = [await up(), await up(), await up()];
+  const day = storeDay(new Date(), DEFAULT_TZ), W = { list: 'L1', day };
+  const ev = (type, entity, payload = {}) => ({ id: ulid(), store: '2045', area: 'floor', type, entity, payload, at: at(), v: 1 });
+  const send = async (events, token = mgr.token) => (await api('POST', '/v1/store/2045/events', { events }, token)).body.results;
+  const r = await send([
+    ev('task.list.set', { list: 'L1' }, { name: 'Opening checks', area: 'store', who: 'Store manager', days: [1, 2, 3, 4, 5, 6, 7], due: '06:00', items: [{ id: 'a1', t: 'Front entry mats down' }, { id: 'a2', t: 'Fire exit clear' }] }),
+    ev('task.walk.start', W), ev('task.walk.item', { ...W, item: 'a1' }, { a: 'y', photo: p1 }),
+    ev('issue.log', { issue: 'mw1' }, { cat: 'door', title: 'Fire exit clear', sev: 2 }), ev('issue.photo', { issue: 'mw1' }, { photo: p2 }),
+    ev('task.walk.item', { ...W, item: 'a2' }, { a: 'n', note: 'Cages against the exit door', photo: p2, sent: { to: 'issue', issue: 'mw1' } }),
+    ev('task.walk.done', W),
+  ]);
+  assert.deepEqual(r.map(x => x.ok), [true, true, true, true, true, true, true]);
+  // A crew phone (the store PIN) holds the walks but writes none.
+  const crewTry = await send([ev('task.walk.item', { ...W, item: 'a1' }, { a: 'n' })], crew.token);
+  assert.equal(crewTry[0].code, 'unauthorised');
+  assert.equal((await api('GET', '/v1/store/2045/snapshot', undefined, crew.token)).body.state.tasks.walks[`L1:${day}`].done !== null, true);
+  // On a walk: every device of the store sees it, and it is not deleted from under the walk.
+  assert.equal((await raw('GET', `/v1/store/2045/photo/${p1}`, crew.token)).status, 200);
+  const held = await raw('DELETE', `/v1/store/2045/photo/${p1}`, mgr.token);
+  assert.equal(held.status, 409); assert.match((await held.json()).message, /walk of Opening checks/);
+  // Retaken: the new answer lists the new photo; the old one is no longer the store's to see, and goes.
+  assert.equal((await send([ev('task.walk.item', { ...W, item: 'a1' }, { a: 'y', photo: p3 })]))[0].ok, true);
+  assert.equal((await raw('GET', `/v1/store/2045/photo/${p1}`, crew.token)).status, 404);
+  assert.equal((await raw('DELETE', `/v1/store/2045/photo/${p1}`, crew.token)).status, 200, 'it was on a walk once: any device of the store may drop it');
+  // The nightly sweep keeps a walk's photos 90 days after the walk; one also on an open issue stays with the issue.
+  const stub = await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('2045')));
+  assert.equal(await stub.sweepPhotos(Date.now() + 2 * 86400e3), 0, 'both still listed');
+  assert.equal(await stub.sweepPhotos(Date.now() + 92 * 86400e3), 1, 'the walk’s own photo');
+  assert.equal((await raw('GET', `/v1/store/2045/photo/${p3}`, mgr.token)).status, 404);
+  assert.equal((await raw('GET', `/v1/store/2045/photo/${p2}`, crew.token)).status, 200, 'the issue keeps it');
 });
 
 test('retention: a bay older than 60 days leaves the live state at the nightly run and stays in History from the archive', async () => {
