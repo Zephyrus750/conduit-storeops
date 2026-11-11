@@ -10,7 +10,7 @@
 // its own page, the booklet by sub-department, and colours that print
 // without "Background graphics" (print-color-adjust).
 
-import { $, ic, esc, vh, sub, toast, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtDate } from '../ui.js';
+import { $, ic, esc, vh, sub, toast, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtDate, empty } from '../ui.js';
 import { mountMap, mapFloors, mapInfo, hasMap, segmentId } from '../map.js';
 import { printSheet } from '../print.js';
 import { issuePin } from './maintenance.js';
@@ -104,7 +104,7 @@ export default {
   id: 'printmap', title: tx('Print map'), icon: 'print',
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
-    if (!hasMap()) return vh(tx('Print map'), sub(tx('No map published yet')), '', 'print') + `<div class="card"><p class="lbl">${tx("The owner publishes the store's map from the console. Then the composer prints it.")}</p></div>`;
+    if (!hasMap()) return vh(tx('Print map'), sub(tx('No map published yet')), '', 'print') + `<div class="card">${empty(tx("The owner publishes the store's map from the console. Then the composer prints it."), { icon: 'map' })}</div>`;
     const ar = area();
     return vh(tx('Print map'), sub(o.orient === 'portrait' ? tx('{paper} portrait', { paper: o.paper }) : tx('{paper} landscape', { paper: o.paper }), mapInfo()?.version ? tx('map {version}', { version: esc(mapInfo().version) }) : ''), `<button class="btn primary" data-act="pm-print">${ic('print')}${tx('Print · Save as PDF')}</button>`, 'print') +
       `<div class="pm-wrap"><div class="pm-room"><div class="pm-paper" style="aspect-ratio:${ar.w} / ${ar.h}"><div id="pmtitle"></div><div class="pm-stage" id="pmstage" style="flex:${ar.mapH} 1 0"></div><div id="pmlegend"></div></div></div><div class="sidecol pm-side" id="pmside">${panel()}</div></div>`;

@@ -1,7 +1,7 @@
 // Stocktake: a session is opened on the desktop, shelves advance pending →
 // counted → verified, phase counting | final. Reads store.get('stocktake').
 
-import { $, ic, esc, vh, sub, prog, status, DEPT_COLOUR, DEPT_NAME, today, fmtTime, toast, mbig } from '../ui.js';
+import { $, ic, esc, vh, sub, prog, status, DEPT_COLOUR, DEPT_NAME, today, fmtTime, toast, mbig, empty } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, groupsFor, oneShelf, segmentId, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
 import { openScanner } from '../scan.js';
 import { printSheet, tick, table, section, signoff } from '../print.js';
@@ -119,7 +119,7 @@ export default {
   },
 };
 function sidebar(map, m) {
-  if (!m.sess) return `<div class="card"><div class="ch"><h3>${tx('Session')}</h3>${status('info', tx('Closed'))}</div><p class="lbl">${tx('Start a session to begin counting. Phones count once it is open; verification stays on the desktop.')}</p><div class="pfoot" style="margin-top:14px"><button class="btn primary" data-act="start">${ic('plus')}${tx('Start a session')}</button></div></div>`;
+  if (!m.sess) return `<div class="card"><div class="ch"><h3>${tx('Session')}</h3>${status('info', tx('Closed'))}</div>${empty(tx('Start a session to begin counting. Phones count once it is open; verification stays on the desktop.'), { icon: 'm-stocktake', act: `<button class="btn primary" data-act="start">${ic('plus')}${tx('Start a session')}</button>` })}</div>`;
   const total = shelfTotal(map);
   return `<div class="card"><div class="ch"><h3>${tx('Session {id}', { id: esc(m.id) })}</h3>${status(m.sess.phase === 'final' ? 'info' : 'warn', m.sess.phase === 'final' ? tx('Final check') : tx('Counting'))}</div>${shelfScanField(tx('Scan or type a shelf label to count it'))}<div class="big">${m.done}<span class="of">/</span>${total}</div><div class="lbl">${tx('Shelves counted · {v} verified · {p} counting', { v: m.counts.verified, p: m.counts.pending })}</div>${prog(m.done / Math.max(1, total) * 100)}` +
     `<div class="pfoot" style="flex-direction:column;gap:8px;margin-top:14px"><button class="btn" data-act="phase">${ic('refresh')}${m.sess.phase === 'final' ? tx('Back to counting') : tx('Flip to Final Check')}</button><button class="btn" data-act="report">${ic('print')}${tx('Report and missing list')}</button><button class="btn" data-act="csv">${ic('download')}${tx('Export CSV')}</button><button class="btn" data-act="verify-all">${ic('checks')}${tx('Bulk verify all counted')}</button><button class="btn" style="color:var(--red)" data-act="end">${tx('End session')}</button></div></div>` +
@@ -127,7 +127,7 @@ function sidebar(map, m) {
 }
 const pct = (n, total) => total ? Math.min(100, Math.round(n / total * 100)) : 0;
 function mobileBar(map, m, total) {
-  if (!m.sess) return `<div class="mv-mh">${ic('m-stocktake')}<b>${tx('Stocktake')}</b></div><div class="mv-hint">${tx('No stocktake session is open yet. Counting starts here when one opens.')}</div>`;
+  if (!m.sess) return `<div class="mv-mh">${ic('m-stocktake')}<b>${tx('Stocktake')}</b></div>${empty(tx('No stocktake session is open yet. Counting starts here when one opens.'), { sm: true, icon: 'm-stocktake' })}`;
   // Still to count (Refresh's old still-due list): shelves not started or
   // mid-count, by department then name, a tap away on the map.
   const left = shelfStates(map, m).filter(r => r.state === 'not started' || r.state === 'pending');
@@ -165,7 +165,7 @@ function missingCard(map, m) {
   const left = shelfStates(map, m).filter(r => r.state === 'not started' || r.state === 'pending'), by = {};
   for (const r of left) (by[r.dept] ||= []).push(r);
   const depts = Object.keys(by);
-  if (!depts.length) return `<div class="card"><div class="ch"><h3>${tx('Missing shelves')}</h3>${status('good', tx('None'))}</div><p class="lbl">${tx('Every shelf is counted.')}</p></div>`;
+  if (!depts.length) return `<div class="card"><div class="ch"><h3>${tx('Missing shelves')}</h3>${status('good', tx('None'))}</div>${empty(tx('Every shelf is counted.'), { sm: true, icon: 'check' })}</div>`;
   const open = missingDept && by[missingDept] ? missingDept : null;
   return `<div class="card st-miss"><div class="ch"><h3>${tx('Missing shelves')}</h3><span class="cs-dim">${tx('{n} to count · tap one to find it', { n: left.length })}</span></div><div class="chips">${depts.map(d => `<span class="chip${open === d ? ' on' : ''}" data-act="missing-dept" data-dept="${d}"><span class="sw" style="background:${DEPT_COLOUR[d]}"></span>${d.toUpperCase()} ${by[d].length}</span>`).join('')}</div>` +
     (open ? `<div class="st-miss-list">${by[open].map(r => `<button class="st-loc${r.state === 'pending' ? ' counting' : ''}" data-act="locate" data-shelf="${esc(r.id)}" title="${r.state === 'pending' ? tx('Counting') : tx('Not started')}">${esc(r.id)}</button>`).join('')}</div>` : `<p class="lbl" style="margin-top:8px">${tx('Pick a department to list its shelves.')}</p>`) + `</div>`;

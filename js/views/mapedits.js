@@ -5,7 +5,7 @@
 // the separate map editor and publishes a new version. A manager can
 // decline one here. Reads store.get('mapedits').
 
-import { $, ic, esc, vh, sub, status, timePassed, toast, mhead, mbig, mghost, mfoot, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, status, timePassed, toast, mhead, mbig, mghost, mfoot, mgr, empty } from '../ui.js';
 import { mountMap, mapbar, crumbx, bindMapChrome, tipLine, canonCode } from '../map.js';
 import { tx, txn } from '../i18n.js';
 import { askText } from '../sheet.js';
@@ -97,11 +97,11 @@ function item(x, m) {
 }
 function sidebar(m) {
   const pills = [['open', tx('Waiting {n}', { n: m.open.length })], ['done', tx('Resolved {n}', { n: m.all.length - m.open.length })]];
-  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map(x => item(x, m)).join('') || `<div class="li" style="color:var(--dim)">${filter === 'open' ? tx('Nothing waiting. Tap a shelf to suggest an edit.') : tx('Nothing resolved yet.')}</div>`}</div></div>`;
+  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map(x => item(x, m)).join('') || empty(filter === 'open' ? tx('Nothing waiting. Tap a shelf to suggest an edit.') : tx('Nothing resolved yet.'), { sm: true, icon: filter === 'open' ? 'edit' : 'check' })}</div></div>`;
   return (draft ? form(false) : `<div class="card me-card"><p class="lbl" style="margin:0">${tx('Tap a shelf on the map to suggest a new name or flag something wrong. The map only changes when the owner publishes a new version.')}</p><div style="margin-top:10px"><span class="btn sm" data-act="new">${ic('edit')}${tx('Type a shelf code instead')}</span></div></div>`) + list;
 }
 function phone(m) {
   if (draft) return form(true);
   return mhead(tx('Suggest map edits'), tx('{n} waiting for the owner', { n: m.open.length })) + `<div class="mv-tiles"><button class="mv-tile hot" data-act="new"><span class="ti">${ic('edit')}</span><span class="tx"><b>${tx('Suggest an edit')}</b><span>${tx('Rename a shelf or flag a problem')}</span></span><span></span>${ic('chev')}</button></div>` +
-    `<div class="mv-sub">${tx('Waiting')}</div><div class="list me-plist">${m.open.slice(0, 20).map(x => item(x, m)).join('') || `<div class="li cs-dim">${tx('Nothing waiting.')}</div>`}</div>`;
+    `<div class="mv-sub">${tx('Waiting')}</div><div class="list me-plist">${m.open.slice(0, 20).map(x => item(x, m)).join('') || empty(tx('Nothing waiting.'), { sm: true, icon: 'check' })}</div>`;
 }

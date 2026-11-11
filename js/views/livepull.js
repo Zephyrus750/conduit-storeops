@@ -24,7 +24,7 @@
 
 import { searchBarcode, barcodeCard } from '../barcodesearch.js';
 import { recallFor, recallFlag, recallTagFor } from '../recallflag.js';
-import { ic, esc, vh, sub, toast, dep, DEPTS_DEFAULT, DEPT_NAME, today, productImg, fmtDay } from '../ui.js';
+import { ic, esc, vh, sub, toast, dep, DEPTS_DEFAULT, DEPT_NAME, today, productImg, fmtDay, empty, mhead } from '../ui.js';
 import { hasArea, ensureArea } from '../unlock.js';
 import { openScanner } from '../scan.js';
 import { sx } from '../map.js';
@@ -105,8 +105,8 @@ function home(ctx) {
       `<span class="lp-dim">${countsLine(c)}</span><span class="lp-bar"><i style="width:${pct}%"></i></span>` +
       `<div class="lp-acts"><button class="btn sm primary" data-act="lp-join" data-sid="${esc(s.id)}" data-part="req">${ic('barcode')}${tx('Ask for stock')}</button><button class="btn sm" data-act="lp-join" data-sid="${esc(s.id)}" data-part="pull">${ic('box')}${tx('Pull stock')}</button></div></div>`;
   };
-  return `<div class="lp-body">` + `<div class="mv-head"><div><h2>${tx('Live pull')}</h2><span>${tx('Ask the stockroom for stock from the floor')}</span></div></div>` +
-    (open.length ? `<div class="card lp-card"><span class="lbl">${txn(open.length, 'Running now · {n}', 'Running now · {n}')}</span>${open.map(row).join('')}</div>` : `<div class="card lp-card"><b>${tx('No session is running')}</b><p class="lp-dim">${tx('Start one for your department: one person scans on the floor, the others pull in the stockroom.')}</p></div>`) +
+  return `<div class="lp-body">` + mhead(tx('Live pull'), tx('Ask the stockroom for stock from the floor')) +
+    (open.length ? `<div class="card lp-card"><span class="lbl">${txn(open.length, 'Running now · {n}', 'Running now · {n}')}</span>${open.map(row).join('')}</div>` : `<div class="card lp-card">${empty(`<b>${tx('No session is running')}</b><br>${tx('Start one for your department: one person scans on the floor, the others pull in the stockroom.')}`, { icon: 'packages' })}</div>`) +
     `<button class="mv-big" data-act="lp-new">${ic('plus')}${tx('Start a session')}</button>` +
     (past.length ? `<div class="card lp-card"><span class="lbl">${tx('Earlier · listed for 7 days')}</span>${past.map(s => `<button class="lp-hist" data-act="lp-past" data-sid="${esc(s.id)}">${s.dept ? dep(s.dept) : ''}<span><b>${esc(s.name)}</b><small>${esc(fmtDay(s.at))} · ${countsLine(sessionCounts(s))}</small></span>${ic('arrow')}</button>`).join('')}</div>` : '') +
     `<p class="lp-dim">${tx('Each session keeps its own list, so two departments can work at the same time.')}</p></div>`;
@@ -116,7 +116,7 @@ function home(ctx) {
 function newForm(ctx) {
   const f = (st.form ||= { name: '', dept: '', part: 'req', shelves: false });
   const coded = DEPTS_DEFAULT.filter(d => ['home', 'clothing', 'kids'].includes(d.group));
-  return `<div class="lp-body"><div class="mv-head"><div><h2>${tx('Start a session')}</h2><span>${tx('Live pull · listed for 7 days')}</span></div></div>` +
+  return `<div class="lp-body">${mhead(tx('Start a session'), tx('Live pull · listed for 7 days'))}` +
     `<div class="card lp-card"><label class="lp-fl" for="lp-name">${tx('Session name')}</label><input class="ad-in" id="lp-name" data-field="lp-name" maxlength="60" value="${esc(f.name)}" placeholder="${tx('Toys, aisles 16 to 18')}">` +
     `<span class="lp-fl">${tx('Department')}</span><div class="lp-depts">${coded.map(d => `<button class="lp-dept${f.dept === d.id ? ' on' : ''}" data-act="lp-dept" data-dept="${d.id}" aria-pressed="${f.dept === d.id}">${dep(d.id)}${esc(d.name)}</button>`).join('')}</div>` +
     `<span class="lp-fl">${tx('Your part')}</span><div class="seg lp-seg"><button class="${f.part === 'req' ? 'on' : ''}" data-act="lp-part" data-part="req" aria-pressed="${f.part === 'req'}">${tx('Requester')}</button><button class="${f.part === 'pull' ? 'on' : ''}" data-act="lp-part" data-part="pull" aria-pressed="${f.part === 'pull'}">${ic('lock')}${tx('Puller')}</button></div>` +
@@ -136,7 +136,7 @@ function zones(ctx, ses) {
   for (const z of sel) if (z !== 'all' && !opts.some(o => o.key === z)) opts.push({ key: z, label: tx('Bays {range}', { range: z.replace('-', '–') }) });
   const opt = o => { const by = o.key === 'all' ? '' : takenBy(o.key); return `<button class="lp-opt${sel.has(o.key) ? ' on' : ''}" data-act="lp-zone" data-z="${esc(o.key)}" role="checkbox" aria-checked="${sel.has(o.key)}"><i></i><span><b>${esc(o.label)}</b><small>${o.sub || (by ? tx('{who} has these', { who: by }) : tx('No one else yet'))}</small></span>${by ? `<em>${esc(by)}</em>` : ''}</button>`; };
   const summary = sel.has('all') || !sel.size ? tx('every bay') : [...sel].map(z => z.replace('-', '–')).join(', ');
-  return `<div class="lp-body"><div class="mv-head"><div><h2>${tx('Your bays')}</h2><span>${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)} · ${tx('puller')}</span></div></div>` +
+  return `<div class="lp-body">${mhead(tx('Your bays'), `${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)} · ${tx('puller')}`)}` +
     `<div class="card lp-card"><span class="lbl">${tx('Which bays does this phone pull?')}</span>${opts.map(opt).join('')}${opt({ key: 'all', label: tx('Every bay'), sub: tx('See every request, whoever has the bay') })}` +
     `<div class="lp-range"><input class="ad-in mono" data-field="lp-from" inputmode="numeric" placeholder="${tx('From')}" aria-label="${tx('First bay')}"><span>–</span><input class="ad-in mono" data-field="lp-to" inputmode="numeric" placeholder="${tx('To')}" aria-label="${tx('Last bay')}"><button class="btn sm" data-act="lp-addrange">${ic('plus')}${tx('Add')}</button></div>` +
     `<p class="lp-dim">${ranges.length ? tx('Ranges come from Settings › Departments. Bays that no puller has picked show on every puller’s phone, so nothing is missed.') : tx('No department ranges are set in Settings › Departments: type a range, or pull every bay.')}</p></div>` +
@@ -150,7 +150,7 @@ const alertsCard = () => `<div class="card lp-card"><span class="lbl">${tx('Aler
 // ── The requester: scan, how many, send ─────────────────────────────────
 function requester(ctx, ses, repaint) {
   const c = sessionCounts(ses), p = sessionPeople(ses), f = st.find, day = today();
-  const head = `<div class="lp-top">${ses.dept ? dep(ses.dept) : ''}<div><b>${esc(ses.name)}</b><span><i class="lp-live"></i>${p.pull ? txn(p.pull, '{n} puller in the stockroom', '{n} pullers in the stockroom') : tx('No puller has joined yet')}</span></div></div>`;
+  const head = mhead(`${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)}`, `<i class="lp-live"></i>${p.pull ? txn(p.pull, '{n} puller in the stockroom', '{n} pullers in the stockroom') : tx('No puller has joined yet')}`);
   const scan = `<form class="lp-scan" data-form="lp-find"><input class="ad-in mono" data-field="lp-code" inputmode="numeric" autocomplete="off" enterkeyhint="search" placeholder="${tx('Scan or type a keycode')}" aria-label="${tx('Keycode or barcode')}"><button type="button" class="lp-cam" data-act="lp-cam" aria-label="${tx('Scan with the camera')}">${ic('camera')}</button></form>` +
     (ses.shelves ? `<button class="lp-shelf" data-act="lp-cam-shelf">${ic('pin')}${st.shelf ? tx('For shelf {shelf}', { shelf: `<b>${esc(st.shelf)}</b>` }) : tx('Scan the shelf you are filling')}</button>` : '');
   const dup = f?.state === 'found' || f?.state === 'seen' ? liveLines(ses).find(l => l.kc === f.kc && l.st === 'todo') : null;
@@ -174,7 +174,7 @@ function requester(ctx, ses, repaint) {
   const lastCage = ses.cages?.[ses.cage - 1];
   const sheet = sheetHtml(`<div class="sx-h">${ic('listcheck')}${esc(ses.name)}${c.todo ? `<span class="n">${tx('{n} waiting', { n: c.todo })}</span>` : ''}</div><p class="sx-sub">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers'), tx('since {time}', { time: hm(ses.at) }), ses.shelves ? tx('shelf scan on') : tx('shelf scan off')].join(' · ')}</p>` +
     (lastCage ? sx.sec(tx('Cage {n}', { n: ses.cage - 1 }), sx.rows([sx.row('cage', txn(lastCage.lines, 'On its way: {n} line', 'On its way: {n} lines'), tx('sent down {time}', { time: hm(lastCage.at) }), tx('Coming'), 'acc')])) : '') +
-    sx.sec(tx('Requests'), lines.length ? sx.rows(lines.slice(0, 60).map(l => { const [t, tone] = stateText(l); return sx.row('box', `${esc(nameOf(ctx, l, repaint))} · ${esc(qtyText(l))}`, `<span class="mono">${esc(l.kc)}</span> · ${esc(baysText(l))} · ${hm(l.at)}`, t, tone); })) : `<p class="sx-sub">${tx('Nothing asked for yet.')}</p>`, tx('newest first')) +
+    sx.sec(tx('Requests'), lines.length ? sx.rows(lines.slice(0, 60).map(l => { const [t, tone] = stateText(l); return sx.row('box', `${esc(nameOf(ctx, l, repaint))} · ${esc(qtyText(l))}`, `<span class="mono">${esc(l.kc)}</span> · ${esc(baysText(l))} · ${hm(l.at)}`, t, tone); })) : empty(tx('Nothing asked for yet.'), { sm: true, icon: 'box' }), tx('newest first')) +
     sx.acts([sx.btn('phone', prefs().pullAnswerBuzz !== false ? tx('Buzz when answered: on') : tx('Buzz when answered: off'), 'data-act="lp-abuzz"'), sx.btn('x', tx('Leave session'), 'data-act="lp-leave"'), sx.btn('check', tx('End session'), 'data-act="lp-end"')]));
   return `<div class="lp-body">${head}${scan}${behindTray()}${card}${showPad ? pad : ''}</div>${sheet}${strip('listcheck', esc(ses.name), countsLine(c), c.todo || '')}`;
 }
@@ -234,10 +234,10 @@ function puller(ctx, ses, repaint) {
     sx.sec(tx('Pullers'), sx.rows(pullers.map(([d, p]) => { const n = all.filter(l => l.st === 'todo' && lineInZone(l, p.bays)).length; return sx.row('phone', esc(who(d)), esc(zoneText(p.bays)), n ? tx('{n} to pull', { n }) : tx('All marked off'), n ? 'acc' : 'ok'); })), tx('the bays each phone covers')) +
     sx.acts([sx.btn('cage', tx('Send cage {n} down', { n: ses.cage }), 'data-act="lp-cage"', true), sx.btn('pin', tx('Change my bays'), 'data-act="lp-zones"'), sx.btn('phone', prefs().pullBuzz !== false ? tx('Buzz: on') : tx('Buzz: off'), 'data-act="lp-buzz"'), sx.btn('x', tx('Leave session'), 'data-act="lp-leave"')]));
   const tab = (id, label) => `<button class="${st.tab === id ? 'on' : ''}" data-act="lp-tab" data-tab="${id}" aria-pressed="${st.tab === id}">${label}</button>`;
-  return `<div class="lp-body"><div class="lp-top">${ses.dept ? dep(ses.dept) : ''}<div><b>${esc(ses.name)}</b><span><i class="lp-live"></i>${tx('Your bays: {bays}', { bays: esc(zoneText(zone)) })}</span></div></div>` +
+  return `<div class="lp-body">${mhead(`${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)}`, `<i class="lp-live"></i>${tx('Your bays: {bays}', { bays: esc(zoneText(zone)) })}`)}` +
     `<div class="lp-tabs">${tab('todo', tx('To pull {n}', { n: todo }))}${tab('done', tx('Marked off {n}', { n: done }))}${tab('all', tx('All {n}', { n: mineL.length }))}</div>` +
     `<div class="seg lp-seg"><button class="${st.order === 'time' ? 'on' : ''}" data-act="lp-order" data-o="time">${tx('As they come in')}</button><button class="${st.order === 'bay' ? 'on' : ''}" data-act="lp-order" data-o="bay">${tx('By bay')}</button></div>` +
-    (shown.length ? shown.map(line).join('') : `<p class="lp-dim lp-empty">${st.tab === 'todo' ? tx('Nothing to pull in your bays. New requests buzz this phone.') : tx('Nothing here yet.')}</p>`) +
+    (shown.length ? shown.map(line).join('') : empty(st.tab === 'todo' ? tx('Nothing to pull in your bays. New requests buzz this phone.') : tx('Nothing here yet.'), { sm: true, icon: st.tab === 'todo' ? 'check' : 'box' })) +
     (others.length && st.tab !== 'todo' ? `<div class="lp-ln done lp-others">${ic('phone')}<span class="lp-pn"><b>${tx('Other pullers’ bays')}</b><small>${txn(others.length, '{n} request', '{n} requests')} · ${oTodo ? tx('{n} waiting', { n: oTodo }) : tx('all marked off')}</small></span></div>` : '') +
     `</div>${st.short ? shortSheet(ctx, ses, repaint) : ''}${sheet}${strip('box', esc(zoneText(zone)), tx('cage {n} · {done} of {all} marked off', { n: ses.cage, done: cageDone, all: cageLines.length }), todo || '')}`;
 }
@@ -259,21 +259,21 @@ function cage(ctx, ses, repaint) {
   if (ses.shelves) going.sort((a, b) => String(a.shelf || '~').localeCompare(String(b.shelf || '~'), 'en', { numeric: true }) || String(a.at).localeCompare(String(b.at)));
   else going.sort((a, b) => String(a.at).localeCompare(String(b.at)));
   const units = going.reduce((n, l) => n + gotOf(l), 0), short = going.filter(l => l.st === 'short').length, left = liveLines(ses).filter(l => l.st === 'todo').length;
-  return `<div class="lp-body"><div class="mv-head"><div><h2>${tx('Send cage {n} down', { n: ses.cage })}</h2><span>${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)}</span></div></div>` +
+  return `<div class="lp-body">${mhead(tx('Send cage {n} down', { n: ses.cage }), `${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)}`)}` +
     (going.length || gone.length ? `<div class="lp-sum"><div><b>${going.length}</b><span>${tx('lines')}</span></div><div><b>${units}</b><span>${tx('units')}</span></div><div><b class="${short ? 'warn' : ''}">${short}</b><span>${tx('short')}</span></div></div>` +
-      `<div class="card lp-card"><span class="lbl">${ses.shelves ? tx('The requester’s copy, in shelf order') : tx('In the cage, in the order asked')}</span>${going.map(l => `<div class="lp-cr"><span><b>${esc(nameOf(ctx, l, repaint))}</b><small>${l.shelf ? esc(l.shelf) + ' · ' : ''}${esc(baysText(l))}</small></span>${l.st === 'short' ? `<span class="lp-pill warn">${tx('{got} of {asked}', { got: gotOf(l), asked: l.qty })}</span>` : `<b class="mono">× ${l.qty === 'all' && !l.got ? tx('all') : gotOf(l)}</b>`}</div>`).join('') || `<p class="lp-dim">${tx('Nothing pulled for this cage yet.')}</p>`}</div>` +
+      `<div class="card lp-card"><span class="lbl">${ses.shelves ? tx('The requester’s copy, in shelf order') : tx('In the cage, in the order asked')}</span>${going.map(l => `<div class="lp-cr"><span><b>${esc(nameOf(ctx, l, repaint))}</b><small>${l.shelf ? esc(l.shelf) + ' · ' : ''}${esc(baysText(l))}</small></span>${l.st === 'short' ? `<span class="lp-pill warn">${tx('{got} of {asked}', { got: gotOf(l), asked: l.qty })}</span>` : `<b class="mono">× ${l.qty === 'all' && !l.got ? tx('all') : gotOf(l)}</b>`}</div>`).join('') || empty(tx('Nothing pulled for this cage yet.'), { sm: true, icon: 'cage' })}</div>` +
       (gone.length ? `<div class="lp-ans warn">${ic('x')}<span><b>${tx('Not coming')}</b>${gone.map(l => esc(nameOf(ctx, l, repaint))).join(', ')}</span></div>` : '') +
       `<label class="lp-fl" for="lp-tag">${tx('Cage tag (optional)')}</label><div class="lp-scan"><input class="ad-in mono" id="lp-tag" data-field="lp-tag" value="${esc(st.tag)}" autocomplete="off" placeholder="BSN1240417"><button type="button" class="lp-cam" data-act="lp-cam-tag" aria-label="${tx('Scan the cage tag')}">${ic('camera')}</button></div>` +
       `<button class="mv-big" data-act="lp-cage-send">${ic('cage')}${tx('Send cage {n} down', { n: ses.cage })}</button>` +
       (left ? `<p class="lp-dim">${txn(left, '{n} line still to pull starts cage {next}.', '{n} lines still to pull start cage {next}.', { next: ses.cage + 1 })}</p>` : '')
-      : `<div class="card lp-card"><b>${tx('Nothing marked off yet')}</b><p class="lp-dim">${tx('Mark requests off, then send the cage down.')}</p></div>`) +
+      : `<div class="card lp-card">${empty(`<b>${tx('Nothing marked off yet')}</b><br>${tx('Mark requests off, then send the cage down.')}`, { icon: 'cage' })}</div>`) +
     `<button class="mv-ghost" data-act="lp-home">${tx('Back')}</button></div>`;
 }
 // A session kept for the week: every line, and asking again for what did not come.
 function past(ctx, ses, repaint) {
   const c = sessionCounts(ses), p = sessionPeople(ses), lines = liveLines(ses).sort((a, b) => String(a.at).localeCompare(String(b.at)));
   const again = lines.filter(l => l.st === 'short' || l.st === 'gone');
-  return `<div class="lp-body"><div class="mv-head"><div><h2>${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)}</h2><span>${esc(fmtDay(ses.at))} ${hm(ses.at)}–${hm(ses.closedAt)}</span></div></div>` +
+  return `<div class="lp-body">${mhead(`${ses.dept ? dep(ses.dept) : ''} ${esc(ses.name)}`, `${esc(fmtDay(ses.at))} ${hm(ses.at)}–${hm(ses.closedAt)}`)}` +
     `<p class="lp-dim">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers')].join(' · ')}</p>` +
     `<div class="lp-sum four"><div><b>${c.asked}</b><span>${tx('asked')}</span></div><div><b class="ok">${c.pulled}</b><span>${tx('pulled')}</span></div><div><b class="warn">${c.short}</b><span>${tx('short')}</span></div><div><b class="bad">${c.gone}</b><span>${tx('not there')}</span></div></div>` +
     `<div class="mv-rows">${lines.map(l => { const [t, tone] = stateText(l); return `<div class="mv-row ${tone === 'ok' ? 'ok' : tone ? 'warn' : ''}"><span class="a">${hm(l.at)}</span><span class="b">${esc(nameOf(ctx, l, repaint))} · ${esc(qtyText(l))}<br><small class="mono">${esc(l.kc)} · ${esc(baysText(l))}</small></span><span class="c">${t}</span></div>`; }).join('')}</div>` +
@@ -299,16 +299,16 @@ function desk(ctx) {
   };
   const hd = (label, list) => `<div class="lp-dhd"><b>${label}</b><span>${txn(list.length, '{n} session', '{n} sessions')}</span></div>`;
   const head = vh(tx('Live pull'), sub(tx('What the floor asked for and what the stockroom pulled'), tx('today’s sessions and the last 7 days')), '', 'packages');
-  if (!ses) return head + `<div class="card"><b>${tx('No sessions this week')}</b><p class="lbl">${tx('Start one from a phone: Live pull is in More, on the Floor and in the Stockroom.')}</p></div>`;
+  if (!ses) return head + `<div class="card">${empty(`<b>${tx('No sessions this week')}</b><br>${tx('Start one from a phone: Live pull is in More, on the Floor and in the Stockroom.')}`, { icon: 'packages' })}</div>`;
   const c = sessionCounts(ses), p = sessionPeople(ses), who = pullerNames(ctx, ses), lines = liveLines(ses);
   const groups = [...Object.entries(ses.cages || {}).map(([n, cg]) => [tx('Cage {n} · sent down {time} · {lines}', { n, time: hm(cg.at), lines: txn(cg.lines, '{n} line', '{n} lines') }) + (cg.tag ? ` · ${esc(cg.tag)}` : ''), lines.filter(l => l.cage === Number(n))]), [tx('Still to send · cage {n}', { n: ses.cage }), lines.filter(l => l.cage == null)]].filter(([, ls]) => ls.length);
   const zones = Object.entries(ses.people || {}).filter(([, x]) => x.part === 'pull').map(([d, x]) => `${who(d) === tx('This phone') ? tx('this PC') : who(d)} ${zoneText(x.bays)}`);
-  return head + `<div class="lp-desk"><div class="card lp-dside">${hd(tx('Running now'), open)}${open.map(item).join('') || `<p class="lbl">${tx('None')}</p>`}${hd(tx('Earlier · listed for 7 days'), earlier)}${earlier.map(item).join('') || `<p class="lbl">${tx('None')}</p>`}</div>` +
+  return head + `<div class="lp-desk"><div class="card lp-dside">${hd(tx('Running now'), open)}${open.map(item).join('') || empty(tx('None'), { sm: true })}${hd(tx('Earlier · listed for 7 days'), earlier)}${earlier.map(item).join('') || empty(tx('None'), { sm: true })}</div>` +
     `<div class="card lp-dmain"><div class="lp-dh">${ses.dept ? dep(ses.dept) : ''}<h2>${esc(ses.name)}</h2>${ses.closedAt ? `<span class="chip">${tx('Ended {time}', { time: hm(ses.closedAt) })}</span>` : `<button class="btn sm" data-act="lp-end" data-sid="${esc(ses.id)}">${tx('End session')}</button>`}</div>` +
     `<p class="lbl">${[txn(p.req, '{n} requester', '{n} requesters'), txn(p.pull, '{n} puller', '{n} pullers') + (zones.length ? ` (${esc(zones.join('; '))})` : ''), tx('since {time}', { time: hm(ses.at) }), ses.shelves ? tx('shelf scan on') : tx('shelf scan off')].join(' · ')}</p>` +
     `<div class="lp-kpis"><div><b>${c.asked}</b><span>${tx('Asked')}</span></div><div><b class="ok">${c.pulled}</b><span>${tx('Pulled')}</span></div><div><b>${c.todo}</b><span>${tx('Waiting')}</span></div><div><b class="warn">${c.short}</b><span>${tx('Short')}</span></div><div><b class="bad">${c.gone}</b><span>${tx('Not there')}</span></div></div>` +
     (lines.length ? `<div class="mfx-scroll"><table class="wb-t lp-t"><thead><tr><th>${tx('Asked')}</th><th>${tx('Item')}</th><th>${tx('Keycode')}</th><th>${tx('Bays')}</th><th class="num">${tx('Asked')}</th><th class="num">${tx('Pulled')}</th><th>${tx('Puller')}</th><th>${tx('State')}</th></tr></thead><tbody>` +
-      groups.map(([label, ls]) => `<tr class="lp-cg"><td colspan="8">${label}</td></tr>` + ls.sort((a, b) => String(a.at).localeCompare(String(b.at))).map(l => { const [t, tone] = stateText(l); return `<tr><td>${hm(l.at)}</td><td>${esc(nameOf(ctx, l, repaint))}${l.shelf ? ` <small class="lbl">${tx('for {shelf}', { shelf: esc(l.shelf) })}</small>` : ''}</td><td class="mono"><span data-kccard="${esc(l.kc)}">${esc(l.kc)}</span></td><td class="mono">${esc(l.got && Object.keys(l.got).length > 1 ? Object.entries(l.got).map(([b, n]) => `${b} (${n})`).join(' + ') : l.bays.join(', '))}${l.seen ? ' ' + seenTag(l, l.bays[0]) : ''}</td><td class="num">${esc(qtyText(l))}</td><td class="num">${l.st === 'todo' ? '–' : l.st === 'gone' ? 0 : l.qty === 'all' && !l.got ? tx('all') : gotOf(l)}</td><td>${esc(l.doneBy ? who(l.doneBy) || tx('another puller') : '')}</td><td><span class="lp-pill ${tone}">${t}</span></td></tr>`; }).join('')).join('') + `</tbody></table></div>` : `<p class="lbl">${tx('Nothing asked for yet.')}</p>`) + `</div></div>`;
+      groups.map(([label, ls]) => `<tr class="lp-cg"><td colspan="8">${label}</td></tr>` + ls.sort((a, b) => String(a.at).localeCompare(String(b.at))).map(l => { const [t, tone] = stateText(l); return `<tr><td>${hm(l.at)}</td><td>${esc(nameOf(ctx, l, repaint))}${l.shelf ? ` <small class="lbl">${tx('for {shelf}', { shelf: esc(l.shelf) })}</small>` : ''}</td><td class="mono"><span data-kccard="${esc(l.kc)}">${esc(l.kc)}</span></td><td class="mono">${esc(l.got && Object.keys(l.got).length > 1 ? Object.entries(l.got).map(([b, n]) => `${b} (${n})`).join(' + ') : l.bays.join(', '))}${l.seen ? ' ' + seenTag(l, l.bays[0]) : ''}</td><td class="num">${esc(qtyText(l))}</td><td class="num">${l.st === 'todo' ? '–' : l.st === 'gone' ? 0 : l.qty === 'all' && !l.got ? tx('all') : gotOf(l)}</td><td>${esc(l.doneBy ? who(l.doneBy) || tx('another puller') : '')}</td><td><span class="lp-pill ${tone}">${t}</span></td></tr>`; }).join('')).join('') + `</tbody></table></div>` : empty(tx('Nothing asked for yet.'), { icon: 'box' })) + `</div></div>`;
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────

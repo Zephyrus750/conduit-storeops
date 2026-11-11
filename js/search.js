@@ -12,7 +12,7 @@
 
 import { despatchDay } from '../shared/manifeststats.js';
 import { recallTag } from './recallflag.js';
-import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip, fmtDate, fmtDay, today } from './ui.js';
+import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip, fmtDate, fmtDay, today, empty } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
 import { VIEWS } from './registry.js';
 import { findRecords } from '../shared/finder.js';
@@ -164,7 +164,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const microBlock = microRows.length ? grp(tx('Micro-departments'), microRows.length) + microRows.join('') : '';
       // A department code (H1) or micro number (038) before shelves that merely start with it.
       out += k === 'shelf' ? shelfBlock + deptBlock + microBlock : deptBlock + microBlock + shelfBlock;
-      if (!out) out = `<div class="ohint">${tx('Nothing matches “{q}”. Try a shelf like A16 S2, a department like Kitchen or a micro-department like 038.', { q: esc(Q) })}</div>`;
+      if (!out) out = empty(tx('Nothing matches “{q}”. Try a shelf like A16 S2, a department like Kitchen or a micro-department like 038.', { q: esc(Q) }), { sm: true, icon: 'search' });
     }
     body.innerHTML = out; sel = 0; markSel(); prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide');
   }
@@ -204,22 +204,22 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
         if (near.length) out += grp(tx('Did you mean'), near.length) + near.slice(0, 5).map(n => orow('p', 'barcode', `${esc(n.keycode)} · ${esc(n.name)}`, tx('digit {n} differs', { n: n.position + 1 }), tx('Search'), `data-q="${esc(n.keycode)}"`)).join('');
       }
       if (item === undefined) out += `<div class="ohint">${tx('The product catalogue did not answer. Try again in a moment.')}</div>`;
-      else if (!item) out += `<div class="ohint">${L?.name ? tx('No product found for {code} (the stockroom knew it as “{name}”). Check the keycode, or search kmart.com.au.', { code: esc(Q), name: esc(L.name) }) : tx('No product found for {code}. Check the keycode, or search kmart.com.au.', { code: esc(Q) })}</div>` + orow('p', 'search', tx('Search kmart.com.au for {code}', { code: esc(Q) }), tx('Opens the site search in a new tab'), tx('Open'), `data-url="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(Q)}"`);
+      else if (!item) out += empty(L?.name ? tx('No product found for {code} (the stockroom knew it as “{name}”). Check the keycode, or search kmart.com.au.', { code: esc(Q), name: esc(L.name) }) : tx('No product found for {code}. Check the keycode, or search kmart.com.au.', { code: esc(Q) }), { sm: true, icon: 'search' }) + orow('p', 'search', tx('Search kmart.com.au for {code}', { code: esc(Q) }), tx('Opens the site search in a new tab'), tx('Open'), `data-url="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(Q)}"`);
       if (L && (L.visits.length || L.adjustments.length || L.cages.length)) {
         out += grp(tx('In the stockroom')) + orow('s', 'm-srhistory', [txn(L.bays.length, 'Backfilled at {n} bay', 'Backfilled at {n} bays'), L.adjustments.length ? txn(L.adjustments.length, '{n} SOH adjustment', '{n} SOH adjustments') : '', L.cages.length ? txn(L.cages.length, 'in {n} cage', 'in {n} cages') : ''].filter(Boolean).join(' · '), tx('Last seen {date}', { date: esc(L.last || '') }), tx('History'), `data-view="srhistory" data-q="${esc(Q)}"`);
         preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || tx('Not in the catalogue'))}</div></div>`) + lifeHtml(L);
-      } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}${tx('Where it’s been')}</div><div class="ohint">${tx('No backfill, adjustment or cage record for this code yet.')}</div></div>`;
+      } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}${tx('Where it’s been')}</div>${empty(tx('No backfill, adjustment or cage record for this code yet.'), { sm: true, icon: 'm-srhistory' })}</div>`;
       // A consolidation label first when it is one (9 digits can be either: a
       // keycode since late 2026, or a pallet label); cages, loads and off-site
       // pallets holding a keycode after the product.
       const fr = found(Q), rr = recordsHtml(fr, Q); out = Q.length >= 10 || (Q.length === 9 && fr.consols?.length) ? rr + out : out + rr;
     } else if (k === 'cons') {
       const r = found(Q);
-      out += recordsHtml(r, Q) || `<div class="ohint">${tx('No consolidation ending {code} on a manifest or truck this device holds. The Back dock code opens its records.', { code: esc(Q.slice(-9)) })}</div>`;
+      out += recordsHtml(r, Q) || empty(tx('No consolidation ending {code} on a manifest or truck this device holds. The Back dock code opens its records.', { code: esc(Q.slice(-9)) }), { sm: true, icon: 'search' });
     } else if (k === 'shelf' || k === 'loc') {
       const { hits, rows, bay, modOf, sel, id, suffix } = shelfRows(U);
       if (bay && hits.length) out += `<div class="ohint">${tx('Bay {bay} is on {shelf}.', { bay: esc(U), shelf: esc(hits[0].id) + (modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : '') })}</div>`;
-      out += grp(tx('Shelves'), hits.length) + (rows.join('') || `<div class="ohint">${hasMap() ? (suffix ? tx('No shelf called {code} on this map.', { code: esc(id) }) : tx('No shelf starts with {code} on this map.', { code: esc(id) })) : tx('No map is published for this store yet.')}</div>`);
+      out += grp(tx('Shelves'), hits.length) + (rows.join('') || empty(hasMap() ? (suffix ? tx('No shelf called {code} on this map.', { code: esc(id) }) : tx('No shelf starts with {code} on this map.', { code: esc(id) })) : tx('No map is published for this store yet.'), { sm: true, icon: hasMap() ? 'search' : 'map' }));
       out += recordsHtml(found(Q), Q);
       if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>${modOf(hits[0]) || hits[0].segments === 1 ? tx('Shelf {code}', { code: esc(hits[0].id) + (modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : '') }) : tx('Run {code}', { code: esc(hits[0].id) })}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}${tx('Show on the store map')}</a>`;
     } else {
@@ -233,7 +233,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       if (ts.length) out += grp(tx('Tools'), ts.length) + ts.map(t => orow('', t.icon, hi(t.title, Q), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
       if (rs.length) out += grp(tx('Resources'), rs.length) + rs.slice(0, 6).map(e => resRow(e, Q)).join('') + (rs.length > 6 ? orow('', 'library', tx('All {n} resources matching “{q}”', { n: rs.length, q: esc(Q) }), tx('Open Resources with this search'), tx('Open'), `data-view="resources" data-q="${esc(Q)}"`) : '');
       const recs = recordsHtml(found(Q), Q); out += recs;
-      if (!depts.length && !ts.length && !rs.length && !recs && !as.length) out += `<div class="ohint">${tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) })}</div>`;
+      if (!depts.length && !ts.length && !rs.length && !recs && !as.length) out += empty(tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) }), { sm: true, icon: 'search' });
     }
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();
@@ -304,7 +304,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       .map(m => brow(m.sd, hi(m.code, Q), hi(m.name, Q), `data-view="map" data-micro="${esc(m.id)}"`));
     // A department code (H1) or micro number (038) before shelves that merely start with it.
     const all = k === 'shelf' ? [...rows, ...depts, ...micros] : [...depts, ...micros, ...rows];
-    return all.length ? all.slice(0, BAR_MAX).join('') : `<div class="sdd-note">${tx('Nothing matches “{q}”. Try a shelf like A16 S2, a department or a micro-dept like 038.', { q: esc(Q) })}</div>`;
+    return all.length ? all.slice(0, BAR_MAX).join('') : empty(tx('Nothing matches “{q}”. Try a shelf like A16 S2, a department or a micro-dept like 038.', { q: esc(Q) }), { sm: true, icon: 'search' });
   }
   function bar(wrap, ok = () => true) {
     const bi = $('input', wrap); if (!bi) return { show() {}, hide() {} };

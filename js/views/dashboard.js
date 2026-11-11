@@ -8,7 +8,7 @@
 
 import { focusDone } from '../../shared/reducers/floor.js';
 import { addDays, retailPeriod } from '../../shared/time.js';
-import { ic, esc, vh, greeting, today, fmtDay, fmtDate, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip } from '../ui.js';
+import { ic, esc, vh, greeting, today, fmtDay, fmtDate, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip, empty } from '../ui.js';
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
@@ -301,7 +301,7 @@ function dockCard(ctx, r) {
   }
   const rows = (dock.history || []).filter(h => inRange(h.id.slice(0, 10), r)), cartons = rows.reduce((n, h) => n + (h.cartons || 0), 0);
   const trucks = period === 'week' ? txn(rows.length, 'truck this week', 'trucks this week') : txn(rows.length, 'truck in {month}', 'trucks in {month}', { month: esc(r.label) });
-  return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3><a class="open" data-go="rhistory">${tx('History')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${rows.length}</span><span class="d">${trucks}</span></div><div class="hl">${txn(cartons, '{n} carton decanted', '{n} cartons decanted', { n: cartons.toLocaleString() })}</div><div class="rows">${rows.slice(-4).reverse().map(h => `<div class="row">${esc(h.id.slice(5, 10))} · T${esc(truckNo(h.id))}<b>${h.teamRate ? tx('{n} ctn · {time} · {rate}/h', { n: h.cartons, time: fmtMins(h.clearMins || 0), rate: h.teamRate }) : tx('{n} ctn · {time}', { n: h.cartons, time: fmtMins(h.clearMins || 0) })}</b></div>`).join('') || `<div class="row">${tx('No trucks cleared yet')}<b>—</b></div>`}</div></div>`;
+  return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3><a class="open" data-go="rhistory">${tx('History')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${rows.length}</span><span class="d">${trucks}</span></div><div class="hl">${txn(cartons, '{n} carton decanted', '{n} cartons decanted', { n: cartons.toLocaleString() })}</div><div class="rows">${rows.slice(-4).reverse().map(h => `<div class="row">${esc(h.id.slice(5, 10))} · T${esc(truckNo(h.id))}<b>${h.teamRate ? tx('{n} ctn · {time} · {rate}/h', { n: h.cartons, time: fmtMins(h.clearMins || 0), rate: h.teamRate }) : tx('{n} ctn · {time}', { n: h.cartons, time: fmtMins(h.clearMins || 0) })}</b></div>`).join('') || empty(tx('No trucks cleared yet'), { sm: true, icon: 'truck' })}</div></div>`;
 }
 function maintCard(ctx, r) {
   const all = Object.values(ctx.store.get('issues')).filter(i => !i.removed), open = all.filter(i => i.status !== 'completed');
@@ -310,7 +310,7 @@ function maintCard(ctx, r) {
   const hs = period === 'today' ? tx('open · {logged} logged today · {waiting} done, waiting for sign-off', { logged, waiting }) : period === 'week' ? tx('open · {logged} logged this week · {waiting} done, waiting for sign-off', { logged, waiting }) : tx('open · {logged} logged in {month} · {waiting} done, waiting for sign-off', { logged, waiting, month: esc(r.label) });
   const cls = open.length ? 'todo' : 'done';
   return `<div class="card kpi mt ${cls}"><div class="kh">${ic('tool')}<h3>${tx('Maintenance')}</h3>${doneTag(cls, tx('All clear'))}<a class="open" data-go="maintenance">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${open.length}</span><span class="hs">${hs}</span></div>` +
-    `<div class="rows">${list.map(i => `<div class="row"><span class="l"><span class="pt" style="background:${i.status === 'open' ? '#DC2626' : '#D97706'}"></span><span><b>${esc(i.title)}</b><span class="where">${esc(i.loc || '')}${i.dept ? ' ' + dep(i.dept) : ''} · ${timePassed(i.created)}</span></span></span><span class="r"><span class="pri p${Math.min(3, (i.sev ?? 1) + 1)}" title="${tx('{sev} severity', { sev: SEV[i.sev ?? 1][0] })}"><i></i><i></i><i></i></span>${chip(i.status === 'open' ? OPEN : tx('Done, to check'), i.status === 'open' ? 'warn' : 'info')}</span></div>`).join('') || `<div class="row">${tx('Nothing open')}<b>✓</b></div>`}</div></div>`;
+    `<div class="rows">${list.map(i => `<div class="row"><span class="l"><span class="pt" style="background:${i.status === 'open' ? '#DC2626' : '#D97706'}"></span><span><b>${esc(i.title)}</b><span class="where">${esc(i.loc || '')}${i.dept ? ' ' + dep(i.dept) : ''} · ${timePassed(i.created)}</span></span></span><span class="r"><span class="pri p${Math.min(3, (i.sev ?? 1) + 1)}" title="${tx('{sev} severity', { sev: SEV[i.sev ?? 1][0] })}"><i></i><i></i><i></i></span>${chip(i.status === 'open' ? OPEN : tx('Done, to check'), i.status === 'open' ? 'warn' : 'info')}</span></div>`).join('') || empty(tx('Nothing open'), { sm: true, icon: 'check' })}</div></div>`;
 }
 
 // ── the operations register ────────────────────────────────────────────

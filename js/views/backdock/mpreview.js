@@ -27,7 +27,7 @@
 //
 //   previewManifest(ctx, file, { attachTo, dating }) → { manNo, consols, totalCartons, attached } | null (cancelled)
 
-import { ic, esc, toast, today, dep, fmtDay } from '../../ui.js';
+import { ic, esc, toast, today, dep, fmtDay, empty } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { openSheet } from '../../sheet.js';
 import { readManifestFile, publishParsed, attachManifest, manifestIndex, microDept, microName, truckNo, STD_MINS_PER_CARTON, todayKey } from './common.js';
@@ -217,10 +217,10 @@ export async function previewManifest(ctx, file, { attachTo = null, dating = fal
     function viewHtml() {
       const v = pick.view;
       if (v === 'groups') return groupsHtml();
-      if (v === 'products' && !prodsOf().length) return `<p class="lbl">${tx('The manifest carries no lines.')}</p>`;
+      if (v === 'products' && !prodsOf().length) return empty(tx('The manifest carries no lines.'), { sm: true, icon: 'box' });
       const rows = rowsOf(v), shown = all[v] ? rows : rows.slice(0, LIST_CAP), cols = HEADS[v].length, dmax = Math.max(1, ...microsOf().map(r => r.cartons));
       return `<div class="mp-tw"><table class="wb-t mp-t mp-${v}"><thead><tr>${HEADS[v].map(h => th(v, h)).join('')}</tr></thead><tbody>` +
-        (shown.map(r => rowHtml(v, r, dmax, cols)).join('') || `<tr><td colspan="${cols}" class="cs-dim">${tx('Nothing matches.')}</td></tr>`) +
+        (shown.map(r => rowHtml(v, r, dmax, cols)).join('') || `<tr><td colspan="${cols}">${empty(tx('Nothing matches.'), { sm: true, icon: 'search' })}</td></tr>`) +
         `</tbody></table></div>${rows.length > shown.length ? more(v, rows.length, 'more') : ''}`;
     }
     const barHtml = () => {

@@ -16,7 +16,7 @@
 // paint on the store map: one department, or the whole of it as heat.
 
 import { despatchDay as isoDespatch } from '../../../shared/manifeststats.js';
-import { $, ic, esc, vh, sub, toast, dep, mhead, fmtDate, today, fmtDay } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, dep, mhead, fmtDate, today, fmtDay, empty } from '../../ui.js';
 import { mountMap, bindMapChrome, hasMap } from '../../map.js';
 import { ensureNames, nameOf, kcCopy, itemName } from '../stockroom/common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
@@ -214,7 +214,7 @@ function explorer(ctx, e, doc) {
     `<div class="mfd-acts">${attachedTo ? `<span class="status good">${tx('On Truck {no}', { no: esc(truckNo(attachedTo)) })}</span>` : trucks.length ? `<select class="ad-in" data-field="truck">${trucks.map(t => `<option value="${esc(t.id)}">${tx('Truck {no} · {status}', { no: esc(truckNo(t.id)), status: esc(TRUCK_ST[t.status] || t.status) })}</option>`).join('')}</select><button class="btn primary sm" data-act="attach">${ic('truck')}${tx('Attach to truck')}</button>` : `<span class="cs-dim">${tx('No truck on the board to attach to')}</span>`}<button class="btn sm" data-act="remove" style="margin-left:auto">${ic('trash')}${tx('Remove')}</button></div>` +
     `<div class="mfx-bar"><div class="seg">${[['consols', tx('Consols')], ['products', tx('Products')], ['depts', tx('Departments')]].map(([k, l]) => `<button class="${st.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="search">${ic('search')}<input data-field="q" value="${esc(st.q)}" placeholder="${tx('find consol, keycode, product, dept…')}" aria-label="${tx('Search this manifest')}"></div>${st.tab === 'depts' ? `<button class="btn sm${st.paint?.mode === 'heat' ? ' on' : ''}" data-act="heat">${ic('layers')}${tx('Whole load heat')}</button>` : ''}<span class="mfd-hit">${st.tab === 'depts' ? txn(list.length, '{n} department', '{n} departments') : st.tab === 'products' ? txn(list.length, '{n} product', '{n} products') : txn(list.length, '{n} consol', '{n} consols')}</span></div>` +
     `<div class="mfx-legend">${['landed', 'active', 'done', 'carried', 'none'].map(s => `${sq(s)}${SQ_NAME[s]}`).join('')}</div>` +
-    `<div class="mfx-scroll"><table class="mfx-t"><thead><tr>${th}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="cs-dim">${tx('Nothing matches.')}</td></tr>`}</tbody></table></div>${more ? `<div class="cs-dim" style="margin-top:8px">${more}</div>` : ''}${st.tab === 'depts' ? paintNotes(ctx, list.map(r => r.dept)) : ''}</div>`;
+    `<div class="mfx-scroll"><table class="mfx-t"><thead><tr>${th}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}">${empty(tx('Nothing matches.'), { sm: true, icon: 'search' })}</td></tr>`}</tbody></table></div>${more ? `<div class="cs-dim" style="margin-top:8px">${more}</div>` : ''}${st.tab === 'depts' ? paintNotes(ctx, list.map(r => r.dept)) : ''}</div>`;
 }
 
 // The day and truck a report came on, for one no truck here carried: set
@@ -244,7 +244,7 @@ function whereBar(ctx, e) {
 }
 
 function detail(ctx, list) {
-  if (!st.open) return `<div class="card mfd"><div class="ch"><h3>${tx('Pick a manifest')}</h3></div><p class="lbl">${tx("Open one from the list to explore its consols, products and departments, or publish today's report.")}</p></div>`;
+  if (!st.open) return `<div class="card mfd"><div class="ch"><h3>${tx('Pick a manifest')}</h3></div>${empty(tx("Open one from the list to explore its consols, products and departments, or publish today's report."), { icon: 'm-manifests' })}</div>`;
   if (st.error) return `<div class="card mfd"><div class="ch"><h3>${esc(st.open)}</h3></div><p class="lbl">${esc(st.error)}</p></div>`;
   const doc = st.docFor === st.open ? st.doc : null;
   if (!doc) return `<div class="card mfd"><div class="ch"><h3>${esc(st.open)}</h3></div><div class="ohint">${tx('Loading the report…')}</div></div>`;
@@ -271,7 +271,7 @@ export default {
       return `<div class="pt3 mfx-wk">${esc(g.title)}${g.key === 'free' ? '' : `<small class="mfx-rp">${esc(retailPeriod(g.key))}</small>`}<span class="cs-dim">${txn(g.xs.length, '{n} manifest', '{n} manifests')}${g.key === 'free' ? '' : ` · ${tx('{n} ctn', { n: ctn.toLocaleString() })}`}</span>${dateable ? `<button class="btn sm" data-act="date-all" title="${tx('Suggest each one’s day and truck from the Planner and the despatch dates, to check and save')}">${ic('cal')}${tx('Give them days')}</button>` : ''}</div>` + g.xs.map(listRow).join('');
     }).join('');
     const loadRows = loads.length ? `<div class="pt3 mfx-wk">${tx('Other loads')}</div>` + loads.map(l => `<div class="mfl-row tk${l.id === st.load ? ' on' : ''}" data-act="open-load" data-id="${esc(l.id)}">${dayTile(l.recvDate || l.date)}<span class="mfl-main"><span class="mfl-top"><b>${esc(l.label)}</b>${statusPill(l.status)}</span><span class="mfl-fig"><span>${txn(l.pallets.length, '<b>{n}</b> pallet', '<b>{n}</b> pallets')}</span><span>${txn(loadUnits(l), '<b>{n}</b> unit', '<b>{n}</b> units', { n: loadUnits(l).toLocaleString('en-AU') })}</span></span></span>${ic('chev')}</div>`).join('') : '';
-    const side = `<div class="card mfl">${list.length ? rowsHtml : `<div class="ohint">${tx("Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it.")}</div>`}${loadRows}</div>`;
+    const side = `<div class="card mfl">${list.length ? rowsHtml : empty(tx("Nothing published yet. Publish today's DC Manifest Report (the .xls from the email) and the dock can verify pallets against it."), { icon: 'm-manifests' })}${loadRows}</div>`;
     return head + stagePanel(ctx, st.stage) + `<div class="mgrid mf-grid">${side}${open ? loadPane(ctx, open) : detail(ctx, list)}</div>`;
   },
   mount(ctx, root) {

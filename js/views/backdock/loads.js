@@ -8,7 +8,7 @@
 // The register and loads are store events (inventory.*), so every desk sees
 // them, as before.
 
-import { $, $$, ic, esc, toast, fmtDate, today, dep } from '../../ui.js';
+import { $, $$, ic, esc, toast, fmtDate, today, dep, empty } from '../../ui.js';
 import { MICRO } from '../../data/micros.js';
 import { loadXLSX } from './common.js';
 import { parseManifestSheets } from '../../../shared/manifest.js';
@@ -43,7 +43,7 @@ export const paintLabel = p => !p ? tx('pick a department or Whole load') : p.mo
 const paintKey = p => p?.mode === 'heat' ? `<span>${tx('light')}</span>${HEAT.map(c => `<i style="background:${c}"></i>`).join('')}<span>${tx('heavy')}</span>` : p ? `<span><i class="hi"></i>${tx('assigned shelves')}</span><span><i class="sub"></i>${tx('the department’s sub-department (no shelves assigned)')}</span>` : '';
 export function mapCard(paint, hasMap) {
   return `<div class="card inv-mapcard"><div class="ch"><h3>${tx('On the map')}</h3><span class="cs-dim" id="invPaint">${paintLabel(paint)}</span><button class="btn sm" data-act="unpaint"${paint ? '' : ' hidden'}>${tx('Clear')}</button></div>` +
-    (hasMap ? `<div class="mapbox"><div class="mapstage" id="mapstage"></div></div><div class="inv-heatkey">${paintKey(paint)}</div>` : `<p class="lbl">${tx('No map published.')}</p>`) + `</div>`;
+    (hasMap ? `<div class="mapbox"><div class="mapstage" id="mapstage"></div></div><div class="inv-heatkey">${paintKey(paint)}</div>` : empty(tx('No map published.'), { sm: true, icon: 'map' })) + `</div>`;
 }
 // A new paint shown in place: the map, the card's label and key, and which
 // department row and heat button are on. No re-render, so the page keeps its scroll.

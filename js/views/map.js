@@ -1,7 +1,7 @@
 // Store map and the selected shelf card. Also the phone's Home: the map with
 // the selected shelf beneath it.
 
-import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_GROUPS, weekId, fmtTime, fmtDate, cycleId, toast } from '../ui.js';
+import { $, ic, esc, vh, sub, dep, DEPT_NAME, DEPT_GROUPS, weekId, fmtTime, fmtDate, cycleId, toast, empty } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, shelfDetail, canonCode, runText, runSubs, setStrip, sx } from '../map.js';
 import { markerSymbol } from '../../shared/maprender.js';
 import { openShare } from '../share.js';
@@ -34,7 +34,7 @@ function shelfFacts(ctx, map, id) {
   return { segs, refreshed, last, age, micros, checked, plan, counted };
 }
 export function selCard(ctx, map, id) {
-  if (!id) return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>${tx('Selected shelf')}</h3></div><p class="lbl">${tx('Click a shelf on the map.')}</p></div>`;
+  if (!id) return `<div class="card selshelf" id="selshelf"><div class="ch"><h3>${tx('Selected shelf')}</h3></div>${empty(tx('Click a shelf on the map.'), { sm: true, icon: 'pin' })}</div>`;
   const g = map.groups(id)[0]; if (!g) return '';
   const info = map.shelfInfo(g), f = shelfFacts(ctx, map, id), cd = map.code(id), d = shelfDetail(map, id);
   const row = (k, v) => `<div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;color:var(--dim)">${k}<b style="color:var(--ink)">${v}</b></div>`;

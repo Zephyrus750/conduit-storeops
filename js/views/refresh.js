@@ -1,7 +1,7 @@
 // Location refresh: mark segments refreshed this week, focus departments,
 // plan paint. Reads store.get('refresh'); writes refresh.* events.
 
-import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig, today, mgr } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, card, prog, dep, DEPT_COLOUR, DEPT_NAME, weekId, fmtTime, toast, mbig, today, mgr, empty } from '../ui.js';
 import { focusDone } from '../../shared/reducers/floor.js';
 import { retailPeriod } from '../../shared/time.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, segmentId, tipLine, canonCode, groupsFor, oneShelf, shelfScanField, bindShelfScan, keepScanFocus, setStrip, sx } from '../map.js';
@@ -146,7 +146,7 @@ export default {
   id: 'refresh', title: tx('Location refresh'), icon: 'm-refresh',
   desktop(ctx) {
     const m = model(ctx);
-    return vh(tx('Location refresh'), sub(tx('This week'), m.week, `${m.counted} / ${TARGET}`), `<button class="btn" data-act="scan-shelf">${ic('camera')}${tx('Scan shelves')}</button><button class="btn" data-act="reset-week">${ic('refresh')}${tx('Reset week')}</button>`, 'm-refresh') +
+    return vh(tx('Location refresh'), sub(`${m.counted} / ${TARGET}`, tx('This week'), m.week), `<button class="btn" data-act="scan-shelf">${ic('camera')}${tx('Scan shelves')}</button><button class="btn" data-act="reset-week">${ic('refresh')}${tx('Reset week')}</button>`, 'm-refresh') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
       `<div class="mapleg">${crumbx(tx('Location refresh'), ctx.storeNo)}<span><i style="background:#16A34A"></i>${tx('Refreshed this week ({n})', { n: m.done })}</span><span><i style="background:transparent;border:2px solid #D24E0E"></i>${tx('Focus department, not yet')}</span><span><i style="background:#CBD0D8"></i>${tx('Not in focus')}</span></div></div>` +
       `<div class="sidecol fill" id="rfside"></div></div>`;
@@ -249,7 +249,7 @@ function mobileBar(map, m, mgr = null) {
   const focus = sx.rows(fc.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${esc(f.d)}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) ;
   const outside = m.done - m.counted;
   return `<div class="sx">${head}${row}` +
-    sx.sec(tx('This week’s focus'), fc.length ? focus : sx.rows([sx.row('asterisk', tx('No focus departments set this week'), mgr ? tx('Set them below') : tx('Managers set them on a store PC'))]), fc.length ? tx('set by managers') : '') +
+    sx.sec(tx('This week’s focus'), fc.length ? focus : empty(`<b>${tx('No focus departments set this week')}</b><br>${mgr ? tx('Set them below') : tx('Managers set them on a store PC')}`, { sm: true, icon: 'asterisk' }), fc.length ? tx('set by managers') : '') +
     (mgr ? mgrSections(m, mgr) : '') +
     sx.sec(tx('Completed this week'), doneByDept(map, m), m.focus.length && outside > 0 ? txn(m.done, '{n} shelf · {out} outside the focus', '{n} shelves · {out} outside the focus', { out: outside }) : txn(m.done, '{n} shelf', '{n} shelves')) + '</div>';
 }
@@ -259,15 +259,15 @@ function mgrSections(m, mgr) {
   const focus = `<div class="rf-focus-set">${FOCUS_DEPTS.map(d => `<button type="button" class="rf-fchip${m.focus.includes(d) ? ' on' : ''}" data-act="focus" data-dept="${d}" aria-pressed="${m.focus.includes(d)}">${dep(d)}<span>${esc(DEPT_NAME[d] || d.toUpperCase())}</span></button>`).join('')}</div>`;
   const depts = deptCounts(m), phones = byPhone(m, mgr.device);
   return sx.sec(tx('Set this week’s focus'), focus, mgr.mark) +
-    sx.sec(tx('Progress by department'), depts.length ? sx.rows(depts.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${esc(f.d)}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) : sx.rows([sx.row('map', tx('No map is published for this store yet.'))]), mgr.mark) +
-    sx.sec(tx('Refreshes by phone'), phones.length ? sx.rows(phones.map(p => sx.row('phone', p.d === mgr.device ? tx('This phone') : tx('Phone {id}', { id: esc(String(p.d).slice(-4).toUpperCase()) }), tx('{n} today', { n: p.today }), txn(p.week, '{n} shelf', '{n} shelves')))) : sx.rows([sx.row('check', tx('Nothing refreshed yet this week'))]), mgr.mark);
+    sx.sec(tx('Progress by department'), depts.length ? sx.rows(depts.map(f => `<div class="sx-r" data-act="zoom-dept" data-dept="${esc(f.d)}">${dep(f.d)}<div class="k"><b>${esc(DEPT_NAME[f.d] || f.d.toUpperCase())}</b></div>${sx.bar(f.done, f.total, DEPT_COLOUR[f.d])}<span class="v">${f.done}/${f.total}</span></div>`)) : empty(tx('No map is published for this store yet.'), { sm: true, icon: 'map' }), mgr.mark) +
+    sx.sec(tx('Refreshes by phone'), phones.length ? sx.rows(phones.map(p => sx.row('phone', p.d === mgr.device ? tx('This phone') : tx('Phone {id}', { id: esc(String(p.d).slice(-4).toUpperCase()) }), tx('{n} today', { n: p.today }), txn(p.week, '{n} shelf', '{n} shelves')))) : empty(tx('Nothing refreshed yet this week'), { sm: true, icon: 'check' }), mgr.mark);
 }
 // The phone's completed list: each department with its badge, name and
 // count, and its shelves as chips (a tap finds one); the first eight, then
 // "+N more" opens the rest.
 function doneByDept(map, m) {
   const groups = refreshedByDept(map, m);
-  if (!groups.length) return sx.rows([sx.row('check', tx('Nothing refreshed yet this week'), tx('Scan or tap a shelf once it is done'))]);
+  if (!groups.length) return empty(`<b>${tx('Nothing refreshed yet this week')}</b><br>${tx('Scan or tap a shelf once it is done')}`, { sm: true, icon: 'm-refresh' });
   return `<div class="rf-mdone">${groups.map(([d, segs]) => { const open = openDept === d, shown = open ? segs : segs.slice(0, 8);
     return `<div class="rf-mgrp"><div class="rf-mgh">${DEPT_NAME[d] ? dep(d) : ''}<b>${esc(DEPT_NAME[d] || (d === 'other' ? tx('Other') : d.toUpperCase()))}</b><span class="n">${segs.length}</span></div><div class="rf-chips">${shown.map(seg => `<button class="rf-seg" type="button" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}</button>`).join('')}${segs.length > shown.length ? `<button class="rf-seg more" type="button" data-act="open-dept" data-dept="${esc(d)}">${tx('+{n} more', { n: segs.length - shown.length })}</button>` : open && segs.length > 8 ? `<button class="rf-seg more" type="button" data-act="open-dept" data-dept="">${tx('Show less')}</button>` : ''}</div></div>`; }).join('')}</div>`;
 }
@@ -280,7 +280,7 @@ function deptOfSeg(map, segId) { for (const g of map.segments()) if (segmentId(g
 
 function groupsHtml(map, m) {
   const groups = refreshedByDept(map, m);
-  if (!groups.length) return `<div class="cs-dim" style="font-size:12px;padding:6px 0">${tx('No shelves refreshed yet this week.')}</div>`;
+  if (!groups.length) return empty(tx('No shelves refreshed yet this week.'), { sm: true, icon: 'm-refresh' });
   return `<div class="rf-groups">${groups.map(([d, segs]) => { const open = openDept === d, shown = open ? segs : segs.slice(0, 12);
     return `<div class="rf-grp"><div class="rf-gh">${dep(d)}<b>${esc(DEPT_NAME[d] || d.toUpperCase())}</b><span class="n">${segs.length}</span><button class="rf-reset" data-act="reset-dept" data-dept="${esc(d)}" title="${tx('Reset {dept} for this week', { dept: esc(d.toUpperCase()) })}">${tx('Reset')}</button></div><div class="rf-chips">${shown.map(seg => `<button class="rf-seg" data-act="locate" data-seg="${esc(seg)}">${esc(seg)}${m.plan[seg] ? `<i style="background:${esc(m.plan[seg])}"></i>` : ''}</button>`).join('')}${segs.length > shown.length ? `<button class="rf-seg more" data-act="open-dept" data-dept="${esc(d)}">${tx('+{n} more', { n: segs.length - shown.length })}</button>` : open && segs.length > 12 ? `<button class="rf-seg more" data-act="open-dept" data-dept="">${tx('Show less')}</button>` : ''}</div></div>`; }).join('')}</div>`;
 }

@@ -6,7 +6,7 @@
 // worked at the people's rates). The manager confirms; manifest.linkLate
 // records how each link was made.
 
-import { esc, toast } from '../../ui.js';
+import { esc, toast, empty } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { pallets, truckNo } from './common.js';
 import { segWorkedMs } from '../../../shared/reducers/backdock.js';
@@ -54,7 +54,7 @@ export function linkSheet(t, rates) {
     `<p class="lbl">${txn(nUn, '{n} pallet landed without a match · {c} consols on manifest {no}. Links are recorded as linked late, with how each match was made.', '{n} pallets landed without a match · {c} consols on manifest {no}. Links are recorded as linked late, with how each match was made.', { c: (t.manifest?.consols || []).length, no: esc(t.manifest?.manNo || '') })}</p>` +
     (auto.length ? `<div class="pt3">${tx('Matched automatically')} · ${txn(auto.length, '{n} pallet', '{n} pallets')}</div><div class="list">${auto.map(a => `<div class="li"><span class="loc">${esc(a.ref)}</span><span class="nm">→ ${a.ids.map(esc).join(' + ')} <small class="cs-dim">(${a.basis === 'scan' ? tx('scanned code') : tx('carton count')})</small></span></div>`).join('')}</div>` : '') +
     (decide.length ? `<div class="pt3">${tx('Needs a decision · pick the consol (ranked by carton fit)')}</div><div class="list">${decide.map(d => `<div class="li ll-row"><span class="loc">${esc(d.p.ref)}</span><span class="nm">${d.n == null ? tx('no count') : d.est ? tx('≈{n} ctn est. from {time} worked', { n: d.n, time: fm(d.mins) }) : tx('{n} ctn', { n: d.n })}${d.people.length ? ' · ' + d.people.map(esc).join(', ') : ''}</span><select class="bdr-in" data-ll="${esc(d.p.ref)}"><option value="">${tx('— leave unlinked —')}</option>${d.cands.map(c => `<option value="${esc(c.id)}"${(st.picks[d.p.ref] ?? d.pre) === c.id ? ' selected' : ''}>${esc(c.id)} — ${tx('{n} ctn', { n: c.cartons })} ${c.d === 0 ? tx('(exact)') : c.d < 1e9 ? `(±${c.d})` : ''} · ${esc(c.dept || '')}</option>`).join('')}</select></div>`).join('')}</div>` : '') +
-    (!auto.length && !decide.length ? `<p class="lbl">${tx('Every landed pallet is already linked.')}</p>` : `<div class="acts2" style="display:flex;gap:8px;margin-top:10px"><button class="btn primary sm" data-act="ll-apply">${tx('Apply links')}</button><button class="btn sm" data-act="ll-close">${tx('Cancel')}</button></div>`) + '</div>';
+    (!auto.length && !decide.length ? empty(tx('Every landed pallet is already linked.'), { sm: true, icon: 'check' }) : `<div class="acts2" style="display:flex;gap:8px;margin-top:10px"><button class="btn primary sm" data-act="ll-apply">${tx('Apply links')}</button><button class="btn sm" data-act="ll-close">${tx('Cancel')}</button></div>`) + '</div>';
 }
 export const linkPick = (ref, id) => { st.picks[ref] = id; };
 export async function applyLinks(ctx, t, rates) {

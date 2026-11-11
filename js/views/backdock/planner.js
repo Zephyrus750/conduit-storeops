@@ -4,7 +4,7 @@
 // and manifest. Ported from Vector's backdock-planner to the showcase's
 // week grid with a side editor.
 
-import { $, ic, esc, vh, sub, toast, mhead, fmtDate, fmtDay, today as storeToday } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, mhead, fmtDate, fmtDay, today as storeToday, empty } from '../../ui.js';
 import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, fmtHM, slotRef, attachManifest } from './common.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
@@ -89,7 +89,7 @@ function landingHtml(ctx, plan, dock, k, today) {
   }).join('');
 }
 function editor(ctx, plan, dock) {
-  if (!st.sel) return `<div class="card"><div class="ch"><h3>${tx('Pick a truck')}</h3></div><p class="lbl">${tx('Click a slot to set its ETA, manifest and decant team, or + Truck on a day to plan one.')}</p></div>`;
+  if (!st.sel) return `<div class="card"><div class="ch"><h3>${tx('Pick a truck')}</h3></div>${empty(tx('Click a slot to set its ETA, manifest and decant team, or + Truck on a day to plan one.'), { icon: 'truck' })}</div>`;
   const [date, n] = [st.sel.slice(0, 10), Number(st.sel.slice(11))], slot = plan.days[date]?.slots?.[n] || { eta: '', note: '', team: [], manifest: null }, t = truckOf(dock, date, n);
   const d = new Date(date + 'T00:00:00'), idx = manifestIndex(dock), rt = plan.days[date]?.routes?.[n];
   if (rt) {
@@ -130,7 +130,7 @@ function manSelect(idx, plan, dock, cur, forTruck) {
 function usedManifests(plan) { const s = new Set(); for (const day of Object.values(plan.days || {})) { for (const sl of Object.values(day.slots || {})) if (sl.manifest?.manNo) s.add(sl.manifest.manNo); for (const r of Object.values(day.routes || {})) if (routeManifest(r)) s.add(routeManifest(r)); } return s; }
 function waiting(ctx, plan, dock) {
   const used = usedManifests(plan), list = manifestIndex(dock).filter(m => !m.truck && !used.has(m.manNo));
-  return `<div class="card"><div class="ch"><h3>${tx('Manifests without a slot')}</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${tx('{consols} consols · {cartons} cartons', { consols: m.consols, cartons: m.totalCartons })}${m.despatch ? ' · ' + tx('despatch {date}', { date: esc(m.despatch) }) : ''}</span><button class="btn sm${st.pick?.man === m.manNo && st.pick.day === 0 ? ' primary' : ''}" data-act="stage-next" data-day="0" data-man="${esc(m.manNo)}" title="${tx("Choose today's truck for it")}">${tx('Today')}</button><button class="btn sm${st.pick?.man === m.manNo && st.pick.day === 1 ? ' primary' : ''}" data-act="stage-next" data-day="1" data-man="${esc(m.manNo)}" title="${tx("Choose tomorrow's truck for it: for a report that came in the day before")}">${tx('Tomorrow')}</button></div>${st.pick?.man === m.manNo ? truckChooser(plan, dock, st.pick) : ''}`).join('')}</div>` : `<p class="lbl">${tx('Every published manifest has a truck.')}</p>`}<p class="lbl">${tx('Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.')}</p></div>`;
+  return `<div class="card"><div class="ch"><h3>${tx('Manifests without a slot')}</h3><span class="cs-dim">${list.length}</span></div>${list.length ? `<div class="list">${list.map(m => `<div class="li"><span class="loc">${esc(m.manNo)}</span><span class="nm">${tx('{consols} consols · {cartons} cartons', { consols: m.consols, cartons: m.totalCartons })}${m.despatch ? ' · ' + tx('despatch {date}', { date: esc(m.despatch) }) : ''}</span><button class="btn sm${st.pick?.man === m.manNo && st.pick.day === 0 ? ' primary' : ''}" data-act="stage-next" data-day="0" data-man="${esc(m.manNo)}" title="${tx("Choose today's truck for it")}">${tx('Today')}</button><button class="btn sm${st.pick?.man === m.manNo && st.pick.day === 1 ? ' primary' : ''}" data-act="stage-next" data-day="1" data-man="${esc(m.manNo)}" title="${tx("Choose tomorrow's truck for it: for a report that came in the day before")}">${tx('Tomorrow')}</button></div>${st.pick?.man === m.manNo ? truckChooser(plan, dock, st.pick) : ''}`).join('')}</div>` : empty(tx('Every published manifest has a truck.'), { sm: true, icon: 'check' })}<p class="lbl">${tx('Manifests arrive the night before. Staging one here means the truck knows what is coming the moment it lands.')}</p></div>`;
 }
 // Today's or tomorrow's trucks for a waiting report: each says what it holds,
 // and the report goes on the one chosen (a truck on the dock without one
@@ -154,7 +154,7 @@ export default {
     const count = days.reduce((n, d) => n + numbersOf(plan, dock, dkey(d)).length, 0), todayN = numbersOf(plan, dock, today).length;
     const range = `${dateLabel(days[0])} – ${dateLabel(days[6])}`;
     const week = `<div class="pweek">${days.map(d => { const k = dkey(d), slots = plan.days[k]?.slots || {}, ns = numbersOf(plan, dock, k); let next = 1; while (ns.includes(next)) next++; return `<div class="pday${k === today ? ' today' : ''}"><div class="dl">${DOW[(d.getDay() + 6) % 7]}<b>${d.getDate()}</b>${ns.length ? `<span class="cs-dim">${txn(ns.length, '{n} truck', '{n} trucks')}</span>` : ''}</div>${ns.length ? ns.map(n => slotHtml(ctx, k, n, slots[n], dock)).join('') : noneHtml(ctx, plan, k, today)}${landingHtml(ctx, plan, dock, k, today)}${next <= 4 ? `<div class="padd" data-act="add" data-slot="${k}-${next}">+ ${tx('Truck {no}', { no: next })}</div>` : ''}</div>`; }).join('')}</div>`;
-    return vh(tx('Planner'), sub(st.week === 0 ? tx('This week') : st.week === 1 ? tx('Next week') : st.week === -1 ? tx('Last week') : tx('{n} weeks', { n: `${st.week > 0 ? '+' : ''}${st.week}` }), range, `${txn(count, '{n} truck', '{n} trucks')}${st.week === 0 ? ` · ${tx('{n} today', { n: todayN })}` : ''}`), `<span class="pills"><button data-act="wk" data-d="-1">‹</button><button class="${st.week === 0 ? 'on' : ''}" data-act="wk" data-d="0">${tx('This week')}</button><button data-act="wk" data-d="1">›</button></span>`, 'm-planner') +
+    return vh(tx('Planner'), sub(`${txn(count, '{n} truck', '{n} trucks')}${st.week === 0 ? ` · ${tx('{n} today', { n: todayN })}` : ''}`, st.week === 0 ? tx('This week') : st.week === 1 ? tx('Next week') : st.week === -1 ? tx('Last week') : tx('{n} weeks', { n: `${st.week > 0 ? '+' : ''}${st.week}` }), range), `<span class="pills"><button data-act="wk" data-d="-1">‹</button><button class="${st.week === 0 ? 'on' : ''}" data-act="wk" data-d="0">${tx('This week')}</button><button data-act="wk" data-d="1">›</button></span>`, 'm-planner') +
       `<div class="grid2 pgrid">${week}<div class="sidecol">${editor(ctx, plan, dock)}${offsiteCard(ctx, today)}${noTruckCard(ctx, plan, dock, days, today)}${summary(plan, dock, days)}${roster(dock)}${waiting(ctx, plan, dock)}</div></div>`;
   },
   mount(ctx, root) {
@@ -265,6 +265,6 @@ function summary(plan, dock, days) {
 // their slot names no team.
 function roster(dock) {
   const pids = dock.roster?.pids || [];
-  return `<div class="card"><div class="ch"><h3>${tx('Week roster')}</h3><span class="cs-dim">${pids.length ? tx('{n} on', { n: pids.length }) : tx('nobody yet')}</span></div><div class="dk-team">${pids.map(pid => `<span class="dk-tc on"><span class="av">${esc(pid)}</span><button class="dk-x" data-act="roster-drop" data-pid="${esc(pid)}" title="${tx('Take off the roster')}">${ic('x')}</button></span>`).join('') || `<span class="cs-dim">${tx('Add who is decanting this week.')}</span>`}</div>` +
+  return `<div class="card"><div class="ch"><h3>${tx('Week roster')}</h3><span class="cs-dim">${pids.length ? tx('{n} on', { n: pids.length }) : tx('nobody yet')}</span></div><div class="dk-team">${pids.map(pid => `<span class="dk-tc on"><span class="av">${esc(pid)}</span><button class="dk-x" data-act="roster-drop" data-pid="${esc(pid)}" title="${tx('Take off the roster')}">${ic('x')}</button></span>`).join('') || empty(tx('Add who is decanting this week.'), { sm: true, icon: 'users' })}</div>` +
     `<div class="bdr-teamadd" style="margin-top:8px"><input class="inp mono" data-field="roster" placeholder="${tx('D-number, e.g. D4')}" maxlength="6"><button class="btn sm" data-act="roster-add">${ic('plus')}${tx('Add')}</button></div><p class="lbl">${tx('New trucks start with this crew when their slot names no team. D-numbers only.')}</p></div>`;
 }

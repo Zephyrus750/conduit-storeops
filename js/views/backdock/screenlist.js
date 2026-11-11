@@ -2,7 +2,7 @@
 // PCs and the dock tablet, one card each, opening the board here. A wall PC
 // or tablet signs in as Dock screen instead and opens straight on its board.
 
-import { ic, vh } from '../../ui.js';
+import { ic, vh, empty } from '../../ui.js';
 import { toolOff, toolForView } from '../../../shared/tools.js';
 import { tx } from '../../i18n.js';
 
@@ -18,7 +18,7 @@ export default {
   desktop(ctx) {
     const off = ctx.store.get('tools')?.off, boards = BOARDS.filter(b => !toolOff(off, toolForView(b[0])));
     return vh(tx('Screens'), tx('Full-screen boards for the wall PCs and the dock tablet.'), '', 'expand') +
-      (boards.length ? `<div class="scr-list">${boards.map(([id, icon, name, what, where]) => `<div class="card scr-card"><div class="ch">${ic(icon)}<h3>${name}</h3></div><p>${what}</p><p class="lbl">${where}</p><button class="btn primary" data-view="${id}">${ic('expand')}${tx('Open')}</button></div>`).join('')}</div>` : `<div class="card"><p class="lbl">${tx('The dock boards are switched off for this store.')}</p></div>`) +
+      (boards.length ? `<div class="scr-list">${boards.map(([id, icon, name, what, where]) => `<div class="card scr-card"><div class="ch">${ic(icon)}<h3>${name}</h3></div><p>${what}</p><p class="lbl">${where}</p><button class="btn primary" data-view="${id}">${ic('expand')}${tx('Open')}</button></div>`).join('')}</div>` : `<div class="card">${empty(tx('The dock boards are switched off for this store.'), { icon: 'expand' })}</div>`) +
       `<div class="card scr-note">${ic('lock')}<p>${tx('Each board is also in Receiving and Results, with more detail. To set up a wall PC or the dock tablet, sign in on it as Dock screen: it opens straight on its board and never locks.')}</p></div>`;
   },
 };

@@ -4,7 +4,7 @@
 // device is signed in to, with switching. Details come from the map
 // editor's Store Info, published with the map (cleanStoreInfo).
 
-import { ic, esc, vh, sub, status, toast, fmtTime, mhead, fmtDay } from '../ui.js';
+import { ic, esc, vh, sub, status, toast, fmtTime, mhead, fmtDay, empty } from '../ui.js';
 import { mapInfo, mapStats, mapSymbols, symbolsHtml } from '../map.js';
 import { tx, txn } from '../i18n.js';
 import { ask } from '../sheet.js';
@@ -30,18 +30,18 @@ function details(ctx, si, phone = false) {
     (dirs ? `<div class="si-acts">${dirs}</div>` : '') +
     (hours ? `<div class="si-sec"><div class="si-k">${tx('Opening hours')}</div>${hours}</div>` : '') +
     (holsHtml ? `<div class="si-sec"><div class="si-k">${tx('Public holidays')}</div>${holsHtml}</div>` : '') +
-    (!addr && !hours && !holsHtml ? `<p class="lbl">${phone ? tx('No address or hours yet.') : tx('No address or hours yet. The owner adds them in the map editor’s Store Info and republishes the map.')}</p>` : '') + `</div>`;
+    (!addr && !hours && !holsHtml ? empty(phone ? tx('No address or hours yet.') : tx('No address or hours yet. The owner adds them in the map editor’s Store Info and republishes the map.'), { sm: true, icon: 'store' }) : '') + `</div>`;
 }
 function logistics(si) {
   const fmt = [si.brand, si.storeType, si.storeStyle, si.storeSize ? tx('{size} m² store', { size: esc(si.storeSize) }) : ''].filter(Boolean);
   const park = si.parkingTip || si.parkingLat != null ? `<div class="si-sec"><div class="si-k">${tx('Staff parking')}</div>${si.parkingTip ? `<div>${esc(si.parkingTip)}</div>` : ''}${si.parkingLat != null && si.parkingLng != null ? `<div class="si-acts">${link(gmaps(si.parkingLat, si.parkingLng), tx('Open in Maps'), 'map')}</div>` : ''}</div>` : '';
   const asm = si.assemblyNotes || si.assemblyLat != null ? `<div class="si-sec"><div class="si-k">${tx('Assembly point')}</div>${si.assemblyNotes ? `<div>${esc(si.assemblyNotes)}</div>` : ''}${si.assemblyLat != null && si.assemblyLng != null ? `<div class="si-acts">${link(gmaps(si.assemblyLat, si.assemblyLng), tx('Open in Maps'), 'map')}</div>` : ''}</div>` : '';
   return `<div class="card"><div class="ch"><h3>${tx('Logistics')}</h3></div>` + (fmt.length ? `<div class="si-sec"><div class="si-k">${tx('Store format')}</div><div>${fmt.map(esc).join(' · ')}</div></div>` : '') +
-    (park || asm ? park + asm : `<p class="lbl">${tx('No parking or assembly details for this store.')}</p>`) + `</div>`;
+    (park || asm ? park + asm : empty(tx('No parking or assembly details for this store.'), { sm: true, icon: 'parking' })) + `</div>`;
 }
 function mapStatus() {
   const info = mapInfo(), st = mapStats();
-  if (!info || !st) return `<div class="card"><div class="ch"><h3>${tx('Map')}</h3>${status('warn', tx('Not published'))}</div><p class="lbl">${tx('No map is published for this store yet. The owner publishes one from the console.')}</p></div>`;
+  if (!info || !st) return `<div class="card"><div class="ch"><h3>${tx('Map')}</h3>${status('warn', tx('Not published'))}</div>${empty(tx('No map is published for this store yet. The owner publishes one from the console.'), { sm: true, icon: 'map' })}</div>`;
   const foh = st.floors.filter(f => f.type === 'foh').reduce((n, f) => n + f.shelves, 0), boh = st.floors.filter(f => f.type === 'boh').reduce((n, f) => n + f.shelves, 0), em = st.floors.reduce((n, f) => n + f.emergency, 0);
   // ShelfSearcher's mapped areas: a sales floor counts from 20 named
   // shelves, the back of house from 10.

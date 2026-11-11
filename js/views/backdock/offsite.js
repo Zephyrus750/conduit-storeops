@@ -12,7 +12,7 @@
 // received, change its callback, add one; a pallet on clearance says so when this device has
 // checked prices. The register is store events (inventory.offsite.*).
 
-import { $, ic, esc, vh, sub, toast, fmtDate, fmtDay, today, mhead } from '../../ui.js';
+import { $, ic, esc, vh, sub, toast, fmtDate, fmtDay, today, mhead, empty } from '../../ui.js';
 import { registerSummary, clearanceDiff, isFixture } from '../../../shared/inventory.js';
 import { addDays } from '../../../shared/time.js';
 import { inv, send, statusPill, stageFile, stagePanel, saveStage, stageChange } from './loads.js';
@@ -57,7 +57,7 @@ const onClearance = (ctx, r) => { const items = load(PKEY(ctx.storeNo), { items:
 function clearance(ctx) {
   const no = ctx.storeNo, cache = load(PKEY(no), { day: '', items: {} }), E = load(EKEY(no), { seen: '', events: [] }), where = heldCodes(ctx);
   const head = `<div class="ch"><h3>${tx('Clearance watch')}</h3><span class="cs-dim">${cache.day ? tx('prices checked {date} on this device', { date: esc(fmtDate(cache.day)) }) : tx('not checked yet')} · ${txn(where.size, '{n} keycode held', '{n} keycodes held')}</span><button class="btn sm" data-act="prices">${ic('refresh')}${tx('Check now')}</button></div>`;
-  if (!where.size) return `<div class="card">${head}<p class="lbl">${tx('Nothing to watch: no keycodes on off-site pallets or open loads.')}</p></div>`;
+  if (!where.size) return `<div class="card">${head}${empty(tx('Nothing to watch: no keycodes on off-site pallets or open loads.'), { icon: 'check' })}</div>`;
   const priced = Object.entries(cache.items).filter(([kc, v]) => where.has(kc) && (v.price != null || v.clr));
   if (cache.day && !priced.length) return `<div class="card">${head}<p class="lbl">${tx('No prices came back. Prices need the product details switched on for the worker (the owner sets CF_ACCOUNT_ID and BROWSER_TOKEN); names and links still work.')}</p></div>`;
   const onClr = priced.filter(([, v]) => v.clr), fresh = E.events.filter(x => !E.seen || x.at > E.seen);
@@ -65,9 +65,9 @@ function clearance(ctx) {
   const I = inv(ctx), pal = Object.values(I.offsite).filter(r => !r.rec).map(r => ({ r, n: r.products.filter(p => cache.items[p.kc]?.clr).length })).filter(x => x.n).sort((a, b) => b.n - a.n);
   const lds = Object.values(I.loads).filter(l => l.status !== 'received').map(l => ({ l, n: new Set(l.pallets.flatMap(p => p.items.filter(i => cache.items[i.k]?.clr).map(i => i.k))).size })).filter(x => x.n).sort((a, b) => b.n - a.n);
   const evRow = x => `<div class="inv-ev ${x.kind}"><b>${x.kind === 'clr' ? tx('On clearance') : tx('Price dropped')}</b><span>${name(x.kc)} <small>${esc(x.kc)}</small></span><span>${money(x.prevPrice)} → <b>${money(x.price)}</b></span><small>${esc(fmtDate(x.day))}</small></div>`;
-  return `<div class="card">${head}<div class="inv-sub">${tx('Since you last looked')}</div>${fresh.length ? fresh.map(evRow).join('') : `<p class="lbl">${tx('No new markdowns.')}</p>`}${fresh.length ? `<button class="btn sm" data-act="seen">${tx('Mark as seen')}</button>` : ''}</div>` +
-    `<div class="inv-tgrid"><div class="card"><div class="ch"><h3>${tx('Off-site pallets worth calling back')}</h3><span class="cs-dim">${pal.length}</span></div>${pal.length ? pal.map(({ r, n }) => `<div class="inv-prow"><span class="pid">${esc(r.pid)}</span><span>${esc(r.title || r.desc || '')}</span><b>${tx('{n} on clearance', { n })}</b></div>`).join('') : `<p class="lbl">${tx('None of the off-site stock is on clearance.')}</p>`}${lds.length ? `<div class="inv-sub">${tx('Open loads')}</div>${lds.map(({ l, n }) => `<div class="inv-prow"><span class="pid go" data-go="manifests" data-load="${esc(l.id)}">${esc(l.label)}</span>${statusPill(l.status)}<b>${tx('{n} on clearance', { n })}</b></div>`).join('')}` : ''}</div>` +
-    `<div class="card"><div class="ch"><h3>${tx('On clearance now')}</h3><span class="cs-dim">${onClr.length}</span></div>${onClr.length ? `<table class="wb-t"><thead><tr><th>${tx('Item')}</th><th>${tx('Price')}</th><th>${tx('Was')}</th><th>${tx('Held on')}</th></tr></thead><tbody>${onClr.slice(0, 60).map(([kc, v]) => `<tr><td>${v.url ? `<a href="${esc(v.url)}" target="_blank" rel="noopener">${name(kc)}</a>` : name(kc)} <small class="cs-dim">${esc(kc)}</small></td><td>${money(v.price)}</td><td>${money(v.was)}</td><td>${[...where.get(kc)].slice(0, 3).map(w => esc(w.startsWith('pallet:') ? tx('pallet {pid}', { pid: w.slice(7) }) : I.loads[w.slice(5)]?.label || tx('a load'))).join(', ')}</td></tr>`).join('')}</tbody></table>` : `<p class="lbl">${tx('Nothing held is on clearance.')}</p>`}</div></div>`;
+  return `<div class="card">${head}<div class="inv-sub">${tx('Since you last looked')}</div>${fresh.length ? fresh.map(evRow).join('') : empty(tx('No new markdowns.'), { sm: true, icon: 'check' })}${fresh.length ? `<button class="btn sm" data-act="seen">${tx('Mark as seen')}</button>` : ''}</div>` +
+    `<div class="inv-tgrid"><div class="card"><div class="ch"><h3>${tx('Off-site pallets worth calling back')}</h3><span class="cs-dim">${pal.length}</span></div>${pal.length ? pal.map(({ r, n }) => `<div class="inv-prow"><span class="pid">${esc(r.pid)}</span><span>${esc(r.title || r.desc || '')}</span><b>${tx('{n} on clearance', { n })}</b></div>`).join('') : empty(tx('None of the off-site stock is on clearance.'), { sm: true, icon: 'check' })}${lds.length ? `<div class="inv-sub">${tx('Open loads')}</div>${lds.map(({ l, n }) => `<div class="inv-prow"><span class="pid go" data-go="manifests" data-load="${esc(l.id)}">${esc(l.label)}</span>${statusPill(l.status)}<b>${tx('{n} on clearance', { n })}</b></div>`).join('')}` : ''}</div>` +
+    `<div class="card"><div class="ch"><h3>${tx('On clearance now')}</h3><span class="cs-dim">${onClr.length}</span></div>${onClr.length ? `<table class="wb-t"><thead><tr><th>${tx('Item')}</th><th>${tx('Price')}</th><th>${tx('Was')}</th><th>${tx('Held on')}</th></tr></thead><tbody>${onClr.slice(0, 60).map(([kc, v]) => `<tr><td>${v.url ? `<a href="${esc(v.url)}" target="_blank" rel="noopener">${name(kc)}</a>` : name(kc)} <small class="cs-dim">${esc(kc)}</small></td><td>${money(v.price)}</td><td>${money(v.was)}</td><td>${[...where.get(kc)].slice(0, 3).map(w => esc(w.startsWith('pallet:') ? tx('pallet {pid}', { pid: w.slice(7) }) : I.loads[w.slice(5)]?.label || tx('a load'))).join(', ')}</td></tr>`).join('')}</tbody></table>` : empty(tx('Nothing held is on clearance.'), { sm: true, icon: 'check' })}</div></div>`;
 }
 
 // ── Register ────────────────────────────────────────────────────────────
@@ -112,9 +112,9 @@ function register(ctx) {
   let body;
   if (st.view === 'man') {
     const shown = st.showBack ? G : live, back = G.length - live.length;
-    body = (shown.length ? shown.map(g => groupHtml(ctx, g, t)).join('') : `<p class="lbl" style="padding:14px">${all.length ? tx('Nothing off-site now.') : tx('No off-site pallets yet. Import the off-site master list (.xlsx), or add a pallet by hand.')}</p>`) +
+    body = (shown.length ? shown.map(g => groupHtml(ctx, g, t)).join('') : empty(all.length ? tx('Nothing off-site now.') : tx('No off-site pallets yet. Import the off-site master list (.xlsx), or add a pallet by hand.'), { icon: 'box' })) +
       (back ? `<button class="btn sm ofg-backs" data-act="backs">${st.showBack ? tx('Hide the ones all back') : txn(back, 'Show {n} manifest all back', 'Show {n} manifests all back')}</button>` : '') + divertedNote(ctx, t);
-  } else body = `<div class="ofg-fil">${filterPills(sum, 'inv-filter')}</div><div class="inv-list">${rows.length ? rows.map(r => regRow(ctx, r, t)).join('') : `<p class="lbl" style="padding:14px">${all.length ? tx('Nothing in this list.') : tx('No off-site pallets yet. Import the off-site master list (.xlsx), or add a pallet by hand.')}</p>`}</div>`;
+  } else body = `<div class="ofg-fil">${filterPills(sum, 'inv-filter')}</div><div class="inv-list">${rows.length ? rows.map(r => regRow(ctx, r, t)).join('') : empty(all.length ? tx('Nothing in this list.') : tx('No off-site pallets yet. Import the off-site master list (.xlsx), or add a pallet by hand.'), { icon: 'box' })}</div>`;
   return tiles + trucksAway(ctx, t) + `<div class="card ofg-card"><div class="ch"><h3>${tx('Off-site register')}</h3>${seg}<button class="btn sm" data-act="add">${ic('plus')}${tx('Add a pallet')}</button></div>${addForm()}${body}</div>`;
 }
 
@@ -178,8 +178,8 @@ function phone(ctx) {
       `<div class="ofg-mf">${groupTag(g)}${act}</div>` + (opened ? `<div class="ofg-mr">${g.kind === 'load' ? g.rows.map(r => `<div class="ofp-m"><div class="t"><b class="pid">${esc(r.pid)}</b><span>${deptLine(r)}</span></div></div>`).join('') : g.rows.map(r => card(r, true)).join('')}</div>` : '') + `</div>`;
   };
   const list = st.view === 'man'
-    ? (live.length ? live.map(group).join('') : `<div class="mv-note">${ic('box')}${all.length ? tx('Nothing off-site now.') : tx('No off-site pallets yet. Add one as it goes off-site.')}</div>`)
-    : filterPills(sum, 'ofp-pills') + (rows.length ? rows.map(r => card(r)).join('') : `<div class="mv-note">${ic('box')}${all.length ? tx('Nothing in this list.') : tx('No off-site pallets yet. Add one as it goes off-site.')}</div>`);
+    ? (live.length ? live.map(group).join('') : empty(all.length ? tx('Nothing off-site now.') : tx('No off-site pallets yet. Add one as it goes off-site.'), { icon: 'box' }))
+    : filterPills(sum, 'ofp-pills') + (rows.length ? rows.map(r => card(r)).join('') : empty(all.length ? tx('Nothing in this list.') : tx('No off-site pallets yet. Add one as it goes off-site.'), { icon: 'box' }));
   return mhead(tx('Off-site pallets'), head, st.adding ? '' : `<button class="btn sm" data-act="add">${ic('plus')}${tx('Add a pallet')}</button>`) +
     `<div class="ofp-mob">${addForm()}${seg}${list}</div>`;
 }

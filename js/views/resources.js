@@ -12,7 +12,7 @@
 // picture when the file is added; Word, Excel and links show their kind's
 // cover). The page opens a big preview: ← → for the next one, Esc to close.
 
-import { ic, esc, vh, sub, toast, fmtDate } from '../ui.js';
+import { ic, esc, vh, sub, toast, fmtDate, empty } from '../ui.js';
 import { tx, txn } from '../i18n.js';
 import { sheetHtml } from '../sheet.js';
 import { readPdf } from '../pagepic.js';
@@ -149,7 +149,7 @@ function page(ctx) {
   const head = vh(tx('Resources'), sub(txn(list.length, '{n} resource', '{n} resources'), tx('from the owner, for managers')), `<button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`, 'library') + (st.ask ? askForm() : '');
   if (err && !got) return head + `<div class="card"><p class="lbl">${tx('The resources did not load: {error}', { error: esc(err) })}</p><button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('Try again')}</button></div>`;
   if (!got) return head + `<div class="card"><div class="ohint">${tx('Loading the resources…')}</div></div>`;
-  if (!list.length) return head + `<div class="card rs-empty">${ic('library')}<p>${tx('No resources yet. The owner adds forms, procedures and links in the console, under Resources.')}</p>${st.ask ? '' : `<button class="btn primary" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`}</div>` + asked(ctx, list);
+  if (!list.length) return head + `<div class="card">${empty(tx('No resources yet. The owner adds forms, procedures and links in the console, under Resources.'), { icon: 'library', act: st.ask ? '' : `<button class="btn primary" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>` })}</div>` + asked(ctx, list);
   if (st.cat !== 'all' && !cats.includes(st.cat)) st.cat = 'all';
   const { order } = ordered(ctx);
   const search = `<div class="rs-bar"><div class="search rs-search">${ic('search')}<input data-field="rs-q" value="${esc(st.q)}" placeholder="${tx('Search titles, categories, notes and file names')}" aria-label="${tx('Search the resources')}">${st.q ? `<button class="ibtn" data-act="rs-clear" aria-label="${tx('Clear the search')}">${ic('x')}</button>` : ''}</div>` +
@@ -158,7 +158,7 @@ function page(ctx) {
   const top = !st.q && st.cat === 'all' ? mostUsed(list, 4) : [];
   const fav = top.length ? `<div class="card rs-top"><div class="ch"><h3>${tx('Used most on this PC')}</h3></div><div class="rs-tiles">${top.map(e => `<button class="rs-tile" data-act="rs-open" data-id="${esc(e.id)}">${badge(e)}<span><b>${esc(e.title)}</b><small>${esc(catName(e.category))}</small></span></button>`).join('')}</div></div>` : '';
   let body;
-  if (!order.length) body = `<div class="card rs-none"><p class="lbl">${st.q ? tx('Nothing matches “{q}”.', { q: esc(st.q) }) : tx('Nothing in this category.')}</p>${st.q && !st.ask ? `<button class="btn" data-act="rs-ask" data-title="${esc(st.q)}">${ic('plus')}${tx('Request “{q}”', { q: esc(st.q) })}</button>` : ''}</div>`;
+  if (!order.length) body = `<div class="card">${empty(st.q ? tx('Nothing matches “{q}”.', { q: esc(st.q) }) : tx('Nothing in this category.'), { icon: st.q ? 'search' : 'library', act: st.q && !st.ask ? `<button class="btn" data-act="rs-ask" data-title="${esc(st.q)}">${ic('plus')}${tx('Request “{q}”', { q: esc(st.q) })}</button>` : '' })}</div>`;
   else body = (st.q || st.cat !== 'all' ? `<div class="rs-gh"><h3>${st.q ? tx('Results') : esc(catName(st.cat))}</h3><span>${order.length}</span></div>` : '') + `<div class="rs-cards">${order.map(e => card(ctx, e)).join('')}</div>`;
   const open = st.view && order.find(e => e.id === st.view);
   if (st.view && !open) st.view = null;
