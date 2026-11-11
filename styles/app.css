@@ -4494,3 +4494,27 @@ small.called svg.i { width: 12px; height: 12px; }
 .rt-away .ch .btn { margin-left: auto; }
 /* Cage sweep (phone): the note under the count when cages opened after the sweep began */
 .swp-prog small{display:block;margin-top:8px;font-size:12px}
+
+/* ── Practice mode (js/practice.js) ──────────────────────────────────── */
+/* The bar across the top of every screen, PC and phone. The app sits below
+   it, never under it; pop-ups and the sign-in cards still cover it. */
+.practice-bar, .frame.practice > .app { --practice-h: 36px; }
+.frame.practice > .app { height: calc(100% - var(--practice-h)); margin-top: var(--practice-h); }
+.practice-bar { position: absolute; top: 0; left: 0; right: 0; height: var(--practice-h); z-index: 30; display: flex; align-items: center; gap: 10px; padding: 0 8px 0 16px; background: #5B21B6 repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 12px, transparent 12px 24px); color: #fff; font-size: 13px; line-height: 1.2; }
+.practice-bar > svg.i { width: 16px; height: 16px; flex: none; }
+.practice-bar .pb-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.practice-bar .pb-t b { font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.practice-bar .pb-end { flex: none; min-height: 26px; padding: 0 12px; border: 0; border-radius: 999px; background: #fff; color: #5B21B6; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.practice-bar .pb-end:hover { background: #EDE9FE; }
+.practice-bar .pb-end:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* The sync state says Practice: the footer's dot and the phone's pill. */
+.foot .dot.practice { background: var(--violet); }
+.m-appbar .msync.practice { border-color: color-mix(in srgb, var(--violet) 45%, transparent); background: color-mix(in srgb, var(--violet) 12%, var(--panel)); color: #5B21B6; cursor: default; }
+.m-appbar .msync.practice .dot { background: var(--violet); }
+.stg-practice.on .stg-h::after { content: ''; display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: var(--violet); vertical-align: 1px; }
+@container shell (max-width: 600px) {
+  .practice-bar, .frame.practice > .app { --practice-h: 44px; }
+  .practice-bar { padding: 0 8px 0 12px; gap: 8px; font-size: 12.5px; }
+  .practice-bar .pb-t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .practice-bar .pb-end { min-height: 32px; }
+}
