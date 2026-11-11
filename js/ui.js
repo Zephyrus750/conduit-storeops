@@ -45,6 +45,15 @@ export function mrows(rows) { return `<div class="mv-rows">${rows.map(r => `<div
 export function card(title, body, right = '') { return `<div class="card"><div class="ch"><h3>${title}</h3>${right}</div>${body}</div>`; }
 export function prog(pct) { pct = Math.max(0, Math.min(100, Math.round(pct || 0))); return `<div class="prog"><div class="track"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`; }
 export function status(cls, text) { return `<span class="status ${cls}">${text}</span>`; }
+// One empty state everywhere (the review board's fix-empty): an icon, one
+// sentence and, when there is one, the action that fills it. The full size
+// for a page, a panel or a card with nothing in it; `sm` inside a list, a
+// table cell or a phone sheet, where it sits on one line. A search with no
+// hits is empty too ('search'). Loading is not empty: that stays a line.
+//   empty(text, { icon, act, sm, cls })  text: html (already translated and escaped)
+export function empty(text, { icon = 'listcheck', act = '', sm = false, cls = '' } = {}) {
+  return `<div class="empty${sm ? ' sm' : ''}${cls ? ' ' + cls : ''}">${ic(icon)}<p>${text}</p>${act ? `<div class="em-a">${act}</div>` : ''}</div>`;
+}
 
 // ── departments ───────────────────────────────────────────────────────
 // Filled from the published map's department list (setDepartments, called

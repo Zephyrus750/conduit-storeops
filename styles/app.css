@@ -4494,3 +4494,19 @@ small.called svg.i { width: 12px; height: 12px; }
 .rt-away .ch .btn { margin-left: auto; }
 /* Cage sweep (phone): the note under the count when cages opened after the sweep began */
 .swp-prog small{display:block;margin-top:8px;font-size:12px}
+
+/* ── One empty state (js/ui.js empty()): an icon, one sentence, the action
+   that fills it. Full size centred in a page, panel or card; .sm on one line
+   inside a list, a table cell or a phone sheet. */
+.empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 24px; text-align: center; color: var(--dim); }
+.empty > svg.i { width: 44px; height: 44px; padding: 10px; box-sizing: border-box; margin: 0; border-radius: 14px; background: var(--ground); color: var(--faint); stroke-width: 1.6; flex: none; }
+.empty > p { margin: 0; max-width: 52ch; font-size: 14px; line-height: 1.5; color: var(--ink2); }
+.empty > p b { color: var(--ink); }
+.empty .em-a { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.empty.sm { flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px 10px; padding: 12px 4px; text-align: left; }
+.empty.sm > svg.i { width: 28px; height: 28px; padding: 6px; border-radius: 8px; }
+.empty.sm > p { flex: 1 1 200px; font-size: 13px; max-width: none; }
+.empty.sm .em-a { justify-content: flex-start; }
+td > .empty.sm, .list > .empty.sm { padding: 10px 12px; }
+.card > .empty:not(.sm) { padding: 28px 16px; }
+@container shell (max-width:600px) { .empty:not(.sm) { padding: 28px 16px; } .empty > svg.i { width: 38px; height: 38px; padding: 8px; } .empty > p { font-size: 13.5px; } }
