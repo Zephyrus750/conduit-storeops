@@ -74,6 +74,14 @@ export const CATALOGUE = {
   'pull.mark':           T('floor', S, ['session', 'line'], { st: 'string' }),   // pulled | short | gone | todo (undo); got { bay: n }
   'pull.cage.send':      T('floor', S, ['session'], { cage: 'number' }),         // payload.tag
   'pull.pair':           T('floor', FS, ['apn'], { keycode: 'string' }),         // a ticket's item barcode → the keycode printed on it
+  // Tasks (shared/reducers/tasks.js): the checklists the managers keep and
+  // each day's walk of them. Floor events so every store device holds them;
+  // a manager writes them (the manager code holds every area of the store).
+  'task.list.set':       T('floor', M, ['list'], { name: 'string', area: 'string', days: 'array', items: 'array' }),   // dept, who, due 'HH:MM' | ''; items [{ id, t }]; written whole
+  'task.list.remove':    T('floor', M, ['list']),
+  'task.walk.start':     T('floor', M, ['list', 'day']),                         // the checklist as it is now becomes the day's walk
+  'task.walk.item':      T('floor', M, ['list', 'day', 'item'], { a: 'string' }),   // y | n; note, photo (an uploaded photo's id), sent { to: backfill, bay, kc? | issue, issue | note }
+  'task.walk.done':      T('floor', M, ['list', 'day']),                         // every item answered; a second done is a no-op
 
   // ── Stockroom ────────────────────────────────────────────────────────
   'cage.create':         T('stockroom', S, ['cage'], { ring: 'string' }),
@@ -181,7 +189,7 @@ export function typeInfo(type) {
 
 // Which projections a store token may read for each entitled area.
 export const AREA_PROJECTIONS = {
-  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'pulls', 'equipment', 'recalls'],
+  floor: ['refresh', 'labels', 'stocktake', 'issues', 'assets', 'picklists', 'pulls', 'equipment', 'recalls', 'tasks'],
   stockroom: ['cages', 'backfill', 'adjustments', 'daylist', 'soh', 'scanPresets', 'cageSweeps', 'apnPairs'],
   backdock: ['dock', 'plan', 'inventory'],
   store: ['devices', 'map', 'roster', 'settings', 'mapedits', 'feedback', 'tools', 'areas', 'comms', 'retention'],

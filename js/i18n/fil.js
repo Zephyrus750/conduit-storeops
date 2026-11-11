@@ -12,5 +12,6 @@ import dock2 from './fil/dock2.js';
 import admin from './fil/admin.js';
 import vguide from './fil/vguide.js';
 import vguide2 from './fil/vguide2.js';
+import tasks from './fil/tasks.js';
 
-export default Object.assign({}, core, shell, guide, map, floor, floor2, stock1, stock2, dock1, dock2, admin, vguide, vguide2);
+export default Object.assign({}, core, shell, guide, map, floor, floor2, stock1, stock2, dock1, dock2, admin, vguide, vguide2, tasks);

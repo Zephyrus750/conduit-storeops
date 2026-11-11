@@ -145,9 +145,9 @@ D1, R2 and KV bindings are added when the features that need them land
 | `GET /v1/store/:no/pull/find?code=` | any device of the store, stockroom entitled, Live pull on | live: one scan for Live pull, so a floor phone never reads the report itself: `{ code, gtin, kc, via (keycode \| apn \| paired \| kmart), name, desc, report: { date, at }, bays, soh, carton, truck }`. `name` is the item's product name from the catalogue (waited for at most 0.8 s, else empty and the phone's catalogue brings it) and `desc` its description from the description book, so the words come with the answer. The keycode comes straight from the code, from an APN the latest report lists, or from a person's link (`cage.pair` or `pull.pair`, the newer wins); a barcode nothing links answers with `gtin` and no `kc`; `bays` are the report's stockroom bays for it in order (none: no stockroom location); `carton` is from the carton profiles; `truck` is a truck planned or on the dock today whose manifest carries it (`{ truck, eta, onDock, manNo, units, cartons }`); an item with a keycode and no bay on the report also gets `seen`: up to three bays it was in over the last 14 days, newest first, one a bay (`[{ bay, date, via: backfill \| report \| soh }]`: scanned there by Backfill, or listed there on an earlier report or SOH snapshot) |
 | `GET /v1/store/:no/bays?kc=a,b` | any device of a store with the Stockroom | live: each keycode's stockroom bays from the latest inventory report (up to 50 keycodes), `{ report: { date, at } \| null, bays: { kc: [bay…] } }`; bays only, no SOH. The PC's product card shows them |
 | `GET /v1/store/:no/profiles` | store token or owner, backdock entitled | live: carton profiles (`carton-profiles/1`, the shape of Decant Visualiser’s `dv-profiles/1`) built from the published manifests: units per carton, consistency, last arrival, pack changes; `last` holds every keycode's latest delivery, ungated, so a first delivery still gives a carton size |
-| `POST /v1/store/:no/photo` | store token for that store | live: an issue photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
-| `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo while an issue lists it (until 90 days after the issue is completed or removed); one on no issue only to the device that took it |
-| `DELETE /v1/store/:no/photo/:id` | store token or owner | live: deletes the photo's bytes once no live issue lists it (`409` while one does: the `issue.photo` remove event takes it off first); a draft not on an issue yet only by the device that took it, a manager or the owner |
+| `POST /v1/store/:no/photo` | store token for that store | live: an issue or walk photo, JPEG bytes under 800 KB (the device shrinks it first), at most 300 a store in any 24 hours; answers `{ id }`. `501` until the `PHOTOS` R2 bucket is bound |
+| `GET /v1/store/:no/photo/:id` | store token or owner | live: the photo while an issue lists it (until 90 days after the issue is completed or removed) or a walk's item does (until 90 days after the walk); one on neither only to the device that took it |
+| `DELETE /v1/store/:no/photo/:id` | store token or owner | live: deletes the photo's bytes once no live issue or walk lists it (`409` while one does: the `issue.photo` remove event, or a new answer for the walk's item, takes it off first); a draft not on an issue yet only by the device that took it, a manager or the owner |
 
 Every error is `{ code, message }`. Codes: `unauthorised`, `not_entitled`,
 `not_registered`, `locked_out`, `revoked` (signed out by a rotation, suspension
@@ -432,6 +432,33 @@ and where it was), which starts the removal and counts up on the recall; stock
 found after All removed puts it back to Removing. A closed recall flags
 nothing and leaves the live state 180 days after closing; its events stay.
 The rail and the Dashboard count what still needs someone.
+
+**Tasks** (`tasks`, `shared/reducers/tasks.js`, `js/views/tasks.js`) are the
+managers' checklists and each day's walk of them, from the owner's note on the
+store walk (11 Nov 2026). A checklist names its area (the store, the back
+dock, the stockroom or a department), who it is for (a role or a person, as
+the store writes it), the weekdays it is due with an optional time, and its
+items, one line each (`task.list.set`, written whole; `task.list.remove`).
+Managers write them on a store PC. Each checklist due today is walked once
+that day on a manager's phone (More › Tasks, in every area): every item ✓ or
+✗ in one tap, the walk starting with its first answer (`task.walk.start`,
+which keeps the checklist as it was) and done with its last
+(`task.walk.done`; a second done is a no-op). A ✗ opens the shared sheet for
+a photo (Maintenance's camera and upload), a note and where it goes
+(`task.walk.item` with `sent`): **Send to Backfill** puts a bay on today's
+requested list with `submission.request`, as Backfill review's Request does
+(the bay typed or scanned, or an item scanned and its bays found with
+`pull/find`); **Raise a maintenance issue** logs `issue.log` with the same
+photo, so it shows in Maintenance; or it is just noted on the walk. Where a ✗
+went stays with the item, and an answer can be corrected with a new event,
+even after the walk is done. On the PC, Tasks › Today lists today's
+checklists by area with who, progress and where each stands (done, ✗ with a
+photo, due, not yet), the photos the walks took, what they raised and where
+it went, and the checklists to edit, and prints today's to walk with a pen;
+Tasks › Walks lists the walks of the last 90 days. Both repaint as a phone's
+events arrive. Floor events for managers only, a tool the owner can switch
+off; a walk keeps every answer for 14 days, then its ✗ and photographed
+answers, and leaves the live state after 90 days with its photos.
 
 A Stockroom view asks for the crew code once per device (`js/unlock.js`,
 `session.unlock`), and the client store reconnects its socket when the
@@ -789,7 +816,7 @@ Floor views are in, and every type in the catalogue has a reducer. Shapes follow
 
 | Area | Reducers | Ported from |
 | --- | --- | --- |
-| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list | ShelfSearcher refresh, label-integrity, stocktake, maintenance and em-service modes |
+| Floor | refresh (segments, focus, plan paint), labels (cycle, assign, check, variance), stocktake (sessions, state advances, verify), issues (log, progress, close, reopen), assets (service, schedule), pick list, tasks (checklists, walks) | ShelfSearcher refresh, label-integrity, stocktake, maintenance and em-service modes |
 | Stockroom | cages with ring colours, backfill submissions (pending, corrected, submitted; requested list; claims; rename), negative-SOH adjustments, day list | K2B review, adjust and scan modules |
 | Back dock | trucks (staged, live, closed) with team and halts, manifests keyed by the last 9 digits and the day and truck a report came on (`manifest.day`, for one no truck here carried), pallets (chep, loscam, bulk) with segments and scans, planner slots 1 to 4 and days confirmed without trucks (`plan.noTrucks`: the morning checklist reads them as done; planning a truck or one arriving clears it) and trucks not coming to the dock (`plan.route`: off-site until called back, or diverted to another store or site, with the day it lands here after all; the truck leaves the day's slots and is put back when set to Receive here; an off-site truck's consols go on the off-site register under its manifest) and pallets sent off-site from the dock (`pallet.offsite`, managers: off the grid and onto the register; the truck closes without them); Call back is a planned slot naming the register pallets or load it brings back (`plan.set` `pids`, `load`), each ticked Received as its label is scanned on a later truck (a staged manifest is a reference: number, counts and consol ids; the device that starts the truck attaches the report from the library), history rows on finalise; off-site pallets and other loads (`inventory.*`: register set, add, update; loads add, status, remove; Floor events until 23 Oct 2026) | Decant Visualiser receiving, manifests, planner, history; ShelfSearcher inventory mode |
 | Store | map publish, roster rotation marker, settings, tools, map edit suggestions, feedback (device presence is a projection written directly from the socket `hb` frame or `POST /hb`, not an event, and kept in the store object's `meta` table so it outlives hibernation) | |
