@@ -4597,7 +4597,9 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .bdm-p { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: var(--fs-md); }
 .bdm-p .bar { position: relative; height: 8px; border-radius: 4px; background: var(--ground); }
 .bdm-p .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
-.bdm-p.low .bar i { background: #D97706; }
+.bdm-p.low .bar i { background: var(--amber); }
+/* The card is no gap column: its section labels keep their own space (the shell's -6px is for the strip's sheets). */
+.bdm .mv-sub { margin: 14px 0 6px; } .bdm .bdm-line { margin: 4px 0 0; }
 .bdm-p .bar u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink2); }
 .bdm-p .v { text-align: right; font-variant-numeric: tabular-nums; } .bdm-p .v small { display: block; font-size: var(--fs-xs); color: var(--dim); }
 .bdm-halt { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #FEF2F2; color: #991B1B; font-size: var(--fs-md); }
