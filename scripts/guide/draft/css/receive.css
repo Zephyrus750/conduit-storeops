@@ -1,0 +1,49 @@
+/* Receive a truck on the phone (scripts/guide/draft/chapters/receive.js):
+   Send to off-site on a manager's phone (js/views/backdock/offsend.js; the
+   off-strip, off-sheet, bdk-sq.pk and rt-tag rules of styles/app.css).
+   Everything new starts rv3-. */
+
+/* The truck's tag once some of it went off-site. */
+.rv3-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: -4px; }
+.rv3-rt { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.25; }
+.rv3-rt svg.i { width: 13px; height: 13px; flex: none; }
+.rv3-rt.part { background: #FEF3C7; color: #92400E; }
+
+/* A pallet's sheet: its contents line. */
+.rv3-cont { border: 1px solid var(--l); border-radius: 10px; padding: 9px 12px; font-size: 15px; font-weight: 600; color: var(--i); }
+
+/* The grid as a picker, and the strip saying what is picked. */
+.sq2.rv3-pk { box-shadow: inset 0 0 0 3px #C2410C; background-image: linear-gradient(rgba(234, 88, 12, .28), rgba(234, 88, 12, .28)); }
+.p2-strip.rv3-off { background: #7C2D12; }
+.rv3-ps { gap: 3px; }
+.rv3-ps b { color: #fff; }
+.rv3-ps small { color: #FED7AA; }
+.rv3-x { flex: none; width: 40px; height: 40px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .25); display: grid; place-items: center; color: #fff; }
+.rv3-x svg.i { width: 18px; height: 18px; }
+.b2.rv3-send { background: #EA580C; border-color: #EA580C; color: #fff; min-height: 44px; font-size: 14.5px; padding: 0 12px; }
+.b2.rv3-send svg.i { width: 17px; height: 17px; }
+
+/* The send sheet. */
+.sh-h.rv3-h { align-items: flex-start; }
+.rv3-h .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rv3-h .t b { font-size: 18px; font-weight: 800; }
+.rv3-h .t small { font-size: 13px; color: var(--d); }
+.sh-b.rv3-b { gap: 12px; }
+.rv3-list { display: flex; flex-direction: column; border: 1px solid var(--l); border-radius: 12px; overflow: hidden; }
+.rv3-list .r { display: grid; grid-template-columns: 26px auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; min-height: 48px; padding: 0 10px; font-size: 13.5px; border-top: 1px solid var(--ls); }
+.rv3-list .r:first-child { border-top: 0; }
+.rv3-list .r > b { color: #0B6183; font-weight: 800; }
+.rv3-list .r .mono { font: 800 13px var(--vg-mono); }
+.rv3-list .r .dl { color: var(--d); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv3-list .r small { color: var(--d); font-size: 12px; }
+.rv3-list .r .x { width: 30px; height: 30px; border: 1px solid var(--l); border-radius: 8px; display: grid; place-items: center; }
+.rv3-list .r .x svg.i { width: 14px; height: 14px; }
+.rv3-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--l); border-radius: 10px; padding: 9px 14px; font-size: 14px; font-weight: 600; background: #fff; }
+.rv3-more svg.i { width: 16px; height: 16px; }
+.rv3-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.rv3-b > div { align-self: stretch; min-width: 0; }
+.rv3-l { font-size: 14px; color: var(--i2); margin-bottom: 5px; }
+.f2.rv3-f { width: 100%; justify-content: space-between; background: var(--g); font-size: 14.5px; white-space: nowrap; overflow: hidden; }
+.f2.rv3-f svg.i { width: 17px; height: 17px; color: var(--i); }
+.rv3-eff { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFF7ED; color: #7C2D12; font-size: 13.5px; line-height: 1.4; }
+.rv3-eff svg.i { width: 15px; height: 15px; flex: none; margin-top: 2px; }
