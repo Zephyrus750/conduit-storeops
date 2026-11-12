@@ -440,4 +440,5 @@ export default {
   "Practice resumed. Nothing here is saved or sent.": "Itinuloy ang practice. Walang nase-save o naipapadala rito.",
   "Practice could not open ({error}). The store opened as usual.": "Hindi mabuksan ang practice ({error}). Nagbukas ang tindahan gaya ng dati.",
   "Practice": "Practice",
+  "The week’s trucks, one day at a time": "Ang mga truck ng linggo, isang araw sa bawat pagkakataon",
 };

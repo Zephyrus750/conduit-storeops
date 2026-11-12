@@ -440,4 +440,5 @@ export default {
   "Practice resumed. Nothing here is saved or sent.": "Práctica reanudada. Aquí no se guarda ni se envía nada.",
   "Practice could not open ({error}). The store opened as usual.": "No se pudo abrir la práctica ({error}). La tienda se abrió como siempre.",
   "Practice": "Práctica",
+  "The week’s trucks, one day at a time": "Los camiones de la semana, día a día",
 };

@@ -2608,17 +2608,6 @@ select.sx-in { appearance: none; padding-right: 36px; background-image: url("dat
 .fq-li .nm { flex: 1; min-width: 0; }
 .fq-acts { display: flex; gap: 6px; flex: none; }
 .ad-edacts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-.pedit .pman select.inp { flex: 1; min-width: 0; }
-/* Planner: days confirmed without trucks. */
-.pnone { color: #15803D; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
-.pnone svg.i { width: 14px; height: 14px; }
-.pnt { margin: 6px auto 0; display: flex; align-items: center; gap: 6px; font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--accent-ink); background: var(--accent-soft); border: 1px dashed var(--accent); border-radius: 8px; padding: 6px 10px; }
-.pnt svg.i { width: 13px; height: 13px; }
-.pundo { font: inherit; font-size: var(--fs-sm); color: var(--dim); background: none; border: 0; text-decoration: underline; padding: 0 2px; }
-.pnt-card .rows { margin-top: 8px; }
-.pnt-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
-.pnt-row:last-child { border-bottom: 0; }
-.pnt-st { display: inline-flex; align-items: center; gap: 8px; }
 /* Pick list: the route order beside the list order. */
 .pk-opt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--accent); }
 .pk-opt > svg.i { width: 18px; height: 18px; color: var(--accent-ink); flex: none; }
@@ -3488,13 +3477,6 @@ body:has(.content.mv > .dk-body) #toasts { top: 76px; bottom: auto; }
 /* A pallet's actions wrap on a phone instead of running off the edge. */
 .bdk-palacts { flex-wrap: wrap; }
 .mv .bdk-palacts .btn { flex: 1 1 calc(50% - 6px); }
-/* Planner slot rows: grey not yet, amber under way, green done (DV's card). */
-.prow.pr-0 > svg.i { color: var(--faint); } .prow.pr-0 b { color: var(--ink2); font-weight: var(--fw-regular); }
-.prow.pr-1 > svg.i, .prow.pr-1 b { color: var(--amber-ink); }
-.prow.pr-2 > svg.i, .prow.pr-2 b { color: var(--green-ink); }
-.prow.pr-0, .prow.pr-1, .prow.pr-2 { border-left: 3px solid var(--track); padding-left: 6px; margin-left: -2px; }
-.prow.pr-1 { border-left-color: var(--amber); } .prow.pr-2 { border-left-color: var(--green); }
-.pslot-h > .status { margin-left: auto; }
 .pchoose { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 10px; background: var(--ground); border-radius: 10px; margin: 0 0 6px; }
 .pchoose .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .pchoose .chip { cursor: pointer; border: 1px solid var(--line); }
@@ -4293,20 +4275,11 @@ svg.i.dkt-i { width: 14px; height: 14px; flex: none; stroke-width: 2; }
 /* Trucks not coming to the dock (plan.route, js/views/backdock/routes.js;
    their tags are the chip family): orange for off-site, violet for diverted, blue for one coming back. */
 .rt-row { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.pslot.routed { cursor: pointer; }
-.pslot.routed.offsite { background: #FFF7ED; border-color: #FED7AA; }
-.pslot.routed.diverted { background: #F5F3FF; border-color: #DDD6FE; }
-.pslot.routed.on { border-color: var(--accent); }
-.prow.pr-x { border-left: 3px solid var(--track); padding-left: 6px; margin-left: -2px; }
-.prow.pr-x b { color: var(--ink2); white-space: normal; }
-.pslot.routed.offsite .prow.pr-x { border-left-color: #FDBA74; }
-.pslot.routed.diverted .prow.pr-x { border-left-color: #C4B5FD; }
 .pland { display: flex; flex-direction: column; gap: 4px; border: 1px dashed #93C5FD; background: #EFF6FF; border-radius: 10px; padding: 8px 9px; font-size: var(--fs-xs); color: #1E3A8A; min-width: 0; }
 .pland.diverted { border-color: #C4B5FD; background: #F5F3FF; color: #4C1D95; }
 .pland-h { display: flex; align-items: center; gap: 5px; font-size: var(--fs-sm); }
 .pland-h svg.i { width: 13px; height: 13px; }
 .pland .btn { align-self: flex-start; }
-.pedit .rt-row { margin: -2px 0 8px; }
 .pedit .pf-acts { flex-wrap: wrap; }
 /* The Where it goes sheet */
 .rt-body { display: flex; flex-direction: column; gap: 12px; }
@@ -5014,8 +4987,8 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 /* Trucks not coming to the dock: blue coming back, orange off-site, violet diverted. */
 .frame.dark .rt-effect { background: #14391F; color: #BBF7D0; }
 .frame.dark :is(.bdr-haltrow.planned, .rvp-msg.back, .rt-effect.back, .pland) { background: #152338; border-color: #2E4A7A; color: #BFDBFE; }
-.frame.dark :is(.pslot.routed.offsite, .db-c.routed.offsite, .mfd-where.offsite, .rt-effect.offsite, .off-bar) { background: #3A2410; border-color: #7A4A1E; color: #FED7AA; }
-.frame.dark :is(.pslot.routed.diverted, .db-c.routed.diverted, .mfd-where.diverted, .rt-effect.diverted, .pland.diverted, .ofg-note) { background: #261A47; border-color: #4C3A8A; color: #DDD6FE; }
+.frame.dark :is(.db-c.routed.offsite, .mfd-where.offsite, .rt-effect.offsite, .off-bar) { background: #3A2410; border-color: #7A4A1E; color: #FED7AA; }
+.frame.dark :is(.db-c.routed.diverted, .mfd-where.diverted, .rt-effect.diverted, .pland.diverted, .ofg-note) { background: #261A47; border-color: #4C3A8A; color: #DDD6FE; }
 .frame.dark :is(small.called, .ofg-pr.called .ofg-pl) { color: #93C5FD; }
 .frame.dark :is(.ofg-pl, .off-what span) { color: #FDBA74; }
 .frame.dark :is(.dkt-co, .dkt-fc.co) { color: #C4B5FD; }
@@ -5055,3 +5028,273 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .frame.dark .mapleg i.k-noname { background: #0C2A3B; }
 /* Equipment's key: out of service is near-black on the light map; a grey mark in the dark. */
 .frame.dark .mapleg i.k-out { background: #9CA3AF; }
+
+/* ── The Planner's week (F.2, approved 12 Nov 2026; js/views/backdock/planner.js) ──
+   The days card above the trucks card, seven columns, every row a fixed
+   height. Colour only where something needs doing. --c is a cell's day
+   column, --r its row and --rs the rows it spans. At the PC's wide layout
+   the editor sits beside the week (--pw-beside, which the view reads when a
+   truck is picked); narrower the side cards go under it and the editor
+   opens as a sheet; half a screen scrolls the week sideways inside its card
+   with the Truck column pinned. */
+.pw, .pw-phone, .pw-rp { --pw-today: color-mix(in srgb, var(--accent) 5%, var(--panel)); --pw-today2: color-mix(in srgb, var(--accent) 10%, var(--panel)); --pw-none: color-mix(in srgb, var(--tone-g) 45%, var(--panel)); --pw-soft: color-mix(in srgb, var(--green) 50%, var(--panel)); }
+.pw { --pw-beside: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; min-width: 0; }
+.pw-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.pw-side { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; min-width: 0; }
+.pw-side > .pw-ed { display: none; }
+@container shell (min-width: 1600px) {
+  .pw { --pw-beside: 1; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
+  .pw.solo { grid-template-columns: minmax(0, 1fr); }
+  .pw-side { display: flex; flex-direction: column; }
+  .pw-side > .pw-ed { display: block; }
+}
+.pw .card { padding: 14px 16px; }
+.pw .card .ch { margin-bottom: 8px; }
+.pw .card .ch h3 { font-size: var(--fs-lg); font-weight: var(--fw-bold); flex: 1; }
+.pw-one, .pw-l1, .pw-l2, .pw-need, .pw-note, .pw-man, .pw-big, .pw-bs, .pw-fin { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pw-print span { display: inline; }
+/* The days card and the trucks card. */
+.pw-scroll { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pw-days, .pw-trucks { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); overflow: clip; box-shadow: 0 1px 2px rgba(17, 24, 39, .04); }
+.pw-days { grid-template-rows: 58px 50px; }
+.pw-trucks { grid-template-rows: repeat(3, 132px) 34px; }
+.pw-trucks.four { grid-template-rows: repeat(4, 132px); }
+.pw-days > *, .pw-trucks > * { grid-column: var(--c); grid-row: var(--r) / span var(--rs, 1); box-sizing: border-box; min-width: 0; border-left: 1px solid var(--line-soft); }
+.pw-days > [style^="--c:1;"], .pw-days > [style="--c:1"], .pw-trucks > [style^="--c:1;"] { border-left: 0; }
+.pw-lab { display: none; }
+.pw-h { --r: 1; padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.pw-b { --r: 2; padding: 6px 10px; display: flex; flex-direction: column; justify-content: center; gap: 2px; background: var(--hover); border-top: 1px solid var(--line-soft); }
+.pw-h.today { background: var(--pw-today); } .pw-b.today { background: var(--pw-today2); }
+.pw-h.none { background: var(--pw-none); } .pw-b.none { background: color-mix(in srgb, var(--tone-g) 70%, var(--panel)); }
+.pw-dl { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; font-size: var(--fs-xs); font-weight: var(--fw-semi); letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+.pw-dl b { font-size: var(--fs-lg); letter-spacing: 0; color: var(--ink); }
+.past .pw-dl b { color: var(--dim); } .today .pw-dl b { color: var(--accent-ink); } .none .pw-dl b { color: var(--green-ink); }
+.pw-dl em { margin-left: auto; font-style: normal; font-weight: var(--fw-semi); letter-spacing: 0; text-transform: none; }
+.pw-dl em.today { color: var(--accent-ink); } .pw-dl em.done { color: color-mix(in srgb, var(--green-ink) 70%, var(--dim)); }
+.pw-bars { display: flex; gap: 3px; height: 3px; }
+.pw-bars i { flex: 1; border-radius: 2px; background: var(--track); }
+.pw-bars i.done { background: var(--pw-soft, color-mix(in srgb, var(--green) 50%, var(--panel))); } .pw-bars i.live { background: var(--accent); } .pw-bars i.now { background: var(--amber); } .pw-bars i.late { background: var(--red); }
+.pw-big { font-size: var(--fs-sm); color: var(--dim); font-variant-numeric: tabular-nums; }
+.pw-big b { font-size: var(--fs-lg); font-weight: var(--fw-bold); color: var(--ink); }
+.pw-big b.dim { color: var(--dim); } .pw-big b.faint { color: var(--faint); } .pw-big b.good { color: var(--green-ink); }
+.pw-bs { font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
+.pw-bs.warn { color: var(--amber-ink); font-weight: var(--fw-semi); } .pw-bs.bad { color: var(--tone-b-ink); font-weight: var(--fw-semi); } .pw-bs.good { color: var(--green-ink); font-weight: var(--fw-semi); }
+/* A truck's cell. */
+.pw-c { position: relative; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; border-top: 1px solid var(--line-soft); }
+.pw-trucks > [style*="--r:1;"], .pw-trucks > [style$="--r:1"] { border-top: 0; }
+.pw-c.today { background: var(--pw-today); }
+.pw-c[data-act] { cursor: pointer; }
+.pw-c[data-act]:hover { background: var(--hover); }
+.pw-c.on, .pw-c.on:hover { box-shadow: inset 0 0 0 2px var(--accent); background: var(--panel); }
+.pw-tk { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; font-size: var(--fs-xs); font-weight: var(--fw-semi); color: var(--faint); white-space: nowrap; }
+.pw-tk svg.i { width: 13px; height: 13px; flex: none; }
+.pw-mh { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pw-man { display: block; font-size: var(--fs-md); font-weight: var(--fw-bold); color: var(--ink); font-variant-numeric: tabular-nums; flex: 1; }
+.pw-man.dim { color: var(--dim); font-weight: var(--fw-semi); } .pw-man.faint { color: var(--faint); font-weight: var(--fw-semi); } .pw-man.warn { color: var(--amber-ink); }
+.pw-mh > .status { flex: none; }
+.pw-phx { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pw-phx > .status { flex: none; }
+.pw-phx .pw-l1 { flex: 1; }
+.pw-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
+.pw-dot.good { background: var(--green); } .pw-dot.warn { background: var(--amber); } .pw-dot.bad { background: var(--red); }
+.pw-l1 { font-size: var(--fs-sm); color: var(--ink2); font-variant-numeric: tabular-nums; }
+.pw-l2 { font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
+.pw-note { display: flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--dim); }
+.pw-note svg.i { width: 12px; height: 12px; flex: none; }
+.pw-need { margin-top: auto; font-size: var(--fs-xs); color: var(--faint); }
+.pw-need.warn { color: var(--amber-ink); font-weight: var(--fw-semi); } .pw-need.bad { color: var(--tone-b-ink); font-weight: var(--fw-semi); }
+.pw-ok { display: flex; align-items: center; gap: 4px; font-size: var(--fs-sm); color: var(--green-ink); white-space: nowrap; }
+.pw-ok svg.i { width: 12px; height: 12px; stroke-width: 2.6; flex: none; }
+.pw-never { font-size: var(--fs-sm); color: var(--faint); }
+.pw-bar { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; margin-top: auto; flex: none; }
+.pw-bar i { display: block; height: 100%; width: var(--w); border-radius: 4px; background: var(--accent); }
+.pw-fin { font-size: var(--fs-xs); font-weight: var(--fw-semi); color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.pw-c .status, .pw-pc .status { align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.pw-mh > .status { align-self: center; }
+.pw-land { background: color-mix(in srgb, var(--tone-i) 40%, var(--panel)); }
+.pw-land .pw-tk { color: var(--tone-i-ink); }
+.pw-plan { align-self: flex-start; margin-top: auto; }
+.pw-addc { justify-content: center; }
+.pw-addc.xr { padding: 0 10px; }
+.pw-add { align-self: flex-start; border: 0; background: none; padding: 2px 0; font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--accent-ink); cursor: pointer; }
+.pw-add:hover { text-decoration: underline; }
+/* A day with no trucks fills its column. */
+.pw-span { align-items: center; justify-content: center; text-align: center; gap: 8px; padding: 18px 14px; }
+.pw-span > b { font-size: var(--fs-md); color: var(--ink2); }
+.pw-span > span:not(.pw-ring):not(.pw-dropx) { font-size: var(--fs-sm); color: var(--dim); line-height: 1.35; }
+.pw-unpl { background: repeating-linear-gradient(135deg, var(--panel) 0 10px, var(--hover) 10px 20px); }
+.pw-none { background: var(--pw-none); }
+.pw-none > b { color: var(--tone-g-ink); } .pw-none > span:not(.pw-ring) { color: var(--green-ink); }
+.pw-gone > b { color: var(--faint); font-weight: var(--fw-semi); }
+.pw-gone .pw-add { align-self: center; }
+.pw-ring { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--panel); border: 1px dashed var(--line); color: var(--faint); }
+.pw-ring svg.i { width: 20px; height: 20px; }
+.pw-none .pw-ring { background: var(--tone-g); border: 1px solid color-mix(in srgb, var(--green) 35%, var(--panel)); color: var(--green-ink); }
+.pw-none .pw-ring svg.i { stroke-width: 2.6; }
+.pw-btn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 5px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; background: var(--panel); color: var(--ink2); font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-semi); cursor: pointer; }
+.pw-btn svg.i { width: 13px; height: 13px; stroke-width: 2.4; }
+.pw-btn.add { margin-top: 4px; border-style: dashed; border-color: var(--accent-line); color: var(--accent-ink); }
+.pw-btn.ok { border-color: color-mix(in srgb, var(--green) 30%, var(--panel)); background: color-mix(in srgb, var(--tone-g) 35%, var(--panel)); color: var(--green-ink); }
+.pw-none .pw-btn { width: auto; margin-top: 4px; padding: 4px 12px; color: var(--green-ink); border-color: color-mix(in srgb, var(--green) 30%, var(--panel)); }
+.pw-lnk { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 2px 0; font: inherit; font-size: var(--fs-xs); color: var(--dim); cursor: pointer; }
+.pw-lnk:hover { color: var(--accent-ink); text-decoration: underline; }
+.pw-lnk svg.i { width: 12px; height: 12px; }
+/* Drag a manifest onto a truck. */
+.pw.dragging [data-drop] { outline: 2px dashed var(--accent-line); outline-offset: -5px; }
+.pw-dropx { display: none; pointer-events: none; position: absolute; inset: 4px; z-index: 1; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px; text-align: center; border-radius: 8px; border: 2px dashed var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); color: var(--accent-ink); }
+.pw-dropx svg.i { width: 18px; height: 18px; }
+.pw-dropx b { font-size: var(--fs-sm); } .pw-dropx small { font-size: var(--fs-xs); }
+.pw.dragging [data-drop].over .pw-dropx { display: flex; }
+/* The side: the editor, the manifests without a slot, off-site, the roster. */
+.pw-form { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 9px 10px; align-items: start; font-size: var(--fs-sm); margin: 4px 0 2px; }
+.pw-fl { color: var(--dim); font-weight: var(--fw-semi); padding-top: 7px; }
+.pw-fl label { font: inherit; color: inherit; }
+.pw-fv { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.pw-fv > b { font-size: var(--fs-md); font-variant-numeric: tabular-nums; padding-top: 6px; }
+.pw-fv .cs-dim { font-size: var(--fs-xs); }
+.pw-form .inp { min-width: 0; padding: 6px 9px; font-size: var(--fs-md); }
+.pw-form .pw-eta { width: 84px; }
+.pw-man2 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.pw-man2 > b { font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
+.pw-man2 select.inp { flex: 1 1 140px; min-width: 0; }
+.pw-form .dk-team { margin-top: 0; gap: 4px; }
+.pw-form .pf-time .inp { width: 100px; }
+.pw-form .pf-pair .inp { width: 60px; }
+.pw-ed .pf-acts, .pw-sheet .sht-f { flex-wrap: wrap; }
+.pw-ed .pf-acts { margin-top: 12px; }
+.pw-ed > .lbl, .pw-sheet .sht-b > .lbl { font-size: var(--fs-sm); }
+.pw-wl { display: flex; flex-direction: column; }
+.pw-w { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line-soft); cursor: grab; }
+.pw-w.moving { opacity: .45; }
+.pw-grip { display: grid; color: var(--faint); flex: none; }
+.pw-grip svg.i { width: 15px; height: 15px; }
+.pw-wt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pw-wt b { font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
+.pw-wt span { font-size: var(--fs-xs); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pw-w .btn.sm { flex: none; padding: 4px 9px; font-size: var(--fs-xs); }
+.pw-side > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.pw-wait .ch .cs-dim { margin-left: auto; white-space: nowrap; }
+.pw-wait .lbl { font-size: var(--fs-xs); margin-top: 6px; }
+.pw-wait .pchoose { margin-top: 2px; }
+.pw-ros { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.pw .card.pw-ros { padding: 12px 16px; }
+.pw-ros b { font-size: var(--fs-md); flex: none; }
+.pw-ros span { flex: 1; min-width: 0; text-align: right; font-size: var(--fs-sm); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pw-ros em { flex: none; font-style: normal; font-size: var(--fs-sm); color: var(--dim); }
+.pw-ros svg.i { width: 15px; height: 15px; color: var(--faint); flex: none; }
+.pw-ros-o .ch .ibtn { margin-left: 6px; }
+.pw-ros-o .dk-team { margin-top: 0; }
+/* An empty week: Repeat last week (board J). */
+.pw-rp { display: flex; flex-direction: column; gap: 14px; border-color: var(--accent-line); }
+.pw-rp-h { display: flex; align-items: center; gap: 16px; }
+.pw-rp-h .vic { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
+.pw-rp-h .vic svg.i { width: 22px; height: 22px; }
+.pw-rp-h { flex-wrap: wrap; } .pw-rp-h > div { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pw-rp-h > div b { font-size: var(--fs-lg); }
+.pw-rp-h > div span { font-size: var(--fs-md); color: var(--dim); }
+.pw-rp-t { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: var(--fw-semi); letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
+.pw-rp-t i { flex: 1; height: 1px; background: var(--line); }
+.pw-rp-g { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.pw-rp-d { border: 1px solid var(--line); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 200px; box-sizing: border-box; }
+.pw-rp-s { min-height: 40px; box-sizing: border-box; border: 1px dashed var(--accent-line); background: color-mix(in srgb, var(--accent) 5%, var(--panel)); border-radius: 8px; padding: 4px 8px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.pw-rp-s b { font-size: var(--fs-sm); color: var(--accent-ink); }
+.pw-rp-s span { font-size: var(--fs-xs); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.pw-rp-x { flex: 1; display: grid; place-items: center; padding: 6px; border-radius: 8px; border: 1px dashed var(--line); font-size: var(--fs-sm); color: var(--faint); text-align: center; }
+.pw-rp-x.ok { border-color: color-mix(in srgb, var(--green) 40%, var(--panel)); background: var(--pw-none); color: var(--green-ink); font-weight: var(--fw-semi); }
+/* The day strip (half a screen) and the phone's days. */
+.pw-strip { display: none; gap: 6px; }
+.pw-strip button { flex: 1; min-width: 0; height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink2); font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-semi); white-space: nowrap; cursor: pointer; }
+.pw-strip button.on, .pw-pdays button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pw-strip i, .pw-pdays i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
+.pw-strip i.good, .pw-pdays i.good { background: var(--green); } .pw-strip i.part, .pw-pdays i.part { background: color-mix(in srgb, var(--accent) 45%, var(--panel)); }
+.pw-strip i.bad, .pw-pdays i.bad { background: var(--red); } .pw-strip i.none, .pw-pdays i.none { background: var(--track); }
+.pw-strip i.today, .pw-pdays i.today { background: var(--accent); }
+.pw-strip .on i, .pw-pdays .on i { background: #fff; }
+/* Half a screen (board G): the week scrolls sideways in one card, the Truck column pinned. */
+@container shell (max-width: 1099px) {
+  .pw-print span { display: none; }
+  .pw-strip { display: flex; }
+  .pw-scroll { overflow-x: auto; gap: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); }
+  .pw-days, .pw-trucks { grid-template-columns: 96px repeat(7, 150px); width: max-content; border: 0; border-radius: 0; overflow: visible; box-shadow: none; }
+  .pw-trucks { border-top: 1px solid var(--line); }
+  .pw-days > :not(.pw-lab), .pw-trucks > :not(.pw-lab) { grid-column: calc(var(--c) + 1); }
+  .pw-days > [style^="--c:1;"], .pw-days > [style="--c:1"], .pw-trucks > [style^="--c:1;"] { border-left: 1px solid var(--line-soft); }
+  .pw-lab { display: flex; flex-direction: column; justify-content: center; gap: 2px; grid-column: 1; grid-row: var(--r); position: sticky; left: 0; z-index: 2; padding: 8px 12px; border-left: 0; background: var(--hover); box-shadow: 6px 0 10px -6px rgba(17, 24, 39, .25); }
+  .pw-trucks .pw-lab + .pw-lab { border-top: 1px solid var(--line-soft); }
+  .pw-days .pw-lab[style="--r:2"] { border-top: 1px solid var(--line-soft); }
+  .pw-lab b { font-size: var(--fs-md); }
+  .pw-lab span { font-size: var(--fs-xs); color: var(--dim); }
+  .pw-rp-g { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pw-rp-h { flex-wrap: wrap; }
+}
+.frame.dark .pw-lab { box-shadow: 6px 0 10px -6px rgba(0, 0, 0, .6); }
+/* The phone (board H): one day at a time. */
+.pw-mhead { align-items: center; }
+.pw-mhead > div { flex: 1; }
+.pw-wk { align-items: center; }
+.pw-wk button { min-width: 36px; min-height: 36px; font-size: var(--fs-lg); padding: 0 8px; }
+.pw-wk span { padding: 0 4px; font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--ink2); white-space: nowrap; }
+.pw-phone { display: flex; flex-direction: column; gap: 10px; }
+.pw-pdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.pw-pdays button { height: 54px; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font: inherit; font-size: var(--fs-xs); font-weight: var(--fw-semi); cursor: pointer; }
+.pw-pdays button b { font-size: var(--fs-lg); line-height: 1.1; }
+.pw-pdays button.none:not(.on) { background: var(--pw-none, color-mix(in srgb, var(--tone-g) 45%, var(--panel))); border-color: color-mix(in srgb, var(--green) 30%, var(--panel)); color: var(--green-ink); }
+.pw-ph { display: flex; flex-direction: column; gap: 5px; }
+.pw-ph-t { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pw-ph-t b { font-size: var(--fs-lg); }
+.pw-ph-t .tday { font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--accent-ink); }
+.pw-ph-t .r { margin-left: auto; font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--accent-ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pw-ph .pw-bars { height: 5px; }
+.pw-pband { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.pw-pband.none { background: var(--pw-none, color-mix(in srgb, var(--tone-g) 45%, var(--panel))); }
+.pw-pband .pw-big { white-space: normal; }
+.pw-pband .pw-big b { font-size: var(--fs-xl); }
+.pw-pband .pw-big span { font-size: var(--fs-sm); }
+.pw-pband .pw-bs { font-size: var(--fs-sm); }
+.pw-ctr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pw-ctr .status { display: flex; align-items: center; justify-content: center; gap: 4px; height: 30px; padding: 0 4px; box-sizing: border-box; font-size: var(--fs-sm); font-weight: var(--fw-bold); }
+.pw-ctr .status > svg.i { margin: 0; }
+.pw-pc { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; min-height: 112px; box-sizing: border-box; }
+.pw-pc[data-act] { cursor: pointer; }
+.pw-pc:has(.pw-dot.warn) { border-color: var(--amber); } .pw-pc:has(.pw-dot.bad) { border-color: var(--red); }
+.pw-pc .pw-man { font-size: var(--fs-lg); }
+.pw-pc .pw-l1, .pw-pc .pw-ok, .pw-pc .pw-never { font-size: var(--fs-md); }
+.pw-pc .pw-l2, .pw-pc .pw-note, .pw-pc .pw-need, .pw-pc .pw-fin { font-size: var(--fs-sm); }
+.pw-pc .pw-bar { height: 10px; border-radius: 6px; margin-top: auto; }
+.pw-pc.pw-span { min-height: 260px; padding: 20px 16px; }
+.pw-pc.pw-unpl { background: repeating-linear-gradient(135deg, var(--panel) 0 10px, var(--hover) 10px 20px); }
+.pw-pc.pw-none { background: var(--pw-none, color-mix(in srgb, var(--tone-g) 45%, var(--panel))); }
+.pw-pc.pw-land { background: color-mix(in srgb, var(--tone-i) 40%, var(--panel)); }
+.pw-pc.pw-span .pw-btn { min-height: 40px; }
+.pw-padd { height: 44px; flex: none; border: 1px dashed var(--accent-line); border-radius: 10px; background: transparent; color: var(--accent-ink); font: inherit; font-size: var(--fs-md); font-weight: var(--fw-semi); cursor: pointer; }
+.pw-rp.phone .pw-rp-h { flex-wrap: wrap; }
+.pw-rp.phone .pw-rp-h .btn { flex: 1 1 140px; justify-content: center; }
+.pw-rp.phone .pw-rp-g { grid-template-columns: 1fr 1fr; }
+.pw-rp.phone .pw-rp-d { min-height: 0; }
+/* Paper: the week for the dock wall (board I), one A4 landscape sheet. */
+@media print {
+  #printroot .pwp { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 8.5pt; }
+  #printroot .pwp-g { display: grid; grid-template-columns: 20mm repeat(7, minmax(0, 1fr)); grid-template-rows: 8mm 12mm repeat(3, 37mm); border: 1.5px solid #000; }
+  #printroot .pwp.four .pwp-g { grid-template-rows: 8mm 12mm repeat(4, 28mm); }
+  #printroot .pwp-g > * { box-sizing: border-box; min-width: 0; overflow: hidden; border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 1.2mm 1.6mm; display: flex; flex-direction: column; gap: .6mm; }
+  #printroot .pwp-h { background: #EDEDED; font-weight: 700; font-size: 10pt; justify-content: center; }
+  #printroot .pwp-h.today { background: #D9D9D9; }
+  #printroot .pwp-l { background: #EDEDED; justify-content: center; }
+  #printroot .pwp-l b { font-size: 10pt; } #printroot .pwp-l span { font-size: 8pt; color: #444; }
+  #printroot .pwp-b { justify-content: center; } #printroot .pwp-b b { font-size: 9.5pt; } #printroot .pwp-b span { color: #444; }
+  #printroot .pwp-c > b { font-size: 10pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #printroot .pwp-c > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #222; }
+  #printroot .pwp-c.blank { color: #777; gap: 1.5mm; } #printroot .pwp-c.blank span { color: #777; }
+  #printroot .pwp-c.blank small { margin-top: auto; font-size: 7.5pt; }
+  #printroot .pwp-box { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 1.2mm; }
+  #printroot .pwp-box span { border: 1px solid #000; border-radius: 1mm; padding: .4mm 1mm; font-size: 7pt; color: #444; display: flex; flex-direction: column; }
+  #printroot .pwp-box b { font-size: 10pt; color: #000; }
+  #printroot .pwp-mid { grid-row: span var(--rs); align-items: center; justify-content: center; text-align: center; background: repeating-linear-gradient(135deg, #fff 0 8px, #F0F0F0 8px 16px); }
+  #printroot .pwp-mid b { font-size: 10.5pt; } #printroot .pwp-mid span { color: #444; }
+  #printroot .pwp-foot { display: grid; grid-template-columns: 2fr 1fr; gap: 5mm; margin-top: 4mm; height: 24mm; }
+  #printroot .pwp.four .pwp-foot { height: 30mm; }
+  #printroot .pwp-notes, #printroot .pwp-ros { border: 1.5px solid #000; padding: 1.2mm 3mm; display: flex; flex-direction: column; gap: 1mm; }
+  #printroot .pwp-notes > b, #printroot .pwp-ros > b { font-size: 8.5pt; letter-spacing: .06em; text-transform: uppercase; }
+  #printroot .pwp-notes i { flex: 1; background: repeating-linear-gradient(#fff 0 5.6mm, #BBB 5.6mm 5.85mm); }
+  #printroot .pwp-ros small { color: #444; font-size: 7.5pt; margin-top: auto; }
+}
