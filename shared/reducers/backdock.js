@@ -4,7 +4,8 @@
 //
 //   dock.trucks   id ('YYYY-MM-DD-Tn') → { status: staged|live|closed, createdAt, landedAt, goalAt,
 //                 grid, minsPerCarton (both from the store settings at creation), team: [{ pid: 'D4', dnum: 4 }], halts: [{ reason, start, end }],
-//                 carriedConsols: consols that came with carried pallets
+//                 carriedConsols: consols that came with carried pallets,
+//                 eta: the ETA its planner slot had (kept so Repeat last week can plan the slot again),
 //                 manifest: { manNo, dcNo, despatch, consols: [...] } | null,
 //                 pallets: ref → pallet }
 //   pallet        { ref, ptype: chep|loscam|bulk, cartons, expectedMins, expectedBasis, note,
@@ -165,6 +166,7 @@ export const backdockReducers = {
     if (routed) { if (routed.slot) day.slots[slot] = routed.slot; delete day.routes[slot]; if (!Object.keys(day.routes).length) delete day.routes; dropRouteRows(s, { date, slot }); }
     if (day && day.slots[slot]) {
       const sl = day.slots[slot]; t.team = teamOf(sl.team) || [];
+      if (sl.eta) t.eta = sl.eta;   // the slot goes; its ETA stays with the truck (the Planner's Repeat last week)
       if (sl.from) t.from = sl.from;   // a truck bringing back what went off-site says so
       // A member's start follows the slot's ETA unless planned otherwise.
       if (sl.eta) for (const m of t.team) if (!m.start) m.start = sl.eta;
