@@ -228,7 +228,7 @@ function daysCard(m) {
   return `<section class="pw-days" aria-label="${tx('The week’s days')}">${lab(1, '')}${lab(2, tx('The day'), tx('cartons'))}` + m.days.map((d, i) => {
     const [tc, tt] = dayTag(d), b = band(d), cls = `${d.isToday ? ' today' : ''}${d.nt && !d.cells.length ? ' none' : ''}${d.past ? ' past' : ''}`;
     return `<div class="pw-h${cls}" style="--c:${i + 1}"><span class="pw-dl">${DOW[i]}<b>${dateOf(d.k).getDate()}</b>${tt ? `<em class="${tc}">${tt}</em>` : ''}</span><span class="pw-bars">${d.cells.map(c => `<i class="${segOf(c)}"></i>`).join('')}</span></div>` +
-      `<div class="pw-b${cls}" style="--c:${i + 1}"><span class="pw-big"><b class="${b.ink || ''}">${b.big}</b>${b.what ? ' ' + b.what : ''}</span><span class="pw-bs ${b.tone}">${b.sub}</span></div>`;
+      `<div class="pw-b${cls}" style="--c:${i + 1}"><span class="pw-big"><b class="${b.ink || ''}">${b.big}</b>${b.what ? ' ' + b.what : ''}</span><span class="pw-bs ${b.tone}" title="${b.sub}">${b.sub}</span></div>`;
   }).join('') + `</section>`;
 }
 function trucksCard(ctx, m) {
