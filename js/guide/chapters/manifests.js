@@ -518,7 +518,7 @@ const where = r => `<div class="mf3-where ${r.route}"><span class="cl">${ai(r.ro
 const mkR = (m, rt) => ({ ...m, st: rt.route, rt });
 const LISTR = () => [...LIST0, mkR({ ...mk(M304), day: DAY, truck: 2 }, RT2()), mkR(mk(['7040299', '2026-10-22', 2, '', 38, 6]), RT299())];
 
-// ── the Planner's week (slotHtml(), routedHtml(), landingHtml(), noneHtml()) ──
+// ── the Planner's week (drawn from the week before F.2; planner.js cellBody()) ──
 const prw = (lvl, icon, b, sub, more = '') => `<div class="mf3-prow pr-${lvl}">${ai(icon)}<div><b>${b}</b>${sub ? `<span>${sub}</span>` : ''}${more}</div></div>`;
 const metrics = (consols, cartons, keycodes, units) => tx('{consols} consols · {cartons}c · {keycodes} keycodes · {units} units', { consols, cartons, keycodes, units });
 const M301 = () => metrics(12, 72, 8, 412), M304M = () => metrics(10, 66, 15, 390), M299 = () => metrics(6, 38, 9, 230);
@@ -536,7 +536,7 @@ const crew = () => `<div class="mf3-crew">${['D4', 'D7', 'D9'].map(p => `<span>$
 const live1 = () => sh(1, DAY, phc('receiving', tx('truck phase::Receiving')), 'live', prw(2, 'file', '7040301', `${M301()} · ${tx('on the truck')}`) +
   prw(1, 'truck', tx('Receiving · {n} pallets', { n: 2 }), tx('landed {time} · layout not confirmed', { time: '05:40' })) + prw(0, 'users', tx('{n} on decant', { n: 3 }), '', crew()));
 const planned2 = on => sh(2, DAY, eta('13:30'), on ? 'on' : '', prw(1, 'file', '7040304', `${M304M()} · ${tx('staged')}`) + prw(0, 'truck', tx('ETA {time}', { time: '13:30' }), tx('starts at Receiving when it lands')) + prw(0, 'users', tx('No team yet'), tx('pick devices')));
-// A truck marked off-site or diverted keeps its place in its day (routedHtml()).
+// A truck marked off-site or diverted keeps its place in its day (cellBody()).
 const routed = (n, k, r, t, man, on) => sh(n, k, t ? eta(t) : '', `routed ${r.route}${on ? ' on' : ''}`, `<div class="mf3-rtrow">${rtag(r)}</div>` +
   prw('x', 'file', r.man, man) + prw('x', r.route === 'offsite' ? 'stack' : 'route', tx('Not coming to the dock'), rline(r)) + prw('x', 'users', tx('Nothing to decant'), ''));
 // Tuesday's Truck 1, called back: it brings 7040304's pallets home, the report staged on it.
@@ -650,7 +650,7 @@ manifests.stories.push({
   html: () => frame(view('v-pl', planPage(), true) + view('v-list', page(LISTR(), '7040304'), false)),
   steps: [
     { cap: tx('Plan › Planner: Truck 2 is due at 13:30 with 7040304, and Truck 1 is still on the dock.'), read: S(tx('There is no room on the dock for a second truck today.'), tx('Click Truck 2: it opens on the right.')),
-      dev: 'Each truck in the week is <b>slotHtml()</b> in js/views/backdock/planner.js; Thursday’s Truck 2, diverted, is <b>routedHtml()</b>. The side is <b>editor()</b>.', ev: [],
+      dev: 'Each truck in the week is <b>cellBody()</b> in js/views/backdock/planner.js, a diverted one included, like Thursday’s Truck 2. The side is <b>editorCard()</b>.', ev: [],
       run: async c => { await c.tap('#v-pl .mf3-ps[data-slot="2026-10-25-2"]'); c.html('#v-pl', planPage({ sel: 2 })); } },
     { cap: tx('Where it goes: Off-site or diverted…, then Off-site.'), read: S(tx('Lands here on is the day it comes back, if you know it; where it is stored and why are for the record.'), tx('The sheet says what happens: nothing expects it at Receiving that day.')),
       dev: '<b>routeSheet()</b> in js/views/backdock/routes.js, for managers; nothing is sent until Save.', ev: [],
