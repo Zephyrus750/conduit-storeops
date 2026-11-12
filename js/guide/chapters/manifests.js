@@ -1,10 +1,14 @@
 // Chapter: Manifests by day and truck, on the store PC at
 // 1920×1080, Back dock › Plan › Manifests as the app draws it today
 // (js/views/backdock/manifests.js: the list by week, day and truck and the
-// explorer; mpreview.js: the upload preview; mbatch.js: several reports at
-// once with their days; mstats.js: the Stats tab). Three What ifs play on
-// the same PC: several reports at once (one of them twice), one on the wrong
-// truck, and a month's stats.
+// explorer; mpreview.js: the upload preview and its four views,
+// Departments, Products, Consolidations and Groups, with a row's details
+// and the product card; mbatch.js: several reports at once with their days;
+// mstats.js: the Stats tab). Five What ifs play on the same PC: several
+// reports at once (one of them twice), one on the wrong truck, a month's
+// stats, and on the Plan row's other tabs a truck that can't come to the
+// dock (the Planner, routes.js) and calling its pallets back (Off-site
+// pallets, offsite.js and callback.js).
 // The demo day: Busselton 1241, Sunday 25 October 2026. Truck 1 is receiving
 // manifest 7040301 with its 12 consols (scripts/guide/seed.mjs, the Receive
 // chapter's truck: A1 and A2 down, 3 consols landed); Truck 2 is planned for
@@ -73,7 +77,7 @@ const KDEPT = { ...Object.fromEntries(KC301), 43310045: '038', 42981102: '047', 
 
 // ── the list by week, day and truck (manifests.js grouped(), listRow()) ──
 // On a truck here, the truck's phase: 7040301's Truck 1 is still receiving.
-const STATUS = () => ({ done: [tx('Done'), 'good'], decanting: [tx('Decanting'), 'warn'], receiving: [tx('Receiving'), ''], planned: [tx('Planned'), ''], arrived: [tx('Came in'), ''], library: [tx('Published'), ''] });
+const STATUS = () => ({ done: [tx('Done'), 'good'], decanting: [tx('Decanting'), 'warn'], receiving: [tx('Receiving'), ''], planned: [tx('Planned'), ''], arrived: [tx('Came in'), ''], library: [tx('Published'), ''], offsite: [tx('Off-site'), 'warn'], diverted: [tx('Diverted'), ''] });
 const monday = d => addDays(d, -((new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7));
 const dayName = d => d === DAY ? tx('Today · {date}', { date: fmtDay(d) }) : d === addDays(DAY, -1) ? tx('Yesterday · {date}', { date: fmtDay(d) }) : fmtDay(d);
 function weekName(w) {
@@ -91,7 +95,7 @@ const tile = d => d ? `<span class="mf2-dd${d === DAY ? ' now' : ''}"><small>${d
 const pill = (t, k = '') => `<span class="mf2-st${k ? ' ' + k : ''}">${t}</span>`;
 function lrow(m, on) {
   const [label, cls] = STATUS()[m.st];
-  return `<div class="mf2-row${on ? ' on' : ''}" data-man="${m.no}">${tile(m.day)}<span class="mm"><span class="hd"><b>${m.no}</b>${m.truck ? `<span class="tn">${ai('truck')}${tx('Truck {no}', { no: m.truck })}</span>` : ''}${pill(label, cls)}</span>` +
+  return `<div class="mf2-row${on ? ' on' : ''}" data-man="${m.no}">${tile(m.day)}<span class="mm"><span class="hd${m.rt ? ' rt' : ''}"><b>${m.no}</b>${m.truck ? `<span class="tn">${ai('truck')}${tx('Truck {no}', { no: m.truck })}</span>` : ''}${m.rt ? rtag(m.rt) : pill(label, cls)}</span>` +
     `<span class="fig"><span>${tx('<b>{n}</b> ctn', { n: m.ctn })}</span><span>${tx('<b>{n}</b> consols', { n: m.n })}</span><span class="meta">${tx('despatched {date}', { date: fmtDay(m.desp) })}</span></span></span>${ai('chev', 'cv')}</div>`;
 }
 const listCard = (list, open) => `<div class="pc2-card mf2-list">${grouped(list).map(g => `<div class="mf2-wk${g.key === 'free' ? ' free' : ''}">${g.title}${g.key === 'free' ? '' : `<small class="wkp">${retailPeriod(g.key)}</small>`}` +
@@ -122,6 +126,7 @@ function explorer(m, { tab = 'consols', open = '', q = '', hit = '' } = {}) {
   const facts = [tx('despatch <b>{date}</b>', { date: ddmmyy(m.desp) }), tx('DC <b>{no}</b>', { no: '4101533' })];
   if (onTruck) facts.push(dayName(m.day), tx('Truck <b>{no}</b> · {n}/{total} landed', { no: m.truck, n: nLanded, total: x.rows.length }));
   else if (m.st === 'arrived') facts.push(tx('Came on Truck <b>{no}</b> · {day}', { no: m.truck, day: dayName(m.day) }));
+  else if (m.rt) facts.push(tx('For Truck <b>{no}</b> · {day}', { no: m.truck, day: dayName(m.day) }));
   const stat = (k, v, note) => `<div><span>${k}</span><b>${v}</b>${note ? `<small>${note}</small>` : ''}</div>`;
   const acts = onTruck ? pill(tx('On Truck {no}', { no: m.truck }), 'good') : `${field(`<span class="val">${tx('Truck {no} · {status}', { no: 1, status: tx('live') })}</span>${ai('chev', 'dn')}`, 'sel wide')}${btn('truck', tx('Attach to truck'), 'sm pri')}`;
   const rows = tab === 'depts' ? null : q ? x.rows.filter(r => x.items[r[0]].some(i => i.k.startsWith(q))) : x.rows;
@@ -130,7 +135,7 @@ function explorer(m, { tab = 'consols', open = '', q = '', hit = '' } = {}) {
   const body = tab === 'depts' ? DEPTS301.map(([d, c, u, k, n, p]) => `<tr><td>${dep(subOf(d))} <span class="dn"><small>${d}</small> ${nameOf(d)}</span></td><td class="n">${c}</td><td class="n">${u}</td><td class="n">${k}</td><td class="n">${n}</td><td><span class="pct"><i style="width:${p}%"></i></span> ${p}%</td></tr>`).join('')
     : rows.map(([id, c, u, k, mix]) => `<tr class="mf2-c" data-id="${id}"><td>${sq(state(id))}</td><td class="mono">${id}</td><td>${mix.split(' ').slice(0, 4).map(d => dep(subOf(d))).join('')}</td><td class="n">${c}</td><td class="n">${u}</td><td class="n">${k}</td></tr>` + (open === id || q ? lines(id) : '')).join('');
   const count = tab === 'depts' ? txn(DEPTS301.length, '{n} department', '{n} departments') : txn(rows.length, '{n} consol', '{n} consols');
-  return `<div class="pc2-card mf2-x"><div class="mf2-dh"><span class="t">${ai('packages')}<b>${m.no}</b>${pill(label, cls)}</span><span class="fx">${facts.map(f => `<span>${f}</span>`).join('')}</span></div>${onTruck ? '' : came(m)}` +
+  return `<div class="pc2-card mf2-x"><div class="mf2-dh"><span class="t">${ai('packages')}<b>${m.no}</b>${pill(label, cls)}</span><span class="fx">${facts.map(f => `<span>${f}</span>`).join('')}</span></div>${onTruck ? '' : m.rt ? where(m.rt) : came(m)}` +
     `<div class="mf2-stats">${stat(tx('Consols'), x.rows.length)}${stat(tx('Cartons'), m.ctn)}${stat(tx('Keycodes'), x.kc)}${stat(tx('Units'), x.units)}${stat(tx('Est. work'), hm(Math.round(m.ctn * 0.5)), tx('{mpc} min/ctn · one person', { mpc: 0.5 }))}</div>${roll(x.roll)}` +
     `<div class="mf2-acts">${acts}${btn('trash', tx('Remove'), 'sm rm')}</div>` +
     `<div class="mf2-bar"><span class="mf2-seg">${[['consols', tx('Consols')], ['products', tx('Products')], ['depts', tx('Departments')]].map(([k, l]) => `<b class="${tab === k ? 'on' : ''}" data-tab="${k}">${l}</b>`).join('')}</span>` +
@@ -149,29 +154,106 @@ const page = (list, open, opts = {}) => { const m = list.find(x => x.no === open
 
 // ── the pop-ups: the shared sheet (js/sheet.js), wide ────────────────
 const sheetHead = (title, subl) => `<div class="mf2-sh"><div class="t"><h3>${ai('file')}${title}</h3><small>${subl}</small></div><span class="x">${ai('x')}</span></div>`;
-// The upload preview (mpreview.js previewManifest()): Truck 2's report for today.
-const MICROS304 = [['028', 12, 18, 82, 2, 3], ['004', 8, 12, 56, 1, 2], ['072', 8, 12, 28, 1, 2], ['015', 6, 9, 40, 1, 2], ['065', 5, 8, 7, 1, 1], ['067', 4, 6, 28, 1, 1], ['091', 4, 6, 28, 1, 1], ['024', 4, 6, 24, 1, 1],
-  ['006', 3, 5, 21, 1, 1], ['025', 3, 5, 21, 1, 1], ['040', 3, 5, 15, 1, 1], ['074', 2, 3, 16, 1, 1], ['038', 2, 3, 12, 1, 1], ['087', 2, 3, 12, 1, 1]];
-const CONS304 = [['601941288', 5, 9, [['072', 5]], 1], ['601941295', 5, 37, [['006', 3], ['074', 2]], 2], ['601941302', 12, 84, [['028', 5], ['067', 4], ['004', 3]], 3], ['601941309', 4, 30, [['015', 4]], 1], ['601941316', 7, 19, [['065', 5], ['038', 2]], 2],
-  ['601941323', 9, 57, [['024', 4], ['072', 3], ['028', 2]], 3], ['601941330', 3, 21, [['025', 3]], 1], ['601941337', 9, 61, [['004', 5], ['091', 4]], 2], ['601941344', 10, 60, [['028', 5], ['040', 3], ['015', 2]], 3], ['601941351', 2, 12, [['087', 2]], 1]];
-const PRODS304 = [['42977641', 68, 10], ['43226605', 56, 8], ['43610017', 40, 6], ['43170264', 28, 8], ['43339981', 28, 4], ['43118843', 28, 4], ['43604471', 24, 4], ['43561290', 21, 3]];
+// The upload preview (mpreview.js previewManifest()): Truck 2's report for
+// today, 7040304. Its consols and their lines, [keycode, micro-department,
+// units, cartons]; the four views are worked out from them as mpreview.js
+// works them out (microRows(), productRows(), groupRows()).
+const L304 = [['601941288', [['43170264', '072', 9, 5]]], ['601941295', [['43561290', '006', 21, 3], ['43447720', '074', 16, 2]]],
+  ['601941302', [['42977641', '028', 33, 5], ['43339981', '067', 28, 4], ['43226605', '004', 23, 3]]], ['601941309', [['43610017', '015', 30, 4]]],
+  ['601941316', [['43610041', '065', 7, 5], ['43310045', '038', 12, 2]]], ['601941323', [['43604471', '024', 24, 4], ['43170264', '072', 19, 3], ['43305518', '028', 14, 2]]],
+  ['601941330', [['43201187', '025', 21, 3]]], ['601941337', [['43226605', '004', 33, 5], ['43118843', '091', 28, 4]]],
+  ['601941344', [['42977641', '028', 35, 5], ['43610025', '040', 15, 3], ['43610017', '015', 10, 2]]], ['601941351', [['43610033', '087', 12, 2]]]];
+// Each consol: its lines, cartons, units, and its micro-departments by cartons, most first.
+const C304 = L304.map(([id, its]) => { const items = its.map(([k, d, q, c]) => ({ k, d, q, c })), m = {}; for (const it of items) m[it.d] = (m[it.d] || 0) + it.c; return { id, items, cartons: items.reduce((n, x) => n + x.c, 0), units: items.reduce((n, x) => n + x.q, 0), mix: Object.entries(m).sort((a, b) => b[1] - a[1]) }; });
+const TOT304 = C304.reduce((n, c) => n + c.cartons, 0);
+// Departments (microRows()): cartons from each consol's mix, units, keycodes, consols and products from the lines; most cartons first.
+const MIC304 = (() => {
+  const m = new Map(), get = d => { if (!m.has(d)) m.set(d, { code: d, cartons: 0, units: 0, keys: new Set(), consols: new Set(), prods: new Map() }); return m.get(d); };
+  for (const c of C304) {
+    for (const [d, n] of c.mix) { const r = get(d); r.cartons += n; r.consols.add(c.id); }
+    for (const it of c.items) { const r = get(it.d); r.units += it.q; r.keys.add(it.k); let p = r.prods.get(it.k); if (!p) r.prods.set(it.k, p = { k: it.k, units: 0, cartons: 0, n: 0 }); p.units += it.q; p.cartons += it.c; p.n++; }
+  }
+  return [...m.values()].sort((a, b) => b.cartons - a.cartons || b.units - a.units);
+})();
+// Products (productRows()): every keycode, its units and cartons and the consols it is on; most units first.
+const PRD304 = (() => {
+  const m = new Map();
+  for (const c of C304) for (const it of c.items) { let r = m.get(it.k); if (!r) m.set(it.k, r = { k: it.k, d: it.d, units: 0, cartons: 0, on: [] }); r.units += it.q; r.cartons += it.c; r.on.push([c.id, it.q, it.c]); }
+  return [...m.values()].sort((a, b) => b.units - a.units);
+})();
+// Groups (groupRows()): Home, Clothing and Kids, each department in it with its micro-departments.
+const GRP304 = (() => {
+  const blank = x => ({ ...x, cartons: 0, units: 0, keys: new Set(), consols: new Set() }), add = (to, r) => { to.cartons += r.cartons; to.units += r.units; for (const k of r.keys) to.keys.add(k); for (const k of r.consols) to.consols.add(k); };
+  const subs = new Map(); for (const r of MIC304) { const sd = subOf(r.code); let s = subs.get(sd); if (!s) subs.set(sd, s = blank({ sd, g: groupOf(r.code), micros: [] })); add(s, r); s.micros.push(r); }
+  return GROUPS.map(([g, name, colour]) => { const list = [...subs.values()].filter(s => s.g === g).sort((a, b) => b.cartons - a.cartons || b.units - a.units), x = blank({ g, name, colour, subs: list }); for (const s of list) add(x, s); return x; }).filter(x => x.subs.length);
+})();
+const CON304 = C304.slice().sort((a, b) => b.cartons - a.cartons);
 const micro = (code, withSub = true) => `<span class="mf2-mc">${dep(subOf(code))}<span class="mcn"><span><b class="mono">${code}</b> ${nameOf(code)}</span>${withSub ? `<small>${SUBS.find(x => x[0] === subOf(code))[2]}</small>` : ''}</span></span>`;
 const GCOL = { h: '#2563EB', c: '#DB2777', k: '#F59E0B' };
-function preview({ glow = '' } = {}) {
+// A keycode copies (kcCopy()); a product's name is the catalogue's, ticked, linking to kmart.com.au (itemName()).
+const kcc = k => `<span class="mf3-kc mono">${k}</span>`;
+const pnm = k => `<span class="mf3-nm"><span class="ok">✓</span>${NAMES[k]} ↗</span>`;
+const bar2 = (c, max, colour) => `<span class="mf2-bar2"><i><b style="width:${Math.round(c / max * 100)}%;background:${colour}"></b></i><span>${c}</span></span>`;
+const chev = on => `<i class="mf3-x${on ? ' on' : ''}">${ai('chev')}</i>`;
+// The product card (installProductCard() in js/views/stockroom/common.js): the catalogue's picture, keycode, name and price.
+const BALLOONS = '<svg viewBox="0 0 84 84" aria-hidden="true"><path d="M26 47 C27 60 33 66 40 80 M45 44 C44 58 41 66 40 80 M60 49 C56 62 47 70 40 80" fill="none" stroke="#9CA3AF" stroke-width="1.2"/>' +
+  '<ellipse cx="26" cy="31" rx="13" ry="16" fill="#EF4444"/><ellipse cx="60" cy="33" rx="13" ry="16" fill="#3B82F6"/><ellipse cx="44" cy="27" rx="14" ry="17" fill="#F59E0B"/><ellipse cx="40" cy="20" rx="3.5" ry="5" fill="#fff" opacity=".45"/><ellipse cx="22" cy="25" rx="3" ry="4.5" fill="#fff" opacity=".4"/><ellipse cx="56" cy="27" rx="3" ry="4.5" fill="#fff" opacity=".4"/></svg>';
+const PRICE = { 42977641: '$3.50' };
+const pcard = k => `<div class="mf3-card"><div class="img">${BALLOONS}</div><div class="b"><span class="kc mono">${k}</span><b>${NAMES[k]}</b><span class="pr">${PRICE[k]}</span><small>${tx('Click the name for kmart.com.au, the keycode to copy it')}</small></div></div>`;
+// The views, as mpreview.js has them: its columns (a sortable one names its sort) and the sort it opens on.
+const VIEWS = () => [['depts', tx('Departments'), MIC304.length], ['products', tx('Products'), PRD304.length], ['consols', tx('Consolidations'), C304.length], ['groups', tx('Groups'), GRP304.length]];
+const HEADS = () => ({
+  depts: [[tx('Micro-department')], [tx('Cartons'), 'cartons'], [tx('Share'), '', 'n'], [tx('Units'), 'units', 'n'], [tx('Keycodes'), 'keycodes', 'n'], [tx('Consols'), 'consols', 'n']],
+  products: [[tx('Keycode')], [tx('Product')], [tx('Micro-department')], [tx('Units'), 'units', 'n'], [tx('Cartons'), 'cartons', 'n'], [tx('Consols'), 'consols', 'n']],
+  consols: [[tx('Pallet id')], [tx('Cartons'), 'cartons', 'n'], [tx('Units'), 'units', 'n'], [tx('Micro-departments')], [tx('Lines'), 'lines', 'n']],
+});
+const SORT0 = { depts: 'cartons', products: 'units', consols: 'cartons' };
+const pth = (v, [label, key, cls = '']) => `<th${cls ? ` class="${cls}"` : ''}>${key ? `<span class="mf3-sort${SORT0[v] === key ? ' on' : ''}">${label}${SORT0[v] === key ? ' ▼' : ''}</span>` : label}</th>`;
+const mini = (heads, rows) => `<table class="mf3-dt"><thead><tr>${heads.map(([l, c]) => `<th${c ? ` class="${c}"` : ''}>${l}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+// A row's details: a department's products, a product's consols, a consol's lines.
+function pvDetail(key, cols) {
+  const t = key[0], id = key.slice(2);
+  const inner = t === 'd' ? mini([[tx('Keycode')], [tx('Product')], [tx('Units'), 'n'], [tx('Cartons'), 'n'], [tx('Consols'), 'n']], [...MIC304.find(r => r.code === id).prods.values()].sort((a, b) => b.units - a.units).map(p => `<tr><td>${kcc(p.k)}</td><td>${pnm(p.k)}</td><td class="n">${p.units}</td><td class="n">${p.cartons}</td><td class="n">${p.n}</td></tr>`).join(''))
+    : t === 'p' ? mini([[tx('Pallet id')], [tx('Units'), 'n'], [tx('Cartons'), 'n']], PRD304.find(r => r.k === id).on.slice().sort((a, b) => b[1] - a[1]).map(([cid, u, c]) => `<tr><td><span class="mf3-go mono" data-id="${cid}">${cid}</span></td><td class="n">${u}</td><td class="n">${c}</td></tr>`).join(''))
+    : mini([[tx('Keycode')], [tx('Product')], [tx('Micro-department')], [tx('Units'), 'n'], [tx('Cartons'), 'n']], C304.find(c => c.id === id).items.map(it => `<tr><td>${kcc(it.k)}</td><td>${pnm(it.k)}</td><td>${micro(it.d, false)}</td><td class="n">${it.q}</td><td class="n">${it.c}</td></tr>`).join(''));
+  return `<tr class="mf3-dr"><td colspan="${cols}"><div class="mf3-dw">${inner}</div></td></tr>`;
+}
+function pvRow(v, r, s) {
+  const o = k => s.open.includes(k), cols = HEADS()[v].length;
+  if (v === 'depts') { const key = `d:${r.code}`; return `<tr class="mf3-r${o(key) ? ' open' : ''}" data-k="${key}"><td><span class="mf3-rh">${chev(o(key))}${micro(r.code)}</span></td><td>${bar2(r.cartons, MIC304[0].cartons, GCOL[groupOf(r.code)])}</td><td class="n">${Math.round(r.cartons / TOT304 * 100)}%</td><td class="n">${r.units}</td><td class="n">${r.keys.size}</td><td class="n">${r.consols.size}</td></tr>` + (o(key) ? pvDetail(key, cols) : ''); }
+  if (v === 'products') { const key = `p:${r.k}`; return `<tr class="mf3-r${o(key) ? ' open' : ''}" data-k="${key}"><td><span class="mf3-rh">${chev(o(key))}${kcc(r.k)}</span></td><td class="mf3-pd">${pnm(r.k)}${s.card === r.k ? pcard(r.k) : ''}</td><td>${micro(r.d, false)}</td><td class="n">${r.units}</td><td class="n">${r.cartons}</td><td class="n">${r.on.length}</td></tr>` + (o(key) ? pvDetail(key, cols) : ''); }
+  const key = `c:${r.id}`;
+  return `<tr class="mf3-r${o(key) ? ' open' : ''}" data-k="${key}"><td class="mono"><span class="mf3-rh">${chev(o(key))}${r.id}</span></td><td class="n">${r.cartons}</td><td class="n">${r.units}</td><td><div class="mf2-cm">${r.mix.map(([d, n]) => `<span>${micro(d, false)}<small>${tx('{n} ctn', { n })}</small></span>`).join('')}</div></td><td class="n">${r.items.length}</td></tr>` + (o(key) ? pvDetail(key, cols) : '');
+}
+function pvGroups() {
+  const cells = (x, colour) => `<td>${bar2(x.cartons, TOT304, colour)}</td><td class="n">${Math.round(x.cartons / TOT304 * 100)}%</td><td class="n">${x.units}</td><td class="n">${x.keys.size}</td><td class="n">${x.consols.size}</td>`;
+  const chip = m => `<span class="mf3-gm" data-code="${m.code}"><b class="mono">${m.code}</b>${nameOf(m.code)}<small>${tx('{n} ctn', { n: m.cartons })}</small></span>`;
+  return `<table class="mf2-t mf3-t mf3-groups"><thead><tr><th>${tx('Department')}</th><th>${tx('Cartons')}</th><th class="n">${tx('Share')}</th><th class="n">${tx('Units')}</th><th class="n">${tx('Keycodes')}</th><th class="n">${tx('Consols')}</th></tr></thead><tbody>` +
+    GRP304.map(g => `<tr class="mf3-gh"><td><span class="mf3-gn"><i style="background:${g.colour}"></i>${g.name}</span></td>${cells(g, g.colour)}</tr>` +
+      g.subs.map(x => `<tr class="mf3-gs"><td><span class="mf3-gd">${dep(x.sd)}<span>${SUBS.find(y => y[0] === x.sd)[2]}</span></span><span class="mf3-gms">${x.micros.map(chip).join('')}</span></td>${cells(x, g.colour)}</tr>`).join('')).join('') + '</tbody></table>';
+}
+// The open view, the switcher with a count on each, and the filter (none on Groups).
+function pvView(s) {
+  if (s.view === 'groups') return pvGroups();
+  const rows = s.view === 'depts' ? MIC304 : s.view === 'products' ? PRD304 : CON304.filter(c => !s.q || c.id.includes(s.q));
+  return `<table class="mf2-t mf3-t mf3-${s.view}"><thead><tr>${HEADS()[s.view].map(h => pth(s.view, h)).join('')}</tr></thead><tbody>${rows.map(r => pvRow(s.view, r, s)).join('')}</tbody></table>`;
+}
+const vbar = s => `<div class="mf3-vbar"><span class="mf3-seg">${VIEWS().map(([k, l, n]) => `<b class="${s.view === k ? 'on' : ''}" data-v="${k}">${l}<small>${n}</small></b>`).join('')}</span>` +
+  (s.view === 'groups' ? '' : `<span class="mf3-q${s.q ? ' typed' : ''}">${ai('search')}<span class="t">${s.q || tx('find consol, keycode, product, dept…')}</span>${s.q ? `<i class="cl">${ai('x')}</i>` : ''}</span>`) + '</div>';
+// s: view (depts | products | consols | groups), open (the rows open: d:028, p:42977641, c:601941344),
+// q (the filter), card (the product the pointer rests on), glow (side: the column of checks).
+function preview(s = {}) {
+  s = { view: 'depts', open: [], q: '', card: '', glow: '', ...s };
   const fact = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`, stat = (k, v, n) => `<div><span>${k}</span><b>${v}</b><small>${n}</small></div>`;
-  return `<div class="mf2-sht prev">${sheetHead(tx('Check the report before publishing'), `Manifest Report 7040304.xls · ${tx('sheet “{name}”', { name: 'Manifest Report' })}`)}<div class="mf2-pb"><div class="main">` +
+  const gc = {}; for (const r of MIC304) gc[groupOf(r.code)] = (gc[groupOf(r.code)] || 0) + r.cartons;
+  return `<div class="mf2-sht prev mf3-pv">${sheetHead(tx('Check the report before publishing'), `Manifest Report 7040304.xls · ${tx('sheet “{name}”', { name: 'Manifest Report' })}`)}<div class="mf2-pb"><div class="main">` +
     `<div class="mf2-facts">${fact(tx('Manifest'), '7040304')}${fact(tx('Store'), '1241')}${fact(tx('DC'), '4101533')}${fact(tx('Despatch'), '24/10/2026')}</div>` +
     `<div class="mf2-stats pv">${stat(tx('Consols'), 10, txn(6, '{n} mixed', '{n} mixed'))}${stat(tx('Cartons'), 66, tx('about {n} a consol', { n: 7 }))}${stat(tx('Keycodes'), 15, txn(19, '{n} line', '{n} lines'))}${stat(tx('Units'), 390, tx('about {n} a carton', { n: 6 }))}` +
     `${stat(tx('Est. work'), hm(33), tx('{mpc} min a carton · about {time} for four', { mpc: 0.5, time: tx('{m}m', { m: 8 }) }))}</div>` +
-    `<div class="mf2-pt">${tx('Departments')}<span class="dim">${txn(14, '{n} micro-department · cartons, largest first', '{n} micro-departments · cartons, largest first')}</span></div>` +
-    `<div class="mf2-roll pv"><span style="flex:25;background:#2563EB">Home 38%</span><span style="flex:12;background:#DB2777">Clothing 18%</span><span style="flex:29;background:#F59E0B">Kids 44%</span></div>` +
-    `<table class="mf2-t pv mt${glow === 'micro' ? ' glow' : ''}"><thead><tr><th>${tx('Micro-department')}</th><th>${tx('Cartons')}</th><th class="n">${tx('Share')}</th><th class="n">${tx('Units')}</th><th class="n">${tx('Keycodes')}</th><th class="n">${tx('Consols')}</th></tr></thead><tbody>` +
-    MICROS304.map(([d, c, sh, u, k, n]) => `<tr><td>${micro(d)}</td><td><span class="mf2-bar2"><i><b style="width:${Math.round(c / 12 * 100)}%;background:${GCOL[groupOf(d)]}"></b></i><span>${c}</span></span></td><td class="n">${sh}%</td><td class="n">${u}</td><td class="n">${k}</td><td class="n">${n}</td></tr>`).join('') + '</tbody></table>' +
-    `<div class="mf2-pt">${tx('Consolidations')}<span class="dim">${tx('{n} in all', { n: 10 })}</span></div><table class="mf2-t pv"><thead><tr><th>${tx('Pallet id')}</th><th class="n">${tx('Cartons')}</th><th class="n">${tx('Units')}</th><th>${tx('Micro-departments')}</th><th class="n">${tx('Lines')}</th></tr></thead><tbody>` +
-    CONS304.map(([id, c, u, mx, l]) => `<tr><td class="mono">${id}</td><td class="n">${c}</td><td class="n">${u}</td><td><div class="mf2-cm">${mx.map(([d, n]) => `<span>${micro(d, false)}<small>${tx('{n} ctn', { n })}</small></span>`).join('')}</div></td><td class="n">${l}</td></tr>`).join('') + '</tbody></table>' +
-    `<div class="mf2-pt">${tx('Largest products')}<span class="dim">${tx('by units')}</span></div><table class="mf2-t pv"><thead><tr><th>${tx('Keycode')}</th><th>${tx('Product')}</th><th>${tx('Micro-department')}</th><th class="n">${tx('Units')}</th><th class="n">${tx('Cartons')}</th></tr></thead><tbody>` +
-    PRODS304.map(([k, u, c]) => `<tr><td class="mono">${k}</td><td>${NAMES[k]}</td><td>${micro(KDEPT[k], false)}</td><td class="n">${u}</td><td class="n">${c}</td></tr>`).join('') + '</tbody></table></div>' +
-    `<div class="side${glow === 'side' ? ' glow' : ''}"><div class="mf2-pt">${tx('Came on')}</div><div class="mf2-came2">${dateIn('')}${truckSel(null)}</div><small class="dim">${tx('For a report from a day already gone. Today’s goes on its truck at the Planner or Receiving.')}</small>` +
+    `<div class="mf2-pt">${tx('Departments')}<span class="dim">${txn(MIC304.length, '{n} micro-department · cartons, largest first', '{n} micro-departments · cartons, largest first')}</span></div>` +
+    `<div class="mf2-roll pv">${GROUPS.filter(g => gc[g[0]]).map(g => `<span style="flex:${gc[g[0]]};background:${g[2]}">${g[1]} ${Math.round(gc[g[0]] / TOT304 * 100)}%</span>`).join('')}</div>` +
+    vbar(s) + `<div class="mf3-view">${pvView(s)}</div></div>` +
+    `<div class="side${s.glow === 'side' ? ' glow' : ''}"><div class="mf2-pt">${tx('Came on')}</div><div class="mf2-came2">${dateIn('')}${truckSel(null)}</div><small class="dim">${tx('For a report from a day already gone. Today’s goes on its truck at the Planner or Receiving.')}</small>` +
     `<div class="mf2-pt">${tx('Checks')}</div><ul class="mf2-checks"><li>✓ ${tx('Every row read ({n} lines).', { n: 66 })}</li></ul>` +
     `<div class="acts"><span class="pc2-btn pri mf2-go">${ai('check')}${tx('Publish to the library')}</span><span class="pc2-btn">${tx('Cancel')}</span></div><small class="dim">${tx('Publishing lists it on every device; a truck attaches it when it lands.')}</small></div></div></div>`;
 }
@@ -233,14 +315,26 @@ export const manifests = {
     { cap: tx('Publish manifests: pick the report from the DC’s email.'), read: S(tx('The .xls is read on this PC first, and nothing is sent until you publish.'), tx('Here it is Truck 2’s report for this afternoon, 7040304.')),
       dev: '<b>previewManifest()</b> in js/views/backdock/mpreview.js reads the sheet with SheetJS and checks it with <b>manifestCheck()</b> in shared/manifest.js.', ev: [],
       run: async c => { await c.tap('#v-list .mf2-pub'); openSheet(c, preview()); } },
-    { cap: tx('The preview names every micro-department, with its cartons.'), read: S(tx('Each by number and name, under the department it sits in.'), tx('Below, each consolidation with its departments, and the largest products.')),
-      dev: 'The table is <b>microRows()</b>: a carton counts for the micro-department with most units in it, so they add up to the manifest’s cartons.', ev: [],
-      run: async c => { await c.tap('.mf2-back .mf2-t.mt tbody tr'); openSheet(c, preview({ glow: 'micro' })); } },
+    { cap: tx('The preview names every micro-department, with its cartons.'), read: S(tx('Each by number and name, under the department it sits in.'), tx('Click one to open it: its products, with their units and cartons.')),
+      dev: 'Departments is <b>microRows()</b> in js/views/backdock/mpreview.js: a carton counts for the micro-department with most units in it, so they add up to the manifest’s cartons. A row opens to its <b>detail()</b>.', ev: [],
+      run: async c => { openSheet(c, preview()); await c.tap('.mf2-back .mf3-r[data-k="d:028"]'); openSheet(c, preview({ open: ['d:028'] })); } },
+    { cap: tx('Products: every keycode on the report, the most units first.'), read: S(tx('Open one for the consols it is on, with its units and cartons in each.'), tx('A column head sorts by it; this PC keeps the view and the sort for next time.')),
+      dev: 'Products is <b>productRows()</b>; the view and each sort are kept on this device (manifest_preview, <b>savePick()</b>).', ev: [],
+      run: async c => { await c.tap('.mf2-back .mf3-seg [data-v="products"]'); openSheet(c, preview({ view: 'products' })); await c.wait(500); await c.tap('.mf2-back .mf3-r[data-k="p:42977641"]'); openSheet(c, preview({ view: 'products', open: ['p:42977641'] })); } },
+    { cap: tx('Point at a product: its card, with the picture, keycode, name and price.'), read: S(tx('Click the name for its page on kmart.com.au, or the keycode to copy it.'), tx('On a phone, a tap opens the same card.')),
+      dev: 'Names come from the product catalogue as their rows come into sight (<b>ensureNames()</b>); the card is <b>installProductCard()</b>, the links <b>itemName()</b> and <b>kcCopy()</b> in js/views/stockroom/common.js.', ev: [],
+      run: async c => { openSheet(c, preview({ view: 'products', open: ['p:42977641'] })); await c.tap('.mf2-back .mf3-r[data-k="p:42977641"] .mf3-nm'); openSheet(c, preview({ view: 'products', open: ['p:42977641'], card: '42977641' })); } },
+    { cap: tx('Click a pallet id: Consolidations opens on that consol, with its lines.'), read: S(tx('The filter holds its number: clear it to see every consol, the most cartons first.'), tx('Each lists its micro-departments with their cartons.')),
+      dev: 'A pallet id is <b>jump()</b>: the view, the filter and the open row at once. The filter finds a keycode, product, department or pallet in the open view; this PC does it all, nothing is sent.', ev: [],
+      run: async c => { openSheet(c, preview({ view: 'products', open: ['p:42977641'] })); await c.tap('.mf2-back .mf3-go[data-id="601941344"]'); openSheet(c, preview({ view: 'consols', open: ['c:601941344'], q: '601941344' })); await c.wait(900); await c.tap('.mf2-back .mf3-q .cl'); openSheet(c, preview({ view: 'consols', open: ['c:601941344'] })); } },
+    { cap: tx('Groups: Home, Clothing and Kids, each department with its micro-departments.'), read: S(tx('Click a micro-department to see it under Departments, open.'), tx('The bar above splits the cartons the same way.')),
+      dev: 'Groups is <b>groupRows()</b>, rolled up from the micro-departments; a micro-department goes to Departments with its row open (<b>jump()</b>).', ev: [],
+      run: async c => { await c.tap('.mf2-back .mf3-seg [data-v="groups"]'); openSheet(c, preview({ view: 'groups' })); } },
     { cap: tx('The checks say it all read: Publish to the library.'), read: S(tx('A report for another store, or one too big, can’t be published until it is fixed.'), tx('A report from a day already gone asks for the day it came; today’s goes on its truck instead.')),
       dev: '<b>publishParsed()</b> posts the report; the worker keeps it whole and emits <b>manifest.publish</b> so every device lists it (<b>publishManifest()</b> in worker/store.js).',
       ev: [R('POST', '/v1/store/1241/manifest', { v: 1, kind: 'report', manNo: '7040304', storeNo: '1241', despatch: '24/10/2026', consols: '[10 consols]' }, 'The report, up to 8 MB; the worker answers with its counts.'),
         E('manifest.publish', 'backdock', { manNo: '7040304' }, { dcNo: '4101533', despatch: '24/10/2026', filename: 'Manifest Report 7040304.xls', consols: 10, totalCartons: 66, keycodes: 15 })],
-      run: async c => { openSheet(c, preview({ glow: 'side' })); await c.tap('.mf2-back .mf2-go'); closeSheet(c); c.html('#v-list', page(LIST1, '7040304')); toast(c, tx('Manifest {man} published · {consols} consols, {cartons} cartons', { man: '7040304', consols: 10, cartons: 66 })); } },
+      run: async c => { openSheet(c, preview({ view: 'groups', glow: 'side' })); await c.tap('.mf2-back .mf2-go'); closeSheet(c); c.html('#v-list', page(LIST1, '7040304')); toast(c, tx('Manifest {man} published · {consols} consols, {cartons} cartons', { man: '7040304', consols: 10, cartons: 66 })); } },
     { cap: tx('It waits under No day yet until Truck 2 takes it.'), read: S(tx('When Truck 2 lands, Receiving attaches it; the list then puts it on today, on Truck 2.'), tx('A report from a day gone takes its day here, under Came on.')),
       dev: 'With no truck, day or slot, <b>placeIndex()</b> has no place for it: it lists first, under No day yet.', ev: [],
       run: async c => { focus(c, '#v-list .mf2-wk.free', '#v-list .mf2-row[data-man="7040304"]'); await c.wait(1300); } },
@@ -394,5 +488,204 @@ manifests.stories.push({
     { cap: tx('At the foot, every manifest in the month.'), read: S(tx('The busiest day and the biggest manifest, then each report with its day and truck.'), tx('7040304 has no day yet, so it counts as estimated.')),
       dev: 'The table is <b>reports()</b>; a row opens that manifest in the list.', ev: [],
       run: async c => { scroll(c, 1960); focus(c, '#v-st tr[data-man="7040304"]'); await c.tap('#v-st tr[data-man="7040304"] .mf2-st'); await c.wait(500); } },
+  ],
+});
+
+// ── Trucks not coming to the dock: the Planner and the off-site register ──
+// The Plan row's Planner (js/views/backdock/planner.js) and Off-site pallets
+// (offsite.js), with the sheets of routes.js and callback.js. The week: a
+// closed truck a day with what its record kept (Saturday had two; Friday's
+// and Saturday's ran without a manifest), Thursday's Truck 2 diverted to
+// 1187 Bunbury with its report 7040299, today's Truck 1 on the dock and
+// Truck 2 planned for 13:30 with 7040304 staged on it. There is no room for
+// it: it goes to the storage yard, due back Tuesday, and is called back on
+// Tuesday's Truck 1.
+const MONS = () => [tx('Jan'), tx('Feb'), tx('Mar'), tx('Apr'), tx('May'), tx('Jun'), tx('Jul'), tx('Aug'), tx('Sep'), tx('Oct'), tx('Nov'), tx('Dec')];
+const dParts = iso => { const d = new Date(iso + 'T00:00:00Z'); return { d: d.getUTCDate(), mon: MONS()[d.getUTCMonth()] }; };
+// "Sun 25 Oct" and "25 Oct" as the Planner writes them (dayLabel(), dateLabel()).
+const dayLabel = (iso, dw = DOW()[dow(iso)]) => tx('{dow} {d} {mon}', { dow: dw, ...dParts(iso) });
+const dateLabel = iso => tx('{d} {mon}', dParts(iso));
+const BACK = '2026-10-27';   // the day 7040304 lands here after all, and is called back
+const RT2 = () => ({ route: 'offsite', lands: BACK, to: 'the storage yard', reason: tx('No room on the dock'), man: '7040304' });
+const RT299 = () => ({ route: 'diverted', lands: null, to: '1187 Bunbury', reason: tx('DC asked'), man: '7040299' });
+// The tags (routeTag(), backTag(), groupTag(), partTag()) and the line under a route (routeLine()).
+const rtag = r => r.route === 'offsite' ? `<span class="mf3-rt off">${ai('stack')}${tx('Off-site · lands {day}', { day: fmtDay(r.lands) })}</span>`
+  : `<span class="mf3-rt div">${ai('route')}${tx('Diverted → {to}', { to: r.to })}</span>`;
+const rline = r => [r.route === 'offsite' ? tx('Went to off-site storage at {to}', { to: r.to }) : tx('Went to {to}', { to: r.to }), r.reason].join(' · ');
+// Where it goes in a manifest's detail (whereBar() in manifests.js), for one routed.
+const where = r => `<div class="mf3-where ${r.route}"><span class="cl">${ai(r.route === 'offsite' ? 'stack' : 'route')}${tx('Where it goes')}</span>${rtag(r)}<small>${rline(r)}</small>${btn('edit', tx('Change'), 'sm')}</div>`;
+// The Manifests list with the two routed reports, each on the day it was due.
+const mkR = (m, rt) => ({ ...m, st: rt.route, rt });
+const LISTR = () => [...LIST0, mkR({ ...mk(M304), day: DAY, truck: 2 }, RT2()), mkR(mk(['7040299', '2026-10-22', 2, '', 38, 6]), RT299())];
+
+// ── the Planner's week (slotHtml(), routedHtml(), landingHtml(), noneHtml()) ──
+const prw = (lvl, icon, b, sub, more = '') => `<div class="mf3-prow pr-${lvl}">${ai(icon)}<div><b>${b}</b>${sub ? `<span>${sub}</span>` : ''}${more}</div></div>`;
+const metrics = (consols, cartons, keycodes, units) => tx('{consols} consols · {cartons}c · {keycodes} keycodes · {units} units', { consols, cartons, keycodes, units });
+const M301 = () => metrics(12, 72, 8, 412), M304M = () => metrics(10, 66, 15, 390), M299 = () => metrics(6, 38, 9, 230);
+const sh = (n, k, right, cls = '', body = '') => `<div class="mf3-ps${cls ? ' ' + cls : ''}" data-slot="${k}-${n}"><div class="h"><b>${tx('Truck {no}', { no: n })}</b>${right}</div>${body}</div>`;
+const eta = t => `<span class="eta">${ai('clock')}${t}</span>`;
+const phc = (k, l) => `<span class="mf3-ph ${k}">${l}</span>`;
+// A closed truck, from its record: [truck, manifest, consols, landed, pallets, minutes to clear, cartons, ctn/h].
+const closed = k => ([n, man, cons, landed, pals, mins, ctn, rate]) => sh(n, k, phc('closed', tx('truck phase::Closed')), 'done',
+  (man ? prw(2, 'file', man, tx('{m} of {n} consols matched', { m: cons, n: cons })) : prw(0, 'file', tx('No manifest'), tx('decanted without one'))) +
+  prw(2, 'truck', tx('Landed {time}', { time: landed }), txn(pals, '{n} pallet', '{n} pallets')) + prw(2, 'users', tx('Cleared in {time}', { time: hm(mins) }), tx('{cartons} ctn · {rate} ctn/h', { cartons: ctn, rate })));
+const HIST = { '2026-10-19': [[1, '7040293', 10, '05:52', 9, 118, 75, 38]], '2026-10-20': [[1, '7040295', 12, '05:47', 11, 132, 84, 38]], '2026-10-21': [[1, '7040296', 9, '05:55', 8, 101, 61, 36], [2, '7040297', 6, '13:20', 5, 69, 40, 35]],
+  '2026-10-22': [[1, '7040298', 14, '05:44', 13, 158, 100, 38]], '2026-10-23': [[1, null, 0, '05:50', 10, 124, 79, 38]], '2026-10-24': [[1, null, 0, '05:58', 7, 82, 51, 37], [2, null, 0, '12:40', 8, 99, 63, 38]] };
+const crew = () => `<div class="mf3-crew">${['D4', 'D7', 'D9'].map(p => `<span>${p}</span>`).join('')}</div>`;
+// Truck 1 today, on the dock: receiving 7040301, A1 and A2 down.
+const live1 = () => sh(1, DAY, phc('receiving', tx('truck phase::Receiving')), 'live', prw(2, 'file', '7040301', `${M301()} · ${tx('on the truck')}`) +
+  prw(1, 'truck', tx('Receiving · {n} pallets', { n: 2 }), tx('landed {time} · layout not confirmed', { time: '05:40' })) + prw(0, 'users', tx('{n} on decant', { n: 3 }), '', crew()));
+const planned2 = on => sh(2, DAY, eta('13:30'), on ? 'on' : '', prw(1, 'file', '7040304', `${M304M()} · ${tx('staged')}`) + prw(0, 'truck', tx('ETA {time}', { time: '13:30' }), tx('starts at Receiving when it lands')) + prw(0, 'users', tx('No team yet'), tx('pick devices')));
+// A truck marked off-site or diverted keeps its place in its day (routedHtml()).
+const routed = (n, k, r, t, man, on) => sh(n, k, t ? eta(t) : '', `routed ${r.route}${on ? ' on' : ''}`, `<div class="mf3-rtrow">${rtag(r)}</div>` +
+  prw('x', 'file', r.man, man) + prw('x', r.route === 'offsite' ? 'stack' : 'route', tx('Not coming to the dock'), rline(r)) + prw('x', 'users', tx('Nothing to decant'), ''));
+// Tuesday's Truck 1, called back: it brings 7040304's pallets home, the report staged on it.
+const back1 = () => sh(1, BACK, eta('10:00'), '', `<div class="mf3-rtrow"><span class="mf3-rt back">${ai('undo')}${tx('From off-site · sent {day}', { day: fmtDay(DAY) })}</span><span class="mf3-rt back">${tx('{n} of {of} back', { n: 0, of: 10 })}</span></div>` +
+  prw(1, 'file', '7040304', `${M304M()} · ${tx('staged')}`) + prw(0, 'truck', tx('ETA {time}', { time: '10:00' }), tx('starts at Receiving when it lands')) + prw(0, 'users', tx('No team yet'), tx('pick devices')));
+const none = (k, ahead) => `<div class="mf3-pempty">${tx('No trucks')}</div>` + (ahead ? `<span class="mf3-pnt">${ai('check')}${tx('Confirm no trucks')}</span><span class="mf3-pnt">${ai('route')}${tx('Off-site or diverted…')}</span>` : '');
+const dayCol = (k, slots, nxt) => `<div class="mf3-pday${k === DAY ? ' today' : ''}"><div class="dl">${DOW()[dow(k)]}<b>${Number(k.slice(8))}</b>${slots.length ? `<span class="n">${txn(slots.length, '{n} truck', '{n} trucks')}</span>` : ''}</div>` +
+  (slots.join('') || none(k, k >= DAY)) + `<div class="mf3-padd">+ ${tx('Truck {no}', { no: nxt })}</div></div>`;
+// p: week (0 this week, 1 next), sel (the truck open on the right: 2), routed (Truck 2 went off-site), called (it is called back).
+function weekHtml(p) {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(p.week ? '2026-10-26' : '2026-10-19', i));
+  return `<div class="mf3-pweek">${days.map(k => {
+    if (p.week) return k === BACK && p.called ? dayCol(k, [back1()], 2) : dayCol(k, [], 1);
+    const hist = (HIST[k] || []).map(closed(k));
+    if (k === '2026-10-22') hist.push(routed(2, k, RT299(), '13:00', M299()));
+    if (k === DAY) hist.push(live1(), p.routed ? routed(2, k, RT2(), '13:30', M304M(), p.sel === 2) : planned2(p.sel === 2));
+    return dayCol(k, hist, hist.length + 1);
+  }).join('')}</div>`;
+}
+// The side: the truck open (editor()), Off-site to call back (offsiteCard()), Days without trucks (noTruckCard()).
+const pf = (label, body, hint = '') => `<div class="mf3-pf"><span class="lbl">${label}</span>${body}${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+const inp = (t, ph = false, cls = '') => `<span class="mf3-inp${ph ? ' ph' : ''}${cls ? ' ' + cls : ''}">${t}</span>`;
+const pman = (no, line, extra = '') => `<div class="mf3-pman">${ai('file')}<div><b>${no}</b><span>${line}</span></div>${extra}</div>`;
+function editor(p) {
+  const head = `<div class="ch"><h3>${tx('Truck {no} · {day}', { no: 2, day: dayLabel(DAY) })}</h3></div>`;
+  if (!p.sel) return `<div class="pc2-card mf3-ed"><div class="ch"><h3>${tx('Pick a truck')}</h3></div><p class="mf3-lbl">${tx('Click a slot to set its ETA, manifest and decant team, or + Truck on a day to plan one.')}</p></div>`;
+  if (p.routed) return `<div class="pc2-card mf3-ed">${head}<div class="mf3-rtrow">${rtag(RT2())}</div><p class="mf3-lbl">${rline(RT2())}</p>${pman('7040304', tx('{consols} consols · {cartons} cartons', { consols: 10, cartons: 66 }))}` +
+    `<p class="mf3-lbl">${tx('Expected here on {day}: the Planner shows it that day, with Plan it.', { day: fmtDate(BACK) })}</p><div class="mf3-acts">${btn('edit', tx('Change where it goes'), 'pri')}${btn('truck', tx('Receive here'))}${btn('', tx('Remove truck'))}</div></div>`;
+  return `<div class="pc2-card mf3-ed">${head}${pf(tx('ETA'), inp('13:30'), tx('24h · the dock board sorts by it'))}` +
+    pf(tx('Manifest'), pman('7040304', tx('{consols} consols · {cartons} cartons', { consols: 10, cartons: 66 }), btn('', tx('Remove'), 'sm')) + `<div class="mf3-pman sel">${inp(`${tx('Every report is on a truck or staged: choose one below')}${ai('chev', 'dn')}`, false, 'sel')}${btn('', tx('Stage'), 'sm pri')}</div>`) +
+    pf(tx('Decant team'), `<div class="mf3-team">${inp('D4', true, 'mono')}<span class="mf3-ib">${ai('plus')}</span></div>`, tx('D-numbers only: no names are kept on the dock.')) +
+    pf(tx('Huddle · break'), `<span class="mf3-pair">${inp('0', true, 'mono n')}<small>${tx('min huddle')}</small>${inp('0', true, 'mono n')}<small>${tx('min team break')}</small></span>`, tx('The huddle is booked at the decant start and stops the clock; the break is the plan’s allowance.')) +
+    pf(tx('Note'), inp(tx('Anything the dock should know'), true)) +
+    pf(tx('Where it goes'), `<span class="mf3-pair"><span class="mf3-good">${ai('truck')}${tx('Receive here')}</span>${btn('route', tx('Off-site or diverted…'), 'sm mf3-route')}</span>`, tx('Not coming to the dock? Mark it off-site or diverted, with the day it lands here after all.')) +
+    `<div class="mf3-acts">${btn('check', tx('Save'), 'pri')}${btn('', tx('Remove truck'))}</div></div>`;
+}
+function offCard(p) {
+  if (!p.routed) return '';
+  const line = p.called ? `<span class="mf3-pl called">${tx('Called back: {when}', { when: tx('{day}, Truck {no}', { day: fmtDay(BACK), no: 1 }) })}</span>` : `<span class="mf3-pl">${tx('Due back {day}', { day: fmtDay(BACK) })}</span>`;
+  return `<div class="pc2-card mf3-ofc"><div class="ch"><h3>${tx('Off-site, to call back')}</h3><span class="dim">${txn(10, '{n} pallet', '{n} pallets')}</span></div>` +
+    `<div class="mf3-ofr"><div class="t"><b class="mono">7040304</b><small>${tx('sent {day} · {pallets}', { day: fmtDay(DAY), pallets: txn(10, '{n} pallet', '{n} pallets') })}</small>${line}</div>${p.called ? btn('', tx('Open'), 'sm') : btn('undo', tx('Call back'), 'sm mf3-cbk')}</div>${btn('stack', tx('Off-site pallets'), 'sm')}</div>`;
+}
+function noTruck(p) {
+  const ahead = p.week ? Array.from({ length: 7 }, (_, i) => addDays('2026-10-26', i)) : [DAY];
+  const row = k => `<div class="mf3-ntr"><span>${k === DAY ? dayLabel(k, tx('Today')) : dayLabel(k)}</span><span class="st">${k === DAY ? `<span class="dim">${txn(2, '{n} truck', '{n} trucks')}</span>` : k === BACK && p.called ? `<span class="dim">${txn(1, '{n} truck', '{n} trucks')}</span>`
+    : `<span class="dim">${tx('not planned')}</span>${btn('', tx('No trucks'), 'sm')}${btn('route', tx('Off-site'), 'sm')}`}</span></div>`;
+  return `<div class="pc2-card mf3-ntc"><div class="ch"><h3>${tx('Days without trucks')}</h3></div><p class="mf3-lbl">${tx('Confirm a day ahead or on the day: it expects no truck and no manifest, and the Dashboard’s morning checklist marks it done. Planning a truck on it clears the mark.')} ${tx('Trucks going off-site or diverted instead? Mark them on the day: Off-site or diverted…')}</p>${ahead.map(row).join('')}</div>`;
+}
+function planPage(p = {}) {
+  p = { week: 0, sel: 0, routed: false, called: false, ...p };
+  const n = p.week ? (p.called ? 1 : 0) : 11, range = p.week ? `${dateLabel('2026-10-26')} – ${dateLabel('2026-11-01')}` : `${dateLabel('2026-10-19')} – ${dateLabel(DAY)}`;
+  const acts = `<span class="mf3-wkp"><b>‹</b><b class="${p.week ? '' : 'on'}">${tx('This week')}</b><b class="nx">›</b></span>`;
+  return `<div class="mf2-pg mf3-plan">${gtabs(TABS(), 'planner')}${vh('m-planner', tx('Planner'), sub(p.week ? tx('Next week') : tx('This week'), range, `${txn(n, '{n} truck', '{n} trucks')}${p.week ? '' : ` · ${tx('{n} today', { n: 2 })}`}`), acts)}` +
+    `<div class="mf3-pgrid">${weekHtml(p)}<div class="mf3-side">${editor(p)}${offCard(p)}${noTruck(p)}</div></div></div>`;
+}
+
+// ── the sheets: Where it goes (routeSheet()) and Call back (callbackSheet()), dialogs ──
+const dlgHead = (title, subl) => `<div class="mf2-sh"><div class="t"><h3>${title}</h3><small>${subl}</small></div><span class="x">${ai('x')}</span></div>`;
+// s: lands (the day it lands here), to (where it is stored), why (the reason picked).
+function routeSheet(s = {}) {
+  const kinds = [['here', tx('Receive here'), 'truck'], ['offsite', tx('Off-site'), 'stack'], ['diverted', tx('Diverted'), 'route']];
+  const why = [['room', tx('No room on the dock')], ['closed', tx('Store closed')], ['dc', tx('DC asked')], ['other', tx('Other')]];
+  return `<div class="mf2-sht mf3-dlg">${dlgHead(tx('Where it goes'), `${fmtDay(DAY)} · ${tx('Truck {no}', { no: 2 })} · 7040304`)}<div class="mf3-db">` +
+    pf(tx('Where it goes'), `<span class="mf3-rseg">${kinds.map(([k, l, i]) => `<b class="${k === 'offsite' ? 'on ' + k : ''}" data-k="${k}">${ai(i)}${l}</b>`).join('')}</span>`) +
+    pf(tx('Lands here on'), `<span class="mf2-in date mf3-lands"><span class="val${s.lands ? '' : ' plh'}">${s.lands ? ddmmyy(s.lands) : 'dd/mm/yyyy'}</span>${ai('cal')}</span>`, tx('The callback day, if you know it: the Planner and the Dashboard show it that day.')) +
+    pf(tx('Where it is stored'), `<span class="mf3-inp wide mf3-to${s.to ? '' : ' ph'}"><span class="t">${s.to || tx('e.g. the storage yard')}</span></span>`) +
+    pf(tx('Why'), `<span class="mf3-why">${why.map(([k, l]) => `<b class="${s.why === k ? 'on' : ''}" data-r="${k}">${l}</b>`).join('')}</span>`) +
+    pf(tx('Note'), inp(tx('Anything the dock should know'), true, 'wide')) +
+    `<p class="mf3-eff offsite">${ai('stack')}<span>${tx('Nothing expects it at Receiving that day; the Planner, the Dashboard and Manifests tag it Off-site, and its cartons are not counted as received.')}</span></p></div>` +
+    `<div class="mf2-sf"><span class="pc2-btn">${tx('Cancel')}</span><span class="pc2-btn pri mf3-save">${ai('check')}${tx('Save')}</span></div></div>`;
+}
+// The pallets sent with 7040304: its consols as the register lists them, [pallet id, departments, cartons].
+const OFF304 = () => C304.map(c => [c.id, c.mix.map(([d]) => d), c.cartons]);
+function cbSheet() {
+  const trucks = [1, 2, 3, 4].map(n => `<span class="mf3-cbt${n === 1 ? ' on' : ''}"><b>${tx('Truck {no}', { no: n })}</b><small>${tx('new')}</small></span>`).join('');
+  return `<div class="mf2-sht mf3-dlg">${dlgHead(tx('Call back {what}', { what: '7040304' }), tx('{pallets} at off-site storage · sent {day}', { pallets: txn(10, '{n} pallet', '{n} pallets'), day: fmtDay(DAY) }))}<div class="mf3-db">` +
+    pf(tx('Pallets'), `<span class="mf3-cbseg"><b class="on"><span>${tx('All {n}', { n: 10 })}</span><small>${tx('{n} ctn', { n: 66 })}</small></b><b><span>${tx('Choose pallets')}</span><small>${tx('tick the ones you need')}</small></b></span>`) +
+    `<div class="mf3-pair2">${pf(tx('Day'), `<span class="mf2-in date"><span class="val">${ddmmyy(BACK)}</span>${ai('cal')}</span>`)}${pf(tx('ETA'), `<span class="mf2-in date"><span class="val">10:00</span>${ai('clock')}</span>`)}</div>` +
+    pf(tx('Truck'), `<span class="mf3-cbts">${trucks}</span>`) +
+    `<p class="mf3-eff back">${ai('undo')}<span>${tx('{day} gets Truck {no} with {man} staged, tagged From off-site · sent {sent}.', { day: fmtDay(BACK), no: 1, man: '7040304', sent: fmtDay(DAY) })} ${tx('Each pallet is ticked Received on the register as it lands.')}</span></p></div>` +
+    `<div class="mf2-sf"><span class="pc2-btn">${tx('Cancel')}</span><span class="pc2-btn pri mf3-plan-go">${ai('truck')}${tx('Plan the truck')}</span></div></div>`;
+}
+
+// ── Off-site pallets: the register by manifest (register(), groupHtml()) ──
+const deptLine = ds => ds.map(d => `${nameOf(d)} ${d}`).join(' · ');
+// p: all (every pallet shown, not three), called (on Tuesday's Truck 1).
+function regPage(p = {}) {
+  p = { all: false, called: false, ...p };
+  const tile = (k, v, note) => `<div class="pc2-card mf3-kpi"><span>${k}</span><b>${v}</b><small>${note}</small></div>`;
+  const rows = OFF304(), shown = p.all ? rows : rows.slice(0, 3);
+  const row = ([pid, ds, ctn]) => `<div class="mf3-ofg-r"><span class="pid mono">${pid}</span><span class="dl">${deptLine(ds)}</span><span class="ctn">${tx('{n} ctn', { n: ctn })}</span>` +
+    (p.called ? '<span class="cb"></span><span class="acts"></span>' : `<span class="cb"><label>${tx('Callback')}</label><span class="mf2-in date sm"><span class="val">${ddmmyy(BACK)}</span>${ai('cal')}</span></span><span class="acts">${btn('check', tx('Received'), 'sm pri')}</span>`) + '</div>';
+  const tag = p.called ? `<span class="mf3-rt back">${ai('undo')}${tx('Called back · {when}', { when: tx('{day}, Truck {no}', { day: fmtDay(BACK), no: 1 }) })}</span>` : `<span class="mf3-rt off">${ai('stack')}${tx('Off-site · back {day}', { day: fmtDay(BACK) })}</span>`;
+  return `<div class="mf2-pg mf3-reg">${gtabs(TABS(), 'offsite')}${vh('m-inventory', tx('Off-site pallets'), sub(txn(10, '{n} pallet off-site', '{n} pallets off-site'), txn(0, '{n} received', '{n} received')), btn('file', tx('Import the master list'), 'pri'))}` +
+    `<div class="mf3-itabs"><b class="on">${tx('Off-site register')}</b><b>${tx('Clearance')}</b></div>` +
+    `<div class="mf3-kpis">${tile(tx('Off-site'), 10, tx('from {what}', { what: txn(1, '{n} manifest', '{n} manifests') }))}${tile(tx('Overdue returns'), 0, tx('callback date passed'))}` +
+    `${tile(tx('Due in 14 days'), p.called ? 0 : 10, tx('next {date}', { date: p.called ? '—' : fmtDay(BACK) }))}${tile(tx('Called back'), p.called ? 10 : 0, p.called ? tx('{day}, Truck {no}', { day: fmtDay(BACK), no: 1 }) : tx('{n} received', { n: 0 }))}</div>` +
+    `<div class="pc2-card mf3-ofg-card"><div class="ch"><h3>${tx('Off-site register')}</h3><span class="mf3-seg2"><b class="on">${tx('By manifest')}</b><b>${tx('By callback date')}</b></span>${btn('plus', tx('Add a pallet'), 'sm')}</div>` +
+    `<div class="mf3-ofg${p.called ? ' called' : ''}"><div class="h"><div class="t"><b class="mono">7040304</b><small>${tx('sent {day} · {pallets}', { day: fmtDay(DAY), pallets: txn(10, '{n} pallet', '{n} pallets') })}</small></div><div class="tag">${tag}</div>` +
+    `<div class="a">${p.called ? btn('m-planner', tx('Open the Planner'), 'sm mf3-open') : btn('undo', tx('Call back'), 'sm pri mf3-cbk')}</div></div>` +
+    `<div class="rows">${shown.map(row).join('')}<span class="mf3-more">${p.all ? tx('Show fewer') : txn(rows.length - 3, '{n} more pallet', '{n} more pallets')}</span></div></div>` +
+    `<p class="mf3-note">${ai('route')}<span>${tx('Diverted manifests aren’t on the register: they aren’t ours to call back.')} ${tx('{man} went to {to} on {day}.', { man: '7040299', to: '1187 Bunbury', day: fmtDay('2026-10-22') })}</span></p></div></div>`;
+}
+
+// ── What if a truck can't come to the dock? ──────────────────────────
+manifests.stories.push({
+  id: 'offsite', title: tx('What if a truck can’t come to the dock?'), blurb: tx('Mark it off-site or diverted on the Planner: it keeps its place in the day, tagged, and Receiving doesn’t expect it.'),
+  know: [tx('Off-site: the truck goes into storage until it is called back, and its consols go on the off-site register under its manifest.'), tx('Diverted: it goes to another store or site for good; its cartons count as diverted, never as received.'),
+    tx('Give the day it lands here after all, if you know it: the Planner and the Dashboard show it that day, with Plan it.'), tx('Managers mark it: on the Planner’s truck, on a day with none planned, or under Where it goes on a manifest in Manifests.'),
+    tx('Receive here puts it back on the plan for its day.')],
+  html: () => frame(view('v-pl', planPage(), true) + view('v-list', page(LISTR(), '7040304'), false)),
+  steps: [
+    { cap: tx('Plan › Planner: Truck 2 is due at 13:30 with 7040304, and Truck 1 is still on the dock.'), read: S(tx('There is no room on the dock for a second truck today.'), tx('Click Truck 2: it opens on the right.')),
+      dev: 'Each truck in the week is <b>slotHtml()</b> in js/views/backdock/planner.js; Thursday’s Truck 2, diverted, is <b>routedHtml()</b>. The side is <b>editor()</b>.', ev: [],
+      run: async c => { await c.tap('#v-pl .mf3-ps[data-slot="2026-10-25-2"]'); c.html('#v-pl', planPage({ sel: 2 })); } },
+    { cap: tx('Where it goes: Off-site or diverted…, then Off-site.'), read: S(tx('Lands here on is the day it comes back, if you know it; where it is stored and why are for the record.'), tx('The sheet says what happens: nothing expects it at Receiving that day.')),
+      dev: '<b>routeSheet()</b> in js/views/backdock/routes.js, for managers; nothing is sent until Save.', ev: [],
+      run: async c => { c.html('#v-pl', planPage({ sel: 2 })); await c.tap('#v-pl .mf3-route'); openSheet(c, routeSheet()); await c.tap('.mf2-back .mf3-lands'); openSheet(c, routeSheet({ lands: BACK }));
+        await c.tap('.mf2-back .mf3-to'); c.cls('.mf2-back .mf3-to', 'ph', false); c.text('.mf2-back .mf3-to .t', ''); await c.type('.mf2-back .mf3-to .t', 'the storage yard'); await c.tap('.mf2-back .mf3-why [data-r="room"]'); openSheet(c, routeSheet({ lands: BACK, to: 'the storage yard', why: 'room' })); } },
+    { cap: tx('Save: Truck 2 keeps its place in the day, tagged Off-site.'), read: S(tx('Its card says it is not coming to the dock and there is nothing to decant.'), tx('Off-site, to call back lists 7040304 with its ten pallets and the day they are due back.')),
+      dev: 'Off-site reads the report for its consols’ cartons and departments, then sends <b>plan.route</b>: the truck leaves the day’s slots, and each consol goes on the off-site register under 7040304 (shared/reducers/backdock.js).',
+      ev: [R('GET', '/v1/store/1241/manifest/7040304', null, 'The report, for each consol’s cartons and departments on the register.'), E('plan.route', 'backdock', { date: DAY, slot: 2 }, { route: 'offsite', lands: BACK, to: 'the storage yard', reason: 'room', note: '', manNo: '7040304', pallets: '[10 consols]' })],
+      run: async c => { openSheet(c, routeSheet({ lands: BACK, to: 'the storage yard', why: 'room' })); await c.tap('.mf2-back .mf3-save'); closeSheet(c); c.html('#v-pl', planPage({ sel: 2, routed: true })); toast(c, tx('Truck {no} on {day}: off-site', { no: 2, day: fmtDay(DAY) })); focus(c, '#v-pl .mf3-ps.routed.offsite', '#v-pl .mf3-ofc'); } },
+    { cap: tx('Manifests lists 7040304 on the day it was due, tagged Off-site.'), read: S(tx('Where it goes says where it went and why, with Change.'), tx('The stats count its cartons as off-site, never as received; Thursday’s diverted report is tagged the same way.')),
+      dev: '<b>placeIndex()</b> in shared/manifeststats.js places a routed report on the day it was due (via route); <b>whereBar()</b> in js/views/backdock/manifests.js shows where it went.', ev: [],
+      run: async c => { focus(c); await c.tap('#v-pl .pc2-gtab[data-t="manifests"]'); c.view('v-list'); focus(c, '#v-list .mf2-row[data-man="7040304"]', '#v-list .mf3-where'); await c.wait(1300); } },
+  ],
+});
+
+// ── What if you need the off-site pallets back? ───────────────────────
+manifests.stories.push({
+  id: 'callback', title: tx('What if you need the off-site pallets back?'), blurb: tx('Call them back from the off-site register or the Planner: which pallets, the day and a free truck.'),
+  know: [tx('The off-site register reads By manifest: each manifest in storage with its pallets, or By callback date.'), tx('Call back plans a truck that day, naming what it brings back; a whole truck called back whole lands on its own manifest.'),
+    tx('Choose pallets brings back only the ones ticked; the rest stay on the register.'), tx('At Receiving, each pallet is ticked Received on the register as its label is scanned.'),
+    tx('The Planner’s Off-site, to call back card does the same, for the week ahead.'), tx('Diverted manifests aren’t on the register: they aren’t ours to call back.')],
+  html: () => frame(view('v-of', regPage(), true) + view('v-pl', planPage({ routed: true }), false)),
+  steps: [
+    { cap: tx('Plan › Off-site pallets: 7040304 in storage, by manifest.'), read: S(tx('Each pallet with its departments, its cartons and the day it is due back.'), tx('Diverted manifests are not on it: they aren’t ours to call back.')),
+      dev: 'The register is <b>offsiteGroups()</b> in shared/offsite.js, drawn by <b>groupHtml()</b> in js/views/backdock/offsite.js; the note is <b>divertedNote()</b>.', ev: [],
+      run: async c => { c.html('#v-of', regPage()); await c.tap('#v-of .mf3-more'); c.html('#v-of', regPage({ all: true })); focus(c, '#v-of .mf3-ofg'); } },
+    { cap: tx('Call back: which pallets, the day, the ETA and a free truck.'), read: S(tx('All of them, or Choose pallets to tick only the ones you need.'), tx('The day starts on their callback date; a truck already planned there is greyed.')),
+      dev: '<b>callbackSheet()</b> in js/views/backdock/callback.js; each truck that day says what holds it (<b>slotsOn()</b>).', ev: [],
+      run: async c => { focus(c); c.html('#v-of', regPage({ all: true })); await c.tap('#v-of .mf3-cbk'); openSheet(c, cbSheet()); } },
+    { cap: tx('Plan the truck: the register says Called back, with its day and truck.'), read: S(tx('7040304 is staged on that truck, as the whole truck comes back whole.'), tx('Its pallets stay on the register until they land.')),
+      dev: '<b>plan.set</b> plans the slot with the pallets it brings back (pids), where they came from (from) and the report staged.',
+      ev: [E('plan.set', 'backdock', { date: BACK, slot: 1 }, { eta: '10:00', pids: '[10 pallets]', from: { date: DAY, slot: 2 }, manifest: { ref: true, manNo: '7040304', n: 10, cartons: 66 } })],
+      run: async c => { openSheet(c, cbSheet()); await c.tap('.mf2-back .mf3-plan-go'); closeSheet(c); c.html('#v-of', regPage({ all: true, called: true })); c.html('#v-pl', planPage({ routed: true, called: true })); toast(c, tx('Called back: Truck {no} on {day}', { no: 1, day: fmtDay(BACK) })); focus(c, '#v-of .mf3-ofg .tag'); } },
+    { cap: tx('On the Planner, Tuesday’s Truck 1 brings them home.'), read: S(tx('It is tagged From off-site, and counts its pallets back as they land.'), tx('Each label scanned at Receiving ticks its pallet off the register.')),
+      dev: 'The tags are <b>backTag()</b> in js/views/backdock/callback.js and <b>routeTag()</b> in js/views/backdock/routes.js; <b>backOn()</b> in shared/offsite.js counts the pallets back.', ev: [],
+      run: async c => { focus(c); await c.tap('#v-of .mf3-open'); c.view('v-pl'); await c.wait(900); await c.tap('#v-pl .mf3-wkp .nx'); c.html('#v-pl', planPage({ week: 1, routed: true, called: true })); focus(c, '#v-pl .mf3-ps[data-slot="2026-10-27-1"]'); } },
   ],
 });
