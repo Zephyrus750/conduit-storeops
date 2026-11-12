@@ -5173,6 +5173,8 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .pw-wt span { font-size: var(--fs-xs); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pw-w .btn.sm { flex: none; padding: 4px 9px; font-size: var(--fs-xs); }
 .pw-side > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+/* Long words (Ausgelagert oder umgeleitet…) wrap inside the side column rather than run past its card. */
+.pw-ed .pf-pair { flex-wrap: wrap; min-width: 0; } .pw-ed .pf-pair .btn, .pw-ed .pf-acts .btn, .pw-sheet .pf-pair .btn { white-space: normal; text-align: left; height: auto; min-height: 32px; max-width: 100%; }
 .pw-wait .ch .cs-dim { margin-left: auto; white-space: nowrap; }
 .pw-wait .lbl { font-size: var(--fs-xs); margin-top: 6px; }
 .pw-wait .pchoose { margin-top: 2px; }
