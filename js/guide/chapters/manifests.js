@@ -518,80 +518,111 @@ const where = r => `<div class="mf3-where ${r.route}"><span class="cl">${ai(r.ro
 const mkR = (m, rt) => ({ ...m, st: rt.route, rt });
 const LISTR = () => [...LIST0, mkR({ ...mk(M304), day: DAY, truck: 2 }, RT2()), mkR(mk(['7040299', '2026-10-22', 2, '', 38, 6]), RT299())];
 
-// ── the Planner's week (drawn from the week before F.2; planner.js cellBody()) ──
-const prw = (lvl, icon, b, sub, more = '') => `<div class="mf3-prow pr-${lvl}">${ai(icon)}<div><b>${b}</b>${sub ? `<span>${sub}</span>` : ''}${more}</div></div>`;
-const metrics = (consols, cartons, keycodes, units) => tx('{consols} consols · {cartons}c · {keycodes} keycodes · {units} units', { consols, cartons, keycodes, units });
-const M301 = () => metrics(12, 72, 8, 412), M304M = () => metrics(10, 66, 15, 390), M299 = () => metrics(6, 38, 9, 230);
-const sh = (n, k, right, cls = '', body = '') => `<div class="mf3-ps${cls ? ' ' + cls : ''}" data-slot="${k}-${n}"><div class="h"><b>${tx('Truck {no}', { no: n })}</b>${right}</div>${body}</div>`;
-const eta = t => `<span class="eta">${ai('clock')}${t}</span>`;
-const phc = (k, l) => `<span class="mf3-ph ${k}">${l}</span>`;
-// A closed truck, from its record: [truck, manifest, consols, landed, pallets, minutes to clear, cartons, ctn/h].
-const closed = k => ([n, man, cons, landed, pals, mins, ctn, rate]) => sh(n, k, phc('closed', tx('truck phase::Closed')), 'done',
-  (man ? prw(2, 'file', man, tx('{m} of {n} consols matched', { m: cons, n: cons })) : prw(0, 'file', tx('No manifest'), tx('decanted without one'))) +
-  prw(2, 'truck', tx('Landed {time}', { time: landed }), txn(pals, '{n} pallet', '{n} pallets')) + prw(2, 'users', tx('Cleared in {time}', { time: hm(mins) }), tx('{cartons} ctn · {rate} ctn/h', { cartons: ctn, rate })));
-const HIST = { '2026-10-19': [[1, '7040293', 10, '05:52', 9, 118, 75, 38]], '2026-10-20': [[1, '7040295', 12, '05:47', 11, 132, 84, 38]], '2026-10-21': [[1, '7040296', 9, '05:55', 8, 101, 61, 36], [2, '7040297', 6, '13:20', 5, 69, 40, 35]],
-  '2026-10-22': [[1, '7040298', 14, '05:44', 13, 158, 100, 38]], '2026-10-23': [[1, null, 0, '05:50', 10, 124, 79, 38]], '2026-10-24': [[1, null, 0, '05:58', 7, 82, 51, 37], [2, null, 0, '12:40', 8, 99, 63, 38]] };
-const crew = () => `<div class="mf3-crew">${['D4', 'D7', 'D9'].map(p => `<span>${p}</span>`).join('')}</div>`;
-// Truck 1 today, on the dock: receiving 7040301, A1 and A2 down.
-const live1 = () => sh(1, DAY, phc('receiving', tx('truck phase::Receiving')), 'live', prw(2, 'file', '7040301', `${M301()} · ${tx('on the truck')}`) +
-  prw(1, 'truck', tx('Receiving · {n} pallets', { n: 2 }), tx('landed {time} · layout not confirmed', { time: '05:40' })) + prw(0, 'users', tx('{n} on decant', { n: 3 }), '', crew()));
-const planned2 = on => sh(2, DAY, eta('13:30'), on ? 'on' : '', prw(1, 'file', '7040304', `${M304M()} · ${tx('staged')}`) + prw(0, 'truck', tx('ETA {time}', { time: '13:30' }), tx('starts at Receiving when it lands')) + prw(0, 'users', tx('No team yet'), tx('pick devices')));
-// A truck marked off-site or diverted keeps its place in its day (cellBody()).
-const routed = (n, k, r, t, man, on) => sh(n, k, t ? eta(t) : '', `routed ${r.route}${on ? ' on' : ''}`, `<div class="mf3-rtrow">${rtag(r)}</div>` +
-  prw('x', 'file', r.man, man) + prw('x', r.route === 'offsite' ? 'stack' : 'route', tx('Not coming to the dock'), rline(r)) + prw('x', 'users', tx('Nothing to decant'), ''));
-// Tuesday's Truck 1, called back: it brings 7040304's pallets home, the report staged on it.
-const back1 = () => sh(1, BACK, eta('10:00'), '', `<div class="mf3-rtrow"><span class="mf3-rt back">${ai('undo')}${tx('From off-site · sent {day}', { day: fmtDay(DAY) })}</span><span class="mf3-rt back">${tx('{n} of {of} back', { n: 0, of: 10 })}</span></div>` +
-  prw(1, 'file', '7040304', `${M304M()} · ${tx('staged')}`) + prw(0, 'truck', tx('ETA {time}', { time: '10:00' }), tx('starts at Receiving when it lands')) + prw(0, 'users', tx('No team yet'), tx('pick devices')));
-const none = (k, ahead) => `<div class="mf3-pempty">${tx('No trucks')}</div>` + (ahead ? `<span class="mf3-pnt">${ai('check')}${tx('Confirm no trucks')}</span><span class="mf3-pnt">${ai('route')}${tx('Off-site or diverted…')}</span>` : '');
-const dayCol = (k, slots, nxt) => `<div class="mf3-pday${k === DAY ? ' today' : ''}"><div class="dl">${DOW()[dow(k)]}<b>${Number(k.slice(8))}</b>${slots.length ? `<span class="n">${txn(slots.length, '{n} truck', '{n} trucks')}</span>` : ''}</div>` +
-  (slots.join('') || none(k, k >= DAY)) + `<div class="mf3-padd">+ ${tx('Truck {no}', { no: nxt })}</div></div>`;
-// p: week (0 this week, 1 next), sel (the truck open on the right: 2), routed (Truck 2 went off-site), called (it is called back).
-function weekHtml(p) {
-  const days = Array.from({ length: 7 }, (_, i) => addDays(p.week ? '2026-10-26' : '2026-10-19', i));
-  return `<div class="mf3-pweek">${days.map(k => {
-    if (p.week) return k === BACK && p.called ? dayCol(k, [back1()], 2) : dayCol(k, [], 1);
-    const hist = (HIST[k] || []).map(closed(k));
-    if (k === '2026-10-22') hist.push(routed(2, k, RT299(), '13:00', M299()));
-    if (k === DAY) hist.push(live1(), p.routed ? routed(2, k, RT2(), '13:30', M304M(), p.sel === 2) : planned2(p.sel === 2));
-    return dayCol(k, hist, hist.length + 1);
-  }).join('')}</div>`;
+// ── the Planner's week, F.2 (planner.js: daysCard(), trucksCard(), cellHtml(), cellBody(); the side) ──
+// The days card (each day's status, a thin bar per truck, its cartons) above
+// the trucks card (one row per truck number, every cell the same size and
+// naming its truck), and beside them the editor, Manifests without a slot,
+// Off-site to call back and the week roster, folded. Classes start pw2-.
+// A closed truck, from its record: [truck, manifest, minutes to clear, cartons, ctn/h]; the crew was D4, D7 and D9.
+const HIST = { '2026-10-19': [[1, '7040293', 118, 75, 38]], '2026-10-20': [[1, '7040295', 132, 84, 38]], '2026-10-21': [[1, '7040296', 101, 61, 36], [2, '7040297', 69, 40, 35]],
+  '2026-10-22': [[1, '7040298', 158, 100, 38]], '2026-10-23': [[1, null, 124, 79, 38]], '2026-10-24': [[1, null, 82, 51, 37], [2, null, 99, 63, 38]] };
+const wkDays = mon => Array.from({ length: 7 }, (_, i) => addDays(mon, i));
+const mins = m => hm(Math.round(m));
+const pst = (text, tone = '', icon = '') => `<span class="pw2-st${tone ? ' ' + tone : ''}">${icon ? ai(icon) : ''}${text}</span>`;
+const ln = (cls, html) => html ? `<span class="${cls}">${html}</span>` : '';
+const tk = n => `<span class="pw2-tk">${ai('truck')}${tx('Truck {no}', { no: n })}</span>`;
+// The chips of a truck not coming to the dock (routeTag() in routes.js) and the line under it (routeLine()).
+const rchip = r => r.route === 'offsite' ? pst(tx('Off-site · lands {day}', { day: fmtDay(r.lands) }), 'warn', 'stack') : pst(tx('Diverted → {to}', { to: r.to }), '', 'route');
+// One truck number on one day: { n, kind: closed | live | planned | routed, … } (cellOf()).
+function cellsOn(k, p) {
+  if (p.week) return k === BACK && p.called ? [{ n: 1, kind: 'planned', man: '7040304', eta: '10:00', ctn: 66, back: true }] : [];
+  const out = (HIST[k] || []).map(([n, man, m, ctn, rate]) => ({ n, kind: 'closed', man, m, ctn, rate }));
+  if (k === '2026-10-22') out.push({ n: 2, kind: 'routed', rt: RT299() });
+  if (k === DAY) out.push({ n: 1, kind: 'live', man: '7040301', ctn: 72 }, p.routed ? { n: 2, kind: 'routed', rt: RT2() } : { n: 2, kind: 'planned', man: '7040304', eta: '13:30', ctn: 66 });
+  return out;
 }
-// The side: the truck open (editor()), Off-site to call back (offsiteCard()), Days without trucks (noTruckCard()).
-const pf = (label, body, hint = '') => `<div class="mf3-pf"><span class="lbl">${label}</span>${body}${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
-const inp = (t, ph = false, cls = '') => `<span class="mf3-inp${ph ? ' ph' : ''}${cls ? ' ' + cls : ''}">${t}</span>`;
-const pman = (no, line, extra = '') => `<div class="mf3-pman">${ai('file')}<div><b>${no}</b><span>${line}</span></div>${extra}</div>`;
-function editor(p) {
-  const head = `<div class="ch"><h3>${tx('Truck {no} · {day}', { no: 2, day: dayLabel(DAY) })}</h3></div>`;
-  if (!p.sel) return `<div class="pc2-card mf3-ed"><div class="ch"><h3>${tx('Pick a truck')}</h3></div><p class="mf3-lbl">${tx('Click a slot to set its ETA, manifest and decant team, or + Truck on a day to plan one.')}</p></div>`;
-  if (p.routed) return `<div class="pc2-card mf3-ed">${head}<div class="mf3-rtrow">${rtag(RT2())}</div><p class="mf3-lbl">${rline(RT2())}</p>${pman('7040304', tx('{consols} consols · {cartons} cartons', { consols: 10, cartons: 66 }))}` +
-    `<p class="mf3-lbl">${tx('Expected here on {day}: the Planner shows it that day, with Plan it.', { day: fmtDate(BACK) })}</p><div class="mf3-acts">${btn('edit', tx('Change where it goes'), 'pri')}${btn('truck', tx('Receive here'))}${btn('', tx('Remove truck'))}</div></div>`;
-  return `<div class="pc2-card mf3-ed">${head}${pf(tx('ETA'), inp('13:30'), tx('24h · the dock board sorts by it'))}` +
-    pf(tx('Manifest'), pman('7040304', tx('{consols} consols · {cartons} cartons', { consols: 10, cartons: 66 }), btn('', tx('Remove'), 'sm')) + `<div class="mf3-pman sel">${inp(`${tx('Every report is on a truck or staged: choose one below')}${ai('chev', 'dn')}`, false, 'sel')}${btn('', tx('Stage'), 'sm pri')}</div>`) +
-    pf(tx('Decant team'), `<div class="mf3-team">${inp('D4', true, 'mono')}<span class="mf3-ib">${ai('plus')}</span></div>`, tx('D-numbers only: no names are kept on the dock.')) +
-    pf(tx('Huddle · break'), `<span class="mf3-pair">${inp('0', true, 'mono n')}<small>${tx('min huddle')}</small>${inp('0', true, 'mono n')}<small>${tx('min team break')}</small></span>`, tx('The huddle is booked at the decant start and stops the clock; the break is the plan’s allowance.')) +
-    pf(tx('Note'), inp(tx('Anything the dock should know'), true)) +
-    pf(tx('Where it goes'), `<span class="mf3-pair"><span class="mf3-good">${ai('truck')}${tx('Receive here')}</span>${btn('route', tx('Off-site or diverted…'), 'sm mf3-route')}</span>`, tx('Not coming to the dock? Mark it off-site or diverted, with the day it lands here after all.')) +
-    `<div class="mf3-acts">${btn('check', tx('Save'), 'pri')}${btn('', tx('Remove truck'))}</div></div>`;
+// The inside of a cell (cellBody()).
+function body(c) {
+  if (c.kind === 'closed') return `<b class="pw2-man dim">${c.man || tx('No manifest')}</b>` + ln('pw2-ok', `${ai('check')}${tx('Cleared in {time}', { time: mins(c.m) })}`) +
+    ln('pw2-l2', [tx('{n} ctn', { n: c.ctn }), tx('{n} crew', { n: 3 }), tx('{n} ctn/h', { n: c.rate })].join(' · '));
+  if (c.kind === 'routed') return `<b class="pw2-man dim">${c.rt.man}</b>${rchip(c.rt)}` + ln('pw2-l2', rline(c.rt)) + ln('pw2-need', tx('Not coming to the dock'));
+  if (c.kind === 'live') return `<b class="pw2-man">${c.man}</b><span class="pw2-phx">${pst(tx('truck phase::Receiving'), 'warn')}${ln('pw2-l1', [tx('from {time}', { time: '05:40' }), tx('{n} crew', { n: 3 })].join(' · '))}</span>` +
+    ln('pw2-l2', tx('Receiving · {n} pallets', { n: 2 })) + ln('pw2-need warn', tx('landed {time} · layout not confirmed', { time: '05:40' }));
+  // planned: the week roster is its crew; ready, so its dot is green.
+  return `<div class="pw2-mh"><b class="pw2-man">${c.man}</b><i class="pw2-dot good"></i></div>` + ln('pw2-l1', [tx('ETA {time}', { time: c.eta }), tx('{n} crew', { n: 3 })].join(' · ')) +
+    (c.back ? pst(tx('From off-site · sent {day}', { day: fmtDay(DAY) }), 'info', 'undo') : ln('pw2-l2', tx('{n} ctn', { n: c.ctn })));
 }
+// A day's row of the days card (band()), its bars (segOf()) and its tag.
+function band(k, cells) {
+  const real = cells.filter(c => c.kind !== 'routed'), closed = real.filter(c => c.kind === 'closed'), past = k < DAY;
+  if (!real.length) return { big: '—', sub: tx('Not planned'), ink: 'faint' };
+  if (past) { const avg = closed.reduce((n, c) => n + c.m, 0) / closed.length;
+    return { big: tx('{n}c', { n: closed.reduce((n, c) => n + c.ctn, 0) }), what: tx('decanted'), sub: `${tx('{k} of {n} cleared', { k: closed.length, n: real.length })} · ${mins(avg)}`, ink: 'dim' }; }
+  return { big: tx('{n}c', { n: real.reduce((n, c) => n + c.ctn, 0) }), what: tx('manifested'), sub: tx('Ready'), ink: '' };
+}
+const seg = c => ({ closed: 'done', live: 'live', planned: 'done', routed: 'none' })[c.kind];
+function daysCard(keys, p) {
+  return `<section class="pw2-days">${keys.map((k, i) => {
+    const cells = cellsOn(k, p), b = band(k, cells), cls = `${k === DAY ? ' today' : ''}${k < DAY ? ' past' : ''}`, at = `--wc:${i + 1}`;
+    const tag = k === DAY ? `<em class="today">${tx('Today')}</em>` : k < DAY ? `<em class="done">${tx('Done')}</em>` : '';
+    return `<div class="pw2-h${cls}${i ? '' : ' c1'}" style="${at}"><span class="pw2-dl">${DOW()[dow(k)]}<b>${Number(k.slice(8))}</b>${tag}</span><span class="pw2-bars">${cells.map(c => `<i class="${seg(c)}"></i>`).join('')}</span></div>` +
+      `<div class="pw2-b${cls}${i ? '' : ' c1'}" style="${at}"><span class="pw2-big"><b class="${b.ink}">${b.big}</b>${b.what ? ' ' + b.what : ''}</span><span class="pw2-bs">${b.sub}</span></div>`;
+  }).join('')}</section>`;
+}
+// The trucks card: three rows and the short fourth (cellHtml()); a day with no trucks fills its column (spanHtml()).
+function trucksCard(keys, p) {
+  return `<section class="pw2-trucks">${keys.map((k, i) => {
+    const cells = cellsOn(k, p), c1 = i ? '' : ' c1', td = k === DAY ? ' today' : '';
+    if (!cells.length) return `<div class="pw2-c pw2-span pw2-unpl${c1}" style="--wc:${i + 1};--wr:1;--ws:4"><span class="pw2-ring">${ai('cal')}</span><b>${tx('Not planned yet')}</b><span>${tx('Plan a truck, or confirm there are none.')}</span>` +
+      `<span class="pw2-btn add">+ ${tx('Truck {no}', { no: 1 })}</span><span class="pw2-btn ok">${ai('check')}${tx('Confirm no trucks')}</span><span class="pw2-lnk">${ai('route')}${tx('Off-site or diverted…')}</span></div>`;
+    const add = [1, 2, 3, 4].find(n => !cells.some(c => c.n === n));
+    return [1, 2, 3, 4].map(r => {
+      const c = cells.find(x => x.n === r), at = `--wc:${i + 1};--wr:${r}`, cl = `${c1}${r === 1 ? ' r1' : ''}${td}`;
+      if (c) { const id = `${k}-${r}`; return `<div class="pw2-c pw2-${c.kind}${cl}${p.sel === id ? ' on' : ''}" style="${at}" data-slot="${id}">${tk(r)}${body(c)}</div>`; }
+      return r === add ? `<div class="pw2-c pw2-addc${cl}" style="${at}"><span class="pw2-add">+ ${tx('Truck {no}', { no: r })}</span></div>` : `<div class="pw2-c${cl}" style="${at}"></div>`;
+    }).join('');
+  }).join('')}</section>`;
+}
+// The side: the editor (editorCard(), editorParts()), Manifests without a slot (waiting()), Off-site to call back (offsiteCard()) and the roster (roster()).
+const row = (label, html) => `<div class="pw2-fl">${label}</div><div class="pw2-fv">${html}</div>`;
+const pin = (t, cls = '') => `<span class="pw2-in${cls ? ' ' + cls : ''}">${t}</span>`;
+const sbtn = (icon, label, cls = '') => `<span class="pw2-bt${cls ? ' ' + cls : ''}">${icon ? ai(icon) : ''}${label}</span>`;
+function editorCard(p) {
+  if (!p.sel) return `<div class="pc2-card pw2-ed"><div class="ch"><h3>${tx('Pick a truck')}</h3></div><div class="pw2-empty">${ai('truck')}<p>${tx('Click a slot to set its ETA, manifest and decant team, or + Truck on a day to plan one.')}</p></div></div>`;
+  const head = `<div class="ch"><h3>${tx('Truck {no} · {day}', { no: 2, day: dayLabel(DAY) })}</h3></div>`, man = tx('{consols} consols · {cartons} cartons', { consols: 10, cartons: 66 });
+  if (p.routed) return `<div class="pc2-card pw2-ed">${head}<div class="pw2-form">${row(tx('Where it goes'), `${rchip(RT2())}<span class="dim">${rline(RT2())}</span>`)}${row(tx('Manifest'), `<b>7040304</b><span class="dim">${man}</span>`)}</div>` +
+    `<p class="pw2-lbl">${tx('Expected here on {day}: the Planner shows it that day, with Plan it.', { day: fmtDate(BACK) })}</p><div class="pw2-acts">${sbtn('edit', tx('Change where it goes'), 'pri')}${sbtn('truck', tx('Receive here'))}${sbtn('', tx('Remove truck'))}</div></div>`;
+  return `<div class="pc2-card pw2-ed">${head}<div class="pw2-form">` +
+    row(tx('ETA'), pin('13:30', 'eta')) +
+    row(tx('Manifest'), `<div class="pw2-man2"><b>7040304</b><span class="dim">${man}</span><span class="pw2-lnk">${tx('Remove')}</span></div><div class="pw2-man2">${pin(`<span>${tx('Every report is on a truck or staged: choose one below')}</span>${ai('chev', 'dn')}`, 'sel')}${sbtn('', tx('Stage'), 'sm')}</div>`) +
+    row(tx('Decant team'), `<div class="pw2-team">${pin('D4', 'ph mono')}<span class="pw2-ib">${ai('plus')}</span></div><span class="dim">${tx('D-numbers only: no names are kept on the dock.')}</span>`) +
+    row(tx('Huddle · break'), `<span class="pw2-pair">${pin('0', 'ph mono n')}<span class="dim">${tx('min huddle')}</span>${pin('0', 'ph mono n')}<span class="dim">${tx('min team break')}</span></span>`) +
+    row(tx('Note'), pin(tx('Anything the dock should know'), 'ph wide')) +
+    row(tx('Where it goes'), `<span class="pw2-pair">${pst(tx('Receive here'), 'good', 'truck')}${sbtn('route', tx('Off-site or diverted…'), 'sm pw2-route')}</span><span class="dim">${tx('Not coming to the dock? Mark it off-site or diverted, with the day it lands here after all.')}</span>`) +
+    `</div><div class="pw2-acts">${sbtn('check', tx('Save'), 'pri')}${sbtn('', tx('Remove truck'))}</div></div>`;
+}
+const waitCard = () => `<div class="pc2-card pw2-wait"><div class="ch"><h3>${tx('Manifests without a slot')}</h3></div><div class="pw2-empty">${ai('check')}<p>${tx('Every published manifest has a truck.')}</p></div></div>`;
 function offCard(p) {
   if (!p.routed) return '';
-  const line = p.called ? `<span class="mf3-pl called">${tx('Called back: {when}', { when: tx('{day}, Truck {no}', { day: fmtDay(BACK), no: 1 }) })}</span>` : `<span class="mf3-pl">${tx('Due back {day}', { day: fmtDay(BACK) })}</span>`;
-  return `<div class="pc2-card mf3-ofc"><div class="ch"><h3>${tx('Off-site, to call back')}</h3><span class="dim">${txn(10, '{n} pallet', '{n} pallets')}</span></div>` +
-    `<div class="mf3-ofr"><div class="t"><b class="mono">7040304</b><small>${tx('sent {day} · {pallets}', { day: fmtDay(DAY), pallets: txn(10, '{n} pallet', '{n} pallets') })}</small>${line}</div>${p.called ? btn('', tx('Open'), 'sm') : btn('undo', tx('Call back'), 'sm mf3-cbk')}</div>${btn('stack', tx('Off-site pallets'), 'sm')}</div>`;
+  const day = tx('{day}, Truck {no}', { day: fmtDay(BACK), no: 1 });
+  return `<div class="pc2-card pw2-ofc"><div class="ch"><h3>${tx('Off-site, to call back')}</h3><span class="dim">${txn(10, '{n} pallet', '{n} pallets')}</span></div>` +
+    `<div class="pw2-ofr${p.called ? ' called' : ''}"><div class="t"><b class="mono">7040304</b><small>${tx('sent {day} · {pallets}', { day: fmtDay(DAY), pallets: txn(10, '{n} pallet', '{n} pallets') })}</small>` +
+    `<span class="pl">${p.called ? tx('Called back: {when}', { when: day }) : tx('Due back {day}', { day: fmtDay(BACK) })}</span></div>${p.called ? sbtn('', tx('Open'), 'sm') : sbtn('undo', tx('Call back'), 'sm')}</div>${sbtn('stack', tx('Off-site pallets'), 'sm all')}</div>`;
 }
-function noTruck(p) {
-  const ahead = p.week ? Array.from({ length: 7 }, (_, i) => addDays('2026-10-26', i)) : [DAY];
-  const row = k => `<div class="mf3-ntr"><span>${k === DAY ? dayLabel(k, tx('Today')) : dayLabel(k)}</span><span class="st">${k === DAY ? `<span class="dim">${txn(2, '{n} truck', '{n} trucks')}</span>` : k === BACK && p.called ? `<span class="dim">${txn(1, '{n} truck', '{n} trucks')}</span>`
-    : `<span class="dim">${tx('not planned')}</span>${btn('', tx('No trucks'), 'sm')}${btn('route', tx('Off-site'), 'sm')}`}</span></div>`;
-  return `<div class="pc2-card mf3-ntc"><div class="ch"><h3>${tx('Days without trucks')}</h3></div><p class="mf3-lbl">${tx('Confirm a day ahead or on the day: it expects no truck and no manifest, and the Dashboard’s morning checklist marks it done. Planning a truck on it clears the mark.')} ${tx('Trucks going off-site or diverted instead? Mark them on the day: Off-site or diverted…')}</p>${ahead.map(row).join('')}</div>`;
-}
+const rosterCard = () => `<div class="pc2-card pw2-ros"><b>${tx('Week roster')}</b><span>D4 · D7 · D9</span><em>${tx('{n} on', { n: 3 })}</em>${ai('chev')}</div>`;
+// p: week (0 this week, 1 next), sel (the truck open: '2026-10-25-2'), routed (Truck 2 went off-site), called (it is called back).
 function planPage(p = {}) {
-  p = { week: 0, sel: 0, routed: false, called: false, ...p };
-  const n = p.week ? (p.called ? 1 : 0) : 11, range = p.week ? `${dateLabel('2026-10-26')} – ${dateLabel('2026-11-01')}` : `${dateLabel('2026-10-19')} – ${dateLabel(DAY)}`;
-  const acts = `<span class="mf3-wkp"><b>‹</b><b class="${p.week ? '' : 'on'}">${tx('This week')}</b><b class="nx">›</b></span>`;
-  return `<div class="mf2-pg mf3-plan">${gtabs(TABS(), 'planner')}${vh('m-planner', tx('Planner'), sub(p.week ? tx('Next week') : tx('This week'), range, `${txn(n, '{n} truck', '{n} trucks')}${p.week ? '' : ` · ${tx('{n} today', { n: 2 })}`}`), acts)}` +
-    `<div class="mf3-pgrid">${weekHtml(p)}<div class="mf3-side">${editor(p)}${offCard(p)}${noTruck(p)}</div></div></div>`;
+  p = { week: 0, sel: '', routed: false, called: false, ...p };
+  const keys = wkDays(p.week ? '2026-10-26' : '2026-10-19');
+  const head = p.week ? sub(tx('Next week'), `${dateLabel(keys[0])} – ${dateLabel(keys[6])}`, txn(1, '{n} truck', '{n} trucks'))
+    : sub(tx('This week'), `${dateLabel(keys[0])} – ${dateLabel(keys[6])}`, txn(11, '{n} truck', '{n} trucks'), tx('{n} today', { n: 2 }), tx('{n} cleared', { n: 8 }), tx('{n} cartons decanted', { n: 553 }), p.routed ? tx('{n} off-site', { n: 1 }) : '', tx('{n} diverted', { n: 1 }));
+  const acts = `${btn('print', tx('Print week'), 'pw2-print')}<span class="pw2-pills"><b>‹</b><b class="${p.week ? '' : 'on'}">${tx('This week')}</b><b class="nx">›</b></span>`;
+  return `<div class="mf2-pg pw2-pg">${gtabs(TABS(), 'planner')}${vh('m-planner', tx('Planner'), head, acts)}` +
+    `<div class="pw2"><div class="pw2-main">${daysCard(keys, p)}${trucksCard(keys, p)}</div><aside class="pw2-side">${editorCard(p)}${waitCard()}${offCard(p)}${rosterCard()}</aside></div></div>`;
 }
+// The dialogs' rows and fields (the shared sheet's .pf, .inp).
+const pf = (label, body, hint = '') => `<div class="mf3-pf"><span class="lbl">${label}</span>${body}${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+const inp = (t, ph = false, cls = '') => `<span class="mf3-inp${ph ? ' ph' : ''}${cls ? ' ' + cls : ''}">${t}</span>`;
 
 // ── the sheets: Where it goes (routeSheet()) and Call back (callbackSheet()), dialogs ──
 const dlgHead = (title, subl) => `<div class="mf2-sh"><div class="t"><h3>${title}</h3><small>${subl}</small></div><span class="x">${ai('x')}</span></div>`;
@@ -650,16 +681,16 @@ manifests.stories.push({
   html: () => frame(view('v-pl', planPage(), true) + view('v-list', page(LISTR(), '7040304'), false)),
   steps: [
     { cap: tx('Plan › Planner: Truck 2 is due at 13:30 with 7040304, and Truck 1 is still on the dock.'), read: S(tx('There is no room on the dock for a second truck today.'), tx('Click Truck 2: it opens on the right.')),
-      dev: 'Each truck in the week is <b>cellBody()</b> in js/views/backdock/planner.js, a diverted one included, like Thursday’s Truck 2. The side is <b>editorCard()</b>.', ev: [],
-      run: async c => { await c.tap('#v-pl .mf3-ps[data-slot="2026-10-25-2"]'); c.html('#v-pl', planPage({ sel: 2 })); } },
+      dev: 'The days card is <b>daysCard()</b> in js/views/backdock/planner.js; under it <b>trucksCard()</b> gives each truck number a row and each truck a cell (<b>cellHtml()</b>, filled by <b>cellBody()</b>: cleared, live, planned, or off-site and diverted like Thursday’s Truck 2). A cell opens <b>editorCard()</b> beside the week.', ev: [],
+      run: async c => { await c.tap('#v-pl .pw2-c[data-slot="2026-10-25-2"]'); c.html('#v-pl', planPage({ sel: '2026-10-25-2' })); } },
     { cap: tx('Where it goes: Off-site or diverted…, then Off-site.'), read: S(tx('Lands here on is the day it comes back, if you know it; where it is stored and why are for the record.'), tx('The sheet says what happens: nothing expects it at Receiving that day.')),
       dev: '<b>routeSheet()</b> in js/views/backdock/routes.js, for managers; nothing is sent until Save.', ev: [],
-      run: async c => { c.html('#v-pl', planPage({ sel: 2 })); await c.tap('#v-pl .mf3-route'); openSheet(c, routeSheet()); await c.tap('.mf2-back .mf3-lands'); openSheet(c, routeSheet({ lands: BACK }));
+      run: async c => { c.html('#v-pl', planPage({ sel: '2026-10-25-2' })); await c.tap('#v-pl .pw2-route'); openSheet(c, routeSheet()); await c.tap('.mf2-back .mf3-lands'); openSheet(c, routeSheet({ lands: BACK }));
         await c.tap('.mf2-back .mf3-to'); c.cls('.mf2-back .mf3-to', 'ph', false); c.text('.mf2-back .mf3-to .t', ''); await c.type('.mf2-back .mf3-to .t', 'the storage yard'); await c.tap('.mf2-back .mf3-why [data-r="room"]'); openSheet(c, routeSheet({ lands: BACK, to: 'the storage yard', why: 'room' })); } },
-    { cap: tx('Save: Truck 2 keeps its place in the day, tagged Off-site.'), read: S(tx('Its card says it is not coming to the dock and there is nothing to decant.'), tx('Off-site, to call back lists 7040304 with its ten pallets and the day they are due back.')),
+    { cap: tx('Save: Truck 2 keeps its place in the day, tagged Off-site.'), read: S(tx('Its cell says where it went, and that it is not coming to the dock.'), tx('Off-site, to call back lists 7040304 with its ten pallets and the day they are due back.')),
       dev: 'Off-site reads the report for its consols’ cartons and departments, then sends <b>plan.route</b>: the truck leaves the day’s slots, and each consol goes on the off-site register under 7040304 (shared/reducers/backdock.js).',
       ev: [R('GET', '/v1/store/1241/manifest/7040304', null, 'The report, for each consol’s cartons and departments on the register.'), E('plan.route', 'backdock', { date: DAY, slot: 2 }, { route: 'offsite', lands: BACK, to: 'the storage yard', reason: 'room', note: '', manNo: '7040304', pallets: '[10 consols]' })],
-      run: async c => { openSheet(c, routeSheet({ lands: BACK, to: 'the storage yard', why: 'room' })); await c.tap('.mf2-back .mf3-save'); closeSheet(c); c.html('#v-pl', planPage({ sel: 2, routed: true })); toast(c, tx('Truck {no} on {day}: off-site', { no: 2, day: fmtDay(DAY) })); focus(c, '#v-pl .mf3-ps.routed.offsite', '#v-pl .mf3-ofc'); } },
+      run: async c => { openSheet(c, routeSheet({ lands: BACK, to: 'the storage yard', why: 'room' })); await c.tap('.mf2-back .mf3-save'); closeSheet(c); c.html('#v-pl', planPage({ sel: '2026-10-25-2', routed: true })); toast(c, tx('Truck {no} on {day}: off-site', { no: 2, day: fmtDay(DAY) })); focus(c, '#v-pl .pw2-c[data-slot="2026-10-25-2"]', '#v-pl .pw2-ofc'); } },
     { cap: tx('Manifests lists 7040304 on the day it was due, tagged Off-site.'), read: S(tx('Where it goes says where it went and why, with Change.'), tx('The stats count its cartons as off-site, never as received; Thursday’s diverted report is tagged the same way.')),
       dev: '<b>placeIndex()</b> in shared/manifeststats.js places a routed report on the day it was due (via route); <b>whereBar()</b> in js/views/backdock/manifests.js shows where it went.', ev: [],
       run: async c => { focus(c); await c.tap('#v-pl .pc2-gtab[data-t="manifests"]'); c.view('v-list'); focus(c, '#v-list .mf2-row[data-man="7040304"]', '#v-list .mf3-where'); await c.wait(1300); } },
@@ -685,7 +716,7 @@ manifests.stories.push({
       ev: [E('plan.set', 'backdock', { date: BACK, slot: 1 }, { eta: '10:00', pids: '[10 pallets]', from: { date: DAY, slot: 2 }, manifest: { ref: true, manNo: '7040304', n: 10, cartons: 66 } })],
       run: async c => { openSheet(c, cbSheet()); await c.tap('.mf2-back .mf3-plan-go'); closeSheet(c); c.html('#v-of', regPage({ all: true, called: true })); c.html('#v-pl', planPage({ routed: true, called: true })); toast(c, tx('Called back: Truck {no} on {day}', { no: 1, day: fmtDay(BACK) })); focus(c, '#v-of .mf3-ofg .tag'); } },
     { cap: tx('On the Planner, Tuesday’s Truck 1 brings them home.'), read: S(tx('It is tagged From off-site, and counts its pallets back as they land.'), tx('Each label scanned at Receiving ticks its pallet off the register.')),
-      dev: 'The tags are <b>backTag()</b> in js/views/backdock/callback.js and <b>routeTag()</b> in js/views/backdock/routes.js; <b>backOn()</b> in shared/offsite.js counts the pallets back.', ev: [],
-      run: async c => { focus(c); await c.tap('#v-of .mf3-open'); c.view('v-pl'); await c.wait(900); await c.tap('#v-pl .mf3-wkp .nx'); c.html('#v-pl', planPage({ week: 1, routed: true, called: true })); focus(c, '#v-pl .mf3-ps[data-slot="2026-10-27-1"]'); } },
+      dev: 'A planned truck’s cell (<b>cellBody()</b> in js/views/backdock/planner.js): <b>backOn()</b> in shared/offsite.js finds the pallets it brings back, and its tag says when they were sent; once it lands the tag counts them back. The side’s <b>offsiteCard()</b> says Called back.', ev: [],
+      run: async c => { focus(c); await c.tap('#v-of .mf3-open'); c.view('v-pl'); await c.wait(900); await c.tap('#v-pl .pw2-pills .nx'); c.html('#v-pl', planPage({ week: 1, routed: true, called: true })); focus(c, '#v-pl .pw2-c[data-slot="2026-10-27-1"]', '#v-pl .pw2-ofc'); } },
   ],
 });
