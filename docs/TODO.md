@@ -43,10 +43,15 @@ brackets below).
 
 - **The phone's New truck sheet:** keep its Decant start time box, or take
   it off like Receive's?
-- **The Planner's week design** (boards F and F.2), **the live reader's
-  option 6** (read both ways at once, a Settings trial, off by default) and
-  **feedback on the ideas canvas** (dialogs, lists, calm screens, the More
-  sheet, the outbox, gaps, handover, roster, weekly, photos, Tasks).
+- **The live reader's option 6** (read both ways at once, a Settings trial,
+  off by default) and **feedback on the ideas canvas** (dialogs, lists, calm
+  screens, the More sheet, the outbox, gaps, handover, roster, weekly,
+  photos, Tasks).
+- **The Planner's week** (F.2, approved and built 12 Nov, decisions 53 and
+  54): check it on a store PC at 1920×1080 with a real week, print the week
+  for the dock wall, and try Repeat last week on an empty week. Say if a
+  crew phone should have the Planner too (54a) or if Repeat should leave
+  the huddle and break out (54b).
 - **The review board's Ready list** (built 11 Nov, PR #94): one empty state and one page header; the confirm sheet's second pass; the alerts bell and rail counts; Ctrl K actions; a shrink trend; every page in Resources; Live pull answers for the requester; one look for print; density and dark; the manager phone's Today, Refresh and Back dock parts. Device health, compare stores, practice mode, a Tasks area and the chip, type and inline-style sweep with the dark pass are in the same PR (decisions 48 to 52).
 
 ## Built 2026-10-09 (the defaults taken)

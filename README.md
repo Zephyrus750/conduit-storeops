@@ -752,6 +752,32 @@ top products, keycodes new in the period and those on the most manifests,
 and the reports in it. A report with no day on file counts on its despatch
 date plus the usual gap and is marked estimated.
 
+The Planner (`js/views/backdock/planner.js`) is the F.2 week, approved 12 Nov
+2026 (decision 53): a card of the seven days (each day's status, a thin bar
+per truck, then its cartons decanted or manifested and what it still needs)
+above a card of trucks, one row per truck number, every cell the same size
+and naming its truck. Colour only where something needs doing: amber for what
+today still needs and a late starter, red for a truck past its ETA, green for
+cleared, ready and a day confirmed with no trucks, the accent for the truck
+being decanted. A cell is a cleared truck (clear time, cartons, crew), the
+live one (its phase, progress and forecast finish), a planned slot (manifest,
+ETA and crew, note, what it needs), one never received, one off-site or
+diverted, or a truck landing from off-site with Plan it; a day with nothing
+fills its column with + Truck, Confirm no trucks and (managers) Off-site or
+diverted. Beside the week at the PC's wide layout: the editor, Manifests
+without a slot (drag one onto a truck, or Today and Tomorrow), Off-site to
+call back and the week roster; narrower they go under the week and the
+editor opens as a side sheet. Half a screen scrolls the week sideways with
+the Truck column pinned and a strip of the days to jump to. A manager's phone
+has it in More: one day at a time with a strip of the seven days, the editor
+as a bottom sheet. Print week is one A4 landscape sheet for the dock wall
+(landed and cleared boxes, notes, the roster). A week with nothing planned
+offers Repeat last week: its slots with their ETAs, decant teams and booked
+huddle and break, and its confirmed no-truck days, as ordinary `plan.set`
+and `plan.noTrucks` events (`repeatWeek` in `shared/dockweek.js`), never its
+manifests, notes or callbacks; a truck keeps the ETA of the slot it came
+from (`truck.eta`) so a week that happened can be repeated too.
+
 The owner's queue (console › Maps, and a store's Map tab) holds Suggest map
 edits and Field Mode alike. **Apply to map** writes a rename or a name that
 reads as a shelf code into the published map's editor source
