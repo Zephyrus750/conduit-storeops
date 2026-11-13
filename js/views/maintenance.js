@@ -1,7 +1,7 @@
 // Maintenance: log issues with a map pin, work them open → progress →
 // completed, reopen as recurring. Reads store.get('issues').
 
-import { $, ic, esc, vh, sub, status, fmtTime, timePassed, toast, mgr, fmtDay } from '../ui.js';
+import { $, ic, esc, vh, sub, status, fmtTime, timePassed, toast, mgr, fmtDay, empty } from '../ui.js';
 import { mountMap, mapbar, crumbx, bindMapChrome, segmentId, mvMap, setStrip, sx } from '../map.js';
 import { ISSUE_CATS } from '../../shared/reducers/floor.js';
 import { printSheet, table, signoff } from '../print.js';
@@ -10,7 +10,7 @@ import { issueLink } from '../share.js';
 import { qrSvg } from '../../shared/qr.js';
 import { mapFloors } from '../map.js';
 import { tx, txn } from '../i18n.js';
-import { ask } from '../sheet.js';
+import { ask, askText, askForm } from '../sheet.js';
 
 const SEV = [[tx('Low'), '#6B7280'], [tx('Medium'), '#D97706'], [tx('High'), '#DC2626'], [tx('Urgent'), '#7F1D1D']];
 // An issue's status word ("Open" alone is the verb on every link and button).
@@ -26,6 +26,8 @@ const SLA_DAYS = [14, 7, 3, 1];
 const since = i => i.reopened || i.created;
 const ageDays = i => (Date.now() - Date.parse(since(i))) / 86400000;
 const overdue = i => i.status !== 'completed' && ageDays(i) > SLA_DAYS[i.sev ?? 1];
+// For the rail's count and the alerts bell (js/alerts.js).
+export const overdueIssues = store => Object.values(store.get('issues') || {}).filter(i => !i.removed && overdue(i)).length;
 const doneAt = i => [...(i.log || [])].reverse().find(l => l.a === 'Completed')?.t || i.updated;
 const thisMonth = iso => { const d = new Date(iso), n = new Date(); return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth(); };
 // The pictogram per category, stroked in a -8..8 box (ShelfSearcher's set).
@@ -42,7 +44,7 @@ const GLYPH = {
   pest: '<path d="M0 -3A3 4.5 0 1 1 0 6A3 4.5 0 1 1 0 -3M-3 0H-7M3 0H7M-3 4H-6.5M3 4H6.5M-1.5 -4L-3 -7M1.5 -4L3 -7"/>',
   other: '<path d="M-4.5 0H-4.4M0 0H0.1M4.5 0H4.6" stroke-width="3"/>',
 };
-const glyphSvg = (cat, colour) => `<svg class="mt-gl" viewBox="-9 -9 18 18" aria-hidden="true"><g fill="none" stroke="${colour}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:${colour}">${GLYPH[cat] || GLYPH.other}</g></svg>`;
+const glyphSvg = (cat, colour) => `<svg class="mt-gl" viewBox="-9 -9 18 18" aria-hidden="true"><g fill="none" stroke="${colour}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" color="${colour}">${GLYPH[cat] || GLYPH.other}</g></svg>`;
 
 function model(ctx) {
   const all = Object.entries(ctx.store.get('issues')).map(([id, i]) => ({ id, ...i })).filter(i => !i.removed);
@@ -56,7 +58,9 @@ function model(ctx) {
 // ── photos ──────────────────────────────────────────────────────────────
 // Shrunk on the device (longest side 1280 px, JPEG) before upload; read
 // back through the worker with this device's token and shown as blob URLs.
-const thumbs = new Map();      // photo id → object URL | 'gone'
+// Tasks shares them: a walk's ✗ takes its photo the same way, and one
+// raised as an issue is the same photo on both.
+export const thumbs = new Map();      // photo id → object URL | 'gone'
 async function shrink(file) {
   const bmp = await createImageBitmap(file), k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
@@ -64,14 +68,19 @@ async function shrink(file) {
   for (const q of [0.72, 0.55, 0.4]) { const b = await new Promise(r => c.toBlob(r, 'image/jpeg', q)); if (b && b.size < 780_000) return b; }
   throw new Error(tx('that photo is too large even after shrinking'));
 }
-async function uploadPhoto(ctx, issueId, file) {
+// Up to the worker: the photo's id, its picture kept for this device.
+export async function postPhoto(ctx, file) {
   const blob = await shrink(file);
   const r = await ctx.api(`/v1/store/${ctx.storeNo}/photo`, { method: 'POST', raw: blob, rawType: 'image/jpeg', timeoutMs: 30000 });
   thumbs.set(r.id, URL.createObjectURL(blob));
-  await ctx.store.dispatch({ type: 'issue.photo', entity: { issue: issueId }, payload: { photo: r.id } });
+  return r.id;
 }
-const photoError = e => e.status === 501 ? tx('Photos are not switched on for this store yet.') : e.network ? tx('Photos need a connection. Try again when online.') : e.message;
-function loadThumbs(ctx, ids, repaint) {
+async function uploadPhoto(ctx, issueId, file) {
+  const id = await postPhoto(ctx, file);
+  await ctx.store.dispatch({ type: 'issue.photo', entity: { issue: issueId }, payload: { photo: id } });
+}
+export const photoError = e => e.status === 501 ? tx('Photos are not switched on for this store yet.') : e.network ? tx('Photos need a connection. Try again when online.') : e.message;
+export function loadThumbs(ctx, ids, repaint) {
   const want = ids.filter(id => !thumbs.has(id)); if (!want.length) return;
   for (const id of want) thumbs.set(id, null);
   Promise.all(want.map(id => ctx.api(`/v1/store/${ctx.storeNo}/photo/${id}`, { blob: true }).then(b => thumbs.set(id, URL.createObjectURL(b))).catch(() => thumbs.set(id, 'gone')))).then(repaint);
@@ -97,7 +106,7 @@ export default {
     const m = model(ctx);
     return vh(tx('Maintenance'), headSub(m), `<button class="btn primary" data-act="new">${ic('plus')}${tx('Log new issue')}</button>`, 'm-maintenance') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
-      `<div class="mapleg">${crumbx(tx('Maintenance'), ctx.storeNo)}<span><i style="background:#DC2626;border-radius:50%"></i>${OPEN}</span><span><i style="background:#D97706;border-radius:50%"></i>${tx('Done, to check')}</span><span><i style="background:#16A34A;border-radius:50%"></i>${tx('Completed')}</span><span style="color:var(--faint)">${draft ? (draft.editId ? tx('Tap the map to move this issue') : tx('Tap the map to place the new issue')) : tx('Log a new issue, then tap the map to place it')}</span></div></div>` +
+      `<div class="mapleg">${crumbx(tx('Maintenance'), ctx.storeNo)}<span><i class="k-red k-dot"></i>${OPEN}</span><span><i class="k-amber k-dot"></i>${tx('Done, to check')}</span><span><i class="k-green k-dot"></i>${tx('Completed')}</span><span class="t-faint">${draft ? (draft.editId ? tx('Tap the map to move this issue') : tx('Tap the map to place the new issue')) : tx('Log a new issue, then tap the map to place it')}</span></div></div>` +
       `<div class="sidecol fill" id="mtside"></div></div>`;
   },
   // The phone gets the map too, so a report is pinned where the fault is;
@@ -173,10 +182,11 @@ export default {
         // Each status change asks for a note for the log, as ShelfSearcher did; Cancel keeps the status.
         else if (act === 'progress' || act === 'close' || act === 'reopen') {
           const cur = ctx.store.get('issues')[a.getAttribute('data-id') || selected];
-          const note = prompt(act === 'progress' ? tx('Maintenance done. Note (optional):') : act === 'close' ? tx('Completed. Note (optional):') : cur?.status === 'progress' ? tx('Not fixed: reopen it. What is still wrong?') : tx('Reopen as recurring. What is wrong again?'), '');
+          const q = act === 'progress' ? [tx('Mark it maintenance done?'), tx('Note (optional)'), tx('Maintenance done')] : act === 'close' ? [tx('Mark it completed?'), tx('Note (optional)'), tx('Completed')] : cur?.status === 'progress' ? [tx('Not fixed: reopen it?'), tx('What is still wrong?'), tx('Reopen')] : [tx('Reopen as recurring?'), tx('What is wrong again?'), tx('Reopen')];
+          const note = await askText({ title: q[0], label: q[1], multiline: true, ok: q[2] });
           if (note === null) return;
           const type = act === 'progress' ? 'issue.progress' : act === 'close' ? 'issue.close' : 'issue.reopen';
-          await ctx.store.dispatch({ type, entity: { issue: act === 'reopen' ? a.getAttribute('data-id') || selected : selected }, payload: note.trim() ? { note: note.trim().slice(0, 500) } : {} });
+          await ctx.store.dispatch({ type, entity: { issue: act === 'reopen' ? a.getAttribute('data-id') || selected : selected }, payload: note ? { note: note.slice(0, 500) } : {} });
         }
         else if (act === 'remove') {
           const i = ctx.store.get('issues')[selected]; if (!i) return;
@@ -186,10 +196,8 @@ export default {
         }
         else if (act === 'work-order') { const i = m0(ctx); if (i) printWorkOrder(ctx, i); }
         else if (act === 'visit') {
-          const who = prompt(tx('Contractor visited: who came (name or company)?'), ''); if (who === null) return;
-          if (!who.trim()) return toast(tx('Say who visited'), 'bad');
-          const note = prompt(tx('What did they do? (optional)'), ''); if (note === null) return;
-          await ctx.store.dispatch({ type: 'issue.visit', entity: { issue: selected }, payload: { who: who.trim().slice(0, 80), ...(note.trim() ? { note: note.trim().slice(0, 500) } : {}) } }); toast(tx('Visit logged'));
+          const r = await askForm({ title: tx('Log a contractor visit'), fields: [{ name: 'who', label: tx('Who came (name or company)?'), required: true }, { name: 'note', label: tx('What did they do? (optional)'), multiline: true }], ok: tx('Log visit') }); if (!r) return;
+          await ctx.store.dispatch({ type: 'issue.visit', entity: { issue: selected }, payload: { who: r.who.slice(0, 80), ...(r.note ? { note: r.note.slice(0, 500) } : {}) } }); toast(tx('Visit logged'));
         }
         else if (act === 'photo-open') { openPhoto(thumbs.get(a.dataset.photo)); }
         else if (act === 'photo-remove') {
@@ -224,20 +232,20 @@ function draftForm(m) {
   return `<div class="card mtdet"><div class="ch"><h3>${draft.editId ? tx('Edit issue') : tx('New issue')}</h3><span class="cs-dim">${draft.x != null ? tx('placed on the map') : tx('tap the map to place it')}</span></div>` +
     (dup ? `<div class="mt-dup">${ic('alert')}${txn(dup, '{n} previous issue logged near here. Check the list before saving.', '{n} previous issues logged near here. Check the list before saving.')}</div>` : '') +
     `<label class="fld"><span>${tx('Title')}</span><input data-draft="title" value="${esc(draft.title)}" placeholder="${tx('Leak under the sink')}"></label><label class="fld"><span>${tx('Where')}</span><input data-draft="loc" value="${esc(draft.loc)}" placeholder="${tx('BOH kitchen · near bay 7031')}"></label><label class="fld"><span>${tx('Type')}</span>${cats}</label><label class="fld"><span>${tx('Note')}</span><input data-draft="note" value="${esc(draft.note)}"></label><div class="mv-sub">${tx('Severity')}</div><div class="mv-chips">${sevs}</div>` +
-    (draft.editId ? '' : draftPhotos()) + `<div class="acts2" style="display:flex;gap:8px;margin-top:12px"><span class="btn primary sm" data-act="draft-save">${ic('check')}${draft.editId ? tx('Save changes') : tx('Log issue')}</span><span class="btn sm" data-act="draft-cancel">${tx('Cancel')}</span></div></div>`;
+    (draft.editId ? '' : draftPhotos()) + `<div class="acts2"><span class="btn primary sm" data-act="draft-save">${ic('check')}${draft.editId ? tx('Save changes') : tx('Log issue')}</span><span class="btn sm" data-act="draft-cancel">${tx('Cancel')}</span></div></div>`;
 }
 function sidebar(m) {
   const pills = [['active', tx('Open {n}', { n: m.open.length })], ['overdue', tx('Overdue {n}', { n: m.overdue })], ['recurring', tx('Recurring {n}', { n: m.recurring })], ['month', tx('Done this month {n}', { n: m.month.length })], ['done', tx('Completed {n}', { n: m.all.length - m.open.length })], ['all', tx('All')]];
-  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map((i, n) => `<div class="li mt-li${selected === i.id ? ' sel' : ''}" data-act="select" data-id="${esc(i.id)}"><span class="mt-pin" style="border-color:${colour(i)}">${glyphSvg(i.cat, colour(i))}</span><span class="nm" style="white-space:normal"><b style="font-weight:600">${esc(i.title)}${i.recur ? ` <span class="recur" title="${txn(i.recur, 'Reopened {n} time', 'Reopened {n} times')}">↻ ×${i.recur}</span>` : ''}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)"><i class="sevdot" style="background:${SEV[i.sev][1]}"></i>${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${timePassed(i.created)}${overdue(i) ? ` · <b class="mt-od">${tx('overdue')}</b>` : ''}</span></span>${status(i.status === 'open' ? 'warn' : i.status === 'progress' ? 'info' : 'good', stName(i))}</div>`).join('') || `<div class="li" style="color:var(--dim)">${tx('Nothing here.')}</div>`}</div></div>`;
+  const list = `<div class="pcard"><div class="pills tight mb-m">${pills.map(p => `<button class="${filter === p[0] ? 'on' : ''}" data-act="filter" data-filter="${p[0]}">${p[1]}</button>`).join('')}</div><div class="list">${m.list.map((i, n) => `<div class="li mt-li${selected === i.id ? ' sel' : ''}" data-act="select" data-id="${esc(i.id)}"><span class="mt-pin" style="--c:${colour(i)}">${glyphSvg(i.cat, colour(i))}</span><span class="nm wrap"><b class="semi">${esc(i.title)}${i.recur ? ` <span class="recur" title="${txn(i.recur, 'Reopened {n} time', 'Reopened {n} times')}">↻ ×${i.recur}</span>` : ''}</b><span class="where"><i class="sevdot sw-c" style="--c:${SEV[i.sev][1]}"></i>${SEV[i.sev][0]} · ${esc(i.loc || CAT_NAME[i.cat])} · ${timePassed(i.created)}${overdue(i) ? ` · <b class="mt-od">${tx('overdue')}</b>` : ''}</span></span>${status(i.status === 'open' ? 'warn' : i.status === 'progress' ? 'info' : 'good', stName(i))}</div>`).join('') || empty(tx('Nothing here.'), { sm: true })}</div></div>`;
   if (draft) return list + draftForm(m);
   const i = m.all.find(x => x.id === selected);
   if (!i) return list;
   const sla = SLA_DAYS[i.sev ?? 1];
   const det = `<div class="card mtdet"><div class="ch"><h3>${esc(i.title)}</h3>${status(i.status === 'open' ? 'warn' : i.status === 'progress' ? 'info' : 'good', stName(i))}</div>` +
-    `<div class="mt-meta"><span><i class="sevdot" style="background:${SEV[i.sev][1]}"></i>${tx('{sev} severity', { sev: SEV[i.sev][0] })}</span><span>${esc(i.loc || CAT_NAME[i.cat])}</span><span>${tx('Logged {time}', { time: fmtTime(i.created) })}</span>${i.reopened && i.status !== 'completed' ? `<span>${tx('Reopened {time}', { time: fmtTime(i.reopened) })}</span>` : ''}${i.recur ? `<span class="recur">${tx('↻ Recurring · reopened {n}×', { n: i.recur })}</span>` : ''}${i.status !== 'completed' ? `<span class="${overdue(i) ? 'mt-od' : 'cs-dim'}">${txn(sla, 'Target {n} day', 'Target {n} days')}${overdue(i) ? ' · ' + tx('overdue') : ''}</span>` : ''}<span class="cs-dim">${i.by ? tx('{type} · by {who}', { type: CAT_NAME[i.cat], who: esc(i.by) }) : tx('{type} · by unknown device', { type: CAT_NAME[i.cat] })}</span></div>` +
+    `<div class="mt-meta"><span><i class="sevdot sw-c" style="--c:${SEV[i.sev][1]}"></i>${tx('{sev} severity', { sev: SEV[i.sev][0] })}</span><span>${esc(i.loc || CAT_NAME[i.cat])}</span><span>${tx('Logged {time}', { time: fmtTime(i.created) })}</span>${i.reopened && i.status !== 'completed' ? `<span>${tx('Reopened {time}', { time: fmtTime(i.reopened) })}</span>` : ''}${i.recur ? `<span class="recur">${tx('↻ Recurring · reopened {n}×', { n: i.recur })}</span>` : ''}${i.status !== 'completed' ? `<span class="${overdue(i) ? 'mt-od' : 'cs-dim'}">${txn(sla, 'Target {n} day', 'Target {n} days')}${overdue(i) ? ' · ' + tx('overdue') : ''}</span>` : ''}<span class="cs-dim">${i.by ? tx('{type} · by {who}', { type: CAT_NAME[i.cat], who: esc(i.by) }) : tx('{type} · by unknown device', { type: CAT_NAME[i.cat] })}</span></div>` +
     photoStrip(i, i.status !== 'completed') +
-    `<div class="list">${i.log.map(l => `<div class="li"><span class="rt" style="margin:0">${fmtTime(l.t)}</span><span class="nm">${esc(tx(l.a))}${l.n ? ' · ' + esc(l.n) : ''}</span></div>`).join('')}</div>` +
-    `<div class="acts2" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${i.x != null ? `<span class="btn sm" data-act="show">${ic('pin')}${tx('Show on map')}</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" data-act="edit">${ic('edit')}${tx('Edit')}</span>` : ''}${i.status === 'open' ? `<span class="btn sm" style="color:#B45309" data-act="progress">${ic('tool')}${tx('Maintenance done')}</span>` : ''}${i.status === 'progress' ? `<span class="btn sm" data-act="reopen">${ic('refresh')}${tx('Not fixed')}</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" style="color:var(--green-ink)" data-act="close">${ic('check')}${tx('Complete')}</span>` : `<span class="btn sm" data-act="reopen">${ic('refresh')}${tx('Reopen')}</span>`}<span class="btn sm" data-act="work-order" title="${tx('A printed sheet for the contractor, with a QR code back to this issue')}">${ic('print')}${tx('Work order')}</span>${i.status !== 'completed' ? `<span class="btn sm" data-act="visit">${ic('users')}${tx('Contractor visited')}</span>` : ''}<span class="btn sm" style="color:var(--red)" data-act="remove">${ic('trash')}${tx('Remove')}</span></div></div>`;
+    `<div class="list">${i.log.map(l => `<div class="li log"><span class="rt">${fmtTime(l.t)}</span><span class="nm">${esc(tx(l.a))}${l.n ? ' · ' + esc(l.n) : ''}</span></div>`).join('')}</div>` +
+    `<div class="acts2">${i.x != null ? `<span class="btn sm" data-act="show">${ic('pin')}${tx('Show on map')}</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm" data-act="edit">${ic('edit')}${tx('Edit')}</span>` : ''}${i.status === 'open' ? `<span class="btn sm t-warn" data-act="progress">${ic('tool')}${tx('Maintenance done')}</span>` : ''}${i.status === 'progress' ? `<span class="btn sm" data-act="reopen">${ic('refresh')}${tx('Not fixed')}</span>` : ''}${i.status !== 'completed' ? `<span class="btn sm t-good" data-act="close">${ic('check')}${tx('Complete')}</span>` : `<span class="btn sm" data-act="reopen">${ic('refresh')}${tx('Reopen')}</span>`}<span class="btn sm" data-act="work-order" title="${tx('A printed sheet for the contractor, with a QR code back to this issue')}">${ic('print')}${tx('Work order')}</span>${i.status !== 'completed' ? `<span class="btn sm" data-act="visit">${ic('users')}${tx('Contractor visited')}</span>` : ''}<span class="btn sm t-bad" data-act="remove">${ic('trash')}${tx('Remove')}</span></div></div>`;
   return list + det;
 }
 const stName = i => i.status === 'open' ? OPEN : i.status === 'progress' ? tx('Done, to check') : tx('Completed');
@@ -260,7 +268,7 @@ function phoneStrip(m) {
 function phone(m) {
   if (draft) {
     const dup = nearby(m, draft).length;
-    const sevs = SEV.map((v, n) => `<button class="sx-chip${draft.sev === n ? ' on' : ''}" type="button" data-act="draft-sev" data-sev="${n}"><i class="sevdot" style="background:${v[1]}"></i>${v[0]}</button>`).join('');
+    const sevs = SEV.map((v, n) => `<button class="sx-chip${draft.sev === n ? ' on' : ''}" type="button" data-act="draft-sev" data-sev="${n}"><i class="sevdot sw-c" style="--c:${v[1]}"></i>${v[0]}</button>`).join('');
     const cats = `<select class="sx-in" data-draft="cat" aria-label="${tx('Type')}">${ISSUE_CATS.map(c => `<option value="${c}"${draft.cat === c ? ' selected' : ''}>${CAT_NAME[c]}</option>`).join('')}</select>`;
     return `<div class="sx"><div class="sx-h">${ic('m-maintenance')}${draft.editId ? tx('Edit issue') : tx('Report an issue')}</div><div class="sx-sub">${draft.x != null ? (draft.loc ? tx('Pinned on the map · {where}. Tap again to move it.', { where: esc(draft.loc) }) : tx('Pinned on the map. Tap again to move it.')) : tx('Tap the map to pin where the fault is.')}</div>` +
       (dup ? `<div class="mt-dup">${ic('alert')}${txn(dup, '{n} issue already logged near here. Check the list before sending.', '{n} issues already logged near here. Check the list before sending.')}</div>` : '') +
@@ -277,7 +285,7 @@ function phone(m) {
     return `<div class="sx"><div class="sx-h"><span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>${esc(i.title)}<span class="n${i.status === 'open' ? ' red' : ''}">${stName(i)}</span></div>` +
       `<div class="sx-sub">${esc(i.loc || CAT_NAME[i.cat])}${i.recur ? ` · <span class="recur">${tx('↻ reopened {n}×', { n: i.recur })}</span>` : ''}</div><div class="sx-sec">` +
       sx.facts([[tx('Urgency'), SEV[i.sev][0]], [tx('Type'), CAT_NAME[i.cat]], [tx('Logged'), esc(fmtTime(i.created))], ...(i.reopened && open ? [[tx('issue::Reopened'), esc(fmtTime(i.reopened))]] : []), open ? [tx('repair::Target'), `${txn(sla, '{n} day', '{n} days')}${overdue(i) ? ' · ' + tx('overdue') : ''}`] : [tx('Completed'), esc(fmtTime(doneAt(i)))]]) + `</div>` +
-      (i.note ? sx.sec(tx('Note'), `<div class="sx-sub" style="margin:0">${esc(i.note)}</div>`) : '') +
+      (i.note ? sx.sec(tx('Note'), `<div class="sx-sub m-0">${esc(i.note)}</div>`) : '') +
       ((i.photos || []).length || open ? sx.sec(tx('Photos'), photoStrip(i, open), tx('{n} of 4', { n: (i.photos || []).length })) : '') +
       sx.acts([
         i.status === 'open' ? sx.btn('tool', tx('Maintenance done'), 'data-act="progress"', true) : '',
@@ -297,7 +305,7 @@ function phone(m) {
   const done = m.all.filter(i => i.status === 'completed').sort((a, b) => (doneAt(a) < doneAt(b) ? 1 : -1)).slice(0, 5);
   return `<div class="sx"><div class="sx-h">${ic('m-maintenance')}${tx('Maintenance')}<span class="n${m.overdue ? ' red' : ''}">${tx('{n} open', { n: m.open.length })}</span></div>` +
     sx.acts([sx.btn('plus', tx('Report an issue'), 'data-act="new"', true)]) +
-    sx.sec(OPEN, open.length ? sx.rows(open.slice(0, 40).map(row)) : sx.rows([sx.row('check', tx('Nothing open'))]), m.overdue ? tx('{n} overdue', { n: m.overdue }) : tx('tap one to open it')) +
+    sx.sec(OPEN, open.length ? sx.rows(open.slice(0, 40).map(row)) : empty(tx('Nothing open'), { sm: true, icon: 'check' }), m.overdue ? tx('{n} overdue', { n: m.overdue }) : tx('tap one to open it')) +
     (done.length ? sx.sec(tx('Recently completed'), sx.rows(done.map(i => sx.row(`<span class="mt-sgl">${glyphSvg(i.cat, colour(i))}</span>`, esc(i.title), tx('{where} · done {ago}', { where: esc(i.loc || CAT_NAME[i.cat]), ago: timePassed(doneAt(i)) }), '', '', `data-act="select" data-id="${esc(i.id)}"`)))) : '') + `</div>`;
 }
 
@@ -318,10 +326,10 @@ function draftPhotos(head = true) {
   const files = draft.files || [];
   return `${head ? `<div class="mv-sub">${tx('Photos')}</div>` : ''}<div class="mt-phs">${files.map((f, n) => `<div class="mt-ph pend"><span>${ic('camera')}${esc(String(n + 1))}</span><button class="mt-ph-x" data-act="draft-photo-x" data-i="${n}" aria-label="${tx('Remove photo')}">${ic('x')}</button></div>`).join('')}${files.length < 4 ? `<label class="mt-ph add">${ic('camera')}<span>${tx('Add photo')}</span><input type="file" accept="image/*" capture="environment" data-photo-input hidden></label>` : ''}</div><p class="mt-ph-note">${tx('Photograph the fault, not people.')}</p>`;
 }
-function openPhoto(url) {
+export function openPhoto(url, alt = tx('Photo of the issue')) {
   if (!url || url === 'gone') return;
   const el = document.createElement('div'); el.className = 'sharesheet mt-full'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', tx('Photo'));
-  el.innerHTML = `<img src="${esc(url)}" alt="${tx('Photo of the issue')}"><button class="ibtn" aria-label="${tx('Close')}">${ic('x')}</button>`;
+  el.innerHTML = `<img src="${esc(url)}" alt="${esc(alt)}"><button class="ibtn" aria-label="${tx('Close')}">${ic('x')}</button>`;
   const close = () => { el.remove(); document.removeEventListener('keydown', k); }, k = e => { if (e.key === 'Escape') close(); };
   el.addEventListener('click', close); document.addEventListener('keydown', k); document.body.appendChild(el);
 }
@@ -353,7 +361,7 @@ function printWorkOrder(ctx, i) {
 // the delete follows the event that took it off (or removed the issue) to
 // the worker. Offline, or if the event is refused, the nightly sweep drops
 // the bytes instead.
-function dropPhotoWhenSent(ctx, ev, photo) {
+export function dropPhotoWhenSent(ctx, ev, photo) {
   const go = () => ctx.api(`/v1/store/${ctx.storeNo}/photo/${photo}`, { method: 'DELETE' }).catch(() => {});
   const sent = () => !ctx.store.pending.some(p => p.id === ev.id);
   if (sent()) return go();

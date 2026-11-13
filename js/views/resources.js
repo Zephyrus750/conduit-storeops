@@ -12,9 +12,10 @@
 // picture when the file is added; Word, Excel and links show their kind's
 // cover). The page opens a big preview: ← → for the next one, Esc to close.
 
-import { ic, esc, vh, sub, toast, fmtDate } from '../ui.js';
+import { ic, esc, vh, sub, toast, fmtDate, empty } from '../ui.js';
 import { tx, txn } from '../i18n.js';
 import { sheetHtml } from '../sheet.js';
+import { readPdf } from '../pagepic.js';
 import { fileKind, matches } from '../../shared/resources.js';
 import { loadResources, cachedResources, resourceError, mostUsed, useResource, thumbUrl, thumbFailed } from '../resourcelib.js';
 
@@ -81,6 +82,40 @@ function card(ctx, e) {
     `<div class="rs-cb"><small class="rs-cat">${esc(catName(e.category))}</small><b class="rs-t">${esc(e.title)}</b>${e.note ? `<span class="rs-note">${esc(e.note)}</span>` : ''}<small class="rs-facts">${facts(e)}</small><div class="rs-acts">${acts(e)}</div></div></article>`;
 }
 
+// Every page in the preview (the review board's imp-pages): a PDF's pages,
+// drawn on this PC from the file itself the first time someone turns the
+// page, up to MAX_PAGES (the rest open full size). Kept while the app is
+// open; page one stays the owner's picture until a page is turned.
+const MAX_PAGES = 6, docs = new Map();   // `${id}@${updated}` → { pdf: Promise, pics: [] }
+const isPdf = e => fileKind(e.file?.name || '')?.ext === 'pdf';
+const pageCount = e => (isPdf(e) && e.file.pages > 1 ? Math.min(e.file.pages, MAX_PAGES) : 1);
+async function pagePic(ctx, e, n) {
+  const k = `${e.id}@${e.updated}`;
+  let d = docs.get(k);
+  if (!d) { d = { pics: [], pdf: ctx.api(`/v1/resources/${encodeURIComponent(e.id)}/file`, { blob: true, timeoutMs: 120_000 }).then(b => readPdf(new Blob([b], { type: 'application/pdf' }))) }; docs.set(k, d); d.pdf.catch(() => docs.delete(k)); }
+  if (!d.pics[n]) d.pics[n] = d.pdf.then(doc => doc.page(n)).then(p => p.url);
+  return d.pics[n];
+}
+const pagerHtml = (e, n) => { const total = pageCount(e); if (total < 2) return ''; const more = e.file.pages > MAX_PAGES;
+  return `<div class="rs-pv-pages"><button type="button" class="ibtn" data-act="rs-pg" data-d="-1"${n <= 1 ? ' disabled' : ''} aria-label="${tx('Previous page')}">${ic('chev')}</button><span>${tx('Page {n} of {total}', { n, total: e.file.pages })}</span><button type="button" class="ibtn" data-act="rs-pg" data-d="1"${n >= total ? ' disabled' : ''} aria-label="${tx('Next page')}">${ic('chev')}</button>${more && n >= total ? `<small>${tx('Open full size for the rest')}</small>` : ''}</div>`; };
+// Turn the preview's page: the sheet shows the page once it is drawn.
+async function turnPage(ctx, root, d) {
+  const e = (cachedResources(ctx.storeNo) || []).find(x => x.id === st.view); if (!e) return;
+  const n = Math.max(1, Math.min(pageCount(e), (st.page || 1) + d)); if (n === (st.page || 1)) return;
+  st.page = n;
+  const sh = root.querySelector('.rs-pv-sheet'), pg = root.querySelector('.rs-pv-pages');
+  if (pg) pg.outerHTML = pagerHtml(e, n);
+  if (sh) { sh.classList.add('busy'); sh.setAttribute('aria-busy', 'true'); }
+  try {
+    const url = await pagePic(ctx, e, n);
+    if (st.view !== e.id || st.page !== n) return;
+    const el = root.querySelector('.rs-pv-sheet'); if (el) { el.classList.remove('busy', 'cov'); el.removeAttribute('aria-busy'); el.innerHTML = `<img src="${url}" alt="${esc(tx('Page {n} of {total}', { n, total: e.file.pages }))}" draggable="false">`; }
+  } catch (err) {
+    if (st.view !== e.id) return;
+    root.querySelector('.rs-pv-sheet')?.classList.remove('busy');
+    toast(tx('That page could not be drawn here: {error}', { error: err.message }), 'bad');
+  }
+}
 // The big preview: the page large, what it is beside it, and Print, Open full size, Download.
 function preview(ctx, e, list) {
   const k = kindOf(e), at = list.indexOf(e), rows = e.file
@@ -88,7 +123,7 @@ function preview(ctx, e, list) {
     : [[tx('Link'), esc(host(e.link))], [tx('Updated'), esc(fmtDate(e.updated))]];
   return sheetHtml({
     size: 'wide', cls: 'rs-pv', title: esc(e.title), sub: `${badge(e)}<span>${esc(catName(e.category))}</span>`, close: 'rs-pv-x',
-    body: `<div class="rs-pv-in"><div class="rs-pv-pg"><div class="rs-pv-sheet${e.thumb ? '' : ' cov'}">${sheet(ctx, e)}</div></div>` +
+    body: `<div class="rs-pv-in"><div class="rs-pv-pg"><div class="rs-pv-sheet${e.thumb ? '' : ' cov'}">${sheet(ctx, e)}</div>${pagerHtml(e, 1)}</div>` +
       `<aside class="rs-pv-side">${e.note ? `<p>${esc(e.note)}</p>` : ''}<dl>${rows.filter(Boolean).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></aside></div>`,
     foot: `<small class="sht-note">${list.length > 1 ? `${tx('← → for the next resource · Esc to close')} · ${at + 1}/${list.length}` : tx('Esc to close')}</small>${acts(e, true)}`,
   });
@@ -105,7 +140,7 @@ function ordered(ctx) {
 function showPv(ctx, root, id) {
   root.querySelector('.rs-pv')?.remove();
   const { order } = ordered(ctx), e = id && order.find(x => x.id === id);
-  st.view = e ? e.id : null; if (!e) return;
+  st.view = e ? e.id : null; st.page = 1; if (!e) return;
   root.insertAdjacentHTML('beforeend', preview(ctx, e, order));
 }
 
@@ -114,7 +149,7 @@ function page(ctx) {
   const head = vh(tx('Resources'), sub(txn(list.length, '{n} resource', '{n} resources'), tx('from the owner, for managers')), `<button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`, 'library') + (st.ask ? askForm() : '');
   if (err && !got) return head + `<div class="card"><p class="lbl">${tx('The resources did not load: {error}', { error: esc(err) })}</p><button class="btn" data-act="rs-refresh">${ic('refresh')}${tx('Try again')}</button></div>`;
   if (!got) return head + `<div class="card"><div class="ohint">${tx('Loading the resources…')}</div></div>`;
-  if (!list.length) return head + `<div class="card rs-empty">${ic('library')}<p>${tx('No resources yet. The owner adds forms, procedures and links in the console, under Resources.')}</p>${st.ask ? '' : `<button class="btn primary" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>`}</div>` + asked(ctx, list);
+  if (!list.length) return head + `<div class="card">${empty(tx('No resources yet. The owner adds forms, procedures and links in the console, under Resources.'), { icon: 'library', act: st.ask ? '' : `<button class="btn primary" data-act="rs-ask">${ic('plus')}${tx('Request a document')}</button>` })}</div>` + asked(ctx, list);
   if (st.cat !== 'all' && !cats.includes(st.cat)) st.cat = 'all';
   const { order } = ordered(ctx);
   const search = `<div class="rs-bar"><div class="search rs-search">${ic('search')}<input data-field="rs-q" value="${esc(st.q)}" placeholder="${tx('Search titles, categories, notes and file names')}" aria-label="${tx('Search the resources')}">${st.q ? `<button class="ibtn" data-act="rs-clear" aria-label="${tx('Clear the search')}">${ic('x')}</button>` : ''}</div>` +
@@ -123,7 +158,7 @@ function page(ctx) {
   const top = !st.q && st.cat === 'all' ? mostUsed(list, 4) : [];
   const fav = top.length ? `<div class="card rs-top"><div class="ch"><h3>${tx('Used most on this PC')}</h3></div><div class="rs-tiles">${top.map(e => `<button class="rs-tile" data-act="rs-open" data-id="${esc(e.id)}">${badge(e)}<span><b>${esc(e.title)}</b><small>${esc(catName(e.category))}</small></span></button>`).join('')}</div></div>` : '';
   let body;
-  if (!order.length) body = `<div class="card rs-none"><p class="lbl">${st.q ? tx('Nothing matches “{q}”.', { q: esc(st.q) }) : tx('Nothing in this category.')}</p>${st.q && !st.ask ? `<button class="btn" data-act="rs-ask" data-title="${esc(st.q)}">${ic('plus')}${tx('Request “{q}”', { q: esc(st.q) })}</button>` : ''}</div>`;
+  if (!order.length) body = `<div class="card">${empty(st.q ? tx('Nothing matches “{q}”.', { q: esc(st.q) }) : tx('Nothing in this category.'), { icon: st.q ? 'search' : 'library', act: st.q && !st.ask ? `<button class="btn" data-act="rs-ask" data-title="${esc(st.q)}">${ic('plus')}${tx('Request “{q}”', { q: esc(st.q) })}</button>` : '' })}</div>`;
   else body = (st.q || st.cat !== 'all' ? `<div class="rs-gh"><h3>${st.q ? tx('Results') : esc(catName(st.cat))}</h3><span>${order.length}</span></div>` : '') + `<div class="rs-cards">${order.map(e => card(ctx, e)).join('')}</div>`;
   const open = st.view && order.find(e => e.id === st.view);
   if (st.view && !open) st.view = null;
@@ -150,6 +185,7 @@ export default {
       const act = a.dataset.act, e = a.dataset.id && find(a.dataset.id);
       if (act === 'rs-pv-x') { showPv(ctx, root, null); return; }
       if (act === 'rs-view') { showPv(ctx, root, a.dataset.id); return; }
+      if (act === 'rs-pg') { turnPage(ctx, root, Number(a.dataset.d)); return; }
       if (act === 'rs-refresh') { load(true); loadReqs(); }
       else if (act === 'rs-ask') { st.ask = { title: a.dataset.title || '', note: '' }; ctx.rerender(); root.querySelector('[data-form="rs-ask"] [name="title"]')?.focus(); }
       else if (act === 'rs-ask-x') { st.ask = null; ctx.rerender(); }

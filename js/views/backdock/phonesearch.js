@@ -6,7 +6,7 @@
 // sheet (donuts of what has landed and been decanted) and a pallet's
 // contents (department subtotals and its items by consol) sit alongside.
 
-import { ic, esc, toast, camButton, dep } from '../../ui.js';
+import { ic, esc, toast, camButton, dep, empty } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { truckNo, grid, pallets, microDept, microChip, fmtHM, PALLET_STATE } from './common.js';
 import { consolsOf } from '../../../shared/reducers/backdock.js';
@@ -56,7 +56,7 @@ export function searchSheet(ctx, t) {
   const dock = ctx.store.get('dock'), cons = consolsOf(t), at = where(t), q = ss.q.trim().toLowerCase();
   const tabs = `<div class="bdk-vt">${[['scan', tx('Scan')], ['consols', tx('Consols')], ['products', tx('Products')]].map(([k, l]) => `<button class="${ss.tab === k ? 'on' : ''}" data-act="ps-tab" data-tab="${k}">${l}</button>`).join('')}</div>`;
   let body = '';
-  if (!t.manifest && ss.tab !== 'scan') body = `<div class="mv-note">${ic('packages')}${tx('No manifest on Truck {n} yet.', { n: esc(truckNo(t.id)) })}</div>`;
+  if (!t.manifest && ss.tab !== 'scan') body = empty(tx('No manifest on Truck {n} yet.', { n: esc(truckNo(t.id)) }), { icon: 'm-manifests' });
   else if (ss.tab === 'scan') {
     const c = ss.hit ? findConsol(cons, ss.hit) : null;
     // The camera first; Type it shows the field (and the keyboard) only when needed.
@@ -65,12 +65,12 @@ export function searchSheet(ctx, t) {
       (!ss.hit ? `<p class="lbl">${tx('The last 9 digits of the pallet label name the consol.')}</p>` : c ? consolCard(t, c, at) : `<div class="ps-card miss"><b class="mono">${esc(id9(ss.hit))}</b><p class="lbl">${t.manifest ? tx('Not on manifest {no}.', { no: esc(t.manifest.manNo) }) + ' ' : ''}${elsewhere(dock, t, ss.hit)}</p></div>`);
   } else if (ss.tab === 'consols') {
     const list = cons.filter(c => !q || c.id.includes(q) || String(c.dept || '').includes(q));
-    body = `<div class="search">${ic('search')}<input data-field="ps-q" value="${esc(ss.q)}" placeholder="${tx('Consol or dept')}" inputmode="numeric"></div><div class="list ps-list">${list.slice(0, 120).map(c => `<div class="li" data-act="ps-open" data-id="${esc(c.id)}">${sq(stateOf(c, at))}<span class="loc mono">${esc(c.id)}</span><span class="nm">${(c.mix || []).slice(0, 3).map(x => chip(x[0])).join('')}</span><span class="rt">${tx('{n} ctn', { n: c.cartons })}</span></div>`).join('') || `<p class="lbl">${tx('Nothing matches.')}</p>`}</div>`;
+    body = `<div class="search">${ic('search')}<input data-field="ps-q" value="${esc(ss.q)}" placeholder="${tx('Consol or dept')}" inputmode="numeric"></div><div class="list ps-list">${list.slice(0, 120).map(c => `<div class="li" data-act="ps-open" data-id="${esc(c.id)}">${sq(stateOf(c, at))}<span class="loc mono">${esc(c.id)}</span><span class="nm">${(c.mix || []).slice(0, 3).map(x => chip(x[0])).join('')}</span><span class="rt">${tx('{n} ctn', { n: c.cartons })}</span></div>`).join('') || empty(tx('Nothing matches.'), { sm: true, icon: 'search' })}</div>`;
   } else {
     // Find an item: every line indexed as "description keycode dept".
     const rows = []; if (q.length >= 2) for (const c of cons) for (const it of c.items || []) { const name = nameOf(it.k) || it.d || ''; if (`${name} ${it.k} ${it.dept || ''} ${microDept(it.dept)}`.toLowerCase().includes(q)) { rows.push({ c, it, name }); if (rows.length >= 200) break; } }
     body = `<div class="search">${ic('search')}<input data-field="ps-q" value="${esc(ss.q)}" placeholder="${tx('Find an item: keycode, description or dept')}"></div>` +
-      (q.length < 2 ? `<p class="lbl">${tx('Type two or more characters.')}</p>` : `<div class="list ps-list">${rows.map(({ c, it, name }) => `<div class="li" data-act="ps-open" data-id="${esc(c.id)}">${sq(stateOf(c, at))}<span class="loc mono">${esc(it.k)}</span><span class="nm">${esc(name)} <small class="cs-dim">· ${esc(c.id)}${at[c.id] ? ' ' + tx('on {ref}', { ref: esc(at[c.id].ref) }) : ''}</small></span><span class="rt">${tx('{n}u', { n: it.q })}</span></div>`).join('') || `<p class="lbl">${tx('Nothing matches.')}</p>`}${rows.length >= 200 ? `<p class="lbl">${tx('First 200 shown: narrow the search.')}</p>` : ''}</div>`);
+      (q.length < 2 ? `<p class="lbl">${tx('Type two or more characters.')}</p>` : `<div class="list ps-list">${rows.map(({ c, it, name }) => `<div class="li" data-act="ps-open" data-id="${esc(c.id)}">${sq(stateOf(c, at))}<span class="loc mono">${esc(it.k)}</span><span class="nm">${esc(name)} <small class="cs-dim">· ${esc(c.id)}${at[c.id] ? ' ' + tx('on {ref}', { ref: esc(at[c.id].ref) }) : ''}</small></span><span class="rt">${tx('{n}u', { n: it.q })}</span></div>`).join('') || empty(tx('Nothing matches.'), { sm: true, icon: 'search' })}${rows.length >= 200 ? `<p class="lbl">${tx('First 200 shown: narrow the search.')}</p>` : ''}</div>`);
   }
   return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Search — Truck {n}', { n: esc(truckNo(t.id)) })}</b><button class="ibtn" data-act="ps-close" title="${tx('Close')}">${ic('x')}</button></div>${tabs}${body}</div>`;
 }
@@ -80,10 +80,10 @@ const donut = (v, total, colour, label) => { const f = total ? Math.min(1, v / t
 export function infoSheet(t, canChange = true) {
   if (!ss.info) return '';
   const cons = consolsOf(t), at = where(t), m = t.manifest;
-  if (!m) return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest')}</b><button class="ibtn" data-act="ps-info" title="${tx('Close')}">${ic('x')}</button></div><div class="mv-note">${ic('packages')}${tx('No manifest on this truck yet.')}</div></div>`;
+  if (!m) return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest')}</b><button class="ibtn" data-act="ps-info" title="${tx('Close')}">${ic('x')}</button></div>${empty(tx('No manifest on this truck yet.'), { sm: true, icon: 'm-manifests' })}</div>`;
   const total = cons.reduce((n, c) => n + c.cartons, 0), landed = cons.filter(c => at[c.id]), done = landed.filter(c => at[c.id].status === 'done');
   const sum = xs => xs.reduce((n, c) => n + c.cartons, 0);
-  return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest {no}', { no: esc(m.manNo) })}</b>${canChange ? `<button class="btn sm" data-act="manpick" style="margin-left:auto">${ic('file')}${tx('Change')}</button>` : ''}<button class="ibtn" data-act="ps-info" title="${tx('Close')}"${canChange ? ' style="margin-left:0"' : ''}>${ic('x')}</button></div><p class="lbl">${m.dcNo ? tx('DC {no}', { no: esc(m.dcNo) }) + ' · ' : ''}${m.despatch ? tx('despatch {d}', { d: esc(m.despatch) }) + ' · ' : ''}${tx('{n} consols · {c} cartons', { n: cons.length, c: total })}</p>` +
+  return `<div class="ps-sheet"><div class="bdk-pal-h"><b>${tx('Manifest {no}', { no: esc(m.manNo) })}</b>${canChange ? `<button class="btn sm ml-auto" data-act="manpick">${ic('file')}${tx('Change')}</button>` : ''}<button class="ibtn${canChange ? ' ml-0' : ''}" data-act="ps-info" title="${tx('Close')}">${ic('x')}</button></div><p class="lbl">${m.dcNo ? tx('DC {no}', { no: esc(m.dcNo) }) + ' · ' : ''}${m.despatch ? tx('despatch {d}', { d: esc(m.despatch) }) + ' · ' : ''}${tx('{n} consols · {c} cartons', { n: cons.length, c: total })}</p>` +
     `<div class="ps-donuts">${donut(landed.length, cons.length, '#3B82F6', tx('consols landed'))}${donut(sum(landed), total, '#F59E0B', tx('cartons landed'))}${donut(sum(done), total, '#16A34A', tx('cartons decanted'))}</div></div>`;
 }
 

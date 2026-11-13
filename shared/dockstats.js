@@ -11,6 +11,7 @@
 //   personNow(t, now, rates)             this truck's rate per person against their 28-day rate
 //   insights(t, now, opts)               the live board's plain-language flags
 //   arrivalsByWeek(history, opts)        cartons each week by the manifest's departments, with callouts
+//   clearTime(history, now, days)        the average clear time of the trucks finished in the last `days`: { mins, trucks } or null
 
 import { csvLines } from './records.js';
 import { segWorkedMs, startOf } from './reducers/backdock.js';
@@ -21,6 +22,17 @@ const ageDays = (row, now) => (now - Date.parse((row.date || String(row.id).slic
 const r1 = x => Math.round(x * 10) / 10;
 export const PERIODS = { truck: 'Last truck', 7: '7 days', 14: '14 days', 30: '30 days' };
 export const LOW_PCT = -8, TREND_PCT = -6;
+
+// A truck's clear time is its history row's clearMins (historyRow: decant
+// start, else landed, to the last pallet done). The window is the one
+// Receiving history compares against: finished (clearedAt, else the
+// truck's day) within the last `days`. A row with no clock (an import that
+// carried none) is left out rather than averaged in as zero.
+export function clearTime(history, now = Date.now(), days = 7) {
+  const since = now - days * DAY;
+  const rows = (history || []).filter(r => r.clearMins > 0 && Date.parse(r.clearedAt || r.date) >= since);
+  return rows.length ? { mins: Math.round(rows.reduce((n, r) => n + r.clearMins, 0) / rows.length), trucks: rows.length } : null;
+}
 
 export function deptSpeed(history, now = Date.now(), days = 30) {
   const acc = {};

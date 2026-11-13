@@ -15,8 +15,8 @@ const LANGS = ['de', 'fr', 'fil', 'vi', 'es', 'it'];
 // Each area's files. A key used in two areas needs a translation in only one.
 export const AREAS = {
   core: ['js/i18n.js', 'js/unlock.js'],
-  shell: ['js/shell.js', 'js/ui.js', 'js/registry.js', 'js/prefs.js', 'js/sync.js', 'js/updates.js', 'js/diag.js', 'js/share.js', 'js/scan.js', 'js/voice.js', 'js/print.js', 'js/config.js', 'js/device.js', 'js/team.js', 'js/sheet.js', 'js/lowpoly.js', 'js/version.js', 'index.html'],
-  guide: ['js/views/settings.js', 'js/tour.js', 'js/whatsnew.js', 'js/views/help.js'],
+  shell: ['js/shell.js', 'js/practice.js', 'js/ui.js', 'js/registry.js', 'js/prefs.js', 'js/sync.js', 'js/updates.js', 'js/diag.js', 'js/share.js', 'js/scan.js', 'js/voice.js', 'js/print.js', 'js/config.js', 'js/device.js', 'js/team.js', 'js/sheet.js', 'js/alerts.js', 'js/lowpoly.js', 'js/version.js', 'index.html'],
+  guide: ['js/views/settings.js', 'js/views/mtoday.js', 'js/tour.js', 'js/whatsnew.js', 'js/views/help.js'],
   map: ['js/map.js', 'js/search.js', 'js/views/map.js', 'js/views/picklist.js', 'js/printmap.js', 'js/views/printmap.js', 'js/views/layouts.js'],
   floor: ['js/views/refresh.js', 'js/views/labelint.js', 'js/views/emergency.js', 'js/views/stocktake.js', 'js/views/storeinfo.js', 'js/views/mapedits.js', 'js/views/fieldmode.js'],
   floor2: ['js/views/dashboard.js', 'js/views/maintenance.js', 'js/views/inputs.js', 'js/views/pastebox.js', 'js/views/livepull.js', 'js/views/equipment.js', 'js/views/recalls.js', 'js/recallflag.js', 'js/barcodesearch.js', 'js/views/resources.js', 'js/resourcelib.js'],
@@ -25,6 +25,7 @@ export const AREAS = {
   dock1: ['js/views/backdock/receiving.js', 'js/views/backdock/phase.js', 'js/views/backdock/plan.js', 'js/views/backdock/late.js', 'js/views/backdock/mpreview.js', 'js/views/backdock/phonesearch.js', 'js/views/backdock/common.js', 'js/views/backdock/bdhome.js', 'js/views/backdock/audit.js', 'js/views/backdock/routes.js', 'js/views/backdock/callback.js', 'js/views/backdock/offsend.js'],
   dock2: ['js/views/backdock/wallboard.js', 'js/views/backdock/screens.js', 'js/views/backdock/rhistory.js', 'js/views/backdock/danalytics.js', 'js/views/backdock/manifests.js', 'js/views/backdock/profiles.js', 'js/views/backdock/planner.js', 'js/views/backdock/offsite.js', 'js/views/backdock/loads.js', 'js/views/backdock/screenlist.js', 'js/views/backdock/mbatch.js', 'js/views/backdock/mstats.js'],
   admin: ['js/views/admin.js', 'js/views/adminresources.js', 'js/views/adminzones.js', 'js/pagepic.js'],
+  tasks: ['js/views/tasks.js'],
   vguide: ['js/guide/scenes.js', 'js/guide/player.js', 'js/guide/icons.js'],
   vguide2: ['js/guide/frames.js', 'js/guide/pc.js', 'js/guide/refresh-map.js', 'js/guide/chapters/around.js', 'js/guide/chapters/refresh.js', 'js/guide/chapters/bfscan.js', 'js/guide/chapters/receive.js', 'js/guide/chapters/labels.js', 'js/guide/labels-map.js', 'js/guide/chapters/bfreview.js', 'js/guide/chapters/manifests.js', 'js/guide/manifests-map.js', 'js/guide/chapters/decant.js', 'js/guide/chapters/signin.js', 'js/guide/chapters/offline.js', 'js/guide/chapters/settings.js', 'js/guide/chapters/find.js', 'js/guide/find-map.js', 'js/guide/chapters/fault.js', 'js/guide/chapters/equip.js', 'js/guide/chapters/livepull.js', 'js/guide/chapters/cages.js', 'js/guide/chapters/receivepc.js'],
 };

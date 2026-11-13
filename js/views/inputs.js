@@ -10,7 +10,9 @@
 //   the off-site master list   Off-site pallets' import
 //   any other sheet of pallets a load in Manifests, with the column mapper
 
-import { ic, esc, vh, toast, fmtDate, today } from '../ui.js';
+import { ic, esc, vh, toast, fmtDate, today, pill } from '../ui.js';
+// A row's need and state in the chip family's tones.
+const TONE = { ok: 'good', due: 'warn', opt: 'info', bad: 'bad' };
 import { hasArea } from '../unlock.js';
 import { toolOff, toolForView } from '../../shared/tools.js';
 import { settingsOf } from '../../shared/reducers/store.js';
@@ -68,7 +70,7 @@ export default {
     const box = `<div class="card inp-drop" data-drop><div class="inp-dh"><span class="inp-ic">${ic('file')}</span><div><h3>${tx('Paste or drop anything here')}</h3><p>${tx('The morning or midday report, a DC manifest, a sheet of pallets, the off-site master list or the SOH report. Conduit works out which it is and shows what it found before anything is saved.')}</p></div></div>` +
       `<div class="acts2 inp-acts"><button class="btn primary" data-act="paste:any">${ic('clip')}${tx('Paste from clipboard')}</button><label class="btn">${ic('file')}${tx('Choose a file')}<input type="file" accept=".xls,.xlsx,.csv" data-field="file" hidden></label><span class="cs-dim">${tx('or drop a file on this box, or press Ctrl V')}</span></div>` +
       (st.saved ? `<div class="inp-saved" role="status">${ic('check')}<span>${st.saved}</span></div>` : '') + `</div>`;
-    const table = rows.length ? `<div class="card inp-list"><div class="ch"><h3>${tx('What comes in')}</h3><span class="cs-dim">${tx('{done} of {total} done today', { done, total: rows.length })}</span></div><div class="mfx-scroll"><table class="wb-t inp-t"><thead><tr><th>${tx('What')}</th><th>${tx('When')}</th><th>${tx('Today')}</th><th>${tx('It feeds')}</th><th>${tx('Where it comes from')}</th><th></th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${r.name}</b><span class="chip ${r.need[1]}">${r.need[0]}</span></td><td>${r.when}</td><td><span class="chip ${r.status[1]}">${esc(r.status[0])}</span></td><td class="cs-dim">${r.feeds}</td><td class="cs-dim">${r.from}</td><td>${r.act[1].startsWith('view:') ? `<button class="btn sm" data-view="${r.act[1].slice(5)}">${r.act[0]}</button>` : `<button class="btn sm" data-act="${r.act[1]}">${r.act[0]}</button>`}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+    const table = rows.length ? `<div class="card inp-list"><div class="ch"><h3>${tx('What comes in')}</h3><span class="cs-dim">${tx('{done} of {total} done today', { done, total: rows.length })}</span></div><div class="mfx-scroll"><table class="wb-t inp-t"><thead><tr><th>${tx('What')}</th><th>${tx('When')}</th><th>${tx('Today')}</th><th>${tx('It feeds')}</th><th>${tx('Where it comes from')}</th><th></th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${r.name}</b>${pill(r.need[0], TONE[r.need[1]] || '', { size: 'sm' })}</td><td>${r.when}</td><td>${pill(esc(r.status[0]), TONE[r.status[1]] || '', { size: 'sm' })}</td><td class="cs-dim">${r.feeds}</td><td class="cs-dim">${r.from}</td><td>${r.act[1].startsWith('view:') ? `<button class="btn sm" data-view="${r.act[1].slice(5)}">${r.act[0]}</button>` : `<button class="btn sm" data-act="${r.act[1]}">${r.act[0]}</button>`}</td></tr>`).join('')}</tbody></table></div></div>` : '';
     return head + box + stagePanel(ctx, st.stage) + table;
   },
   mount(ctx, root) {

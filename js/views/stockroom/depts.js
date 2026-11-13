@@ -7,6 +7,7 @@
 // History and Adjustments group by it.
 
 import { $, ic, esc, vh, sub, toast, timePassed } from '../../ui.js';
+import { ask } from '../../sheet.js';
 import { SR_DEPTS, SR_GROUPS, deptLabel, deptColour, send } from './common.js';
 import { settingsOf } from '../../../shared/reducers/store.js';
 import { tx, txn } from '../../i18n.js';
@@ -41,7 +42,7 @@ function addTo(list, r) {
 function card(d, list) {
   const mine = list.map((r, i) => ({ r, i })).filter(x => x.r.dept === d.id);
   const pins = mine.filter(x => x.r.from === x.r.to).length;
-  return `<div class="dpt-card" style="--dc:${deptColour(d.id)}"><div class="dpt-h"><span class="dep" style="background:${deptColour(d.id)}">${esc(d.id.toUpperCase())}</span><b>${esc(d.name)}</b><small>${[mine.length - pins ? txn(mine.length - pins, '{n} range', '{n} ranges') : '', pins ? txn(pins, '{n} single bay', '{n} single bays') : ''].filter(Boolean).join(' · ')}</small></div>` +
+  return `<div class="dpt-card" style="--dc:${deptColour(d.id)}"><div class="dpt-h"><span class="dep" style="--dc:${deptColour(d.id)}">${esc(d.id.toUpperCase())}</span><b>${esc(d.name)}</b><small>${[mine.length - pins ? txn(mine.length - pins, '{n} range', '{n} ranges') : '', pins ? txn(pins, '{n} single bay', '{n} single bays') : ''].filter(Boolean).join(' · ')}</small></div>` +
     `<div class="dpt-chips">${mine.length ? mine.map(({ r, i }) => `<span class="dpt-chip${r.from === r.to ? ' pin' : ''}" title="${r.from === r.to ? tx('One bay: beats any range around it') : tx('Bays {from} to {to}', { from: r.from, to: r.to })}">${esc(span(r))}<button type="button" data-act="dpt-x" data-i="${i}" aria-label="${tx('Remove {bays} from {dept}', { bays: esc(span(r)), dept: esc(d.id.toUpperCase()) })}">${ic('x')}</button></span>`).join('') : `<span class="dpt-none">${tx('No bays yet')}</span>`}</div>` +
     `<div class="dpt-add"><input class="ad-in mono" data-field="dpt-from" data-dept="${d.id}" inputmode="numeric" autocomplete="off" placeholder="${tx('bay range::From')}" aria-label="${tx('{dept}: from bay', { dept: esc(deptLabel(d.id)) })}"><span>–</span><input class="ad-in mono" data-field="dpt-to" data-dept="${d.id}" inputmode="numeric" autocomplete="off" placeholder="${tx('bay range::To')}" title="${tx('Leave empty for one bay')}" aria-label="${tx('{dept}: to bay, empty for one bay', { dept: esc(deptLabel(d.id)) })}"><button type="button" class="btn sm" data-act="dpt-add" data-dept="${d.id}">${ic('plus')}${tx('Add')}</button></div></div>`;
 }
@@ -102,7 +103,7 @@ export default {
       else if (act === 'dpt-paste-add' || act === 'dpt-paste-replace') {
         const { ranges, bad } = parseDeptLines(st.text);
         if (!ranges.length) return;
-        if (act === 'dpt-paste-replace' && current(ctx).length && !confirm(tx('Replace all {n} entries with these {m}? Nothing is saved until you press Save.', { n: current(ctx).length, m: ranges.length }))) return;
+        if (act === 'dpt-paste-replace' && current(ctx).length && !await ask({ title: tx('Replace all {n} entries with these {m}?', { n: current(ctx).length, m: ranges.length }), text: tx('Nothing is saved until you press Save.'), ok: tx('Replace them') })) return;
         let list = act === 'dpt-paste-replace' ? [] : current(ctx);
         for (const r of ranges) list = addTo(list, r).list;
         setDraft(ctx, list); st.paste = false; st.text = '';

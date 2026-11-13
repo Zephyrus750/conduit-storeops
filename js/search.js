@@ -12,7 +12,7 @@
 
 import { despatchDay } from '../shared/manifeststats.js';
 import { recallTag } from './recallflag.js';
-import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip, fmtDate, fmtDay } from './ui.js';
+import { $, $$, ic, esc, dep, DEPT_NAME, DEPT_COLOUR, toast, accChip, fmtDate, fmtDay, today, empty } from './ui.js';
 import { mountMap, hasMap, canonCode, splitCanon, shelfForLocation, runText } from './map.js';
 import { VIEWS } from './registry.js';
 import { findRecords } from '../shared/finder.js';
@@ -34,6 +34,29 @@ export function classify(q) {
   if (/^[A-Za-z]?\d{1,4}$/.test(q)) return 'loc';
   return 'name';
 }
+// Places opened from the palette (a truck, a cage, a manifest, a screen),
+// newest first, so the last few are one keystroke away (imp-search).
+const PLACES_KEY = 'search_places';
+const places = () => { try { return JSON.parse(localStorage.getItem(PLACES_KEY) || '[]'); } catch { return []; } };
+function rememberPlace(view, arg, title, sub) {
+  try { const key = JSON.stringify([view, arg || null]); const r = places().filter(x => JSON.stringify([x.view, x.arg || null]) !== key); r.unshift({ view, arg: arg || null, title: String(title).slice(0, 120), sub: String(sub || '').slice(0, 120) }); localStorage.setItem(PLACES_KEY, JSON.stringify(r.slice(0, 5))); } catch {}
+}
+// Actions (imp-search): things to do, not only places to go. Each opens its
+// screen and presses that screen's own button (data-act), so an action does
+// exactly what the button does and has no logic of its own.
+function actionsFor(s, tools) {
+  const can = new Set(tools.map(t => t.id)), out = [];
+  const A = (view, icon, title, sub, extra = {}) => { if (can.has(view)) out.push({ view, icon, title, sub, ...extra }); };
+  const day = today();
+  for (const [id, t] of Object.entries(s?.dock?.trucks || {})) if (t.status !== 'closed') A('receiving', 'm-receiving', tx('Open Truck {no}', { no: tNo(id) }), id.slice(0, 10) === day ? tx('Receiving · today') : tx('Receiving · {day}', { day: fmtDay(id.slice(0, 10)) }), { arg: { truck: id } });
+  A('maintenance', 'tool', tx('Log a maintenance issue'), tx('Maintenance'), { press: 'new' });
+  A('adjust', 'print', tx('Print today’s adjustments'), tx('What is still to adjust, in the department shown'), { press: 'print' });
+  A('daylist', 'print', tx('Print the day list'), tx('The triage sheet for the walkers'), { press: 'print' });
+  if (!Object.values(s?.stocktake?.sessions || {}).some(x => !x.ended && !x.endedAt)) A('stocktake', 'm-stocktake', tx('Start a stocktake session'), tx('Stocktake'), { press: 'start' });
+  return out;
+}
+const actRow = (a, Q) => orow('', a.icon, hi(a.title, Q), esc(a.sub), tx('Do it'), `data-view="${a.view}"${a.arg?.truck ? ` data-truck="${esc(a.arg.truck)}"` : ''}${a.press ? ` data-press="${a.press}"` : ''}`);
+const placeRow = p => orow('', 'history', esc(p.title), esc(p.sub || ''), tx('Open'), `data-view="${esc(p.view)}"${Object.entries(p.arg || {}).map(([k, v]) => ARG_KEYS.includes(k) ? ` data-${k}="${esc(v)}"` : '').join('')}`);
 const RECENT_KEY = 'search_recent';
 const recent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } };
 const remember = (q, k) => { try { const r = recent().filter(x => x[0] !== q); r.unshift([q, k]); localStorage.setItem(RECENT_KEY, JSON.stringify(r.slice(0, 6))); } catch {} };
@@ -141,7 +164,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const microBlock = microRows.length ? grp(tx('Micro-departments'), microRows.length) + microRows.join('') : '';
       // A department code (H1) or micro number (038) before shelves that merely start with it.
       out += k === 'shelf' ? shelfBlock + deptBlock + microBlock : deptBlock + microBlock + shelfBlock;
-      if (!out) out = `<div class="ohint">${tx('Nothing matches “{q}”. Try a shelf like A16 S2, a department like Kitchen or a micro-department like 038.', { q: esc(Q) })}</div>`;
+      if (!out) out = empty(tx('Nothing matches “{q}”. Try a shelf like A16 S2, a department like Kitchen or a micro-department like 038.', { q: esc(Q) }), { sm: true, icon: 'search' });
     }
     body.innerHTML = out; sel = 0; markSel(); prev.hidden = true; prev.innerHTML = ''; pal.classList.remove('wide');
   }
@@ -156,6 +179,10 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (k === 'none') {
       const r = recent();
       if (r.length) out += grp(tx('Recent')) + r.map(x => orow(x[1] === 'prod' ? 'p' : x[1] === 'name' ? '' : 's', 'history', esc(x[0]), KIND[x[1]] || '', tx('Search again'), `data-q="${esc(x[0])}"`)).join('');
+      const pl = places().filter(p => tools().some(t => t.id === p.view));
+      if (pl.length) out += grp(tx('Opened lately')) + pl.map(placeRow).join('');
+      const acts = actionsFor(data(), tools());
+      if (acts.length) out += grp(tx('Actions')) + acts.slice(0, 5).map(a => actRow(a, '')).join('');
       const used = mostUsed(resources(), 3);
       if (used.length) out += grp(tx('Resources used most on this PC')) + used.map(e => resRow(e, '')).join('');
       out += grp(tx('Jump to')) + tools().slice(0, 6).map(t => orow('', t.icon, esc(t.title), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
@@ -169,7 +196,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       out = grp(tx('Products'), item ? 1 : 0);
       if (item) {
         out += orow('p', 'barcode', `${hi(Q, Q)} · ${esc(item.name || tx('Product'))}`, [item.price != null ? money(item.price) : '', item.was != null && item.was !== item.price ? tx('was {price}', { price: money(item.was) }) : '', item.clr ? tx('clearance') : ''].filter(Boolean).join(' · ') || tx('On kmart.com.au'), tx('Open'), `data-url="${esc(item.url)}"`);
-        preview = `<div class="pcardx">${item.img ? `<img src="${esc(item.img)}" alt="" referrerpolicy="no-referrer" data-pimg style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:#fff;margin-bottom:8px">` : ''}<div class="kc">${esc(Q)}</div><div class="nm">${esc(item.name || '')}</div><div class="fx">${item.price != null ? `<span class="soh g">${money(item.price)}</span>` : ''}${item.was != null && item.was !== item.price ? `<span>${tx('was {price}', { price: money(item.was) })}</span>` : ''}${item.clr ? `<span class="status warn">${tx('Clearance')}</span>` : ''}</div></div><div class="pfacts"><span>${ic('clock')}${item.at ? tx('Price checked {date}', { date: fmtDate(item.at) }) : tx('Price checked never')}</span><span>${ic('m-product')}${tx('From the public product page')}</span></div><a class="btn accent sm" href="${esc(item.url)}" target="_blank" rel="noopener">${ic('ext')}${tx('Open on kmart.com.au')}</a>`;
+        preview = `<div class="pcardx">${item.img ? `<img src="${esc(item.img)}" alt="" referrerpolicy="no-referrer" data-pimg class="pcardx-img">` : ''}<div class="kc">${esc(Q)}</div><div class="nm">${esc(item.name || '')}</div><div class="fx">${item.price != null ? `<span class="soh g">${money(item.price)}</span>` : ''}${item.was != null && item.was !== item.price ? `<span>${tx('was {price}', { price: money(item.was) })}</span>` : ''}${item.clr ? `<span class="status warn">${tx('Clearance')}</span>` : ''}</div></div><div class="pfacts"><span>${ic('clock')}${item.at ? tx('Price checked {date}', { date: fmtDate(item.at) }) : tx('Price checked never')}</span><span>${ic('m-product')}${tx('From the public product page')}</span></div><a class="btn accent sm" href="${esc(item.url)}" target="_blank" rel="noopener">${ic('ext')}${tx('Open on kmart.com.au')}</a>`;
       } else {
         // A code nobody knows is often one digit off: offer the catalogue's near-misses.
         const near = await client.catalogue.nearMiss?.(Q) || [];
@@ -177,22 +204,22 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
         if (near.length) out += grp(tx('Did you mean'), near.length) + near.slice(0, 5).map(n => orow('p', 'barcode', `${esc(n.keycode)} · ${esc(n.name)}`, tx('digit {n} differs', { n: n.position + 1 }), tx('Search'), `data-q="${esc(n.keycode)}"`)).join('');
       }
       if (item === undefined) out += `<div class="ohint">${tx('The product catalogue did not answer. Try again in a moment.')}</div>`;
-      else if (!item) out += `<div class="ohint">${L?.name ? tx('No product found for {code} (the stockroom knew it as “{name}”). Check the keycode, or search kmart.com.au.', { code: esc(Q), name: esc(L.name) }) : tx('No product found for {code}. Check the keycode, or search kmart.com.au.', { code: esc(Q) })}</div>` + orow('p', 'search', tx('Search kmart.com.au for {code}', { code: esc(Q) }), tx('Opens the site search in a new tab'), tx('Open'), `data-url="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(Q)}"`);
+      else if (!item) out += empty(L?.name ? tx('No product found for {code} (the stockroom knew it as “{name}”). Check the keycode, or search kmart.com.au.', { code: esc(Q), name: esc(L.name) }) : tx('No product found for {code}. Check the keycode, or search kmart.com.au.', { code: esc(Q) }), { sm: true, icon: 'search' }) + orow('p', 'search', tx('Search kmart.com.au for {code}', { code: esc(Q) }), tx('Opens the site search in a new tab'), tx('Open'), `data-url="https://www.kmart.com.au/search/?searchTerm=${encodeURIComponent(Q)}"`);
       if (L && (L.visits.length || L.adjustments.length || L.cages.length)) {
         out += grp(tx('In the stockroom')) + orow('s', 'm-srhistory', [txn(L.bays.length, 'Backfilled at {n} bay', 'Backfilled at {n} bays'), L.adjustments.length ? txn(L.adjustments.length, '{n} SOH adjustment', '{n} SOH adjustments') : '', L.cages.length ? txn(L.cages.length, 'in {n} cage', 'in {n} cages') : ''].filter(Boolean).join(' · '), tx('Last seen {date}', { date: esc(L.last || '') }), tx('History'), `data-view="srhistory" data-q="${esc(Q)}"`);
         preview = (preview || `<div class="pcardx"><div class="kc">${esc(Q)}</div><div class="nm">${esc(L.name || tx('Not in the catalogue'))}</div></div>`) + lifeHtml(L);
-      } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}${tx('Where it’s been')}</div><div class="ohint">${tx('No backfill, adjustment or cage record for this code yet.')}</div></div>`;
+      } else if (L) preview = (preview || '') + `<div class="plife"><div class="pt3">${ic('m-srhistory')}${tx('Where it’s been')}</div>${empty(tx('No backfill, adjustment or cage record for this code yet.'), { sm: true, icon: 'm-srhistory' })}</div>`;
       // A consolidation label first when it is one (9 digits can be either: a
       // keycode since late 2026, or a pallet label); cages, loads and off-site
       // pallets holding a keycode after the product.
       const fr = found(Q), rr = recordsHtml(fr, Q); out = Q.length >= 10 || (Q.length === 9 && fr.consols?.length) ? rr + out : out + rr;
     } else if (k === 'cons') {
       const r = found(Q);
-      out += recordsHtml(r, Q) || `<div class="ohint">${tx('No consolidation ending {code} on a manifest or truck this device holds. The Back dock code opens its records.', { code: esc(Q.slice(-9)) })}</div>`;
+      out += recordsHtml(r, Q) || empty(tx('No consolidation ending {code} on a manifest or truck this device holds. The Back dock code opens its records.', { code: esc(Q.slice(-9)) }), { sm: true, icon: 'search' });
     } else if (k === 'shelf' || k === 'loc') {
       const { hits, rows, bay, modOf, sel, id, suffix } = shelfRows(U);
       if (bay && hits.length) out += `<div class="ohint">${tx('Bay {bay} is on {shelf}.', { bay: esc(U), shelf: esc(hits[0].id) + (modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : '') })}</div>`;
-      out += grp(tx('Shelves'), hits.length) + (rows.join('') || `<div class="ohint">${hasMap() ? (suffix ? tx('No shelf called {code} on this map.', { code: esc(id) }) : tx('No shelf starts with {code} on this map.', { code: esc(id) })) : tx('No map is published for this store yet.')}</div>`);
+      out += grp(tx('Shelves'), hits.length) + (rows.join('') || empty(hasMap() ? (suffix ? tx('No shelf called {code} on this map.', { code: esc(id) }) : tx('No shelf starts with {code} on this map.', { code: esc(id) })) : tx('No map is published for this store yet.'), { sm: true, icon: hasMap() ? 'search' : 'map' }));
       out += recordsHtml(found(Q), Q);
       if (hits.length) preview = `<div class="pt2">${ic('pin')}<b>${modOf(hits[0]) || hits[0].segments === 1 ? tx('Shelf {code}', { code: esc(hits[0].id) + (modOf(hits[0]) ? ' ' + esc(modOf(hits[0])) : '') }) : tx('Run {code}', { code: esc(hits[0].id) })}</b> · ${esc(DEPT_NAME[hits[0].dept] || hits[0].dept || '')}</div><div class="pmap" id="opmap"></div><a class="btn accent sm" data-view="map" data-select="${sel(hits[0])}">${ic('map')}${tx('Show on the store map')}</a>`;
     } else {
@@ -200,11 +227,13 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       const depts = Object.entries(DEPT_NAME).filter(([, n]) => n.toLowerCase().includes(ql));
       const ts = tools().filter(t => t.title.toLowerCase().includes(ql));
       const rs = (resources() || []).filter(e => matches(e, Q));
+      const words = ql.split(/\s+/).filter(Boolean), as = actionsFor(data(), tools()).filter(a => words.every(w => a.title.toLowerCase().includes(w)));
+      if (as.length) out += grp(tx('Actions'), as.length) + as.map(a => actRow(a, Q)).join('');
       if (depts.length) out += grp(tx('Departments'), depts.length) + depts.map(([d, n]) => orow('s', 'map', `${hi(n, Q)} ${dep(d)}`, tx('Show the department on the map'), tx('Show'), `data-view="map" data-dept="${d}"`)).join('');
       if (ts.length) out += grp(tx('Tools'), ts.length) + ts.map(t => orow('', t.icon, hi(t.title, Q), tx('Open the view'), tx('Open'), `data-view="${t.id}"`)).join('');
       if (rs.length) out += grp(tx('Resources'), rs.length) + rs.slice(0, 6).map(e => resRow(e, Q)).join('') + (rs.length > 6 ? orow('', 'library', tx('All {n} resources matching “{q}”', { n: rs.length, q: esc(Q) }), tx('Open Resources with this search'), tx('Open'), `data-view="resources" data-q="${esc(Q)}"`) : '');
       const recs = recordsHtml(found(Q), Q); out += recs;
-      if (!depts.length && !ts.length && !rs.length && !recs) out += `<div class="ohint">${tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) })}</div>`;
+      if (!depts.length && !ts.length && !rs.length && !recs && !as.length) out += empty(tx('Nothing matches “{q}”. Try a keycode, a shelf like A16 S2, a manifest, a cage tag, a department or a tool.', { q: esc(Q) }), { sm: true, icon: 'search' });
     }
     if (my !== seq) return;
     body.innerHTML = out; sel = 0; markSel();
@@ -229,7 +258,15 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
     if (!row) return;
     const q = input.value.trim(); if (q) remember(q, classify(q));
     if (row.dataset.res) { close(); useResource(row.dataset.res); return; }   // still inside the click or the Enter: a tab may open
-    if (row.dataset.view) { const arg = {}; for (const k of ARG_KEYS) if (row.dataset[k] != null) arg[k] = row.dataset[k]; close(); go(row.dataset.view, Object.keys(arg).length ? arg : undefined); return; }
+    if (row.dataset.view) {
+      const arg = {}; for (const k of ARG_KEYS) if (row.dataset[k] != null) arg[k] = row.dataset[k];
+      const a = Object.keys(arg).length ? arg : undefined, press = row.dataset.press;
+      if (!press) rememberPlace(row.dataset.view, a, row.querySelector('.ot b')?.textContent || '', row.querySelector('.ot span')?.textContent || '');
+      close(); go(row.dataset.view, a);
+      // An action: the screen's own button, once the screen is up.
+      if (press) { let n = 0; const tick = () => { const b = document.querySelector(`#content [data-act="${press}"]`); if (b) b.click(); else if (n++ < 40) setTimeout(tick, 50); }; setTimeout(tick, 30); }
+      return;
+    }
     if (row.dataset.q != null) { open(row.dataset.q); return; }        // a recent search: run it again
     if (row.dataset.url) { try { window.open(row.dataset.url, '_blank', 'noopener'); } catch {} close(); return; }
   }
@@ -240,7 +277,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
   const BAR_MAX = 6;
   const SUB_RANK = x => (x[0] === 'S' ? 0 : x[0] === 'E' ? 1 : x[0] === 'P' ? 2 : 3);
   const subWord = s => s[0] === 'S' ? tx('Side') : s[0] === 'E' ? tx('End') : s[0] === 'P' ? tx('Permanent end') : '';
-  const brow = (d, code, note, attrs) => { const c = DEPT_COLOUR[String(d || '').toLowerCase()] || '#64748B'; return `<div class="sdd-r" role="option" ${attrs}><i style="background:${c}"></i><b>${code}</b><span>${note}</span>${d ? dep(d) : ''}</div>`; };
+  const brow = (d, code, note, attrs) => { const c = DEPT_COLOUR[String(d || '').toLowerCase()] || '#64748B'; return `<div class="sdd-r" role="option" ${attrs}><i class="sw-c" style="--c:${c}"></i><b>${code}</b><span>${note}</span>${d ? dep(d) : ''}</div>`; };
   function barHtml(q) {
     const Q = q.trim(), ql = Q.toLowerCase(), k = classify(Q);
     if (!Q) {
@@ -267,7 +304,7 @@ export function initSearch({ client, frame, go, tools = () => [], life = () => n
       .map(m => brow(m.sd, hi(m.code, Q), hi(m.name, Q), `data-view="map" data-micro="${esc(m.id)}"`));
     // A department code (H1) or micro number (038) before shelves that merely start with it.
     const all = k === 'shelf' ? [...rows, ...depts, ...micros] : [...depts, ...micros, ...rows];
-    return all.length ? all.slice(0, BAR_MAX).join('') : `<div class="sdd-note">${tx('Nothing matches “{q}”. Try a shelf like A16 S2, a department or a micro-dept like 038.', { q: esc(Q) })}</div>`;
+    return all.length ? all.slice(0, BAR_MAX).join('') : empty(tx('Nothing matches “{q}”. Try a shelf like A16 S2, a department or a micro-dept like 038.', { q: esc(Q) }), { sm: true, icon: 'search' });
   }
   function bar(wrap, ok = () => true) {
     const bi = $('input', wrap); if (!bi) return { show() {}, hide() {} };

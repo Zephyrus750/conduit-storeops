@@ -14,7 +14,7 @@
 // how each went. Export still writes the field-capture/1 file.
 // Opened by a manager from Settings.
 
-import { $, ic, esc, vh, sub, mhead, toast, today, fmtTime, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, mhead, toast, today, fmtTime, mgr, pill } from '../ui.js';
 import { mountMap, mvMap, bindMapChrome, segmentId, canonCode, hasMap, setStrip, sx } from '../map.js';
 import { haptic } from '../device.js';
 import { tx, txn } from '../i18n.js';
@@ -43,7 +43,7 @@ export default {
   desktop(ctx) {
     if (!isManager(ctx)) return vh(tx('Field Mode'), tx('Needs the manager code'), '', 'm-map') + `<div class="card"><p class="lbl">${tx('Field Mode checks shelves against their labels for the map. Enter the manager code on this device to use it.')}</p></div>`;
     return vh(tx('Field Mode'), sub(tx('Check shelves against their labels'), tx('kept on this device until sent to the owner')), `<button class="btn" data-go="settings">${ic('x')}${tx('leave::Exit')}</button>`, 'm-map') +
-      `<div class="mapview fmview"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="mapleg"><span><i style="background:#F1F5F9;border:1.5px dashed #94A3B8"></i>${tx('Not checked')}</span><span><i style="background:#16A34A"></i>${tx('Checked')}</span><span><i style="background:#E0F2FE;border:1.5px dashed #0EA5E9"></i>${tx('No name on the map')}</span></div></div><div class="card fm-panel fm-desk" id="fmpanel"></div></div>`;
+      `<div class="mapview fmview"><div class="mapbox"><div class="mapstage" id="mapstage"></div><div class="mapleg"><span><i class="k-unchecked"></i>${tx('Not checked')}</span><span><i class="k-green"></i>${tx('Checked')}</span><span><i class="k-noname"></i>${tx('No name on the map')}</span></div></div><div class="card fm-panel fm-desk" id="fmpanel"></div></div>`;
   },
   mobile(ctx) {
     if (!isManager(ctx)) return mhead(tx('Field Mode'), tx('Needs the manager code')) + `<div class="mv-note">${ic('lock')}${tx('Enter the manager code on this device to check shelves.')}</div>`;
@@ -151,7 +151,7 @@ export default {
           sx.sec(tx('Comment'), `<input class="sx-in" name="comment" maxlength="300" value="${esc(c?.note || '')}" placeholder="${tx('Anything the owner should know')}">`, tx('optional')) +
           `<div class="sx-acts"><button class="sx-btn sx-pri" type="submit" data-save="stay">${ic('check')}${tx('Save')}</button><button class="sx-btn" type="submit" data-save="next">${ic('arrow')}${tx('Save &amp; next')}</button><button class="sx-btn" type="button" data-act="fm-back">${ic('x')}${c ? tx('Close') : tx('Skip')}</button>${c ? `<button class="sx-btn" type="button" data-act="fm-clear">${ic('trash')}${tx('Clear')}</button>` : ''}</div></form>`;
       }
-      const row = (icon, title, subl, tag, tone, extra = '') => `<div class="sx-r">${ic(icon)}<div class="k"><b>${title}</b>${subl ? `<span>${subl}</span>` : ''}</div>${tag ? `<span class="fmx-tag ${tone}">${tag}</span>` : ''}${extra}</div>`;
+      const row = (icon, title, subl, tag, tone, extra = '') => `<div class="sx-r">${ic(icon)}<div class="k"><b>${title}</b>${subl ? `<span>${subl}</span>` : ''}</div>${tag ? pill(tag, { ok: 'good', wait: 'warn' }[tone] || '', { size: 'sm' }) : ''}${extra}</div>`;
       const icon = c => c.kind === 'rename' ? 'edit' : c.kind === 'name' ? 'plus' : 'alert';
       const wait = waiting.map(c => row(icon(c), what(c), detail(c), '', '', `<button class="rt-x" type="button" data-act="fm-drop" data-key="${esc(c.key || c.shelf)}" aria-label="${tx('Remove')}">${ic('x')}</button>`));
       const sent = d.sent.slice(0, 12).map(x => { const e = edits[x.id], st = !e ? [tx('Sent'), ''] : e.status === 'accepted' ? [/^on the map/i.test(e.reply || '') ? tx('On the map') : tx('Accepted'), 'ok'] : e.status === 'declined' ? [tx('Declined'), 'no'] : [tx('Waiting'), 'wait'];

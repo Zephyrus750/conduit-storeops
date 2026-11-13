@@ -10,7 +10,7 @@
 // only, as Maintenance is. Anyone adds, edits, moves and checks; only a
 // manager removes an item (its history stays, and it can come back).
 
-import { $, ic, esc, vh, sub, status, fmtDate, toast, mgr, today } from '../ui.js';
+import { $, ic, esc, vh, sub, status, fmtDate, toast, mgr, today, empty } from '../ui.js';
 import { mountMap, mapbar, crumbx, bindMapChrome, mvMap, setStrip, sx, mapFloors } from '../map.js';
 import { printSheet, table, tick, signoff } from '../print.js';
 import { qrSvg } from '../../shared/qr.js';
@@ -46,7 +46,7 @@ const GLYPH = {
 };
 const glyphOf = it => (it.kind === 'stacker' || it.kind === 'forklift' ? GLYPH.stk : GLYPH[EQUIP_GROUP[it.kind]] || GLYPH.eqp);
 const glyphSvg = (it, colour) => `<svg class="mt-gl" viewBox="-9 -9 18 18" aria-hidden="true"><g fill="none" stroke="${colour}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${glyphOf(it)}</g></svg>`;
-const pinMark = it => `<span class="mt-pin eq-pin ${it.st}" style="border-color:${COLOUR[it.st]}">${glyphSvg(it, it.st === 'out' ? '#fff' : COLOUR[it.st])}</span>`;
+const pinMark = it => `<span class="mt-pin eq-pin ${it.st}" style="--c:${COLOUR[it.st]}">${glyphSvg(it, it.st === 'out' ? '#fff' : COLOUR[it.st])}</span>`;
 const nameOf = it => it.name || KIND[it.kind] || '';
 const isManager = s => (s?.roles || []).includes('manager') || !!s?.owner;
 
@@ -98,7 +98,7 @@ export default {
     const m = model(ctx);
     return vh(tx('Equipment checks'), headSub(m), `<button class="btn" data-act="labels">${ic('qr')}${tx('Print QR labels')}</button><button class="btn" data-act="sheet">${ic('print')}${tx('Print check sheet')}</button><button class="btn primary" data-act="new">${ic('plus')}${tx('Add equipment')}</button>`, 'm-equipment') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
-      `<div class="mapleg">${crumbx(tx('Equipment checks'), ctx.storeNo)}${['ok', 'soon', 'late', 'out'].map(k => `<span><i style="background:${COLOUR[k]};border-radius:50%"></i>${{ ok: tx('In date'), soon: tx('Due in 14 days'), late: tx('Overdue'), out: tx('Out of service') }[k]}</span>`).join('')}<span style="color:var(--faint)" id="eqhint"></span></div></div>` +
+      `<div class="mapleg">${crumbx(tx('Equipment checks'), ctx.storeNo)}${['ok', 'soon', 'late', 'out'].map(k => `<span><i class="sw-c k-dot k-${k}" style="--c:${COLOUR[k]}"></i>${{ ok: tx('In date'), soon: tx('Due in 14 days'), late: tx('Overdue'), out: tx('Out of service') }[k]}</span>`).join('')}<span class="t-faint" id="eqhint"></span></div></div>` +
       `<div class="sidecol fill" id="eqside"></div></div>`;
   },
   mobile(ctx) {
@@ -249,15 +249,16 @@ async function saveCheck(ctx, root, map) {
 function pills(m) {
   const count = g => (g === 'all' ? m.live.length : m.live.filter(it => EQUIP_GROUP[it.kind] === g).length);
   const groups = GROUPS.filter(([g]) => g === 'all' || count(g) || filter === g);
-  return groups.map(([g, label]) => `<button class="${!showRemoved && filter === g ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="filter" data-filter="${g}">${label} ${count(g)}</button>`).join('') +
-    (m.removed.length ? `<button class="${showRemoved ? 'on' : ''}" style="padding:5px 11px;font-size:12.5px" data-act="removed">${tx('Removed {n}', { n: m.removed.length })}</button>` : '');
+  return groups.map(([g, label]) => `<button class="${!showRemoved && filter === g ? 'on' : ''}" data-act="filter" data-filter="${g}">${label} ${count(g)}</button>`).join('') +
+    (m.removed.length ? `<button class="${showRemoved ? 'on' : ''}" data-act="removed">${tx('Removed {n}', { n: m.removed.length })}</button>` : '');
 }
 function row(it, m) {
-  return `<div class="li mt-li${selected === it.id ? ' sel' : ''}" data-act="select" data-id="${esc(it.id)}">${pinMark(it)}<span class="nm" style="white-space:normal"><b style="font-weight:600"><span class="mono">${esc(it.code)}</span> ${esc(nameOf(it))}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)">${esc(it.loc || tx('Not on the map'))} · ${everyText(it)}${it.last ? ' · ' + tx('last {date}', { date: fmtDate(it.last) }) : ''}</span></span>${status(it.removed ? 'info' : tone(it.st), esc(stText(it, m.day)))}</div>`;
+  return `<div class="li mt-li${selected === it.id ? ' sel' : ''}" data-act="select" data-id="${esc(it.id)}">${pinMark(it)}<span class="nm wrap"><b class="semi"><span class="mono">${esc(it.code)}</span> ${esc(nameOf(it))}</b><span class="where">${esc(it.loc || tx('Not on the map'))} · ${everyText(it)}${it.last ? ' · ' + tx('last {date}', { date: fmtDate(it.last) }) : ''}</span></span>${status(it.removed ? 'info' : tone(it.st), esc(stText(it, m.day)))}</div>`;
 }
 function sidebar(m, em, manager) {
-  const empty = showRemoved ? tx('Nothing removed.') : m.live.length ? tx('Nothing here.') : tx('No equipment yet. Add the store’s ladders, pallet jacks and trolleys, then tap the map where each lives.');
-  const list = `<div class="pcard"><div class="pills" style="margin-bottom:12px">${pills(m)}</div><div class="list">${m.list.map(it => row(it, m)).join('') || `<div class="li" style="color:var(--dim)">${empty}</div>`}</div></div>`;
+  const none = showRemoved ? tx('Nothing removed.') : m.live.length ? tx('Nothing here.') : tx('No equipment yet. Add the store’s ladders, pallet jacks and trolleys, then tap the map where each lives.');
+  const first = !showRemoved && !m.live.length;
+  const list = `<div class="pcard"><div class="pills tight mb-m">${pills(m)}</div><div class="list">${m.list.map(it => row(it, m)).join('') || empty(none, { sm: !first, icon: first ? 'm-equipment' : 'listcheck', act: first ? `<button class="btn primary" data-act="new">${ic('plus')}${tx('Add equipment')}</button>` : '' })}</div></div>`;
   if (draft) return draftForm(m) + list;
   const it = m.all.find(x => x.id === selected);
   if (checking && it) return checkForm(it, m) + list;
@@ -268,10 +269,10 @@ function sidebar(m, em, manager) {
 // Everything due in the window: this equipment and Emergency's markers.
 function dueCard(m, em) {
   const eq = m.live.filter(it => it.st === 'out' || it.st === 'late' || it.st === 'soon');
-  const rows = [...eq.map(it => ({ rank: RANK[it.st], due: it.due || '', html: `<div class="li" data-act="select" data-id="${esc(it.id)}">${pinMark(it)}<span class="nm"><b style="font-weight:600"><span class="mono">${esc(it.code)}</span> ${esc(nameOf(it))}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)">${esc(it.loc || '')} · ${tx('Equipment')}</span></span>${status(tone(it.st), esc(stText(it, m.day)))}</div>` })),
-    ...em.map(r => ({ rank: RANK[r.st], due: r.due, html: `<div class="li" data-act="emergency"><span class="mt-pin" style="border-color:${COLOUR[r.st]}">${ic('m-emergency')}</span><span class="nm"><b style="font-weight:600">${esc(r.name)}</b><span class="where" style="display:block;font-size:12px;color:var(--dim)">${esc(r.where)}${r.where ? ' · ' : ''}${tx('Emergency')}</span></span>${status(tone(r.st), esc(r.st === 'late' ? txn(-daysUntil(r.due, m.day), 'Overdue {n} day', 'Overdue {n} days') : tx('Due {date}', { date: fmtDate(r.due) })))}</div>` }))]
+  const rows = [...eq.map(it => ({ rank: RANK[it.st], due: it.due || '', html: `<div class="li" data-act="select" data-id="${esc(it.id)}">${pinMark(it)}<span class="nm"><b class="semi"><span class="mono">${esc(it.code)}</span> ${esc(nameOf(it))}</b><span class="where">${esc(it.loc || '')} · ${tx('Equipment')}</span></span>${status(tone(it.st), esc(stText(it, m.day)))}</div>` })),
+    ...em.map(r => ({ rank: RANK[r.st], due: r.due, html: `<div class="li" data-act="emergency"><span class="mt-pin" style="--c:${COLOUR[r.st]}">${ic('m-emergency')}</span><span class="nm"><b class="semi">${esc(r.name)}</b><span class="where">${esc(r.where)}${r.where ? ' · ' : ''}${tx('Emergency')}</span></span>${status(tone(r.st), esc(r.st === 'late' ? txn(-daysUntil(r.due, m.day), 'Overdue {n} day', 'Overdue {n} days') : tx('Due {date}', { date: fmtDate(r.due) })))}</div>` }))]
     .sort((a, b) => a.rank - b.rank || a.due.localeCompare(b.due));
-  return `<div class="card"><div class="ch"><h3>${tx('Due in the next 14 days')}</h3><span class="cs-dim">${tx('Equipment and Emergency')}</span></div><div class="list">${rows.map(r => r.html).join('') || `<div class="li" style="color:var(--dim)">${tx('Nothing due. Every check is in date.')}</div>`}</div></div>`;
+  return `<div class="card"><div class="ch"><h3>${tx('Due in the next 14 days')}</h3><span class="cs-dim">${tx('Equipment and Emergency')}</span></div><div class="list">${rows.map(r => r.html).join('') || empty(tx('Nothing due. Every check is in date.'), { sm: true, icon: 'check' })}</div></div>`;
 }
 function logRows(it) {
   const label = Object.fromEntries(pointsOf(it));
@@ -290,12 +291,12 @@ function outNote(it) {
 function detail(it, m, manager) {
   const acts = it.removed
     ? [manager ? `<span class="btn sm primary" data-act="restore">${ic('refresh')}${tx('Bring it back')}</span>` : '']
-    : [`<span class="btn sm primary" data-act="check">${ic('listcheck')}${tx('Record a check')}</span>`, it.x != null ? `<span class="btn sm" data-act="show">${ic('pin')}${tx('Show on map')}</span>` : '', `<span class="btn sm" data-act="move">${ic('pin')}${it.x != null ? tx('Move on the map') : tx('Put it on the map')}</span>`, `<span class="btn sm" data-act="edit">${ic('edit')}${tx('Edit')}</span>`, `<span class="btn sm" data-act="label">${ic('qr')}${tx('Print label')}</span>`, manager ? `<span class="btn sm" style="color:var(--red)" data-act="remove">${ic('trash')}${tx('Remove')}</span>` : ''];
+    : [`<span class="btn sm primary" data-act="check">${ic('listcheck')}${tx('Record a check')}</span>`, it.x != null ? `<span class="btn sm" data-act="show">${ic('pin')}${tx('Show on map')}</span>` : '', `<span class="btn sm" data-act="move">${ic('pin')}${it.x != null ? tx('Move on the map') : tx('Put it on the map')}</span>`, `<span class="btn sm" data-act="edit">${ic('edit')}${tx('Edit')}</span>`, `<span class="btn sm" data-act="label">${ic('qr')}${tx('Print label')}</span>`, manager ? `<span class="btn sm t-bad" data-act="remove">${ic('trash')}${tx('Remove')}</span>` : ''];
   return `<div class="card mtdet"><div class="ch"><h3>${pinMark(it)} <span class="mono">${esc(it.code)}</span> ${esc(nameOf(it))}</h3>${status(it.removed ? 'info' : tone(it.st), esc(stText(it, m.day)))}</div>` +
     (it.removed ? `<div class="mt-dup">${ic('trash')}<span>${tx('Removed {date}: {why}.', { date: esc(fmtDate(it.removed.at)), why: esc((WHY.find(w => w[0] === it.removed.why) || [, it.removed.why])[1]) })}${it.removed.note ? ' ' + esc(it.removed.note) : ''}</span></div>` : outNote(it)) +
     `<div class="mt-meta">${facts(it, m).map(([k, v]) => `<span>${k}: <b>${v}</b></span>`).join('')}</div>` +
-    `<div class="list">${logRows(it).map(l => `<div class="li"><span class="rt" style="margin:0">${esc(l.when)}</span><span class="nm">${esc(l.what)}${l.note ? ' · ' + esc(l.note) : ''}</span></div>`).join('')}</div>` +
-    `<div class="acts2" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">${acts.join('')}<span class="btn sm" data-act="back">${ic('x')}${tx('Close')}</span></div></div>`;
+    `<div class="list">${logRows(it).map(l => `<div class="li log"><span class="rt">${esc(l.when)}</span><span class="nm">${esc(l.what)}${l.note ? ' · ' + esc(l.note) : ''}</span></div>`).join('')}</div>` +
+    `<div class="acts2">${acts.join('')}<span class="btn sm" data-act="back">${ic('x')}${tx('Close')}</span></div></div>`;
 }
 function draftForm(m) {
   const kinds = Object.entries(KIND).map(([k, label]) => `<button class="${draft.kind === k ? 'on' : ''}" data-act="draft-kind" data-kind="${k}">${label}</button>`).join('');
@@ -304,12 +305,12 @@ function draftForm(m) {
   return `<div class="card mtdet eq-form"><div class="ch"><h3>${draft.editId ? tx('Edit {code}', { code: esc(draft.code) }) : tx('Add equipment')}</h3><span class="cs-dim">${draft.x != null ? tx('placed on the map') : tx('tap the map to place it')}</span></div>` +
     `<div class="mv-sub">${tx('What is it?')}</div><div class="mv-chips">${kinds}</div>` +
     `<div class="eq-two"><label class="fld"><span>${tx('Code')}</span><input data-draft="code" class="mono" value="${esc(draft.code)}" maxlength="16" autocapitalize="characters"></label><label class="fld"><span>${tx('Name')}</span><input data-draft="name" value="${esc(draft.name)}" maxlength="80" placeholder="${esc(KIND[draft.kind])}"></label></div>` +
-    `<p class="cs-dim" style="margin:0 0 8px;font-size:12.5px">${tx('The next free number for its group. Use the number on its tag if it has one: the QR label prints with this code.')}</p>` +
+    `<p class="cs-dim note mb-s">${tx('The next free number for its group. Use the number on its tag if it has one: the QR label prints with this code.')}</p>` +
     `<label class="fld"><span>${tx('Where it lives')}</span><input data-draft="loc" value="${esc(draft.loc)}" maxlength="60" placeholder="${tx('Stockroom, by bay 7012')}"></label>` +
     `<div class="mv-sub">${tx('Checked how often?')}</div><div class="mv-chips">${every}</div>` +
     `<div class="eq-two">${draft.editId ? '' : `<label class="fld"><span>${tx('Last checked')}</span><input type="date" data-draft="last" value="${esc(draft.last || '')}" max="${today()}"></label>`}${draft.every === 0 || draft.editId ? `<label class="fld"><span>${tx('Next due')}</span><input type="date" data-draft="due" value="${esc(draft.due || '')}"></label>` : ''}</div>` +
-    `<p class="cs-dim" style="margin:0;font-size:12.5px">${nextNote}</p>` +
-    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px"><span class="btn primary sm" data-act="draft-save">${ic('check')}${draft.editId ? tx('Save changes') : tx('Add {code}', { code: esc(draft.code) })}</span><span class="btn sm" data-act="draft-cancel">${tx('Cancel')}</span></div></div>`;
+    `<p class="cs-dim note">${nextNote}</p>` +
+    `<div class="acts2"><span class="btn primary sm" data-act="draft-save">${ic('check')}${draft.editId ? tx('Save changes') : tx('Add {code}', { code: esc(draft.code) })}</span><span class="btn sm" data-act="draft-cancel">${tx('Cancel')}</span></div></div>`;
 }
 function checkVals(it) {
   const pts = pointsOf(it), failed = pts.filter(([k]) => checking.pts[k] === 'fail'), done = pts.every(([k]) => checking.pts[k]);
@@ -325,14 +326,14 @@ function checkForm(it, m) {
     `<div class="eq-pts"><div class="eq-pth"><b>${tx('{kind} check', { kind: esc(KIND[it.kind]) })}</b><span class="btn sm" data-act="all-ok">${tx('All OK')}</span></div>${rows}</div>` +
     (failed.length ? `<div class="mt-dup eq-out">${ic('alert')}<span><b>${tx('It fails the check.')}</b> ${tx('{code} goes out of service: marked do not use on the map until a check passes.', { code: esc(it.code) })}</span></div><label class="eq-sw"><input type="checkbox" data-act="issue-toggle"${checking.issue ? ' checked' : ''}> ${tx('Log it in Maintenance too, so it gets fixed')}</label>` : '') +
     `<label class="fld"><span>${tx('Note')}</span><input data-check="note" value="${esc(checking.note)}" maxlength="300" placeholder="${tx('What you saw, or what was fixed')}"></label>` +
-    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px"><span class="btn sm ${failed.length ? 'eq-bad' : 'primary'}${done ? '' : ' eq-off'}" data-act="check-save">${ic(failed.length ? 'alert' : 'check')}${save}</span><span class="btn sm" data-act="check-cancel">${tx('Cancel')}</span></div></div>`;
+    `<div class="acts2"><span class="btn sm ${failed.length ? 'eq-bad' : 'primary'}${done ? '' : ' eq-off'}" data-act="check-save">${ic(failed.length ? 'alert' : 'check')}${save}</span><span class="btn sm" data-act="check-cancel">${tx('Cancel')}</span></div></div>`;
 }
 function removeForm(it) {
   const why = WHY.map(([k, name, hint]) => `<label class="eq-why${removing.why === k ? ' on' : ''}"><input type="radio" name="eqwhy" data-act="why" data-why="${k}"${removing.why === k ? ' checked' : ''}><span><b>${name}</b><small>${hint}</small></span></label>`).join('');
   return `<div class="card mtdet eq-form"><div class="ch"><h3>${tx('Remove {code}', { code: esc(it.code) })} ${mgr()}</h3></div><div class="mv-sub">${tx('Why is it going?')}</div>${why}` +
     `<label class="fld"><span>${tx('Note')}</span><input data-remove="note" value="${esc(removing.note)}" maxlength="300" placeholder="${tx('Replaced by LAD-04')}"></label>` +
-    `<p class="cs-dim" style="margin:0;font-size:12.5px">${tx('It leaves the map, not the history: its checks stay. Undo for a few seconds, or bring it back later from Removed.')}</p>` +
-    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px"><span class="btn sm eq-bad${removing.why ? '' : ' eq-off'}" data-act="remove-save">${ic('trash')}${tx('Remove {code}', { code: esc(it.code) })}</span><span class="btn sm" data-act="remove-cancel">${tx('Cancel')}</span></div></div>`;
+    `<p class="cs-dim note">${tx('It leaves the map, not the history: its checks stay. Undo for a few seconds, or bring it back later from Removed.')}</p>` +
+    `<div class="acts2"><span class="btn sm eq-bad${removing.why ? '' : ' eq-off'}" data-act="remove-save">${ic('trash')}${tx('Remove {code}', { code: esc(it.code) })}</span><span class="btn sm" data-act="remove-cancel">${tx('Cancel')}</span></div></div>`;
 }
 
 // ── the phone (managers) ──────────────────────────────────────────────────
@@ -392,8 +393,8 @@ function phone(m, manager) {
   const r = x => sx.row(`<span class="mt-sgl">${glyphSvg(x, COLOUR[x.st])}</span>`, `<span class="mono">${esc(x.code)}</span> ${esc(nameOf(x))}`, esc(x.loc || tx('Not on the map')), esc(stText(x, m.day)), x.st === 'late' || x.st === 'out' ? 'bad' : x.st === 'soon' ? 'warn' : 'dim', `data-act="select" data-id="${esc(x.id)}"`);
   const chips = GROUPS.filter(([g]) => g === 'all' || m.live.some(x => EQUIP_GROUP[x.kind] === g)).map(([g, label]) => `<button class="sx-chip${!showRemoved && filter === g ? ' on' : ''}" type="button" data-act="filter" data-filter="${g}">${label}</button>`).join('') + (m.removed.length ? `<button class="sx-chip${showRemoved ? ' on' : ''}" type="button" data-act="removed">${tx('Removed {n}', { n: m.removed.length })}</button>` : '');
   return `<div class="sx"><div class="sx-h">${ic('m-equipment')}${tx('Equipment')}<span class="n${m.late + m.out ? ' red' : ''}">${txn(m.live.length, '{n} piece', '{n} pieces')}</span></div>` +
-    sx.acts([sx.btn('plus', tx('Add equipment'), 'data-act="new"', true)]) + `<div class="sx-chips" style="margin-top:10px">${chips}</div>` +
-    sx.sec(showRemoved ? tx('Removed') : tx('Equipment'), m.list.length ? sx.rows(m.list.slice(0, 80).map(r)) : sx.rows([sx.row('check', m.live.length || showRemoved ? tx('Nothing here.') : tx('No equipment yet'))]), tx('tap one to open it')) + `</div>`;
+    sx.acts([sx.btn('plus', tx('Add equipment'), 'data-act="new"', true)]) + `<div class="sx-chips mt-m">${chips}</div>` +
+    sx.sec(showRemoved ? tx('Removed') : tx('Equipment'), m.list.length ? sx.rows(m.list.slice(0, 80).map(r)) : empty(m.live.length || showRemoved ? tx('Nothing here.') : tx('No equipment yet'), { sm: true, icon: 'm-equipment' }), tx('tap one to open it')) + `</div>`;
 }
 
 // ── paper ─────────────────────────────────────────────────────────────────

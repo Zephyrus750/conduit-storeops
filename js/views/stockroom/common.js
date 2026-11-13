@@ -1,7 +1,7 @@
 // Shared bits for the Stockroom views: ring colours, today's key, product
 // names from the catalogue with a repaint when they arrive.
 import { recallTagFor, recallFor, recallWord } from '../../recallflag.js';
-import { esc, ic, today, fmtDate, DEPTS_DEFAULT, DEPT_COLOUR, depInk, productImg } from '../../ui.js';
+import { esc, ic, today, fmtDate, DEPTS_DEFAULT, DEPT_COLOUR, depInk, productImg, pill } from '../../ui.js';
 import { tx, txn } from '../../i18n.js';
 import { openSheet } from '../../sheet.js';
 
@@ -25,7 +25,7 @@ export const deptColour = id => DEPT_COLOUR[id] || srDept(id)?.color || '#64748B
 export function deptBadge(id, { short = false } = {}) {
   if (!id) return '';
   const d = srDept(id);
-  return `<span class="srdept" title="${esc(deptLabel(id))}"><span class="dep" style="background:${deptColour(id)};color:${depInk(deptColour(id))}">${esc(String(id).toUpperCase())}</span>${short || !d ? '' : `<span class="nm">${esc(d.name)}</span>`}</span>`;
+  return `<span class="srdept" title="${esc(deptLabel(id))}"><span class="dep" style="--dc:${deptColour(id)};--di:${depInk(deptColour(id))}">${esc(String(id).toUpperCase())}</span>${short || !d ? '' : `<span class="nm">${esc(d.name)}</span>`}</span>`;
 }
 export const ageOf = iso => { if (!iso) return '—'; const h = (Date.now() - new Date(iso)) / 3600000; return h < 1 ? tx('{n}m', { n: Math.max(1, Math.round(h * 60)) }) : h < 48 ? tx('{n}h', { n: Math.round(h) }) : tx('{n}d', { n: Math.round(h / 24) }); };
 
@@ -137,7 +137,7 @@ function baysLine(w) {
 }
 function cardHtml(kc, it, w) {
   const rc = recallFor(null, kc);
-  const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : it ? `<span class="pch-none">${tx('No price yet')}</span>` : '';
+  const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? pill(tx('On clearance'), 'bad', { size: 'sm' }) : ''}</span>` : it ? `<span class="pch-none">${tx('No price yet')}</span>` : '';
   return `<div class="pch-img">${productImg(it?.img) || ic('box')}</div>` +
     `<div class="pch-b"><span class="mono pch-kc">${esc(kc)}</span><b>${it ? esc(it.name || tx('Verified product')) : it === undefined ? tx('Not checked yet') : tx('Not in the catalogue')}</b>${price}${baysLine(w)}` +
     (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') +
@@ -200,11 +200,11 @@ export function setProductActions(fn) { popActions = fn; return () => { if (popA
 export function closeProduct() { pop?.close(); }
 function popParts(kc, it, w, nm, ext) {
   const rc = recallFor(null, kc), url = it?.url || searchUrl(kc);
-  const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? `<em>${tx('On clearance')}</em>` : ''}</span>` : '';
+  const price = it && Number.isFinite(it.price) ? `<span class="pch-price"><b>${money(it.price)}</b>${Number.isFinite(it.was) ? `<s>${money(it.was)}</s>` : ''}${it.clr ? pill(tx('On clearance'), 'bad', { size: 'sm' }) : ''}</span>` : '';
   const img = `<div class="ppop-img${it?.img || it === undefined ? '' : ' none'}">${it?.img ? productImg(it.img) : `${ic('box')}${it === undefined ? '' : `<small>${tx('No photo')}</small>`}`}</div>`;
   const near = it === null && nm.length ? `<div class="ppop-near"><small>${tx('Did you mean')}</small>${nm.slice(0, 2).map(x => `<div class="ppop-nr"><span><b class="mono">${esc(x.keycode)}</b> ${esc(x.name || '')}</span>${ext.use ? `<button type="button" class="btn sm primary" data-pp="use" data-code="${esc(x.keycode)}">${tx('Use it')}</button>` : `<button type="button" class="btn sm" data-pp="copy" data-code="${esc(x.keycode)}">${tx('Copy')}</button>`}</div>`).join('')}</div>` : '';
   const body = `<div class="ppop-b">` +
-    (it === undefined || it ? '' : it === false ? `<span class="ppop-miss">${tx('Not checked yet')}</span><p class="ppop-why">${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}</p>` : `<span class="ppop-miss">${tx('Not in the catalogue')}</span><p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
+    (it === undefined || it ? '' : it === false ? `${pill(tx('Not checked yet'), 'warn', { size: 'sm' })}<p class="ppop-why">${tx('The product catalogue did not answer. It is asked again in a couple of minutes.')}</p>` : `${pill(tx('Not in the catalogue'), 'warn', { size: 'sm' })}<p class="ppop-why">${tx('Check the code on the item: it may be a misread, or a code no longer sold.')}</p>`) +
     (rc ? `<span class="pch-rc ${esc(rc.kind)}">${ic('alert')}${recallWord(rc)} · ${esc(rc.title)}</span>` : '') + baysLine(w) + near + `</div>`;
   const title = it === undefined ? searching() : it ? esc(it.name || tx('Verified product')) : `<span class="mono">${esc(kc)}</span>`;
   // Not found: the keycode is the title, so it is not said twice.
@@ -328,19 +328,19 @@ export const ctnOf = kc => cartonOf(kc)?.ctn || null;
 export const profilesReady = () => profiles !== null;   // false until the first load lands
 export function depthChip(kc, now = Date.now()) {
   const p = profileOf(kc);
-  if (!p?.ctn) { const l = lastArrival[String(kc)]; return l?.ctn ? `<span class="ctn-chip single" title="${tx('From the latest delivery ({date}: {units} units in {cartons} cartons); it firms up once three trucks agree', { date: esc(l.date), units: l.units, cartons: l.cartons })}">${tx('▤ {ctn}/ctn · latest delivery', { ctn: l.ctn })}</span>` : ''; }
+  if (!p?.ctn) { const l = lastArrival[String(kc)]; return l?.ctn ? pill(tx('▤ {ctn}/ctn · latest delivery', { ctn: l.ctn }), '', { size: 'sm', cls: 'beside', title: tx('From the latest delivery ({date}: {units} units in {cartons} cartons); it firms up once three trucks agree', { date: esc(l.date), units: l.units, cartons: l.cartons }) }) : ''; }
   const t = p.last_arrival?.date ? Date.parse(p.last_arrival.date + 'T00:00:00') : NaN, days = isNaN(t) ? null : Math.round((now - t) / 86400000), recent = days != null && days <= 21;
   const recount = p.pack_change && p.pack_change.since_trucks < 4;
   const why = [txn(p.trucks, '{ctn} units a carton over {n} truck', '{ctn} units a carton over {n} trucks', { ctn: p.ctn }), p.last_arrival?.date ? tx('last landed {date}', { date: esc(p.last_arrival.date) }) : '', recent ? tx('likely out the back') : ''].filter(Boolean).join('; ');
   const chip = [tx('▤ {ctn}/ctn', { ctn: p.ctn }), days == null ? '' : days <= 0 ? tx('today') : tx('{n}d ago', { n: days }), recent ? tx('out back?') : ''].filter(Boolean).join(' · ');
-  return `<span class="ctn-chip${recent ? ' recent' : ''}" title="${why}">${chip}</span>` +
-    (recount ? `<span class="sri-badge recount" title="${tx('The supplier re-cartoned this recently ({prev} → {ctn} a carton): count it, do not spot-check', { prev: p.pack_change.prev_ctn, ctn: p.ctn })}">RECOUNT</span>` : '');
+  return pill(chip, recent ? 'warn' : 'info', { size: 'sm', cls: 'beside', title: why }) +
+    (recount ? pill('RECOUNT', 'info', { size: 'sm', cls: 'beside', title: tx('The supplier re-cartoned this recently ({prev} → {ctn} a carton): count it, do not spot-check', { prev: p.pack_change.prev_ctn, ctn: p.ctn }) }) : '');
 }
 // GHOST (K2B's stockroom intelligence, from one reading): the system says
 // zero or less, but it landed in the last three weeks.
 export function ghostChip(kc, soh, now = Date.now()) {
   const p = profileOf(kc), last = p?.last_arrival?.date ? Date.parse(p.last_arrival.date + 'T00:00:00') : NaN;
-  return soh <= 0 && !isNaN(last) && now - last <= 21 * 86400000 ? `<span class="sri-badge ghost" title="${tx('SOH 0 or less, but it arrived recently: count it')}">GHOST</span>` : '';
+  return soh <= 0 && !isNaN(last) && now - last <= 21 * 86400000 ? pill('GHOST', 'warn', { size: 'sm', cls: 'beside', title: tx('SOH 0 or less, but it arrived recently: count it') }) : '';
 }
 export async function send(ctx, type, entity, payload = {}) {
   try { return await ctx.store.dispatch({ type, entity, payload }); }

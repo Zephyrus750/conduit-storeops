@@ -10,7 +10,7 @@
 
 import { productLife } from '../shared/records.js';
 import { createClient } from '../client/index.js';
-import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners, mgr, installProductImages } from './ui.js';
+import { $, $$, ic, esc, fmtLong, toast, installKeyboard, setStoreTz, today, DEPT_COLOUR, DEPT_NAME, DEPT_GROUPS, scopeListeners, mgr, installProductImages, empty } from './ui.js';
 import { settingsOf } from '../shared/reducers/store.js';
 import { retailPeriod } from '../shared/time.js';
 import { installCameraButtons } from './scan.js';
@@ -19,7 +19,8 @@ import { loadMap, setMap, setPlanSource, mapInfo, parkMap, liveIn, mapStats, she
 import { initSearch } from './search.js';
 import { voiceSupported, listenOnce } from './voice.js';
 import { resolveSpoken } from '../shared/voice.js';
-import { takeDeepLink } from './share.js';
+import { takeDeepLink, viewLink } from './share.js';
+import { printFrom } from './print.js';
 import { installLog } from './diag.js';
 installLog();
 import { updates, initUpdates } from './updates.js';
@@ -39,10 +40,11 @@ import { polyBackground } from './lowpoly.js';
 import { applyOrientation, haptic } from './device.js';
 import { installProductLinks, installProductCard } from './views/stockroom/common.js';
 import { installPullAlerts } from './views/livepull.js';
-import { equipmentNeeds } from './views/equipment.js';
-import { recallsNeeding } from './views/recalls.js';
+import { waiting, railCounts, bellCount, useAlertSource } from './alerts.js';
+import { openSheet } from './sheet.js';
 import { holdToast, refusalText, pillState, syncPanel } from './sync.js';
 import { tx, txn, translateStatic, langSelect, setLang } from './i18n.js';
+import { installPractice, inPractice } from './practice.js';
 
 // The worker: ?worker= (remembered), then the remembered one, then the
 // default. Only an allowed origin is taken, from the link or from storage.
@@ -64,6 +66,8 @@ const areaName = a => AREA_NAME[a] || AREA_NAME.floor;
 const workerLine = () => WORKER === WORKER_DEFAULT ? '' : `<div class="si-worker">${ic('lock')}${tx('Signing in to <b>{host}</b>', { host: esc(new URL(WORKER).host) })}</div>`;
 
 const client = createClient({ baseUrl: WORKER, app: 'conduit ' + VERSION });
+// Practice mode (js/practice.js): a sandbox store kept off the worker; its gate goes on before anything is asked.
+const practice = installPractice({ client, frame: document.querySelector('.frame'), closeStore: () => closeStore() });
 let team = null;      // the team message strip (js/team.js)
 let store = null, admin = null, current = null, currentArg = null, unsubs = [], ws = 'floor', pullAlertsOff = null;
 const frame = $('.frame');
@@ -98,7 +102,7 @@ let capsSig = null, rolesSig = null;
 client.session.on('change', snap => {
   const sig = (snap?.caps || []).join(','), rsig = (snap?.roles || []).join(',');
   if (capsSig === null || !store || admin) { capsSig = sig; rolesSig = rsig; return; }
-  if (rsig !== rolesSig) { rolesSig = rsig; if (sig === capsSig) { buildRail(); paintBadges(); } managerCheck(); }
+  if (rsig !== rolesSig) { rolesSig = rsig; if (sig === capsSig) { buildRail(); paintBadges(); } if (ws === 'today' && !isManager()) { setWs('floor'); show(HOME.floor); } managerCheck(); }
   if (sig === capsSig) return;
   const gone = capsSig.split(',').filter(a => a && !sig.split(',').includes(a)); capsSig = sig;
   buildRail(); paintBadges();
@@ -106,7 +110,7 @@ client.session.on('change', snap => {
   if (view && view.area && view.area !== 'store' && !(snap?.caps || []).includes(view.area)) { setWs('floor'); show(HOME.floor); }
   if (gone.length) { const [a, b, c] = gone.map(areaName); toast(c ? tx('{a}, {b} and {c} were switched off for this store', { a, b, c }) : b ? tx('{a} and {b} were switched off for this store', { a, b }) : tx('{a} was switched off for this store', { a })); }
 });
-client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); showSignin(wasOwner ? { owner: true, error: tx('Owner session expired. Sign in again.') } : { error: tx('This device was signed out. Sign in again.') }); });
+client.session.on('signin-required', () => { const wasOwner = admin || client.session.current?.owner; leave(); if (practice.on) { practice.finish().finally(() => location.reload()); return; } showSignin(wasOwner ? { owner: true, error: tx('Owner session expired. Sign in again.') } : { error: tx('This device was signed out. Sign in again.') }); });
 // A shared shelf link (?store=…&shelf=…): open the map on that shelf once
 // signed in to that store (a guide link, ?guide=…, opens Help in any store). A store parked on this device is switched to; a
 // device that is not signed in gets the sign-in with that store chosen.
@@ -138,6 +142,8 @@ function openPendingLink(s) {
   // The guide is the same in every store: a printed page's QR code opens its chapter here.
   if (l.guide) { show('help', { chapter: l.guide }); return true; }
   if (l.store !== s.store) { toast(l.equip ? tx('That equipment label is for store {store}. Add that store from Store details to open it.', { store: l.store }) : l.issue ? tx('That work order is for store {store}. Add that store from Store details to open it.', { store: l.store }) : tx('That shelf link is for store {store}. Add that store from Store details to open it.', { store: l.store })); return false; }
+  // A printed sheet's QR code: the screen it came from (one this device can't open goes home).
+  if (l.view) { show(VIEWS[l.view] ? l.view : 'mhome'); return true; }
   if (l.issue) { if (isMobile() && deskOnly(VIEWS.maintenance)) { toast(tx('Work orders open on a store PC')); return false; } show('maintenance', { issue: l.issue }); return true; }
   if (l.equip) { if (isMobile() && deskOnly(VIEWS.equipment)) { toast(tx('Equipment checks open on a store PC, or a manager’s phone')); return false; } show('equipment', { equip: l.equip }); return true; }
   show('map', { select: l.shelf }); return true;
@@ -149,7 +155,7 @@ async function enter() {
   showLoading();
   const s = client.session.current;
   try {
-    store = await client.open(s.store); useRecallStore(store);
+    store = (await practice.open(s)) || await client.open(s.store); useRecallStore(store);
     await loadStoreMap(s.store);
   } catch (e) {
     if (s.actas) { await client.session.endActAs(); await enterAdmin(); toast(tx('Cannot open {store}: {error}', { store: s.store, error: e.message }), 'bad'); return; }
@@ -175,6 +181,8 @@ async function enter() {
   let areasSig = JSON.stringify(store.get('areas')?.on || null);
   store.on('areas', a => { const sig = JSON.stringify(a?.on || null); if (sig === areasSig) return; areasSig = sig; client.session.refresh().catch(() => {}); });
   store.on('tools', () => { if (railSig() === toolsSig) return; buildRail(); paintBadges(); setWs(ws); if (current && offView(current)) show(current, currentArg); });
+  // The rail's counts and the bell follow the store, at most every 1.5 s.
+  store.on('*', alertsSoon); store.on('status', alertsSoon); answeredLoad(s.store);
   paintStatus(store.status);
   $('#chipName').textContent = s.name || s.store; $('#chipNo').textContent = tx('Store {no}', { no: s.store });
   buildRail(); paintBadges(); setWs('floor');
@@ -187,7 +195,9 @@ async function enter() {
   // The phone goes back to the area it was last used in when this device can
   // still open it; otherwise it asks where you are working.
   const caps = s.caps || [];
-  if (last && caps.includes(last) && (last === 'floor' || hasArea(client.session, last))) { setWs(last); show(HOME[last] || 'mhome'); }
+  // A manager's phone starts on Today, the store at a glance (the manager phone, 12 Oct).
+  if (isManager() && !s.owner) { setWs('today'); show('mtoday'); }
+  else if (last && caps.includes(last) && (last === 'floor' || hasArea(client.session, last))) { setWs(last); show(HOME[last] || 'mhome'); }
   else { show('mhome'); openLauncher(); }
 }
 // The published map: the store's `map` projection names the current
@@ -271,6 +281,8 @@ function managerCheck() {
 function closeStore() { useRecallStore(null); team?.off(); team = null; setStoreTz(null); lockMins = 0; client.closeAll(); store = null; for (const u of unsubs) u(); unsubs = []; content.innerHTML = ''; current = null; currentArg = null; $('#msheet')?.classList.remove('open'); const d = $('#syncDlg'); if (d) d.hidden = true; }
 function leave() { closeStore(); admin = null; frame.classList.remove('adm'); applyPrefs(frame); actasBar(null); resetAdmin(); }
 async function signOut() {
+  // Practice ends first: its store closes and its data goes, and the app reloads after, so nothing of it stays in memory.
+  const drill = practice.on; if (drill) { closeStore(); await practice.finish(); }
   try { await store?.flush(); } catch {}
   // A shared device keeps no store data past sign-out (the outbox was just
   // flushed; anything still queued stays so it is not lost).
@@ -278,8 +290,8 @@ async function signOut() {
   // Signed out from the Continue screen, the store was never opened: its outbox is read from the device.
   let queued = store?.pending?.length || 0; if (!store && no) try { queued = await client.storage.count(`outbox:${no}:`); } catch { queued = 1; }
   if (no && !client.session.current?.actas && !queued) try { await client.storage.del(`snap:${no}`); } catch {}
-  if (client.session.current?.actas) { closeStore(); await client.session.endActAs(); await enterAdmin(); return; }
-  leave(); await client.session.signOut(); showSignin();
+  if (client.session.current?.actas) { closeStore(); await client.session.endActAs(); if (drill) return location.reload(); await enterAdmin(); return; }
+  leave(); await client.session.signOut(); if (drill) return location.reload(); showSignin();
 }
 function actasBar(s) {
   $('#actasBar')?.remove(); if (!s) return;
@@ -536,30 +548,73 @@ function groupTabs(id) {
   lastTabs[g] = id; try { localStorage.setItem('rail_tabs', JSON.stringify(lastTabs)); } catch {}
   return `<nav class="gtabs" role="tablist" aria-label="${esc(GROUPS[g].label)}">${tabs.map(([v, label]) => `<button type="button" role="tab" class="gtab${v === id ? ' on' : ''}" aria-selected="${v === id}" data-view="${v}">${ic(VIEWS[v].icon)}<span>${label}</span>${BADGED.includes(v) ? `<span class="badge" data-badge="${v}" hidden></span>` : ''}</button>`).join('')}</nav>`;
 }
-// Rail badges (the showcase's): Backfill review carries today's locations
-// waiting for review; Cages, in red, the open cages not seen for a week.
-// Each reads its area's projection, which is empty until the device holds
-// that area's code, so a badge stays hidden without it.
-const BADGED = ['inputs', 'bfreview', 'cages', 'equipment', 'recalls'];
-// Checks that need a person now: equipment overdue or out of service, and
-// Emergency's serviced markers past their due date.
-function checksNeeded(store, day) {
-  const eq = equipmentNeeds(store), assets = Object.values(store.get('assets') || {}).filter(a => a.due && a.due < day).length;
-  return eq.late + eq.out + assets;
+// Rail badges (the showcase's, then the review board's des-badges): a count
+// on each row with something waiting, red when any of it is urgent, amber
+// for today's. What counts is js/alerts.js, the same list the bell shows.
+// Each part reads its area's projection, which is empty until the device
+// holds that area's code, so a badge stays hidden without it.
+const BADGED = ['inputs', 'bfreview', 'cages', 'equipment', 'recalls', 'maintenance', 'tasks', 'planner', 'resources'];
+// Requests this store made that the owner has answered since a manager last
+// opened Resources (the library lives on the worker, not in the store's log).
+let answered = 0, answeredT = 0;
+const SEEN = no => `resources_seen:${no}`;
+function answeredLoad(no) {
+  clearTimeout(answeredT); answered = 0;
+  if (!no || !isManager() || offView('resources') || inPractice()) return;   // practice reads nothing of the store's from the worker
+  client.session.token().then(token => client.transport.request('/v1/resources/requests', { token })).then(r => {
+    let seen = ''; try { seen = localStorage.getItem(SEEN(no)) || ''; } catch {}
+    answered = (r.requests || []).filter(q => q.status !== 'open' && String(q.updated || '') > seen).length; alertsSoon();
+  }, () => {}).finally(() => { answeredT = setTimeout(() => answeredLoad(no), 10 * 60000); });
 }
+function answeredSeen(no) { answered = 0; try { localStorage.setItem(SEEN(no), new Date().toISOString()); } catch {} alertsSoon(); }
+// On a phone a line opens the phone's screen for it; one only the desk has
+// (the morning report) stays on the rail of the PC.
+const PHONE_GO = { planner: 'receiving' };
+const alertList = () => {
+  if (!store) return [];
+  const list = waiting({ store, session: client.session, offView, canRead: a => hasArea(client.session, a), answered });
+  if (!isMobile()) return list;
+  return list.map(x => VIEWS[x.go] && deskOnly(VIEWS[x.go]) ? (PHONE_GO[x.go] ? { ...x, go: PHONE_GO[x.go] } : null) : x).filter(Boolean);
+};
 function paintBadges() {
   if (!store) return;
-  const day = today(), bf = store.get('backfill'), cages = store.get('cages') || {};
-  // The morning report is due until any desk has pasted today's (a store with a Stockroom, its code on this device).
-  const caps = client.session.current?.caps || [], morningDue = caps.includes('stockroom') && hasArea(client.session, 'stockroom') && !offView('bfreview') && bf?.report?.date !== day;
-  const n = { inputs: morningDue ? 1 : 0, bfreview: Object.values(bf?.subs || {}).filter(x => x.date === day && x.status === 'pending').length, cages: Object.values(cages).filter(c => c.status === 'open' && Date.now() - Date.parse(c.seen) > 7 * 86400e3).length, equipment: offView('equipment') ? 0 : checksNeeded(store, day), recalls: offView('recalls') ? 0 : recallsNeeding(store).need };
-  const titleOf = (k, v) => k === 'inputs' ? tx('The morning report is not pasted yet') : k === 'equipment' ? txn(v, '{n} check overdue or out of service', '{n} checks overdue or out of service') : k === 'recalls' ? txn(v, '{n} recall or withdrawal to act on', '{n} recalls or withdrawals to act on') : k === 'cages' ? txn(v, '{n} cage not seen this week', '{n} cages not seen this week') : txn(v, '{n} location to review today', '{n} locations to review today');
+  const list = alertList(), { n, lvl } = railCounts(list);
   for (const el of $$('[data-badge]')) {
     const keys = el.dataset.badge.split('+'), v = keys.reduce((t, k) => t + (n[k] || 0), 0);
     el.hidden = !v; el.textContent = v > 99 ? '99+' : String(v);
-    el.classList.toggle('red', keys.some(k => ['cages', 'equipment', 'recalls'].includes(k) && n[k]));
-    el.title = keys.filter(k => n[k]).map(k => titleOf(k, n[k])).join(' · ');
+    el.classList.toggle('red', keys.some(k => n[k] && lvl[k] === 'bad'));
+    el.classList.toggle('amber', !keys.some(k => n[k] && lvl[k] === 'bad') && keys.some(k => n[k] && lvl[k] === 'warn'));
+    el.title = list.filter(x => keys.includes(x.key)).map(x => x.text).join(' · ');
   }
+  paintBell(list);
+}
+let alertsT = 0;
+function alertsSoon() { if (alertsT) return; alertsT = setTimeout(() => { alertsT = 0; paintBadges(); }, 1500); }
+useAlertSource(() => alertList());
+// The alerts bell (new-bell): one place for what needs someone, each line
+// opening the screen it is about. Its number leaves out routine work (the
+// day's locations to review, the morning report), which the rail counts.
+function paintBell(list = alertList()) {
+  const { n, bad } = bellCount(list);
+  for (const b of $$('[data-shell-act="alerts"]')) {
+    const c = b.querySelector('.bell-n'); if (c) { c.hidden = !n; c.textContent = n > 99 ? '99+' : String(n); }
+    b.classList.toggle('bad', bad); b.classList.toggle('some', n > 0);
+    b.title = n ? txn(n, '{n} thing needs someone', '{n} things need someone') : tx('Nothing needs you right now.');
+    if (b.classList.contains('mbell')) b.hidden = !n;
+  }
+}
+let bellSheet = null;
+function openAlerts() {
+  if (!store) return;
+  bellSheet?.close();
+  const list = alertList(), order = { bad: 0, warn: 1, info: 2 }, { n } = bellCount(list);
+  const row = x => `<button type="button" class="al-row ${x.level}" data-al="${esc(x.go)}">${ic(x.icon)}<span>${esc(x.text)}</span>${ic('chev')}</button>`;
+  const now = list.filter(x => x.level !== 'info').sort((a, b) => order[a.level] - order[b.level]), routine = list.filter(x => x.level === 'info');
+  const body = (now.length ? `<div class="al-list">${now.map(row).join('')}</div>` : empty(tx('Nothing needs you right now.'), { icon: 'check' })) +
+    (routine.length ? `<div class="al-sec">${tx('Routine today')}</div><div class="al-list">${routine.map(row).join('')}</div>` : '');
+  bellSheet = openSheet({ kind: 'side', title: tx('Alerts'), sub: n ? txn(n, '{n} thing needs someone', '{n} things need someone') : tx('All clear'), body, cls: 'al-sheet',
+    onClose: () => { bellSheet = null; },
+    onClick: e => { const b = e.target.closest('[data-al]'); if (!b) return; const go = b.dataset.al; bellSheet?.close(); if (go === 'sync') openSync(); else show(go); } });
 }
 function setWs(w) {
   ws = w; try { if (store) localStorage.setItem('last_workspace', w); } catch {} $('#app').className = 'app ws-' + w + (prefs().railmin ? ' railmin' : '');
@@ -577,6 +632,7 @@ function onHold(list) { toast(holdToast(list), 'warn', { label: tx('See'), run: 
 // the app bar that shows only when there is something to say (offline,
 // sending, or changes waiting). Both open the list of what is on the device.
 function paintStatus(s) {
+  if (practice.paint(s)) return;   // practice: the pill and the footer say so, whatever the practice store is doing
   const pill = $('#msync'), p = s.state === 'owner' ? null : pillState(s);
   if (pill) { pill.hidden = !p; if (p) { pill.className = `msync ${p.tone}`; pill.innerHTML = `<span class="dot"></span>${esc(p.text)}`; pill.setAttribute('aria-label', tx('Sync: {state}. Show the changes on this device', { state: p.text })); } }
   const el = $('#footSync'); if (!el) return;
@@ -670,7 +726,7 @@ function show(id, arg) {
   if (store && railSig() !== toolsSig) { buildRail(); paintBadges(); setWs(ws); }
   if (store && view.managers && !isManager()) { toast(tx('{name} is for managers: sign in with the manager code', { name: view.title })); if (current && current !== view.id) return; view = VIEWS[mobile ? HOME[ws] || 'map' : 'dashboard']; }
   if (store && offView(view.id)) { toast(tx('{name} is switched off for this store', { name: tx(toolForView(view.id).name) })); if (current && current !== view.id && !offView(current)) return; view = VIEWS[mobile ? HOME[view.area] || 'map' : 'dashboard']; }
-  if (store && view.area && view.area !== ws && view.area !== 'admin') setWs(view.area);
+  if (store && view.area && view.area !== ws && view.area !== 'admin' && !(ws === 'today' && mobile)) setWs(view.area);
   // A phone-only view (a workspace home) opens its desktop counterpart on a wide screen.
   if (!mobile && view.desktopView && VIEWS[view.desktopView]) return show(view.desktopView, arg);
   id = view.id;
@@ -678,7 +734,7 @@ function show(id, arg) {
   currentArg = arg !== undefined ? arg : (id === current ? currentArg : null);
   current = id;
   const cur = client.session.current;
-  const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, api: (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token })), storage: client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
+  const ctx = { store, admin, arg: currentArg, session: client.session, catalogue: client.catalogue, api: (path, opts = {}) => client.session.token().then(token => client.transport.request(path, { ...opts, token })), storage: practice.storage || client.storage, storeNo: cur?.store, storeName: cur?.name || '', isMobile: mobile, go: show, rerender: () => show(current, currentArg), signOut, actAs };
   const useMobile = mobile && typeof view.mobile === 'function';
   // A view that fails to paint shows why and a way out, never an empty frame.
   let html; try { html = useMobile ? view.mobile(ctx) : view.desktop(ctx); }
@@ -708,7 +764,10 @@ function show(id, arg) {
   try { unsubs = view.mount?.(ctx, content) || []; } catch (e) { console.error(e); toast(e.message, 'bad'); }
   if (keep) restorePlace(content, keep); else content.scrollTop = 0;
   team?.repaint();
-  markRail(); if (store && !useMobile) paintBadges();
+  // What a sheet printed from here says about where it came from (js/print.js).
+  printFrom({ store: cur?.store || '', name: cur?.name || '', view: view.id, link: v => (cur?.store && !admin ? viewLink(cur.store, v) : '') });
+  if (view.id === 'resources' && store && cur?.store) answeredSeen(cur.store);
+  markRail(); if (store && !useMobile) paintBadges(); else if (store) paintBell();
   // A sheet closes when the view changes; a repaint of the same view (a
   // store update) leaves it open, so the launcher survives sign-in.
   if (prev !== view.id) $('#msheet')?.classList.remove('open');
@@ -759,7 +818,8 @@ const SHEET_X = `<button class="sheet-x" data-act="close-more" aria-label="${tx(
 function openLauncher() {
   let sh = $('#msheet'); if (!sh) { sh = document.createElement('div'); sh.id = 'msheet'; sh.className = 'm-launcher m-more'; $('#app').appendChild(sh); }
   const caps = client.session.current?.caps || [];
-  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>${tx('Where are you working?')}</h3>${SHEET_X}</div><p class="mv-sheet-sub">${tx('Pick your area to begin.')} ${(client.session.current?.roles || []).includes('manager') ? tx('Signed in as manager: every area is open.') : tx('Stockroom and Back dock ask for their crew code, which lasts one shift (12 hours) on this device.')}</p><div class="mv-tiles">${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled style="opacity:.5"'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : tx('Not on for this store')}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div></div>`;
+  const today = isManager() ? `<button class="mv-tile${ws === 'today' ? ' hot' : ''}" data-ws="today"><span class="ti">${ic('m-dashboard')}</span><span class="tx"><b>${tx('Today')}</b><span>${tx('The store at a glance: what needs you, each area, the devices')}</span></span><span></span>${ic('chev')}</button>` : '';
+  sh.innerHTML = `<div class="sheet"><div class="sheet-h"><h3>${tx('Where are you working?')}</h3>${SHEET_X}</div><p class="mv-sheet-sub">${tx('Pick your area to begin.')} ${(client.session.current?.roles || []).includes('manager') ? tx('Signed in as manager: every area is open.') : tx('Stockroom and Back dock ask for their crew code, which lasts one shift (12 hours) on this device.')}</p><div class="mv-tiles">${today}${WORKSPACES.map(w => { const on = caps.includes(w[0]); return `<button class="mv-tile${ws === w[0] ? ' hot' : ''}" data-ws="${w[0]}" ${on ? '' : 'disabled'}><span class="ti">${ic(w[2])}</span><span class="tx"><b>${w[1]}</b><span>${on ? w[3] : caps.includes(w[0]) ? w[3] : tx('Not on for this store')}</span></span><span>${hasArea(client.session, w[0]) || w[0] === 'floor' ? '' : ic('lock')}</span>${ic('chev')}</button>`; }).join('')}</div></div>`;
   sh.dataset.kind = ''; sh.classList.add('open');
 }
 // The phone's Departments picker: the whole floor; Home, Clothing and
@@ -804,6 +864,7 @@ document.addEventListener('click', e => {
     if (act === 'signout' || act === 'end-actas') signOut();
     else if (act === 'sheet') { sheetOpen = !sheetOpen; try { localStorage.setItem(SHEET_KEY, sheetOpen ? '1' : '0'); } catch {} paintSheet(); haptic('tap'); }
     else if (act === 'sync') openSync();
+    else if (act === 'alerts') openAlerts();
     else if (act === 'update-now') updates.apply();
     // The ? in the top bar and the phone's app bar: Help, at this screen's chapter of the guide.
     else if (act === 'guide') { if (store) show('help', { chapter: guideFor(current, isMobile()) }); }
@@ -822,7 +883,7 @@ document.addEventListener('click', e => {
   // a data-view element opens the view, with a store number for the
   // console's store rows.
   const v = e.target.closest('[data-view]'); if (v && !v.disabled) { if (v.closest('#omni, .sdd-r')) return; show(v.getAttribute('data-view'), v.dataset.no ? { no: v.dataset.no, ...(v.dataset.tab ? { tab: v.dataset.tab } : {}) } : undefined); return; }
-  const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor') { setWs('floor'); show('mhome'); } else show(HOME[target] || 'mhome'); return; }
+  const w = e.target.closest('[data-ws]'); if (w && !w.disabled) { $('#msheet')?.classList.remove('open'); const target = w.dataset.ws; if (target === ws) return; if (target === 'floor' || target === 'today') { setWs(target); show('mhome'); } else { if (ws === 'today') setWs(target); show(HOME[target] || 'mhome'); } return; }
   if (e.target.closest('.mdepts')) { if (store) (ws === 'floor' ? openDepts : openLauncher)(); return; }
   const dp = e.target.closest('[data-pickdept]'); if (dp) { $('#msheet')?.classList.remove('open'); const d = dp.dataset.pickdept; $('.mdepts')?.classList.toggle('on', d !== 'all'); show('map', { dept: d }); return; }
   // The store chip opens the device and store page (Settings); store details are still to come.

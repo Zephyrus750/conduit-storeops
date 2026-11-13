@@ -8,13 +8,14 @@
 // Adjustments: reportToIntel(). The list filters on the latest snapshot's
 // flags too: under two cartons (to pull) and 0 or less (to adjust).
 
-import { ic, esc, vh, sub, toast, mhead, fmtDate } from '../../ui.js';
+import { ic, esc, vh, sub, toast, mhead, fmtDate, empty, pill } from '../../ui.js';
 import { todayKey, kcCopy, ensureNames, nameOf, nameHtml, loadProfiles, allProfiles, profileOf, ctnOf, depthChip } from './common.js';
 import { openScreenScan } from '../../screenscan.js';
 import { parseReport, rowKey, sohBand, flagOf, flagsOf, historyOf, classify, checksFor, PRIORITY, BADGE, isoWeek, byLoc } from '../../../shared/stockintel.js';
 import { toolOff, toolForView } from '../../../shared/tools.js';
 import { tx, txn } from '../../i18n.js';
 import { ask } from '../../sheet.js';
+import { shrinkDays } from './adjust.js';
 
 // The snapshot history, fetched when the index changes.
 const cache = { key: null, snaps: null, loading: null, error: null, built: null };
@@ -43,7 +44,7 @@ export function bayRows(data, loc) {
   return snap.rows.filter(r => r.loc === want).map(r => { const ctn = ctnOf(r.kc); return { ...r, ctn, flag: flagOf(r.soh, ctn) }; })
     .sort((a, b) => (FLAG_ORDER[a.flag] ?? 2) - (FLAG_ORDER[b.flag] ?? 2) || a.kc.localeCompare(b.kc));
 }
-export const flagBadge = f => f === 'adjust' ? `<span class="sri-flag adjust" title="${tx('In a stockroom bay but the system says 0 or less: adjust it')}">ADJUST</span>` : f === 'pull' ? `<span class="sri-flag pull" title="${tx('Under two cartons in the whole store: the floor has most likely run out and the rest is out the back')}">PULL</span>` : '';
+export const flagBadge = f => f === 'adjust' ? pill('ADJUST', 'bad', { size: 'sm', title: tx('In a stockroom bay but the system says 0 or less: adjust it') }) : f === 'pull' ? pill('PULL', 'info', { size: 'sm', title: tx('Under two cartons in the whole store: the floor has most likely run out and the rest is out the back') }) : '';
 export function bayList(rows) {
   return `<div class="list sri-bay">${rows.map(r => `<div class="li"><span class="mono kc">${kcCopy(r.kc)}</span><span class="nm">${nameHtml(r.kc)}<small>${depthChip(r.kc)}</small></span>${bandSoh(r.soh, r.ctn)}${flagBadge(r.flag)}</div>`).join('')}</div>`;
 }
@@ -53,7 +54,7 @@ function lookupCard(ctx, data) {
   const n = rows ? { adjust: rows.filter(r => r.flag === 'adjust').length, pull: rows.filter(r => r.flag === 'pull').length } : null;
   return `<div class="card"><div class="ch"><h3>${tx('Look up a location')}</h3><span class="cs-dim">${data?.latest ? tx("from {date}'s report", { date: esc(fmtDate(data.latest.date)) }) : tx('no report yet')}</span></div>` +
     `<div class="search">${ic('search')}<input data-field="sri-loc" value="${esc(st.loc)}" placeholder="${tx('Location, e.g. 7002')}" inputmode="numeric"></div>` +
-    (!st.loc ? `<p class="lbl">${tx('Everything the report puts in one bay, with its stock on hand, carton size and what to pull or adjust.')}</p>` : !data?.latest ? '' : !rows.length ? `<p class="lbl">${tx('Nothing in location {loc} on the latest report.', { loc: esc(normLoc(st.loc)) })}</p>` :
+    (!st.loc ? `<p class="lbl">${tx('Everything the report puts in one bay, with its stock on hand, carton size and what to pull or adjust.')}</p>` : !data?.latest ? '' : !rows.length ? empty(tx('Nothing in location {loc} on the latest report.', { loc: esc(normLoc(st.loc)) }), { sm: true, icon: 'search' }) :
       `<p class="lbl">${txn(rows.length, '{n} item in {loc}', '{n} items in {loc}', { loc: esc(normLoc(st.loc)) })}${n.pull ? ` · ${tx('<b>{n} to pull</b>', { n: n.pull })}` : ''}${n.adjust ? ` · ${tx('<b>{n} to adjust</b>', { n: n.adjust })}` : ''}</p>${bayList(rows)}`) + '</div>';
 }
 
@@ -144,7 +145,7 @@ function flaggedRows(data) {
 }
 function classesCard(ctx, data) {
   if (!data) return `<div class="card"><div class="ch"><h3>${tx('Classes')}</h3></div><div class="ohint">${sohError() ? esc(sohError()) : tx('Loading the snapshots…')}</div></div>`;
-  if (!data.snaps.length) return `<div class="card"><div class="ch"><h3>${tx('Classes')}</h3></div><p class="lbl">${tx("No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving.")}</p></div>`;
+  if (!data.snaps.length) return `<div class="card"><div class="ch"><h3>${tx('Classes')}</h3></div>${empty(tx("No snapshot yet. Save today's SIM report or paste the SOH report here; the classes need three snapshots to tell flat from moving."), { icon: 'chart' })}</div>`;
   const rows = flaggedRows(data);
   const counts = Object.fromEntries([...FILTERS.map(f => [f, f === 'all' ? rows.length : rows.filter(r => r.cls === f).length]), ...FLAGS.map(f => [f, rows.filter(r => r.flag === f).length])]);
   const q = st.q.trim().toLowerCase(), byFlag = FLAGS.includes(st.filter);
@@ -154,7 +155,30 @@ function classesCard(ctx, data) {
   return `<div class="card"><div class="ch"><h3>${tx('Classes')}</h3><span class="cs-dim">${txn(data.snaps.length, '{n} snapshot · {from} to {to}', '{n} snapshots · {from} to {to}', { from: esc(data.snaps[0].date), to: esc(data.latest.date) })}</span></div>` +
     `<div class="sri-filters">${FILTERS.map(f => `<button class="chip${st.filter === f ? ' on' : ''}" data-act="sri-filter" data-f="${f}">${f === 'all' ? tx('All') : f[0].toUpperCase() + f.slice(1)} <b>${counts[f]}</b></button>`).join('')}` +
     `<span class="sri-fsep" aria-hidden="true"></span>${FLAGS.map(f => `<button class="chip flag ${f}${st.filter === f ? ' on' : ''}" data-act="sri-filter" data-f="${f}" title="${f === 'pull' ? tx('Under two cartons in the whole store: the floor has most likely run out and the rest is out the back') : tx('In a stockroom bay but the system says 0 or less: adjust it')}">${f === 'pull' ? tx('{n} to pull · under two cartons', { n: `<b>${counts.pull}</b>` }) : tx('{n} to adjust · 0 or less', { n: `<b>${counts.adjust}</b>` })}</button>`).join('')}<div class="search">${ic('search')}<input data-field="sri-q" value="${esc(st.q)}" placeholder="${tx('Keycode, location or name')}"></div></div>` +
-    `<div class="mfx-scroll"><table class="wb-t sri-t"><thead><tr><th>${tx('Class')}</th><th>${tx('Keycode')}</th><th>${tx('Product')}</th><th>${tx('Loc')}</th><th>${tx('Last {n}', { n: Math.min(12, data.snaps.length) })}</th><th class="n">SOH</th><th class="n">${tx('/ctn')}</th><th>${tx('Last landed')}</th></tr></thead><tbody>${list.slice(0, 300).map(r => `<tr><td>${clsBadge(r.cls, r.flat)}${r.flag ? ' ' + flagBadge(r.flag) : ''}${r.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${verify[`${r.kc}|${r.loc}`] ? ` <span class="status good">✓ ${tx('verified')}</span>` : ''}</td><td class="mono">${kcCopy(r.kc)}</td><td>${nameHtml(r.kc)}</td><td class="mono">${esc((r.locs || [r.loc]).join(' '))}</td><td>${spark(r.w, r.cls)}</td><td class="n">${bandSoh(r.latest, r.ctn)}</td><td class="n">${r.ctn || '—'}</td><td>${r.lastArrival?.date ? esc(fmtDate(r.lastArrival.date)) : '—'}</td></tr>`).join('') || `<tr><td colspan="8" class="cs-dim">${byFlag ? tx('Nothing flagged on the latest snapshot.') : tx('Nothing in this class.')}</td></tr>`}</tbody></table></div>${list.length > 300 ? `<p class="lbl">${tx('{n} more: search or pick a class to narrow.', { n: list.length - 300 })}</p>` : ''}</div>`;
+    `<div class="mfx-scroll"><table class="wb-t sri-t"><thead><tr><th>${tx('Class')}</th><th>${tx('Keycode')}</th><th>${tx('Product')}</th><th>${tx('Loc')}</th><th>${tx('Last {n}', { n: Math.min(12, data.snaps.length) })}</th><th class="n">SOH</th><th class="n">${tx('/ctn')}</th><th>${tx('Last landed')}</th></tr></thead><tbody>${list.slice(0, 300).map(r => `<tr><td>${clsBadge(r.cls, r.flat)}${r.flag ? ' ' + flagBadge(r.flag) : ''}${r.recount ? '<span class="sri-badge recount">RECOUNT</span>' : ''}${verify[`${r.kc}|${r.loc}`] ? ` <span class="status good">✓ ${tx('verified')}</span>` : ''}</td><td class="mono">${kcCopy(r.kc)}</td><td>${nameHtml(r.kc)}</td><td class="mono">${esc((r.locs || [r.loc]).join(' '))}</td><td>${spark(r.w, r.cls)}</td><td class="n">${bandSoh(r.latest, r.ctn)}</td><td class="n">${r.ctn || '—'}</td><td>${r.lastArrival?.date ? esc(fmtDate(r.lastArrival.date)) : '—'}</td></tr>`).join('') || `<tr><td colspan="8">${empty(byFlag ? tx('Nothing flagged on the latest snapshot.') : tx('Nothing in this class.'), { sm: true, icon: byFlag ? 'check' : 'search' })}</td></tr>`}</tbody></table></div>${list.length > 300 ? `<p class="lbl">${tx('{n} more: search or pick a class to narrow.', { n: list.length - 300 })}</p>` : ''}</div>`;
+}
+
+// Shrink over weeks (imp-shrinktrend): each week's adjusted and avoided
+// shrink from the Adjustments lists the log keeps, in one of the three
+// parts (to zero, zero up to one carton, combined), newest week last.
+const PARTS = [['total', tx('To zero')], ['carton', tx('To one carton')], ['combined', tx('Combined')]];
+const aud = v => v.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 });
+function shrinkCard(ctx) {
+  const part = st.shrinkPart || 'total', days = shrinkDays(ctx), weeks = new Map();
+  for (const d of days) {
+    const w = isoWeek(d.date), x = weeks.get(w) || { w, from: d.date, to: d.date, adj: 0, avo: 0, nAdj: 0, nAvo: 0 };
+    x.to = d.date; x.adj += d.adjusted[part] || 0; x.avo += d.avoided?.[part] || 0; x.nAdj += d.adjustedN; x.nAvo += d.avoidedN; weeks.set(w, x);
+  }
+  const list = [...weeks.values()].slice(-8), max = Math.max(1, ...list.map(x => Math.max(x.adj, x.avo)));
+  const pills = `<div class="pills sm">${PARTS.map(([k, l]) => `<button class="${part === k ? 'on' : ''}" data-act="sri-shrink" data-part="${k}" aria-pressed="${part === k}">${l}</button>`).join('')}</div>`;
+  const head = `<div class="ch"><h3>${tx('Shrink over weeks')}</h3>${pills}</div>`;
+  if (!list.some(x => x.nAdj || x.nAvo)) return `<div class="card sri-shrink">${head}${empty(tx('No adjustments recorded yet. Each day’s list adds to this once it is worked.'), { icon: 'chart', sm: true })}</div>`;
+  const tot = list.reduce((t, x) => ({ adj: t.adj + x.adj, avo: t.avo + x.avo }), { adj: 0, avo: 0 });
+  const bar = (v, cls, label) => `<i class="${cls} h-c" style="--h:${Math.max(v ? 3 : 0, Math.round(v / max * 100))}%" title="${esc(label)}"></i>`;
+  return `<div class="card sri-shrink">${head}` +
+    `<div class="sri-sh-tot"><span class="sh-a"><b>${aud(tot.adj)}</b>${tx('adjusted')}</span><span class="sh-v"><b>${aud(tot.avo)}</b>${tx('avoided')}</span><span class="cs-dim">${txn(list.length, 'over the last {n} week', 'over the last {n} weeks')}</span></div>` +
+    `<div class="sri-sh-bars" role="img" aria-label="${esc(tx('Adjusted and avoided shrink by week'))}">${list.map(x => `<div class="wk"><div class="pair">${bar(x.adj, 'sh-a', tx('{week}: {amount} adjusted · {n} items', { week: x.w, amount: aud(x.adj), n: x.nAdj }))}${bar(x.avo, 'sh-v', tx('{week}: {amount} avoided · {n} items', { week: x.w, amount: aud(x.avo), n: x.nAvo }))}</div><small>${esc(fmtDate(x.from))}</small></div>`).join('')}</div>` +
+    `<div class="sri-sh-key"><span><i class="sh-a"></i>${tx('Adjusted: ticked off as written off in the system')}</span><span><i class="sh-v"></i>${tx('Avoided: flagged, never adjusted by the day’s end')}</span></div></div>`;
 }
 
 function snapsCard(data) {
@@ -171,7 +195,7 @@ export default {
     if (st.parsed) ensureNames(ctx, [...new Set(Object.values(st.parsed.items).map(r => r.kc))], () => ctx.rerender());
     if (data?.history && st.filter !== 'all') ensureNames(ctx, flaggedRows(data).filter(r => (FLAGS.includes(st.filter) ? r.flag : r.cls) === st.filter).slice(0, 300).map(r => r.kc), () => ctx.rerender());
     const head = vh(tx('Stock intelligence'), sub(txn(n, '{n} snapshot', '{n} snapshots'), n ? tx('latest {date}', { date: esc(Object.keys(idx).sort().at(-1)) }) : tx('none yet'), 'STUCK · GHOST · FROZEN · DEEP'), `<button class="btn" data-view="daylist">${ic('m-daylist')}${tx('Day list')}</button>`, 'chart');
-    return head + `<div class="sri-grid"><div>${sendCard()}${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${lookupCard(ctx, data)}${snapsCard(data)}<div class="card"><div class="ch"><h3>${tx('How the classes work')}</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} ${tx('SOH has not moved for three snapshots although stock arrived: count it.')}</li><li>${clsBadge('ghost')} ${tx('The system says zero but stock arrived: count it.')}</li><li>${clsBadge('frozen', 3)} ${tx('Flat for three or more snapshots with nothing arriving: count it.')}</li><li>${clsBadge('deep')} ${tx('Flat, but two cartons or more on hand: a spot-check.')}</li><li>${clsBadge('new')} ${tx('Under three snapshots: not enough history yet.')}</li><li><span class="sri-badge recount">RECOUNT</span> ${tx('Re-cartoned within the last four trucks: count, do not spot-check.')}</li></ul></div></div></div>`;
+    return head + `<div class="sri-grid"><div>${sendCard()}${pastePanel(ctx, data)}${classesCard(ctx, data)}</div><div>${lookupCard(ctx, data)}${shrinkCard(ctx)}${snapsCard(data)}<div class="card"><div class="ch"><h3>${tx('How the classes work')}</h3></div><ul class="sri-help"><li>${clsBadge('stuck')} ${tx('SOH has not moved for three snapshots although stock arrived: count it.')}</li><li>${clsBadge('ghost')} ${tx('The system says zero but stock arrived: count it.')}</li><li>${clsBadge('frozen', 3)} ${tx('Flat for three or more snapshots with nothing arriving: count it.')}</li><li>${clsBadge('deep')} ${tx('Flat, but two cartons or more on hand: a spot-check.')}</li><li>${clsBadge('new')} ${tx('Under three snapshots: not enough history yet.')}</li><li><span class="sri-badge recount">RECOUNT</span> ${tx('Re-cartoned within the last four trucks: count, do not spot-check.')}</li></ul></div></div></div>`;
   },
   mount(ctx, root) {
     // From Reports & files: an SOH report pasted there, read here for its review.
@@ -184,6 +208,7 @@ export default {
       else if (act === 'sri-screen') openScreenScan(ctx, { mode: 'rows', onUse: ({ items }) => { const merged = { ...(st.parsed?.items || {}) }; for (const r of Object.values(items)) { const k = rowKey(r); merged[k] = merged[k] ? { ...merged[k], soh: r.soh, price: r.price ?? merged[k].price } : r; } st.parsed = { items: merged, skipped: st.parsed?.skipped || 0 }; const nRows = Object.keys(items).length; toast(txn(nRows, '{n} row read off the screen', '{n} rows read off the screen')); ctx.rerender(); } });
       else if (act === 'sri-clear') { st.parsed = null; st.text = ''; st.keep = false; ctx.rerender(); }
       else if (act === 'sri-filter') { st.filter = a.dataset.f; ctx.rerender(); }
+      else if (act === 'sri-shrink') { st.shrinkPart = a.dataset.part; ctx.rerender(); }
       else if (act === 'sri-save') {
         const items = Object.values(st.parsed?.items || {}); if (!items.length) return;
         st.busy = true; ctx.rerender();

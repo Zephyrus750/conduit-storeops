@@ -8,7 +8,7 @@
 
 import { focusDone } from '../../shared/reducers/floor.js';
 import { addDays, retailPeriod } from '../../shared/time.js';
-import { ic, esc, vh, greeting, today, fmtDay, fmtDate, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip } from '../ui.js';
+import { ic, esc, vh, greeting, today, fmtDay, fmtDate, dayOf, weekId, cycleId, daysLeftInCycle, timePassed, dep, DEPT_COLOUR, accChip, empty, pill } from '../ui.js';
 import { microCount, MICRO, microCode, microName } from '../data/micros.js';
 import { hasArea } from '../unlock.js';
 import { teamChip, openTeamFor } from '../team.js';
@@ -18,7 +18,7 @@ import { itemCartons } from './backdock/manifests.js';
 import { nameOf, ensureNames } from './stockroom/common.js';
 import { flags as palletFlags } from './backdock/receiving.js';
 import { settingsOf } from '../../shared/reducers/store.js';
-import { phaseChip, phaseLine, PHASE_NAME } from './backdock/phase.js';
+import { phaseChip, phaseLine, PHASE_NAME, PHASE_TONE } from './backdock/phase.js';
 import { PHASES, truckPhase, phaseSteps } from '../../shared/dockphase.js';
 import { ratesFor } from './backdock/plan.js';
 import { toolOff } from '../../shared/tools.js';
@@ -41,7 +41,7 @@ const OPEN = tx('issue status::Open');
 // still to do take the accent ring (styles/app.css).
 const doneTag = (cls, tag) => /\bdone\b/.test(cls || '') ? `<span class="status good donetag" title="${tag || tx('Done')}">${ic('check')}${tag || tx('Done')}</span>` : '';
 function kpi(cls, icon, title, go, n, d, hl, rows, pct, tag) {
-  return `<div class="card kpi${cls ? ' ' + cls : ''}"><div class="kh">${ic(icon)}<h3>${title}</h3>${doneTag(cls, tag)}<a class="open" data-go="${go}">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${n}</span><span class="d">${d}</span></div><div class="hl">${hl}</div><div class="rows">${rows.map(r => `<div class="row">${r[0]}<b${r[2] ? ` class="${r[2]}"` : ''}>${r[1]}</b></div>`).join('')}</div>${pct != null ? `<div class="prog"><div class="track"><i style="width:${Math.min(100, Math.round(pct))}%"></i></div><b>${Math.min(100, Math.round(pct))}%</b></div>` : ''}</div>`;
+  return `<div class="card kpi${cls ? ' ' + cls : ''}"><div class="kh">${ic(icon)}<h3>${title}</h3>${doneTag(cls, tag)}<a class="open" data-go="${go}">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${n}</span><span class="d">${d}</span></div><div class="hl">${hl}</div><div class="rows">${rows.map(r => `<div class="row">${r[0]}<b${r[2] ? ` class="${r[2]}"` : ''}>${r[1]}</b></div>`).join('')}</div>${pct != null ? `<div class="prog"><div class="track"><i style="--w:${Math.min(100, Math.round(pct))}%"></i></div><b>${Math.min(100, Math.round(pct))}%</b></div>` : ''}</div>`;
 }
 const lockedCard = (name, icon, view) => `<div class="card kpi locked"><div class="kh">${ic(icon)}<h3>${name}</h3></div><div class="hero"><span class="n">${ic('lock')}</span><span class="d">${tx('Needs the {area} code', { area: name })}</span></div><div class="hl">${tx('{area} figures stay on the worker until this device has the {area} or manager code.', { area: name })}</div><button type="button" class="btn" data-go="${view}">${ic('lock')}${tx('Enter the code')}</button></div>`;
 const chip = (t, k = '') => `<span class="status${k ? ' ' + k : ''}">${t}</span>`;
@@ -111,10 +111,10 @@ function dockMini(ctx, t) {
       `${fl ? `<span class="dkg-fl ${fl[0]}">${esc(fl[2])}</span>` : ''}${live ? `<span class="dkg-tm" data-dktick="${ref}">${fmtMins(workedMin(t, p, now))}</span>` : ''}${crew ? `<span class="dkg-who">${esc(crew)}</span>` : ''}` +
       `</div>`;
   }).join('');
-  const key = PTYPES.map(p => `<span><i style="background:${p[2]}"></i>${PT_SHORT[p[0]]}</span>`).join('') +
+  const key = PTYPES.map(p => `<span><i class="sw-c" style="--c:${p[2]}"></i>${PT_SHORT[p[0]]}</span>`).join('') +
     `<span><i class="dn"></i>${tx('Done')}</span><span><i class="ac"></i>${tx('Decanting')}</span>`;
   return `<div class="dkg"><div class="dkg-h"><b>${tx('The dock')}</b><span>${n ? txn(n, '{n} pallet on the dock', '{n} pallets on the dock') : tx('Every bay free')}</span></div>` +
-    `<div class="dkg-grid" style="grid-template-columns:repeat(${g.cols},minmax(0,1fr));max-width:${g.cols * 80}px">${cells}</div><div class="dkg-key">${key}</div></div>`;
+    `<div class="dkg-grid" style="--cols:${g.cols}">${cells}</div><div class="dkg-key">${key}</div></div>`;
 }
 // ── the pallet card ────────────────────────────────────────────────────
 // Hovering or focusing a pallet shows what is on it (its consols verified
@@ -123,21 +123,22 @@ function dockMini(ctx, t) {
 // worked against its estimate, pace, what needs a look). Built when shown,
 // in one of three sizes by the room there is: the full card, a compact one
 // of icons with values, or two lines of icons.
-const SVG = d => `<svg class="dkt-i" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+// The card's icons, from the app's set (icons.svg).
+const DI = name => ic(name, 'dkt-i');
 const I = {
-  box: SVG('<path d="M12 3l8 4.5v9l-8 4.5l-8-4.5v-9z"/><path d="M12 12l8-4.5"/><path d="M12 12v9"/><path d="M12 12l-8-4.5"/>'),
-  landed: SVG('<path d="M12 4v12"/><path d="M7 11l5 5l5-5"/><path d="M5 20h14"/>'),
-  start: SVG('<path d="M7 4v16l13-8z"/>'),
-  done: SVG('<path d="M5 12l5 5l10-10"/>'),
-  crew: SVG('<path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0-8 0"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>'),
-  clock: SVG('<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0"/><path d="M12 7v5l3 3"/>'),
-  scan: SVG('<path d="M4 7v-1a2 2 0 0 1 2-2h2"/><path d="M4 17v1a2 2 0 0 0 2 2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v1"/><path d="M16 20h2a2 2 0 0 0 2-2v-1"/><path d="M5 11h1v2h-1z"/><path d="M10 11v2"/><path d="M14 11h1v2h-1z"/><path d="M19 11v2"/>'),
-  lines: SVG('<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M5 6v.01"/><path d="M5 12v.01"/><path d="M5 18v.01"/>'),
-  back: SVG('<path d="M9 14l-5-5l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/>'),
+  box: DI('box'),
+  landed: DI('download'),
+  start: DI('play'),
+  done: DI('check'),
+  crew: DI('user'),
+  clock: DI('clock'),
+  scan: DI('barcode'),
+  lines: DI('list'),
+  back: DI('undo'),
 };
 const MARK = { active: '▶', paused: '⏸', done: '✓', sus: '⚠' };
 const STATE_CHIP = { landed: tx('Landed'), assigned: tx('Up next'), active: tx('Decanting'), paused: tx('Paused'), done: tx('Done'), out: tx('Left out') };
-const microBadge = code => microDept(code) ? dep(microDept(code)) : '<span class="dep" style="background:#94A3B8;color:#fff">?</span>';
+const microBadge = code => microDept(code) ? dep(microDept(code)) : '<span class="dep" style="--dc:#94A3B8;--di:#fff">?</span>';
 const badgeColour = code => DEPT_COLOUR[microDept(code)] || '#94A3B8';
 // Everything the card shows, worked out once for the size it is drawn in.
 function palData(t, p, now) {
@@ -159,16 +160,17 @@ function palData(t, p, now) {
     people: [...new Set(segs.map(x => x.pid))].join('+'), crewNow: openSegs(p).map(x => x.pid).join('+'),
     flags: palletFlags(t, p), scanned: (p.scanIds || []).length, verified: (p.consolIds || []).length };
 }
-const PACE_INK = { over: '#B91C1C', near: '#B45309', on: '#15803D', under: '#15803D', wait: '#6B7280' };
+// A pallet's pace as a text tone (t-*), which the dark appearance follows.
+const PACE_TONE = { over: 'bad', near: 'warn', on: 'good', under: 'good', wait: 'dim' };
 const workedText = d => d.segs.length ? (d.est ? tx('{time} worked of est {n} min', { time: fmtMins(d.worked), n: d.est }) : tx('{time} worked', { time: fmtMins(d.worked) })) : d.est ? tx('Not started · est {n} min', { n: d.est }) : tx('Not started');
 const clockText = d => d.est ? `${d.segs.length ? Math.round(d.worked) : 0}/${d.est}m` : d.segs.length ? fmtMins(d.worked) : '—';
 const scanText = d => d.scanned > d.verified ? `${d.verified}/${d.scanned}` : String(d.verified);
 const flagChips = d => `${d.p.carryover ? `<span class="dkt-fc co">↩ ${tx('carried over')}</span>` : ''}${d.flags.map(f => `<span class="dkt-fc ${f[0]}" title="${esc(f[1])}">${esc(f[2])}</span>`).join('')}`;
-const head = (d, big) => `<div class="dkt-h"><i class="dkt-sw" style="background:${PT_COLOUR[d.p.ptype] || '#69787F'}"></i><b>${big ? tx('Pallet {ref}', { ref: esc(d.p.ref) }) : esc(d.p.ref)}</b><span class="dkt-sub">${esc(big ? PT_ONE[d.p.ptype] || d.p.ptype || '' : PT_SHORT[d.p.ptype] || '')} · ${big ? txn(d.p.cartons || 0, '{n} carton', '{n} cartons') : tx('{n} ctn', { n: d.p.cartons ?? '–' })}</span><span class="dkt-st st-${d.s}">${STATE_CHIP[d.s] || esc(d.s)}</span></div>`;
+const head = (d, big) => `<div class="dkt-h"><i class="dkt-sw sw-c" style="--c:${PT_COLOUR[d.p.ptype] || '#69787F'}"></i><b>${big ? tx('Pallet {ref}', { ref: esc(d.p.ref) }) : esc(d.p.ref)}</b><span class="dkt-sub">${esc(big ? PT_ONE[d.p.ptype] || d.p.ptype || '' : PT_SHORT[d.p.ptype] || '')} · ${big ? txn(d.p.cartons || 0, '{n} carton', '{n} cartons') : tx('{n} ctn', { n: d.p.cartons ?? '–' })}</span><span class="dkt-st st-${d.s}">${STATE_CHIP[d.s] || esc(d.s)}</span></div>`;
 function cardFull(d) {
   const top = d.micros.slice(0, 4), max = Math.max(1, ...top.map(m => m.ctn)), pr = d.items.slice(0, 3);
   const ver = d.verified ? `<span class="dkt-ver">${I.scan}${d.verified === 1 ? `<span class="mono">${esc(d.cons[0]?.id || d.p.consolIds[0])}</span> ${tx('verified')}` : txn(d.verified, '{n} consol verified', '{n} consols verified')}</span>` : `<span class="dkt-ver no">${tx('No consol verified yet')}</span>`;
-  const on = d.cons.length ? `<div class="dkt-mx">${top.map(m => `${microBadge(m.code)}<span class="dkt-mn"><b class="mono">${esc(m.code)}</b> ${esc(microTitle(m.code) || tx('Unknown micro-department'))}</span><span class="dkt-bar"><i style="width:${Math.round(m.ctn / max * 100)}%"></i></span><span class="dkt-nu">${tx('{n} ctn', { n: m.ctn })} · ${tx('{n}u', { n: m.u })}</span>`).join('')}</div>` +
+  const on = d.cons.length ? `<div class="dkt-mx">${top.map(m => `${microBadge(m.code)}<span class="dkt-mn"><b class="mono">${esc(m.code)}</b> ${esc(microTitle(m.code) || tx('Unknown micro-department'))}</span><span class="dkt-bar"><i style="--w:${Math.round(m.ctn / max * 100)}%"></i></span><span class="dkt-nu">${tx('{n} ctn', { n: m.ctn })} · ${tx('{n}u', { n: m.u })}</span>`).join('')}</div>` +
       (d.micros.length > 4 ? `<div class="dkt-more">${tx('{n} more micro-departments', { n: d.micros.length - 4 })}</div>` : '') +
       (pr.length ? `<div class="dkt-pr">${pr.map(x => `<div><span class="mono">${esc(x.k)}</span><span class="dkt-pn">${esc(nameOf(x.k) || '')}</span><b>${x.u}</b></div>`).join('')}<div class="dkt-more">${d.items.length > 3 ? tx('+{n} more lines · {u} units in all', { n: d.items.length - 3, u: d.units }) : txn(d.units, '{n} unit in all', '{n} units in all')}</div></div>` : '')
     : `<div class="dkt-more">${tx('Scan its label at Receiving to see what is on it.')}</div>`;
@@ -178,24 +180,24 @@ function cardFull(d) {
     `<div class="dkt-sec"><div class="dkt-lbl"><span>${tx('On this pallet')}</span>${ver}</div>${on}</div><div class="dkt-div"></div>` +
     `<div class="dkt-sec"><div class="dkt-lbl"><span>${tx('Decant')}</span></div><div class="dkt-kv"><div><span>${tx('Landed')}</span><b>${d.p.landedAt ? fmtHM(d.p.landedAt) : '—'}</b></div>` +
     `<div><span>${d.p.doneAt ? tx('Finished') : tx('Started')}</span><b>${d.p.doneAt ? fmtHM(d.p.doneAt) : d.segs[0] ? fmtHM(d.segs[0].start) : '—'}</b></div><div><span>${tx('Crew')}</span><b>${esc(d.crewNow || d.people) || '—'}</b></div></div>` +
-    `<div class="dkt-wk"><span>${workedText(d)}</span><b style="color:${PACE_INK[d.paceKey]}">${pace}</b></div><div class="dkt-bar wide"><i style="width:${bar}%;background:${PACE_INK[d.paceKey]}"></i></div></div>` +
+    `<div class="dkt-wk"><span>${workedText(d)}</span><b class="t-${PACE_TONE[d.paceKey]}">${pace}</b></div><div class="dkt-bar wide t-${PACE_TONE[d.paceKey]}"><i style="--w:${bar}%"></i></div></div>` +
     (d.flags.length ? `<div class="dkt-sec dkt-fl"><div class="dkt-lbl"><span>${tx('Needs a look')}</span></div>${d.flags.map(f => `<div><span class="dkt-fc ${f[0]}">${esc(f[2])}</span>${esc(f[1])}</div>`).join('')}</div>` : '') + `</div>`;
 }
-const iv = (icon, v, label, ink = '') => `<span class="dkt-iv" title="${label}"${ink ? ` style="color:${ink}"` : ''}>${icon}<span class="sr">${label}</span>${v}</span>`;
+const iv = (icon, v, label, tone = '') => `<span class="dkt-iv${tone ? ' inked t-' + tone : ''}" title="${label}">${icon}<span class="sr">${label}</span>${v}</span>`;
 function cardCompact(d) {
   const top = d.micros.slice(0, 4), first = d.items[0];
   return `<div class="dkt-cmp">${head(d, false)}` +
-    (d.cons.length ? `<div class="dkt-mixbar">${d.micros.map(m => `<i style="flex:${Math.max(1, m.ctn)};background:${badgeColour(m.code)}"></i>`).join('')}</div>` +
+    (d.cons.length ? `<div class="dkt-mixbar">${d.micros.map(m => `<i style="--f:${Math.max(1, m.ctn)};--c:${badgeColour(m.code)}"></i>`).join('')}</div>` +
       `<div class="dkt-chips">${top.map(m => `<span>${microBadge(m.code)}<span class="mono">${esc(m.code)}</span>${m.ctn}</span>`).join('')}${d.micros.length > 4 ? `<span class="dkt-more">+${d.micros.length - 4}</span>` : ''}</div>` +
       (first ? `<div class="dkt-top">${esc(nameOf(first.k) || first.k)} <b>×${first.u}</b>${d.items.length > 1 ? ` <span class="dkt-more">· ${tx('+{n} more', { n: d.items.length - 1 })}</span>` : ''}</div>` : '')
     : `<div class="dkt-more">${tx('No consol verified yet')}</div>`) +
-    `<div class="dkt-ig">${iv(I.landed, d.p.landedAt ? fmtHM(d.p.landedAt) : '—', tx('Landed'))}${d.p.doneAt ? iv(I.done, fmtHM(d.p.doneAt), tx('Finished'), '#15803D') : iv(I.start, d.segs[0] ? fmtHM(d.segs[0].start) : '—', tx('Started'))}` +
-    `${iv(I.crew, esc(d.crewNow || d.people) || '—', tx('Crew'))}${iv(I.clock, clockText(d), tx('Worked of its estimate'), PACE_INK[d.paceKey])}${iv(I.scan, scanText(d), tx('Consols verified'), d.verified ? '#15803D' : '')}${iv(I.lines, `${d.items.length} · ${tx('{n}u', { n: d.units })}`, tx('Lines and units'))}</div>` +
+    `<div class="dkt-ig">${iv(I.landed, d.p.landedAt ? fmtHM(d.p.landedAt) : '—', tx('Landed'))}${d.p.doneAt ? iv(I.done, fmtHM(d.p.doneAt), tx('Finished'), 'good') : iv(I.start, d.segs[0] ? fmtHM(d.segs[0].start) : '—', tx('Started'))}` +
+    `${iv(I.crew, esc(d.crewNow || d.people) || '—', tx('Crew'))}${iv(I.clock, clockText(d), tx('Worked of its estimate'), PACE_TONE[d.paceKey])}${iv(I.scan, scanText(d), tx('Consols verified'), d.verified ? 'good' : '')}${iv(I.lines, `${d.items.length} · ${tx('{n}u', { n: d.units })}`, tx('Lines and units'))}</div>` +
     (d.flags.length || d.p.carryover ? `<div class="dkt-fcs">${flagChips(d)}</div>` : '') + `</div>`;
 }
 function cardMini(d) {
-  return `<div class="dkt-mini"><div class="dkt-ml"><span class="dkt-iv"><i class="dkt-sw" style="background:${PT_COLOUR[d.p.ptype] || '#69787F'}"></i><b>${esc(d.p.ref)}</b>${MARK[d.p.suspect ? 'sus' : d.s] ? `<span class="dkt-mk st-${d.s}" title="${STATE_CHIP[d.s] || ''}">${MARK[d.p.suspect ? 'sus' : d.s]}</span>` : ''}</span>${iv(I.box, d.p.cartons ?? '–', tx('Cartons'))}${iv(I.clock, clockText(d), tx('Worked of its estimate'), PACE_INK[d.paceKey])}${d.crewNow || d.people ? iv(I.crew, esc(d.crewNow || d.people), tx('Crew')) : ''}</div>` +
-    `<div class="dkt-ml">${d.micros.slice(0, 3).map(m => `<span class="dkt-iv">${microBadge(m.code)}${m.ctn}</span>`).join('')}${d.micros.length > 3 ? `<span class="dkt-more">+${d.micros.length - 3}</span>` : ''}${iv(I.scan, scanText(d), tx('Consols verified'), d.verified ? '#15803D' : '')}</div>` +
+  return `<div class="dkt-mini"><div class="dkt-ml"><span class="dkt-iv"><i class="dkt-sw sw-c" style="--c:${PT_COLOUR[d.p.ptype] || '#69787F'}"></i><b>${esc(d.p.ref)}</b>${MARK[d.p.suspect ? 'sus' : d.s] ? `<span class="dkt-mk st-${d.s}" title="${STATE_CHIP[d.s] || ''}">${MARK[d.p.suspect ? 'sus' : d.s]}</span>` : ''}</span>${iv(I.box, d.p.cartons ?? '–', tx('Cartons'))}${iv(I.clock, clockText(d), tx('Worked of its estimate'), PACE_TONE[d.paceKey])}${d.crewNow || d.people ? iv(I.crew, esc(d.crewNow || d.people), tx('Crew')) : ''}</div>` +
+    `<div class="dkt-ml">${d.micros.slice(0, 3).map(m => `<span class="dkt-iv">${microBadge(m.code)}${m.ctn}</span>`).join('')}${d.micros.length > 3 ? `<span class="dkt-more">+${d.micros.length - 3}</span>` : ''}${iv(I.scan, scanText(d), tx('Consols verified'), d.verified ? 'good' : '')}</div>` +
     (d.flags.length || d.p.carryover ? `<div class="dkt-fcs">${flagChips(d)}</div>` : '') + `</div>`;
 }
 const CARDS = { full: cardFull, compact: cardCompact, mini: cardMini };
@@ -274,7 +276,7 @@ function dockCard(ctx, r) {
     // closed today (shown as Closed until the next truck lands).
     const ph = t ? truckPhase(t) : last ? 'closed' : null, shown = t || last;
     const steps = ph ? `<ol class="dk-steps6" aria-label="${tx('Truck phase')}">${PHASES.map((x, i) => `<li class="${phaseSteps(ph)[i]}"${x === ph ? ' aria-current="step"' : ''}><i></i><span>${PHASE_NAME[x]}</span></li>`).join('')}</ol>` : '';
-    const chip = shown ? `<span class="phb-chip ph-${ph}">${PHASE_NAME[ph]}</span> <b>${tx('Truck {no}', { no: esc(truckNo(shown.id)) })}</b>` : `<span class="phb-chip dock-st ${none || awayDay ? 'none' : 'idle'}${awayDay ? ' away' : ''}">${none ? tx('No trucks today') : awayDay ? awayTitle : tx('No truck on the dock')}</span>`;
+    const chip = shown ? `${pill(PHASE_NAME[ph], PHASE_TONE[ph], { size: 'sm', live: ph === 'decanting' })} <b>${tx('Truck {no}', { no: esc(truckNo(shown.id)) })}</b>` : pill(none ? tx('No trucks today') : awayDay ? awayTitle : tx('No truck on the dock'), awayDay ? 'warn' : none ? 'info' : '', { size: 'sm' });
     const cartons = done.reduce((n, h) => n + (h.cartons || 0), 0) + onDock.reduce((n, x) => n + progress(x).done, 0);
     const row = (label, value) => `<div class="row">${label}<b>${value}</b></div>`;
     const common = row(tx('Trucks today'), planned ? tx('{done} of {n} cleared', { done: done.length, n: planned }) : none ? tx('none · confirmed in the Planner') : awayDay ? txn(away.length, '{n} not coming to the dock', '{n} not coming to the dock') : '—') +
@@ -286,7 +288,7 @@ function dockCard(ctx, r) {
     const fin = !t && (planned ? done.length >= planned : none || awayDay), cls = fin ? 'done' : planned ? 'todo' : '';
     const open = `<a class="open" data-go="receiving">${tx('Open')} ${ic('arrow')}</a>`, head = `<div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3>${doneTag(cls)}${open}</div><div class="dk-chip">${chip}</div>${steps}`;
     const dayHero = `<div class="hero"><span class="n">${done.length}</span><span class="d">${planned ? tx('/ {n} trucks cleared today', { n: planned }) : txn(done.length, 'truck cleared today', 'trucks cleared today')}</span></div>`;
-    const dayBar = planned ? `<div class="prog"><div class="track"><i style="width:${Math.round(done.length / planned * 100)}%"></i></div><b>${Math.round(done.length / planned * 100)}%</b></div>` : '';
+    const dayBar = planned ? `<div class="prog"><div class="track"><i style="--w:${Math.round(done.length / planned * 100)}%"></i></div><b>${Math.round(done.length / planned * 100)}%</b></div>` : '';
     // No truck on the dock, or one planned but not landed: the day's trucks.
     if (!t || ph === 'planned') {
       const wait = next ? tx('Waiting for truck {no}', { no: next[0] }) : '';
@@ -297,11 +299,11 @@ function dockCard(ctx, r) {
     const pr = progress(t), halt = openHalt(t), fc = forecast(t, Date.now(), ratesFor(ctx.store.get('dock'))), crew = (t.team || []).length;
     const facts = [t.landedAt ? tx('landed {time}', { time: fmtHM(t.landedAt) }) : '', crew ? tx('{n} crew', { n: crew }) : '', t.goalAt ? tx('goal {time}', { time: fmtHM(t.goalAt) }) : ''].filter(Boolean).join(' · ');
     return `<div class="card kpi dk todo">${head}<div class="hero"><span class="n">${pr.done}</span><span class="d">${tx('/ {total} cartons decanted', { total: pr.total })}</span></div><div class="hl">${phaseLine(t)}${facts ? ` · ${facts}` : ''}</div>${dockMini(ctx, t)}` +
-      `<div class="rows">${halt ? `<div class="row">${tx('On hold')}<b class="c-red">${tx('{hold} since {time}', { hold: esc(holdName(halt)), time: fmtHM(halt.start) })}</b></div>` : ''}${row(tx('Pallets done'), `${pr.doneCount} / ${pr.count}`)}${row(tx('Forecast finish'), fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—')}${common}</div><div class="prog"><div class="track"><i style="width:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
+      `<div class="rows">${halt ? `<div class="row">${tx('On hold')}<b class="c-red">${tx('{hold} since {time}', { hold: esc(holdName(halt)), time: fmtHM(halt.start) })}</b></div>` : ''}${row(tx('Pallets done'), `${pr.doneCount} / ${pr.count}`)}${row(tx('Forecast finish'), fc.at ? fmtHM(new Date(fc.at).toISOString()) : '—')}${common}</div><div class="prog"><div class="track"><i style="--w:${pr.pct}%"></i></div><b>${pr.pct}%</b></div></div>`;
   }
   const rows = (dock.history || []).filter(h => inRange(h.id.slice(0, 10), r)), cartons = rows.reduce((n, h) => n + (h.cartons || 0), 0);
   const trucks = period === 'week' ? txn(rows.length, 'truck this week', 'trucks this week') : txn(rows.length, 'truck in {month}', 'trucks in {month}', { month: esc(r.label) });
-  return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3><a class="open" data-go="rhistory">${tx('History')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${rows.length}</span><span class="d">${trucks}</span></div><div class="hl">${txn(cartons, '{n} carton decanted', '{n} cartons decanted', { n: cartons.toLocaleString() })}</div><div class="rows">${rows.slice(-4).reverse().map(h => `<div class="row">${esc(h.id.slice(5, 10))} · T${esc(truckNo(h.id))}<b>${h.teamRate ? tx('{n} ctn · {time} · {rate}/h', { n: h.cartons, time: fmtMins(h.clearMins || 0), rate: h.teamRate }) : tx('{n} ctn · {time}', { n: h.cartons, time: fmtMins(h.clearMins || 0) })}</b></div>`).join('') || `<div class="row">${tx('No trucks cleared yet')}<b>—</b></div>`}</div></div>`;
+  return `<div class="card kpi dk"><div class="kh">${ic('m-receiving')}<h3>${tx('Back dock')}</h3><a class="open" data-go="rhistory">${tx('History')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${rows.length}</span><span class="d">${trucks}</span></div><div class="hl">${txn(cartons, '{n} carton decanted', '{n} cartons decanted', { n: cartons.toLocaleString() })}</div><div class="rows">${rows.slice(-4).reverse().map(h => `<div class="row">${esc(h.id.slice(5, 10))} · T${esc(truckNo(h.id))}<b>${h.teamRate ? tx('{n} ctn · {time} · {rate}/h', { n: h.cartons, time: fmtMins(h.clearMins || 0), rate: h.teamRate }) : tx('{n} ctn · {time}', { n: h.cartons, time: fmtMins(h.clearMins || 0) })}</b></div>`).join('') || empty(tx('No trucks cleared yet'), { sm: true, icon: 'truck' })}</div></div>`;
 }
 function maintCard(ctx, r) {
   const all = Object.values(ctx.store.get('issues')).filter(i => !i.removed), open = all.filter(i => i.status !== 'completed');
@@ -310,7 +312,7 @@ function maintCard(ctx, r) {
   const hs = period === 'today' ? tx('open · {logged} logged today · {waiting} done, waiting for sign-off', { logged, waiting }) : period === 'week' ? tx('open · {logged} logged this week · {waiting} done, waiting for sign-off', { logged, waiting }) : tx('open · {logged} logged in {month} · {waiting} done, waiting for sign-off', { logged, waiting, month: esc(r.label) });
   const cls = open.length ? 'todo' : 'done';
   return `<div class="card kpi mt ${cls}"><div class="kh">${ic('tool')}<h3>${tx('Maintenance')}</h3>${doneTag(cls, tx('All clear'))}<a class="open" data-go="maintenance">${tx('Open')} ${ic('arrow')}</a></div><div class="hero"><span class="n">${open.length}</span><span class="hs">${hs}</span></div>` +
-    `<div class="rows">${list.map(i => `<div class="row"><span class="l"><span class="pt" style="background:${i.status === 'open' ? '#DC2626' : '#D97706'}"></span><span><b>${esc(i.title)}</b><span class="where">${esc(i.loc || '')}${i.dept ? ' ' + dep(i.dept) : ''} · ${timePassed(i.created)}</span></span></span><span class="r"><span class="pri p${Math.min(3, (i.sev ?? 1) + 1)}" title="${tx('{sev} severity', { sev: SEV[i.sev ?? 1][0] })}"><i></i><i></i><i></i></span>${chip(i.status === 'open' ? OPEN : tx('Done, to check'), i.status === 'open' ? 'warn' : 'info')}</span></div>`).join('') || `<div class="row">${tx('Nothing open')}<b>✓</b></div>`}</div></div>`;
+    `<div class="rows">${list.map(i => `<div class="row"><span class="l"><span class="pt ${i.status === 'open' ? 'k-red' : 'k-amber'}"></span><span><b>${esc(i.title)}</b><span class="where">${esc(i.loc || '')}${i.dept ? ' ' + dep(i.dept) : ''} · ${timePassed(i.created)}</span></span></span><span class="r"><span class="pri p${Math.min(3, (i.sev ?? 1) + 1)}" title="${tx('{sev} severity', { sev: SEV[i.sev ?? 1][0] })}"><i></i><i></i><i></i></span>${chip(i.status === 'open' ? OPEN : tx('Done, to check'), i.status === 'open' ? 'warn' : 'info')}</span></div>`).join('') || empty(tx('Nothing open'), { sm: true, icon: 'check' })}</div></div>`;
 }
 
 // ── the operations register ────────────────────────────────────────────
@@ -353,21 +355,21 @@ function morning(ctx) {
   const meta = srOk ? ctx.store.get('backfill')?.report : null;
   const rep = meta?.date === t ? meta : report && srOk ? { at: report.at, bays: Object.keys(report.byLoc || {}).length, codes: Object.values(report.byLoc || {}).reduce((n, l) => n + l.length, 0) } : null, midday = rep && new Date(rep.at).getHours() >= 12;
   const A = [
-    srOk && [`${tx('Morning inventory report')} <span class="chip due">${tx('Required')}</span>`, rep ? tx('Pasted {time} · {bays} bays · {codes} codes', { time: fmtHM(new Date(rep.at).toISOString()), bays: rep.bays, codes: rep.codes }) : tx('Not pasted yet · the board compares against nothing until it is'), !!rep, tx('Paste whole report'), tx('Re-paste'), 'paste'],
+    srOk && [`${tx('Morning inventory report')} ${pill(tx('Required'), 'warn', { size: 'sm' })}`, rep ? tx('Pasted {time} · {bays} bays · {codes} codes', { time: fmtHM(new Date(rep.at).toISOString()), bays: rep.bays, codes: rep.codes }) : tx('Not pasted yet · the board compares against nothing until it is'), !!rep, tx('Paste whole report'), tx('Re-paste'), 'paste'],
     dockOk && (none ? [tx('Manifests for today’s trucks'), tx('No trucks today · confirmed in the Planner') + tmrw, true, '', tx('Open'), 'planner'] : away.length ? [tx('Manifests for today’s trucks'), tx('Not coming to the dock today: {list}', { list: awayList }) + tmrw, true, '', tx('Open'), 'planner'] : manRow(mans, lib, tmrw, dock, t)),
     dockOk && none ? [tx('Planner'), tx('No trucks today · confirmed'), true, '', tx('Open'), 'planner'] : dockOk && away.length ? [tx('Planner'), tx('{list} · marked in the Planner', { list: awayList }), true, '', tx('Open'), 'planner'] : dockOk && [tx('Planner'), mans.length ? `${mans.map(([n]) => { const sl = slots.find(x => Number(x[0]) === n)?.[1]; return `T${n}${sl?.eta ? ' ' + sl.eta : tr.find(x => x[0] === n) ? ' ' + tr.find(x => x[0] === n)[2] : ''}`; }).join(' · ')}${slots.length && slots.every(([, s]) => (s.team || []).length) ? ' · ' + tx('teams set') : ''}` : tx('Today’s trucks not planned · or confirm no trucks in the Planner'), mans.length > 0, tx('Plan today’s trucks'), tx('Open'), 'planner'],
   ].filter(Boolean);
   const B = [
     dockOk && none ? [tx('First truck decant'), tx('No trucks today'), true, '', tx('Open'), 'planner'] : dockOk && away.length ? [tx('First truck decant'), tx('No truck to decant today'), true, '', tx('Open'), 'planner'] : dockOk && [tx('First truck decant'), !first ? tx('No truck on the dock yet today') : first.status === 'closed' || first.clearMins != null ? tx('Closed · {time}', { time: fmtMins(first.clearMins || 0) }) : first.goalAt ? tx('goal {time} · {pct}% decanted', { time: fmtHM(first.goalAt), pct: progress(first).pct }) : tx('{pct}% decanted', { pct: progress(first).pct }), !!first && (first.status === 'closed' || first.clearMins != null), tx('Open the dock'), tx('History'), first && first.clearMins != null ? 'rhistory' : 'receiving'],
     // Optional: the midday report takes about ten minutes to make, so it never holds the list back.
-    srOk && [`${tx('Midday report')} <span class="chip opt">${tx('Optional')}</span>`, midday ? tx('Pasted {time}', { time: fmtHM(new Date(rep.at).toISOString()) }) : tx('After 12:00 if there is time · the room moves after the next truck lands'), !!midday, tx('Paste whole report'), tx('Re-paste'), 'paste', true],
+    srOk && [`${tx('Midday report')} ${pill(tx('Optional'), 'info', { size: 'sm' })}`, midday ? tx('Pasted {time}', { time: fmtHM(new Date(rep.at).toISOString()) }) : tx('After 12:00 if there is time · the room moves after the next truck lands'), !!midday, tx('Paste whole report'), tx('Re-paste'), 'paste', true],
     [tx('Label integrity · today’s department'), liToday.length ? tx('{list} · checked', { list: liToday.map(([id]) => { const [sid, code] = id.split('-'); const e = (MICRO[sid] || []).find(x => microCode(x) === code); return `${esc(sid.toUpperCase())} ${esc(code)}${e ? ' ' + esc(microName(e)) : ''}`; }).join(' · ') }) : tx('pick the micro-department and print the sheet'), liToday.length > 0, tx('Pick department'), tx('Open'), 'labelint'],
   ].filter(Boolean);
   // 'paste' opens the paste pop-up on the clipboard instead of a screen.
   const row = ([title, text, done, act, again, go]) => { const to = go === 'paste' ? 'data-paste="report"' : `data-go="${go}"`; return `<div class="mrow${done ? ' done' : ''}"><span class="mst">${done ? ic('check') : ''}</span><div class="mtx"><b>${title}</b><span>${text}</span></div>${done ? `<a ${to}>${again}</a>` : `<button class="mact" ${to}>${ic(go === 'paste' ? 'clip' : 'arrow')}${act}</button>`}</div>`; };
   const counted = B.filter(x => !x[6] || x[2]), dA = A.filter(x => x[2]).length, dB = counted.filter(x => x[2]).length;
-  return `<div class="morn">${A.length ? `<div class="mh"><b>${tx('Morning setup')}</b><span class="cs-dim">${dA === A.length ? tx('{done} of {total} · complete', { done: dA, total: A.length }) : tx('{done} of {total} · do these first', { done: dA, total: A.length })}</span><span class="mprog"><i style="width:${Math.round(dA / A.length * 100)}%"></i></span></div>${A.map(row).join('')}` : ''}` +
-    `<div class="mh later"><b>${tx('Later today')}</b><span class="cs-dim">${tx('{done} of {total}', { done: dB, total: counted.length })}</span><span class="mprog"><i style="width:${counted.length ? Math.round(dB / counted.length * 100) : 0}%"></i></span></div>${B.map(row).join('')}</div>`;
+  return `<div class="morn">${A.length ? `<div class="mh"><b>${tx('Morning setup')}</b><span class="cs-dim">${dA === A.length ? tx('{done} of {total} · complete', { done: dA, total: A.length }) : tx('{done} of {total} · do these first', { done: dA, total: A.length })}</span><span class="mprog"><i style="--w:${Math.round(dA / A.length * 100)}%"></i></span></div>${A.map(row).join('')}` : ''}` +
+    `<div class="mh later"><b>${tx('Later today')}</b><span class="cs-dim">${tx('{done} of {total}', { done: dB, total: counted.length })}</span><span class="mprog"><i style="--w:${counted.length ? Math.round(dB / counted.length * 100) : 0}%"></i></span></div>${B.map(row).join('')}</div>`;
 }
 function register(ctx, r) {
   const caps = ctx.session.current?.caps || [], need = [];
@@ -417,7 +419,7 @@ const dashHead = ctx => vh(`<span class="greet">${greeting()}</span><span id="da
 function dashTop(ctx) {
     const r = range(), reg = register(ctx, r);
     return `<div class="dash"><div class="kpis">${backfillCard(ctx, r)}${refreshCard(ctx, r)}${labelsCard(ctx, r)}</div><div class="side2">${dockCard(ctx, r)}${maintCard(ctx, r)}</div>` +
-      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>${tx('Operations register')}</h3></div><div class="hl">${tx('{n} tools', { n: reg.count })} · <b style="color:var(--ink);font-weight:600">${tx('{n} need attention', { n: reg.need })}</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">${tx('Modules')}</div>${reg.html}</div></div>`;
+      `<div class="card kpi reg2 register"><div class="kh">${ic('grid')}<h3>${tx('Operations register')}</h3></div><div class="hl">${tx('{n} tools', { n: reg.count })} · <b class="t-ink semi">${tx('{n} need attention', { n: reg.need })}</b></div>${period === 'today' ? morning(ctx) : ''}<div class="reg-lbl">${tx('Modules')}</div>${reg.html}</div></div>`;
 }
 
 export default {

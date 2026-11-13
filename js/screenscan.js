@@ -14,7 +14,7 @@
 //           'list' (codes for the barcode list)
 //     onUse({ codes, locs, items }) receives what was read when the person uses it.
 
-import { ic, esc, toast } from './ui.js';
+import { ic, esc, toast, empty } from './ui.js';
 import { otsu, wordsToRows, ingest, filtered, locVerdict, matchPreset } from '../shared/screenscan.js';
 import { parseReport, byLoc } from '../shared/stockintel.js';
 import { csvLines } from '../shared/records.js';
@@ -157,12 +157,12 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
       const rows = Object.values(items).sort((a, b) => byLoc(a.loc, b.loc) || a.kc.localeCompare(b.kc));
       const nLocs = new Set(rows.map(r => r.loc)).size;
       $('.ss-count b').textContent = rows.length; $('.ss-flags').textContent = rows.length ? txn(nLocs, '{n} location · rows merge by keycode, so overlapping frames are harmless', '{n} locations · rows merge by keycode, so overlapping frames are harmless') : '';
-      $('.ss-list').innerHTML = rows.length ? `<table class="wb-t"><thead><tr><th>${tx('Loc')}</th><th>${tx('Keycode')}</th><th class="n">SOH</th><th class="n">${tx('Price')}</th></tr></thead><tbody>${rows.slice(0, 400).map(r => `<tr><td class="mono">${esc(r.loc)}</td><td class="mono">${esc(r.kc)}</td><td class="n">${r.soh}</td><td class="n">${r.price ?? ''}</td></tr>`).join('')}</tbody></table>` : `<p class="lbl">${tx('Rows appear here as frames are read.')}</p>`;
+      $('.ss-list').innerHTML = rows.length ? `<table class="wb-t"><thead><tr><th>${tx('Loc')}</th><th>${tx('Keycode')}</th><th class="n">SOH</th><th class="n">${tx('Price')}</th></tr></thead><tbody>${rows.slice(0, 400).map(r => `<tr><td class="mono">${esc(r.loc)}</td><td class="mono">${esc(r.kc)}</td><td class="n">${r.soh}</td><td class="n">${r.price ?? ''}</td></tr>`).join('')}</tbody></table>` : empty(tx('Rows appear here as frames are read.'), { sm: true, icon: 'table' });
     } else {
       const all = Object.keys(tally.codes), codes = filtered(tally, showAll), hidden = all.length - codes.length;
       $('.ss-count b').textContent = codes.length;
       $('.ss-flags').innerHTML = `${lv.state === 'match' ? `<span class="status good">${tx('✓ Location {loc} verified', { loc: esc(lv.seen) })}</span> ` : lv.state === 'mismatch' ? `<span class="status bad">${tx('⚠ The report reads location {seen}: you are reviewing {expected}', { seen: esc(lv.seen), expected: esc(lv.expected) })}</span> ` : ''}${showAll ? tx('all {n} raw reads', { n: all.length }) : `${tx('{n} keycodes', { n: codes.length })}${hidden ? ` · ${tx('{n} noise reads filtered', { n: hidden })}` : ''}`} <button class="go" data-ss="all">${showAll ? tx('Show filtered') : tx('Show all reads')}</button>`;
-      $('.ss-list').innerHTML = codes.map(c => `<button class="ss-chip${c.length < 8 ? ' odd' : ''}" data-ss="rm" data-code="${esc(c)}" title="${txn(tally.codes[c].count, 'Read {n} time · click to remove if wrong', 'Read {n} times · click to remove if wrong')}"><span class="mono">${esc(c)}</span><small>${tally.codes[c].count}×</small></button>`).join('') || `<p class="lbl">${tx('Codes appear here as frames are read.')}</p>`;
+      $('.ss-list').innerHTML = codes.map(c => `<button class="ss-chip${c.length < 8 ? ' odd' : ''}" data-ss="rm" data-code="${esc(c)}" title="${txn(tally.codes[c].count, 'Read {n} time · click to remove if wrong', 'Read {n} times · click to remove if wrong')}"><span class="mono">${esc(c)}</span><small>${tally.codes[c].count}×</small></button>`).join('') || empty(tx('Codes appear here as frames are read.'), { sm: true, icon: 'barcode' });
     }
     const n = Number($('.ss-count b').textContent), use = { compare: expected ? tx('Use {n} codes for {bay}', { n, bay: expected }) : tx('Use {n} codes for the bay', { n }), soh: tx('Add {n} to SOH adjustments', { n }), rows: tx('Add {n} rows to the SOH report', { n }), list: tx('Make a barcode list of {n}', { n }) }[mode];
     $('.ss-acts').innerHTML = `<button class="btn primary" data-ss="use"${n ? '' : ' disabled'}>${esc(use)}</button><button class="btn sm" data-ss="csv"${n ? '' : ' disabled'}>${ic('file')}CSV</button><button class="btn sm" data-ss="xls"${n ? '' : ' disabled'}>${ic('file')}Excel</button><button class="btn sm" data-ss="reset"${n ? '' : ' disabled'}>${tx('Clear')}</button>`;
@@ -196,7 +196,7 @@ export function openScreenScan(ctx, { mode = 'list', expected = '', title, onUse
     else if (a === 'csv' || a === 'xls') exportAs(a);
     else if (a === 'use') {
       const lv = locVerdict(tally.locs, expected);
-      if (mode === 'compare' && lv.state === 'mismatch' && !confirm(`${tx('⚠ LOCATION MISMATCH')}\n\n${tx('The captured report reads location {seen}, but you are reviewing {expected}. This usually means the wrong report is open.', { seen: lv.seen, expected: lv.expected })}\n\n${tx('Use these codes anyway?')}`)) return;
+      if (mode === 'compare' && lv.state === 'mismatch' && !await ask({ title: tx('Use these codes anyway?'), text: tx('The captured report reads location {seen}, but you are reviewing {expected}. This usually means the wrong report is open.', { seen: lv.seen, expected: lv.expected }), ok: tx('Use these codes'), cancel: tx('Cancel') })) return;
       const codes = filtered(tally, showAll), out = kind === 'rows' ? { items: { ...items } } : { codes, locs: Object.fromEntries(codes.map(c => [c, tally.codes[c].loc || ''])) };
       close(); onUse?.(out);
     }

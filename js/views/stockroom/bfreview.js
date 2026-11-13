@@ -14,7 +14,7 @@
 
 import { haptic } from '../../device.js';
 import { recallFor, recallFlag } from '../../recallflag.js';
-import { $, $$, ic, esc, vh, sub, status, fmtTime, toast, mhead, mscan, mrows, productImg, mbig, mghost, mfoot, camButton, depInk, accChip, accBand } from '../../ui.js';
+import { $, $$, ic, esc, vh, sub, status, pill, fmtTime, toast, mhead, mscan, mrows, productImg, mbig, mghost, mfoot, camButton, depInk, accChip, accBand, empty } from '../../ui.js';
 import { phoneCode, disputes, parseReportByLocation, parseReportLines, reportApns, reportDescs, parseKeycodes, parseKeycodeText, parseRequested, reportRange, freshBand, reportGap, pasteDelta, reviewRows, compareCounts, readyPayload, backfillMetrics, scannedCodes } from '../../../shared/backfill.js';
 import { hasMap, shelfForLocation } from '../../map.js';
 import { barcodeSvg } from '../../../shared/barcode.js';
@@ -29,7 +29,7 @@ import { settingsOf, deptForBay } from '../../../shared/reducers/store.js';
 import { openPasteBox } from '../pastebox.js';
 import { reportToIntel } from './intel.js';
 import { tx, txn } from '../../i18n.js';
-import { ask } from '../../sheet.js';
+import { ask, askText } from '../../sheet.js';
 
 // Desk state. report: the pasted SIM report { at, byLoc, range, delta, bayAt }
 // (delta: what changed per bay since the previous paste; bayAt: when one
@@ -61,17 +61,17 @@ export default {
     // REQ: on today's requested list. PRE: in the pasted report but not
     // requested (banked ahead). The diff mark: the report covers the bay and
     // is not stale, so it opens straight to compare.
-    const tags = s => (reqd.has(s.bay) ? `<span class="rq-tag req" title="${tx('On today’s requested list')}">${tx('REQ')}</span>` : m.sys?.[s.bay] ? `<span class="rq-tag pre" title="${tx('In the paste but not on today’s plan: banked ahead')}">${tx('PRE')}</span>` : '') + (s.status === 'pending' && m.sys?.[s.bay] && band !== 'r' ? `<span class="rq-cmp" title="${tx('Report loaded for this bay: opens straight to compare')}">${ic('sort')}</span>` : '') +
-      (s.status === 'pending' && s.lateScans ? `<span class="rq-tag late" title="${txn(s.lateScans, 'Back in review: {n} scan landed after it was readied', 'Back in review: {n} scans landed after it was readied')}">${tx('LATE')}</span>` : '') +
-      (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) ? `<span class="rq-tag scan" title="${tx('The phone has not submitted this bay for review yet')}">${tx('SCANNING')}</span>` : '');
+    const tags = s => (reqd.has(s.bay) ? pill(tx('REQ'), 'info', { size: 'sm', title: tx('On today’s requested list') }) : m.sys?.[s.bay] ? pill(tx('PRE'), 'good', { size: 'sm', title: tx('In the paste but not on today’s plan: banked ahead') }) : '') + (s.status === 'pending' && m.sys?.[s.bay] && band !== 'r' ? `<span class="rq-cmp" title="${tx('Report loaded for this bay: opens straight to compare')}">${ic('sort')}</span>` : '') +
+      (s.status === 'pending' && s.lateScans ? pill(tx('LATE'), 'warn', { size: 'sm', title: txn(s.lateScans, 'Back in review: {n} scan landed after it was readied', 'Back in review: {n} scans landed after it was readied') }) : '') +
+      (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) ? pill(tx('SCANNING'), '', { size: 'sm', title: tx('The phone has not submitted this bay for review yet') }) : '');
     const ranges = settingsOf(ctx.store.get()).deptRanges || [];
-    const slc = (s, c, extra = '') => `<button class="slc${st.sel === key(s) ? ' sel' : ''}${extra}" data-act="sel" data-sel="${esc(key(s))}"><div class="sl"><div class="tp"><span class="loc">${esc(s.bay)}</span>${deptBadge(deptForBay(ranges, s.bay), { short: true })}${tags(s)}${heldElsewhere(ctx, m, s.bay) ? `<span class="lock" title="${tx('Being reviewed on another device')}">${ic('lock')}</span>` : ''}</div><div class="meta">${tx('{count} scanned', { count: `<b title="${tx('scanned / expected')}">${c.scannedCount}/${c.expected}</b>` })} · ${s.updatedAt ? fmtTime(s.updatedAt) : ''}</div></div><div class="sr">${c.pct == null ? `<span class="pc" style="color:var(--dim)">—</span><span class="dc">${tx('no report')}</span>` : `<span class="pc">${accChip(c.pct)}</span><span class="dc">${c.add ? `<b class="a">+${c.add}</b> ` : ''}${c.delete ? `<b class="d">−${c.delete}</b>` : ''}${!c.add && !c.delete ? tx('clean') : ''}</span>`}</div></button>`;
-    const left = `<div class="srail left"><div class="srail-t">${tx('backfill stage::Review')}<span class="ct amber">${m.pending.length}</span><span class="tb"><select class="sortb" data-act="sort" title="${tx('Sort')}">${Object.entries(SORTS).map(([k, l]) => `<option value="${k}" ${st.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></span></div><div class="srail-list">` +
+    const slc = (s, c, extra = '') => `<button class="slc${st.sel === key(s) ? ' sel' : ''}${extra}" data-act="sel" data-sel="${esc(key(s))}"><div class="sl"><div class="tp"><span class="loc">${esc(s.bay)}</span>${deptBadge(deptForBay(ranges, s.bay), { short: true })}${tags(s)}${heldElsewhere(ctx, m, s.bay) ? `<span class="lock" title="${tx('Being reviewed on another device')}">${ic('lock')}</span>` : ''}</div><div class="meta">${tx('{count} scanned', { count: `<b title="${tx('scanned / expected')}">${c.scannedCount}/${c.expected}</b>` })} · ${s.updatedAt ? fmtTime(s.updatedAt) : ''}</div></div><div class="sr">${c.pct == null ? `<span class="pc t-dim">—</span><span class="dc">${tx('no report')}</span>` : `<span class="pc">${accChip(c.pct)}</span><span class="dc">${c.add ? `<b class="a">+${c.add}</b> ` : ''}${c.delete ? `<b class="d">−${c.delete}</b>` : ''}${!c.add && !c.delete ? tx('clean') : ''}</span>`}</div></button>`;
+    const left = `<div class="srail left"><div class="srail-t">${tx('backfill stage::Review')}${pill(m.pending.length, 'warn')}<span class="tb"><select class="sortb" data-act="sort" title="${tx('Sort')}">${Object.entries(SORTS).map(([k, l]) => `<option value="${k}" ${st.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></span></div><div class="srail-list">` +
       m.pending.map(s => slc(s, s.c)).join('') +
       m.requested.map(b => `<button class="slc wait${st.sel === 'req:' + b ? ' sel' : ''}" data-act="sel" data-sel="req:${esc(b)}"><div class="sl"><div class="tp"><span class="loc">${esc(b)}</span></div><div class="meta">${tx('requested · not scanned yet')}${m.sys && !m.sys[b] ? ` · <span class="rq-tag miss" title="${tx('On today’s plan but not in this report')}">${tx('MISSING')}</span>` : ''}</div></div><div class="sr"><span class="pc wait">${ic('clock')}</span></div></button>`).join('') +
       `</div><div class="srail-foot"><div class="req">${tx('<b>{sent}</b> sent through · <b>{requested}</b> requested', { sent: m.subs.length, requested: m.requested.length })}</div><div class="addrow"><input class="inp" data-field="addloc" placeholder="${tx('Add or request a bay…')}" inputmode="numeric"><button class="btn sm" data-act="request">${tx('Request')}</button></div></div></div>`;
-    const right = `<div class="srail right"><div class="srail-t">${tx('Ready')}<span class="ct green">${m.ready.length}</span></div><div class="srail-list">${m.ready.map(s => slc(s, compareCounts(s, m.sys ? m.sys[s.bay] || null : null))).join('') || `<div class="scol-empty" style="padding:14px"><small>${tx('Nothing marked ready yet')}</small></div>`}</div>` +
-      `<div class="srail-sub"><div class="srail-t sub">${tx('Submitted today')}<span class="ct green">${m.submitted.length}</span></div>${m.submitted.map(s => slc(s, compareCounts(s, m.sys ? m.sys[s.bay] || null : null), ' subm')).join('')}</div>${m.ready.length ? `<button class="finall" data-act="finalise">${ic('check')}${tx('Finalise all ({n})', { n: m.ready.length })}</button>` : ''}</div>`;
+    const right = `<div class="srail right"><div class="srail-t">${tx('Ready')}${pill(m.ready.length, 'good')}</div><div class="srail-list">${m.ready.map(s => slc(s, compareCounts(s, m.sys ? m.sys[s.bay] || null : null))).join('') || empty(tx('Nothing marked ready yet'), { sm: true })}</div>` +
+      `<div class="srail-sub"><div class="srail-t sub">${tx('Submitted today')}${pill(m.submitted.length, 'good', { size: 'sm' })}</div>${m.submitted.map(s => slc(s, compareCounts(s, m.sys ? m.sys[s.bay] || null : null), ' subm')).join('')}</div>${m.ready.length ? `<button class="finall" data-act="finalise">${ic('check')}${tx('Finalise all ({n})', { n: m.ready.length })}</button>` : ''}</div>`;
     return head + (st.reqPaste ? reqSheet(m) : '') + (st.help ? helpSheet() : '') + `<div class="sr3">${left}<div class="smid">${middle(ctx, m)}</div>${right}</div>`;
   },
   mobile(ctx) {
@@ -206,12 +206,12 @@ function deptPick(ctx, bay) {
   const ranges = settingsOf(ctx.store.get()).deptRanges || [], n = Number(m[0]);
   const pin = ranges.find(r => r.from === n && r.to === n), fromRange = deptForBay(ranges.filter(r => r !== pin), bay), cur = pin?.dept || fromRange || '';
   const none = pin ? (fromRange ? tx('Use the bay range ({dept})', { dept: deptLabel(fromRange) }) : tx('Use the bay range (none)')) : fromRange ? tx('{dept} · bay range', { dept: deptLabel(fromRange) }) : tx('No department yet');
-  const face = cur ? `<span class="dep" style="background:${deptColour(cur)};color:${depInk(deptColour(cur))}">${esc(String(cur).toUpperCase())}</span>` : `<span class="nodep">${tx('Department')}</span>`;
+  const face = cur ? `<span class="dep" style="--dc:${deptColour(cur)};--di:${depInk(deptColour(cur))}">${esc(String(cur).toUpperCase())}</span>` : `<span class="nodep">${tx('Department')}</span>`;
   return `<label class="hdept${cur ? '' : ' none'}" title="${cur ? `${esc(deptLabel(cur))} · ` : ''}${tx('The department bay {bay} belongs to: Adjustments and History group by it', { bay: esc(bay) })}">${face}${ic('chev', 'cv')}<select data-field="bdept" data-bay="${esc(bay)}" aria-label="${tx('Department for bay {bay}', { bay: esc(bay) })}"><option value="">${esc(none)}</option>` +
     SR_GROUPS.map(([g, gl]) => `<optgroup label="${gl}">${SR_DEPTS.filter(d => d.group === g).map(d => `<option value="${d.id}"${pin?.dept === d.id ? ' selected' : ''}>${esc(deptLabel(d.id))}</option>`).join('')}</optgroup>`).join('') + `</select></label>`;
 }
 // The report's SOH for a code, beside its name in the review (red at 0 or less).
-function sohTag(kc) { const q = st.report?.soh?.[kc]; return q == null ? '' : ` <span class="rsoh${q <= 0 ? ' neg' : ''}" title="${tx("SOH on today's report")}">SOH ${esc(q)}</span>`; }
+function sohTag(kc) { const q = st.report?.soh?.[kc]; return q == null ? '' : pill(`SOH ${esc(q)}`, q <= 0 ? 'bad' : '', { size: 'sm', cls: 'beside', title: tx("SOH on today's report") }); }
 // The pasted report's items at 0 or less (its SOH column) go to today's
 // Adjustments at the bay the report lists them in, as Stock intelligence
 // does when its report is saved; items already on the list are left alone.
@@ -255,7 +255,7 @@ export async function pasteReport(ctx, text) {
 // detected live with names, duplicates removed, leftovers called out, and a
 // live Re-check verdict against what the phones scanned.
 function bayPasteSheet(s) {
-  return `<div class="card baypaste"><div class="ch"><h3>${tx('Inventory list for {bay}', { bay: esc(s.bay) })}</h3><span class="cs-dim">${tx('paste from SIM: one keycode a line, or the whole block')}</span><span class="btn sm" style="margin-left:auto" data-act="bay-paste-close">${ic('x')}${tx('Close')}</span></div><textarea class="ad-in mono" data-field="baypaste" rows="5" placeholder="43166022&#10;43199310&#10;…"></textarea><div class="bp-live" data-baylive><span class="cs-dim">${tx('Paste the list and the codes show here as they are read.')}</span></div><div class="acts" style="margin-top:10px"><button class="btn primary" data-act="bay-paste-save">${ic('check')}${tx('Compare')}</button>${st.report?.byLoc?.[s.bay] ? `<button class="btn" data-act="bay-paste-clear">${tx('Clear compare')}</button>` : ''}</div></div>`;
+  return `<div class="card baypaste"><div class="ch"><h3>${tx('Inventory list for {bay}', { bay: esc(s.bay) })}</h3><span class="cs-dim">${tx('paste from SIM: one keycode a line, or the whole block')}</span><span class="btn sm ml-auto" data-act="bay-paste-close">${ic('x')}${tx('Close')}</span></div><textarea class="ad-in mono" data-field="baypaste" rows="5" placeholder="43166022&#10;43199310&#10;…"></textarea><div class="bp-live" data-baylive><span class="cs-dim">${tx('Paste the list and the codes show here as they are read.')}</span></div><div class="acts mt-m"><button class="btn primary" data-act="bay-paste-save">${ic('check')}${tx('Compare')}</button>${st.report?.byLoc?.[s.bay] ? `<button class="btn" data-act="bay-paste-clear">${tx('Clear compare')}</button>` : ''}</div></div>`;
 }
 function bayLive(s, text) {
   const r = parseKeycodeText(text);
@@ -269,11 +269,11 @@ function bayLive(s, text) {
 // Today's requested list in bulk (K2B's editor): bays by any separator.
 function reqSheet(m) {
   const cur = (m.reqAll || []).join('\n'), n = (m.reqAll || []).length;
-  return `<div class="card reqpaste"><div class="ch"><h3>${tx('Today’s requested list')}</h3><span class="cs-dim">${tx('bays to backfill today, by space, comma or line')}</span><span class="btn sm" style="margin-left:auto" data-act="req-close">${ic('x')}${tx('Close')}</span></div><textarea class="ad-in mono" data-field="reqpaste" rows="5">${esc(cur)}</textarea><div class="cs-dim" data-reqcount>${txn(n, '{n} bay', '{n} bays')}</div><div class="acts" style="margin-top:10px"><button class="btn primary" data-act="req-save">${ic('check')}${tx('Save list')}</button><button class="btn" data-act="req-clear">${tx('Clear')}</button></div></div>`;
+  return `<div class="card reqpaste"><div class="ch"><h3>${tx('Today’s requested list')}</h3><span class="cs-dim">${tx('bays to backfill today, by space, comma or line')}</span><span class="btn sm ml-auto" data-act="req-close">${ic('x')}${tx('Close')}</span></div><textarea class="ad-in mono" data-field="reqpaste" rows="5">${esc(cur)}</textarea><div class="cs-dim" data-reqcount>${txn(n, '{n} bay', '{n} bays')}</div><div class="acts mt-m"><button class="btn primary" data-act="req-save">${ic('check')}${tx('Save list')}</button><button class="btn" data-act="req-clear">${tx('Clear')}</button></div></div>`;
 }
 function helpSheet() {
   const k = (keys, what) => `<div class="hk"><span>${keys.map(x => `<kbd>${x}</kbd>`).join(' ')}</span><span>${what}</span></div>`;
-  return `<div class="card helpsheet"><div class="ch"><h3>${tx('Keyboard')}</h3><span class="btn sm" style="margin-left:auto" data-act="help">${ic('x')}${tx('Close')}</span></div><div class="hks">` +
+  return `<div class="card helpsheet"><div class="ch"><h3>${tx('Keyboard')}</h3><span class="btn sm ml-auto" data-act="help">${ic('x')}${tx('Close')}</span></div><div class="hks">` +
     k(['↓', 'j'], tx('next bay to review')) + k(['↑', 'k'], tx('previous bay')) + k(['Enter'], tx('mark ready and open the next bay')) + k(['F'], tx('Focus: one code at a time')) +
     k([tx('Space')], tx('Focus: checked, next code')) + k(['⌫'], tx('Focus: incorrect, next code')) + k(['←', '→'], tx('Focus: move between codes')) + k(['A', 'D'], tx('Focus: the Add or Delete side')) + k(['?'], tx('this sheet')) + k(['Esc'], tx('close a sheet')) + '</div></div>';
 }
@@ -283,12 +283,12 @@ function helpSheet() {
 // Ready), then how to look at it: the views, one filter every view follows,
 // the report's time on its clock, and Export.
 function middle(ctx, m) {
-  if (!st.sel) return `<div class="bf-empty"><span class="ic">${ic('m-backfill')}</span><b>${tx('Nothing on the board yet')}</b><small>${tx('Phones send bays here as they scan. Request a bay on the left to put it on the day list.')}</small></div>`;
+  if (!st.sel) return empty(`<b>${tx('Nothing on the board yet')}</b><br>${tx('Phones send bays here as they scan. Request a bay on the left to put it on the day list.')}`, { icon: 'm-backfill', cls: 'bf-mid' });
   if (st.sel.startsWith('req:')) {
     const bay = st.sel.slice(4), sys = m.sys?.[bay] || null;
-    return `<div class="smid-h hc"><span class="hc-id">${locMenu(bay, false, false)}${locBc(bay)}${deptPick(ctx, bay)}<span class="status req">${ic('clock')}${tx('Requested')}</span></span>${hstats([[sys ? sys.length : '—', tx('expected')], [0, tx('scanned')]])}<span class="sp"></span><span class="hc-acts"><button class="btn" data-act="cancel-req" data-bay="${esc(bay)}">${ic('x')}${tx('Cancel request')}</button></span></div>` +
+    return `<div class="smid-h hc"><span class="hc-id">${locMenu(bay, false, false)}${locBc(bay)}${deptPick(ctx, bay)}${pill(tx('Requested'), 'info', { icon: 'clock' })}</span>${hstats([[sys ? sys.length : '—', tx('expected')], [0, tx('scanned')]])}<span class="sp"></span><span class="hc-acts"><button class="btn" data-act="cancel-req" data-bay="${esc(bay)}">${ic('x')}${tx('Cancel request')}</button></span></div>` +
       `<div class="reqgrid"><div class="reqcard">${ic('phone')}<b>${tx('Waiting for the floor')}</b><p>${sys ? tx('Send someone to <b>{bay}</b> with a phone: the first scan turns this into a review and compares it against the pasted report on the spot.', { bay: esc(bay) }) : tx('Send someone to <b>{bay}</b> with a phone: the first scan turns this into a review.', { bay: esc(bay) })}</p><a class="btn" data-go="daylist">${ic('listcheck')}${tx('Day list')}</a></div>` +
-      `<div class="reqlist"><div class="scol-t">${sys ? tx('In the report') : tx('No report covers this bay')}<span class="ct">${sys ? sys.length : 0}</span></div>${(sys || []).map(c => `<div class="reqrow"><span class="kc">${esc(c)}</span><span class="nm">${nameHtml(c, undefined, { swap: true })}</span></div>`).join('')}</div></div>`;
+      `<div class="reqlist"><div class="scol-t">${sys ? tx('In the report') : tx('No report covers this bay')}${pill(sys ? sys.length : 0, '', { size: 'sm' })}</div>${(sys || []).map(c => `<div class="reqrow"><span class="kc">${esc(c)}</span><span class="nm">${nameHtml(c, undefined, { swap: true })}</span></div>`).join('')}</div></div>`;
   }
   const s = m.subs.find(x => key(x) === st.sel); if (!s) return '';
   const sys = m.sys ? m.sys[s.bay] || null : null, rows = reviewRows(s, sys), c = compareCounts(s, sys);
@@ -305,11 +305,11 @@ function middle(ctx, m) {
   const exp = hmenu('export', mbtn('export', `${ic('download')}${tx('Export')}`, 'btn sm'),
     mitem('print-sheet', 'print', tx('Worksheet'), tx('Print the To add / To remove worksheet')) + mitem('copy-all', 'file', tx('Copy all'), tx('Copy every code to add or remove, one a line')), { right: true });
   const view = (v, label, title = '') => `<button class="${st.view === v ? 'on' : ''}" data-act="view" data-v="${v}"${title ? ` title="${title}"` : ''}>${label}</button>`;
-  const ctl = `<div class="smid-ctl"><span class="pills">${view('list', tx('List'))}${view('detail', tx('Detail'))}${view('codes', tx('Barcodes'), tx('Each code to add or remove as a barcode, to scan into the PDT'))}${view('focus', tx('Focus'), tx('One code at a time, keyboard first (F)'))}</span>${filt}${ro ? `<span class="cpill lock">${ic('lock')}${tx('read only')}</span>` : ''}${!sys ? `<span class="cpill lock">${ic('alert')}${tx('no report for this bay')}</span>` : ''}<span class="sp"></span>${reportClock(s, sys)}${exp}</div>`;
-  const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</span><span class="nm">${nameHtml(r.code, undefined, sw)}${sohTag(r.code)}${depthChip(r.code)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span>${ro ? '' : `<span class="acts"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? tx('Clear incorrect') : tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove this code')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
+  const ctl = `<div class="smid-ctl"><span class="pills">${view('list', tx('List'))}${view('detail', tx('Detail'))}${view('codes', tx('Barcodes'), tx('Each code to add or remove as a barcode, to scan into the PDT'))}${view('focus', tx('Focus'), tx('One code at a time, keyboard first (F)'))}</span>${filt}${ro ? pill(tx('read only'), '', { size: 'sm', icon: 'lock' }) : ''}${!sys ? pill(tx('no report for this bay'), '', { size: 'sm', icon: 'alert' }) : ''}<span class="sp"></span>${reportClock(s, sys)}${exp}</div>`;
+  const crow = r => `<div class="scode${r.incorrect ? ' inc' : ''}${nameOf(r.code) === null ? ' bad' : ''}"><span class="kc" data-act="copy" data-code="${esc(r.code)}" title="${tx('Copy')}">${esc(r.code)}</span><span class="nm">${nameHtml(r.code, undefined, sw)}${sohTag(r.code)}${depthChip(r.code)}${r.incorrect ? pill(tx('✕ incorrect'), 'bad', { size: 'sm', cls: 'beside' }) : ''}</span>${ro ? '' : `<span class="acts"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${r.incorrect ? tx('Clear incorrect') : tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove this code')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`;
   // K2B's scan columns: every code to add or remove as a barcode the reviewer
   // scans straight into the PDT, with its name to check against.
-  const bcRow = r => `<div class="bcrow${r.incorrect ? ' inc' : ''}">${barcodeSvg(r.code, { module: 1.6, height: 44 })}<span class="nm">${nameHtml(r.code, undefined, sw)}${r.incorrect ? ` <span class="inctag">${tx('✕ incorrect')}</span>` : ''}</span></div>`;
+  const bcRow = r => `<div class="bcrow${r.incorrect ? ' inc' : ''}">${barcodeSvg(r.code, { module: 1.6, height: 44 })}<span class="nm">${nameHtml(r.code, undefined, sw)}${r.incorrect ? pill(tx('✕ incorrect'), 'bad', { size: 'sm', cls: 'beside' }) : ''}</span></div>`;
   // The filter picks the columns: All shows Add and Delete side by side
   // (matches need nothing and are counted below), one kind shows its own.
   const COL = {
@@ -318,10 +318,10 @@ function middle(ctx, m) {
     match: [tx('Match'), 'match', matches, tx('Nothing matches yet'), sys ? tx('No scanned code is in the report for this bay') : tx('Paste the report to compare')],
   };
   const shown = st.filt === 'all' ? ['add', 'delete'] : [st.filt];
-  const cols = (row, why, cls = '') => `<div class="scols${cls}${shown.length === 1 ? ' one' : ''}">${shown.map(k => { const [t, tc, list, none, sub] = COL[k]; return `<div class="scol"><div class="scol-t ${tc}">${t}<span class="ct">${list.length}</span></div>${list.map(row).join('') || `<div class="scol-empty">${why ? ic('check') : ''}<b>${none}</b>${why ? `<small>${sub}</small>` : ''}</div>`}</div>`; }).join('')}</div>`;
+  const cols = (row, why, cls = '') => `<div class="scols${cls}${shown.length === 1 ? ' one' : ''}">${shown.map(k => { const [t, tc, list, none, sub] = COL[k]; return `<div class="scol"><div class="scol-t ${tc}">${t}${pill(list.length, '', { size: 'sm' })}</div>${list.map(row).join('') || empty(why ? `<b>${none}</b><br>${sub}` : none, { sm: true, icon: why ? 'check' : 'listcheck' })}</div>`; }).join('')}</div>`;
   const drows = rows.filter(want);
   const body = st.view === 'focus' ? focusView(s, rows, { add: COL.add[3], delete: COL.delete[3], one: COL[st.filt]?.[3] }, sw) : st.view === 'codes' ? cols(bcRow, false, ' bcols') : st.view === 'detail'
-    ? `<div class="dlist"><div class="drow dhead"><span>${tx('Keycode')}</span><span></span><span>${tx('Verdict')}</span><span>${tx('Product')}</span><span>${tx('Backfilled')}</span><span>${tx('Inventory')}</span><span></span></div>${drows.map(r => `<div class="drow${r.incorrect ? ' bad' : ''}"><span class="kc">${esc(r.code)}</span><span class="dc-icos">${r.status !== 'delete' ? `<span class="dc-ico" title="${tx('Scanned')}">${ic('barcode')}</span>` : ''}</span><span class="cpill ${r.status === 'delete' ? 'del' : r.status === 'match' ? 'match' : 'add'}">${r.status === 'delete' ? tx('Remove') : r.status === 'match' ? tx('Match') : tx('Add to {bay}', { bay: esc(s.bay) })}</span><span class="dc-name">${nameHtml(r.code, undefined, sw)}</span><span class="tick2${r.status !== 'delete' ? ' yes' : ''}">${ic(r.status !== 'delete' ? 'check' : 'x')}</span><span class="tick2${r.status !== 'add' && r.status !== 'scanned' ? ' yes' : ''}">${ic(r.status !== 'add' && r.status !== 'scanned' ? 'check' : 'x')}</span>${ro ? '<span></span>' : `<span class="dc-edit"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`).join('') || `<div class="scol-empty"><b>${COL[st.filt]?.[3] || tx('Nothing in this column')}</b></div>`}</div>`
+    ? `<div class="dlist"><div class="drow dhead"><span>${tx('Keycode')}</span><span></span><span>${tx('Verdict')}</span><span>${tx('Product')}</span><span>${tx('Backfilled')}</span><span>${tx('Inventory')}</span><span></span></div>${drows.map(r => `<div class="drow${r.incorrect ? ' bad' : ''}"><span class="kc">${esc(r.code)}</span><span class="dc-icos">${r.status !== 'delete' ? `<span class="dc-ico" title="${tx('Scanned')}">${ic('barcode')}</span>` : ''}</span>${pill(r.status === 'delete' ? tx('Remove') : r.status === 'match' ? tx('Match') : tx('Add to {bay}', { bay: esc(s.bay) }), r.status === 'delete' ? 'bad' : r.status === 'match' ? 'good' : 'info', { size: 'sm' })}<span class="dc-name">${nameHtml(r.code, undefined, sw)}</span><span class="tick2${r.status !== 'delete' ? ' yes' : ''}">${ic(r.status !== 'delete' ? 'check' : 'x')}</span><span class="tick2${r.status !== 'add' && r.status !== 'scanned' ? ' yes' : ''}">${ic(r.status !== 'add' && r.status !== 'scanned' ? 'check' : 'x')}</span>${ro ? '<span></span>' : `<span class="dc-edit"><span title="${tx('Flag for SOH adjustment')}" data-act="flag" data-code="${esc(r.code)}">${ic('sort')}</span><span title="${tx('Mark incorrect')}" data-act="incorrect" data-code="${esc(r.code)}">${ic('alert')}</span>${r.status !== 'delete' ? `<span title="${tx('Remove')}" data-act="remove" data-code="${esc(r.code)}">${ic('x')}</span>` : ''}</span>`}</div>`).join('') || empty(COL[st.filt]?.[3] || tx('Nothing in this column'), { sm: true })}</div>`
     : cols(crow, true);
   const hist = m.history.filter(h => h.bay === s.bay && h.metrics).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
   const tail = `<div class="matches">${sys ? tx('<b>{n} codes match</b> the pasted report and need nothing', { n: matches.length }) : tx('<b>{n} codes match</b> · no report pasted for this bay yet', { n: matches.length })}${s.readyAt ? ` · ${tx('marked ready {time}', { time: fmtTime(s.readyAt) })}` : ''}</div>` +
@@ -373,7 +373,7 @@ function freshChip() {
   if (!st.report) return `<span class="rs-gap">${ic('alert')}${tx('No report pasted')}</span>`;
   const mins = (Date.now() - st.report.at) / 60000;
   // freshLabel (shared/backfill.js) in words: just now, or minutes ago.
-  return `<span class="rs-fresh ${freshBand(mins)}" title="${tx('SIM report pasted {time} · {n} bays · re-paste if the room has moved since', { time: fmtTime(new Date(st.report.at).toISOString()), n: Object.keys(st.report.byLoc).length })}"><span class="dot"></span>${mins < 1 ? tx('report just now') : tx('report {n}m ago', { n: Math.round(mins) })}</span>`;
+  return pill(mins < 1 ? tx('report just now') : tx('report {n}m ago', { n: Math.round(mins) }), { g: 'good', a: 'warn', r: 'bad' }[freshBand(mins)] || '', { icon: 'clock', title: tx('SIM report pasted {time} · {n} bays · re-paste if the room has moved since', { time: fmtTime(new Date(st.report.at).toISOString()), n: Object.keys(st.report.byLoc).length }) });
 }
 // The report's clock (Vector's gap note) at the end of the counts: hover
 // for when the list and the scans were taken, click for the whole note.
@@ -402,11 +402,11 @@ async function useNear(ctx, m, code, other) {
   const s = m.subs.find(x => key(x) === st.sel), bay = s ? s.bay : st.sel?.startsWith('req:') ? st.sel.slice(4) : null;
   if (!bay || !other || s?.status === 'submitted') return;
   if (s?.codes[code]?.scanned) {
-    if (!confirm(tx('Use {other} instead of {code} in the scans for {bay}?', { other, code, bay }))) return;
+    if (!await ask({ title: tx('Use {other} instead of {code} in the scans for {bay}?', { other, code, bay }), ok: tx('Use {code}', { code: other }), cancel: tx('Cancel'), danger: false })) return;
     // One update, marked a swap: a correction, not a scan, so the crew's Send stands.
     if (!await send(ctx, 'submission.update', { bay: s.bay, date: s.date }, { codes: { [other]: true }, remove: [code], swap: true })) return;
   } else if ((st.report?.byLoc?.[bay] || []).includes(code)) {
-    if (!confirm(tx('Use {other} instead of {code} in the report list for {bay}?', { other, code, bay }))) return;
+    if (!await ask({ title: tx('Use {other} instead of {code} in the report list for {bay}?', { other, code, bay }), ok: tx('Use {code}', { code: other }), cancel: tx('Cancel'), danger: false })) return;
     await saveReport(ctx, { ...st.report, byLoc: { ...st.report.byLoc, [bay]: [...new Set(st.report.byLoc[bay].map(c => c === code ? other : c))] }, unsent: undefined });
   } else return;
   ensureNames(ctx, [other], () => ctx.rerender());
@@ -430,7 +430,7 @@ function focusTarget(rows) {
 function focusCard(s, side, list, none, sw, active) {
   const n = list.length, done = st.processed.get(key(s)) || new Set(), idx = IDX[side];
   const pick = side !== 'one' ? ` data-act="fside" data-side="${side}"` : '';
-  const title = side === 'add' ? `<div class="fside-t add">${tx('Add to {bay}', { bay: esc(s.bay) })}<span class="ct">${n}</span></div>` : side === 'delete' ? `<div class="fside-t del">${tx('Delete from system')}<span class="ct">${n}</span></div>` : '';
+  const title = side === 'add' ? `<div class="fside-t add">${tx('Add to {bay}', { bay: esc(s.bay) })}${pill(n, '', { size: 'sm' })}</div>` : side === 'delete' ? `<div class="fside-t del">${tx('Delete from system')}<span class="ct">${n}</span></div>` : '';
   if (!n) return `<div class="focus-card empty${active ? ' act' : ''}"${pick}>${title}<b>${none || tx('Nothing in this column')}</b></div>`;
   st[idx] = ((st[idx] % n) + n) % n;
   const r = list[st[idx]];
@@ -505,12 +505,12 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'finalise') {
     if (!m.ready.length) return toast(tx('No reviewed bays to submit'));
     const list = m.ready.map(s => `${s.bay}${s.metrics?.accuracy == null ? ` (${tx('no report')})` : ` ${s.metrics.accuracy}%`}`);
-    if (!confirm(`${txn(m.ready.length, 'Submit {n} reviewed bay? Each must already be finalised on the PDT.', 'Submit {n} reviewed bays? Each must already be finalised on the PDT.')}\n\n${list.slice(0, 30).join(', ')}${list.length > 30 ? `, ${tx('and {n} more', { n: list.length - 30 })}` : ''}`)) return;
+    if (!await ask({ title: txn(m.ready.length, 'Submit {n} reviewed bay?', 'Submit {n} reviewed bays?'), text: [tx('Each must already be finalised on the PDT.'), `${list.slice(0, 30).join(', ')}${list.length > 30 ? `, ${tx('and {n} more', { n: list.length - 30 })}` : ''}`], ok: tx('Submit'), cancel: tx('Cancel'), danger: false })) return;
     let n = 0; for (const s of m.ready) if (await send(ctx, 'submission.submit', { bay: s.bay, date })) n++;
     toast(txn(n, '{n} bay submitted', '{n} bays submitted'));
   }
   else if (act === 'delete') { const s = cur(); if (s && await ask({ title: tx('Delete {bay} from today’s board?', { bay: s.bay }), text: tx('Its scans are removed from the review.'), ok: tx('Delete bay') })) { await send(ctx, 'submission.delete', { bay: s.bay, date }); st.sel = null; } }
-  else if (act === 'rename') { const s = cur(); if (!s) return; const to = prompt(tx('Correct the bay number for {bay}', { bay: s.bay }), s.bay); if (to && to.trim().toUpperCase() !== s.bay) { const r = await send(ctx, 'submission.rename', { bay: s.bay, date }, { newBay: to.trim() }); if (r) st.sel = `${to.trim().toUpperCase()}:${date}`; } }
+  else if (act === 'rename') { const s = cur(); if (!s) return; const to = await askText({ title: tx('Correct the bay number for {bay}', { bay: s.bay }), label: tx('Bay'), value: s.bay, upper: true, required: true, ok: tx('Rename') }); if (to && to !== s.bay) { const r = await send(ctx, 'submission.rename', { bay: s.bay, date }, { newBay: to }); if (r) st.sel = `${to}:${date}`; } }
   else if (act === 'incorrect') { const s = cur(); if (!s) return; const set = new Set(s.incorrect); set.has(a.dataset.code) ? set.delete(a.dataset.code) : set.add(a.dataset.code); await send(ctx, 'submission.update', { bay: s.bay, date }, { incorrect: [...set] }); }
   else if (act === 'remove') { const s = cur(); if (s) await send(ctx, 'submission.update', { bay: s.bay, date }, { remove: [a.dataset.code] }); }
   else if (act === 'flag') {
@@ -518,7 +518,7 @@ async function onClick(e, ctx, root, repaint) {
     // is offered (and kept on Cancel), never overwritten with 0.
     const s = cur(); if (!s) return; const kc = a.dataset.code;
     const had = (ctx.store.get('adjustments') || {})[date]?.[kc], rep = st.report?.soh?.[kc];
-    const ans = prompt(`${tx('SOH for {code} on the report (0 or below)', { code: kc })}${had ? `\n${tx('Already flagged today at {qty}.', { qty: had.qty })}` : rep != null ? `\n${tx('The report says {soh}.', { soh: rep })}` : ''}`, had ? String(had.qty) : rep != null && rep <= 0 ? String(rep) : '0');
+    const ans = await askText({ title: tx('Flag {code} for Adjustments', { code: kc }), text: had ? tx('Already flagged today at {qty}.', { qty: had.qty }) : rep != null ? tx('The report says {soh}.', { soh: rep }) : '', label: tx('SOH for {code} on the report (0 or below)', { code: kc }), value: had ? String(had.qty) : rep != null && rep <= 0 ? String(rep) : '0', inputmode: 'numeric', required: true, ok: tx('Flag') });
     if (ans === null) return;
     const qty = Number(String(ans).trim().replace(/[^\d.-]/g, ''));
     if (!Number.isFinite(qty) || String(ans).trim() === '') return toast(tx('Type the SOH from the report, like -3 or 0'), 'bad');
@@ -538,7 +538,7 @@ async function onClick(e, ctx, root, repaint) {
     if (!ctx.store.get('backfill').subs[`${st.mBay}:${date}`]) { toast(tx('{bay} was deleted from today’s board at the desk, so nothing was submitted.', { bay: st.mBay }), 'bad'); st.mBay = null; st.mStep = 1; return repaint(); }
     // What isn't done yet is said first: codes the reader held stay out of the bay.
     const nHeld = heldFor(st.mBay).size;
-    if (nHeld && !confirm(`${txn(nHeld, '{n} code was held as a possible misread and is not in the bay.', '{n} codes were held as possible misreads and are not in the bay.')} ${tx('Submit {bay} for review anyway?', { bay: st.mBay })}`)) return;
+    if (nHeld && !await ask({ title: tx('Submit {bay} for review anyway?', { bay: st.mBay }), text: txn(nHeld, '{n} code was held as a possible misread and is not in the bay.', '{n} codes were held as possible misreads and are not in the bay.'), ok: tx('Submit'), cancel: tx('Cancel'), danger: false })) return;
     if (!await send(ctx, 'submission.update', { bay: st.mBay, date }, { sent: true })) return;
     mineAdd(st.mBay, date); st.mStep = 3; repaint();
   }
@@ -548,7 +548,7 @@ async function onClick(e, ctx, root, repaint) {
   else if (act === 'm-remind-close') { st.mRemind = false; repaint(); }
   else if (act === 'm-dismiss') { if (!await ask({ title: tx('Clear {bay} from your list?', { bay: a.dataset.bay }), text: tx('It was removed from today’s board.'), ok: tx('Clear {bay}', { bay: a.dataset.bay }) })) return; mineSave(mineLocal().filter(x => !(x.bay === a.dataset.bay && x.date === a.dataset.date))); repaint(); }
   else if (act === 'm-done') {
-    const bay = a.dataset.bay, d = a.dataset.date; if (!confirm(tx('Mark "{bay}" as submitted on the PDT?', { bay }))) return;
+    const bay = a.dataset.bay, d = a.dataset.date; if (!await ask({ title: tx('Mark "{bay}" as submitted on the PDT?', { bay }), ok: tx('Mark submitted'), cancel: tx('Cancel'), danger: false })) return;
     const r = await send(ctx, 'submission.submit', { bay, date: d }); if (!r) return;
     st.mRemind = false; toast(tx('{bay} completed', { bay }));
     const n = readdOpen(ctx.store.get('backfill').subs[`${bay}:${d}`]).length;
@@ -557,7 +557,7 @@ async function onClick(e, ctx, root, repaint) {
   }
   else if (act === 'm-readd') { st.readd = { bay: a.dataset.bay, date: a.dataset.date }; st.mView = 'readd'; repaint(); setTimeout(() => root.querySelector('[data-field="mreadd"]')?.focus(), 30); }
   else if (act === 'm-readd-done') { const r = await send(ctx, 'submission.readd', { bay: a.dataset.bay, date: a.dataset.date }, { code: a.dataset.code, done: true }); if (r) { toast(tx('{code} scanned back in', { code: a.dataset.code })); repaint(); } }
-  else if (act === 'm-ready') { const s = m.pending.find(x => x.bay === a.dataset.bay); if (!s) return; if (!m.sys?.[s.bay] && !confirm(tx('There is no report for {bay} on this phone, so it is recorded as "no report". Mark it ready?', { bay: s.bay }))) return; await readyBay(ctx, s, m, false); repaint(); }
+  else if (act === 'm-ready') { const s = m.pending.find(x => x.bay === a.dataset.bay); if (!s) return; if (!m.sys?.[s.bay] && !await ask({ title: tx('Mark {bay} ready?', { bay: s.bay }), text: tx('There is no report for {bay} on this phone, so it is recorded as "no report".', { bay: s.bay }), ok: tx('Mark ready'), cancel: tx('Cancel'), danger: false })) return; await readyBay(ctx, s, m, false); repaint(); }
   else if (act === 'm-del') { await removeScan(ctx, a.dataset.code, repaint); }
   else if (act === 'm-undo') { if (st.mLast) { await send(ctx, 'submission.update', { bay: st.mBay, date }, { remove: [st.mLast] }); st.mLast = null; repaint(); } }
   else if (act === 'm-next') { st.mStep = 1; st.mBay = ''; st.mLast = null; repaint(); setTimeout(() => root.querySelector('[data-field="mbay"]')?.focus(), 30); }
@@ -568,7 +568,7 @@ async function onClick(e, ctx, root, repaint) {
 // metrics match), free it, and with next open the bay that slides into its
 // place on the review list (Vector's Enter = ready and next).
 async function readyBay(ctx, s, m, next) {
-  if (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) && !confirm(`${tx('{bay} has not been submitted for review from the phone yet, so it may still be scanning.', { bay: s.bay })} ${tx('Mark it ready anyway?')}`)) return;
+  if (s.status === 'pending' && !s.sentAt && Object.values(s.codes).some(c => c.scanned) && !await ask({ title: tx('Mark it ready anyway?'), text: tx('{bay} has not been submitted for review from the phone yet, so it may still be scanning.', { bay: s.bay }), ok: tx('Mark ready'), cancel: tx('Cancel'), danger: false })) return;
   const date = todayKey(), sys = m.sys?.[s.bay] || null, p = readyPayload(s, sys), order = m.pending.map(key), idx = order.indexOf(key(s));
   if (Object.keys(p.codes).length || p.incorrect.length) await send(ctx, 'submission.update', { bay: s.bay, date }, p);
   const r = await send(ctx, 'submission.ready', { bay: s.bay, date }, sys ? { system: sys } : {}); if (!r) return;
@@ -645,7 +645,7 @@ function mineView(ctx) {
   const line = r => [esc(r.bay) + (r.date !== todayKey() ? ` <small class="cs-dim">${esc(r.date.slice(5))}</small>` : ''), r.state === 'ready' ? tx('Reviewed: finalise it on the PDT, then tap Submit') : r.state === 'gone' ? tx('Removed from today’s board') : r.state === 'done' ? `${tx('Submitted ✓')}${readdOpen(r.sub).length ? ` · ${tx('{n} to scan back', { n: readdOpen(r.sub).length })}` : ''}` : tx('In review'), r.state === 'gone' ? chip(r) : (r.state === 'done' ? '' : chip(r)) + readdBtn(r), r.state === 'ready' ? 'bfs bfst-fin' : r.state === 'gone' ? 'warn' : r.state === 'done' ? 'bfs bfst-done' : 'bfs bfst-rev'];
   const items = rows.reduce((n, r) => n + readdOpen(r.sub).length, 0);
   return mhead(tx('My locations'), txn(rows.length, '{n} bay from this phone · last 2 days', '{n} bays from this phone · last 2 days')) +
-    (open.length ? mrows(open.map(line)) : `<div class="mv-note">${ic('layers')}${tx('No locations submitted yet.')} ${tx('Scan a location’s codes and submit it for review.')}</div>`) +
+    (open.length ? mrows(open.map(line)) : empty(`${tx('No locations submitted yet.')} ${tx('Scan a location’s codes and submit it for review.')}`, { icon: 'layers' })) +
     (items ? `<div class="mv-tiles">${`<button class="mv-tile hot" data-act="m-check"><span class="ti">${ic('barcode')}</span><span class="tx"><b>${tx('Re-add checklist')}</b><span>${txn(items, '{n} item to scan back in', '{n} items to scan back in')}</span></span><span></span>${ic('chev')}</button>`}</div>` : '') +
     (done.length ? `<details class="mv-done-list"><summary>${tx('Completed · {n}', { n: done.length })}</summary>${mrows(done.map(line))}</details>` : '') +
     mfoot(mghost(tx('Back to scanning'), ' data-act="m-home"'));
@@ -664,7 +664,7 @@ function checkView(ctx) {
   const item = (r, live) => readdOpen(r.sub).map(x => `<div class="rd-item">${live ? barcodeSvg(x.code, { module: 1.8, height: 52 }) : ''}<span class="nm"><b class="mono">${esc(x.code)}</b> ${nameHtml(x.code)}</span>${live ? `<button class="btn sm primary" data-act="m-readd-done" data-bay="${esc(r.bay)}" data-date="${esc(r.date)}" data-code="${esc(x.code)}">${tx('✓ Scanned back in')}</button>` : ''}</div>`).join('');
   return mhead(tx('Re-add checklist'), tx('Scan each one back in on the PDT')) +
     (ready.map(r => `<div class="rd-group"><div class="rd-h ok">${tx('{bay} · FINALISED · scan back now', { bay: esc(r.bay) })}</div>${item(r, true)}</div>`).join('') +
-     wait.map(r => `<div class="rd-group"><div class="rd-h">${tx('{bay} · WAITING · not finalised yet', { bay: esc(r.bay) })}</div>${item(r, false)}</div>`).join('') || `<div class="mv-note">${ic('check')}${tx('Nothing waiting to scan back in.')}</div>`) +
+     wait.map(r => `<div class="rd-group"><div class="rd-h">${tx('{bay} · WAITING · not finalised yet', { bay: esc(r.bay) })}</div>${item(r, false)}</div>`).join('') || empty(tx('Nothing waiting to scan back in.'), { icon: 'check' })) +
     mfoot(mghost(tx('My locations'), ' data-act="m-mine"'));
 }
 // The finalise reminder: once a session, when a bay this phone sent is ready.
@@ -717,7 +717,7 @@ function boardView(ctx, m, sheet) {
   ].filter(([, , rows]) => rows.length);
   const gh = (h, n, tag = 'div') => `<${tag} class="bf-gh"><i class="dot"></i>${h}<span class="ct">${n}</span>${tag === 'summary' ? ic('chev', 'cv') : ''}</${tag}>`;
   const board = groups.length ? `<div class="card bf-board">${groups.map(([k, h, rows]) => k === 'bfst-done' ? `<details class="bf-g bfst-done">${gh(h, rows.length, 'summary')}${rows.join('')}</details>` : `<div class="bf-g ${k}">${gh(h, rows.length)}${rows.join('')}</div>`).join('')}</div>`
-    : `<div class="mv-note">${ic('layers')}${tx('Nothing on the board yet.')} ${tx('Scan a location label to start it.')}</div>`;
+    : empty(`${tx('Nothing on the board yet.')} ${tx('Scan a location label to start it.')}`, { icon: 'm-backfill' });
   const mineBtn = `<button class="btn sm bf-mine" data-act="m-mine" aria-label="${readyN ? txn(readyN, 'My locations: {n} ready to finalise', 'My locations: {n} ready to finalise') : tx('My locations')}">${ic('listcheck')}${tx('Mine')}${readyN ? `<b>${readyN}</b>` : ''}</button>`;
   const entry = `<div class="bf-entry"><input class="inp" data-field="mbay" inputmode="numeric" autocomplete="off" placeholder="${tx('Scan or type a location')}" aria-label="${tx('Location label or number')}" enterkeyhint="go">${camButton('mbay')}<button class="btn primary" data-act="m-start">${tx('Start')}</button></div>`;
   const strip = next ? bfStrip(`<div class="dk-st"><div class="dk-l2">${tx('Up next')}</div><div class="dk-l1"><b>${esc(next)}</b>${dep(next)}<span>${txn(m.requested.length, '{n} requested', '{n} requested')}</span></div></div><button class="dk-go" data-act="m-resume" data-bay="${esc(next)}">${tx('Start {bay}', { bay: esc(next) })}</button>`, false)
@@ -738,14 +738,14 @@ function scanView(ctx, m) {
   // back to the newest code still here once that one is removed.
   const held = heldFor(bay), d = deptForBay(rangesOf(ctx), bay), last = st.mLast && codes.includes(st.mLast) ? st.mLast : null;
   warmReader();   // the reading engine loads while the location is open, so Scan starts quickly
-  const row = (c, i) => `<div class="bf-code${i === 0 && c === last ? ' new' : ''}${dsp[c] ? ' warn' : nameOf(c) === null || recallFor(ctx.store, c) ? ' bad' : ''}"><b class="mono" data-kccard="${esc(c)}">${esc(c)}</b><span class="nm">${dsp[c] ? `<span class="mv-dsp">${ic('alert')}${esc(disputeHint(c, dsp[c][0]))}</span>` : nameHtml(c)}</span>${i === 0 && c === last ? `<em>${tx('just now')}</em>` : ''}` +
+  const row = (c, i) => `<div class="bf-code${i === 0 && c === last ? ' new' : ''}${dsp[c] ? ' warn' : nameOf(c) === null || recallFor(ctx.store, c) ? ' bad' : ''}"><b class="mono" data-kccard="${esc(c)}">${esc(c)}</b><span class="nm">${dsp[c] ? `<span class="mv-dsp">${ic('alert')}${esc(disputeHint(c, dsp[c][0]))}</span>` : nameHtml(c)}</span>${i === 0 && c === last ? pill(tx('just now'), 'good', { size: 'sm' }) : ''}` +
     `<button class="mv-x" data-act="m-del" data-code="${esc(c)}" aria-label="${tx('Remove {code}', { code: esc(c) })}" title="${tx('Remove {code}', { code: esc(c) })}">${ic('x')}</button></div>`;
   const title = `<button class="dk-tn" data-act="m-change" aria-label="${tx('Location {bay}: switch location or see the board', { bay: esc(bay) })}">${tx('Location {bay}', { bay: `<span class="mono">${esc(bay)}</span>` })}${ic('chev')}</button>`;
   const entry = `<div class="bf-entry"><span class="bf-fw"><input data-field="mscan" inputmode="numeric" autocomplete="off" placeholder="${tx('Scan or type a code')}" aria-label="${tx('Keycode or item barcode')}" enterkeyhint="done"><button type="button" data-act="m-scan-btn" aria-label="${tx('Add the typed code')}">${ic('plus')}</button></span><button class="btn primary bf-scan" data-act="m-read">${ic('camera')}${tx('Scan')}</button></div>`;
   const notes = (held.size ? `<button class="mv-note warn bf-heldnote" data-act="m-panel">${ic('alert')}${txn(held.size, '{n} code was held as a possible misread: tap to check it.', '{n} codes were held as possible misreads: tap to check them.')}</button>` : '') +
     (recallNow ? recallFlag(ctx.store, recallNow, st.mRecall.kc) : '') +
     (nDsp ? `<div class="mv-note warn">${ic('alert')}${nDsp / 2 === 1 ? tx('Two codes are one digit apart: check which is on the shelf and remove the other.') : tx('{n} codes are one digit apart: check which is on the shelf and remove the other.', { n: nDsp })}</div>` : '');
-  const list = `<div class="card bf-list"><div class="bf-lh">${tx('Scanned here')}<span>${tx('newest first')}</span></div>${all.length ? all.map(row).join('') : `<p class="bf-empty">${tx('Tap Scan to read the PDT’s list, or scan each product.')}</p>`}</div>`;
+  const list = `<div class="card bf-list"><div class="bf-lh">${tx('Scanned here')}<span>${tx('newest first')}</span></div>${all.length ? all.map(row).join('') : empty(tx('Tap Scan to read the PDT’s list, or scan each product.'), { sm: true, icon: 'barcode' })}</div>`;
   const strip = bfStrip(`<div class="dk-st"><div class="dk-l1"><b>${codes.length}</b><span>${txn(codes.length, 'code in {bay}', 'codes in {bay}', { bay: esc(bay) })}</span></div>` +
     `<div class="dk-l2">${held.size ? `<b class="w">${txn(held.size, '{n} held', '{n} held')}</b> · ` : ''}${(last || all[0]) ? `${tx('Last')} <b>${esc(last || all[0])}</b> ${esc(nameOf(last || all[0]) || '')}` : tx('Nothing scanned yet')}</div></div>` +
     `<button class="dk-go ok" data-act="m-send">${ic('check')}${tx('Submit for review')}</button>`);

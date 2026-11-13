@@ -10,7 +10,7 @@
 // its own page, the booklet by sub-department, and colours that print
 // without "Background graphics" (print-color-adjust).
 
-import { $, ic, esc, vh, sub, toast, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtDate } from '../ui.js';
+import { $, ic, esc, vh, sub, toast, DEPT_NAME, DEPT_COLOUR, DEPT_GROUPS, weekId, fmtDate, empty } from '../ui.js';
 import { mountMap, mapFloors, mapInfo, hasMap, segmentId } from '../map.js';
 import { printSheet } from '../print.js';
 import { issuePin } from './maintenance.js';
@@ -43,7 +43,7 @@ function panel() {
   const sel = o.dept && !DEPT_GROUPS.some(g => g[0].toLowerCase() === o.dept) ? DEPT_GROUPS.find(g => g[2].includes(o.dept))?.[0].toLowerCase() : o.dept;
   const subs = sel ? (DEPT_GROUPS.find(g => g[0].toLowerCase() === sel)?.[2] || []) : [];
   const areaCard = `<div class="card pm-card"><div class="ch"><h3>${tx('Area')}</h3></div><div class="seg pm-seg"><button class="${!o.dept ? 'on' : ''}" data-pm="dept" data-v="">${tx('All')}</button>${groups.map(([l, icon]) => `<button class="${sel === l.toLowerCase() ? 'on' : ''}" data-pm="dept" data-v="${l.toLowerCase()}">${ic(icon)}${l}</button>`).join('')}</div>` +
-    (subs.length ? `<div class="pm-sublab">${tx('Sub-dept')}</div><div class="seg pm-seg"><button class="${o.dept === sel ? 'on' : ''}" data-pm="dept" data-v="${sel}">${tx('All')}</button>${subs.map(id => `<button class="${o.dept === id ? 'on' : ''}" data-pm="dept" data-v="${id}"><i class="pm-sw" style="background:${DEPT_COLOUR[id] || '#999'}"></i>${id.toUpperCase()}</button>`).join('')}</div>` : '') +
+    (subs.length ? `<div class="pm-sublab">${tx('Sub-dept')}</div><div class="seg pm-seg"><button class="${o.dept === sel ? 'on' : ''}" data-pm="dept" data-v="${sel}">${tx('All')}</button>${subs.map(id => `<button class="${o.dept === id ? 'on' : ''}" data-pm="dept" data-v="${id}"><i class="pm-sw sw-c" style="--c:${DEPT_COLOUR[id] || '#999'}"></i>${id.toUpperCase()}</button>`).join('')}</div>` : '') +
     (o.dept ? chk('hide', tx('Hide other departments')) : '') + `</div>`;
   const layers = `<div class="card pm-card"><div class="ch"><h3>${tx('Layers')}</h3></div>${chk('labels', tx('Shelf names'))}${chk('badges', tx('Shelf badges'))}<div class="pm-row"><span>${tx('Department colours')}</span>${seg('colours', [['full', tx('Full')], ['outline', tx('Outline')]])}</div>${chk('pc', tx('Price checks'))}${chk('tory', tx('Tory lines'))}${chk('lm', tx('Landmarks'))}</div>`;
   const modes = `<div class="card pm-card"><div class="ch"><h3>${tx('Mode details')}</h3></div>${chk('route', tx('Pick route (this device’s pick list)'))}${chk('rfdone', tx('Refresh — completed shelves'))}${chk('rfplan', tx('Refresh — plan colours'))}${chk('st', tx('Stocktake states'))}${chk('emerg', tx('Emergency markers'))}${chk('maint', tx('Maintenance issues'))}</div>`;
@@ -61,7 +61,7 @@ function legend(map) {
   const fid = map.floorId(), here = new Set(map.segments().filter(g => g.closest('.mfl')?.getAttribute('data-fid') === fid && (!g.hasAttribute('data-dim') || !o.hide)).map(g => (g.getAttribute('data-dept') || '').toLowerCase()));
   const focus = codesOf(o.dept), depts = DEPT_GROUPS.flatMap(g => g[2]).filter(d => here.has(d) && (!focus.length || focus.includes(d)));   // an area's key names its departments
   const extra = [o.rfdone && [tx('Refreshed'), '#16A34A'], o.rfplan && [tx('Plan colour'), '#6B7280'], o.st && [tx('Counting'), '#EAB308'], o.st && [tx('Counted'), '#16A34A'], o.st && [tx('Verified'), '#2563EB'], o.route && [tx('Pick route'), '#D24E0E'], o.emerg && [tx('Emergency markers'), '#DC2626'], o.maint && [tx('Maintenance issues'), '#6F4527']].filter(Boolean);
-  return `<div class="pm-legend"><b>${tx('Key')}</b>${depts.map(d => `<span><i style="background:${DEPT_COLOUR[d] || '#999'}"></i>${esc(d.toUpperCase())} ${esc(DEPT_NAME[d] || '')}</span>`).join('')}${extra.length ? '<em></em>' + extra.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('') : ''}</div>`;
+  return `<div class="pm-legend"><b>${tx('Key')}</b>${depts.map(d => `<span><i class="sw-c" style="--c:${DEPT_COLOUR[d] || '#999'}"></i>${esc(d.toUpperCase())} ${esc(DEPT_NAME[d] || '')}</span>`).join('')}${extra.length ? '<em></em>' + extra.map(([l, c]) => `<span><i class="sw-c" style="--c:${c}"></i>${l}</span>`).join('') : ''}</div>`;
 }
 const scopeText = map => { const f = mapFloors().find(x => x.id === map.floorId()); return [f ? `${f.type === 'boh' ? 'BOH' : 'FOH'} · ${f.name}` : tx('Floor'), o.dept ? deptLabel(o.dept) : ''].filter(Boolean).join(' · '); };
 
@@ -97,17 +97,17 @@ function page(ctx, map, scope, ar) {
   for (const el of svg.querySelectorAll('.mfl')) if (el.style.display === 'none') el.remove();
   for (const el of svg.querySelectorAll('[data-sel]')) el.removeAttribute('data-sel');
   svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%'); svg.setAttribute('preserveAspectRatio', 'xMidYMid meet'); svg.style.removeProperty('height'); svg.style.removeProperty('width');
-  return `<div class="pm-page" style="height:${ar.h}mm">${titleStrip(ctx, scope)}<div class="pm-pmap" style="height:${ar.mapH}mm">${svg.outerHTML}</div>${legend(map)}</div>`;
+  return `<div class="pm-page" style="--ph:${ar.h}mm">${titleStrip(ctx, scope)}<div class="pm-pmap" style="--mh:${ar.mapH}mm">${svg.outerHTML}</div>${legend(map)}</div>`;
 }
 
 export default {
   id: 'printmap', title: tx('Print map'), icon: 'print',
   deskOnly: true,   // not on the phone: no menu row, no search result; a link goes home
   desktop(ctx) {
-    if (!hasMap()) return vh(tx('Print map'), sub(tx('No map published yet')), '', 'print') + `<div class="card"><p class="lbl">${tx("The owner publishes the store's map from the console. Then the composer prints it.")}</p></div>`;
+    if (!hasMap()) return vh(tx('Print map'), sub(tx('No map published yet')), '', 'print') + `<div class="card">${empty(tx("The owner publishes the store's map from the console. Then the composer prints it."), { icon: 'map' })}</div>`;
     const ar = area();
     return vh(tx('Print map'), sub(o.orient === 'portrait' ? tx('{paper} portrait', { paper: o.paper }) : tx('{paper} landscape', { paper: o.paper }), mapInfo()?.version ? tx('map {version}', { version: esc(mapInfo().version) }) : ''), `<button class="btn primary" data-act="pm-print">${ic('print')}${tx('Print · Save as PDF')}</button>`, 'print') +
-      `<div class="pm-wrap"><div class="pm-room"><div class="pm-paper" style="aspect-ratio:${ar.w} / ${ar.h}"><div id="pmtitle"></div><div class="pm-stage" id="pmstage" style="flex:${ar.mapH} 1 0"></div><div id="pmlegend"></div></div></div><div class="sidecol pm-side" id="pmside">${panel()}</div></div>`;
+      `<div class="pm-wrap"><div class="pm-room"><div class="pm-paper" style="--ar:${ar.w} / ${ar.h}"><div id="pmtitle"></div><div class="pm-stage" id="pmstage" style="--f:${ar.mapH}"></div><div id="pmlegend"></div></div></div><div class="sidecol pm-side" id="pmside">${panel()}</div></div>`;
   },
   mount(ctx, root) {
     const stage = $('#pmstage', root); if (!stage) return [];

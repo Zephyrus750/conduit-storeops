@@ -8,6 +8,7 @@ import { Miniflare } from 'miniflare';
 import { hashSecret, signToken } from '../../worker/auth.js';
 import { dvAnswer, DV_TRUCK } from '../fixtures/dv.js';
 import { ulid } from '../../shared/ulid.js';
+import { storeDay, DEFAULT_TZ } from '../../shared/time.js';
 
 const OWNER_KEY = 'owner-key-for-tests-only';
 let sitemapReads = 0;
@@ -274,6 +275,44 @@ test('device presence: POST /hb records the device (the polling fallback for the
   assert.equal(rec.lastError.length, 200, 'fields are capped as the socket frame caps them');
   // The token is scoped to its store: it cannot heartbeat another store.
   assert.equal((await api('POST', '/v1/store/1187/hb', {}, dev)).status, 403);
+});
+
+test('device health: the heartbeat carries the language, the kind of device and the last five errors, capped; an older device still lands', async () => {
+  const dev = (await api('POST', '/v1/auth/signin', { store: '1241', pin: '2468', device: 'health-pc' })).body.token;
+  const errors = Array.from({ length: 8 }, (_, i) => ({ at: `2026-10-08T0${i}:00:00+08:00`, msg: `fault ${i} ` + 'é'.repeat(400) }));
+  const full = await api('POST', '/v1/store/1241/hb', { app: 'conduit 9.9.1', online: true, outbox: 0, area: 'floor', lang: 'de-and-then-much-too-long', kind: 'pc', errors }, dev);
+  assert.equal(full.status, 200, 'five long errors still fit the heartbeat');
+  const devices = async () => (await api('GET', '/v1/admin/stores/1241/devices', undefined, ownerToken)).body.devices;
+  let rec = (await devices())['health-pc'];
+  assert.equal(rec.lang, 'de-and-then-much', 'the language is capped at 16');
+  assert.equal(rec.kind, 'pc');
+  assert.equal(rec.errors.length, 5, 'at most five errors, newest first as sent');
+  assert.deepEqual(rec.errors.map(e => e.msg.slice(0, 7)), ['fault 0', 'fault 1', 'fault 2', 'fault 3', 'fault 4']);
+  assert.ok(rec.errors.every(e => e.msg.length === 200), 'each message capped at 200');
+  assert.equal(rec.errors[0].at, '2026-10-08T00:00:00+08:00');
+  // A kind outside pc, phone and screen, a bad time, an empty message and a non-list are dropped, not stored.
+  await api('POST', '/v1/store/1241/hb', { app: 'conduit 9.9.1', kind: 'toaster', errors: [{ at: 'yesterday', msg: 'late' }, { at: '2026-10-08T01:00:00Z', msg: '' }, 'nope'] }, dev);
+  rec = (await devices())['health-pc'];
+  assert.equal(rec.kind, null); assert.deepEqual(rec.errors, [{ at: null, msg: 'late' }]);
+  await api('POST', '/v1/store/1241/hb', { app: 'conduit 9.9.1', errors: 'boom' }, dev);
+  assert.deepEqual((await devices())['health-pc'].errors, []);
+  // A device from before these fields: recorded as before, the new ones empty.
+  await api('POST', '/v1/store/1241/hb', { app: 'conduit 0.9.0', online: true, outbox: 2, area: 'floor', lastError: 'old' }, dev);
+  rec = (await devices())['health-pc'];
+  assert.deepEqual([rec.app, rec.outbox, rec.lastError, rec.lang, rec.kind, rec.errors], ['conduit 0.9.0', 2, 'old', null, null, []]);
+  // The socket frame lands the same fields.
+  const res = await mf.dispatchFetch('http://conduit.test/v1/store/1241/ws', { headers: { Upgrade: 'websocket', 'Sec-WebSocket-Protocol': `conduit, ${dev}` } });
+  const ws = res.webSocket; ws.accept();
+  const clock = new Promise(resolve => ws.addEventListener('message', m => { if (JSON.parse(m.data).t === 'clock') resolve(); }));
+  ws.send(JSON.stringify({ t: 'hb', app: 'conduit 9.9.2', online: true, outbox: 0, lang: 'vi', kind: 'screen', errors: [{ at: '2026-10-08T02:00:00Z', msg: 'socket fault' }] }));
+  await clock; ws.close();
+  rec = (await devices())['health-pc'];
+  assert.deepEqual([rec.app, rec.lang, rec.kind, rec.errors], ['conduit 9.9.2', 'vi', 'screen', [{ at: '2026-10-08T02:00:00Z', msg: 'socket fault' }]]);
+  // The store object woken from hibernation (its state rebuilt from the snapshot and the log) still knows the device.
+  const stub = await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('1241')));
+  await stub.load();
+  const back = (await devices())['health-pc'];
+  assert.deepEqual([back.app, back.lang, back.kind, back.last], ['conduit 9.9.2', 'vi', 'screen', rec.last], 'device presence outlives the store object');
 });
 
 test('owner diagnostics and act-as', async () => {
@@ -1004,6 +1043,45 @@ test('issue photos: a store device adds a JPEG, the store and owner read it, oth
   assert.equal(await stub.sweepPhotos(Date.now() + 91 * 86400e3), 1, 'the removed issue\'s photo');
   assert.equal((await raw('GET', `/v1/store/2044/photo/${pGone}`, ownerToken)).status, 404);
   assert.equal((await raw('GET', `/v1/store/2044/photo/${pLive}`, dev2.token)).status, 200, 'a live issue keeps its photo');
+});
+
+test('walk photos: a photo on a walk item is the store’s to see while the walk lists it, kept 90 days after the walk', async () => {
+  assert.equal((await reg2('2045')).status, 201);
+  const mgr = (await api('POST', '/v1/auth/signin', { store: '2045', managerCode: 'MG-2045', device: 'ph-45m' })).body;
+  const crew = (await api('POST', '/v1/auth/signin', { store: '2045', pin: '135790', device: 'ph-45' })).body;
+  const raw = (method, path, token, body) => mf.dispatchFetch('http://conduit.test' + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'image/jpeg' } : {}) }, body });
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(300).fill(9), 0xff, 0xd9]);
+  const up = async () => (await (await raw('POST', '/v1/store/2045/photo', mgr.token, jpeg)).json()).id;
+  const [p1, p2, p3] = [await up(), await up(), await up()];
+  const day = storeDay(new Date(), DEFAULT_TZ), W = { list: 'L1', day };
+  const ev = (type, entity, payload = {}) => ({ id: ulid(), store: '2045', area: 'floor', type, entity, payload, at: at(), v: 1 });
+  const send = async (events, token = mgr.token) => (await api('POST', '/v1/store/2045/events', { events }, token)).body.results;
+  const r = await send([
+    ev('task.list.set', { list: 'L1' }, { name: 'Opening checks', area: 'store', who: 'Store manager', days: [1, 2, 3, 4, 5, 6, 7], due: '06:00', items: [{ id: 'a1', t: 'Front entry mats down' }, { id: 'a2', t: 'Fire exit clear' }] }),
+    ev('task.walk.start', W), ev('task.walk.item', { ...W, item: 'a1' }, { a: 'y', photo: p1 }),
+    ev('issue.log', { issue: 'mw1' }, { cat: 'door', title: 'Fire exit clear', sev: 2 }), ev('issue.photo', { issue: 'mw1' }, { photo: p2 }),
+    ev('task.walk.item', { ...W, item: 'a2' }, { a: 'n', note: 'Cages against the exit door', photo: p2, sent: { to: 'issue', issue: 'mw1' } }),
+    ev('task.walk.done', W),
+  ]);
+  assert.deepEqual(r.map(x => x.ok), [true, true, true, true, true, true, true]);
+  // A crew phone (the store PIN) holds the walks but writes none.
+  const crewTry = await send([ev('task.walk.item', { ...W, item: 'a1' }, { a: 'n' })], crew.token);
+  assert.equal(crewTry[0].code, 'unauthorised');
+  assert.equal((await api('GET', '/v1/store/2045/snapshot', undefined, crew.token)).body.state.tasks.walks[`L1:${day}`].done !== null, true);
+  // On a walk: every device of the store sees it, and it is not deleted from under the walk.
+  assert.equal((await raw('GET', `/v1/store/2045/photo/${p1}`, crew.token)).status, 200);
+  const held = await raw('DELETE', `/v1/store/2045/photo/${p1}`, mgr.token);
+  assert.equal(held.status, 409); assert.match((await held.json()).message, /walk of Opening checks/);
+  // Retaken: the new answer lists the new photo; the old one is no longer the store's to see, and goes.
+  assert.equal((await send([ev('task.walk.item', { ...W, item: 'a1' }, { a: 'y', photo: p3 })]))[0].ok, true);
+  assert.equal((await raw('GET', `/v1/store/2045/photo/${p1}`, crew.token)).status, 404);
+  assert.equal((await raw('DELETE', `/v1/store/2045/photo/${p1}`, crew.token)).status, 200, 'it was on a walk once: any device of the store may drop it');
+  // The nightly sweep keeps a walk's photos 90 days after the walk; one also on an open issue stays with the issue.
+  const stub = await mf.getDurableObjectNamespace('STORE').then(ns => ns.get(ns.idFromName('2045')));
+  assert.equal(await stub.sweepPhotos(Date.now() + 2 * 86400e3), 0, 'both still listed');
+  assert.equal(await stub.sweepPhotos(Date.now() + 92 * 86400e3), 1, 'the walk’s own photo');
+  assert.equal((await raw('GET', `/v1/store/2045/photo/${p3}`, mgr.token)).status, 404);
+  assert.equal((await raw('GET', `/v1/store/2045/photo/${p2}`, crew.token)).status, 200, 'the issue keeps it');
 });
 
 test('retention: a bay older than 60 days leaves the live state at the nightly run and stays in History from the archive', async () => {

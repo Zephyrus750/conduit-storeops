@@ -1,10 +1,13 @@
 // Chapter: Receive a truck on the phone, the Back dock tabs as
 // the app has them today (js/views/backdock/receiving.js, bdhome.js):
 // land a pallet with the camera, the other phones land theirs
-// live, Finish receiving, Take 5. Three What ifs play on the same phone.
+// live, Finish receiving, Take 5. Four What ifs play on the same phone; the
+// fourth is a manager's phone sending pallets to off-site (offsend.js).
 // The day: Busselton 1241, Truck 1 with manifest 7040301 and its 12 consols
 // (the demo day scripts/guide/seed.mjs records), team D4, D7, D9.
 import { tx, txn } from '../../i18n.js';
+import { fmtDay } from '../../ui.js';
+import { MICRO } from '../../data/micros.js';
 import { ai, phone2, tab, sheet, unsheet, sheetHead, toast2, label, camera2, tally } from '../frames.js';
 
 const S = (...p) => p.join(' ');
@@ -22,13 +25,13 @@ const TINY = () => ({ c: tx('pallet type::Tub'), l: tx('pallet type::Pallet'), b
 const PH = () => [tx('Planned'), tx('Receiving'), tx('Received'), tx('Decanting'), tx('Cleared'), tx('Closed')];
 const track = at => `<div class="ph2t">${PH().map((l, i) => `<span class="${i < at ? 'd' : i === at ? 'c' : ''}">${l}</span>`).join('')}</div>`;
 const STATUS = () => ({ 1: ['rec', tx('Receiving')], 2: ['ok', tx('Received')], 3: ['dec', tx('Decanting')] });
-const truck = (n = 1, at = 1, man = true) => `<div class="tk2"><div class="tk2-r"><b>${tx('Truck {n}', { n })}${ai('chev')}</b><span class="st2 ${STATUS()[at][0]}">${STATUS()[at][1]}</span>` +
-  (man ? `<span class="mf2"><b>${ai('file')}7040301</b><small>${tx('{c} ctn · {n} consols expected', { c: 72, n: 12 })}</small></span>` : `<span class="mf2"><b>${ai('file')}${tx('No manifest')}</b><small>${tx('A manager attaches the manifest.')}</small></span>`) + `</div>${track(at)}</div>`;
+const truck = (n = 1, at = 1, man = true, tags = '') => `<div class="tk2"><div class="tk2-r"><b>${tx('Truck {n}', { n })}${ai('chev')}</b><span class="st2 ${STATUS()[at][0]}">${STATUS()[at][1]}</span>` +
+  (man ? `<span class="mf2"><b>${ai('file')}7040301</b><small>${tx('{c} ctn · {n} consols expected', { c: 72, n: 12 })}</small></span>` : `<span class="mf2"><b>${ai('file')}${tx('No manifest')}</b><small>${tx('A manager attaches the manifest.')}</small></span>`) + `</div>${tags ? `<div class="rv3-tags">${tags}</div>` : ''}${track(at)}</div>`;
 // The dock: bays A1 to D7. A pallet is { t: c|l|b, n: cartons, ok, off, cr: carried, done, tm }.
 const grid = bays => `<div class="dk2">${[...'ABCD'].flatMap(r => [1, 2, 3, 4, 5, 6, 7].map(k => {
   const ref = r + k, p = bays[ref];
   if (!p) return `<span class="sq2" data-ref="${ref}"><i>${ref}</i>+</span>`;
-  return `<span class="sq2 ${p.done ? 'done' : 't-' + p.t}${p.fresh ? ' fresh' : ''}" data-ref="${ref}"><i>${ref}${p.cr ? ' ↩' : ''}</i>${p.n}${p.ok || p.done ? `<span class="ok2">${ai('check')}</span>` : ''}${p.off ? '<span class="off2">OFF</span>' : p.tm ? `<span class="tm2">${p.tm}</span>` : ''}</span>`;
+  return `<span class="sq2 ${p.done ? 'done' : 't-' + p.t}${p.fresh ? ' fresh' : ''}${p.pk ? ' rv3-pk' : ''}" data-ref="${ref}"><i>${ref}${p.cr ? ' ↩' : ''}</i>${p.n}${p.ok || p.done ? `<span class="ok2">${ai('check')}</span>` : ''}${p.off ? '<span class="off2">OFF</span>' : p.tm ? `<span class="tm2">${p.tm}</span>` : ''}</span>`;
 })).join('')}</div>`;
 const entry = bays => { const n = Object.keys(bays).length; return `<div class="card2 pe"><div class="card2-h">${tx('Pallet entry')}<span>${tx('{a} of {b} verified', { a: Object.values(bays).filter(p => p.ok || p.done).length, b: n })}</span></div>${grid(bays)}</div>`; };
 const legend = () => `<div class="lg2"><span><i style="background:#2953D6"></i>${tx('Tubs')}</span><span><i style="background:#B3261E"></i>${tx('Load')}</span><span><i style="background:#69787F"></i>${tx('Bulk')}</span><span class="r">${tx('Tap an empty square to land')}</span></div>`;
@@ -36,7 +39,7 @@ const legend = () => `<div class="lg2"><span><i style="background:#2953D6"></i>$
 // scanned with its last four digits bold, +n for the pallet's other labels.
 const llRow = ([ref, t, n, first, more, at]) => `<div><span class="tg t-${t}">${ref}</span><span class="ck">${ai('check')}</span><span class="tx"><span><em class="t-${t}">${TINY()[t]}</em> · ${tx('{n} ctn', { n })}</span><span class="cons">${first.slice(0, -4)}<b>${first.slice(-4)}</b></span>${more ? `<span class="more">+${more}</span>` : ''}</span><small>${at}</small></div>`;
 const last = (rows, ctn) => `<div class="card2 ll"><div class="card2-h">${tx('Last landed')}<span>${tx('landed {a} · first pallet {b} · {n} ctn', { a: '05:40', b: '05:45', n: ctn })}</span></div><div class="ll2">${rows.slice(0, 4).map(llRow).join('')}</div></div>`;
-const strip = (got, toLand, off) => `<div class="ds2"><b>${got}/12 <span>${tx('consols matched')}</span></b><div class="bar"><i style="width:${Math.round(got / 12 * 100)}%"></i></div><small>${tx('<em>{a}</em> to land · <em class="z">{b}</em> off-manifest', { a: toLand, b: off })}</small></div><span class="b2 pri fin">${tx('Finish receiving')}</span><span class="up2">${ai('chev', 'up')}</span>`;
+const strip = (got, toLand, off, total = 12) => `<div class="ds2"><b>${got}/${total} <span>${tx('consols matched')}</span></b><div class="bar"><i style="width:${Math.round(got / total * 100)}%"></i></div><small>${tx('<em>{a}</em> to land · <em class="z">{b}</em> off-manifest', { a: toLand, b: off })}</small></div><span class="b2 pri fin">${tx('Finish receiving')}</span><span class="up2">${ai('chev', 'up')}</span>`;
 const stripReceived = () => `<div class="ds2"><b>${tx('Received')}</b><small>${tx('Take 5, then Start decant')}</small></div><span class="up2">${ai('chev', 'up')}</span>`;
 
 // The bays as the day goes on.
@@ -93,11 +96,11 @@ const HELD = () => ['warn', '601999917', 0, '', tx('not on this manifest: held o
 // Types a label number into the open field and adds it.
 const typeIn = async (c, code) => { c.cls('.ty-f', 'ph', false); await c.type('.ty-f .t', code); await c.tap('.p2-sheet .add'); };
 // A landed pallet's card (js/views/backdock/receiving.js palletPanel): type, cartons, labels, actions.
-const card = ({ ref, pill, extra = '', type, ctn, est, rows }) => `<div class="sh-h"><b>${tx('Pallet {ref}', { ref })} <span class="st2 ${pill[0]}" style="vertical-align:3px">${pill[1]}</span>${extra}</b><span class="sh-x">${ai('x')}</span></div>` +
+const card = ({ ref, pill, extra = '', type, ctn, est, rows, foot = '' }) => `<div class="sh-h"><b>${tx('Pallet {ref}', { ref })} <span class="st2 ${pill[0]}" style="vertical-align:3px">${pill[1]}</span>${extra}</b><span class="sh-x">${ai('x')}</span></div>` +
   `<div class="sh-b"><div class="pt2">${[['c', tx('Chep tubs')], ['l', tx('Load pallet')], ['b', tx('Bulk')]].map(([k, l]) => `<span class="${k}${type === k ? ' on' : ''}">${type === k ? ai('check') : ''}${l}</span>`).join('')}</div>` +
   `<div class="two2"><div><div class="sh-sec">${tx('Cartons')}</div><span class="f2">${ctn}</span></div><div><div class="sh-sec">${tx('Est. mins')}</div><span class="f2">${est}</span></div></div><div class="sh-sec">${tx('Note')}</div><span class="f2 ph">${tx('optional')}</span>` +
   `<div class="row2"><span class="b2 pri big" style="flex:1">${ai('camera')}${tx('Scan a label')}</span><span class="b2 big">${ai('keyboard')}${tx('Type it')}</span></div><div class="rows" style="display:flex;flex-direction:column;gap:6px">${rows}</div>` +
-  `<div class="two2"><span class="b2">${ai('check')}${tx('Update')}</span><span class="b2">${ai('swap')}${tx('Move')}</span></div></div>`;
+  (foot || `<div class="two2"><span class="b2">${ai('check')}${tx('Update')}</span><span class="b2">${ai('swap')}${tx('Move')}</span></div>`) + '</div>';
 
 // ── the chapter ──────────────────────────────────────────────────────
 export const receive = {
@@ -245,5 +248,62 @@ receive.stories.push({
       dev: 'The new truck needs its own team and Take 5 before Start decant.', ev: [],
       run: async c => { unsheet(c); await c.tap('.p2-tabs [data-tab="decant"]'); tab(c, 'decant'); c.html('#r-recv', truck(2, 1, false) + `<div class="row2" style="align-items:flex-start;font-size:13.5px;color:var(--i2)">${ai('users')}<span>${tx('No crew on this truck yet. Add the team from <b>Team &amp; plan</b>, then Take 5 starts the decant.')}</span></div>`);
         c.html('.p2-strip', `<div class="ds2"><b>${tx('Receiving')}</b><small>${tx('Take 5, then Start decant')}</small></div><span class="up2">${ai('chev', 'up')}</span>`); } },
+  ],
+});
+
+// ── What if there's no room on the dock for all of it? (a manager's phone) ──
+// Every pallet is down (B2); A7 and B1 go to off-site storage. On a phone
+// it starts from a pallet's sheet (offsend.js): Send B1 to off-site, Add
+// more pallets from the grid, then the sheet again with both.
+const deptName = d => Object.values(MICRO).flat().find(x => x.startsWith(d + ' '))?.slice(4) || '';
+// A pallet on the dock, as the send sheet lists it: [type, cartons, its consols].
+const OFFP = { A7: ['b', 7, [10]], B1: ['c', 9, [11]] };
+const partTag = (n, of) => `<span class="rv3-rt part">${ai('stack')}${tx('Part off-site · {n} of {of}', { n, of })}</span>`;
+const offRow = (ref, many) => { const [, c, cs] = OFFP[ref]; return `<div class="r"><b>${ref}</b><span class="mono">${C[cs[0]][0]}</span><span class="dl">${cs.map(i => `${deptName(C[i][2])} ${C[i][2]}`).join(' · ')}</span><small>${tx('{n} ctn', { n: c })}</small>${many ? `<span class="x">${ai('x')}</span>` : ''}</div>`; };
+// The send sheet (sendSheet(t, true)): the pallets, Add more, Callback, Requested by, Note, what happens.
+function sendSheet(refs) {
+  const n = refs.length, rest = 8 - n;
+  const title = n === 1 ? tx('Send {ref} to off-site', { ref: refs[0] }) : txn(n, 'Send {n} pallet to off-site', 'Send {n} pallets to off-site');
+  const effect = n === 1 ? tx('It comes off the grid and goes on the Off-site register. The truck closes without it.') : tx('They come off the grid and go on the Off-site register, sent today. The other {left} carry on to decant, and the truck closes without these {n}.', { left: rest, n });
+  return `<div class="sh-h rv3-h"><span class="t"><b>${title}</b><small>${[tx('Truck {n}', { n: 1 }), '7040301', fmtDay('2026-10-25')].join(' · ')}</small></span><span class="sh-x rv3-bx">${ai('x')}</span></div>` +
+    `<div class="sh-b rv3-b"><div class="rv3-list">${refs.map(r => offRow(r, n > 1)).join('')}</div><span class="rv3-more">${ai('plus')}${tx('Add more pallets from the grid')}</span>` +
+    `<div class="rv3-two"><div><div class="rv3-l">${tx('Callback')}</div><span class="f2 ph rv3-f">dd/mm/yyyy${ai('cal')}</span></div><div><div class="rv3-l">${tx('Requested by')}</div><span class="f2 ph rv3-f">${tx('Name')}</span></div></div>` +
+    `<div><div class="rv3-l">${tx('Note')}</div><span class="f2 ph rv3-f">${tx('Anything the yard should know')}</span></div>` +
+    `<p class="rv3-eff">${ai('stack')}<span>${effect} ${tx('Its tag becomes Part off-site · {n} of {of}.', { n, of: 8 })}</span></p>` +
+    `<span class="b2 pri big wide rv3-go">${ai('stack')}${tx('Send to off-site')}</span><span class="b2 big wide">${tx('Cancel')}</span></div>`;
+}
+// The strip while picking (pickBar(t, true)): what is picked, × to stop, Send.
+const pickStrip = refs => { const rs = refs.slice().sort(), c = rs.reduce((n, r) => n + OFFP[r][1], 0);
+  return `<div class="ds2 rv3-ps"><b>${txn(rs.length, '{n} pallet picked', '{n} pallets picked')}</b><small>${rs.join(', ')} · ${tx('{n} ctn', { n: c })}</small></div><span class="rv3-x">${ai('x')}</span><span class="b2 rv3-send">${ai('stack')}${tx('Send to off-site…')}</span>`; };
+const pickBays = refs => Object.fromEntries(Object.entries(B2).map(([k, v]) => [k, refs.includes(k) ? { ...v, pk: true } : v]));
+const pickMode = (c, refs) => { c.html('.pe-w', entry(pickBays(refs))); c.html('.p2-strip', pickStrip(refs)); c.cls('.p2-strip', 'rv3-off', true); };
+const B1card = () => card({ ref: 'B1', pill: ['dec', tx('Landed')], type: 'c', ctn: 9, est: 5,
+  rows: `<div class="lb2">${ai('check')}<b>${C[11][0]}</b><span>${tx('{n} ctn', { n: 9 })} · 024</span><span class="x2">${ai('x')}</span></div><div class="rv3-cont">▸ ${tx('Contents')} · ${txn(1, '{n} consol', '{n} consols')}</div>`,
+  foot: `<div class="two2"><span class="b2">${ai('check')}${tx('Update')}</span><span class="b2 rv3-one">${ai('stack')}${tx('Send {ref} to off-site', { ref: 'B1' })}</span></div><div class="two2"><span class="b2">${ai('swap')}${tx('Move')}</span><span class="b2">🚫 ${tx('Not in this session')}</span></div><span class="b2 wide">${ai('trash')}${tx('Remove')}</span>` });
+const LEFT = Object.fromEntries(Object.entries(B2).filter(([k]) => !OFFP[k]));
+receive.stories.push({
+  id: 'offsite', title: tx('What if there’s no room on the dock for all of it?'), blurb: tx('On a manager’s phone, send the pallets nobody has started to off-site storage: they leave the grid, and the truck closes without them.'),
+  know: [tx('Managers only: Send to off-site is at the foot of a pallet’s sheet.'), tx('Only pallets nobody has started can go; a started one says so.'),
+    tx('They go on the Off-site register under the truck’s manifest, sent today, with the callback date if you give one.'), tx('The truck closes without them, and its receiving audit no longer expects their consols.'),
+    tx('Its tag says Part off-site, with how many of its pallets went.'), tx('The PC does the same from the dock: Pick pallets for off-site.')],
+  html: () => phone({ view: 'recv', bays: B2, rows: L2 }).replace(last(L2, 18), last(L2, 72)).replace(strip(3, 9, 0), strip(12, 0, 1)),
+  steps: [
+    { cap: tx('On a manager’s phone, tap a pallet there is no room for: B1.'), read: S(tx('Its sheet has Send B1 to off-site at the foot, for managers.'), tx('Only a pallet nobody has started can go.')),
+      dev: '<b>palletPanel()</b> in js/views/backdock/receiving.js shows it to a manager on a live truck, for a pallet nobody has started (<b>pickable()</b> in js/views/backdock/offsend.js).', ev: [],
+      run: async c => { c.html('.p2-strip', strip(12, 0, 1)); await c.tap('.sq2[data-ref="B1"]'); sheet(c, B1card()); } },
+    { cap: tx('Send B1 to off-site: the sheet to send it.'), read: S(tx('Callback is the day it is due back; Requested by and Note are for the yard.'), tx('Add more pallets from the grid picks others to go with it.')),
+      dev: '<b>onOffAct()</b>, off-one: on a phone it opens <b>sendSheet()</b> at once, with B1 picked. Nothing is sent yet.', ev: [],
+      run: async c => { sheet(c, B1card()); await c.tap('.p2-sheet .rv3-one'); c.html('.p2-sheet', sendSheet(['B1'])); } },
+    { cap: tx('Add more pallets from the grid: tap A7 too.'), read: S(tx('The strip says what is picked; × stops picking.'), tx('Tap a picked pallet again to let it go.')),
+      dev: 'On a phone the strip is <b>pickBar()</b> while picking; a tap picks or lets go (<b>pickCell()</b>).', ev: [],
+      run: async c => { sheet(c, sendSheet(['B1'])); await c.tap('.p2-sheet .rv3-more'); unsheet(c); pickMode(c, ['B1']); await c.wait(400); await c.tap('.sq2[data-ref="A7"]'); pickMode(c, ['B1', 'A7']); } },
+    { cap: tx('Send to off-site…: both are on the sheet, each with its ×.'), read: S(tx('The other six carry on to decant, and the truck closes without these two.'), tx('Its tag becomes Part off-site · 2 of 8.')),
+      dev: '<b>sendSheet()</b> again; a pallet’s × takes it off the list (off-drop).', ev: [],
+      run: async c => { pickMode(c, ['B1', 'A7']); await c.tap('.p2-strip .rv3-send'); sheet(c, sendSheet(['B1', 'A7'])); } },
+    { cap: tx('Send to off-site: A7 and B1 leave the grid, and the truck is Part off-site · 2 of 8.'), read: S(tx('They go on the Off-site register under 7040301, sent today.'), tx('The strip counts only the consols still expected: 10 of 10.')),
+      dev: '<b>pallet.offsite</b> takes them off the truck and onto the register (shared/reducers/backdock.js); <b>partTag()</b> tags the truck.',
+      ev: [E('pallet.offsite', 'backdock', { truck: TR }, { bays: ['B1', 'A7'], cb: null, req: '', note: '' })],
+      run: async c => { sheet(c, sendSheet(['B1', 'A7'])); await c.tap('.p2-sheet .rv3-go'); unsheet(c); c.html('#r-recv .tk2', truck(1, 1, true, partTag(2, 8)).replace(/^<div class="tk2">|<\/div>$/g, ''));
+        c.html('.pe-w', entry(LEFT)); c.html('.ll-w', last(L2.filter(r => !OFFP[r[0]]), 56)); c.cls('.p2-strip', 'rv3-off', false); c.html('.p2-strip', strip(10, 0, 1, 10)); toast2(c, `<span>${txn(2, '{n} pallet sent to off-site', '{n} pallets sent to off-site')}</span>`); } },
   ],
 });

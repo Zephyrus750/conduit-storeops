@@ -4,7 +4,7 @@
 // device is signed in to, with switching. Details come from the map
 // editor's Store Info, published with the map (cleanStoreInfo).
 
-import { ic, esc, vh, sub, status, toast, fmtTime, mhead, fmtDay } from '../ui.js';
+import { ic, esc, vh, sub, status, pill, toast, fmtTime, mhead, fmtDay, empty } from '../ui.js';
 import { mapInfo, mapStats, mapSymbols, symbolsHtml } from '../map.js';
 import { tx, txn } from '../i18n.js';
 import { ask } from '../sheet.js';
@@ -23,25 +23,25 @@ function details(ctx, si, phone = false) {
   const hours = si.hoursDays?.length ? `<table class="si-hours">${si.hoursDays.map(([d, t]) => `<tr${/^sat/i.test(d) ? ' class="wk"' : ''}><th>${esc(d)}</th><td>${esc(t)}</td></tr>`).join('')}</table>` : '';
   const today = isoDay(new Date());
   const hols = (si.publicHolidays || []).filter(h => h.date && h.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8);
-  const holsHtml = hols.length ? `<div class="si-hols">${hols.map(h => `<div class="${/closed/i.test(h.hours) ? 'closed' : ''}"><b>${esc(h.name || tx('Public holiday'))}</b>${h.date === today ? `<span class="si-today">${tx('today')}</span>` : ''}<span>${esc(dayLabel(h.date))}</span><span class="h">${esc(h.hours || '')}</span></div>`).join('')}</div>` : '';
+  const holsHtml = hols.length ? `<div class="si-hols">${hols.map(h => `<div class="${/closed/i.test(h.hours) ? 'closed' : ''}"><b>${esc(h.name || tx('Public holiday'))}</b>${h.date === today ? `${pill(tx('today'), '', { size: 'sm', live: true, cls: 'si-today' })}` : ''}<span>${esc(dayLabel(h.date))}</span><span class="h">${esc(h.hours || '')}</span></div>`).join('')}</div>` : '';
   const dirs = [link(dirGoogle(si), 'Google Maps', 'map'), link(dirApple(si, ctx.storeName), 'Apple Maps', 'map')].join('');
   return `<div class="card"><div class="ch"><h3>${tx('Details')}</h3></div>` +
     (addr ? `<div class="si-sec"><div class="si-k">${tx('Address')}</div><div>${addr}</div></div>` : '') +
     (dirs ? `<div class="si-acts">${dirs}</div>` : '') +
     (hours ? `<div class="si-sec"><div class="si-k">${tx('Opening hours')}</div>${hours}</div>` : '') +
     (holsHtml ? `<div class="si-sec"><div class="si-k">${tx('Public holidays')}</div>${holsHtml}</div>` : '') +
-    (!addr && !hours && !holsHtml ? `<p class="lbl">${phone ? tx('No address or hours yet.') : tx('No address or hours yet. The owner adds them in the map editor’s Store Info and republishes the map.')}</p>` : '') + `</div>`;
+    (!addr && !hours && !holsHtml ? empty(phone ? tx('No address or hours yet.') : tx('No address or hours yet. The owner adds them in the map editor’s Store Info and republishes the map.'), { sm: true, icon: 'store' }) : '') + `</div>`;
 }
 function logistics(si) {
   const fmt = [si.brand, si.storeType, si.storeStyle, si.storeSize ? tx('{size} m² store', { size: esc(si.storeSize) }) : ''].filter(Boolean);
   const park = si.parkingTip || si.parkingLat != null ? `<div class="si-sec"><div class="si-k">${tx('Staff parking')}</div>${si.parkingTip ? `<div>${esc(si.parkingTip)}</div>` : ''}${si.parkingLat != null && si.parkingLng != null ? `<div class="si-acts">${link(gmaps(si.parkingLat, si.parkingLng), tx('Open in Maps'), 'map')}</div>` : ''}</div>` : '';
   const asm = si.assemblyNotes || si.assemblyLat != null ? `<div class="si-sec"><div class="si-k">${tx('Assembly point')}</div>${si.assemblyNotes ? `<div>${esc(si.assemblyNotes)}</div>` : ''}${si.assemblyLat != null && si.assemblyLng != null ? `<div class="si-acts">${link(gmaps(si.assemblyLat, si.assemblyLng), tx('Open in Maps'), 'map')}</div>` : ''}</div>` : '';
   return `<div class="card"><div class="ch"><h3>${tx('Logistics')}</h3></div>` + (fmt.length ? `<div class="si-sec"><div class="si-k">${tx('Store format')}</div><div>${fmt.map(esc).join(' · ')}</div></div>` : '') +
-    (park || asm ? park + asm : `<p class="lbl">${tx('No parking or assembly details for this store.')}</p>`) + `</div>`;
+    (park || asm ? park + asm : empty(tx('No parking or assembly details for this store.'), { sm: true, icon: 'parking' })) + `</div>`;
 }
 function mapStatus() {
   const info = mapInfo(), st = mapStats();
-  if (!info || !st) return `<div class="card"><div class="ch"><h3>${tx('Map')}</h3>${status('warn', tx('Not published'))}</div><p class="lbl">${tx('No map is published for this store yet. The owner publishes one from the console.')}</p></div>`;
+  if (!info || !st) return `<div class="card"><div class="ch"><h3>${tx('Map')}</h3>${status('warn', tx('Not published'))}</div>${empty(tx('No map is published for this store yet. The owner publishes one from the console.'), { sm: true, icon: 'map' })}</div>`;
   const foh = st.floors.filter(f => f.type === 'foh').reduce((n, f) => n + f.shelves, 0), boh = st.floors.filter(f => f.type === 'boh').reduce((n, f) => n + f.shelves, 0), em = st.floors.reduce((n, f) => n + f.emergency, 0);
   // ShelfSearcher's mapped areas: a sales floor counts from 20 named
   // shelves, the back of house from 10.
@@ -49,7 +49,7 @@ function mapStatus() {
   return `<div class="card"><div class="ch"><h3>${tx('Map')}</h3>${status(foh >= 20 ? 'good' : 'warn', foh >= 20 ? tx('Ready') : tx('In development'))}</div>` +
     `<div class="si-areas">${area(foh >= 20, txn(foh, 'Front of house · {n} shelf', 'Front of house · {n} shelves'))}${area(boh >= 10, txn(boh, 'Back of house · {n} shelf', 'Back of house · {n} shelves'))}${area(em > 0, txn(em, 'Emergency · {n} marker', 'Emergency · {n} markers'))}</div>` +
     `<div class="list">${st.floors.map(f => `<div class="li"><span class="loc">${esc(f.name)}</span><span class="nm">${f.type === 'boh' ? tx('Back of house') : tx('Front of house')} · ${txn(f.shelves, '{n} shelf in {runs} runs', '{n} shelves in {runs} runs', { runs: f.runs })} · ${f.paths ? txn(f.paths, '{n} walk-path point', '{n} walk-path points') : tx('no walk paths')}</span></div>`).join('')}</div>` +
-    `<p class="lbl" style="margin-top:10px">${[tx('Version {v}', { v: esc(String(info.version)) }), info.at ? tx('published {time}', { time: esc(fmtTime(info.at)) }) : '', info.storeInfo?.lastUpdated ? tx('details updated {date}', { date: esc(info.storeInfo.lastUpdated) }) : '', info.metresPerUnit ? tx('scale set (1 unit = {cm} cm)', { cm: +(info.metresPerUnit * 100).toFixed(1) }) : tx('scale not set: distances and shelf sizes need the editor’s Set Scale')].filter(Boolean).join(' · ')}</p></div>`;
+    `<p class="lbl mt-m">${[tx('Version {v}', { v: esc(String(info.version)) }), info.at ? tx('published {time}', { time: esc(fmtTime(info.at)) }) : '', info.storeInfo?.lastUpdated ? tx('details updated {date}', { date: esc(info.storeInfo.lastUpdated) }) : '', info.metresPerUnit ? tx('scale set (1 unit = {cm} cm)', { cm: +(info.metresPerUnit * 100).toFixed(1) }) : tx('scale not set: distances and shelf sizes need the editor’s Set Scale')].filter(Boolean).join(' · ')}</p></div>`;
 }
 // The symbols drawn on this store's map, with how many of each.
 function symbols() {
@@ -63,7 +63,7 @@ function stores(ctx) {
     parked.map(p => `<div class="li"><span class="loc">${esc(p.store)}</span><span class="nm">${esc(p.name || '')}</span><button class="btn sm primary" data-act="switch" data-store="${esc(p.store)}">${tx('Switch')}</button><button class="ibtn" data-act="forget" data-store="${esc(p.store)}" title="${tx('Sign out of {store}', { store: esc(p.store) })}" aria-label="${tx('Sign out of {store}', { store: esc(p.store) })}">${ic('x')}</button></div>`).join('') + `</div>` +
     (adding ? `<form class="si-add" data-form="add"><input class="inp" name="store" inputmode="numeric" autocomplete="off" placeholder="${tx('Store number')}" aria-label="${tx('Store number')}" required><input class="inp" name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="${tx('Store PIN')}" aria-label="${tx('Store PIN')}" required><button class="btn primary sm">${tx('Sign in')}</button><button type="button" class="btn sm" data-act="add-cancel">${tx('Cancel')}</button></form>`
       : `<div class="si-acts"><button class="btn sm" data-act="add">${ic('plus')}${tx('Add another store')}</button></div>`) +
-    `<p class="lbl" style="margin-top:8px">${tx('Switching keeps each store signed in on this device; crew and manager codes are dropped when you switch away. Sign out signs out of every store here.')}</p></div>`;
+    `<p class="lbl mt-s">${tx('Switching keeps each store signed in on this device; crew and manager codes are dropped when you switch away. Sign out signs out of every store here.')}</p></div>`;
 }
 
 export default {
@@ -92,7 +92,7 @@ export default {
           // Send what can go first: switching drops the area codes.
           try { await ctx.store.flush(); } catch {}
           const n = ctx.store.status?.queued || 0, area = ctx.store.pending.some(e => e.area !== 'store');
-          if (n && !confirm((area ? txn(n, '{n} change for {store} is still waiting to send. It sends when you switch back (Stockroom and Back dock changes once their code is entered again).', '{n} changes for {store} are still waiting to send. They send when you switch back (Stockroom and Back dock changes once their code is entered again).', { store: ctx.storeNo }) : txn(n, '{n} change for {store} is still waiting to send. It sends when you switch back.', '{n} changes for {store} are still waiting to send. They send when you switch back.', { store: ctx.storeNo })) + '\n\n' + tx('Switch to {store}?', { store: a.dataset.store }))) return;
+          if (n && !await ask({ title: tx('Switch to {store}?', { store: a.dataset.store }), text: area ? txn(n, '{n} change for {store} is still waiting to send. It sends when you switch back (Stockroom and Back dock changes once their code is entered again).', '{n} changes for {store} are still waiting to send. They send when you switch back (Stockroom and Back dock changes once their code is entered again).', { store: ctx.storeNo }) : txn(n, '{n} change for {store} is still waiting to send. It sends when you switch back.', '{n} changes for {store} are still waiting to send. They send when you switch back.', { store: ctx.storeNo }), ok: tx('Switch store'), cancel: tx('Stay on {store}', { store: ctx.storeNo }), danger: false })) return;
           await ctx.session.switchTo(a.dataset.store); location.reload();
         }
         else if (act === 'forget') { if (await ask({ title: tx('Sign this device out of store {store}?', { store: a.dataset.store }), ok: tx('Sign out'), cancel: tx('Stay signed in') })) { await ctx.session.forget(a.dataset.store); parked = await ctx.session.parked(); repaint(); } }

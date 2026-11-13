@@ -7,8 +7,9 @@
 // plan.js, the truck's head card with its tally against the manifest, the
 // dock grid with Land a pallet, the team, the decant plan, Landed today with
 // a pallet's card; finishSheet() in phase.js; the late links of late.js; the
-// receiving audit of audit.js). Three What ifs play on the same PC: a pallet
-// on the wrong square, a pallet with no label, Finish receiving too soon.
+// receiving audit of audit.js; Send to off-site of offsend.js). Four What ifs
+// play on the same PC: a pallet on the wrong square, a pallet with no label,
+// Finish receiving too soon, and no room on the dock for all of it.
 // The day is the phone chapters' (receive.js, decant.js): Busselton 1241,
 // Sunday 25 October 2026, Truck 1 landed at 05:40 with manifest 7040301 and
 // its 12 consols, the team D4, D7 and D9. The dock sheet has A1 to A7 and
@@ -19,9 +20,11 @@
 // phones' morning (A1 and A2 landed from a phone at 05:45 and 05:48). The
 // forecasts are estClear() (shared/dockplan.js) at those times. The screen
 // is longer than the PC's window, so the drawing scrolls (Y below).
-// Every class here starts rc2- (styles/guide.css); the frame is js/guide/pc.js.
+// Every class here starts rc2-, or rc3- for Send to off-site (styles/guide.css);
+// the frame is js/guide/pc.js.
 import { tx, txn, locale } from '../../i18n.js';
 import { fmtDay } from '../../ui.js';
+import { MICRO } from '../../data/micros.js';
 import { ai } from '../frames.js';
 import { DAY, dShort, pc, view, vh, sub, gtabs, btn } from '../pc.js';
 
@@ -50,15 +53,18 @@ const entered = (...refs) => Object.fromEntries(refs.map(r => [r, mk(r, { at: EN
 // Where the content is scrolled to: the top, the dock, and the foot (the pallet's card under Landed today).
 // The offsets are the drawing's own (measured at 1920×1080 in English): the dock card at the top of the window, the grid at the top, the page's foot.
 const Y = { top: 0, dock: 897, grid: 985, foot: 1790, foot2: 1738, footA6: 1785, footA7: 1703 };
-const day = (o = {}) => ({ bays: bays('A1', 'A2'), y: Y.top, ph: 1, conf: '', t5: 0, begun: false, card: '', form: '', pt: '', sel: '', moving: '', fresh: [], fc: '06:08', start: '', empty: false, nt: false, landed: '', sheet: null, ...o });
+const day = (o = {}) => ({ bays: bays('A1', 'A2'), y: Y.top, ph: 1, conf: '', t5: 0, begun: false, card: '', form: '', pt: '', sel: '', moving: '', fresh: [], fc: '06:08', start: '', empty: false, nt: false, landed: '', sheet: null, pick: null, cb: '', sent: [], ...o });
 const mut = (s, f) => { const n = structuredClone(s); f(n); return n; };
 
 // ── what the truck adds up to (liveAudit() in shared/reducers/backdock.js) ──
 const all = s => Object.values(s.bays);
 const ctn = s => all(s).reduce((n, p) => n + (p.n || 0), 0);
 const matched = s => all(s).reduce((n, p) => n + p.cons.length, 0);
+// The consols the truck still expects: a pallet sent to off-site takes its consols off the audit.
+const gone = s => s.sent.flatMap(r => BAY[r][1]);
+const total = s => 12 - gone(s).length;
 const extra = s => all(s).reduce((n, p) => n + p.held.length, 0);
-const short = s => { const on = new Set(all(s).flatMap(p => p.cons)); return C.reduce((n, c, i) => n + (on.has(i) ? 0 : c[1]), 0); };
+const short = s => { const on = new Set([...all(s).flatMap(p => p.cons), ...gone(s)]); return C.reduce((n, c, i) => n + (on.has(i) ? 0 : c[1]), 0); };
 const bare = s => Object.keys(s.bays).filter(r => !s.bays[r].cons.length && !s.bays[r].held.length);
 const nocount = s => all(s).filter(p => p.n == null).length;
 const PHASE = () => [tx('truck phase::Planned'), tx('truck phase::Receiving'), tx('truck phase::Received'), tx('truck phase::Decanting'), tx('truck phase::Cleared'), tx('truck phase::Closed')];
@@ -79,7 +85,7 @@ function trk(s) {
 }
 // The six phases and the next step (phaseBar() in js/views/backdock/phase.js).
 function phb(s) {
-  const n = all(s).length, line = s.ph === 0 ? tx('Not landed yet') : s.ph === 1 ? `${txn(n, '{n} pallet landed', '{n} pallets landed')} · ${tx('{m} of {n} consols matched', { m: matched(s), n: 12 })}`
+  const n = all(s).length, line = s.ph === 0 ? tx('Not landed yet') : s.ph === 1 ? `${txn(n, '{n} pallet landed', '{n} pallets landed')} · ${tx('{m} of {n} consols matched', { m: matched(s), n: total(s) })}`
     : s.ph === 2 ? tx('Layout confirmed {time} · Take 5, then start', { time: s.conf }) : tx('{done} of {n} pallets done · {c} of {total} ctn', { done: 0, n, c: 0, total: ctn(s) });
   const go = s.ph === 0 ? tx('New truck') : s.ph === 1 ? tx('Finish receiving') : s.ph === 2 ? tx('Start decant') : '';
   // phaseSteps() in shared/dockphase.js: a received truck has Received done and Decanting next up.
@@ -113,30 +119,57 @@ function take5(s) {
 }
 // The truck's head card: its line, the chips, the cartons and the tally (tallyRow()).
 function head(s) {
-  const n = all(s).length, m = matched(s), miss = 12 - m, x = extra(s), sh = short(s), un = bare(s).length, nc = nocount(s);
+  const n = all(s).length, m = matched(s), tot = total(s), miss = tot - m, x = extra(s), sh = short(s), un = bare(s).length, nc = nocount(s);
   const chip = (l, v, cls = '') => `<span class="rc2-chip${cls}"><span class="l">${l}</span><span class="v">${v}</span></span>`;
   const tal = (cls, v, l) => `<span class="rc2-tal${cls ? ' ' + cls : ''}"><b>${v}</b>${l}</span>`;
-  return `<div class="rc2-card rc2-head"><div class="rc2-hd"><span class="rc2-tile">${ai('truck')}</span><div class="rc2-tt"><b>${tx('Truck {n}', { n: 1 })}</b><span class="rc2-tst live">${tx('Live')}</span>` +
+  return `<div class="rc2-card rc2-head"><div class="rc2-hd"><span class="rc2-tile">${ai('truck')}</span><div class="rc2-tt"><b>${tx('Truck {n}', { n: 1 })}</b><span class="rc2-tst live">${tx('Live')}</span>${s.sent.length ? `<span class="rc3-rtrow">${partTag(s)}</span>` : ''}` +
     `<small>${tx('landed {time}', { time: '05:40' })}${n ? ' · ' + tx('first pallet {time}', { time: all(s).map(p => p.at).sort()[0] }) : ''} · ${txn(n, '{n} pallet', '{n} pallets')} · ${tx('{n} decanting', { n: 0 })}</small></div>${btn('print', tx('Audit'), 'sm rc2-aud')}` +
     `<div class="rc2-chips">${chip(tx('Manifest'), tx('{n}<small> cons · {c}c</small>', { n: 12, c: 72 }))}${chip(tx('Decant start'), s.start || `05:40<small> ${tx('landed')}</small>`)}${chip(tx('Goal'), '—')}${chip(tx('Forecast'), s.fc)}` +
     (s.conf ? chip(tx('Receiving'), `${ai('check')}${tx('Confirmed {time}', { time: s.conf })}`, ' ok rc2-rcv') : chip(tx('Receiving'), tx('Finish'), ' rc2-rcv')) + '</div></div>' +
     `<div class="rc2-prog"><b>0</b><span class="of">${tx('/ {n} cartons', { n: ctn(s) })}</span><span class="pct">0%</span></div><div class="rc2-bar"><i></i></div>` +
-    `<div class="rc2-tally">${tal(m === 12 ? 'ok' : '', `${m}/12`, tx('consols matched'))}${tal(miss ? 'warn' : 'ok', miss, tx('not landed'))}${tal(x ? 'bad' : '', x, tx('off-manifest'))}${tal(sh ? 'warn' : '', sh, tx('ctn short'))}${un ? tal('bad', un, tx('no label')) : ''}</div>` +
+    `<div class="rc2-tally">${tal(m === tot ? 'ok' : '', `${m}/${tot}`, tx('consols matched'))}${tal(miss ? 'warn' : 'ok', miss, tx('not landed'))}${tal(x ? 'bad' : '', x, tx('off-manifest'))}${tal(sh ? 'warn' : '', sh, tx('ctn short'))}${un ? tal('bad', un, tx('no label')) : ''}</div>` +
     (nc ? `<div class="rc2-msg">${ai('alert')}<span>${txn(nc, '{n} pallet has no carton count: it is planned at 60 minutes until it is counted.', '{n} pallets have no carton count: they are planned at 60 minutes until they are counted.')}</span></div>` : '') + '</div>';
+}
+// Send to off-site (js/views/backdock/offsend.js): the tag a truck that sent
+// some carries (partTag()), the bar while picking (pickBar()) and the side
+// sheet (sendSheet()). A pallet's line names its departments (deptLine()).
+const deptName = d => Object.values(MICRO).flat().find(x => x.startsWith(d + ' '))?.slice(4) || '';
+const deptLine = cons => [...new Set(cons.map(i => C[i][2]))].map(d => `${deptName(d)} ${d}`).join(' · ');
+const partTag = s => `<span class="rc3-rt part">${ai('stack')}${tx('Part off-site · {n} of {of}', { n: s.sent.length, of: s.sent.length + all(s).length })}</span>`;
+const picked = s => (s.pick || []).slice().sort();
+function pickBar(s) {
+  const ps = picked(s), c = ps.reduce((n, r) => n + (s.bays[r].n || 0), 0);
+  const what = ps.length ? `<b>${txn(ps.length, '{n} pallet picked', '{n} pallets picked')}</b><span>${ps.join(', ')}${c ? ' · ' + tx('{n} ctn', { n: c }) : ''}</span>` : `<b>${tx('Pick pallets for off-site')}</b><span>${tx('Tap the pallets there is no room for. Started pallets can’t go.')}</span>`;
+  return `<div class="rc3-bar">${ai('stack')}<div class="w">${what}</div><div class="a">${ps.length ? `<span class="pc2-btn sm">${tx('Clear')}</span>` : ''}<span class="pc2-btn sm">${tx('Cancel')}</span><span class="pc2-btn sm pri rc3-send${ps.length ? '' : ' off'}">${ai('stack')}${tx('Send to off-site…')}</span></div></div>`;
+}
+// The side sheet over the whole screen (the shared sheet, kind side).
+function sendSheet(s) {
+  const ps = picked(s), n = ps.length, rest = all(s).length - n, of = n + rest + s.sent.length;
+  const row = r => { const p = s.bays[r]; return `<div class="r"><b>${r}</b><span class="mono">${C[p.cons[0]][0]}${p.cons.length > 1 ? ` +${p.cons.length - 1}` : ''}</span><span class="dl">${deptLine(p.cons)}</span><small>${tx('{n} ctn', { n: p.n })}</small></div>`; };
+  const title = n === 1 ? tx('Send {ref} to off-site', { ref: ps[0] }) : txn(n, 'Send {n} pallet to off-site', 'Send {n} pallets to off-site');
+  const effect = n === 1 ? tx('It comes off the grid and goes on the Off-site register. The truck closes without it.') : tx('They come off the grid and go on the Off-site register, sent today. The other {left} carry on to decant, and the truck closes without these {n}.', { left: rest, n });
+  return `<div class="rc3-side"><div class="hd"><div class="t"><h3>${title}</h3><small>${[tx('Truck {n}', { n: 1 }), '7040301', fmtDay(DAY)].join(' · ')}</small></div><span class="x">${ai('x')}</span></div>` +
+    `<div class="bd"><div class="list">${ps.map(row).join('')}</div>` +
+    `<div class="pair"><div class="f"><span>${tx('Callback')}</span><span class="rc3-in rc3-cb"><span class="t${s.cb ? '' : ' ph'}">${s.cb || 'dd/mm/yyyy'}</span>${ai('cal')}</span></div><div class="f"><span>${tx('Requested by')}</span><span class="rc3-in ph">${tx('Name')}</span></div></div>` +
+    `<div class="f"><span>${tx('Note')}</span><span class="rc3-in ph">${tx('Anything the yard should know')}</span></div>` +
+    `<p class="eff">${ai('stack')}<span>${effect} ${tx('Its tag becomes Part off-site · {n} of {of}.', { n: n + s.sent.length, of })}</span></p></div>` +
+    `<div class="ft"><span class="pc2-btn">${tx('Cancel')}</span><span class="pc2-btn pri rc3-go">${ai('stack')}${tx('Send to off-site')}</span></div></div>`;
 }
 // The dock: Land a pallet (or the move under way), the grid (dockGrid()), the hold-up row.
 function dock(s) {
   const lg = `<span class="rc2-lg">${TYPES().map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}<span><i class="dn"></i>${tx('Done')}</span><span><i class="ac"></i>${tx('Decanting')}</span><span><i class="co"></i>${tx('Carryover')}</span><span><i class="ov"></i>${tx('Over its estimate')}</span></span>`;
-  const form = s.moving ? `<div class="rc2-mvb">${tx('Moving {ref}: tap an empty square.', { ref: s.moving })}<span class="pc2-btn sm">${tx('Cancel')}</span></div>`
+  const form = s.pick ? pickBar(s) : s.moving ? `<div class="rc2-mvb">${tx('Moving {ref}: tap an empty square.', { ref: s.moving })}<span class="pc2-btn sm">${tx('Cancel')}</span></div>`
     : `<div class="rc2-land"><b>${tx('Land a pallet')}</b><span class="rc2-in mono rc2-bay${s.form ? '' : ' ph'}">${s.form || tx('bay field::Bay')}</span><span class="rc2-pts${s.pt ? '' : ' ask'}">${TYPES().map(([k, l, c]) => `<span class="rc2-pt${s.pt === k ? ' on' : ''}" data-pt="${k}"><i style="background:${c}"></i>${l}</span>`).join('')}</span>` +
       `<span class="rc2-in mono ph">${tx('Cartons')}</span><span class="pc2-btn sm pri rc2-lgo${s.pt ? '' : ' off'}">${ai('plus')}${tx('Land')}</span></div>`;
   const sq = ref => {
     const p = s.bays[ref];
     if (!p) return `<span class="rc2-sq e${s.moving ? ' tg' : ''}" data-ref="${ref}"><span class="ref">${ref}</span><span class="pl">${s.moving ? '⇲' : '+'}</span></span>`;
     const fl = p.held.length ? ['off', tx('OFF')] : p.n == null ? ['ctn', tx('+CTN')] : null;
-    return `<span class="rc2-sq t-${p.t}${s.fresh.includes(ref) ? ' fresh' : ''}" data-ref="${ref}"><span class="ref">${ref}</span><span class="ct">${p.n ?? '–'}</span>${fl ? `<span class="fl ${fl[0]}">${fl[1]}</span>` : ''}</span>`;
+    return `<span class="rc2-sq t-${p.t}${s.fresh.includes(ref) ? ' fresh' : ''}${s.pick?.includes(ref) ? ' rc3-pk' : ''}" data-ref="${ref}"><span class="ref">${ref}</span><span class="ct">${p.n ?? '–'}</span>${fl ? `<span class="fl ${fl[0]}">${fl[1]}</span>` : ''}</span>`;
   };
-  return `<div class="rc2-card rc2-dock"><div class="rc2-kh">${ai('box')}<h3>${tx('The dock')}</h3>${lg}</div>${form}<div class="rc2-grid">${REFS.map(sq).join('')}</div>` +
+  // Managers send pallets nobody has started to off-site (offsend.js): the button, while nothing is being moved or picked.
+  const offBtn = all(s).length && !s.pick && !s.moving ? btn('stack', tx('Pick pallets for off-site'), 'sm rc3-pickbtn') : '';
+  return `<div class="rc2-card rc2-dock${s.pick ? ' rc3-picking' : ''}"><div class="rc2-kh">${ai('box')}<h3>${tx('The dock')}</h3>${lg}${offBtn}</div>${form}<div class="rc2-grid">${REFS.map(sq).join('')}</div>` +
     `<div class="rc2-hr">${ai('clock')}<span>${s.begun ? tx('Decant running') : tx('Take 5, then Start decant')}</span>${btn('alert', tx('Hold-up'), 'sm')}${btn('users', tx('Book huddle'), 'sm')}</div></div>`;
 }
 // The team on the truck (teamCard()) and the decant plan (planCard() in plan.js).
@@ -376,5 +409,39 @@ receivepc.stories.push({
     { cap: tx('Too soon? Click the Receiving chip: the hand-over is undone.'), read: S(tx('Truck 1 is receiving again, with Finish receiving as the next step.'), tx('Confirm it again when the truck is empty.')),
       dev: 'The chip sends <b>receiving.confirm</b> with confirmed: false (<b>onAct()</b>, received).', ev: [E('receiving.confirm', 'backdock', { truck: TR }, { confirmed: false })],
       run: async c => { await c.tap('#v-rc .rc2-rcv'); paint(c, F0); off(c); toast(c, tx('Hand-over undone')); } },
+  ],
+});
+
+// ── What if there's no room on the dock for all of it? ────────────────
+// The whole sheet is in (S7, at the dock); A5, A7 and B1 go to off-site
+// storage, due back Wednesday. The side sheet is over the whole screen.
+const SENT = ['A5', 'A7', 'B1'];
+const O0 = mut(S7, s => { s.sel = ''; s.y = Y.dock; s.fc = '06:34'; s.sheet = null; });
+const O1 = mut(O0, s => { s.pick = []; });
+const pickTo = k => mut(O1, s => { s.pick = SENT.slice(0, k); });
+const O3 = mut(pickTo(3), s => { s.cb = '28/10/2026'; });
+const O4 = mut(O0, s => { for (const r of SENT) delete s.bays[r]; s.sent = SENT; s.fc = '06:30'; s.y = Y.top; });
+const side = (c, s) => { c.html('.pc2-omni', sendSheet(s)); c.cls('.pc2-omni', 'rc3-om', true); c.show('.pc2-omni'); };
+const unside = c => { c.hide('.pc2-omni'); c.html('.pc2-omni', ''); c.cls('.pc2-omni', 'rc3-om', false); };
+receivepc.stories.push({
+  id: 'offsite', title: tx('What if there’s no room on the dock for all of it?'), blurb: tx('Send the pallets nobody has started to off-site storage: they leave the grid, and the truck closes without them.'),
+  know: [tx('Managers send them: Pick pallets for off-site on the dock, or Send to off-site on a pallet’s card.'), tx('Only pallets nobody has started can go; a started one says so.'),
+    tx('They go on the Off-site register under the truck’s manifest, sent today, with the callback date if you give one.'), tx('The truck closes without them, and its receiving audit no longer expects their consols.'),
+    tx('Its tag says Part off-site, with how many of its pallets went.'), tx('Call them back from the register or the Planner: the truck that brings them back ticks each one off as it lands.')],
+  html: () => desk(O0),
+  steps: [
+    { cap: tx('No room on the dock for all of Truck 1: Pick pallets for off-site.'), read: S(tx('The grid turns into a picker, and a bar says what is picked.'), tx('Started pallets can’t go.')),
+      dev: '<b>onOffAct()</b> in js/views/backdock/offsend.js, off-pick: a square picks instead of opening its pallet (<b>pickCell()</b>), and <b>pickBar()</b> stands in for Land a pallet. Nothing is sent yet.', ev: [],
+      run: async c => { await c.tap('#v-rc .rc3-pickbtn'); paint(c, O1); } },
+    { cap: tx('Click the pallets that go: A5, A7 and B1.'), read: S(tx('Each one picked is ticked in orange; click it again to let it go.'), tx('The bar adds up their cartons.')),
+      dev: 'The pick is kept on this PC, for this truck, until it is sent or cancelled.', ev: [],
+      run: async c => { paint(c, O1); for (let k = 1; k <= SENT.length; k++) { await c.tap(`#v-rc .rc2-sq[data-ref="${SENT[k - 1]}"]`); paint(c, pickTo(k)); } } },
+    { cap: tx('Send to off-site…: the sheet lists them, with a callback date.'), read: S(tx('Callback is the day they are due back; Requested by and Note are for the yard.'), tx('It says what happens: the other pallets carry on to decant, and the truck closes without these.')),
+      dev: '<b>sendSheet()</b> in js/views/backdock/offsend.js; the date is kept as it is typed.', ev: [],
+      run: async c => { paint(c, pickTo(3)); await c.tap('#v-rc .rc3-send'); off(c); side(c, pickTo(3)); await c.tap('.pc2-omni .rc3-cb'); c.cls('.pc2-omni .rc3-cb .t', 'ph', false); await c.type('.pc2-omni .rc3-cb .t', '28/10/2026'); side(c, O3); } },
+    { cap: tx('Send to off-site: they leave the grid, and Truck 1 is Part off-site · 3 of 8.'), read: S(tx('The tally counts only the consols still expected: 8 of 8 matched.'), tx('On the Off-site register they are listed under 7040301, with Call back.')),
+      dev: '<b>pallet.offsite</b> takes each pallet off the truck onto the register (shared/reducers/backdock.js); <b>partTag()</b> tags the truck, and <b>liveAudit()</b> leaves their consols out.',
+      ev: [E('pallet.offsite', 'backdock', { truck: TR }, { bays: SENT, cb: '2026-10-28', req: '', note: '' })],
+      run: async c => { side(c, O3); await c.tap('.pc2-omni .rc3-go'); unside(c); off(c); paint(c, mut(O4, s => { s.y = Y.dock; })); await scroll(c, Y.top); paint(c, O4); toast(c, txn(3, '{n} pallet sent to off-site', '{n} pallets sent to off-site')); glow(c, '#v-rc .rc3-rt', true); } },
   ],
 });

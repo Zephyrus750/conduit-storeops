@@ -7,10 +7,11 @@
 // editor's Store Info shows as a banner with directions.
 
 import { haptic } from '../device.js';
-import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, status, fmtDate, toast, mbig, mghost, mgr, empty } from '../ui.js';
 import { mountMap, mapbar, crumbx, mvMap, bindMapChrome, mapInfo, mapFloors, setStrip, sx } from '../map.js';
 import { paperMap } from '../printmap.js';
 import { printSheet, table, tick, signoff } from '../print.js';
+import { askText } from '../sheet.js';
 import { markerSymbol, MARKER_NAMES } from '../../shared/maprender.js';
 import { tx, txn } from '../i18n.js';
 
@@ -21,7 +22,7 @@ const SOON_DAYS = 30;
 const EXT_NAME = { water: tx('Water'), foam: tx('Foam'), powder: tx('Dry powder'), co2: 'CO₂', wet_chem: tx('Wet chemical'), liquid: tx('Vaporising liquid') };
 const EXT_BAND = { water: '#DC2626', foam: '#0057B8', powder: '#FFFFFF', co2: '#111111', wet_chem: '#E8B98A', liquid: '#FFD500' };
 const extName = k => EXT_NAME[String(k || '').toLowerCase()] || String(k || '');
-const extBand = k => { const c = EXT_BAND[String(k || '').toLowerCase()]; return c ? `<i class="ext-band" style="background:${c}"></i>` : ''; };
+const extBand = k => { const c = EXT_BAND[String(k || '').toLowerCase()]; return c ? `<i class="ext-band sw-c" style="--c:${c}"></i>` : ''; };
 let selected = null, filterType = '', evac = null;   // evac: null | 'armed' | { r, floor }
 // The map's own name for a kind of marker (shared/maprender.js), in the device's language.
 const markerName = t => (MARKER_NAMES[t] ? tx(MARKER_NAMES[t]) : (TYPES[t] || [t])[0]);
@@ -47,7 +48,7 @@ export default {
   desktop(ctx) {
     return vh(tx('Emergency'), sub('<span id="emsub">…</span>'), `<button class="btn" data-act="evacprint" title="${tx('An evacuation map for the staff room, one page per floor, and the equipment walk sheet')}">${ic('print')}${tx('Print evacuation map')}</button><button class="btn evac" data-act="evac" id="evacBtn">${ic('pin')}${tx('Nearest exit')}</button><button class="btn primary" data-act="service">${ic('alert')}${tx('Log a service')}</button>`, 'm-emergency') +
       `<div class="grid2"><div class="mapbox">${mapbar()}<div class="mapstage" id="mapstage"></div>` +
-      `<div class="mapleg">${crumbx(tx('Emergency'), ctx.storeNo)}<span><i style="background:#DC2626"></i>${tx('Fire exits and extinguishers')}</span><span><i style="background:#2563EB"></i>${tx('First aid')}</span><span><i style="background:#F59E0B"></i>${tx('AED')}</span><span><i style="background:#16A34A"></i>${tx('Assembly point')}</span><span style="color:var(--faint)">${tx('Tap a marker for its details and servicing')}</span></div></div>` +
+      `<div class="mapleg">${crumbx(tx('Emergency'), ctx.storeNo)}<span><i class="k-red"></i>${tx('Fire exits and extinguishers')}</span><span><i class="k-blue"></i>${tx('First aid')}</span><span><i class="k-yellow"></i>${tx('AED')}</span><span><i class="k-green"></i>${tx('Assembly point')}</span><span class="t-faint">${tx('Tap a marker for its details and servicing')}</span></div></div>` +
       `<div class="sidecol" id="emside"></div></div>`;
   },
   mobile(ctx) { return mvMap({ badge: '<span id="emsub">…</span>' }) + `<div class="mv-sel mode em" id="emmob"></div>`; },
@@ -89,8 +90,8 @@ export default {
         if (act === 'select') { selected = a.getAttribute('data-id'); const r = map.markers().find(x => x.id === selected); if (r) map.setVb([r.x - 600, r.y - 400, 1200, 800]); paint(); }
         else if (act === 'close') { selected = null; paint(); }
         else if (act === 'filter') { filterType = a.getAttribute('data-type'); paint(); }
-        else if (act === 'service') { if (!selected) return toast(tx('Tap a marker on the map first')); const note = prompt(tx('Technician / docket #'), ''); if (note == null) return; await ctx.store.dispatch({ type: 'asset.service', entity: { asset: selected }, payload: { note, ...fromKey(map, selected) } }); toast(tx('Service logged')); }
-        else if (act === 'schedule') { const mk = map.markers().find(x => x.id === selected), cur = (ctx.store.get('assets')[selected] || ctx.store.get('assets')[mk?.legacyId])?.intMonths || 12; const v = prompt(tx('Service interval in months'), String(cur)); const n = Number(v); if (!v || !Number.isInteger(n)) return; await ctx.store.dispatch({ type: 'asset.schedule', entity: { asset: selected }, payload: { months: n, ...fromKey(map, selected) } }); }
+        else if (act === 'service') { if (!selected) return toast(tx('Tap a marker on the map first')); const note = await askText({ title: tx('Log a service'), label: tx('Technician / docket #'), ok: tx('Log service') }); if (note == null) return; await ctx.store.dispatch({ type: 'asset.service', entity: { asset: selected }, payload: { note, ...fromKey(map, selected) } }); toast(tx('Service logged')); }
+        else if (act === 'schedule') { const mk = map.markers().find(x => x.id === selected), cur = (ctx.store.get('assets')[selected] || ctx.store.get('assets')[mk?.legacyId])?.intMonths || 12; const v = await askText({ title: tx('Set the service interval'), label: tx('Service interval in months'), value: String(cur), inputmode: 'numeric', required: true, ok: tx('Save') }); const n = Number(v); if (!v || !Number.isInteger(n)) return; await ctx.store.dispatch({ type: 'asset.schedule', entity: { asset: selected }, payload: { months: n, ...fromKey(map, selected) } }); }
       } catch (err) { toast(err.message, 'bad'); }
     });
     return [ctx.store.on('assets', paint)];
@@ -101,17 +102,17 @@ export default {
 function detail(r, phone = false, mark = false) {
   const t = TYPES[r.type] || [r.type, '#64748B', 'alert'];
   const rec = r.rec;
-  return `<div class="card"><div class="ch"><h3 style="color:${t[1]}">${t[0]}${r.extClass ? ` · ${extBand(r.extClass)}${esc(extName(r.extClass))}` : ''}</h3><span class="ibtn" data-act="close">${ic('x')}</span></div>` +
+  return `<div class="card"><div class="ch"><h3 class="tc" style="--c:${t[1]}">${t[0]}${r.extClass ? ` · ${extBand(r.extClass)}${esc(extName(r.extClass))}` : ''}</h3><span class="ibtn" data-act="close">${ic('x')}</span></div>` +
     `<div class="mt-meta"><span>${esc(r.location || r.label || tx('On the map'))}</span>${r.dept ? `<span>${esc(r.dept.toUpperCase())}</span>` : ''}${phone ? '' : rec ? `<span>${rec.due ? tx('Due {date}', { date: fmtDate(rec.due) }) : tx('No schedule')}</span><span>${txn(rec.intMonths, 'Every {n} month', 'Every {n} months')}</span>` : `<span class="cs-dim">${tx('Not serviced yet')}</span>`}</div>` +
     (r.detail ? `<div class="msh-sec"><b>${ic('file')}${tx('Notes')}</b><p>${esc(r.detail)}</p></div>` : '') +
     (r.method ? `<div class="msh-sec"><b>${ic('listcheck')}${tx('Method')}</b><p>${esc(r.method)}</p></div>` : '') + (r.operation ? `<div class="msh-sec"><b>${ic('tool')}${tx('Operation')}</b><p>${esc(r.operation)}</p></div>` : '') +
-    (phone ? '' : (rec ? `<div class="list">${rec.log.slice().reverse().slice(0, 6).map(l => `<div class="li"><span class="rt" style="margin:0">${fmtDate(l.t)}</span><span class="nm">${esc(tx(l.a))}${l.n ? ' · ' + logNote(l) : ''}</span></div>`).join('')}</div>` : '') +
-    `<div class="acts2" style="display:flex;gap:8px;margin-top:12px;align-items:center">${mark ? mgr() : ''}<span class="btn primary sm" data-act="service">${ic('check')}${tx('Service done')}</span><span class="btn sm" data-act="schedule">${tx('Set schedule')}</span></div>`) + '</div>';
+    (phone ? '' : (rec ? `<div class="list">${rec.log.slice().reverse().slice(0, 6).map(l => `<div class="li log"><span class="rt">${fmtDate(l.t)}</span><span class="nm">${esc(tx(l.a))}${l.n ? ' · ' + logNote(l) : ''}</span></div>`).join('')}</div>` : '') +
+    `<div class="acts2">${mark ? mgr() : ''}<span class="btn primary sm" data-act="service">${ic('check')}${tx('Service done')}</span><span class="btn sm" data-act="schedule">${tx('Set schedule')}</span></div>`) + '</div>';
 }
 function sidebar(m) {
   const sel = m.rows.find(r => r.id === selected);
-  const due = `<div class="card"><div class="ch"><h3>${tx('Service due')}</h3></div><div class="list emlist">${m.due.map(r => `<div class="li" data-act="select" data-id="${r.id}"><span class="pt" style="background:${(TYPES[r.type] || [])[1] || '#64748B'}"></span><span class="nm">${(TYPES[r.type] || [r.type])[0]} · ${esc(r.location || r.label || '')}<span class="where" style="display:block;font-size:12px;color:var(--dim)">${txn(r.rec.intMonths, 'every {n} month · due {date}', 'every {n} months · due {date}', { date: fmtDate(r.rec.due) })}</span></span>${status('warn', r.st === 'overdue' ? tx('Overdue') : tx('Due'))}</div>`).join('') || `<div class="li" style="color:var(--dim)">${tx('Nothing due in the next 30 days.')}</div>`}</div></div>`;
-  const eq = `<div class="card"><div class="ch"><h3>${tx('Equipment')}</h3></div><div class="list">${Object.entries(m.counts).map(([t, n]) => `<div class="li" data-act="filter" data-type="${filterType === t ? '' : t}"><span class="pt" style="background:${(TYPES[t] || [])[1] || '#64748B'}"></span><span class="nm">${(TYPES[t] || [t])[0]}</span><span class="rt">${tx('{n} in date', { n: m.rows.filter(r => r.type === t && r.st === 'ok').length })}</span><b>${n}</b></div>`).join('')}</div></div>`;
+  const due = `<div class="card"><div class="ch"><h3>${tx('Service due')}</h3></div><div class="list emlist">${m.due.map(r => `<div class="li" data-act="select" data-id="${r.id}"><span class="pt sw-c" style="--c:${(TYPES[r.type] || [])[1] || '#64748B'}"></span><span class="nm">${(TYPES[r.type] || [r.type])[0]} · ${esc(r.location || r.label || '')}<span class="where">${txn(r.rec.intMonths, 'every {n} month · due {date}', 'every {n} months · due {date}', { date: fmtDate(r.rec.due) })}</span></span>${status('warn', r.st === 'overdue' ? tx('Overdue') : tx('Due'))}</div>`).join('') || empty(tx('Nothing due in the next 30 days.'), { sm: true, icon: 'check' })}</div></div>`;
+  const eq = `<div class="card"><div class="ch"><h3>${tx('Equipment')}</h3></div><div class="list">${Object.entries(m.counts).map(([t, n]) => `<div class="li" data-act="filter" data-type="${filterType === t ? '' : t}"><span class="pt sw-c" style="--c:${(TYPES[t] || [])[1] || '#64748B'}"></span><span class="nm">${(TYPES[t] || [t])[0]}</span><span class="rt">${tx('{n} in date', { n: m.rows.filter(r => r.type === t && r.st === 'ok').length })}</span><b>${n}</b></div>`).join('')}</div></div>`;
   return evacCard() + assemblyCard() + (sel ? detail(sel) : '') + due + eq;
 }
 // The phone's Emergency sheet (opened from the strip): the nearest exit,
@@ -133,7 +134,7 @@ function mobile(m, manager = false) {
   const eq = manager ? types.map(t => { const inDate = m.rows.filter(r => r.type === t && r.st === 'ok').length; return sx.row(icon(t), name(t), tx('{n} of {total} in date', { n: inDate, total: m.counts[t] }), '', '', `data-act="filter" data-type="${filterType === t ? '' : t}"`); }) : [];
   return `<div class="sx">${head}<div class="em-mevac">${mbig(tx('Nearest exit'), 'evac', 'pin', ' data-act="evac"')}</div>${sx.sec(tx('Show on the map'), kinds, filterType ? tx('tap again for all') : tx('tap a kind'))}${assemblyCard()}` +
     (due.length ? sx.sec(`<b class="sx-lt">${tx('Service due')}${mgr()}</b>`, sx.rows(due), tx('next 30 days · manager')) : '') + (eq.length ? sx.sec(`<b class="sx-lt">${tx('Equipment')}${mgr()}</b>`, sx.rows(eq), tx('manager')) : '') +
-    `<div class="sx-sub" style="margin-top:12px">${tx('Tap a marker for what it is and how to use it.')}</div></div>`;
+    `<div class="sx-sub mt-m">${tx('Tap a marker for what it is and how to use it.')}</div></div>`;
 }
 // The strip under the phone's Emergency map: the marker count and the
 // nearest exit, the walk once it is drawn, or the marker in hand.
@@ -151,7 +152,7 @@ function metres(units) { const mpu = mapInfo()?.metresPerUnit; return mpu ? tx('
 function evacCard(mobile) {
   if (!evac) return '';
   const hide = `<span class="btn sm" data-act="evac">${ic('x')}${evac === 'armed' ? tx('Cancel') : tx('Hide route')}</span>`;
-  if (evac === 'armed') return `<div class="card em-evac"><div class="ch"><h3>${ic('pin')}${tx('Nearest exit')}</h3>${hide}</div><p class="lbl" style="margin:0">${tx('Tap where you are on the map. The walk to the closest exit on this floor draws in green.')}</p></div>`;
+  if (evac === 'armed') return `<div class="card em-evac"><div class="ch"><h3>${ic('pin')}${tx('Nearest exit')}</h3>${hide}</div><p class="lbl m-0">${tx('Tap where you are on the map. The walk to the closest exit on this floor draws in green.')}</p></div>`;
   const { exit, assembly } = evac.r, where = x => esc(x.label || x.location || '');
   // Each step is one sentence, with or without where the exit is and how far.
   const ew = where(exit.target), ed = metres(exit.dist);
@@ -164,7 +165,7 @@ function evacCard(mobile) {
       : aw ? tx('Go on to the <b>assembly point</b> ({where}).', { where: aw }) : tx('Go on to the <b>assembly point</b>.'));
   }
   else steps.push(assemblyText() ? tx('Then go to the <b>assembly point</b>: {where}.', { where: esc(assemblyText()) }) : tx('Then go to the <b>assembly point</b>.'));
-  return `<div class="card em-evac"><div class="ch"><h3>${ic('pin')}${tx('Nearest exit')}${evac.floor ? ` · ${esc(evac.floor)}` : ''}</h3>${hide}</div><ol class="em-steps">${steps.map(x => `<li>${x}</li>`).join('')}</ol>${mobile ? '' : `<p class="lbl" style="margin:8px 0 0">${tx('Blue is where you tapped. Tap Nearest exit again to start from somewhere else.')}</p>`}</div>`;
+  return `<div class="card em-evac"><div class="ch"><h3>${ic('pin')}${tx('Nearest exit')}${evac.floor ? ` · ${esc(evac.floor)}` : ''}</h3>${hide}</div><ol class="em-steps">${steps.map(x => `<li>${x}</li>`).join('')}</ol>${mobile ? '' : `<p class="lbl m-0 mt-s">${tx('Blue is where you tapped. Tap Nearest exit again to start from somewhere else.')}</p>`}</div>`;
 }
 const assemblyText = () => mapInfo()?.storeInfo?.assemblyNotes || '';
 // The store's assembly point from the map editor's Store Info, with
@@ -192,8 +193,8 @@ function printEvacuation(ctx, m, route) {
     const pm = paperMap({ floor: f.id, mono: true, layers: { emergency: true, priceChecks: false, labels: false, badges: true }, evacFrom: here ? route.origin : null, aspect: 277 / 150 });
     const types = {}; for (const mk of pm?.markers || []) types[mk.type] = (types[mk.type] || 0) + 1;
     const key = Object.entries(types).map(([t, n]) => `<span>${markerSymbol(t, 22)}${esc(markerName(t))}${n > 1 ? ` ×${n}` : ''}</span>`).join('') + (here ? `<span><i class="ev-you"></i>${tx('You are here')}</span><span><i class="ev-route"></i>${tx('Way out')}</span>` : '');
-    return `<div class="pm-page ev-page" style="height:190mm"><div class="ev-head"><div><h1>${tx('Evacuation map')}</h1><span>${esc(store)} · ${esc(f.type === 'boh' ? tx('Back of house') : tx('Sales floor'))}, ${esc(f.name)}</span></div><div class="ev-call">${tx('In an emergency')}<b>000</b></div></div>` +
-      `<div class="pm-pmap" style="height:150mm">${pm ? pm.svg : ''}</div>` +
+    return `<div class="pm-page ev-page"><div class="ev-head"><div><h1>${tx('Evacuation map')}</h1><span>${esc(store)} · ${esc(f.type === 'boh' ? tx('Back of house') : tx('Sales floor'))}, ${esc(f.name)}</span></div><div class="ev-call">${tx('In an emergency')}<b>000</b></div></div>` +
+      `<div class="pm-pmap">${pm ? pm.svg : ''}</div>` +
       `<div class="ev-foot"><div class="ev-key">${key || `<span>${tx('No emergency equipment is marked on this floor.')}</span>`}</div><div class="ev-asm">${tx('<b>Leave by the nearest exit.</b> Do not use lifts. Go to {place} and wait to be checked off.', { place: asm })}</div></div></div>`;
   });
   const order = mk => fls.findIndex(f => f.id === mk.floor);

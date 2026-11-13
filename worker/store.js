@@ -21,7 +21,7 @@
 // WebSocket protocol (JSON text frames):
 //   → { t:'hello', since }          ← { t:'snapshot', seq, state } or { t:'delta', seq, events }
 //   → { t:'submit', events }        ← { t:'ack', results }
-//   → { t:'hb', app, area, online, outbox, lastError }   (updates the devices projection, no reply)
+//   → { t:'hb', app, area, online, outbox, lastError, lang, kind, errors }   (updates the devices projection; ← { t:'clock', now })
 //   ← { t:'event', event }          broadcast on every applied event
 //   → { t:'ping' }                  ← { t:'pong', seq }
 
@@ -40,6 +40,7 @@ import { isoWeek, weeklyDates } from '../shared/stockintel.js';
 import { toolForEvent, toolOff } from '../shared/tools.js';
 import { storeKpis } from '../shared/kpis.js';
 import { SOH_KEEP } from '../shared/reducers/stockroom.js';
+import { walkPhotos } from '../shared/reducers/tasks.js';
 import { rolloverDue } from '../shared/backfill.js';
 import { sanitizeSvg } from '../shared/svgsafe.js';
 import { cleanStoreInfo } from '../shared/maprender.js';
@@ -58,10 +59,12 @@ const MAP_FLOOR_MAX = 1_900_000;   // per floor; SQLite rows in a Durable Object
 const MAP_SOURCE_MAX = 1_900_000;
 const MAP_BODY_MAX = 16_000_000;   // a publish: every floor plus the source, checked before parsing  // the editor's document kept beside a version (no floor drawings in it)
 const DELTA_LIMIT = 5000;
+const DEVICES_KEEP_MS = 60_000;    // device presence is kept (meta) at most once a minute, a new device or app version at once
 const BATCH_MAX = 8_000_000;          // an events body, or one socket frame
-// Issue photos (R2 bucket PHOTOS): a JPEG the device already shrank, at most
-// PHOTO_DAY_CAP a store in any 24 hours, and the bytes dropped 90 days after
-// an issue is completed or removed (a photo can show people; it is kept no
+// Issue and walk photos (R2 bucket PHOTOS): a JPEG the device already
+// shrank, at most PHOTO_DAY_CAP a store in any 24 hours, and the bytes
+// dropped 90 days after an issue is completed or removed, or 90 days after
+// the walk whose item lists it (a photo can show people; it is kept no
 // longer than it helps).
 const PHOTO_MAX = 800_000, PHOTO_DAY_CAP = 300, PHOTO_KEEP_DAYS = 90;
 // The store plan: the official floor plan a map was traced from, the
@@ -128,6 +131,11 @@ export class StoreObject extends DurableObject {
     const last = this.sql.exec('SELECT MAX(seq) AS m FROM events').toArray()[0];
     this.state.seq = last?.m || 0;
     this.sinceSnapshot = rows.length;
+    // Device presence kept since the snapshot (keepDevices): the later heartbeat of each device wins.
+    try {
+      const kept = JSON.parse(this.sql.exec("SELECT value FROM meta WHERE key = 'devices'").toArray()[0]?.value || 'null');
+      if (kept && typeof kept === 'object') for (const [id, d] of Object.entries(kept)) if (!(this.state.devices[id]?.last >= d?.last)) this.state.devices[id] = d;
+    } catch {}
   }
   // The state is saved as one row, which holds at most 2 MB. The events are
   // already logged when this runs, so a snapshot that fails (or would be too
@@ -180,8 +188,8 @@ export class StoreObject extends DurableObject {
         case '/ws': return this.upgrade(request, claims);
         // Owner reads (the console): refused for a store token however it got here.
         case '/devices': return raw.owner ? json({ devices: this.state.devices }) : fail(403, 'unauthorised', 'owner only');
-        case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readJson(request, 4096).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true, now: Date.now() }); }
-        case '/kpis': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length }));
+        case '/hb': { if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'POST /hb'); const b = await readJson(request, 8192).catch(() => ({})); this.recordHb(claims, b || {}); return json({ ok: true, now: Date.now() }); }
+        case '/kpis': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json(storeKpis(this.state, { today: storeDay(new Date(), this.tz()), caps: claims.caps || [], bytes: JSON.stringify(this.state).length, cartons: this.kpiCartons(claims) }));
         case '/tail': if (!raw.owner) return fail(403, 'unauthorised', 'owner only'); return json({ seq: this.state.seq, events: this.tail(Number(url.searchParams.get('limit') || 200)) });
         case '/map': return request.method === 'POST' ? await this.publishMap(await readJson(request, MAP_BODY_MAX), claims) : json(this.mapInfo());
         default: {
@@ -374,11 +382,12 @@ export class StoreObject extends DurableObject {
   }
   archived(kind) { return this.sql.exec('SELECT row FROM archive WHERE kind = ? ORDER BY date DESC, key', kind).toArray().map(r => JSON.parse(r.row)); }
 
-  // ── issue photos ──────────────────────────────────────────────────────
+  // ── issue and walk photos ─────────────────────────────────────────────
   // The bytes live in R2 under <store>/<id>.jpg; the issue.photo event
-  // attaches the id to an issue. Any device of the store may add one (the
-  // Floor reports issues); reads go through here so a signed-out device
-  // (an old epoch) cannot fetch them.
+  // attaches the id to an issue, and task.walk.item to a walk's item (a ✗
+  // raised as an issue carries the same photo on both). Any device of the
+  // store may add one (the Floor reports issues); reads go through here so a
+  // signed-out device (an old epoch) cannot fetch them.
   photos() { if (!this.env.PHOTOS) throw new HttpError(501, 'not_implemented', 'issue photos need the PHOTOS R2 bucket bound to the worker'); return this.env.PHOTOS; }
   photoKey(id) { return `${this.storeNo}/${id}.jpg`; }
   // ── the store plan ──
@@ -427,44 +436,50 @@ export class StoreObject extends DurableObject {
     return json({ id, size: buf.length, at }, 201);
   }
   // Where a photo is: { row } from the photos table (null once its bytes are
-  // gone) and { issue } the issue that lists it, live or removed.
+  // gone), { issue } the issue that lists it, live or removed, and { walk }
+  // the walk whose item lists it (walks stay in the live state for
+  // KEEP_WALK_DAYS, shared/reducers/tasks.js).
   photoAt(id) {
     const row = this.sql.exec('SELECT id, at, by FROM photos WHERE id = ?', id).toArray()[0] || null;
     const hit = Object.entries(this.state.issues || {}).find(([, i]) => (i.photos || []).some(p => p.id === id));
-    return { row, issueId: hit?.[0] || null, issue: hit?.[1] || null };
+    const walk = Object.values(this.state.tasks?.walks || {}).find(w => walkPhotos(w).includes(id)) || null;
+    return { row, issueId: hit?.[0] || null, issue: hit?.[1] || null, walk };
   }
-  // A photo is served while an issue lists it. One no issue lists (taken
-  // off, or still a draft being reported) is served only to the device
-  // that took it, so a removed photo is not reachable by its id.
+  // A photo is served while an issue or a walk lists it. One neither lists
+  // (taken off, or still a draft being reported) is served only to the
+  // device that took it, so a removed photo is not reachable by its id.
   async getPhoto(id, claims) {
-    const { row, issue } = this.photoAt(id);
-    if (!row || (!issue && !claims.owner && row.by !== String(claims.device || 'unknown').slice(0, 64))) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
+    const { row, issue, walk } = this.photoAt(id);
+    if (!row || (!issue && !walk && !claims.owner && row.by !== String(claims.device || 'unknown').slice(0, 64))) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
     const obj = await this.photos().get(this.photoKey(id));
     if (!obj) throw new HttpError(404, 'not_found', 'no such photo, or it has expired');
     return new Response(obj.body, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400', ...CORS } });
   }
   // Deleting drops the bytes only. Taking a photo off an issue is the
-  // issue.photo event (logged, on every device); a photo a live issue still
-  // lists is refused here. The bytes of one taken off, or on a removed
-  // issue, go at once; a draft's (on no issue yet) only by the device that
-  // took it, a manager or the owner.
+  // issue.photo event (logged, on every device), off a walk's item a new
+  // answer for it; a photo a live issue or a walk still lists is refused
+  // here. The bytes of one taken off, or on a removed issue, go at once; a
+  // draft's (on no issue yet) only by the device that took it, a manager or
+  // the owner.
   async deletePhoto(id, claims) {
     if (!claims.owner && claims.store !== this.storeNo) throw new HttpError(403, 'unauthorised', 'not this store');
-    const { row, issueId, issue } = this.photoAt(id);
+    const { row, issueId, issue, walk } = this.photoAt(id);
     if (!row) return json({ id, deleted: false });
     if (issue && !issue.removed) throw new HttpError(409, 'conflict', `the photo is on issue ${issueId}: take it off the issue first`);
+    if (walk) throw new HttpError(409, 'conflict', `the photo is on the ${walk.day} walk of ${walk.name}: answer the item again without it first`);
     const mine = row.by === String(claims.device || 'unknown').slice(0, 64);
     if (!issue && !this.detached(id) && !mine && !claims.owner && !(claims.roles || []).includes('manager')) throw new HttpError(403, 'unauthorised', 'a photo not yet on an issue is deleted by the device that took it');
     await this.photos().delete(this.photoKey(id));
     this.sql.exec('DELETE FROM photos WHERE id = ?', id);
     return json({ id, deleted: true });
   }
-  // Was this photo on an issue once (an issue.photo event took it off)?
+  // Was this photo on an issue or a walk once (an event took it off)?
   detached(id) {
-    return this.sql.exec("SELECT 1 FROM events WHERE type = 'issue.photo' AND payload LIKE ? LIMIT 1", `%"${id}"%`).toArray().length > 0;
+    return this.sql.exec("SELECT 1 FROM events WHERE type IN ('issue.photo', 'task.walk.item') AND payload LIKE ? LIMIT 1", `%"${id}"%`).toArray().length > 0;
   }
   // Nightly: drop the bytes of photos on issues completed or removed more
-  // than PHOTO_KEEP_DAYS ago, and of uploads never attached to an issue.
+  // than PHOTO_KEEP_DAYS ago, on walks more than PHOTO_KEEP_DAYS old, and of
+  // uploads never attached to either.
   async sweepPhotos(now = Date.now()) {
     if (!this.env.PHOTOS || !this.storeNo) return 0;
     const keep = new Set(), old = now - PHOTO_KEEP_DAYS * 86400e3;
@@ -472,6 +487,7 @@ export class StoreObject extends DurableObject {
       const closed = i.removed || i.status === 'completed';
       if (!(closed && Date.parse(i.updated) < old)) for (const p of i.photos || []) keep.add(p.id);
     }
+    for (const w of Object.values(this.state.tasks?.walks || {})) if (Date.parse(`${w.day}T23:59:59Z`) >= old) for (const p of walkPhotos(w)) keep.add(p);
     const stale = this.sql.exec('SELECT id, at FROM photos').toArray().filter(r => !keep.has(r.id) && Date.parse(r.at) < now - 86400e3);
     for (const r of stale) { await this.env.PHOTOS.delete(this.photoKey(r.id)); this.sql.exec('DELETE FROM photos WHERE id = ?', r.id); }
     return stale.length;
@@ -970,11 +986,33 @@ export class StoreObject extends DurableObject {
   // manager read it) and never become events; the append-only log is never
   // pruned. The socket 'hb' frame and POST /hb (a device on the polling
   // fallback) both land here. Every field is capped.
+  // The console's Devices page reads the language, the kind of device and
+  // its last few errors as well; a device too old to send them leaves them
+  // null and empty.
   recordHb(claims, msg) {
-    this.state.devices[claims.device || 'nodevice'] = {
+    const id = claims.device || 'nodevice', prev = this.state.devices[id];
+    const rec = this.state.devices[id] = {
       app: msg.app ? String(msg.app).slice(0, 64) : null, last: new Date().toISOString(), role: claims.roles?.[0] || null,
       area: msg.area ? String(msg.area).slice(0, 64) : null, online: msg.online !== false, outbox: Math.max(0, Math.min(1e6, Number(msg.outbox) || 0)), lastError: msg.lastError ? String(msg.lastError).slice(0, 200) : null, owner: !!claims.owner,
+      lang: msg.lang ? String(msg.lang).slice(0, 16) : null, kind: HB_KINDS.includes(msg.kind) ? msg.kind : null, errors: hbErrors(msg.errors),
     };
+    this.keepDevices(!prev || prev.app !== rec.app);
+  }
+  // The devices projection outlives the store object. It is folded from no
+  // event, so a store object woken from hibernation used to start from its
+  // last snapshot's devices (up to a thousand events old) and a PC that had
+  // gone quiet since dropped off the console. It is kept in meta: at once
+  // for a new device or a new app version, else at most once a minute (the
+  // next heartbeat writes what waited); load() puts it back.
+  keepDevices(now = false) {
+    if (!now && Date.now() - (this.devicesKeptAt || 0) < DEVICES_KEEP_MS) return;
+    try { this.sql.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('devices', ?)", JSON.stringify(this.state.devices)); this.devicesKeptAt = Date.now(); }
+    catch (e) { console.error(`store ${this.storeNo}: devices not kept`, e?.message || e); }
+  }
+  // The carton sizes the shrink figures in /kpis need: the Stockroom's, from the manifests.
+  kpiCartons(claims) {
+    if (!(claims.caps || []).includes('stockroom')) return null;
+    try { return this.profiles(); } catch { return null; }
   }
   webSocketClose(ws) { try { ws.close(); } catch {} }
   webSocketError(ws) { try { ws.close(); } catch {} }
@@ -1009,6 +1047,15 @@ export class StoreObject extends DurableObject {
       }
     }
   }
+}
+
+// A heartbeat's device kind and recent errors (newest first, as the device
+// keeps them): at most five, each message 200 characters, its time an ISO
+// string or null.
+const HB_KINDS = ['pc', 'phone', 'screen'];
+function hbErrors(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 5).map(e => ({ at: typeof e?.at === 'string' && Number.isFinite(Date.parse(e.at)) ? e.at.slice(0, 40) : null, msg: String(e?.msg ?? '').slice(0, 200) })).filter(e => e.msg);
 }
 
 function rowToEvent(r) {

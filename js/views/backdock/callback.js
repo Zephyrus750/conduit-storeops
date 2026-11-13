@@ -19,14 +19,15 @@ import { openSheet } from '../../sheet.js';
 import { backOn } from '../../../shared/offsite.js';
 import { truckNo, slotRef, microName } from './common.js';
 import { routeManifest } from '../../../shared/dockroutes.js';
+import { rtTag } from './routes.js';
 
 export const callText = c => tx('{day}, Truck {no}', { day: esc(fmtDay(c.date)), no: c.slot });
 export function groupTag(g) {
-  if (g.state === 'back') return `<span class="rt-tag ok">${ic('check')}${tx('All back')}</span>`;
-  if (g.state === 'called') return `<span class="rt-tag back">${ic('undo')}${tx('Called back · {when}', { when: callText(g.calls[0]) })}${g.calls.length > 1 ? ` +${g.calls.length - 1}` : ''}</span>`;
-  if (g.state === 'overdue') return `<span class="rt-tag late">${ic('alert')}${tx('Overdue since {day}', { day: esc(fmtDay(g.cb)) })}</span>`;
-  if (g.state === 'part') return `<span class="rt-tag part">${ic('stack')}${g.of ? tx('Part off-site · {n} of {of}', { n: g.rows.length, of: g.of }) : tx('Part off-site')}</span>`;
-  return `<span class="rt-tag off">${ic('stack')}${g.cb ? tx('Off-site · back {day}', { day: esc(fmtDay(g.cb)) }) : tx('Off-site')}</span>`;
+  if (g.state === 'back') return rtTag('good', 'check', tx('All back'));
+  if (g.state === 'called') return rtTag('info', 'undo', tx('Called back · {when}', { when: callText(g.calls[0]) }) + (g.calls.length > 1 ? ` +${g.calls.length - 1}` : ''));
+  if (g.state === 'overdue') return rtTag('bad', 'alert', tx('Overdue since {day}', { day: esc(fmtDay(g.cb)) }));
+  if (g.state === 'part') return rtTag('warn', 'stack', g.of ? tx('Part off-site · {n} of {of}', { n: g.rows.length, of: g.of }) : tx('Part off-site'));
+  return rtTag('warn', 'stack', g.cb ? tx('Off-site · back {day}', { day: esc(fmtDay(g.cb)) }) : tx('Off-site'));
 }
 export const groupName = g => g.kind === 'other' ? tx('Other pallets') : esc(g.label);
 export function groupSub(g) {
@@ -44,7 +45,7 @@ export const deptLine = r => (r.depts || []).map(d => microName(d) ? `${esc(micr
 export function backTag(ctx, truckId) {
   const b = backOn(ctx.store.get('inventory'), truckId);
   if (!b.n) return '';
-  return `<span class="rt-tag back">${ic('undo')}${b.sent ? tx('From off-site · sent {day}', { day: esc(fmtDay(b.sent)) }) : tx('From off-site')}</span><span class="rt-tag back n">${tx('{n} of {of} back', { n: b.back, of: b.n })}</span>`;
+  return rtTag('info', 'undo', b.sent ? tx('From off-site · sent {day}', { day: esc(fmtDay(b.sent)) }) : tx('From off-site')) + rtTag('info', '', tx('{n} of {of} back', { n: b.back, of: b.n }), 'num');
 }
 
 // What a slot holds on a day: the trucks already planned, on the dock, or

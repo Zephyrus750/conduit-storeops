@@ -4,17 +4,18 @@
 // focus for the coming weeks). Device preferences persist under suite_prefs.
 
 import { haptic, applyOrientation, isPhone } from '../device.js';
-import { $, ic, esc, vh, sub, toast, timePassed, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, toast, timePassed, weekId, DEPTS_DEFAULT, DEPT_NAME, DEPT_COLOUR, mgr, mhead } from '../ui.js';
 import { settingsOf, AUTO_LOCK_CHOICES, SETTINGS_DEFAULTS } from '../../shared/reducers/store.js';
-import { SCALES, prefs, setPref } from '../prefs.js';
+import { SCALES, SKINS, DENSITIES, prefs, setPref } from '../prefs.js';
 import { VERSION } from '../version.js';
 import { tx, txn, langPicker, setLang } from '../i18n.js';
-import { ask } from '../sheet.js';
+import { ask, askText } from '../sheet.js';
 import { updates } from '../updates.js';
 import { retailPeriod } from '../../shared/time.js';
 import { bundle, storagePots, releaseCache, fmtBytes } from '../diag.js';
 import { SUBS, MICRO, microId, microCode, microName } from '../data/micros.js';
 import { ulid } from '../../shared/ulid.js';
+import { practiceCard } from '../practice.js';
 
 let sec = 'general';
 const currentSec = () => sec;
@@ -37,7 +38,7 @@ export default {
   // Store settings, the refresh focus and target, and the price-check size
   // are set on a store PC. A manager sees Field Mode first, under Manager.
   // Help and feedback sit together at the foot.
-  mobile(ctx) { return `<div class="mv-head"><div><h2>${tx('Settings')}</h2><span>${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}</span></div></div><div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}${mgr()}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${helpCard()}</div>`; },
+  mobile(ctx) { return mhead(tx('Settings'), `${ctx.store ? esc(ctx.storeNo) + ' ' + esc(ctx.storeName) : tx('Owner console')} · ${VERSION}`) + `<div class="stg-body">${ctx.store && canEdit(ctx) ? `<div class="stg-grp-h">${tx('Manager')}${mgr()}</div>${fieldCard(ctx)}<div class="stg-grp-h">${tx('This phone')}</div>` : ''}${body(ctx, 'general')}${body(ctx, 'appearance')}<div id="stgStorage"></div><div class="stg-grp-h">${tx('Help and feedback')}</div>${ctx.store ? feedbackBody(ctx) : ''}${helpCard()}</div>`; },
   mount(ctx, root) {
     root.addEventListener('click', e => { const b = e.target.closest('[data-setlang]'); if (b) setLang(b.dataset.setlang); });
     root.addEventListener('click', async e => {
@@ -49,17 +50,19 @@ export default {
       else if (act === 'haptics') { setPref('haptics', prefs().haptics === false); haptic('select'); ctx.rerender(); }
       else if (act === 'portrait') { setPref('allowLandscape', !prefs().allowLandscape); applyOrientation(); ctx.rerender(); }
       else if (act === 'scale') setPref('scale', a.getAttribute('data-v')), ctx.rerender();
+      else if (act === 'skin') setPref('skin', a.getAttribute('data-v')), ctx.rerender();
+      else if (act === 'density') setPref('density', a.getAttribute('data-v')), ctx.rerender();
       else if (act === 'railmin') setPref('railmin', !prefs().railmin), ctx.rerender();
       else if (act === 'hdr') setPref('hdr', prefs().hdr === 'title' ? 'classic' : 'title'), ctx.rerender();
       else if (act === 'signout') { if (await ask({ title: ctx.store ? tx('Sign out of this store on this device?') : tx('Sign out of the owner console on this device?'), ok: tx('Sign out'), cancel: tx('Stay signed in') })) await ctx.signOut(); }
       else if (act === 'reload') location.reload();
-      else if (act === 'force-reload') { if (confirm(tx('Reload Conduit from the worker? You stay signed in; queued changes are kept.'))) await updates.forceReload(); }
+      else if (act === 'force-reload') { if (await ask({ title: tx('Reload Conduit from the worker?'), text: tx('You stay signed in; queued changes are kept.'), ok: tx('Reload'), cancel: tx('Cancel'), danger: false })) await updates.forceReload(); }
       else if (act === 'install') { if (!(await updates.install())) toast(tx('Use the browser menu › Install app, or Share › Add to Home Screen on an iPhone')); ctx.rerender(); }
       else if (act === 'map-tips') setPref('mapTips', prefs().mapTips === false), ctx.rerender();
       else if (act === 'pc-mode') setPref('priceChecks', a.getAttribute('data-v')), ctx.rerender();
       else if (act === 'clear-pot') await clearPot(ctx, a.dataset.prefix);
       else if (act === 'clear-maps-cache') { try { await caches.delete('suite-maps-v1'); toast(tx('Map cache cleared')); } catch {} paintStorage(ctx, root); }
-      else if (act === 'copy-diag') { const t = await bundle(ctx, 'settings'); try { await navigator.clipboard.writeText(t); toast(tx('Diagnostics copied')); } catch { prompt(tx('Copy the diagnostics:'), t); } }
+      else if (act === 'copy-diag') { const t = await bundle(ctx, 'settings'); try { await navigator.clipboard.writeText(t); toast(tx('Diagnostics copied')); } catch { askText({ title: tx('Copy the diagnostics'), text: tx('Select it all and copy it.'), value: t, multiline: true, readonly: true, ok: tx('Done'), cancel: tx('Close') }); } }
       else if (act === 'send-feedback') await sendFeedback(ctx, root);
       else if (act === 'assign-micro') ctx.go('labelint', { micro: a.dataset.micro });
       else if (act === 'check-update') { a.textContent = tx('Checking…'); await updates.check(); ctx.rerender(); if (!updates.state.waiting) toast(tx('You are on the current release')); }
@@ -80,7 +83,7 @@ function body(ctx, sec = currentSec()) {
   const p = prefs();
   if (sec === 'appearance') {
     const seg = (act, opts, cur) => `<span class="seg stg-seg">${opts.map(o => `<button class="${cur === o[0] ? 'on' : ''}" data-act="${act}" data-v="${o[0]}">${o[1]}</button>`).join('')}</span>`;
-    return `<div class="stg-card"><div class="stg-h">${tx('Display')}</div><p class="stg-p">${tx('Every store device shares one colour scheme. Size, the title bar and the rail are set on each device.')}</p>${row(tx('Language'), tx('Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.'), langPicker())}${row(tx('Display size'), tx('How large the whole app renders on this device. Small is 80%, Compact 95%, Large 115%.'), seg('scale', SCALES.map(([v, l]) => [v, tx(l)]), String(p.scale)))}${ctx.isMobile ? '' : row(tx('Title bar'), tx('Move each view’s title into the header and fold search into the logo.'), tgl(p.hdr === 'title', 'hdr')) + row(tx('Rail'), tx('Start with the rail collapsed to icons'), tgl(p.railmin, 'railmin'))}</div>`;
+    return `<div class="stg-card"><div class="stg-h">${tx('Display')}</div><p class="stg-p">${tx('Every store device shares one colour scheme. Size, light or dark, density, the title bar and the rail are set on each device.')}</p>${row(tx('Language'), tx('Every screen on this device, in one of seven languages. Shelf, product and department names stay as the store writes them.'), langPicker())}${row(tx('Display size'), tx('How large the whole app renders on this device. Small is 80%, Compact 95%, Large 115%.'), seg('scale', SCALES.map(([v, l]) => [v, tx(l)]), String(p.scale)))}${row(tx('Appearance'), tx('Light or dark on this device, or the same as the device’s own setting.'), seg('skin', SKINS.map(([v, l]) => [v, tx(l)]), String(p.skin || 'light')))}${ctx.isMobile ? '' : row(tx('Density'), tx('Compact fits more rows on the screen: tighter rows, cards and gaps.'), seg('density', DENSITIES.map(([v, l]) => [v, tx(l)]), String(p.density || 'comfortable')))}${ctx.isMobile ? '' : row(tx('Title bar'), tx('Move each view’s title into the header and fold search into the logo.'), tgl(p.hdr === 'title', 'hdr')) + row(tx('Rail'), tx('Start with the rail collapsed to icons'), tgl(p.railmin, 'railmin'))}</div>`;
   }
   if (sec === 'store') return storeBody(ctx);
   if (sec === 'refresh') return refreshBody(ctx);
@@ -96,7 +99,8 @@ function body(ctx, sec = currentSec()) {
     `<div class="stg-card"><div class="stg-h">${tx('Scanner and vibration')}</div>${row(tx('Beep on a read'), tx('The camera scanner beeps when it reads a code.'), tgl(prefs().scanSound !== false, 'scan-sound'))}${row(tx('Vibrate on a read'), tx('The phone buzzes when a code is read.'), tgl(prefs().scanVibrate !== false, 'scan-vibrate'))}${row(tx('Vibration feedback'), tx('A short buzz when a shelf is tapped, a department opens, a search finds or misses, and on errors (phones only).'), tgl(prefs().haptics !== false, 'haptics'))}${isPhone() ? row(tx('Rotation'), prefs().allowLandscape ? tx('Rotation allowed: the app turns with the phone.') : tx('Portrait locked: the app stays upright when the phone turns (installed app).'), tgl(!prefs().allowLandscape, 'portrait')) : ''}</div>` +
     `<div class="stg-card"><div class="stg-h">${tx('Updates')}</div>${updatesRow()}${row(tx('Force reload'), tx('Clears the cached release and reloads from the worker. Signed-in state, maps and queued changes are kept.'), `<span class="btn sm" data-act="force-reload">${ic('refresh')}${tx('Force reload')}</span>`)}${installRow()}</div>` +
     (ctx.isMobile ? '' : `<div class="stg-card"><div class="stg-h">${tx('Map')}</div>${row(tx('Hover details'), tx('Show a shelf’s department, run and status when the pointer rests on it.'), tgl(prefs().mapTips !== false, 'map-tips'))}${row(tx('Price checks'), tx('How price checks and order screens show on the map: normal, large (the same size at any zoom) or hidden.'), segOf('pc-mode', [['small', tx('Normal')], ['large', tx('Large')], ['off', tx('Hidden')]], prefs().priceChecks || 'small'))}</div>`) +
-    `<div class="stg-card"><div class="stg-h">${tx('Account')}</div>${row(tx('Sign out'), ctx.store ? (cur?.actas ? tx('Returns to the owner console. Queued changes are sent first.') : tx('Forgets the store on this device. Queued changes are sent first.')) : tx('Forgets the owner session on this device.'), `<span class="btn sm" style="color:var(--red)" data-act="signout">${cur?.actas ? tx('Back to the console') : tx('Sign out')}</span>`)}</div>`;
+    practiceCard(ctx) +
+    `<div class="stg-card"><div class="stg-h">${tx('Account')}</div>${row(tx('Sign out'), ctx.store ? (cur?.actas ? tx('Returns to the owner console. Queued changes are sent first.') : tx('Forgets the store on this device. Queued changes are sent first.')) : tx('Forgets the owner session on this device.'), `<span class="btn sm t-bad" data-act="signout">${cur?.actas ? tx('Back to the console') : tx('Sign out')}</span>`)}</div>`;
 }
 function updatesRow() {
   const u = updates.state;
@@ -145,7 +149,7 @@ async function saveStore(ctx, root) {
   const payload = {};
   for (const k of Object.keys(next)) if (JSON.stringify(next[k]) !== JSON.stringify(cfg[k])) payload[k] = next[k];
   if (!Object.keys(payload).length) return toast(tx('Nothing changed'));
-  if (payload.dockGrid && !confirm(tx('Change the dock grid to {rows} × {cols}? Trucks already on the dock keep their grid.', { rows: payload.dockGrid.rows, cols: payload.dockGrid.cols }))) return;
+  if (payload.dockGrid && !await ask({ title: tx('Change the dock grid to {rows} × {cols}?', { rows: payload.dockGrid.rows, cols: payload.dockGrid.cols }), text: tx('Trucks already on the dock keep their grid.'), ok: tx('Change the grid'), cancel: tx('Cancel'), danger: false })) return;
   try { await ctx.store.dispatch({ type: 'store.settings.set', entity: {}, payload }); toast(tx('Store settings saved')); }
   catch (e) { toast(e.message, 'bad'); }
 }
@@ -164,7 +168,7 @@ async function paintStorage(ctx, root) {
   const [est, pots, rel] = await Promise.all([navigator.storage?.estimate?.().catch(() => null), ctx.storage ? storagePots(ctx.storage) : [], releaseCache()]);
   const used = est?.usage || 0, quota = est?.quota || 0, pct = quota ? Math.round(used / quota * 100) : 0;
   const CLEAR = { 'kc:': tx('Names are fetched again as they are needed.'), 'map:': tx('The store’s map downloads again on the next open.'), 'simreport:': tx('Pasted reports on this device are forgotten.'), 'snap:': tx('Other stores’ snapshots go; this store reloads.') };
-  host.innerHTML = `<div class="stg-card"><div class="stg-h">${tx('Storage on this device')}</div><p class="stg-p">${quota ? tx('{used} of {quota} used ({pct}%)', { used: fmtBytes(used), quota: fmtBytes(quota), pct }) : tx('The browser does not report its storage here.')}</p>${quota ? `<div class="prog"><i style="width:${Math.min(100, pct)}%"></i></div>` : ''}` +
+  host.innerHTML = `<div class="stg-card"><div class="stg-h">${tx('Storage on this device')}</div><p class="stg-p">${quota ? tx('{used} of {quota} used ({pct}%)', { used: fmtBytes(used), quota: fmtBytes(quota), pct }) : tx('The browser does not report its storage here.')}</p>${quota ? `<div class="prog"><i class="w-c" style="--w:${Math.min(100, pct)}%"></i></div>` : ''}` +
     pots.slice().sort((a, b) => b.bytes - a.bytes).map(p => row(esc(tx(p.name)), `${txn(p.count, 'stored::{n} item', 'stored::{n} items')} · ${fmtBytes(p.bytes)}${p.prefix === 'outbox:' && p.count ? ' · ' + tx('waiting to sync, never cleared here') : ''}`, CLEAR[p.prefix] && p.count ? `<span class="btn sm" data-act="clear-pot" data-prefix="${esc(p.prefix)}" title="${esc(CLEAR[p.prefix])}">${tx('Clear')}</span>` : '')).join('') + `</div>` +
     `<div class="stg-card"><div class="stg-h">${tx('Release cache')}</div>${row(tx('App files'), rel?.release ? tx('{n} files · {release} · {state}', { n: rel.files, release: esc(rel.release), state: updates.state.offlineReady ? tx('complete, works offline') : tx('installing') }) : tx('Not installed for offline use on this page.'), '')}${row(tx('Map cache'), rel?.maps ? tx('Network first · kept for offline') : tx('Empty'), rel?.maps ? `<span class="btn sm" data-act="clear-maps-cache">${tx('Clear maps')}</span>` : '')}</div>`;
 }
@@ -183,7 +187,7 @@ function deptsBody(ctx) {
   const assign = ctx.store.get('labels')?.assign || {}, all = SUBS.flatMap(sd => (MICRO[sd[0]] || []).map(x => [sd, x]));
   const shelved = all.filter(([sd, x]) => (assign[microId(sd[0], x)] || []).length).length;
   return `<div class="stg-card"><div class="stg-h">${tx('Departments')}</div><p class="stg-p">${tx('Micro-departments group shelves into buying categories and drive the Label integrity checks. <b>{n} of {total}</b> micro-departments have shelving.', { n: shelved, total: all.length })}</p>` +
-    SUBS.map(([sid, sc, sname]) => { const ms = MICRO[sid] || []; return `<div class="stg-dept"><div class="stg-dept-h"><span class="dep" style="background:${esc(DEPT_COLOUR[sid] || '#64748B')}">${esc(sc)}</span><b>${esc(sname)}</b><span class="stg-dim">${tx('{n}/{total} with shelves', { n: ms.filter(x => (assign[microId(sid, x)] || []).length).length, total: ms.length })}</span></div>` +
+    SUBS.map(([sid, sc, sname]) => { const ms = MICRO[sid] || []; return `<div class="stg-dept"><div class="stg-dept-h"><span class="dep" style="--dc:${esc(DEPT_COLOUR[sid] || '#64748B')}">${esc(sc)}</span><b>${esc(sname)}</b><span class="stg-dim">${tx('{n}/{total} with shelves', { n: ms.filter(x => (assign[microId(sid, x)] || []).length).length, total: ms.length })}</span></div>` +
       ms.map(x => { const id = microId(sid, x), n = (assign[id] || []).length; return `<div class="stg-item"><div><b>${esc(microCode(x))} ${esc(microName(x))}</b><span>${n ? txn(n, '{n} shelf', '{n} shelves') : tx('no shelves yet')}</span></div><div class="stg-ctl"><span class="btn sm" data-act="assign-micro" data-micro="${esc(id)}">${ic('pin')}${tx('Assign on map')}</span></div></div>`; }).join('') + '</div>'; }).join('') + `</div>`;
 }
 

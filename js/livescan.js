@@ -33,7 +33,7 @@
 //   heldRows(held, label) → html, and resolveHeld(held, code, how) → the code to add or null:
 //     the held codes' Use / Keep / Remove, for the screen behind the camera too
 
-import { ic, esc, toast } from './ui.js';
+import { ic, esc, toast, empty } from './ui.js';
 import { feedback, barcodeReader } from './scan.js';
 import { codesIn, preprocess, decide, misreadFix, readsNeeded } from '../shared/livescan.js';
 import { tx, txn } from './i18n.js';
@@ -169,7 +169,7 @@ export function openLiveReader({ title = tx('Read the PDT'), mode: firstMode = '
   const rate = () => passes.length < 2 ? '' : tx('One read every {s} s', { s: ((passes.at(-1) - passes[0]) / (passes.length - 1) / 1000).toFixed(1) });
   const panelHtml = () => `<div class="ls-ph"><b>${tx('Read this time')}</b>${rate() ? `<span class="ls-rate">${rate()}</span>` : ''}<button type="button" class="btn sm" data-ls="panel">${tx('Close')}</button></div>` +
     (held.size ? `<div class="ls-sub">${tx('Held: check each one')}</div>${heldRows(held, label)}` : '') +
-    (session.length ? session.map(s => `<div class="ls-row"><span class="mono">${esc(s.code)}</span><span class="ls-nm">${label(s.code)}</span><small>${esc(s.why)}${s.n ? ` · ${txn(s.n, '{n} read', '{n} reads')}` : ''}${s.ms != null ? ` · ${tx('{s} s', { s: (s.ms / 1000).toFixed(1) })}` : ''}</small></div>`).join('') : `<p class="ls-none">${tx('Nothing read yet.')} ${tx('Hold the list steady in the window, about a hand away.')}</p>`);
+    (session.length ? session.map(s => `<div class="ls-row"><span class="mono">${esc(s.code)}</span><span class="ls-nm">${label(s.code)}</span><small>${esc(s.why)}${s.n ? ` · ${txn(s.n, '{n} read', '{n} reads')}` : ''}${s.ms != null ? ` · ${tx('{s} s', { s: (s.ms / 1000).toFixed(1) })}` : ''}</small></div>`).join('') : empty(`${tx('Nothing read yet.')} ${tx('Hold the list steady in the window, about a hand away.')}`, { sm: true, icon: 'camera' }));
   const togglePanel = (open = panel.hidden) => { panel.hidden = !open; el.classList.toggle('open', open); if (open) panel.innerHTML = panelHtml(); };
 
   // ── boxes over the codes: the frame's pixels to the screen ──

@@ -1,5 +1,7 @@
 // Admin console: the owner's views. Stores (overview), one store (overview,
-// events, devices, access), register a store, and the owner action log.
+// events, devices, access), register a store, every store's devices (device
+// health), every store's numbers side by side (Compare stores), and the
+// owner action log.
 // Everything here talks to the worker's /v1/admin/* routes through
 // ctx.admin.api(); nothing touches a store's event log except "Act as store",
 // which hands the shell a store-scoped token whose writes carry actor.owner.
@@ -7,7 +9,7 @@
 // Reads are cached per store while the console is open; a Refresh button
 // or any write clears the relevant cache.
 
-import { $, $$, ic, esc, vh, sub, fmtTime, timePassed, status, toast, deptCommonName, DEPTS_DEFAULT, productImg, accChip } from '../ui.js';
+import { $, $$, ic, esc, vh, sub, fmtTime, timePassed, status, toast, deptCommonName, DEPTS_DEFAULT, productImg, accChip, empty } from '../ui.js';
 import { parseMapFile, renderMap, publishBody } from '../../shared/maprender.js';
 import { applyEdit, parseCode } from '../../shared/mapedits.js';
 import { mountMap, bindMapChrome } from '../map.js';
@@ -16,8 +18,8 @@ import { TOOLS } from '../../shared/tools.js';
 import { csvLines } from '../../shared/records.js';
 import wallboard from './backdock/wallboard.js';
 import { teamboard } from './backdock/screens.js';
-import { tx, txn } from '../i18n.js';
-import { ask } from '../sheet.js';
+import { tx, txn, LANGS, flagSvg } from '../i18n.js';
+import { ask, askText } from '../sheet.js';
 import { loadZones, zoneSelect, zoneHint, zonesChanged } from './adminzones.js';
 
 const AREAS = ['floor', 'stockroom', 'backdock'];
@@ -37,7 +39,7 @@ const digits = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b
 export const gen = { pin: () => digits(6), stockroom: () => 'SR-' + digits(4), dock: () => 'BD-' + digits(4), manager: () => 'MG-' + digits(6) };
 
 // ── state and cache ───────────────────────────────────────────────────
-const st = { no: null, tab: 'over', filter: '', area: 'all', rot: null, edit: false, reg: null, regDone: null, health: null, actions: null, kpis: null, q: '', status: 'all', larea: 'all', zone: 'all' };
+const st = { no: null, tab: 'over', filter: '', area: 'all', rot: null, edit: false, reg: null, regDone: null, health: null, actions: null, kpis: null, q: '', status: 'all', larea: 'all', zone: 'all', dfilter: 'all', cmp: { key: 'no', dir: 1 } };
 const cache = {};                     // no → { rec, devices, tail, snap }
 const forStore = no => cache[no] || (cache[no] = {});
 export function invalidate(no) { if (no) delete cache[no]; else for (const k of Object.keys(cache)) delete cache[k]; st.actions = null; }
@@ -62,7 +64,7 @@ const areaChips = rec => `<span class="ad-areas">${AREAS.map(a => { const on = r
 const health = rec => !AREAS.some(a => rec.entitlements?.[a]) ? 'leg' : rec.status === 'live' ? 'ok' : rec.status === 'migrating' ? 'mig' : 'leg';
 const when = iso => iso ? `${fmtTime(iso)} · ${timePassed(iso)}` : '—';
 const banner = (text, ro) => `<div class="ad-banner${ro ? ' ro' : ''}">${ic('lock')}<div>${text}</div></div>`;
-const table = (heads, rows, cls = '') => `<div class="ad-scroll"><table class="rstbl ${cls}"><tr>${heads.map(h => `<th>${h}</th>`).join('')}</tr>${rows.join('') || `<tr><td colspan="${heads.length}" class="cs-dim">${tx('Nothing yet')}</td></tr>`}</table></div>`;
+const table = (heads, rows, cls = '') => `<div class="ad-scroll"><table class="rstbl ${cls}"><tr>${heads.map(h => `<th>${h}</th>`).join('')}</tr>${rows.join('') || `<tr><td colspan="${heads.length}">${empty(tx('Nothing yet'), { sm: true })}</td></tr>`}</table></div>`;
 const field = (l, inp, hint) => `<label class="ad-field"><span>${l}</span>${inp}${hint ? `<small>${hint}</small>` : ''}</label>`;
 const inp = (name, v, ph, cls = '', extra = '') => `<input class="ad-in${cls ? ' ' + cls : ''}" name="${name}" value="${esc(v ?? '')}" placeholder="${esc(ph || '')}" autocomplete="off" ${extra}>`;
 const genRow = (name, v, ph, disabled) => `<span class="ad-inrow">${inp(name, v, ph, 'mono', disabled ? 'disabled' : '')}<button class="btn sm" type="button" data-act="gen" data-name="${name}" ${disabled ? 'disabled' : ''}>${ic('refresh')}${tx('Generate')}</button></span>`;
@@ -81,12 +83,12 @@ function catalogueCard(c) {
   const BUILD = { ok: tx('ok'), partial: tx('partial'), failed: tx('failed') };
   const state = b ? `<span class="tst staged">${tx('building · {done} of {of} files', { done: b.done, of: b.of || '?' })}</span>` : lb ? `<span class="tst ${lb.status === 'ok' ? 'live' : lb.status === 'partial' ? 'staged' : 'bad'}">${BUILD[lb.status] || esc(lb.status)}</span>` : `<span class="tst">${tx('never built')}</span>`;
   const legacy = [c.total ? '' : tx('names and links still come from the legacy suite worker until the first build'), c.details?.browserRendering ? '' : c.details?.legacy ? tx('prices and images still come from the legacy details worker (set CF_ACCOUNT_ID and BROWSER_TOKEN to move them)') : tx('prices and images are off until CF_ACCOUNT_ID and BROWSER_TOKEN are set')].filter(Boolean);
-  return `<div class="card"><div class="ch"><h3>${tx('Product catalogue')}</h3>${state}<button class="btn sm" data-act="cat-rebuild" style="margin-left:auto"${b ? ' disabled' : ''}>${ic('refresh')}${tx('Rebuild now')}</button></div>` +
+  return `<div class="card"><div class="ch"><h3>${tx('Product catalogue')}</h3>${state}<button class="btn sm ml-auto" data-act="cat-rebuild"${b ? ' disabled' : ''}>${ic('refresh')}${tx('Rebuild now')}</button></div>` +
     `<div class="ad-kv"><span>${tx('Products')}</span><b>${Number(c.total || 0).toLocaleString()}</b><span>${tx('Sitemap files')}</span><b>${c.files || 0}</b><span>${tx('Pictures kept')}</span><b>${Number(c.pictures || 0).toLocaleString()}</b>` +
     `<span>${tx('Last build')}</span><b>${lb ? `${fmtTime(new Date(lb.at).toISOString())} · ${esc(lb.trigger || '')} · ${esc(lb.discovery || '')}${lb.errors ? ` · ${txn(lb.errors, '{n} error', '{n} errors')}` : ''}` : '—'}</b>` +
     `${lb?.reason ? `<span>${tx('Reason')}</span><b>${esc(lb.reason)}</b>` : ''}${lb?.sweepHeld ? `<span>${tx('Held')}</span><b>${tx('{n} files looked gone at once; kept as a suspected outage', { n: lb.sweepHeld })}</b>` : ''}` +
     `<span>${tx('Next weekly read')}</span><b>${c.next ? fmtTime(new Date(c.next).toISOString()) : '—'}</b></div>` +
-    (legacy.length ? `<div class="cs-dim" style="margin-top:10px">${legacy.map(esc).join('<br>')}</div>` : '') + probeBox() + `</div>`;
+    (legacy.length ? `<div class="cs-dim mt-m">${legacy.map(esc).join('<br>')}</div>` : '') + probeBox() + `</div>`;
 }
 // The picture check: one keycode through each step its picture takes
 // (GET /v1/admin/catalogue/probe). The reasons are the worker's, in English.
@@ -117,16 +119,65 @@ async function loadKpis(ctx) {
   await Promise.all(stores.map(s => ctx.admin.api(`/v1/admin/stores/${s.no}/kpis`).then(k => { out[s.no] = k; }).catch(e => { out[s.no] = { error: e.code || 'unreachable', devices: { seen24h: 0, versions: {}, errors: [] }, alerts: [] }; })));
   st.kpis = out;
 }
+// Every store's numbers once, for a page that needs them all (a second
+// call while they load waits on the first).
+const kpisMissing = ctx => (ctx.admin.stores || []).some(s => !st.kpis?.[s.no]);
+let kpisLoading = null;
+const kpisOnce = ctx => kpisLoading || (kpisLoading = loadKpis(ctx).finally(() => { kpisLoading = null; }));
 // Fleet: the app versions the stores' devices ran in the last day, and the
 // devices reporting an error.
 function fleetCard(stores) {
   if (!st.kpis) return '';
   const versions = {}, errors = [];
   for (const s of stores) { const k = st.kpis[s.no]; if (!k?.devices) continue; for (const [v, n] of Object.entries(k.devices.versions || {})) (versions[v] ||= { n: 0, stores: new Set() }).n += n, versions[v].stores.add(s.no); for (const e of k.devices.errors || []) errors.push({ ...e, no: s.no }); }
-  const vs = Object.entries(versions).sort((a, b) => b[0].localeCompare(a[0], 'en', { numeric: true })), latest = vs[0]?.[0];
-  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>${tx('Fleet · app versions')}</h3><span class="cs-dim">${tx('devices seen in the last day')}</span></div>${vs.length ? `<div class="list">${vs.map(([v, x]) => `<div class="li"><span class="loc mono">${esc(v)}</span><span class="nm">${txn(x.n, '{n} device', '{n} devices')} · ${[...x.stores].map(esc).join(', ')}</span>${v === latest ? `<span class="status good">${tx('newest')}</span>` : `<span class="status warn">${tx('app version::behind')}</span>`}</div>`).join('')}</div>` : `<p class="lbl">${tx('No device has checked in today.')}</p>`}</div>` +
-    `<div class="card"><div class="ch"><h3>${tx('Fleet · errors')}</h3><span class="cs-dim">${tx('last error each device reported')}</span></div>${errors.length ? `<div class="list">${errors.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12).map(e => `<div class="li" data-view="adminstore" data-no="${esc(e.no)}"><span class="loc mono">${esc(e.no)}</span><span class="nm"><span class="mono">${esc(e.id)}</span> · ${esc(e.error)}</span><span class="rt">${fmtTime(e.at)}</span></div>`).join('')}</div>` : `<p class="lbl">${tx('No device is reporting an error.')}</p>`}</div></div>`;
+  const vs = Object.entries(versions).sort((a, b) => byVersion(a[0], b[0])), latest = vs[0]?.[0];
+  return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>${tx('Fleet · app versions')}</h3><span class="cs-dim">${tx('devices seen in the last day')}</span><a class="go" data-view="admindevices" data-act="dfilter" data-v="behind" style="margin-left:auto">${tx('Devices')}</a></div>${vs.length ? `<div class="list">${vs.map(([v, x]) => `<div class="li"><span class="loc mono">${esc(v)}</span><span class="nm">${txn(x.n, '{n} device', '{n} devices')} · ${[...x.stores].map(esc).join(', ')}</span>${v === latest ? `<span class="status good">${tx('newest')}</span>` : `<span class="status warn">${tx('app version::behind')}</span>`}</div>`).join('')}</div>` : empty(tx('No device has checked in today.'), { icon: 'phone' })}</div>` +
+    `<div class="card"><div class="ch"><h3>${tx('Fleet · errors')}</h3><span class="cs-dim">${tx('last error each device reported')}</span><a class="go" data-view="admindevices" data-act="dfilter" data-v="errors" style="margin-left:auto">${tx('Devices')}</a></div>${errors.length ? `<div class="list">${errors.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12).map(e => `<div class="li" data-view="adminstore" data-no="${esc(e.no)}"><span class="loc mono">${esc(e.no)}</span><span class="nm"><span class="mono">${esc(e.id)}</span> · ${esc(e.error)}</span><span class="rt">${fmtTime(e.at)}</span></div>`).join('')}</div>` : empty(tx('No device is reporting an error.'), { icon: 'check' })}</div></div>`;
 }
+// App versions in order, newest first: numbers compare as numbers, so
+// 0.10.2 is newer than 0.9.9. The newest is the highest any device has
+// reported; a device on any other version is behind.
+const byVersion = (a, b) => String(b).localeCompare(String(a), 'en', { numeric: true });
+const newestApp = apps => [...apps].filter(Boolean).sort(byVersion)[0] || null;
+
+// ── device health ─────────────────────────────────────────────────────
+// Each device's last heartbeat (/devices): its kind, role, app version,
+// language, last seen, outbox and its last few errors. A device from
+// before the language, kind and error list sends only its last error.
+const QUIET_MS = 10 * 60000;
+const KIND = { pc: tx('device kind::PC'), phone: tx('device kind::Phone'), screen: tx('device kind::Screen') };
+const appName = a => String(a || '').replace(/^conduit\s+/i, '');
+function devHealth(d, newest, now = Date.now()) {
+  const errors = d.errors?.length ? d.errors : d.lastError ? [{ at: null, msg: d.lastError }] : [];
+  return { errors, quiet: !(now - Date.parse(d.last) <= QUIET_MS), behind: !!(newest && d.app && byVersion(d.app, newest) > 0), offline: d.online === false, outbox: d.outbox || 0 };
+}
+// The newest version across the fleet: every device the console has read, and the Fleet card's.
+function fleetNewest(ctx) {
+  const apps = (ctx.admin.stores || []).flatMap(s => Object.values(forStore(s.no).devices || {}).map(d => d.app));
+  for (const k of Object.values(st.kpis || {})) apps.push(...Object.keys(k?.devices?.versions || {}));
+  return newestApp(apps);
+}
+const langCell = c => { const l = LANGS.find(x => x[0] === c); return l ? `<span class="dv-lang">${flagSvg(c)}${esc(l[1])}</span>` : c ? `<span class="mono">${esc(c)}</span>` : '<span class="cs-dim">—</span>'; };
+const appCell = (d, h) => d.app ? `<span class="dv-app"><span class="mono">${esc(appName(d.app))}</span>${h.behind ? status('warn', tx('app version::behind')) : status('good', tx('newest'))}</span>` : '<span class="cs-dim">—</span>';
+const seenCell = (d, h) => `${status(h.offline || h.quiet ? 'warn' : 'good', h.offline ? tx('offline') : h.quiet ? tx('quiet') : tx('online'))}<small>${when(d.last)}</small>`;
+function errorsCell(h) {
+  if (!h.errors.length) return '<span class="cs-dim">—</span>';
+  const line = e => `<span class="dv-err">${esc(e.msg)}</span>${e.at ? `<small>${fmtTime(e.at)}</small>` : ''}`;
+  const [latest, ...rest] = h.errors;
+  return `<div class="dv-errs">${line(latest)}${rest.length ? `<details><summary>${txn(rest.length, '{n} earlier error', '{n} earlier errors')}</summary>${rest.map(e => `<div>${line(e)}</div>`).join('')}</details>` : ''}</div>`;
+}
+// Its roles: the token's first, then the rest the heartbeat lists (a manager's PC: floor · manager).
+const rolesOf = d => [...new Set([d.role, ...String(d.area || '').split(',')].map(r => String(r || '').trim()).filter(Boolean))];
+const DEV_HEADS = () => [tx('Device'), tx('Kind'), tx('Role'), tx('App version'), tx('Language'), tx('Last seen'), tx('Outbox'), tx('Recent errors')];
+const deviceCells = (id, d, h) => `<td class="mono"><b>${esc(id)}</b>${d.owner ? ` <span class="tst">${tx('owner')}</span>` : ''}</td><td>${KIND[d.kind] || '<span class="cs-dim">—</span>'}</td><td>${rolesOf(d).map(esc).join(' · ')}</td><td>${appCell(d, h)}</td><td>${langCell(d.lang)}</td><td>${seenCell(d, h)}</td><td class="n">${h.outbox ? `<b class="c-red">${h.outbox}</b>` : '0'}</td><td>${errorsCell(h)}</td>`;
+// Every store's devices, read the way the console reads /kpis: together,
+// a store that cannot be reached saying so (and not asked again until Refresh).
+async function loadDevices(ctx) {
+  const need = (ctx.admin.stores || []).filter(s => { const c = forStore(s.no); return !c.devices && !c.devErr && !c.devLoading; });
+  await Promise.all(need.map(s => { const c = forStore(s.no); c.devLoading = true; return ctx.admin.api(`/v1/admin/stores/${s.no}/devices`).then(r => { c.devices = r.devices || {}; }).catch(e => { c.devErr = e.code || 'unreachable'; }).finally(() => { delete c.devLoading; }); }));
+  return need.length > 0;
+}
+
 function setupCard(k) {
   if (!k) return '';
   const b = k.backfill, d = k.dock;
@@ -134,7 +185,7 @@ function setupCard(k) {
   const dk = d ? [d.clearMins != null ? txn(d.trucks, 'Dock: {n} truck in 7 days, {cartons} cartons, {mins} min average clear', 'Dock: {n} trucks in 7 days, {cartons} cartons, {mins} min average clear', { cartons: d.cartons, mins: d.clearMins }) : txn(d.trucks, 'Dock: {n} truck in 7 days, {cartons} cartons', 'Dock: {n} trucks in 7 days, {cartons} cartons', { cartons: d.cartons }), txn(d.manifests, '{n} manifest published', '{n} manifests published')].join(' · ') : '';
   const fl = !k.floor ? '' : k.floor.urgent ? txn(k.floor.openIssues, 'Floor: {n} open issue, {urgent} high or urgent', 'Floor: {n} open issues, {urgent} high or urgent', { urgent: k.floor.urgent }) : txn(k.floor.openIssues, 'Floor: {n} open issue', 'Floor: {n} open issues');
   const facts = [bf, dk, fl, tx('Devices: {seen} seen today of {total}', { seen: k.devices.seen24h, total: k.devices.total })].filter(Boolean);
-  return `<div class="card" style="margin-top:14px"><div class="ch"><h3>${tx('This week and set-up')}</h3></div><div class="list">${facts.map(f => `<div class="li"><span class="nm">${esc(f)}</span></div>`).join('')}</div>${k.alerts.length ? `<ul class="mp-checks" style="margin-top:10px">${k.alerts.map(a => `<li class="${a.level === 'bad' ? 'bad' : a.level === 'info' ? 'ok' : 'warn'}">${esc(a.text)}</li>`).join('')}</ul>` : `<p class="lbl">${tx('Nothing missing.')}</p>`}</div>`;
+  return `<div class="card mt-l"><div class="ch"><h3>${tx('This week and set-up')}</h3></div><div class="list">${facts.map(f => `<div class="li"><span class="nm">${esc(f)}</span></div>`).join('')}</div>${k.alerts.length ? `<ul class="mp-checks mt-m">${k.alerts.map(a => `<li class="${a.level === 'bad' ? 'bad' : a.level === 'info' ? 'ok' : 'warn'}">${esc(a.text)}</li>`).join('')}</ul>` : empty(tx('Nothing missing.'), { sm: true, icon: 'check' })}</div>`;
 }
 function exportRegistry(stores) {
   const head = ['store', 'name', 'zone', 'status', 'floor', 'stockroom', 'backdock', 'tools off', 'map', 'backfill today', 'backfill 7 days', 'accuracy %', 'auto-closed yesterday', 'trucks 7 days', 'devices 24h', 'alerts', 'updated'];
@@ -154,7 +205,7 @@ const overview = {
     const kp = no => st.kpis?.[no], num = (v, suf = '') => v == null ? '<span class="cs-dim">—</span>' : `${v}${suf}`;
     const rows = shown.map(s => { const k = kp(s.no), b = k?.backfill, al = (k?.alerts || []).filter(x => x.level !== 'info'); return `<tr class="ad-row" data-view="adminstore" data-no="${esc(s.no)}"><td><b class="mono">${esc(s.no)}</b></td><td><b>${esc(s.name)}</b><small>${esc(s.region || '')}</small></td><td>${tst(s.status)}</td><td>${areaChips(s)}</td><td class="n">${!k ? '…' : b ? `${b.today}<small>/${b.requested || b.today + b.pending}</small>` : num(null)}</td><td class="n">${!k ? '' : b ? num(b.week) : num(null)}</td><td class="n">${!k ? '' : b?.accuracy != null ? accChip(b.accuracy) : num(null)}</td><td class="n">${!k ? '' : b?.autoClosed ? `<b class="c-amber">${b.autoClosed}</b>` : num(b ? 0 : null)}</td><td class="n">${!k ? '' : k.dock ? num(k.dock.trucks) : num(null)}</td><td class="n">${!k ? '' : `${k.devices.seen24h}`}</td><td>${!k ? '' : k.error ? `<span class="tst">${k.error === 'unreachable' ? tx('unreachable') : esc(k.error)}</span>` : al.length ? `<span class="ad-alert ${al.some(x => x.level === 'bad') ? 'bad' : ''}" title="${esc(al.map(x => x.text).join('\n'))}">${tx('{n} to look at', { n: al.length })}</span>` : `<span class="status good">${tx('ok')}</span>`}</td><td><span class="btn sm">${tx('Open')}</span></td></tr>`; });
     const filters = `<div class="ad-filters ad-reg"><div class="search">${ic('search')}<input data-field="regq" value="${esc(st.q)}" placeholder="${tx('Store number, name or zone')}"></div>${(() => { const zs = [...new Set(stores.map(x => x.region).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })); return zs.length ? `<select class="ad-in" data-field="regzone" aria-label="${tx('Zone')}"><option value="all">${tx('Every zone')}</option>${zs.map(z => `<option value="${esc(z)}"${st.zone === z ? ' selected' : ''}>${esc(z)}</option>`).join('')}</select>` : ''; })()}<select class="ad-in" data-field="regstatus" aria-label="${tx('Status')}">${['all', 'live', 'migrating', 'registered', 'suspended'].map(v => `<option value="${v}"${st.status === v ? ' selected' : ''}>${v === 'all' ? tx('Any status') : stateName(v)}</option>`).join('')}</select><select class="ad-in" data-field="regarea" aria-label="${tx('Area')}">${['all', ...AREAS].map(v => `<option value="${v}"${st.larea === v ? ' selected' : ''}>${v === 'all' ? tx('Any area') : AREA_NAME[v]}</option>`).join('')}</select><span class="cs-dim">${tx('{n} of {total}', { n: shown.length, total: stores.length })}</span><button class="btn sm" data-act="reg-export">${ic('download')}${tx('Export CSV')}</button></div>`;
-    const acts = (st.actions || []).slice(0, 8).map(a => `<div class="li"><span class="rt" style="min-width:92px">${fmtTime(a.at)}</span><span class="nm">${actionText(a)}</span></div>`).join('') || `<div class="li cs-dim">${tx('No owner actions logged yet')}</div>`;
+    const acts = (st.actions || []).slice(0, 8).map(a => `<div class="li"><span class="rt" style="min-width:92px">${fmtTime(a.at)}</span><span class="nm">${actionText(a)}</span></div>`).join('') || empty(tx('No owner actions logged yet'), { sm: true, icon: 'history' });
     const h = st.health;
     return vh(tx('Stores'), sub(tx('Owner mode'), tx('read-only until you act as a store'), tx('every owner action is logged')), `<a class="btn primary" data-view="adminreg">${ic('plus')}${tx('Register a store')}</a>${editorBtn()}<button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`) +
       banner(tx('<b>Owner</b> · you are viewing every store the system knows about. Opening a store shows its log and devices read-only; <b>Act as store</b> switches to writes that carry your owner id.')) +
@@ -181,6 +232,7 @@ const overview = {
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'open-editor') return openEditor();
       if (a.dataset.act === 'reg-export') return exportRegistry(ctx.admin.stores || []);
+      if (a.dataset.act === 'dfilter') { st.dfilter = a.dataset.v; return; }   // the Fleet card's links: the shell then opens Devices
       if (a.dataset.act === 'refresh') { invalidate(); st.health = null; st.cat = null; st.kpis = null; try { await ctx.admin.refreshStores(); } catch (err) { return fail(err); } ctx.rerender(); }
       if (a.dataset.act === 'cat-probe') return runProbe(ctx, root);
       if (a.dataset.act === 'cat-rebuild') {
@@ -203,10 +255,10 @@ const storeView = {
     const c = forStore(st.no), rec = c.rec || (ctx.admin.stores || []).find(s => s.no === st.no);
     if (!rec) return vh(tx('Store'), '', `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a>`) + banner(tx('No store selected. Pick one from the rail or the Stores list.'));
     const tabs = [['over', tx('Overview')], ['events', tx('Events')], ['devices', tx('Devices')], ['boards', tx('Boards')], ['access', tx('Access')], ['map', tx('Map')], ['migr', tx('Migration')]];
-    const head = vh(`${esc(rec.no)} <span class="pd-name">${esc(rec.name)}</span>`, sub(esc(rec.region || ''), tst(rec.status), tx('registered {time}', { time: fmtTime(rec.created) })), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="actas">${ic('users')}${tx('Act as store')}</button>`);
+    const head = vh(`${esc(rec.no)} <span class="pd-name">${esc(rec.name)}</span>`, sub(esc(rec.region || ''), tx('registered {time}', { time: fmtTime(rec.created) }), tst(rec.status)), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button><button class="btn primary" data-act="actas">${ic('users')}${tx('Act as store')}</button>`);
     const seg = `<div class="ad-tabs">${tabs.map(t => `<button class="${t[0] === st.tab ? 'on' : ''}" data-act="tab" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>`;
     const ro = ['access', 'map', 'migr'].includes(st.tab) ? '' : banner(tx('Read-only view of <b>{name}</b>. Nothing you do here changes the store until you <b>Act as store</b>.', { name: esc(rec.name) }), true);
-    const body = st.tab === 'boards' ? boardsTab(rec, c) : st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : st.tab === 'migr' ? migrTab(rec, c) : overTab(rec, c);
+    const body = st.tab === 'boards' ? boardsTab(rec, c) : st.tab === 'events' ? eventsTab(c) : st.tab === 'devices' ? devicesTab(c, fleetNewest(ctx)) : st.tab === 'access' ? accessTab(rec) : st.tab === 'map' ? mapTab(rec, c) : st.tab === 'migr' ? migrTab(rec, c) : overTab(rec, c);
     return head + ro + seg + body;
   },
   mount(ctx, root) {
@@ -217,6 +269,8 @@ const storeView = {
     // The Boards tab reads the store again every 30 seconds, as its screens repaint.
     const no = st.no, tick = st.tab === 'boards' ? setInterval(() => { const c = forStore(no); delete c.snap; load(ctx, no, ['snap']).then(() => { if (st.tab === 'boards' && st.no === no) ctx.rerender(); }).catch(() => {}); }, 30_000) : null;
     if (st.tab === 'over' && !st.kpis?.[st.no]) ctx.admin.api(`/v1/admin/stores/${st.no}/kpis`).then(k => { st.kpis = { ...(st.kpis || {}), [st.no]: k }; ctx.rerender(); }).catch(() => {});
+    // The newest app version is the fleet's: the Devices tab reads every store's numbers once.
+    if (st.tab === 'devices' && kpisMissing(ctx)) kpisOnce(ctx).then(() => ctx.rerender()).catch(() => {});
     root.addEventListener('click', e => onStoreClick(e, ctx));
     root.addEventListener('change', e => { if (e.target.matches('select[data-act="areastate"]')) patchStore(ctx, { areas: { [e.target.dataset.area]: e.target.value } }); });
     root.addEventListener('input', e => { if (e.target.matches('[data-field="filter"]')) { st.filter = e.target.value; const t = $('#adTail', root); if (t) t.innerHTML = tailRows(forStore(st.no)); } });
@@ -245,7 +299,7 @@ function deptShelving(doc, info) {
 function shelvingHtml(doc, info) {
   const { total, counts, groups } = deptShelving(doc, info);
   if (!total) return '';
-  const badge = (id, color) => `<span class="dep" style="background:${esc(color)}">${esc(id.toUpperCase())}</span>`;
+  const badge = (id, color) => `<span class="dep" style="--dc:${esc(color)}">${esc(id.toUpperCase())}</span>`;
   let out = `<div class="ad-depts"><div class="ad-deptsh"><b>${tx('Shelving by department')}</b><span>${txn(total, '{n} shelf', '{n} shelves')}</span></div>`;
   for (const [gid, rows] of groups) {
     const n = rows.reduce((a, r) => a + (counts[r.id] || 0), 0); if (!n) continue;
@@ -269,7 +323,7 @@ function overTab(rec, c) {
 }
 function eventsTab(c) {
   const pills = ['all', 'floor', 'stockroom', 'backdock', 'store'].map(a => `<button class="${st.area === a ? 'on' : ''}" data-act="area" data-area="${a}">${a === 'all' ? tx('All areas') : AREA_NAME[a]}</button>`).join('');
-  return `<div class="card"><div class="ch"><h3>${tx('Event tail')}</h3><span class="cs-dim">${c.tail ? tx('newest first · {n} of {total}', { n: c.tail.length, total: c.seq ?? '?' }) : tx('newest first · loading')}</span><span class="pills" style="margin-left:auto">${pills}</span></div><div class="ad-filters"><div class="search">${ic('search')}<input data-field="filter" value="${esc(st.filter)}" placeholder="${tx('Filter by type, entity or device…')}"></div></div><div id="adTail">${tailRows(c)}</div></div>`;
+  return `<div class="card"><div class="ch"><h3>${tx('Event tail')}</h3><span class="cs-dim">${c.tail ? tx('newest first · {n} of {total}', { n: c.tail.length, total: c.seq ?? '?' }) : tx('newest first · loading')}</span><span class="pills ml-auto">${pills}</span></div><div class="ad-filters"><div class="search">${ic('search')}<input data-field="filter" value="${esc(st.filter)}" placeholder="${tx('Filter by type, entity or device…')}"></div></div><div id="adTail">${tailRows(c)}</div></div>`;
 }
 function tailRows(c) {
   const q = st.filter.trim().toLowerCase();
@@ -277,12 +331,13 @@ function tailRows(c) {
     .map(e => `<tr><td class="mono">${e.seq}</td><td class="mono">${fmtTime(e.at)}</td><td><i class="ad-dot ${esc(e.area)}"></i>${esc(e.area)}</td><td class="mono">${esc(e.type)}</td><td class="mono"><b>${esc(ent(e.entity))}</b></td><td class="mono">${actor(e.actor)}${e.actor?.role ? ' · ' + esc(e.actor.role) : ''}</td><td>${esc(short(e.payload))}</td></tr>`);
   return table([tx('Seq'), tx('Time'), tx('Area'), tx('Type'), tx('Entity'), tx('Actor'), tx('Payload')], rows, 'ad-ev');
 }
-function devicesTab(c) {
-  const rows = Object.entries(c.devices || {}).sort((a, b) => (a[1].last < b[1].last ? 1 : -1)).map(([id, d]) => { const stale = Date.now() - new Date(d.last) > 10 * 60000, bad = d.online === false || (d.outbox || 0) > 0 || stale; return `<tr class="${bad ? 'bad' : ''}"><td class="mono"><b>${esc(id)}</b>${d.owner ? ` <span class="tst">${tx('owner')}</span>` : ''}</td><td>${esc(d.role || '')}${d.area && d.area !== d.role ? ' · ' + esc(d.area) : ''}</td><td class="mono">${esc(d.app || '')}</td><td>${status(bad ? 'warn' : 'good', d.online === false ? tx('offline') : stale ? tx('quiet') : tx('online'))}</td><td class="mono">${when(d.last)}</td><td class="mono">${d.outbox ? `<b class="c-red">${d.outbox}</b>` : '0'}</td><td>${esc(d.lastError || '')}</td></tr>`; });
-  return `<div class="card"><div class="ch"><h3>${tx('Devices')}</h3><span class="cs-dim">${tx('heartbeat every 3 min while a device is open · {n} seen', { n: rows.length })}</span></div>${table([tx('Device'), tx('Role'), tx('App'), tx('State'), tx('Last seen'), tx('Outbox'), tx('Last error')], rows, 'ad-dev')}</div>`;
+function devicesTab(c, newest) {
+  const now = Date.now();
+  const rows = Object.entries(c.devices || {}).sort((a, b) => (a[1].last < b[1].last ? 1 : -1)).map(([id, d]) => { const h = devHealth(d, newest, now); return `<tr class="${h.offline || h.outbox || h.quiet ? 'bad' : ''}">${deviceCells(id, d, h)}</tr>`; });
+  return `<div class="card"><div class="ch"><h3>${tx('Devices')}</h3><span class="cs-dim">${tx('heartbeat every 3 min while a device is open · {n} seen', { n: rows.length })}</span><a class="go" data-view="admindevices" style="margin-left:auto">${tx('Every store’s devices')}</a></div>${table(DEV_HEADS(), rows, 'ad-tbl ad-dev dv-tbl')}</div>`;
 }
 function accessTab(rec) {
-  const areas = `<div class="ad-ent">${AREAS.map(a => { const on = !!rec.entitlements?.[a]; return `<div class="card"><div class="ch"><h3>${AREA_NAME[a]}</h3><span class="ad-tgl ${on ? 'on' : ''}" data-act="entitle" data-area="${a}" role="switch" aria-checked="${on}"><i></i></span></div><div class="ad-tools${on ? '' : ' off'}">${toolsIn(a).map(t => { const live = on && !(rec.toolsOff || []).includes(t.id); return `<button type="button" class="ad-tool" data-act="tool" data-tool="${t.id}" role="switch" aria-checked="${live}"${on ? '' : ' disabled'} title="${live ? tx('On: click to switch it off for this store') : tx('Off: click to switch it on')}"><span class="tick ${live ? 'on' : ''}">${live ? ic('check') : ''}</span>${esc(tx(t.name))}</button>`; }).join('')}</div>${on && toolsIn(a).some(t => (rec.toolsOff || []).includes(t.id)) ? `<p class="lbl" style="margin:8px 0 0">${tx('{n} switched off: hidden on every device now, and the worker refuses their changes.', { n: toolsIn(a).filter(t => (rec.toolsOff || []).includes(t.id)).length })}</p>` : ''}${on ? `<div class="ad-inrow" style="margin-top:10px"><span class="lbl" style="margin:0">${tx('State')}</span><select class="ad-in" data-act="areastate" data-area="${a}">${['legacy', 'migrating', 'live'].map(v => `<option value="${v}" ${rec.areas?.[a] === v ? 'selected' : ''}>${stateName(v)}</option>`).join('')}</select></div>` : ''}</div>`; }).join('')}</div>`;
+  const areas = `<div class="ad-ent">${AREAS.map(a => { const on = !!rec.entitlements?.[a]; return `<div class="card"><div class="ch"><h3>${AREA_NAME[a]}</h3><span class="ad-tgl ${on ? 'on' : ''}" data-act="entitle" data-area="${a}" role="switch" aria-checked="${on}"><i></i></span></div><div class="ad-tools${on ? '' : ' off'}">${toolsIn(a).map(t => { const live = on && !(rec.toolsOff || []).includes(t.id); return `<button type="button" class="ad-tool" data-act="tool" data-tool="${t.id}" role="switch" aria-checked="${live}"${on ? '' : ' disabled'} title="${live ? tx('On: click to switch it off for this store') : tx('Off: click to switch it on')}"><span class="tick ${live ? 'on' : ''}">${live ? ic('check') : ''}</span>${esc(tx(t.name))}</button>`; }).join('')}</div>${on && toolsIn(a).some(t => (rec.toolsOff || []).includes(t.id)) ? `<p class="lbl" style="margin:8px 0 0">${tx('{n} switched off: hidden on every device now, and the worker refuses their changes.', { n: toolsIn(a).filter(t => (rec.toolsOff || []).includes(t.id)).length })}</p>` : ''}${on ? `<div class="ad-inrow mt-m"><span class="lbl m-0">${tx('State')}</span><select class="ad-in" data-act="areastate" data-area="${a}">${['legacy', 'migrating', 'live'].map(v => `<option value="${v}" ${rec.areas?.[a] === v ? 'selected' : ''}>${stateName(v)}</option>`).join('')}</select></div>` : ''}</div>`; }).join('')}</div>`;
   const rotRow = (name, label, desc, on) => {
     // Setting a code: the label, then the new code full width and large (it is read out or typed on the store's devices), then the buttons.
     if (st.rot === name) return `<form class="li ad-rot" data-form="rotate"><div class="ad-rot-h"><b>${NEW_CODE[name]}</b><span class="cs-dim">${desc}</span></div>${inp('value', st.rotValue, name === 'pin' ? tx('6 digits') : '', 'mono ad-rot-in', 'required inputmode="' + (name === 'pin' ? 'numeric' : 'text') + '" aria-label="' + NEW_CODE[name] + '"')}<div class="ad-rot-a"><button class="btn sm" type="button" data-act="gen" data-name="value" data-kind="${name}">${ic('refresh')}${tx('Generate')}</button><button class="btn sm primary" type="submit">${tx('Save')}</button><button class="btn sm" type="button" data-act="rot-cancel">${tx('Cancel')}</button></div></form>`;
@@ -294,7 +349,7 @@ function accessTab(rec) {
   };
   const creds = `<div class="card"><div class="ch"><h3>${tx('Credentials')}</h3><span class="cs-dim">${tx('shared per store, no individual logins')}</span></div><div class="list ad-creds">${rotRow('pin', tx('Store PIN'), tx('opens the Floor on any device'), true)}${CODES.map(([k, l, d]) => rotRow(k, l, d, k !== 'dock' || rec.entitlements?.backdock)).join('')}<div class="li"><span class="loc" style="min-width:120px">${tx('Sessions')}</span><span class="nm">${tx('For a lost or shared device when the codes can stay.')}</span><button type="button" class="btn sm" data-act="revoke">${ic('lock')}${tx('Sign out every device')}</button></div></div>${st.rotDone ? `<div class="ad-done" style="margin:12px 0 0"><span class="ck">${ic('check')}</span><div><b>${tx('{label} is now', { label: esc(st.rotDone.label) })}</b><span class="ad-newcode mono">${esc(st.rotDone.value)}</span><span>${tx('Shown once. Hand it to the store; devices need it the next time they unlock.')}</span></div><button type="button" class="btn sm" data-copykc="${esc(st.rotDone.value)}">${tx('Copy')}</button></div>` : ''}<p class="lbl">${tx('A new PIN or code signs every device at the store out straight away; each needs the store PIN again. Show reads the current one back without signing anyone out, and goes in Owner actions.')}</p></div>`;
   const identity = st.edit
-    ? `<form class="card" data-form="edit"><div class="ch"><h3>${tx('Store')}</h3></div><div class="ad-grid2">${field(tx('Name'), inp('name', rec.name, tx('Store name'), '', 'required'))}${field(tx('Zone'), zoneSelect('region', rec.region), zoneHint())}${field(tx('Status'), `<select class="ad-in" name="status">${STATUSES.map(v => `<option value="${v}" ${rec.status === v ? 'selected' : ''}>${stateName(v)}</option>`).join('')}</select>`, tx('live once any area is live on Conduit'))}</div><div class="acts" style="margin-top:12px"><button class="btn primary sm" type="submit">${ic('check')}${tx('Save')}</button><button class="btn sm" type="button" data-act="edit-cancel">${tx('Cancel')}</button></div></form>`
+    ? `<form class="card" data-form="edit"><div class="ch"><h3>${tx('Store')}</h3></div><div class="ad-grid2">${field(tx('Name'), inp('name', rec.name, tx('Store name'), '', 'required'))}${field(tx('Zone'), zoneSelect('region', rec.region), zoneHint())}${field(tx('Status'), `<select class="ad-in" name="status">${STATUSES.map(v => `<option value="${v}" ${rec.status === v ? 'selected' : ''}>${stateName(v)}</option>`).join('')}</select>`, tx('live once any area is live on Conduit'))}</div><div class="acts mt-m"><button class="btn primary sm" type="submit">${ic('check')}${tx('Save')}</button><button class="btn sm" type="button" data-act="edit-cancel">${tx('Cancel')}</button></div></form>`
     : `<div class="card"><div class="ch"><h3>${tx('Store')}</h3><span class="btn sm" data-act="edit">${ic('edit')}${tx('Edit')}</span></div><div class="ad-kv"><span>${tx('Number')}</span><b class="mono">${esc(rec.no)}</b><span>${tx('Name')}</span><b>${esc(rec.name)}</b><span>${tx('Zone')}</span><b>${esc(rec.region || '—')}</b><span>${tx('Status')}</span><b>${tst(rec.status)}</b><span>${tx('Created')}</span><b>${fmtTime(rec.created)}</b><span>${tx('Updated')}</span><b>${fmtTime(rec.updated)}</b></div></div>`;
   // Store-wide tools (Resources): on with the store, not inside an area.
   const whole = toolsIn('store').length ? `<div class="card ad-whole"><div class="ch"><h3>${tx('Whole store')}</h3><span class="cs-dim">${tx('managers on any PC')}</span></div><div class="ad-tools">${toolsIn('store').map(t => { const live = !(rec.toolsOff || []).includes(t.id); return `<button type="button" class="ad-tool" data-act="tool" data-tool="${t.id}" role="switch" aria-checked="${live}" title="${live ? tx('On: click to switch it off for this store') : tx('Off: click to switch it on')}"><span class="tick ${live ? 'on' : ''}">${live ? ic('check') : ''}</span>${esc(tx(t.name))}</button>`; }).join('')}</div></div>` : '';
@@ -309,14 +364,14 @@ function migrTab(rec, c) {
     ? `<span>${tx('DV site')}</span><b>${esc(r.legacy?.name || '—')} · ${esc(r.url)}${r.legacy?.storeNumber ? ' · ' + tx('store {no}', { no: esc(r.legacy.storeNumber) }) : ''}</b><span>${tx('Archive')}</span><b>${txn(r.counts.history, '{n} decanted truck', '{n} decanted trucks')}</b><span>${tx('On the dock')}</span><b>${txn(r.counts.trucks, '{n} open truck · {pallets} pallets', '{n} open trucks · {pallets} pallets', { pallets: r.counts.pallets })}</b><span>${tx('Planner')}</span><b>${txn(r.counts.planner, '{n} slot', '{n} slots')}</b>`
     : `<span>${tx('Legacy store')}</span><b>${esc(r.legacy?.name || '—')} · ${tx('code {code}', { code: esc(r.code) })}${r.legacy?.storeNumber ? ' · ' + tx('number {no}', { no: esc(r.legacy.storeNumber) }) : ''}</b><span>${tx('History')}</span><b>${tx('{n} bays on record', { n: r.counts.history })}</b><span>${tx('Departments')}</span><b>${r.counts.depts ? txn(r.counts.depts, '{n} bay range (Backfill review › Departments)', '{n} bay ranges (Backfill review › Departments)') : tx('none set in K2B')}</b><span>${tx("Today's board")}</span><b>${tx('{n} bays · {requested} requested', { n: r.counts.today, requested: r.counts.requested })}</b><span>${tx('Negative SOH')}</span><b>${tx('{n} items today', { n: r.counts.negsoh })}</b>`;
   const result = !r ? '' : `<div class="card"><div class="ch"><h3>${r.dry ? tx('Dry run') : tx('Import')} · ${esc(r.legacy?.name || r.code || r.url)}</h3><span class="cs-dim">${r.dry ? tx('nothing was written') : tx('{applied} events written · {dups} already there', { applied: r.applied, dups: r.duplicates })}</span></div><div class="ad-kv">${kv}<span>${tx('Events')}</span><b>${r.dry ? tx('{n} would be written', { n: r.counts.events }) : tx('{n} · {applied} written · {dups} duplicates · {rejected} rejected', { n: r.counts.events, applied: r.applied, dups: r.duplicates, rejected: r.rejected.length })}</b></div>` +
-    (r.warnings.length ? `<div class="scol-t del" style="margin-top:10px">${tx('Warnings')}<span class="ct">${r.warnings.length}</span></div><ul class="ad-sum" style="padding-left:18px;font-size:12.5px;color:var(--ink2)">${r.warnings.slice(0, 20).map(w => `<li>${esc(w)}</li>`).join('')}${r.warnings.length > 20 ? `<li>${tx('… {n} more', { n: r.warnings.length - 20 })}</li>` : ''}</ul>` : '') +
-    (r.rejected.length ? `<div class="scol-t del" style="margin-top:10px">${tx('Rejected')}<span class="ct">${r.rejected.length}</span></div><ul style="padding-left:18px;font-size:12.5px">${r.rejected.slice(0, 10).map(x => `<li><span class="mono">${esc(x.id)}</span> ${esc(x.code)}: ${esc(x.message)}</li>`).join('')}</ul>` : '') +
-    (r.dry ? `<div class="acts" style="margin-top:12px"><button class="btn primary" data-act="import-accept">${ic('check')}${tx('Looks right · import now')}</button></div>` : `<div class="ad-done" style="margin:12px 0 0"><span class="ck">${ic('check')}</span><div><b>${tx('Imported.')}</b><span>${r.source === 'dv' ? tx("Open the store's Receiving and Receiving history to check the dock and the archive, then flip the Back dock to live below. Decant Visualiser stays deployed; freezing it for this store is a manual step on that site.") : tx("Open the store's Backfill review to check the board, then flip the Stockroom to live below. K2B stays deployed; freezing it for this store is a manual step in that app.")}</span></div></div>`) + `</div>`;
-  const picker = `<div class="ad-field" style="margin-bottom:10px"><label>${tx('Legacy app')}</label><span class="pills"><button type="button" class="${dv ? '' : 'on'}" data-act="import-src" data-v="k2b">${tx('K2B · Stockroom')}</button><button type="button" class="${dv ? 'on' : ''}" data-act="import-src" data-v="dv">${tx('Decant Visualiser · Back dock')}</button></span></div>`;
+    (r.warnings.length ? `<div class="scol-t del mt-m">${tx('Warnings')}<span class="ct">${r.warnings.length}</span></div><ul class="ad-sum" style="padding-left:18px;font-size:12.5px;color:var(--ink2)">${r.warnings.slice(0, 20).map(w => `<li>${esc(w)}</li>`).join('')}${r.warnings.length > 20 ? `<li>${tx('… {n} more', { n: r.warnings.length - 20 })}</li>` : ''}</ul>` : '') +
+    (r.rejected.length ? `<div class="scol-t del mt-m">${tx('Rejected')}<span class="ct">${r.rejected.length}</span></div><ul style="padding-left:18px;font-size:12.5px">${r.rejected.slice(0, 10).map(x => `<li><span class="mono">${esc(x.id)}</span> ${esc(x.code)}: ${esc(x.message)}</li>`).join('')}</ul>` : '') +
+    (r.dry ? `<div class="acts mt-m"><button class="btn primary" data-act="import-accept">${ic('check')}${tx('Looks right · import now')}</button></div>` : `<div class="ad-done" style="margin:12px 0 0"><span class="ck">${ic('check')}</span><div><b>${tx('Imported.')}</b><span>${r.source === 'dv' ? tx("Open the store's Receiving and Receiving history to check the dock and the archive, then flip the Back dock to live below. Decant Visualiser stays deployed; freezing it for this store is a manual step on that site.") : tx("Open the store's Backfill review to check the board, then flip the Stockroom to live below. K2B stays deployed; freezing it for this store is a manual step in that app.")}</span></div></div>`) + `</div>`;
+  const picker = `<div class="ad-field mb-m"><label>${tx('Legacy app')}</label><span class="pills"><button type="button" class="${dv ? '' : 'on'}" data-act="import-src" data-v="k2b">${tx('K2B · Stockroom')}</button><button type="button" class="${dv ? 'on' : ''}" data-act="import-src" data-v="dv">${tx('Decant Visualiser · Back dock')}</button></span></div>`;
   const fields = dv
     ? `<div class="ad-grid2">${field(tx('Decant Visualiser site'), inp('url', st.importUrl || '', 'https://busselton-dock.netlify.app', 'mono', 'required inputmode="url"'), tx('the store’s DV address; its state is read without a code, so team members import as D-numbers'))}</div>`
     : `<div class="ad-grid2">${field(tx('K2B store code'), inp('code', st.importCode || '', tx('e.g. {example}', { example: 'BUS247' }), 'mono', 'required autocapitalize="characters"'), tx('the join code the store’s phones use'))}${field(tx('Store PIN in K2B'), `<input class="ad-in mono" name="pin" type="password" autocomplete="off" required placeholder="••••">`, tx('the review PIN; only its hash is stored, and only in K2B'))}</div>`;
-  const form = `<form class="card" data-form="import"><div class="ch"><h3>${tx('Import from {app}', { app: dv ? 'Decant Visualiser' : 'K2B' })}</h3><span class="cs-dim">${dv ? tx('the archive, the trucks on the dock, the week plan') : tx("history, today's board, requested bays, negative SOH")}</span></div>${picker}${fields}<div class="si-err" id="impErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit" data-dry="1">${ic('search')}${tx('Dry run')}</button><button class="btn" type="submit" data-dry="0">${ic('arrow')}${tx('Import')}</button></div><p class="lbl">${tx('A dry run reads everything and counts what would be written. Importing writes events with your owner id; running it again only adds what is new.')} ${dv ? (rec.entitlements?.backdock ? '' : `<b>${tx('Turn the Back dock on in Access first.')}</b>`) : (rec.entitlements?.stockroom ? '' : `<b>${tx('Turn the Stockroom on in Access first.')}</b>`)}</p></form>`;
+  const form = `<form class="card" data-form="import"><div class="ch"><h3>${tx('Import from {app}', { app: dv ? 'Decant Visualiser' : 'K2B' })}</h3><span class="cs-dim">${dv ? tx('the archive, the trucks on the dock, the week plan') : tx("history, today's board, requested bays, negative SOH")}</span></div>${picker}${fields}<div class="si-err" id="impErr"></div><div class="acts mt-m"><button class="btn primary" type="submit" data-dry="1">${ic('search')}${tx('Dry run')}</button><button class="btn" type="submit" data-dry="0">${ic('arrow')}${tx('Import')}</button></div><p class="lbl">${tx('A dry run reads everything and counts what would be written. Importing writes events with your owner id; running it again only adds what is new.')} ${dv ? (rec.entitlements?.backdock ? '' : `<b>${tx('Turn the Back dock on in Access first.')}</b>`) : (rec.entitlements?.stockroom ? '' : `<b>${tx('Turn the Stockroom on in Access first.')}</b>`)}</p></form>`;
   return `<div class="card"><div class="ch"><h3>${tx('Cutover by area')}</h3><span class="cs-dim">${tx('a switch, not a mirror · one area at a time')}</span></div><div class="ad-scroll"><table class="rstbl"><tr><th>${tx('Area')}</th><th>${tx('Now')}</th><th>${tx('Legacy twin')}</th><th></th></tr>${rows}</table></div></div><div class="grid2 ad-two">${form}${result || `<div class="card"><div class="ch"><h3>${tx('How it works')}</h3></div><div class="ad-steps"><div class="on"><i>1</i><b>${tx('Dry run')}</b><span>${tx("Reads the legacy worker with the store's code and PIN; nothing is written.")}</span></div><div><i>2</i><b>${tx('Import')}</b><span>${tx('Each legacy record becomes the events Conduit would have logged. Re-running only adds what is new.')}</span></div><div><i>3</i><b>${tx('Check the board')}</b><span>${tx("Open Backfill review and History as the store; the day's bays and the archive should match K2B.")}</span></div><div><i>4</i><b>${tx('Flip to live')}</b><span>${tx('Devices see the area as live; K2B goes bugfix-only for this store.')}</span></div></div></div>`}</div>`;
 }
 async function runImport(ctx, form, dry) {
@@ -337,19 +392,19 @@ async function runImport(ctx, form, dry) {
 const FB_KIND = { wrong: tx('Something is wrong'), idea: tx('An idea'), question: tx('A question'), other: tx('Other') };
 function feedbackCard(list) {
   const rows = (list || []).slice().reverse().slice(0, 30);
-  return `<div class="card" style="margin-top:16px"><div class="ch"><h3>${tx('Feedback')}</h3><span class="cs-dim">${tx('{n} from this store', { n: (list || []).length })}</span></div>${rows.length ? `<div class="list">${rows.map(f => `<div class="li fb-li"><span class="nm" style="white-space:normal"><b>${esc(FB_KIND[f.kind] || f.kind)}</b> · ${esc(f.text)}<small class="cs-dim" style="display:block">${when(f.at)} · ${esc(f.by || '')}${f.role ? ' · ' + esc(f.role) : ''} · ${tx('on {view}', { view: esc(f.view || '?') })} · ${esc(f.version || '')}</small>${f.diag ? `<details><summary class="cs-dim">${tx('Diagnostics')}</summary><pre class="mono fb-diag">${esc(f.diag)}</pre></details>` : ''}</span></div>`).join('')}</div>` : `<p class="lbl">${tx('Nothing sent yet. Stores send it from Settings › Feedback and report.')}</p>`}</div>`;
+  return `<div class="card mt-l"><div class="ch"><h3>${tx('Feedback')}</h3><span class="cs-dim">${tx('{n} from this store', { n: (list || []).length })}</span></div>${rows.length ? `<div class="list">${rows.map(f => `<div class="li fb-li"><span class="nm wrap"><b>${esc(FB_KIND[f.kind] || f.kind)}</b> · ${esc(f.text)}<small class="cs-dim" style="display:block">${when(f.at)} · ${esc(f.by || '')}${f.role ? ' · ' + esc(f.role) : ''} · ${tx('on {view}', { view: esc(f.view || '?') })} · ${esc(f.version || '')}</small>${f.diag ? `<details><summary class="cs-dim">${tx('Diagnostics')}</summary><pre class="mono fb-diag">${esc(f.diag)}</pre></details>` : ''}</span></div>`).join('')}</div>` : empty(tx('Nothing sent yet. Stores send it from Settings › Feedback and report.'), { icon: 'file' })}</div>`;
 }
 function mapTab(rec, c) {
   const m = c.map;
-  const cur = m === undefined ? `<div class="ohint">${tx('Loading…')}</div>` : m === null ? `<p class="lbl">${tx('No map has been published for this store. Devices show a placeholder until one is.')}</p>` : m.error ? `<p class="lbl">${tx('Could not read the map: {error}', { error: esc(m.error) })}</p>` :
+  const cur = m === undefined ? `<div class="ohint">${tx('Loading…')}</div>` : m === null ? empty(tx('No map has been published for this store. Devices show a placeholder until one is.'), { icon: 'map' }) : m.error ? `<p class="lbl">${tx('Could not read the map: {error}', { error: esc(m.error) })}</p>` :
     `<div class="ad-kv"><span>${tx('Version')}</span><b class="mono">${esc(m.version)}</b><span>${tx('Published')}</span><b>${when(m.at)} · ${m.by?.owner ? tx('owner') : esc(m.by?.device || '')}</b><span>${tx('Floors')}</span><b>${(m.floors || []).map(f => `${esc(f.name || f.id)} · ${tx('{n} shelves', { n: f.shelves ?? '?' })} · ${tx('{n} KB', { n: Math.round((f.bytes || 0) / 1024) })}`).join('<br>')}</b><span>${tx('Departments')}</span><b>${(m.departments || []).length || tx('none in the document')}</b><span>${tx('Earlier versions')}</span><b>${(m.versions || []).filter(v => v.version !== m.version).map(v => `<span class="mono">${esc(v.version)}</span> ${fmtTime(v.at)}`).join(' · ') || '—'}</b></div>`;
   const doc = c.mapdoc, floors = doc?.floors || [];
-  const preview = !m || !m.version ? '' : doc === undefined ? `<div class="ohint" style="margin-top:12px">${tx('Loading the map…')}</div>` : !doc ? '' :
+  const preview = !m || !m.version ? '' : doc === undefined ? `<div class="ohint mt-m">${tx('Loading the map…')}</div>` : !doc ? '' :
     `<div class="mapbox admap"><div class="admap-bar">${floors.length > 1 ? `<div class="seg2 floorseg">${floors.map((f, i) => `<button class="${i === 0 ? 'on' : ''}" data-mapfloor="${esc(f.id)}">${esc(f.name || f.id)}</button>`).join('')}</div>` : `<span class="cs-dim">${esc(floors[0]?.name || tx('Ground'))}</span>`}<div class="zoom"><span class="ibtn" data-zoom="out">${ic('minus')}</span><span class="ibtn" data-zoom="in">${ic('plus')}</span><span class="ibtn" data-zoom="fit" title="${tx('Fit')}">${ic('map')}</span></div></div><div class="mapstage" id="adMapStage"></div></div>` + shelvingHtml(doc, m);
   const next = m && m.version ? bump(m.version) : '1';
   const form = `<form class="card" data-form="publish"><div class="ch"><h3>${tx('Publish a map')}</h3><span class="cs-dim">${tx("the Map Editor's export, or rendered floor SVGs")}</span></div><div class="ad-grid2">${field(tx('Version'), inp('version', st.pubVersion ?? next, tx('e.g. {example}', { example: '4.4' }), 'mono', 'required pattern="[\\w.\\-]{1,32}"'), tx('must be new; devices switch to it on their next sync'))}${field(tx('Map name'), inp('name', rec.name, tx('e.g. {example}', { example: 'Busselton' })))}</div>` +
-    `<div class="ad-grid2" style="margin-top:12px">${field(tx('Map file'), `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".js,.json,.svg,text/javascript,application/json,image/svg+xml" data-floor="ground" style="display:none"><span>${ic('file')} ${tx('Choose file…')}</span><small class="cs-dim" style="display:block"></small></label>`, tx("the editor's .js export (what ShelfSearcher read) or its .json save: every floor in it is rendered and published. A rendered ground-floor .svg still works."))}${field(tx('Stockroom floor SVG (optional)'), `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="stockroom" style="display:none"><span>${ic('file')} ${tx('Choose file…')}</span><small class="cs-dim" style="display:block"></small></label>`, tx('only with an .svg map file; an editor export carries its own floors'))}</div>` +
-    `<div class="si-err" id="pubErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit">${ic('check')}${tx('Publish')}</button></div><p class="lbl">${tx('Publishing writes the document to the store and logs a <span class="mono">map.publish</span> event with your owner id. Every signed-in device downloads the new version once and keeps it offline.')}</p></form>`;
+    `<div class="ad-grid2 mt-m">${field(tx('Map file'), `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".js,.json,.svg,text/javascript,application/json,image/svg+xml" data-floor="ground" style="display:none"><span>${ic('file')} ${tx('Choose file…')}</span><small class="cs-dim" style="display:block"></small></label>`, tx("the editor's .js export (what ShelfSearcher read) or its .json save: every floor in it is rendered and published. A rendered ground-floor .svg still works."))}${field(tx('Stockroom floor SVG (optional)'), `<label class="ad-in" style="display:block;cursor:pointer"><input type="file" accept=".svg,image/svg+xml" data-floor="stockroom" style="display:none"><span>${ic('file')} ${tx('Choose file…')}</span><small class="cs-dim" style="display:block"></small></label>`, tx('only with an .svg map file; an editor export carries its own floors'))}</div>` +
+    `<div class="si-err" id="pubErr"></div><div class="acts mt-m"><button class="btn primary" type="submit">${ic('check')}${tx('Publish')}</button></div><p class="lbl">${tx('Publishing writes the document to the store and logs a <span class="mono">map.publish</span> event with your owner id. Every signed-in device downloads the new version once and keeps it offline.')}</p></form>`;
   return `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>${tx('Published map')}</h3>${editorBtn('sm')}<span class="btn sm" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</span></div>${cur}${preview}</div><div class="ad-col">${form}${editsCard(c.snap?.mapedits)}</div></div>`;
 }
 // The store's suggested edits. A rename or a name that reads as a shelf code
@@ -365,7 +420,7 @@ function editsCard(edits) {
   const all = Object.entries(edits || {}).map(([id, x]) => ({ id, ...x }));
   const open = all.filter(x => x.status === 'open').sort((a, b) => (a.at < b.at ? -1 : 1));
   const done = all.filter(x => x.status !== 'open').sort((a, b) => (a.resolvedAt < b.resolvedAt ? 1 : -1)).slice(0, 8);
-  const row = x => `<tr><td class="mono">${editShelf(x)}</td><td style="white-space:normal">${editWhat(x)}${fieldTag(x)}</td><td class="mono">${fmtTime(x.at)}<small>${esc(x.by || '')}</small></td><td>${x.status === 'open' ? `<span class="ad-edacts">${canApply(x) ? `<button class="btn sm primary" data-act="edit-apply" data-id="${esc(x.id)}" title="${tx('Write it into the published map and publish a new version')}">${ic('check')}${tx('Apply to map')}</button>` : ''}<button class="btn sm${canApply(x) ? '' : ' primary'}" data-act="edit-accept" data-id="${esc(x.id)}" title="${canApply(x) ? tx('Made it by hand in the editor') : tx('Done')}">${canApply(x) ? '' : ic('check')}${canApply(x) ? tx('Accept') : tx('Resolve')}</button><button class="btn sm" data-act="edit-decline" data-id="${esc(x.id)}">${tx('Decline')}</button></span>` : `${status(x.status === 'accepted' ? 'good' : '', x.status === 'accepted' ? tx('Accepted') : tx('Declined'))}<small>${fmtTime(x.resolvedAt)}${x.reply ? ' · ' + esc(x.reply) : ''}</small>`}</td></tr>`;
+  const row = x => `<tr><td class="mono">${editShelf(x)}</td><td class="wrap">${editWhat(x)}${fieldTag(x)}</td><td class="mono">${fmtTime(x.at)}<small>${esc(x.by || '')}</small></td><td>${x.status === 'open' ? `<span class="ad-edacts">${canApply(x) ? `<button class="btn sm primary" data-act="edit-apply" data-id="${esc(x.id)}" title="${tx('Write it into the published map and publish a new version')}">${ic('check')}${tx('Apply to map')}</button>` : ''}<button class="btn sm${canApply(x) ? '' : ' primary'}" data-act="edit-accept" data-id="${esc(x.id)}" title="${canApply(x) ? tx('Made it by hand in the editor') : tx('Done')}">${canApply(x) ? '' : ic('check')}${canApply(x) ? tx('Accept') : tx('Resolve')}</button><button class="btn sm" data-act="edit-decline" data-id="${esc(x.id)}">${tx('Decline')}</button></span>` : `${status(x.status === 'accepted' ? 'good' : '', x.status === 'accepted' ? tx('Accepted') : tx('Declined'))}<small>${fmtTime(x.resolvedAt)}${x.reply ? ' · ' + esc(x.reply) : ''}</small>`}</td></tr>`;
   const apply = open.filter(canApply);
   const heads = [tx('Shelf'), tx('Suggestion'), tx('Sent'), ''];
   return `<div class="card"><div class="ch"><h3>${tx('Suggested edits')}</h3><span class="cs-dim">${tx('{n} waiting · from Suggest map edits and Field Mode', { n: open.length })}</span>${apply.length > 1 ? `<button class="btn sm primary" data-act="edit-apply-all">${ic('check')}${tx('Apply all {n} to the map', { n: apply.length })}</button>` : ''}</div>` +
@@ -434,16 +489,16 @@ async function onStoreClick(e, ctx) {
   }
   else if (act === 'edit-accept' || act === 'edit-decline') {
     const status = act === 'edit-accept' ? 'accepted' : 'declined';
-    const note = prompt(status === 'accepted' ? tx('Accepted: the change is in a published map version. Note for the store (optional):') : tx('Decline this suggestion. Why? (optional)'), '');
+    const note = await askText(status === 'accepted' ? { title: tx('Accept this suggestion?'), text: tx('Accept it once the change is in a published map version.'), label: tx('Note for the store (optional)'), multiline: true, ok: tx('Accept') } : { title: tx('Decline this suggestion?'), label: tx('Why? (optional)'), multiline: true, ok: tx('Decline') });
     if (note === null) return;
     a.disabled = true;
-    try { await ctx.admin.api(`/v1/admin/stores/${no}/mapedits/${encodeURIComponent(a.dataset.id)}`, { method: 'POST', body: { status, ...(note.trim() ? { note: note.trim() } : {}) } }); delete c.snap; st.actions = null; toast(status === 'accepted' ? tx('Suggestion accepted') : tx('Suggestion declined')); ctx.rerender(); }
+    try { await ctx.admin.api(`/v1/admin/stores/${no}/mapedits/${encodeURIComponent(a.dataset.id)}`, { method: 'POST', body: { status, ...(note ? { note } : {}) } }); delete c.snap; st.actions = null; toast(status === 'accepted' ? tx('Suggestion accepted') : tx('Suggestion declined')); ctx.rerender(); }
     catch (err) { a.disabled = false; fail(err); }
   }
   else if (act === 'area') { st.area = a.dataset.area; ctx.rerender(); }
   else if (act === 'actas') { a.disabled = true; try { await ctx.actAs(no); } catch (err) { a.disabled = false; fail(err); } }
-  else if (act === 'tool') { const id = a.dataset.tool, off = (c.rec?.toolsOff || []).includes(id), t = TOOLS.find(x => x.id === id); if (!off && !confirm(tx('Switch {tool} off for {no}? It disappears from every device now and the worker refuses its changes. Its records stay.', { tool: tx(t.name), no }))) return; await patchStore(ctx, { tools: { [id]: off } }); toast(off ? tx('{tool} on for {no}', { tool: tx(t.name), no }) : tx('{tool} off for {no}', { tool: tx(t.name), no })); }
-  else if (act === 'entitle') { const area = a.dataset.area, on = !c.rec?.entitlements?.[area]; if (!on && !confirm(tx('Turn {area} off for {no}? Devices lose the area the next time their token refreshes.', { area: AREA_NAME[area], no }))) return; await patchStore(ctx, { entitlements: { [area]: on } }); }
+  else if (act === 'tool') { const id = a.dataset.tool, off = (c.rec?.toolsOff || []).includes(id), t = TOOLS.find(x => x.id === id); if (!off && !await ask({ title: tx('Switch {tool} off for {no}?', { tool: tx(t.name), no }), text: [tx('It disappears from every device now and the worker refuses its changes.'), tx('Its records stay.')], ok: tx('Switch it off') })) return; await patchStore(ctx, { tools: { [id]: off } }); toast(off ? tx('{tool} on for {no}', { tool: tx(t.name), no }) : tx('{tool} off for {no}', { tool: tx(t.name), no })); }
+  else if (act === 'entitle') { const area = a.dataset.area, on = !c.rec?.entitlements?.[area]; if (!on && !await ask({ title: tx('Turn {area} off for {no}?', { area: AREA_NAME[area], no }), text: tx('Devices lose the area the next time their token refreshes.'), ok: tx('Turn it off') })) return; await patchStore(ctx, { entitlements: { [area]: on } }); }
   else if (act === 'revoke') { if (await ask({ title: tx('Sign out every device at store {no}?', { no: st.no }), text: tx('Each one needs the store PIN again.'), ok: tx('Sign out every device'), cancel: tx('Cancel') }) && await patchStore(ctx, { revoke: true })) toast(tx('Every device is signed out')); }
   else if (act === 'rot') { st.rot = a.dataset.name; st.rotValue = gen[a.dataset.name](); st.rotDone = null; st.reveal = null; ctx.rerender(); }
   else if (act === 'reveal') {
@@ -460,7 +515,7 @@ async function onStoreClick(e, ctx) {
   else if (act === 'gen') { const kind = a.dataset.kind || a.dataset.name; const el = a.closest('.ad-inrow')?.querySelector('input'); if (el && gen[kind]) el.value = gen[kind](); }
   else if (act === 'edit') { st.edit = true; ctx.rerender(); }
   else if (act === 'edit-cancel') { st.edit = false; ctx.rerender(); }
-  else if (act === 'flip') { const { area, state } = a.dataset; if (state === 'live' && !confirm(tx('Flip {area} for {no} to live? Devices treat Conduit as the system of record for it from now.', { area: AREA_NAME[area], no }))) return; try { await ctx.admin.api(`/v1/admin/stores/${no}/flip`, { method: 'POST', body: { area, state } }); st.actions = null; invalidate(no); await ctx.admin.refreshStores(); toast(tx('{area} is {state}', { area: AREA_NAME[area], state: STATE_NAME[state] || state })); ctx.rerender(); } catch (err) { fail(err); } }
+  else if (act === 'flip') { const { area, state } = a.dataset; if (state === 'live' && !await ask({ title: tx('Flip {area} for {no} to live?', { area: AREA_NAME[area], no }), text: tx('Devices treat Conduit as the system of record for it from now.'), ok: tx('Flip to live'), cancel: tx('Cancel'), danger: false })) return; try { await ctx.admin.api(`/v1/admin/stores/${no}/flip`, { method: 'POST', body: { area, state } }); st.actions = null; invalidate(no); await ctx.admin.refreshStores(); toast(tx('{area} is {state}', { area: AREA_NAME[area], state: STATE_NAME[state] || state })); ctx.rerender(); } catch (err) { fail(err); } }
   else if (act === 'import-accept') { const r = st.importResult; if (!r || !st.importPin) return toast(tx('Run the dry run again first'), 'bad'); const form = document.querySelector('form[data-form="import"]'); if (form) { if (r.source === 'dv') form.url.value = r.url; else { form.code.value = r.code; form.pin.value = st.importPin; } runImport(ctx, form, false); } }
   else if (act === 'import-src') { st.importSource = a.dataset.v; st.importResult = null; st.importPin = null; ctx.rerender(); }
 }
@@ -487,14 +542,14 @@ const register = {
       const d = st.regDone, on = AREAS.filter(a => d.entitlements[a]).map(a => AREA_NAME[a]).join(' + ') || tx('no areas');
       return vh(tx('Store registered'), sub(`${esc(d.no)} ${esc(d.name)}`, tx('created just now'), tx('store object ready')), back) +
         `<div class="ad-done"><span class="ck">${ic('check')}</span><div><b>${tx('{no} {name} is on the system.', { no: esc(d.no), name: esc(d.name) })}</b><span>${tx('The store is in the registry, entitlements are set, and devices can sign in from now. Nothing was deployed.')}</span></div></div>` +
-        `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>${tx('Hand these to the store')}</h3><span class="cs-dim">${tx('shown once · rotate any time')}</span></div><div class="ad-kv codes"><span>${tx('Store PIN')}</span><b class="mono">${esc(d.pin)}</b>${CODES.filter(([k]) => d.codes[k]).map(([k, l]) => `<span>${l}</span><b class="mono">${esc(d.codes[k])}</b>`).join('')}<span>${tx('Sign-in')}</span><b>${tx('store number <span class="mono">{no}</span> + PIN on any device', { no: esc(d.no) })}</b></div><div class="acts" style="margin-top:12px"><button class="btn" data-act="copy">${ic('clip')}${tx('Copy codes')}</button></div></div>` +
-        `<div class="card"><div class="ch"><h3>${tx('Next steps')}</h3></div><div class="ad-steps"><div class="on"><i>1</i><b>${tx('Registered')}</b><span>${on} · ${esc(d.region || tx('no zone'))} · ${tx('owner: you')}</span></div><div><i>2</i><b>${tx('Sign a device in')}</b><span>${tx('Store number and PIN on the store sign-in. Crew codes unlock Stockroom and Back dock per device.')}</span></div><div><i>3</i><b>${tx('Publish the map')}</b><span>${tx('Needed before the Floor is useful. Arrives with the map route.')}</span></div><div><i>4</i><b>${tx('Flip areas to live')}</b><span>${tx("From the store's Access tab once the team has switched; the legacy app freezes for that area.")}</span></div></div><div class="acts" style="margin-top:12px"><a class="btn primary" data-view="adminstore" data-no="${esc(d.no)}">${ic('store')}${tx('Open the store')}</a><button class="btn" data-act="another">${ic('plus')}${tx('Register another')}</button></div></div></div>`;
+        `<div class="grid2 ad-two"><div class="card"><div class="ch"><h3>${tx('Hand these to the store')}</h3><span class="cs-dim">${tx('shown once · rotate any time')}</span></div><div class="ad-kv codes"><span>${tx('Store PIN')}</span><b class="mono">${esc(d.pin)}</b>${CODES.filter(([k]) => d.codes[k]).map(([k, l]) => `<span>${l}</span><b class="mono">${esc(d.codes[k])}</b>`).join('')}<span>${tx('Sign-in')}</span><b>${tx('store number <span class="mono">{no}</span> + PIN on any device', { no: esc(d.no) })}</b></div><div class="acts mt-m"><button class="btn" data-act="copy">${ic('clip')}${tx('Copy codes')}</button></div></div>` +
+        `<div class="card"><div class="ch"><h3>${tx('Next steps')}</h3></div><div class="ad-steps"><div class="on"><i>1</i><b>${tx('Registered')}</b><span>${on} · ${esc(d.region || tx('no zone'))} · ${tx('owner: you')}</span></div><div><i>2</i><b>${tx('Sign a device in')}</b><span>${tx('Store number and PIN on the store sign-in. Crew codes unlock Stockroom and Back dock per device.')}</span></div><div><i>3</i><b>${tx('Publish the map')}</b><span>${tx('Needed before the Floor is useful. Arrives with the map route.')}</span></div><div><i>4</i><b>${tx('Flip areas to live')}</b><span>${tx("From the store's Access tab once the team has switched; the legacy app freezes for that area.")}</span></div></div><div class="acts mt-m"><a class="btn primary" data-view="adminstore" data-no="${esc(d.no)}">${ic('store')}${tx('Open the store')}</a><button class="btn" data-act="another">${ic('plus')}${tx('Register another')}</button></div></div></div>`;
     }
     const r = st.reg || (st.reg = { no: '', name: '', region: '', entitlements: { floor: true, stockroom: false, backdock: false }, pin: gen.pin(), codes: { stockroom: '', dock: '', manager: gen.manager() } });
     const identity = `<div class="card"><div class="ch"><h3>${tx('Store')}</h3></div><div class="ad-grid2">${field(tx('Store number'), inp('no', r.no, tx('e.g. {example}', { example: '1241' }), 'mono', 'required inputmode="numeric" pattern="\\d{3,5}"'), tx('the single identifier every area uses'))}${field(tx('Name'), inp('name', r.name, tx('Store name'), '', 'required'))}${field(tx('Zone'), zoneSelect('region', r.region), zoneHint())}</div></div>`;
     const areas = `<div class="card"><div class="ch"><h3>${tx('Areas')}</h3><span class="cs-dim">${tx('what this store is allowed to have · change any time')}</span></div><div class="ad-ent in">${AREAS.map(a => { const on = !!r.entitlements[a]; return `<div class="ad-entc"><div class="ch"><h3>${AREA_NAME[a]}</h3><span class="ad-tgl ${on ? 'on' : ''}" data-act="ent" data-area="${a}" role="switch" aria-checked="${on}"><i></i></span></div><div class="ad-tools${on ? '' : ' off'}">${TOOLS.filter(t => t.area === a).map(t => `<label><span class="tick ${on ? 'on' : ''}">${on ? ic('check') : ''}</span>${esc(tx(t.name))}</label>`).join('')}</div></div>`; }).join('')}</div><p class="lbl">${tx("Devices never see an area that is off. Turn one on later from the store's Access tab.")}</p></div>`;
     const creds = `<div class="card"><div class="ch"><h3>${tx('Credentials')}</h3><span class="cs-dim">${tx('shared per store, no individual logins')}</span></div><div class="ad-grid2">${field(tx('Store PIN'), genRow('pin', r.pin, tx('6 digits')), tx('opens the store on any device'))}${field(tx('Stockroom code'), genRow('stockroom', r.codes.stockroom, r.entitlements.stockroom ? '' : tx('not needed · Stockroom is off'), !r.entitlements.stockroom), tx('unlocks the Stockroom area on a device'))}${field(tx('Dock code'), genRow('dock', r.codes.dock, r.entitlements.backdock ? '' : tx('not needed · Back dock is off'), !r.entitlements.backdock), tx('unlocks the Back dock on a device'))}${field(tx('Manager code'), genRow('manager', r.codes.manager, ''), tx('opens every entitled area on a device'))}</div></div>`;
-    const summary = `<div class="card ad-sum"><div class="ch"><h3>${tx('What happens when you register')}</h3></div><ul><li>${tx('The store is written to the registry on the worker. No deploy, no app update.')}</li><li>${tx('Entitlements are written: <b>{areas}</b>.', { areas: AREAS.filter(a => r.entitlements[a]).map(a => AREA_NAME[a]).join(', ') || tx('no areas') })}</li><li>${tx('The PIN and codes become valid immediately and are shown once.')}</li><li>${tx('The store appears on every sign-in screen straight away.')}</li><li>${tx('A <b>store.register</b> action is logged with your owner id.')}</li></ul><div class="si-err" id="regErr"></div><div class="acts" style="margin-top:12px"><button class="btn primary" type="submit">${ic('check')}${tx('Register store')}</button><a class="btn" data-view="admin">${tx('Cancel')}</a></div></div>`;
+    const summary = `<div class="card ad-sum"><div class="ch"><h3>${tx('What happens when you register')}</h3></div><ul><li>${tx('The store is written to the registry on the worker. No deploy, no app update.')}</li><li>${tx('Entitlements are written: <b>{areas}</b>.', { areas: AREAS.filter(a => r.entitlements[a]).map(a => AREA_NAME[a]).join(', ') || tx('no areas') })}</li><li>${tx('The PIN and codes become valid immediately and are shown once.')}</li><li>${tx('The store appears on every sign-in screen straight away.')}</li><li>${tx('A <b>store.register</b> action is logged with your owner id.')}</li></ul><div class="si-err" id="regErr"></div><div class="acts mt-m"><button class="btn primary" type="submit">${ic('check')}${tx('Register store')}</button><a class="btn" data-view="admin">${tx('Cancel')}</a></div></div>`;
     return vh(tx('Register a store'), sub(tx('Owner action'), tx('creates the store on the worker'), tx('no deploy')), back) + `<form class="ad-form" id="regForm" data-form="register"><div class="ad-form-main">${identity}${areas}${creds}</div><div class="ad-form-side">${summary}</div></form>`;
   },
   mount(ctx, root) {
@@ -533,7 +588,7 @@ const register = {
 // The same renderers the store's screens use, over the owner's snapshot of
 // the store; nothing on them can be pressed (inert).
 function boardsTab(rec, c) {
-  if (!rec.entitlements?.backdock) return `<div class="card"><p class="lbl">${tx('{name} has no Back dock, so it has no boards.', { name: esc(rec.name) })}</p></div>`;
+  if (!rec.entitlements?.backdock) return `<div class="card">${empty(tx('{name} has no Back dock, so it has no boards.', { name: esc(rec.name) }), { icon: 'm-receiving' })}</div>`;
   if (c.snap === undefined) return `<div class="card"><div class="ohint">${tx('Loading…')}</div></div>`;
   const snap = c.snap || {}, empty = { dock: { trucks: {}, history: [], manifests: {}, ledger: {} }, plan: { days: {} } };
   const view = { store: { get: k => (k ? snap[k] ?? empty[k] ?? {} : snap), on: () => () => {} }, isMobile: false, storeNo: rec.no, storeName: rec.name, rerender() {}, go() {}, session: { current: { caps: AREAS.filter(a => rec.entitlements?.[a]), roles: ['owner'], owner: true } } };
@@ -591,7 +646,7 @@ const maps = {
     const q = queue.map(x => `<div class="li fq-li"><span class="loc mono">${esc(x.no)}</span><span class="nm">${what(x)}${x.note ? ` · ${esc(x.note)}` : ''}${fieldTag(x)} <span class="cs-dim">· ${timePassed(x.at)}</span></span><span class="fq-acts">${canApply(x) ? `<button class="btn sm primary" data-act="maps-apply" data-no="${esc(x.no)}" data-id="${esc(x.id)}">${ic('check')}${tx('Apply to map')}</button>` : ''}<a class="btn sm" data-view="adminstore" data-no="${esc(x.no)}" data-tab="map">${tx('Review')}</a></span></div>`).join('');
     return vh(tx('Maps'), sub(tx('every store’s published map'), tx('suggested edits from the floor')), `${editorBtn()}<button class="btn" data-act="maps-refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`, 'm-map') +
       `<div class="card"><div class="ch"><h3>${tx('Published maps')}</h3><span class="cs-dim">${tx('open the editor on a store, publish, then accept its suggestions')}</span></div>${table([tx('Store'), tx('Name'), tx('Version'), tx('Published'), tx('Floors'), tx('Open suggestions'), ''], rows)}</div>` +
-      `<div class="card"><div class="ch"><h3>${tx('Suggestions waiting')}</h3><span class="cs-dim">${tx('{n} open, oldest first', { n: queue.length })}</span></div>${q ? `<div class="list">${q}</div>` : `<p class="lbl">${tx('Nothing waiting. Floor staff suggest renames and flags from a shelf card; managers send Field Mode checks.')}</p>`}</div>`;
+      `<div class="card"><div class="ch"><h3>${tx('Suggestions waiting')}</h3><span class="cs-dim">${tx('{n} open, oldest first', { n: queue.length })}</span></div>${q ? `<div class="list">${q}</div>` : empty(tx('Nothing waiting. Floor staff suggest renames and flags from a shelf card; managers send Field Mode checks.'), { icon: 'check' })}</div>`;
   },
   mount(ctx, root) {
     const stores = ctx.admin.stores || [];
@@ -624,7 +679,7 @@ async function applyToMap(ctx, no, list) {
   for (const x of list) { const n = applyEdit(doc, x); shelves += n; (n ? done : missed).push(x); }
   if (!done.length) return toast(txn(missed.length, 'No single shelf on the published map matches that suggestion (the name is missing, or shared and the suggestion has no position): make it in the map editor', 'No single shelf on the published map matches those suggestions (the name is missing, or shared and the suggestion has no position): make them in the map editor'), 'bad');
   let version = bump(info.version);
-  if (!confirm(`${txn(done.length, "Apply {n} suggestion ({shelves}) to store {no}'s map and publish it as version {version}?", "Apply {n} suggestions ({shelves}) to store {no}'s map and publish it as version {version}?", { shelves: txn(shelves, '{n} shelf renamed or named', '{n} shelves renamed or named'), no, version })}${missed.length ? `\n\n${tx('{n} could not be matched to one shelf and stay waiting.', { n: missed.length })}` : ''}\n\n${tx('Every device gets the new map within a minute. Open the map editor from Conduit again before editing there.')}`)) return;
+  if (!await ask({ title: txn(done.length, "Apply {n} suggestion ({shelves}) to store {no}'s map and publish it as version {version}?", "Apply {n} suggestions ({shelves}) to store {no}'s map and publish it as version {version}?", { shelves: txn(shelves, '{n} shelf renamed or named', '{n} shelves renamed or named'), no, version }), text: [...(missed.length ? [tx('{n} could not be matched to one shelf and stay waiting.', { n: missed.length })] : []), tx('Every device gets the new map within a minute. Open the map editor from Conduit again before editing there.')], ok: tx('Apply and publish'), cancel: tx('Cancel'), danger: false })) return;
   const name = ctx.admin.stores.find(r => String(r.no) === String(no))?.name;
   for (let tries = 0; ; tries++) {
     try { await ctx.admin.api(`/v1/store/${no}/map`, { method: 'POST', body: publishBody(doc, { version, name }) }); break; }
@@ -636,11 +691,114 @@ async function applyToMap(ctx, no, list) {
   invalidate(no); await ctx.admin.refreshStores(); ctx.rerender();
 }
 
+// ── Devices: every store's devices, problems first ─────────────────────
+// Spot an out-of-date PC before it causes trouble: one row per device
+// across the fleet, from each store's /devices, filtered to those behind
+// the newest version, those reporting errors, or those gone quiet.
+const DEV_FILTERS = [['all', tx('All')], ['behind', tx('device filter::Behind')], ['errors', tx('With errors')], ['quiet', tx('device filter::Quiet')]];
+const DEV_MATCH = { all: () => true, behind: x => x.h.behind, errors: x => x.h.errors.length > 0, quiet: x => x.h.quiet };
+const devScore = h => (h.errors.length ? 4 : 0) + (h.behind ? 4 : 0) + (h.outbox ? 2 : 0) + (h.offline ? 1 : 0) + (h.quiet ? 1 : 0);
+const devicesPage = {
+  id: 'admindevices', title: tx('Devices'), icon: 'phone',
+  desktop(ctx) {
+    const stores = ctx.admin.stores || [], now = Date.now();
+    const all = stores.flatMap(s => Object.entries(forStore(s.no).devices || {}).map(([id, d]) => ({ s, id, d })));
+    const newest = fleetNewest(ctx);
+    for (const x of all) x.h = devHealth(x.d, newest, now);
+    all.sort((a, b) => devScore(b.h) - devScore(a.h) || (a.d.last < b.d.last ? 1 : a.d.last > b.d.last ? -1 : 0));
+    const f = DEV_MATCH[st.dfilter] ? st.dfilter : 'all', shown = all.filter(DEV_MATCH[f]), count = k => all.filter(DEV_MATCH[k]).length;
+    const waiting = stores.filter(s => !forStore(s.no).devices && !forStore(s.no).devErr), failed = stores.filter(s => forStore(s.no).devErr);
+    const live = all.filter(x => !x.h.quiet).length, behind = count('behind'), errs = count('errors'), quiet = count('quiet');
+    const rows = shown.map(({ s, id, d, h }) => `<tr><td><a class="go mono" data-view="adminstore" data-no="${esc(s.no)}" data-tab="devices">${esc(s.no)}</a><small>${esc(s.name)}</small></td>${deviceCells(id, d, h)}</tr>`);
+    const pills = `<span class="pills" style="margin-left:auto">${DEV_FILTERS.map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-act="dfilter" data-v="${k}">${l} ${count(k)}</button>`).join('')}</span>`;
+    const note = [waiting.length ? tx('Reading {n} of {total} stores…', { n: stores.length - waiting.length, total: stores.length }) : '', failed.length ? tx('Could not read {stores}.', { stores: failed.map(s => esc(s.no)).join(', ') }) : ''].filter(Boolean).join(' ');
+    return vh(tx('Devices'), sub(tx('every store’s devices'), tx('from each device’s heartbeat'), newest ? tx('newest {version}', { version: `<span class="mono">${esc(appName(newest))}</span>` }) : ''), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="dev-refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`, 'phone') +
+      `<div class="ad-tiles">${tile(all.length, txn(all.length, 'device', 'devices'), tx('{n} seen in the last 10 min', { n: live }))}${tile(behind, tx('behind the newest version'), newest ? tx('newest {version}', { version: esc(appName(newest)) }) : tx('no version reported yet'), behind ? 'warn' : '')}${tile(errs, tx('reporting errors'), tx('their last five errors each'), errs ? 'warn' : '')}${tile(quiet, tx('quiet'), tx('not seen for 10 min or more'))}</div>` +
+      `<div class="card dv-card"><div class="ch"><h3>${tx('Every store’s devices')}</h3><span class="cs-dim">${tx('problems first: errors and old versions, then changes waiting, then quiet')}</span>${pills}</div>${note ? `<p class="lbl" style="margin:0 0 8px">${note}</p>` : ''}${table([tx('Store'), ...DEV_HEADS()], rows, 'ad-tbl ad-dev dv-tbl')}</div>`;
+  },
+  mount(ctx, root) {
+    loadDevices(ctx).then(did => { if (did) ctx.rerender(); }).catch(fail);
+    if (kpisMissing(ctx)) kpisOnce(ctx).then(() => ctx.rerender()).catch(() => {});
+    root.addEventListener('click', e => {
+      const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'dfilter') { st.dfilter = a.dataset.v; ctx.rerender(); }
+      else if (a.dataset.act === 'dev-refresh') { for (const s of ctx.admin.stores || []) { const c = forStore(s.no); delete c.devices; delete c.devErr; } st.kpis = null; ctx.rerender(); }
+    });
+    return [];
+  },
+};
+
+// ── Compare stores: the same measures side by side ─────────────────────
+// One row per store from its /kpis: backfill accuracy, this week's
+// location refresh, the dock's clear time and the Adjustments shrink. In
+// each column the best store is marked good and the worst a warning, once
+// two stores have a figure; a click on a column head sorts by it.
+const money = v => Number(v || 0).toLocaleString('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 });
+const hm = m => { m = Math.max(0, Math.round(m || 0)); return m >= 60 ? tx('{h}h {m}m', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') }) : tx('{n}m', { n: m }); };
+const DASH = '<span class="cs-dim">—</span>';
+// Shrink in dollars, combined (back to zero, then up to one carton), as the
+// Stock intelligence shrink card counts it: adjusted is what was ticked off,
+// avoided what a past day's list left unticked. It sorts by adjusted and has
+// no best or worst: a store that ticks nothing off would look best.
+const shrinkVal = sh => sh && sh.items && sh.priced ? sh.adjusted.combined : null;
+const CMP = [
+  { key: 'acc', head: tx('Backfill accuracy'), span: tx('7 days'), better: 1, val: k => k?.backfill?.accuracy ?? null,
+    cell: k => k.backfill?.accuracy != null ? `${accChip(k.backfill.accuracy)}<small>${txn(k.backfill.week, '{n} bay', '{n} bays')}</small>` : DASH },
+  { key: 'refresh', head: tx('Location refresh'), span: tx('this week'), better: 1, val: k => (k?.refresh ? k.refresh.counted / (k.refresh.target || 1) : null),
+    cell: k => k.refresh ? `<b>${k.refresh.counted}</b> / ${k.refresh.target}${k.refresh.done !== k.refresh.counted ? `<small>${tx('{n} marked in all', { n: k.refresh.done })}</small>` : ''}` : DASH },
+  { key: 'clear', head: tx('Dock clear time'), span: tx('7 days'), better: -1, val: k => k?.dock?.clear7?.mins ?? null,
+    cell: k => !k.dock ? DASH : `${k.dock.clear7 ? `<b>${hm(k.dock.clear7.mins)}</b>` : DASH}<small>${k.dock.clear7 ? txn(k.dock.clear7.trucks, '{n} truck', '{n} trucks') + ' · ' : ''}<span class="cmp-nw">${k.dock.clear28 ? tx('28 days: {time}', { time: hm(k.dock.clear28.mins) }) : tx('28 days: none')}</span></small>` },
+  { key: 'shrink', head: tx('Shrink adjusted · avoided'), span: tx('7 days'), better: 0, val: k => shrinkVal(k?.shrink),
+    cell: k => { const sh = k.shrink; if (!sh || !sh.items) return sh ? `${DASH}<small>${tx('nothing on the lists')}</small>` : DASH;
+      if (!sh.priced) return `<b>${txn(sh.adjustedItems, '{n} item adjusted', '{n} items adjusted')}</b><small>${tx('{n} on the lists, none with a price', { n: sh.items })}</small>`;
+      return `<span class="cmp-sh"><b>${money(sh.adjusted.combined)}</b> ${tx('shrink::adjusted')}</span><span class="cmp-sh"><b>${money(sh.avoided?.combined)}</b> ${tx('shrink::avoided')}</span><small>${tx('{done} of {n} items ticked off', { done: sh.adjustedItems, n: sh.items })}${sh.unpriced ? ' · ' + tx('{n} without a price', { n: sh.unpriced }) : ''}</small>`; } },
+];
+const compare = {
+  id: 'admincompare', title: tx('Compare stores'), icon: 'chart',
+  desktop(ctx) {
+    const stores = ctx.admin.stores || [], rows = stores.map(s => ({ s, k: st.kpis?.[s.no] }));
+    // Each column's best and worst, among the stores with a figure.
+    const marks = {};
+    for (const c of CMP) {
+      const vals = rows.map(r => (r.k && !r.k.error ? c.val(r.k) : null)).filter(v => v != null);
+      if (!c.better || vals.length < 2) continue;
+      const hi = Math.max(...vals), lo = Math.min(...vals);
+      if (hi !== lo) marks[c.key] = c.better > 0 ? { best: hi, worst: lo } : { best: lo, worst: hi };
+    }
+    const { key, dir } = st.cmp, col = CMP.find(c => c.key === key);
+    const byNo = (a, b) => String(a.s.no).localeCompare(String(b.s.no), 'en', { numeric: true });
+    const sortVal = r => (col ? (r.k && !r.k.error ? col.val(r.k) : null) : Number(r.s.no));
+    rows.sort((a, b) => { const x = sortVal(a), y = sortVal(b); if (x == null || y == null) return (x == null) - (y == null) || byNo(a, b); return (x - y) * dir || byNo(a, b); });
+    const arrow = k => (key === k ? `<i class="cmp-arr" aria-hidden="true">${dir > 0 ? '▲' : '▼'}</i>` : '');
+    const th = (k, head, span) => `<th aria-sort="${key === k ? (dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="cmp-h${key === k ? ' on' : ''}" data-act="cmp-sort" data-key="${k}">${head}${span ? `<small>${span}</small>` : ''}${arrow(k)}</button></th>`;
+    const cell = (c, k) => { const v = c.val(k), m = marks[c.key], cls = v == null || !m ? '' : v === m.best ? ' cmp-best' : v === m.worst ? ' cmp-worst' : ''; return `<td class="cmp-c${cls}"${cls ? ` title="${cls === ' cmp-best' ? tx('The best of the stores') : tx('The weakest of the stores')}"` : ''}>${c.cell(k)}</td>`; };
+    const body = rows.map(({ s, k }) => `<tr><td><a class="go mono" data-view="adminstore" data-no="${esc(s.no)}">${esc(s.no)}</a><small>${esc(s.name)}</small></td>${!k ? `<td colspan="${CMP.length}" class="cs-dim">${tx('Loading…')}</td>` : k.error ? `<td colspan="${CMP.length}"><span class="tst">${k.error === 'unreachable' ? tx('unreachable') : esc(k.error)}</span></td>` : CMP.map(c => cell(c, k)).join('')}</tr>`).join('');
+    const notes = [
+      [tx('Backfill accuracy'), tx('the average accuracy of the bays finished in the last 7 days, as in Backfill review.')],
+      [tx('Location refresh'), tx('shelves refreshed this week against the weekly target; with focus departments set, only shelves in them count, as on the store’s Location refresh.')],
+      [tx('Dock clear time'), tx('the average time from landing (or the decant start) to the last pallet, for trucks finished in the last 7 days; the small figure is the last 28 days.')],
+      [tx('Shrink'), tx('the Adjustments lists of the last 7 days at the report’s price, below zero back to zero and then up to one carton (carton sizes from the manifests). Adjusted: ticked off as adjusted. Avoided: left unticked at the end of its day. Without prices the items are counted.')],
+    ];
+    return vh(tx('Compare stores'), sub(tx('the same measures for every store'), txn(stores.length, '{n} store', '{n} stores')), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="cmp-refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`, 'chart') +
+      `<div class="card"><div class="ad-scroll"><table class="rstbl ad-tbl cmp-tbl"><thead><tr>${th('no', tx('Store'), '')}${CMP.map(c => th(c.key, c.head, c.span)).join('')}</tr></thead><tbody>${body || `<tr><td colspan="${CMP.length + 1}" class="cs-dim">${tx('No stores yet')}</td></tr>`}</tbody></table></div>` +
+      `<dl class="cmp-notes">${notes.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join('')}<dt><span class="cmp-key best"></span><span class="cmp-key worst"></span></dt><dd>${tx('Green marks each column’s best store and amber its weakest, once two stores have a figure; a dash is no data. Shrink marks the most dealt with as the best. Click a column head to sort.')}</dd></dl></div>`;
+  },
+  mount(ctx, root) {
+    if (kpisMissing(ctx)) kpisOnce(ctx).then(() => ctx.rerender()).catch(fail);
+    root.addEventListener('click', e => {
+      const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'cmp-refresh') { st.kpis = null; ctx.rerender(); }
+      else if (a.dataset.act === 'cmp-sort') { const k = a.dataset.key, c = CMP.find(x => x.key === k); st.cmp = st.cmp.key === k ? { key: k, dir: -st.cmp.dir } : { key: k, dir: c ? -c.better : 1 }; ctx.rerender(); }
+    });
+    return [];
+  },
+};
+
 const actions = {
   id: 'adminactions', title: tx('Owner actions'), icon: 'history',
   desktop(ctx) {
     const rows = (st.actions || []).map(a => `<tr><td class="mono">${a.seq}</td><td class="mono">${fmtTime(a.at)}</td><td class="mono">${esc(a.type)}</td><td class="mono">${a.store ? `<a class="go" data-view="adminstore" data-no="${esc(a.store)}">${esc(a.store)}</a>` : '—'}</td><td>${esc(short(a.detail))}</td></tr>`);
-    return vh(tx('Owner actions'), sub(tx('the registry log'), tx('newest first'), tx('{n} kept', { n: rows.length })), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`) +
+    return vh(tx('Owner actions'), sub(tx('the registry log'), tx('{n} kept', { n: rows.length }), tx('newest first')), `<a class="btn" data-view="admin">${ic('arrow')}${tx('All stores')}</a><button class="btn" data-act="refresh">${ic('refresh')}${tx('reload::Refresh')}</button>`) +
       `<div class="card">${table([tx('Seq'), tx('When'), tx('Action'), tx('Store'), tx('Detail')], rows, 'ad-ev')}</div>`;
   },
   mount(ctx, root) {
@@ -673,6 +831,6 @@ function actionText(a) {
   }
 }
 
-export const ADMIN_VIEWS = [overview, storeView, register, actions, service, maps];
+export const ADMIN_VIEWS = [overview, storeView, register, actions, service, maps, devicesPage, compare];
 export function adminSelected() { return st.no; }
 export function resetAdmin() { st.no = null; st.tab = 'over'; st.reg = null; st.regDone = null; st.actions = null; st.health = null; invalidate(); }

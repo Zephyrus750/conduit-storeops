@@ -5,6 +5,8 @@
 //   await c.session.signIn({ store: '1241', pin: '2468' });
 //   const store = await c.open('1241');   // load cache, connect, ready to dispatch
 //
+// device: () => ({ lang, kind }) for the heartbeat, else read from the page
+// (client/store.js pageDevice).
 // c.maps.get(no) fetches the published map once per version; c.catalogue
 // .lookup(kc) answers product lookups from a week-long cache.
 // Shared modules (catalogue, validation, reducers) are the same files the
@@ -24,8 +26,14 @@ export { createStore } from './store.js';
 export { createCatalogue } from './catalogue.js';
 export { createMaps } from './maps.js';
 
-export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, WebSocketImpl, app = 'conduit', timers } = {}) {
-  const transport = createTransport({ baseUrl, fetchImpl });
+export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, WebSocketImpl, app = 'conduit', timers, device } = {}) {
+  // One door to the worker for the session, the catalogue, the maps and the
+  // views (ctx.api). A gate (setGate) sees every call first and may refuse
+  // it with an error, which never leaves the device: practice mode
+  // (client/practice.js) shuts the worker off this way.
+  const wire = createTransport({ baseUrl, fetchImpl });
+  let gate = null;
+  const transport = { ...wire, request(path, opts) { const no = gate?.(path, opts || {}); return no ? Promise.reject(no) : wire.request(path, opts); } };
   const session = createSession({ transport, storage, app });
   const catalogue = createCatalogue({ transport, storage, timers, token: () => session.token() });
   const maps = createMaps({ transport, session, storage });
@@ -34,7 +42,7 @@ export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, W
     if (!storeNo) throw new Error('no store: sign in first');
     const no = String(storeNo);
     if (stores.has(no)) return stores.get(no);
-    const store = createStore({ storeNo: no, session, transport, storage, WebSocketImpl, timers });
+    const store = createStore({ storeNo: no, session, transport, storage, WebSocketImpl, timers, ...(device ? { device } : {}) });
     stores.set(no, store);
     await store.load();
     store.connect();
@@ -42,5 +50,5 @@ export function createClient({ baseUrl, storage = defaultStorage(), fetchImpl, W
   }
   function closeAll() { for (const s of stores.values()) s.close(); stores.clear(); }
   session.on('signin-required', closeAll);
-  return { transport, session, catalogue, maps, storage, open, closeAll, stores };
+  return { transport, session, catalogue, maps, storage, open, closeAll, stores, setGate: g => { gate = typeof g === 'function' ? g : null; } };
 }

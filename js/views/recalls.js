@@ -9,12 +9,13 @@
 // Beside Equipment under Safety & upkeep on a desk; on a phone, managers
 // only, as Maintenance is.
 
-import { $, ic, esc, vh, sub, fmtDate, toast, mgr } from '../ui.js';
+import { $, ic, esc, vh, sub, fmtDate, toast, mgr, empty, mhead } from '../ui.js';
 import { RECALL_STATUSES, liveRecalls } from '../../shared/reducers/recall.js';
 import { parseKeycodes } from '../../shared/backfill.js';
 import { gs1Parse } from '../../shared/gs1.js';
 import { recallTag, recallWord } from '../recallflag.js';
 import { tx, txn } from '../i18n.js';
+import { ask } from '../sheet.js';
 
 const isManager = s => (s?.roles || []).includes('manager') || !!s?.owner;
 const STATUS = { open: tx('issue status::Open'), removing: tx('Removing'), removed: tx('All removed'), closed: tx('Closed') };
@@ -42,7 +43,7 @@ function listCard(m, manager) {
   const groups = st.closed ? [[tx('Closed'), m.closed]] : RECALL_STATUSES.filter(s => s !== 'closed').map(s => [STATUS[s], m.live.filter(r => r.status === s)]);
   const body = groups.filter(([, xs]) => xs.length).map(([t, xs]) => `<div class="pt3">${esc(t)}<span class="cs-dim">${xs.length}</span></div>` + xs.map(row).join('')).join('');
   return `<div class="card mfl rc-list"><div class="pills"><button class="${st.closed ? '' : 'on'}" data-act="tab" data-closed="0">${tx('In force')} ${m.live.length}</button><button class="${st.closed ? 'on' : ''}" data-act="tab" data-closed="1">${tx('Closed')} ${m.closed.length}</button></div>` +
-    (body || `<div class="ohint">${st.closed ? tx('Nothing closed in the last 180 days.') : manager ? tx('No recalls or withdrawals in force. Add one from the notice: its keycodes are flagged on every device straight away.') : tx('No recalls or withdrawals in force.')}</div>`) +
+    (body || empty(st.closed ? tx('Nothing closed in the last 180 days.') : manager ? tx('No recalls or withdrawals in force. Add one from the notice: its keycodes are flagged on every device straight away.') : tx('No recalls or withdrawals in force.'), { icon: st.closed ? 'history' : 'check' })) +
     bayLine(m, manager) + `</div>`;
 }
 function bayLine(m, manager) {
@@ -52,7 +53,7 @@ function bayLine(m, manager) {
 
 // One recall: where it stands, what to do, its keycodes and where the stock is, what was found.
 function detail(ctx, r, manager) {
-  if (!r) return `<div class="card rc-det"><div class="ohint">${tx('Pick a recall to see its keycodes, where the stock is and what has been moved.')}</div></div>`;
+  if (!r) return `<div class="card rc-det">${empty(tx('Pick a recall to see its keycodes, where the stock is and what has been moved.'), { icon: 'alert' })}</div>`;
   const i = RECALL_STATUSES.indexOf(r.status);
   const steps = `<div class="rc-steps">${RECALL_STATUSES.map((s, k) => `<span class="${k < i ? 'done' : k === i ? 'cur' : ''}">${k < i ? ic('check') : ''}${STATUS[s]}</span>`).join('')}</div>`;
   const next = { open: 'removing', removing: 'removed', removed: 'closed' }[r.status];
@@ -63,7 +64,7 @@ function detail(ctx, r, manager) {
     const where = !w ? `<span class="cs-dim">${tx('Looking…')}</span>` : w.none ? `<span class="cs-dim">${tx('Not in the latest report')}</span>` : w.bays.length ? `${tx('Stockroom: {bays}', { bays: w.bays.map(b => `<b class="mono">${esc(b)}</b>`).join(', ') })}${w.soh != null ? ` · ${tx('SOH {n}', { n: w.soh })}` : ''}` : tx('No stockroom bay in the report');
     return `<div class="rc-kc"><b class="mono" data-kccard="${esc(kc)}">${esc(kc)}</b><span>${name ? esc(name) : ''}</span><span class="rc-where">${where}</span></div>`;
   }).join('');
-  const found = r.found.length ? `<div class="rc-found">${[...r.found].reverse().slice(0, 40).map(f => `<div><b>${f.n}</b><span class="mono">${esc(f.kc)}</span><span>${f.where ? esc(f.where) : ''}</span><span class="cs-dim">${fmtDate(f.t)}</span></div>`).join('')}</div>` : `<p class="lbl">${tx('Nothing recorded yet. Anyone who moves stock to the recall bay records it here or from the red flag when they scan it.')}</p>`;
+  const found = r.found.length ? `<div class="rc-found">${[...r.found].reverse().slice(0, 40).map(f => `<div><b>${f.n}</b><span class="mono">${esc(f.kc)}</span><span>${f.where ? esc(f.where) : ''}</span><span class="cs-dim">${fmtDate(f.t)}</span></div>`).join('')}</div>` : empty(tx('Nothing recorded yet. Anyone who moves stock to the recall bay records it here or from the red flag when they scan it.'), { sm: true, icon: 'history' });
   return `<div class="card rc-det"><div class="rc-h">${recallTag(r)}<h3>${esc(r.title)}</h3>${r.ref ? `<span class="cs-dim">${esc(r.ref)}</span>` : ''}</div>` +
     `<p class="lbl">${tx('Added {date}', { date: fmtDate(r.added) })}${r.closedAt ? ' · ' + tx('closed {date}', { date: fmtDate(r.closedAt) }) : ''}</p>${steps}${acts}` +
     (r.action ? `<div class="rc-do"><b>${tx('What to do with the stock')}</b><span>${esc(r.action)}</span></div>` : '') +
@@ -110,7 +111,7 @@ export default {
   // A manager's phone: the list, or one recall with a way back.
   mobile(ctx) {
     const m = model(ctx), manager = isManager(ctx.session.current), r = st.sel ? m.rc.items?.[st.sel] : null;
-    const head = `<div class="mv-head"><div><h2>${tx('Recalls')} ${mgr()}</h2><span>${headParts(m).join(' · ')}</span></div></div>`;
+    const head = mhead(`${tx('Recalls')} ${mgr()}`, headParts(m).join(' · '));
     if (st.draft) return `<div class="rc-m">${head}${form(st.draft)}</div>`;
     if (r) return `<div class="rc-m"><button class="btn sm rc-back" data-act="back">${ic('chev')}${tx('All recalls')}</button>${detail(ctx, r, manager)}</div>`;
     return `<div class="rc-m">${head}${manager ? `<button class="btn primary rc-add" data-act="new">${ic('plus')}${tx('Add a recall')}</button>` : ''}${listCard(m, manager)}</div>`;
@@ -143,7 +144,7 @@ export default {
         else if (act === 'save') await save(ctx, root);
         else if (act === 'status') {
           const x = ctx.store.get('recalls').items[st.sel]; if (!x) return;
-          if (a.dataset.st === 'closed' && !confirm(tx('Close {title}? Its flags stop on every device.', { title: x.title }))) return;
+          if (a.dataset.st === 'closed' && !await ask({ title: tx('Close {title}?', { title: x.title }), text: tx('Its flags stop on every device.'), ok: tx('Close recall') })) return;
           await ctx.store.dispatch({ type: 'recall.status', entity: { recall: x.id }, payload: { status: a.dataset.st } });
           toast(tx('{title}: {status}', { title: x.title, status: STATUS[a.dataset.st] }));
         }

@@ -15,9 +15,9 @@
 // or (Word, Excel and the like, which cannot be drawn here) the kind's
 // cover. Files added before pictures existed get theirs from Make the pictures.
 
-import { ic, esc, vh, sub, toast, fmtDate } from '../ui.js';
+import { ic, esc, vh, sub, toast, fmtDate, empty } from '../ui.js';
 import { tx, txn } from '../i18n.js';
-import { ask } from '../sheet.js';
+import { ask, askText } from '../sheet.js';
 import { fileKind, matches, sameTitle, FILE_EXTS, FILE_MAX } from '../../shared/resources.js';
 import { invalidate } from './admin.js';
 import { canPicture, readPdf, pictureOf } from '../pagepic.js';
@@ -46,7 +46,7 @@ function requests(ctx) {
       : `<button class="btn sm" data-act="rq-open" data-id="${esc(q.id)}">${ic('refresh')}${tx('Reopen')}</button>`;
     return `<tr class="rq-${q.status}"><td><b>${esc(q.title)}</b>${q.note ? `<div class="cs-dim">${esc(q.note)}</div>` : ''}${q.reply ? `<div class="rq-reply">${tx('Answer: {reply}', { reply: esc(q.reply) })}</div>` : ''}${res ? `<div class="cs-dim">${tx('Added as {title}', { title: esc(res.title) })}</div>` : ''}</td><td>${esc(storeName(q.store, all))}</td><td class="mono">${esc(fmtDate(q.created))}</td><td><span class="status ${cls}">${label}</span></td><td class="rsa-acts">${acts}</td></tr>`;
   };
-  return `<div class="card rq-card"><div class="ch"><h3>${tx('Requests from stores')}</h3><span class="cs-dim">${open.length ? txn(open.length, '{n} waiting', '{n} waiting') : tx('All answered')}</span>${done.length > 5 ? `<button class="btn sm" data-act="rq-more" style="margin-left:auto">${st.allReqs ? tx('Latest answers only') : txn(done.length, 'Show all {n} answered', 'Show all {n} answered')}</button>` : ''}</div>` +
+  return `<div class="card rq-card"><div class="ch"><h3>${tx('Requests from stores')}</h3><span class="cs-dim">${open.length ? txn(open.length, '{n} waiting', '{n} waiting') : tx('All answered')}</span>${done.length > 5 ? `<button class="btn sm ml-auto" data-act="rq-more">${st.allReqs ? tx('Latest answers only') : txn(done.length, 'Show all {n} answered', 'Show all {n} answered')}</button>` : ''}</div>` +
     `<table class="wb-t rsa-t"><thead><tr><th>${tx('Document asked for')}</th><th>${tx('Store')}</th><th>${tx('Asked')}</th><th>${tx('State')}</th><th></th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table></div>`;
 }
 
@@ -119,7 +119,7 @@ function form(ctx, e, pre = null) {
     `<div class="ad-grid2"><label class="ad-field"><span>${e?.file ? tx('Replace the file (optional)') : tx('File')}</span><input class="ad-in" type="file" name="file" accept="${ACCEPT}"><small class="cs-dim">${e?.file ? tx('Now: {name} · {size}', { name: esc(e.file.name), size: kb(e.file.size) }) : tx('PDF, pictures, Word, Excel, PowerPoint, CSV or text, up to {mb} MB', { mb: FILE_MAX / 1e6 })}</small></label>` +
     `<label class="ad-field"><span>${tx('or a link')}</span><input class="ad-in" name="link" value="${esc(e?.link || '')}" maxlength="500" placeholder="https://"><small class="cs-dim">${tx('A web page to open instead of a file')}</small></label></div>` +
     `<fieldset class="rsa-stores"><legend>${tx('Stores')}</legend><label class="rsa-radio"><input type="radio" name="scope" value="all"${some ? '' : ' checked'}> ${tx('Every store')}</label><label class="rsa-radio"><input type="radio" name="scope" value="some"${some ? ' checked' : ''}> ${tx('Only the stores picked')}</label>` +
-    `<div class="rsa-pick">${all.map(s => `<label><input type="checkbox" name="store" value="${esc(s.no)}"${picked.has(String(s.no)) ? ' checked' : ''}> <span class="mono">${esc(s.no)}</span> ${esc(s.name)}</label>`).join('') || `<span class="cs-dim">${tx('No stores yet')}</span>`}</div></fieldset>` +
+    `<div class="rsa-pick">${all.map(s => `<label><input type="checkbox" name="store" value="${esc(s.no)}"${picked.has(String(s.no)) ? ' checked' : ''}> <span class="mono">${esc(s.no)}</span> ${esc(s.name)}</label>`).join('') || empty(tx('No stores yet'), { sm: true, icon: 'store' })}</div></fieldset>` +
     `<div class="pf-acts"><button class="btn primary" type="submit"${st.busy ? ' disabled' : ''}>${ic('check')}${st.busy ? tx('Saving…') : e ? tx('Save') : tx('Add it')}</button><button class="btn" type="button" data-act="rsa-cancel"${st.busy ? ' disabled' : ''}>${tx('Cancel')}</button></div></form>`;
 }
 
@@ -137,8 +137,8 @@ function page(ctx) {
     return `<tr><td><b>${esc(e.title)}</b>${e.note ? `<div class="cs-dim">${esc(e.note)}</div>` : ''}</td><td>${esc(e.category || '—')}</td><td class="rsa-what">${what}</td><td>${esc(storesText(e, all))}</td><td class="mono">${esc(fmtDate(e.updated))}</td>` +
       `<td class="rsa-acts">${e.file ? `<button class="btn sm" data-act="rsa-open" data-id="${esc(e.id)}" title="${k?.inline ? tx('Open') : tx('Download')}">${ic(k?.inline ? 'ext' : 'arrow')}</button>` : ''}<label class="btn sm" title="${e.file ? tx('Replace the file') : tx('Upload a file')}">${ic('file')}<input type="file" accept="${ACCEPT}" data-upload="${esc(e.id)}" hidden></label><button class="btn sm" data-act="rsa-edit" data-id="${esc(e.id)}">${ic('edit')}${tx('Edit')}</button><button class="btn sm" data-act="rsa-del" data-id="${esc(e.id)}" title="${tx('Remove')}" aria-label="${tx('Remove {title}', { title: esc(e.title) })}">${ic('trash')}</button></td></tr>`;
   }).join('');
-  const table = list.length ? `<div class="card"><div class="rs-bar"><div class="search rs-search">${ic('search')}<input data-field="rsa-q" value="${esc(st.q)}" placeholder="${tx('Search the library')}" aria-label="${tx('Search the library')}"></div></div><table class="wb-t rsa-t"><thead><tr><th>${tx('Title')}</th><th>${tx('Category')}</th><th>${tx('File or link')}</th><th>${tx('Stores')}</th><th>${tx('Updated')}</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="cs-dim">${tx('Nothing matches.')}</td></tr>`}</tbody></table></div>`
-    : st.edit ? '' : `<div class="card rs-empty">${ic('library')}<p>${tx('Nothing in the library yet. Add the forms, procedures and links managers reach for most: every store’s PC lists them under Resources.')}</p><button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button></div>`;
+  const table = list.length ? `<div class="card"><div class="rs-bar"><div class="search rs-search">${ic('search')}<input data-field="rsa-q" value="${esc(st.q)}" placeholder="${tx('Search the library')}" aria-label="${tx('Search the library')}"></div></div><table class="wb-t rsa-t"><thead><tr><th>${tx('Title')}</th><th>${tx('Category')}</th><th>${tx('File or link')}</th><th>${tx('Stores')}</th><th>${tx('Updated')}</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6">${empty(tx('Nothing matches.'), { sm: true, icon: 'search' })}</td></tr>`}</tbody></table></div>`
+    : st.edit ? '' : `<div class="card">${empty(tx('Nothing in the library yet. Add the forms, procedures and links managers reach for most: every store’s PC lists them under Resources.'), { icon: 'library', act: `<button class="btn primary" data-act="rsa-new">${ic('plus')}${tx('Add a resource')}</button>` })}</div>`;
   return head + editing + banner + requests(ctx) + table + `<p class="lbl">${tx('Managers see these on a store PC under Resources, searchable and by category. Switch Resources off for a store on its Access tab.')}</p>`;
 }
 
@@ -166,7 +166,7 @@ export default {
       else if (act === 'rq-more') { st.allReqs = !st.allReqs; ctx.rerender(); }
       else if (act === 'rq-add' && q) { st.edit = 'new'; st.from = q.id; ctx.rerender(); root.querySelector('[data-form="resource"]')?.scrollIntoView({ block: 'nearest' }); root.querySelector('[name="title"]')?.focus(); }
       else if (act === 'rq-done' && q) { const have = (st.list || []).find(e => sameTitle(e.title, q.title)); await answer(q, { status: 'added', ...(have ? { resource: have.id } : {}) }, tx('{title} marked added', { title: q.title })); }
-      else if (act === 'rq-no' && q) { const why = prompt(tx('Decline {title}? A word why, for the store (optional):', { title: q.title }), ''); if (why === null) return; await answer(q, { status: 'declined', reply: why }, tx('{title} declined', { title: q.title })); }
+      else if (act === 'rq-no' && q) { const why = await askText({ title: tx('Decline {title}?', { title: q.title }), label: tx('A word why, for the store (optional)'), multiline: true, ok: tx('Decline') }); if (why === null) return; await answer(q, { status: 'declined', reply: why }, tx('{title} declined', { title: q.title })); }
       else if (act === 'rq-open' && q) await answer(q, { status: 'open' }, tx('{title} is waiting again', { title: q.title }));
       else if (act === 'rsa-new') { dropPic(); st.edit = 'new'; st.from = null; ctx.rerender(); root.querySelector('[name="title"]')?.focus(); }
       else if (act === 'rsa-edit') { dropPic(); st.edit = a.dataset.id; if (e?.file) pickFile(ctx, null, e); ctx.rerender(); root.querySelector('[name="title"]')?.focus(); }
