@@ -768,9 +768,9 @@ diverted. Beside the week at the PC's wide layout: the editor, Manifests
 without a slot (drag one onto a truck, or Today and Tomorrow), Off-site to
 call back and the week roster; narrower they go under the week and the
 editor opens as a side sheet. Half a screen scrolls the week sideways with
-the Truck column pinned and a strip of the days to jump to. A manager's phone
-has it in More: one day at a time with a strip of the seven days, the editor
-as a bottom sheet. Print week is one A4 landscape sheet for the dock wall
+the Truck column pinned and a strip of the days to jump to. The Planner is
+the PC's alone: no phone has it in More or search, and the bell's late and
+no-manifest trucks open Receiving on a phone. Print week is one A4 landscape sheet for the dock wall
 (landed and cleared boxes, notes, the roster). A week with nothing planned
 offers Repeat last week: its slots with their ETAs, decant teams and booked
 huddle and break, and its confirmed no-truck days, as ordinary `plan.set`

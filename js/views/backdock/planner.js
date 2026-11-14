@@ -9,11 +9,11 @@
 // A slot pre-stages truck YYYY-MM-DD-Tn; when Receiving starts that truck the
 // reducer consumes the slot's team and manifest (and keeps its ETA). At the
 // PC's wide layout the editor sits beside the week; narrower it opens as a
-// side sheet, and on a manager's phone (one day at a time, a strip of the
-// seven days to switch) as a bottom sheet. Half a screen scrolls the week
-// sideways inside its card with the Truck column pinned. Print week is one
-// A4 landscape sheet for the dock wall; an empty week offers Repeat last
-// week (ordinary plan.set and plan.noTrucks events, shared/dockweek.js).
+// side sheet. The Planner is the PC's alone (the owner, 14 Nov 2026).
+// Half a screen scrolls the week sideways inside its card with the Truck
+// column pinned. Print week is one A4 landscape sheet for the dock wall;
+// an empty week offers Repeat last week (ordinary plan.set and
+// plan.noTrucks events, shared/dockweek.js).
 
 import { ic, esc, vh, sub, toast, fmtDate, fmtDay, today as storeToday, empty, pill, storeTz } from '../../ui.js';
 import { manifestIndex, truckNo, who, dnumId, progress, fmtMins, fmtHM, slotRef, attachManifest, stTag, forecast, startOf } from './common.js';
@@ -41,9 +41,9 @@ const dayLabel = (k, dow = DOW[dowOf(k)]) => { const d = dateOf(k); return tx('{
 const dowDay = k => tx('{dow} {d}', { dow: DOW[dowOf(k)], d: dateOf(k).getDate() });
 const dateLabel = k => { const d = dateOf(k); return tx('{d} {mon}', { d: d.getDate(), mon: MON[d.getMonth()] }); };
 // st.sel 'YYYY-MM-DD-n'; st.sheet: the editor opens as a sheet (decided when a truck is picked:
-// the wide layout has room beside the week); st.pday the phone's day (0..6); st.fresh weeks
+// the wide layout has room beside the week); st.fresh weeks
 // started empty; st.drag a manifest being dragged onto a truck.
-const st = { week: 0, sel: null, sheet: false, pick: null, roster: false, pday: null, fresh: new Set(), drag: null };
+const st = { week: 0, sel: null, sheet: false, pick: null, roster: false, fresh: new Set(), drag: null };
 const nowHM = () => { const { hh, mm } = storeParts(new Date(), storeTz()); return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; };
 const mondayOf = (today, off) => addDays(today, -dowOf(today) + off * 7);
 // A staged reference carries its counts; a truck's (or an older slot's) manifest carries the consols.
@@ -143,7 +143,7 @@ function needLine(c) {
   return ['', ''];
 }
 const DOT_T = { good: tx('Ready'), warn: tx('Needs something now'), bad: tx('Past its ETA, not landed'), '': tx('Not ready yet') };
-// The inside of a truck's cell (the PC's week and the phone's day share it).
+// The inside of a truck's cell.
 function cellBody(ctx, d, c, m) {
   const plan = m.plan;
   if (c.kind === 'closed') {
@@ -252,7 +252,7 @@ function headSub(m) {
 const weekPills = () => `<span class="pills"><button data-act="wk" data-d="-1" aria-label="${tx('Last week')}">‹</button><button class="${st.week === 0 ? 'on' : ''}" data-act="wk" data-d="0">${tx('This week')}</button><button data-act="wk" data-d="1" aria-label="${tx('Next week')}">›</button></span>`;
 
 // An empty week (board J): Repeat last week, or start empty.
-function repeatOffer(ctx, m, phone = false) {
+function repeatOffer(ctx, m) {
   if (st.fresh.has(m.keys[0]) || m.keys[6] < m.today || m.keys.some(k => dayHasPlan(m.plan, m.dock, k))) return null;
   const last = weekOf(addDays(m.keys[0], -7)), per = last.map(k => dayTrucks(m.plan, m.dock, k)), n = per.reduce((k, x) => k + x.length, 0), days = per.filter(x => x.length).length;
   if (!n && !last.some(k => m.plan.days[k]?.noTrucks)) return null;
@@ -262,7 +262,7 @@ function repeatOffer(ctx, m, phone = false) {
     const body = k < m.today ? `<div class="pw-rp-x">${tx('Already past')}</div>` : none ? `<div class="pw-rp-x ok">${tx('No trucks · confirmed')}</div>` : slots.length ? slots.map(e => `<div class="pw-rp-s"><b>${tx('Truck {no}', { no: e.entity.slot })}</b><span>${[e.payload.eta ? tx('ETA {time}', { time: esc(e.payload.eta) }) : tx('No ETA'), e.payload.team.length ? tx('{n} crew', { n: e.payload.team.length }) : ''].filter(Boolean).join(' · ')}</span></div>`).join('') : `<div class="pw-rp-x">${tx('Stays unplanned')}</div>`;
     return `<div class="pw-rp-d"><span class="pw-dl">${DOW[i]}<b>${dateOf(k).getDate()}</b></span>${body}</div>`;
   };
-  return `<section class="card pw-rp${phone ? ' phone' : ''}" aria-label="${tx('Repeat last week')}"><div class="pw-rp-h"><span class="vic">${ic('refresh')}</span><div><b>${n ? tx('Last week had {n} trucks over {d} days', { n, d: days }) : tx('Last week had no trucks, confirmed')}</b><span>${tx('Repeat its slots, ETAs and decant teams here, and its confirmed no-truck days. Manifests are not copied: they arrive the night before.')}</span></div>` +
+  return `<section class="card pw-rp" aria-label="${tx('Repeat last week')}"><div class="pw-rp-h"><span class="vic">${ic('refresh')}</span><div><b>${n ? tx('Last week had {n} trucks over {d} days', { n, d: days }) : tx('Last week had no trucks, confirmed')}</b><span>${tx('Repeat its slots, ETAs and decant teams here, and its confirmed no-truck days. Manifests are not copied: they arrive the night before.')}</span></div>` +
     `<button class="btn primary" data-act="repeat"${evs.length ? '' : ' disabled'}>${tx('Repeat last week')}</button><button class="btn" data-act="fresh">${tx('Start empty')}</button></div>` +
     `<div class="pw-rp-t"><span>${tx('What repeating adds')}</span><i></i></div><div class="pw-rp-g">${m.keys.map(col).join('')}</div></section>`;
 }
@@ -357,30 +357,6 @@ function roster(dock) {
     `<div class="bdr-teamadd mt-s"><input class="inp mono" data-field="roster" placeholder="${tx('D-number, e.g. D4')}" maxlength="6" aria-label="${tx('D-number, e.g. D4')}"><button class="btn sm" data-act="roster-add">${ic('plus')}${tx('Add')}</button></div><p class="lbl">${tx('New trucks start with this crew when their slot names no team. D-numbers only.')}</p></div>`;
 }
 
-// ── the phone: one day at a time (board H) ─────────────────────────────
-function phoneDay(ctx, m) {
-  if (st.pday == null) st.pday = Math.max(0, m.keys.indexOf(m.today));
-  const d = m.days[st.pday], i = st.pday, b = band(d);
-  const days = `<nav class="pw-pdays" aria-label="${tx('Days')}">${m.days.map((x, j) => `<button type="button" class="${j === i ? 'on' : ''}${x.nt && !x.cells.length ? ' none' : ''}" data-act="pday" data-i="${j}" aria-pressed="${j === i}">${DOW[j]}<b>${dateOf(x.k).getDate()}</b><i class="${DAY_DOT(x)}"></i></button>`).join('')}</nav>`;
-  const ready = d.past ? '' : d.isToday || d.ahead ? [d.live.length ? tx('{n} live', { n: d.live.length }) : '', d.planned.length ? tx('{k} / {n} ready', { k: d.ready, n: d.planned.length }) : ''].filter(Boolean).join(' · ') : d.real.length ? tx('{k} of {n} cleared', { k: d.closed.length, n: d.real.length }) : '';
-  const head = `<div class="pw-ph"><div class="pw-ph-t"><b>${esc(fmtDay(d.k))}</b>${d.isToday ? `<span class="tday">${tx('Today')}</span>` : ''}<span class="r">${ready}</span></div><span class="pw-bars">${d.cells.map(c => `<i class="${segOf(c)}"></i>`).join('')}</span></div>`;
-  const ctr = (icon, k, n, text) => pill(`${ic(icon)}${text}`, n && k === n ? 'good' : d.isToday && k < n ? 'warn' : '', { cls: 'num' });
-  const counters = d.open && !d.past ? `<div class="pw-ctr">${ctr('file', d.withMan, d.open, tx('{k}/{n} manifests', { k: d.withMan, n: d.open }))}${ctr('truck', d.withEta, d.open, tx('{k}/{n} ETAs', { k: d.withEta, n: d.open }))}${ctr('users', d.withTeam, d.open, tx('{k}/{n} teams', { k: d.withTeam, n: d.open }))}</div>` : '';
-  const bandHtml = `<section class="pw-pband${d.nt && !d.cells.length ? ' none' : ''}" aria-label="${tx('The day')}"><div class="pw-big"><b class="${b.ink || ''}">${b.big}</b>${b.what ? ` <span>${b.what}${d.units && !d.past ? ' · ' + tx('{n} units', { n: abbr(d.units) }) : ''}</span>` : ''}</div><span class="pw-bs ${b.tone}">${b.sub}</span>${counters}</section>`;
-  let body;
-  if (!d.cells.length && !d.lands.length) {
-    body = d.nt ? `<div class="pw-pc pw-span pw-none"><span class="pw-ring">${ic('check')}</span><b>${tx('No trucks')}</b><span>${tx('Confirmed in the Planner')}</span>${d.ahead ? `<button class="pw-btn" data-act="notrucks-off" data-date="${d.k}">${tx('Undo')}</button>` : ''}</div>`
-      : d.past ? empty(tx('No trucks'), { icon: 'truck', sm: true })
-      : `<div class="pw-pc pw-span pw-unpl"><span class="pw-ring">${ic('cal')}</span><b>${tx('Not planned yet')}</b><span>${tx('Plan a truck, or confirm there are none.')}</span><button class="pw-btn add" data-act="add" data-slot="${d.k}-1">+ ${tx('Truck {no}', { no: 1 })}</button><button class="pw-btn ok" data-act="notrucks" data-date="${d.k}">${ic('check')}${tx('Confirm no trucks')}</button>${isMgr(ctx) ? `<button class="pw-lnk" data-act="route-day" data-date="${d.k}">${ic('route')}${tx('Off-site or diverted…')}</button>` : ''}</div>`;
-  } else {
-    body = [1, 2, 3, 4].map(n => d.rows[n]).filter(Boolean).map(c => c.kind === 'land'
-      ? `<div class="pw-pc pw-land"><span class="pw-tk">${ic('undo')}${c.x.route.route === 'offsite' ? tx('Lands from off-site') : tx('Lands after a diversion')}</span>${cellBody(ctx, d, c, m)}</div>`
-      : `<div class="pw-pc pw-${c.kind}" data-act="sel" data-slot="${d.k}-${c.n}">${tk(c.n)}${cellBody(ctx, d, c, m)}</div>`).join('') +
-      (d.add ? `<button class="pw-padd" data-act="add" data-slot="${d.k}-${d.add}">+ ${tx('Truck {no}', { no: d.add })}</button>` : '');
-  }
-  return `<div class="pw-phone">${days}${head}${bandHtml}${body}</div>`;
-}
-
 // ── paper: the week for the dock wall (board I) ────────────────────────
 function printWeek(ctx) {
   const m = weekModel(ctx), dock = m.dock, rows = m.R, crewOf = list => list.length > 4 && list.every((p, i) => i === 0 || Number(p.slice(1)) === Number(list[i - 1].slice(1)) + 1) ? `${list[0]}–${list[list.length - 1]}` : list.join(' ');
@@ -413,9 +389,9 @@ function printWeek(ctx) {
 
 export default {
   id: 'planner', title: tx('Planner'), icon: 'm-planner', area: 'backdock',
-  // On a PC; on the phone a manager's only (the manager phone's Back dock),
-  // as Maintenance and Recalls. A crew phone's link goes home.
-  deskOnly: s => !(s?.owner || (s?.roles || []).includes('manager')),
+  // The PC's alone: no phone menu row or search result; a phone's link goes home
+  // (the bell's Planner lines open Receiving there, PHONE_GO in js/shell.js).
+  deskOnly: true,
   desktop(ctx) {
     const m = weekModel(ctx), rp = repeatOffer(ctx, m);
     const head = vh(tx('Planner'), headSub(m), `<button class="btn pw-print" data-act="print" title="${tx('Print week')}" aria-label="${tx('Print week')}">${ic('print')}<span>${tx('Print week')}</span></button>${weekPills()}`, 'm-planner');
@@ -424,18 +400,13 @@ export default {
     if (rp) return head + `<div class="pw solo"><div class="pw-main">${rp}</div></div>`;
     return head + `<div class="pw${st.drag ? ' dragging' : ''}"><div class="pw-main">${week}</div><aside class="pw-side">${editorCard(ctx, m.plan, m.dock)}${waiting(ctx, m.plan, m.dock)}${offsiteCard(ctx, m.today)}${roster(m.dock)}</aside></div>${editorSheet(ctx, m.plan, m.dock)}`;
   },
-  mobile(ctx) {
-    const m = weekModel(ctx), rp = repeatOffer(ctx, m, true);
-    const head = `<div class="mv-head pw-mhead"><div><h2>${tx('Planner')}</h2></div><span class="pills pw-wk"><button data-act="wk" data-d="-1" aria-label="${tx('Last week')}">‹</button><span>${dateLabel(m.keys[0])} – ${dateLabel(m.keys[6])}</span><button data-act="wk" data-d="1" aria-label="${tx('Next week')}">›</button></span></div>`;
-    return head + (rp || phoneDay(ctx, m)) + editorSheet(ctx, m.plan, m.dock);
-  },
   mount(ctx, root) {
     const field = n => root.querySelector(`[data-field="${n}"]`)?.value ?? '';
     const set = (date, slot, payload) => ctx.store.dispatch({ type: 'plan.set', entity: { date, slot }, payload });
     const cur = () => { const plan = ctx.store.get('plan'); const date = st.sel.slice(0, 10), n = Number(st.sel.slice(11)); return { date, n, slot: plan.days[date]?.slots?.[n] || { eta: null, note: '', team: [], manifest: null } }; };
     // The editor sits beside the week when the layout has room for it (the
     // wide layout's container query says so); else it opens as a sheet.
-    const pick = id => { st.sel = id; st.sheet = ctx.isMobile || getComputedStyle(root.querySelector('.pw') || root).getPropertyValue('--pw-beside').trim() !== '1'; };
+    const pick = id => { st.sel = id; st.sheet = getComputedStyle(root.querySelector('.pw') || root).getPropertyValue('--pw-beside').trim() !== '1'; };
     // A manifest onto a truck: one on the dock takes it now, a slot or a free number stages it.
     const stageOn = async (man, date, n) => {
       const t = ctx.store.get('dock').trucks[`${date}-T${n}`];
@@ -447,10 +418,9 @@ export default {
       const a = e.target.closest('[data-act]'); if (!a || a.disabled) return;
       const act = a.dataset.act;
       try {
-        if (act === 'wk') { const d = Number(a.dataset.d); st.week = d === 0 ? 0 : st.week + d; st.pday = st.week === 0 ? null : 0; st.sel = null; st.pick = null; ctx.rerender(); }
+        if (act === 'wk') { const d = Number(a.dataset.d); st.week = d === 0 ? 0 : st.week + d; st.sel = null; st.pick = null; ctx.rerender(); }
         else if (act === 'sel') { pick(a.dataset.slot); ctx.rerender(); }
         else if (act === 'unsel') { st.sel = null; ctx.rerender(); }
-        else if (act === 'pday') { st.pday = Number(a.dataset.i); ctx.rerender(); }
         else if (act === 'jump') { const sc = root.querySelector('.pw-scroll'), col = root.querySelectorAll('.pw-days .pw-h')[Number(a.dataset.i)]; for (const b of root.querySelectorAll('.pw-strip button')) b.classList.toggle('on', b === a); if (sc && col) sc.scrollTo({ left: Math.max(0, col.offsetLeft - (root.querySelector('.pw-days .pw-lab')?.offsetWidth || 0)), behavior: 'smooth' }); }
         else if (act === 'add') { pick(a.dataset.slot); const { date, n } = cur(); await set(date, n, { eta: null, note: '' }); }
         else if (act === 'save') { const { date, n } = cur(); const eta = field('eta').trim(); if (eta && !/^\d{2}:\d{2}$/.test(eta)) return toast(tx('Enter a time like 06:30'), 'bad'); const hu = field('huddle'), br = field('break'); await set(date, n, { eta: eta || null, note: field('note'), huddleMins: hu === '' ? null : Number(hu), breakMins: br === '' ? null : Number(br) }); toast(tx('Saved')); }

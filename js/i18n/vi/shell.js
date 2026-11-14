@@ -440,5 +440,4 @@ export default {
   "Practice resumed. Nothing here is saved or sent.": "Đã quay lại luyện tập. Không có gì ở đây được lưu hay gửi đi.",
   "Practice could not open ({error}). The store opened as usual.": "Không mở được luyện tập ({error}). Cửa hàng đã mở như bình thường.",
   "Practice": "Luyện tập",
-  "The week’s trucks, one day at a time": "Xe tải trong tuần, từng ngày một",
 };

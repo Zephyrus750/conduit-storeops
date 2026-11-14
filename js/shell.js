@@ -567,8 +567,9 @@ function answeredLoad(no) {
   }, () => {}).finally(() => { answeredT = setTimeout(() => answeredLoad(no), 10 * 60000); });
 }
 function answeredSeen(no) { answered = 0; try { localStorage.setItem(SEEN(no), new Date().toISOString()); } catch {} alertsSoon(); }
-// On a phone a line opens the phone's screen for it; one only the desk has
-// (the morning report) stays on the rail of the PC.
+// On a phone a line opens the phone's screen for it (the Planner's late and
+// no-manifest trucks open Receiving); one only the desk has (the morning
+// report) stays on the rail of the PC.
 const PHONE_GO = { planner: 'receiving' };
 const alertList = () => {
   if (!store) return [];
