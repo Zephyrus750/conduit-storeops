@@ -9,8 +9,10 @@
 // clearance shelf talkers (their barcode is the item's own EAN-13, the
 // keycode printed at the left) and keycodes typed from tickets. A pick of
 // six: found in a bay, sold by the carton, in two bays, no stockroom
-// location, seen lately in an old backfill bay, on today's truck. The
-// stockroom pulls them by bay: pulled, short across two bays, not there.
+// location, seen lately in an old backfill bay, on today's truck. Each
+// request lands on the stockroom phone the moment it is sent (it buzzes and
+// lists it), as the app does; the stockroom then pulls them by bay: pulled,
+// short across two bays, not there.
 // Every class here starts lp2- (styles/guide.css).
 import { tx, txn } from '../../i18n.js';
 import { dep, fmtDay, DEPTS_DEFAULT, DEPT_NAME } from '../../ui.js';
@@ -235,7 +237,9 @@ const lineOf = ([it, q, t], o = {}) => line(it, q, t, { ...(it.seen ? { seen: SE
 const MARKS = { [POTS.kc]: [tx('Pulled {n}', { n: 6 }), 'ok'], [BALM.kc]: [tx('Pulled {n}', { n: 12 }), 'ok'], [LASH.kc]: [tx('Short · {got} of {asked}', { got: 3, asked: 4 }), 'warn'], [SPONGE.kc]: [tx('Not there'), 'bad'] };
 const marked = (xs, cage = 0) => byBay(xs).map(x => lineOf(x, { done: MARKS[x[0].kc][0], tone: MARKS[x[0].kc][1], cage }));
 const left = done => byBay(PICK().filter(x => !done.includes(x[0].kc))).map(x => lineOf(x));
-async function sendIt(c, it, qty, asked) { await c.tap('#lpa .lp2-pad .send'); off(c); A(c, req(sent(it, qty))); stripTo(c, 'lpa', stripA(asked, 0, asked)); }
+// The stockroom phone the moment a request is sent: it buzzes, and the request joins its list as they came in (the newest marked).
+const landB = (c, n) => { const xs = PICK().slice(0, n); buzz(c); B(c, puller(xs.map(x => lineOf(x, { fresh: x === xs[n - 1] })), { todo: n })); stripTo(c, 'lpb', stripB(1, 0, n, n)); };
+async function sendIt(c, it, qty, asked) { await c.tap('#lpa .lp2-pad .send'); off(c); A(c, req(sent(it, qty))); stripTo(c, 'lpa', stripA(asked, 0, asked)); await c.wait(350); landB(c, asked); }
 
 // ── the chapter ────────────────────────────────────────────────────────
 export const livepull = {
@@ -262,10 +266,10 @@ export const livepull = {
     { cap: tx('The answer comes at once: the item and its bay.'), read: S(tx('Its product name, or the description from the store’s reports, with the stockroom bay on today’s report.'), tx('Found from the barcode says how the scan was matched.')),
       dev: 'The worker’s <b>pullFind()</b> (worker/store.js) answers from the latest inventory report: the keycode from the report’s APN, the product name and description, the bays, the carton size and any truck today.', ev: [],
       run: async c => { off(c); camOff(c); A(c, req(prod(POTS, { from: FOUND() }) + pad())); } },
-    { cap: tx('Type how many, then Send.'), read: S(tx('Type a number, add a carton at a time, or ask for all there is.'), tx('The camera opens again straight away for the next item.')),
-      dev: 'Live pull events are Floor events, so both phones hold the same list. <b>sendRequest()</b> sends the words with the request.',
+    { cap: tx('Type how many, then Send.'), read: S(tx('Type a number, add a carton at a time, or ask for all there is.'), tx('The stockroom phone buzzes, and the request is there at once.')),
+      dev: 'Live pull events are Floor events, so both phones hold the same list. <b>sendRequest()</b> sends the words with the request; <b>installPullAlerts()</b> buzzes each phone whose bays hold it.',
       ev: [E('pull.request', 'floor', LINE, { kc: POTS.kc, bays: [POTS.bay], qty: 6, name: desc(POTS) })],
-      run: async c => { off(c); await key(c, '6'); A(c, req(prod(POTS, { from: FOUND() }) + pad('6'))); await c.tap('#lpa .lp2-pad .send'); off(c); A(c, req(sent(POTS, 6))); stripTo(c, 'lpa', stripA(1, 0, 1)); } },
+      run: async c => { off(c); await key(c, '6'); A(c, req(prod(POTS, { from: FOUND() }) + pad('6'))); await sendIt(c, POTS, 6, 1); } },
     { cap: tx('Keep going down the aisle: a lip balm sold by the carton.'), read: S(tx('The answer shows the carton size, and + Carton adds a carton at a time.'), tx('Twelve is one carton.')),
       dev: '<b>pullFind()</b> answers with the carton size from the report, and the request carries it, so the puller sees cartons too.',
       ev: [R('GET', `/v1/store/1241/pull/find?code=${BALM.apn}`, null, 'Found by the report’s APN, with its carton size.'), E('pull.request', 'floor', LINE, { kc: BALM.kc, bays: [BALM.bay], qty: 12, carton: 12, name: desc(BALM) })],
@@ -286,10 +290,9 @@ export const livepull = {
     { cap: tx('Nail polish is on today’s truck: skip it, or request it anyway.'), read: S(tx('Truck {n} is due at {eta} with {cartons} cartons of it, so the shelf fills today.', { n: POLISH.truck.n, eta: POLISH.truck.eta, cartons: POLISH.truck.cartons }), tx('Request anyway when the shelf can’t wait.')),
       dev: '<b>pullFind()</b> reads today’s trucks and planned slots for the keycode; <b>flags()</b> shows it before the pad.', ev: [R('GET', `/v1/store/1241/pull/find?code=${POLISH.kc}`, null, 'In bay 7044, and on Truck 2’s manifest today.')],
       run: async c => { off(c); await typeCode(c, POLISH.kc); A(c, req(prod(POLISH) + onTruck(POLISH))); await c.wait(700); await c.tap('#lpa [data-x="skip"]'); off(c); A(c, req()); } },
-    { cap: tx('The stockroom phone has buzzed for each one. By bay walks them in order.'), read: S(tx('Four requests: the lip balm shows its carton, the lashes both bays.'), tx('The loofah is marked SUGGESTED: it may not be there.')),
-      dev: 'Alerts: <b>installPullAlerts()</b> buzzes for each request in this phone’s bays; By bay sorts by the first bay.', ev: [],
-      run: async c => { off(c); buzz(c); B(c, puller(PICK().map(x => lineOf(x, { fresh: x[0] === SPONGE })), { todo: 4 })); stripTo(c, 'lpb', stripB(1, 0, 4, 4));
-        await c.wait(600); await c.tap('#lpb .lp2-seg [data-o="bay"]'); B(c, puller(left([]), { todo: 4, order: 'bay' })); } },
+    { cap: tx('In the stockroom, By bay puts the four requests in walking order.'), read: S(tx('Four requests: the lip balm shows its carton, the lashes both bays.'), tx('The loofah is marked SUGGESTED: it may not be there.')),
+      dev: 'Each request joined this list as it was sent (<b>installPullAlerts()</b> buzzed for each one in this phone’s bays); By bay sorts by the first bay.', ev: [],
+      run: async c => { off(c); await c.wait(300); await c.tap('#lpb .lp2-seg [data-o="bay"]'); B(c, puller(left([]), { todo: 4, order: 'bay' })); } },
     { cap: tx('Pulled: the pots, then a carton of lip balm.'), read: S(tx('Each mark reaches the floor straight away.'), tx('Undo puts one back until the cage goes down.')),
       dev: 'A second phone’s mark on the same line is refused as a conflict: the first <b>pull.mark</b> wins.',
       ev: [E('pull.mark', 'floor', LINE, { st: 'pulled', got: { [POTS.bay]: 6 } }), E('pull.mark', 'floor', LINE, { st: 'pulled', got: { [BALM.bay]: 12 } })],
@@ -390,9 +393,9 @@ livepull.stories.push({
         await key(c, '0'); A(c, req(prod(POTS, { from: FOUND() }) + pad('10', true))); } },
     { cap: tx('Change: the request is now for {n}.', { n: 10 }), read: S(tx('The floor phone confirms it.')),
       dev: '<b>pull.update</b> changes how many while it waits; once it is marked off, the change is refused.', ev: [E('pull.update', 'floor', LINE, { qty: 10 })],
-      run: async c => { off(c); await c.tap('#lpa .lp2-pad .send'); off(c); A(c, req(sent(POTS, 10, true))); } },
+      run: async c => { off(c); await c.tap('#lpa .lp2-pad .send'); off(c); A(c, req(sent(POTS, 10, true))); await c.wait(350); B(c, puller([line(POTS, 10, '10:42', { fresh: true })], { todo: 1 })); } },
     { cap: tx('The puller’s phone shows {n}.', { n: 10 }), read: S(tx('Pulled {n} marks it off.', { n: 10 })),
-      dev: 'Both phones read the same line in the pulls projection.', ev: [],
+      dev: 'Both phones read the same line in the pulls projection: the change reached the stockroom phone as it was made.', ev: [],
       run: async c => { off(c); B(c, puller([line(POTS, 10, '10:42', { fresh: true })], { todo: 1 })); } },
   ],
 });

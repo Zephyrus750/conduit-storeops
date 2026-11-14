@@ -5037,7 +5037,7 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
    truck is picked); narrower the side cards go under it and the editor
    opens as a sheet; half a screen scrolls the week sideways inside its card
    with the Truck column pinned. */
-.pw, .pw-phone, .pw-rp { --pw-today: color-mix(in srgb, var(--accent) 5%, var(--panel)); --pw-today2: color-mix(in srgb, var(--accent) 10%, var(--panel)); --pw-none: color-mix(in srgb, var(--tone-g) 45%, var(--panel)); --pw-soft: color-mix(in srgb, var(--green) 50%, var(--panel)); }
+.pw, .pw-rp { --pw-today: color-mix(in srgb, var(--accent) 5%, var(--panel)); --pw-today2: color-mix(in srgb, var(--accent) 10%, var(--panel)); --pw-none: color-mix(in srgb, var(--tone-g) 45%, var(--panel)); --pw-soft: color-mix(in srgb, var(--green) 50%, var(--panel)); }
 .pw { --pw-beside: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; min-width: 0; }
 .pw-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .pw-side { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; min-width: 0; }
@@ -5109,7 +5109,7 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .pw-bar { height: 6px; border-radius: 4px; background: var(--track); overflow: hidden; margin-top: auto; flex: none; }
 .pw-bar i { display: block; height: 100%; width: var(--w); border-radius: 4px; background: var(--accent); }
 .pw-fin { font-size: var(--fs-xs); font-weight: var(--fw-semi); color: var(--accent-ink); font-variant-numeric: tabular-nums; }
-.pw-c .status, .pw-pc .status { align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.pw-c .status { align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
 .pw-mh > .status { align-self: center; }
 .pw-land { background: color-mix(in srgb, var(--tone-i) 40%, var(--panel)); }
 .pw-land .pw-tk { color: var(--tone-i-ink); }
@@ -5203,15 +5203,15 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
 .pw-rp-s span { font-size: var(--fs-xs); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .pw-rp-x { flex: 1; display: grid; place-items: center; padding: 6px; border-radius: 8px; border: 1px dashed var(--line); font-size: var(--fs-sm); color: var(--faint); text-align: center; }
 .pw-rp-x.ok { border-color: color-mix(in srgb, var(--green) 40%, var(--panel)); background: var(--pw-none); color: var(--green-ink); font-weight: var(--fw-semi); }
-/* The day strip (half a screen) and the phone's days. */
+/* The day strip (half a screen). */
 .pw-strip { display: none; gap: 6px; }
 .pw-strip button { flex: 1; min-width: 0; height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink2); font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-semi); white-space: nowrap; cursor: pointer; }
-.pw-strip button.on, .pw-pdays button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-.pw-strip i, .pw-pdays i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
-.pw-strip i.good, .pw-pdays i.good { background: var(--green); } .pw-strip i.part, .pw-pdays i.part { background: color-mix(in srgb, var(--accent) 45%, var(--panel)); }
-.pw-strip i.bad, .pw-pdays i.bad { background: var(--red); } .pw-strip i.none, .pw-pdays i.none { background: var(--track); }
-.pw-strip i.today, .pw-pdays i.today { background: var(--accent); }
-.pw-strip .on i, .pw-pdays .on i { background: #fff; }
+.pw-strip button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pw-strip i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
+.pw-strip i.good { background: var(--green); } .pw-strip i.part { background: color-mix(in srgb, var(--accent) 45%, var(--panel)); }
+.pw-strip i.bad { background: var(--red); } .pw-strip i.none { background: var(--track); }
+.pw-strip i.today { background: var(--accent); }
+.pw-strip .on i { background: #fff; }
 /* Half a screen (board G): the week scrolls sideways in one card, the Truck column pinned. */
 @container shell (max-width: 1099px) {
   .pw-print span { display: none; }
@@ -5230,49 +5230,6 @@ td > .empty.sm, .list > .empty.sm, .sdd > .empty.sm { padding: 10px 12px; }
   .pw-rp-h { flex-wrap: wrap; }
 }
 .frame.dark .pw-lab { box-shadow: 6px 0 10px -6px rgba(0, 0, 0, .6); }
-/* The phone (board H): one day at a time. */
-.pw-mhead { align-items: center; }
-.pw-mhead > div { flex: 1; }
-.pw-wk { align-items: center; }
-.pw-wk button { min-width: 36px; min-height: 36px; font-size: var(--fs-lg); padding: 0 8px; }
-.pw-wk span { padding: 0 4px; font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--ink2); white-space: nowrap; }
-.pw-phone { display: flex; flex-direction: column; gap: 10px; }
-.pw-pdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
-.pw-pdays button { height: 54px; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font: inherit; font-size: var(--fs-xs); font-weight: var(--fw-semi); cursor: pointer; }
-.pw-pdays button b { font-size: var(--fs-lg); line-height: 1.1; }
-.pw-pdays button.none:not(.on) { background: var(--pw-none, color-mix(in srgb, var(--tone-g) 45%, var(--panel))); border-color: color-mix(in srgb, var(--green) 30%, var(--panel)); color: var(--green-ink); }
-.pw-ph { display: flex; flex-direction: column; gap: 5px; }
-.pw-ph-t { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.pw-ph-t b { font-size: var(--fs-lg); }
-.pw-ph-t .tday { font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--accent-ink); }
-.pw-ph-t .r { margin-left: auto; font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--accent-ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.pw-ph .pw-bars { height: 5px; }
-.pw-pband { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-.pw-pband.none { background: var(--pw-none, color-mix(in srgb, var(--tone-g) 45%, var(--panel))); }
-.pw-pband .pw-big { white-space: normal; }
-.pw-pband .pw-big b { font-size: var(--fs-xl); }
-.pw-pband .pw-big span { font-size: var(--fs-sm); }
-.pw-pband .pw-bs { font-size: var(--fs-sm); }
-.pw-ctr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.pw-ctr .status { display: flex; align-items: center; justify-content: center; gap: 4px; height: 30px; padding: 0 4px; box-sizing: border-box; font-size: var(--fs-sm); font-weight: var(--fw-bold); }
-.pw-ctr .status > svg.i { margin: 0; }
-.pw-pc { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; min-height: 112px; box-sizing: border-box; }
-.pw-pc[data-act] { cursor: pointer; }
-.pw-pc:has(.pw-dot.warn) { border-color: var(--amber); } .pw-pc:has(.pw-dot.bad) { border-color: var(--red); }
-.pw-pc .pw-man { font-size: var(--fs-lg); }
-.pw-pc .pw-l1, .pw-pc .pw-ok, .pw-pc .pw-never { font-size: var(--fs-md); }
-.pw-pc .pw-l2, .pw-pc .pw-note, .pw-pc .pw-need, .pw-pc .pw-fin { font-size: var(--fs-sm); }
-.pw-pc .pw-bar { height: 10px; border-radius: 6px; margin-top: auto; }
-.pw-pc.pw-span { min-height: 260px; padding: 20px 16px; }
-.pw-pc.pw-unpl { background: repeating-linear-gradient(135deg, var(--panel) 0 10px, var(--hover) 10px 20px); }
-.pw-pc.pw-none { background: var(--pw-none, color-mix(in srgb, var(--tone-g) 45%, var(--panel))); }
-.pw-pc.pw-land { background: color-mix(in srgb, var(--tone-i) 40%, var(--panel)); }
-.pw-pc.pw-span .pw-btn { min-height: 40px; }
-.pw-padd { height: 44px; flex: none; border: 1px dashed var(--accent-line); border-radius: 10px; background: transparent; color: var(--accent-ink); font: inherit; font-size: var(--fs-md); font-weight: var(--fw-semi); cursor: pointer; }
-.pw-rp.phone .pw-rp-h { flex-wrap: wrap; }
-.pw-rp.phone .pw-rp-h .btn { flex: 1 1 140px; justify-content: center; }
-.pw-rp.phone .pw-rp-g { grid-template-columns: 1fr 1fr; }
-.pw-rp.phone .pw-rp-d { min-height: 0; }
 /* Paper: the week for the dock wall (board I), one A4 landscape sheet. */
 @media print {
   #printroot .pwp { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 8.5pt; }

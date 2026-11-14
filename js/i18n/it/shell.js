@@ -440,5 +440,4 @@ export default {
   "Practice resumed. Nothing here is saved or sent.": "Esercitazione ripresa. Qui non si salva né si invia nulla.",
   "Practice could not open ({error}). The store opened as usual.": "Impossibile aprire l’esercitazione ({error}). Il negozio si è aperto come al solito.",
   "Practice": "Esercitazione",
-  "The week’s trucks, one day at a time": "I camion della settimana, un giorno alla volta",
 };
